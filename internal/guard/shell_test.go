@@ -1333,6 +1333,28 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	}
 }
 
+// TestGuardAdvisesInstallOnRawInstalls: a raw install is correct work, only uncached, so
+// it earns advice toward the install op and never a deny. Naming packages is a
+// dependency edit, which the install op cannot run, so that spelling is left alone.
+func TestGuardAdvisesInstallOnRawInstalls(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"pnpm install",
+		"pnpm install -r --frozen-lockfile --prefer-offline",
+		"npm ci",
+		"uv sync",
+		"cargo fetch",
+		"go mod download",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "%q must advise, never deny", cmd)
+		assert.Equal(t, installGuardContext, v.Context, cmd)
+	}
+	for _, cmd := range []string{"pnpm install lodash", "go mod download golang.org/x/mod", "npm install", "mise install"} {
+		assert.Equal(t, ShellVerdict{}, Evaluate(testDependencies(), cmd), cmd)
+	}
+}
+
 // TestGuardDeniesInPlaceSed: `-i` is the one sed flag that WRITES, and the two
 // implementations read each other's spelling as garbage: GNU takes `sed -i 's/x/y/' f` as
 // an edit while BSD reads that script as the backup suffix, and `sed -i ”` inverts it. A
@@ -1654,42 +1676,6 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		`cat gate.jsonl | jq -r .target`,
 	} {
 		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
-	}
-}
-
-// TestGuardDeniesWatchingCI pins the blocking forms. Measured 2026-09-07: four watches in
-// one session, every one green, each following a local gate that had already run the
-// identical command on the identical tree.
-func TestGuardDeniesWatchingCI(t *testing.T) {
-	for _, cmd := range []string{
-		`gh run watch 34069443069`,
-		`gh run watch 34069443069 --exit-status --interval 60`,
-		`gh pr checks 183 --watch`,
-		`gh run view 34069443069 --watch`,
-		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
-		// command, not the head of the line.
-		`GH_TOKEN=x gh run watch 123`,
-	} {
-		v := Evaluate(testDependencies(), cmd)
-		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
-		assert.Equal(t, denyRuleCIWatch, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "GREEN CHANGES NOTHING", cmd)
-	}
-}
-
-// Reading a result that already exists is the point of the tool and stays allowed; what
-// the rule refuses is the WAITING. `watch` also names a real unrelated program.
-func TestGuardAllowsReadingCIWithoutWaiting(t *testing.T) {
-	for _, cmd := range []string{
-		`gh pr list --state open --json number,mergeable,statusCheckRollup`,
-		`gh pr checks 183`,
-		`gh run view 34069443069 --log`,
-		`gh run list --branch main --limit 5`,
-		`gh run view 34069443069 --json status,conclusion`,
-		// Not gh at all.
-		`watch -n 5 free -m`,
-	} {
-		assert.NotEqual(t, denyRuleCIWatch, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

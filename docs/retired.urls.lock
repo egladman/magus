@@ -327,3 +327,8 @@ tags/magus-no-wait/
 # The read-ack guard rule folded into person-only; rule pages are generated, so the old
 # name gets no alias.
 reference/rules/read-ack/
+
+# The ci-watch rule left the shipped guard: how a repository waits on CI is its own
+# policy, written with magus\guard.command. A rule page is generated per shipped rule,
+# so it retires rather than aliases.
+reference/rules/ci-watch/

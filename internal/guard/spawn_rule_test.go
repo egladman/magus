@@ -28,12 +28,12 @@ import (
 type spawnRuleProbe struct {
 	asked  []types.SpawnRequest
 	gates  []hint.Gate
-	answer types.SpawnVerdict
+	answer types.GuardVerdict
 	err    error
 }
 
 func (p *spawnRuleProbe) rule() workspace.SpawnRule {
-	return func(_ context.Context, req types.SpawnRequest, facts hint.Gate) (types.SpawnVerdict, error) {
+	return func(_ context.Context, req types.SpawnRequest, facts hint.Gate) (types.GuardVerdict, error) {
 		p.asked = append(p.asked, req)
 		p.gates = append(p.gates, facts)
 		return p.answer, p.err
@@ -87,14 +87,14 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 				Kind: types.SpawnKindSpawn, Host: "claude-code", Session: "8f2c6a1e", Model: "sonnet",
 				AgentType: "general-purpose", Description: "orchestrator/brisk-heron/implement adr 0002",
 				Name: "brisk-heron", Prompt: "Implement ADR 0002.", Background: true, Isolated: true,
-				Role: types.SpawnRoleRoot,
+				Role: types.AgentRoleRoot,
 			},
 		},
 		{
 			name: "claude-code continue", host: "claude-code", event: claudeContinueEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindContinue, Host: "claude-code", Session: "8f2c6a1e",
-				Prompt: "Now fix the review comments.", Role: types.SpawnRoleRoot,
+				Prompt: "Now fix the review comments.", Role: types.AgentRoleRoot,
 				Target: &types.SpawnTarget{Agent: "brisk-heron"},
 			},
 		},
@@ -102,21 +102,21 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			name: "cursor through its glue", host: "cursor", event: cursorGlueEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "cursor", Session: "conv-parent", AgentType: "explore",
-				Prompt: "Audit internal/job", Role: types.SpawnRoleRoot,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot,
 			},
 		},
 		{
 			name: "cursor raw", host: "cursor", event: cursorRawEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "cursor", Session: "conv-parent", AgentType: "explore",
-				Prompt: "Audit internal/job", Role: types.SpawnRoleRoot,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot,
 			},
 		},
 		{
 			name: "codex-shaped", host: "codex", event: codexShapedEnvelope,
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "codex", Session: "codex-s",
-				Prompt: "Audit internal/job", Role: types.SpawnRoleRoot,
+				Prompt: "Audit internal/job", Role: types.AgentRoleRoot,
 			},
 		},
 	}
@@ -138,7 +138,7 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 // no spawn for a rule to see there; a string is judged as the command it is.
 func TestSpawnRuleIsNotAskedAboutACommand(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "no"}}
+	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: "ls", Host: "opencode"})
 	assert.Empty(t, probe.asked)
 }
@@ -147,7 +147,7 @@ func TestSpawnRuleIsNotAskedAboutACommand(t *testing.T) {
 // asked when one stands.
 func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAllow}}
+	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
 	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Equal(t, string(denySpawnUnbriefed), v.Rule, "the built-in reason stands")
@@ -156,12 +156,12 @@ func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 
 func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	deny := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "Name a model."}}
+	deny := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}}
 	v := Judge(ctx, Dependencies{SpawnRule: deny.rule()}, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
 	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
 
 	ctx, _ = spawnFixture(t)
-	advise := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "Add a Done when section."}}
+	advise := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	v = Judge(ctx, Dependencies{SpawnRule: advise.rule()}, Request{Input: cursorGlueEnvelope, Host: "cursor"})
 	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
 }
@@ -189,11 +189,11 @@ func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 // The approved rule and the working-tree rule both run and the stricter answer stands,
 // so an unapproved edit can tighten but never loosen.
 func TestSpawnRulesKeepTheStricterSide(t *testing.T) {
-	deny := types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "unnamed model"}
-	allow := types.SpawnVerdict{Decision: types.SpawnAllow}
+	deny := types.GuardVerdict{Decision: types.GuardDeny, Reason: "unnamed model"}
+	allow := types.GuardVerdict{Decision: types.GuardAllow}
 	cases := []struct {
 		name           string
-		live, approved *types.SpawnVerdict
+		live, approved *types.GuardVerdict
 		want           string
 		decidedBy      string
 	}{
@@ -237,7 +237,7 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, []trail.SpawnRuleFailure{{
+	assert.Equal(t, []trail.RuleFailure{{
 		Side:  decidedByApproved,
 		Error: "the rule could not be resolved: approved magusfile: magusfile.buzz:3:1: expected expression",
 	}}, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
@@ -250,7 +250,7 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
 
-	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "Add a Done when section."}}
+	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
@@ -267,13 +267,13 @@ func TestSpawnRuleRoleIsComputed(t *testing.T) {
 	probe := &spawnRuleProbe{}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 1)
-	assert.Equal(t, types.SpawnRoleRoot, probe.asked[0].Role)
+	assert.Equal(t, types.AgentRoleRoot, probe.asked[0].Role)
 	assert.Nil(t, probe.asked[0].Lease)
 
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
-	assert.Equal(t, types.SpawnRoleWorker, probe.asked[1].Role)
+	assert.Equal(t, types.AgentRoleWorker, probe.asked[1].Role)
 	require.NotNil(t, probe.asked[1].Lease)
 	assert.Equal(t, row.ID, probe.asked[1].Lease.ID)
 	assert.Equal(t, row.WritePaths, probe.asked[1].Lease.WritePaths, "the worker sees its whole lease row")
@@ -316,8 +316,8 @@ const finishedSpawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PostT
 
 // spawnBlob is the part of an agent_spawn request blob these tests read.
 type spawnBlob struct {
-	Target       string                   `json:"target"`
-	RuleFailures []trail.SpawnRuleFailure `json:"rule_failures"`
+	Target       string              `json:"target"`
+	RuleFailures []trail.RuleFailure `json:"rule_failures"`
 }
 
 func readSpawnBlob(t *testing.T, cacheDir string, e trail.Event) spawnBlob {
@@ -336,12 +336,12 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 	loadErr := errors.New("magusfile.buzz:3:1: expected expression")
 	cases := []struct {
 		name     string
-		approved types.SpawnVerdict
+		approved types.GuardVerdict
 		want     string
 		by       string
 	}{
-		{"an approved deny still denies", types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "Name a model."}, "deny", decidedByApproved},
-		{"an approved allow reports the failure", types.SpawnVerdict{Decision: types.SpawnAllow}, "advise", ""},
+		{"an approved deny still denies", types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, "deny", decidedByApproved},
+		{"an approved allow reports the failure", types.GuardVerdict{Decision: types.GuardAllow}, "advise", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -362,7 +362,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 			spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 			require.Len(t, spawns, 1)
 			assert.Equal(t, tc.by, spawns[0].DecidedBy)
-			assert.Equal(t, []trail.SpawnRuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
+			assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
 				readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 		})
 	}
@@ -375,7 +375,7 @@ func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
 
-	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "Add a Done when section."}}
+	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	assert.Equal(t, "advise", v.Decision)
 	assert.Equal(t, string(advisorySharedCheckout), v.Rule, "the built-in advice keeps its rule")
@@ -618,11 +618,11 @@ func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	var seen []job.Snapshot
-	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.SpawnVerdict, error) {
+	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.GuardVerdict, error) {
 		snap, ok := job.SnapshotFromContext(ctx)
 		require.True(t, ok, "the rule runs under the guard's rows")
 		seen = append(seen, snap)
-		return types.SpawnVerdict{}, nil
+		return types.GuardVerdict{}, nil
 	}
 	Judge(ctx, Dependencies{SpawnRule: rule}, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
 	require.Len(t, seen, 1)
@@ -705,7 +705,7 @@ func TestAttributionDoesNotReachTheParent(t *testing.T) {
 // denyEverySpawn is a magusfile whose spawn rule denies every spawn.
 const denyEverySpawn = `import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("Name a model.");
 });
 `
@@ -757,7 +757,7 @@ func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
 func TestSlowApprovedRuleDenies(t *testing.T) {
 	m := inspectMagus(t, committedSpawnRule(t, `import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.allow();
 });
 `))
@@ -775,11 +775,11 @@ magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: slow},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, approvedRuleTimedOut, v.Reason)
+	assert.Equal(t, approvedRuleTimedOut(seamSpawn), v.Reason)
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
-	assert.Equal(t, []trail.SpawnRuleFailure{{Side: decidedByApproved, Error: "resolving the rule took longer than 50ms"}},
+	assert.Equal(t, []trail.RuleFailure{{Side: decidedByApproved, Error: "resolving the rule took longer than 50ms"}},
 		readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 }

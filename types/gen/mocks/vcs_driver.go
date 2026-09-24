@@ -581,6 +581,72 @@ func (_c *MockVCSDriver_CheckMergeDriver_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
+// CheckoutState provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) CheckoutState(ctx context.Context, dir string) (types.CheckoutState, error) {
+	ret := _mock.Called(ctx, dir)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CheckoutState")
+	}
+
+	var r0 types.CheckoutState
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (types.CheckoutState, error)); ok {
+		return returnFunc(ctx, dir)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) types.CheckoutState); ok {
+		r0 = returnFunc(ctx, dir)
+	} else {
+		r0 = ret.Get(0).(types.CheckoutState)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, dir)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_CheckoutState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CheckoutState'
+type MockVCSDriver_CheckoutState_Call struct {
+	*mock.Call
+}
+
+// CheckoutState is a helper method to define mock.On call
+//   - ctx context.Context
+//   - dir string
+func (_e *MockVCSDriver_Expecter) CheckoutState(ctx interface{}, dir interface{}) *MockVCSDriver_CheckoutState_Call {
+	return &MockVCSDriver_CheckoutState_Call{Call: _e.mock.On("CheckoutState", ctx, dir)}
+}
+
+func (_c *MockVCSDriver_CheckoutState_Call) Run(run func(ctx context.Context, dir string)) *MockVCSDriver_CheckoutState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_CheckoutState_Call) Return(checkoutState types.CheckoutState, err error) *MockVCSDriver_CheckoutState_Call {
+	_c.Call.Return(checkoutState, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_CheckoutState_Call) RunAndReturn(run func(ctx context.Context, dir string) (types.CheckoutState, error)) *MockVCSDriver_CheckoutState_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Checkouts provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) Checkouts(ctx context.Context, root string) ([]string, error) {
 	ret := _mock.Called(ctx, root)
@@ -3062,6 +3128,68 @@ func (_c *MockVCSDriver_Name_Call) Return(s string) *MockVCSDriver_Name_Call {
 }
 
 func (_c *MockVCSDriver_Name_Call) RunAndReturn(run func() string) *MockVCSDriver_Name_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// OtherCheckouts provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) OtherCheckouts(root string) ([]string, error) {
+	ret := _mock.Called(root)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OtherCheckouts")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(string) ([]string, error)); ok {
+		return returnFunc(root)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) []string); ok {
+		r0 = returnFunc(root)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) error); ok {
+		r1 = returnFunc(root)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_OtherCheckouts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OtherCheckouts'
+type MockVCSDriver_OtherCheckouts_Call struct {
+	*mock.Call
+}
+
+// OtherCheckouts is a helper method to define mock.On call
+//   - root string
+func (_e *MockVCSDriver_Expecter) OtherCheckouts(root interface{}) *MockVCSDriver_OtherCheckouts_Call {
+	return &MockVCSDriver_OtherCheckouts_Call{Call: _e.mock.On("OtherCheckouts", root)}
+}
+
+func (_c *MockVCSDriver_OtherCheckouts_Call) Run(run func(root string)) *MockVCSDriver_OtherCheckouts_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_OtherCheckouts_Call) Return(strings []string, err error) *MockVCSDriver_OtherCheckouts_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_OtherCheckouts_Call) RunAndReturn(run func(root string) ([]string, error)) *MockVCSDriver_OtherCheckouts_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -46,6 +46,9 @@ type Manifest struct {
 	// manifest written before returns existed, which read back as no value, the
 	// same as a void target, so old entries stay valid.
 	Return any `json:"return,omitempty"`
+	// Stamps maps each of the step's Stamps to its digest as the run left it; see
+	// Step.Stamps.
+	Stamps map[string]string `json:"stamps,omitempty"`
 }
 
 // OutputRecord captures one declared output file.

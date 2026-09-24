@@ -25,8 +25,8 @@ Every op is invoked as `typescript["<op>"](ctx, opts?)`. The first argument is t
 
 | Key     | Type    | Description                                                                                                                                                                                                                                                                                                                                                                  | Source                                                                                              |
 | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `args`  | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `typescript["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L180) |
-| `stdin` | `str`   | Data written to the command's standard input.                                                                                                                                                                                                                                                                                                                                | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L184) |
+| `args`  | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `typescript["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L186) |
+| `stdin` | `str`   | Data written to the command's standard input.                                                                                                                                                                                                                                                                                                                                | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L190) |
 
 
 Working directory and environment are NOT options: they ride the context, as `typescript["<op>"](ctx.withCwd("sub"))` and `typescript["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
@@ -216,6 +216,64 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     typescript["eslint"](ctx);
 }
 ```
+
+## npm-ci
+
+**Command:** `npm ci --prefer-offline`
+
+### update
+
+Replaces `ci` with `update`, drops `--prefer-offline`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "update"
+  },
+  {
+    "op": "remove",
+    "path": "/1"
+  }
+]
+```
+
+</details>
+
+## pnpm-install
+
+**Command:** `pnpm install --frozen-lockfile --prefer-offline`
+
+### update
+
+Replaces `install` with `update`, drops `--prefer-offline`, drops `--frozen-lockfile`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "update"
+  },
+  {
+    "op": "remove",
+    "path": "/2"
+  },
+  {
+    "op": "remove",
+    "path": "/1"
+  }
+]
+```
+
+</details>
 
 ## prettier
 

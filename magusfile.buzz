@@ -14,6 +14,11 @@ import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
+// This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
+import "./tools/policy/guard" as agentpolicy;
+magus\guard.command(agentpolicy\judge);
+magus\guard.spawn(agentpolicy\judgeSpawn);
+magus\guard.write(agentpolicy\judgeWrite);
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -2960,7 +2965,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz");
+        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
@@ -3016,6 +3021,10 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         } else {
             cover_for(mod.value, ["--embedded"], {});
         }
+    }
+    // The agent policy is a magusfile import like the tools above it.
+    foreach (mod in fs\glob("tools/policy/*.buzz")) {
+        cover_for(mod.value, ["--embedded"], {});
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
     // nothing ran until 2026-08-09. That gap is why a broken escaper shipped: every one

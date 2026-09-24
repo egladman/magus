@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/spells"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -87,7 +88,6 @@ const (
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
 	denyRuleCaptureFilter     denyRuleName = "capture-filter"
-	denyRuleCIWatch           denyRuleName = "ci-watch"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
 	denyRuleRawTool           denyRuleName = "raw-tool"
@@ -697,6 +697,10 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	have := afterGlobalFlags(c.Name, c.Args)
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
+			// Installs are advised, never denied: see installAdvised.
+			if op, ok := spell.Op(operation); ok && op.Kind == spells.OpKindInstall {
+				continue
+			}
 			for _, charms := range [][]string{nil, {"rw"}} {
 				program, args, ok, err := spell.RenderCommand(operation, charms)
 				if err != nil || !ok || program == "" || filepath.Base(program) != c.Name {
@@ -711,6 +715,31 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 		}
 	}
 	return toolMatch{}, false
+}
+
+// installAdvised reports a command that is some spell's declared install run bare, such
+// as `pnpm install` or `npm ci`. Every manifest's installs are read, not the install op's
+// rendering, which names only the first. An operand after the install's own words names
+// packages (`pnpm install <pkg>`), which is a dependency edit, not an install.
+func installAdvised(deps Dependencies, c hint.Invocation) bool {
+	have := afterGlobalFlags(c.Name, c.Args)
+	for _, spell := range deps.spells() {
+		for _, man := range spell.Manifests() {
+			for _, in := range man.Installs {
+				if filepath.Base(in.Command.Bin) != c.Name {
+					continue
+				}
+				prefix := commandPrefix(in.Command.Bin, in.Command.Args)
+				if len(prefix) == 0 || len(have) < len(prefix) || !slices.Equal(have[:len(prefix)], prefix) {
+					continue
+				}
+				if !slices.ContainsFunc(have[len(prefix):], func(a string) bool { return !strings.HasPrefix(a, "-") }) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // commandPrefix extracts the semantic subcommand from an operation's rendered argv,
@@ -1091,9 +1120,6 @@ var (
 	denyCaptureFilter = "Read that file whole (`cat`, or your editor tool), or give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
-	denyCIWatch = "Ask for the board once, when you need the answer:\n" +
-		"  gh pr list --state open --json number,mergeable,statusCheckRollup\n" +
-		"Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: the human merges, not you. Poll that command instead while you are acting on a RED run."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
@@ -1216,6 +1242,11 @@ var (
 	updateAdvice = "Run the covering target with the update charm (`" + hint.Run.With("<target>:update", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
 		"update is the reserved charm for moving PINNED UPSTREAM state forward, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry or a vulnerability feed serves today is update. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
 	updateGuardContext = "magus workspace: " + updateAdvice
+
+	// Advice, not a deny: a raw install is correct, only uncached. "install" is the
+	// project's own top-level target (magusfile convention, not a spell op name: a
+	// spell's install op is named per binary, pnpm-install/go-mod-download/...).
+	installGuardContext = "magus workspace: `" + hint.Run.With("install", "<project>...") + "` runs the same install, keyed on the lockfile, and replays it when nothing changed."
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status: it already says the command passed, and a message that prints only on success adds nothing."
@@ -1550,12 +1581,6 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	if parsed && processPollFires(cmds) {
 		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}
 	}
-	// Beside busy-wait and for the same reason: both are an agent blocking on a condition
-	// it will be told about anyway. This one has no raw-line fallback, because an
-	// unparseable line naming `watch` is far more likely to be something else entirely.
-	if parsed && ciWatchFires(cmds) {
-		return ShellVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
-	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
 	// a task capture, this one refuses trimming it once it arrives. It has to sit above
 	// the search advisories, which would otherwise answer for the grep and say nothing
@@ -1642,6 +1667,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: denyExitStatusEcho, Rule: denyRule{Name: denyRuleExitStatusEcho}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return ShellVerdict{Context: updateGuardContext}
+	case parsed && slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
+		return ShellVerdict{Context: installGuardContext}
 	case ruleFires(cmds, parsed, command, docSearchFires, docSearchRe):
 		v := ShellVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
 		if s := proseSuggestion(cmds, hints); s != nil {

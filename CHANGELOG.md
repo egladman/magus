@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Each spell's install op is named binary + capability, one per binary.**
+  typescript's `pnpm-install` and `npm-ci`, go's `go-mod-download`, python's
+  `uv-sync`, rust's `cargo-fetch`. A project composes the one it needs into its
+  own top-level `install` target, which `build`/`test`/`lint` need; `:update`
+  rewrites the lockfile as before. An unchanged install replays without forking
+  the package manager. macOS seeds `node_modules` from a sibling checkout.
 - **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
   targets run first across every selected project; a failure stops everything, exits 3
   (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
@@ -78,6 +84,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
   grades the child under that job's lease and records its base.
+- **`magus\guard.command` registers a workspace shell-command rule.** One Buzz function
+  sees every agent shell command the built-ins pass, as parsed programs, and may deny or
+  advise, never lift a built-in deny. It fails open and is held to the committed copy as
+  `magus\guard.spawn` is. Both rules now return `GuardVerdict` (was `SpawnVerdict`) and
+  share `once`/`count`.
+- **`magus\guard.write` registers a workspace file-write rule.** One Buzz function sees
+  every file an agent writes through its host's edit tools, with the text the host says
+  it writes, on the same strengthen-only, fail-open, committed-copy terms as
+  `magus\guard.command`. A command rule judging `git push` also gets the checkout's
+  branch and its remotes' branches, read through the VCS driver.
 - **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
@@ -169,6 +185,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
+  `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
+  package leaves the command alone.
+- **`install` probes only its own tools and skips dependency order.** A project's install
+  no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
+  not tsc.
+- **The agent guard hook no longer loads the workspace.** `magus shell` reads its rules
+  from the root magusfile alone, and loads the committed copy only while a file that
+  load read is uncommitted. Measured here: about 120ms per call, down from about 1.6s.
 - **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
   count. magus reads no environment variable to guess it runs in CI, so the same command
   behaves the same everywhere, and `concurrency_profile` stays `balanced`
@@ -259,7 +284,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   lease it was graded under; an unknown lease id is a deny.
 - **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
   --watch`.
-- **The guard denies watching a CI run** (`gh run watch`, `--watch`). Batch-poll instead.
 - **The guard routes unbounded source dumps to `magus refs`.**
 - **A deny on a multi-command line says nothing on it ran.**
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
@@ -305,9 +329,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
   `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
   headers through it, pass it with `WithSink` and close it after the run.
+- **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
+  `head-repo` inputs.** The action reads the pull request from the triggering event and
+  runs its advisors in one step; delete those keys from `with:`. An input switch reading
+  anything but `true` or `false` now fails the step, and one failing advisor no longer
+  stops the rest.
 
 ### Fixed
 
+- **Workspace load is 10x faster.** A bare library import is no longer executed as a
+  candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
+  A run skips re-evaluating a magusfile that does not export the target, and an exact
+  source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
 - **The GitHub provider no longer offers a merge method a ruleset refuses.** `describe`
   intersected repository settings alone; it now narrows `methods` to what every active
   ruleset rule targeting the base branch also allows, drops `merge` under a required

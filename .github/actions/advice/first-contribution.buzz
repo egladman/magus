@@ -7,8 +7,6 @@
 // What it says is chosen for the mistakes a newcomer to a MAGUS workspace makes, not for
 // generic repository etiquette: generated files are regenerated rather than edited, and
 // the whole pipeline is one command they can run before pushing.
-//
-// Reads REPO, PR_NUMBER, PR_AUTHOR.
 import "proc";
 import "advice";
 import "serialize";
@@ -43,9 +41,10 @@ export fun welcome(author: str) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final author = advice\env("PR_AUTHOR");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final author = pull.author;
     if (repo == "" or pr == "" or author == "") {
         std\print("first-contribution: no PR context; nothing to advise");
         return;

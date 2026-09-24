@@ -55,6 +55,48 @@ func (v gitVCS) IsSecondaryCheckout(dir string) bool {
 	return strings.Contains(filepath.ToSlash(strings.TrimSpace(rest)), "/.git/worktrees/")
 }
 
+// OtherCheckouts implements types.CheckoutLister from the files `git worktree list` reads:
+// the primary checkout is the parent of a non-bare common dir, and each linked
+// worktree's admin dir holds a gitdir file naming its .git. A bare repository's own
+// common dir names no checkout (matching its basename against ".git" would only ever
+// recognize the non-bare shape), so the primary is recognized structurally instead:
+// its parent is a checkout of common exactly when ITS OWN common dir is common too.
+// That also covers the "bare repo alongside a root checkout" layout, where the bare
+// dir sits inside the primary rather than beside it, and the primary is discovered
+// the same way a linked worktree is: by resolving its own gitdir chain.
+func (v gitVCS) OtherCheckouts(root string) ([]string, error) {
+	common := gitCommonDir(root)
+	self, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	add := func(dir string) {
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil || real == self || slices.Contains(out, real) {
+			return
+		}
+		if fi, err := os.Stat(real); err == nil && fi.IsDir() {
+			out = append(out, real)
+		}
+	}
+	if parent := filepath.Dir(common); gitCommonDir(parent) == common {
+		add(parent)
+	}
+	entries, err := os.ReadDir(filepath.Join(common, "worktrees"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	for _, e := range entries {
+		b, err := os.ReadFile(filepath.Join(common, "worktrees", e.Name(), "gitdir"))
+		if err != nil {
+			continue
+		}
+		add(filepath.Dir(strings.TrimSpace(string(b))))
+	}
+	return out, nil
+}
+
 // ConfiguredRemote implements types.RemoteConfigReporter by reading .git/config, the
 // same answer `git remote get-url origin` gives without starting git. It resolves a
 // linked worktree or submodule to the shared config first, since only that one carries
@@ -548,19 +590,31 @@ func (v gitVCS) culprit(ctx context.Context, dir string) (string, error) {
 }
 
 func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
-	shortHash, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--short", "HEAD")
-	if err != nil {
-		return types.VCSMeta{}, err
+	// Concurrent: every run reads this before its first step, and five serial spawns
+	// were about 90ms of a cached replay.
+	queries := [][]string{
+		{"rev-parse", "--short", "HEAD"},
+		{"rev-parse", "HEAD"},
+		{"rev-parse", "--abbrev-ref", "HEAD"},
+		{"log", "-1", "--format=%ci"},
+		// --untracked-files=normal against status.showUntrackedFiles=no, which would
+		// report a tree holding only new files as clean.
+		{"status", "--porcelain", "--untracked-files=normal"},
 	}
-	hash, _ := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "HEAD")
-	branch, _ := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--abbrev-ref", "HEAD")
-	commitDate, _ := gitOutput(ctx, dir, gitOpts{}, "log", "-1", "--format=%ci")
+	outs := make([]string, len(queries))
+	errs := make([]error, len(queries))
+	var wg sync.WaitGroup
+	for i, q := range queries {
+		wg.Go(func() { outs[i], errs[i] = gitOutput(ctx, dir, gitOpts{}, q...) })
+	}
+	wg.Wait()
+	if errs[0] != nil {
+		return types.VCSMeta{}, errs[0]
+	}
+	shortHash, hash, branch, commitDate, dirtyOut := outs[0], outs[1], outs[2], outs[3], outs[4]
 	// Don't swallow the dirty-probe error: a failed status must not be reported as
 	// a clean tree (that would stamp a dirty build as clean).
-	// --untracked-files=normal against status.showUntrackedFiles=no, which would report a
-	// tree holding only new files as clean.
-	dirtyOut, err := gitOutput(ctx, dir, gitOpts{}, "status", "--porcelain", "--untracked-files=normal")
-	if err != nil {
+	if err := errs[4]; err != nil {
 		return types.VCSMeta{}, fmt.Errorf("git status: %w", err)
 	}
 	return types.VCSMeta{
@@ -830,6 +884,29 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 		return "", types.ErrVCSUnsupported
 	}
 	return strings.TrimPrefix(out, "origin/"), nil
+}
+
+// CheckoutState implements types.CheckoutStateReporter with two reads of refs and none of
+// the working tree: `symbolic-ref` names the branch HEAD points at and exits 1 when HEAD
+// names a commit, and `for-each-ref` lists refs/remotes.
+func (gitVCS) CheckoutState(ctx context.Context, dir string) (types.CheckoutState, error) {
+	var state types.CheckoutState
+	branch, err := gitOutput(ctx, dir, gitOpts{}, "symbolic-ref", "-q", "--short", "HEAD")
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		state.Branch = branch
+	case !errors.As(err, &exit) || exit.ExitCode() != 1:
+		return types.CheckoutState{}, fmt.Errorf("git symbolic-ref: %w", err)
+	}
+	refs, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--format=%(refname)", "refs/remotes")
+	if err != nil {
+		return types.CheckoutState{}, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	for _, ref := range strings.Fields(refs) {
+		state.RemoteBranches = append(state.RemoteBranches, strings.TrimPrefix(ref, "refs/remotes/"))
+	}
+	return state, nil
 }
 
 // CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of

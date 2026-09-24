@@ -40,14 +40,27 @@ func (w rootOnlyWS) All() []*types.Project { return nil }
 
 func TestLoadLocalBuzzLibraryUsesProjectRootImports(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "lib/text.buzz", `export fun value() > str { return "ok"; }`)
+	writeFile(t, root, "lib/text.buzz", `export fun value() > str { return "root-import-spell"; }`)
 	path := filepath.Join(root, "lib", "helper.buzz")
 	writeFile(t, root, "lib/helper.buzz", `import "lib/text" as text;
-export fun helper() > str { return text.value(); }`)
+export fun mgs_getName() > str { return text.value(); }`)
 
 	ctx := interp.WithSource(context.Background(), &interp.Source{Dir: root})
-	_, _, err := loadBuzzSpell(ctx, path)
-	assert.ErrorIs(t, err, spell.ErrNotASpell)
+	spec, _, err := loadBuzzSpell(ctx, path)
+	require.NoError(t, err)
+	assert.Equal(t, "root-import-spell", spec.Name)
+}
+
+// A module that never names mgs_getName cannot export it, so it is refused as not a
+// spell without being executed: its import runs once, as the library it is.
+func TestLoadLocalBuzzLibraryIsNotExecutedAsASpell(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "lib", "helper.buzz")
+	writeFile(t, root, "lib/helper.buzz", `import "lib/does-not-exist" as missing;
+export fun helper() > str { return missing.value(); }`)
+
+	_, _, err := loadBuzzSpell(interp.WithSource(context.Background(), &interp.Source{Dir: root}), path)
+	assert.ErrorIs(t, err, spell.ErrNotASpell, "executing it would have failed on the missing import instead")
 }
 
 // TestProjectImportFileResolver exercises the reserved `.file(rel)` member on a

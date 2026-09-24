@@ -193,9 +193,16 @@ type Step struct {
 	// because they move independently; see config.CacheInclude.
 	IncludeOS   bool
 	IncludeArch bool
-	NoCache     bool // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay  bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Slots       int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	// Stamps are files (relative to WorkspaceRoot) a tool writes when its work
+	// completes. They are not hashed: they change DURING the run, so the key computed
+	// before it could never match an entry filed after it. Instead the entry records
+	// each stamp's digest as the run left it, and a hit replays only while every stamp
+	// still reads the same. A stamped entry describes one local tree, so it is never
+	// fetched from or pushed to a remote.
+	Stamps     []string
+	NoCache    bool // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Slots      int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -438,8 +445,8 @@ func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, mErr := c.readManifest(s.ProjectPath, hash)
-	return mErr == nil, nil
+	manifest, mErr := c.readManifest(s.ProjectPath, hash)
+	return mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
 }
 
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
@@ -743,11 +750,13 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	// handed that to every other machine. A failing stat was the lucky outcome; this is
 	// the one that was silent.
 	storable := c.local.writes() && !s.NoCache
-	if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
-		storable = false
-		c.log.WarnContext(ctx, fmt.Sprintf(
-			"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
-			s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+	if storable {
+		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
+			storable = false
+			c.log.WarnContext(ctx, fmt.Sprintf(
+				"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
+				s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+		}
 	}
 
 	var snap *Manifest
