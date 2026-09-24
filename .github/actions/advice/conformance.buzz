@@ -11,9 +11,9 @@
 // SILENCE IS THE DEFAULT AND THE HARD PART. A workspace with no convention must produce
 // nothing. Two gates enforce that, and both must pass:
 //
-//   - the cohort must be big enough to establish a convention at all (MIN_COHORT). Two
-//     targets agreeing is a coincidence.
-//   - the majority must be overwhelming (MIN_SHARE). A 30/28 split is not a violation,
+//   - the cohort must be big enough to establish a convention at all
+//     (`conformance-min-cohort`). Two targets agreeing is a coincidence.
+//   - the majority must be overwhelming (`conformance-min-share`). A 30/28 split is not a violation,
 //     it is a workspace that has not decided, and reporting it as one burns the tool's
 //     credibility on the first run.
 //
@@ -31,8 +31,6 @@
 //
 // It never renames anything. Renaming a target breaks every caller, CI config, and
 // script outside the workspace, so this advises and stops.
-//
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
 import "proc";
 import "advice";
 import "magus";
@@ -188,16 +186,17 @@ fun body(items: [{str: str}]) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("conformance: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "conformance: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "conformance: the pull request's number, base and head sha must be set together";
     }
     if (advice\silenced(repo, pr: pr, name: section)) {
         // Retract rather than leave the last finding frozen on the page.
@@ -207,10 +206,10 @@ fun main() > void !> any {
     }
 
     var minCohort = 5;
-    final configuredCohort = advice\env("MIN_COHORT");
+    final configuredCohort = advice\input("conformance-min-cohort");
     if (configuredCohort != "") { minCohort = std\parseInt(configuredCohort) ?? 5; }
     var minShare = 0.8;
-    final configuredShare = advice\env("MIN_SHARE");
+    final configuredShare = advice\input("conformance-min-share");
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var members = mut [];

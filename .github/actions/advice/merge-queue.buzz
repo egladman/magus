@@ -5,7 +5,7 @@
 // The label's prefix and the merge methods come from `magus queue describe`, so the
 // advice names what the provider accepts rather than what this file assumes.
 //
-// Reads REPO, PR_NUMBER, QUEUE_PROVIDER and QUEUE_BASE.
+// Reads the `merge-queue-provider` and `merge-queue-base` inputs.
 import "proc";
 import "advice";
 import "magus";
@@ -41,10 +41,11 @@ export fun suggestion(base: str, prefix: str, methods: [str]) > str {
 
 fun main() > void !> any {
     if (advice\collecting()) { return; }
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final provider = advice\env("QUEUE_PROVIDER");
-    final queueBase = advice\env("QUEUE_BASE");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final provider = advice\input("merge-queue-provider");
+    final queueBase = advice\input("merge-queue-base");
     if (repo == "" or pr == "" or provider == "" or queueBase == "") {
         std\print("merge-queue: no pull request or queue to advise on");
         return;

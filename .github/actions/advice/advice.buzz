@@ -1,5 +1,5 @@
-// Shared plumbing for the PR advisors: environment reads, and the one comment they all
-// write into.
+// Shared plumbing for the PR advisors: the pull request and inputs they read, and the one
+// comment they all write into.
 //
 // ONE comment per pull request, not one per advisor. Each advisor owns a SECTION of it,
 // delimited by its own begin/end markers, and replaces only that section - so a reader
@@ -28,9 +28,7 @@ final comment_marker = "<!-- magus:advice -->";
 // reaching the forge at all.
 //
 // One environment variable rather than a flag per advisor, because an advisor is a script
-// with no argv of its own: the composite action hands it everything through the
-// environment, so a local driver has to speak the same way or the advisors would need two
-// input paths.
+// with no argv of its own and reads everything else from its environment too.
 //
 // MAGUS_INTERNAL_ is what the prefix says: this pair is the handshake between `magus diff`
 // and these scripts, not a knob to set by hand. Nothing supports it and nothing keeps it
@@ -41,14 +39,14 @@ final mode_local = "local";
 
 // The base to compare against in local mode, set by the driver. A BRANCH NAME rather than
 // a rev, which is what the name insists on: the advisors compare against `origin/<base>`,
-// the same thing PR_BASE means in CI, so local mode changes where the value comes from and
-// not what it is.
+// the same thing PullRequest.base means in CI, so local mode changes where the value comes
+// from and not what it is.
 final base_env = "MAGUS_INTERNAL_ADVICE_BASE_BRANCH";
 
 // Stand-ins for the two pull-request facts a local run does not have. Both must be
-// NON-EMPTY: every advisor guards on "PR_NUMBER, PR_BASE and PR_HEAD_SHA set together"
-// and reads all three empty as "not a pull request, say nothing", which locally would
-// silence the entire set rather than run it.
+// NON-EMPTY: every advisor guards on "number, base and headSha set together" and reads all
+// three empty as "not a pull request, say nothing", which locally would silence the entire
+// set rather than run it.
 final local_pr = "local";
 // HEAD, not the working tree, and the difference is real rather than pedantic: the
 // advisors compare with `git diff <base>...<head>` and `git merge-tree <base> <head>`, and
@@ -60,25 +58,88 @@ final local_head = "HEAD";
 // collecting reports whether this run writes to the caller instead of to the forge.
 export fun collecting() > bool { return (os\env(mode_env) ?? "") == mode_local; }
 
-// localFallback maps a pull-request variable to what a local run uses in its place. Pure
-// over the base, so the local contract is pinned by a test rather than by an environment
-// this file would have to mutate to observe.
-export fun localFallback(name: str, base: str) > str {
-    if (name == "PR_BASE") { return base; }
-    if (name == "PR_NUMBER") { return local_pr; }
-    if (name == "PR_HEAD_SHA") { return local_head; }
-    return "";
+// PullRequest is what an advisor knows about the change it advises on. Every field is ""
+// when the run has no pull request, which every advisor reads as "say nothing".
+export object PullRequest {
+    // owner/name, as the runner's GITHUB_REPOSITORY spells it.
+    repo: str = "",
+    number: str = "",
+    // The branch the pull request merges into.
+    base: str = "",
+    // The head COMMIT. actions/checkout resolves a pull_request event to the ephemeral
+    // merge commit, which already contains the base, so comparing that against the base
+    // would find nothing.
+    headSha: str = "",
+    // The head BRANCH, which is what a fixer pushes to.
+    headRef: str = "",
+    // owner/name of the repository holding headRef. Differs from repo on a fork, which the
+    // job's token cannot push to.
+    headRepo: str = "",
+    author: str = "",
 }
 
-// env reads a variable, returning "" rather than null so callers can compare directly.
-//
-// In local mode it also SUPPLIES the pull-request facts nobody set, so an advisor goes
-// on reading its inputs through this one helper and grows no local branch of its own. A
-// name that IS set always wins: a developer who exported PR_BASE meant it.
-export fun env(name: str) > str {
-    final set = os\env(name) ?? "";
-    if (set != "" or !collecting()) { return set; }
-    return localFallback(name, base: os\env(base_env) ?? "");
+// eventPullRequest reads the pull request out of an Actions event payload. An event with
+// no pull_request (a push, a schedule) yields one with only repo set. Throws on a payload
+// that is not a JSON object, or whose pull_request has no number.
+export fun eventPullRequest(payload: str, repo: str) > PullRequest !> any {
+    final event = serialize\jsonDecode(payload);
+    if (event.map() == null) { throw "advice: the event payload is not a JSON object"; }
+    final pr = event.q(["pull_request"]);
+    if (pr.map() == null) { return PullRequest{repo = repo}; }
+    final number = pr.q(["number"]).integer();
+    if (number == null) { throw "advice: the event payload's pull_request has no number"; }
+    return PullRequest{
+        repo = repo,
+        number = "{number!}",
+        base = pr.q(["base", "ref"]).stringValue(),
+        headSha = pr.q(["head", "sha"]).stringValue(),
+        headRef = pr.q(["head", "ref"]).stringValue(),
+        // null when the fork was deleted; "" then reads as not a fork, and the fixers'
+        // branch check still refuses to push.
+        headRepo = pr.q(["head", "repo", "full_name"]).stringValue(),
+        author = pr.q(["user", "login"]).stringValue(),
+    };
+}
+
+// localPullRequest is the stand-in a local run advises on. headRef stays empty, so no
+// fixer finds a branch to push to.
+export fun localPullRequest(repo: str, base: str) > PullRequest {
+    return PullRequest{repo = repo, number = local_pr, base = base, headSha = local_head};
+}
+
+// pullRequest returns the pull request this run advises on: the local stand-in under
+// `magus diff`, otherwise the one in the event payload at GITHUB_EVENT_PATH. Throws when
+// neither is available.
+export fun pullRequest() > PullRequest !> any {
+    final repo = os\env("GITHUB_REPOSITORY") ?? "";
+    if (collecting()) { return localPullRequest(repo, base: os\env(base_env) ?? ""); }
+    final path = os\env("GITHUB_EVENT_PATH") ?? "";
+    if (path == "") {
+        throw "advice: GITHUB_EVENT_PATH is not set; the advisors read the pull request "
+            + "from the event payload the Actions runner writes there";
+    }
+    return eventPullRequest(fs\readFile(path), repo: repo);
+}
+
+// decodeInputs parses the action's inputs as the composite step passes them, toJSON of the
+// inputs context. "" decodes to no inputs. Throws on anything but an object of strings.
+export fun decodeInputs(text: str) > {str: str} !> any {
+    final inputs = mut {<str: str>};
+    if (text == "") { return inputs; }
+    final decoded = serialize\jsonDecode(text).map();
+    if (decoded == null) { throw "advice: ADVICE_INPUTS is not a JSON object"; }
+    foreach (name, value in decoded!) {
+        final s = value.string();
+        if (s == null) { throw "advice: input " + name + " is not a string"; }
+        inputs[name] = s!;
+    }
+    return inputs;
+}
+
+// input returns the named action input, or "" when it was not passed. Unset ADVICE_INPUTS
+// passes none, so an advisor run on its own falls back to its defaults.
+export fun input(name: str) > str !> any {
+    return decodeInputs(os\env("ADVICE_INPUTS") ?? "")[name] ?? "";
 }
 
 // fetchBase brings refs/remotes/origin/<base> up to date before an advisor compares
@@ -187,8 +248,8 @@ fun preface() > str {
         + "> Checked this pull request against the build graph. Each finding below starts "
         + "collapsed; open the ones that concern you. **Nothing here blocks the merge**; "
         + "disagree with a note and label it away.\n";
-    final repo = env("REPO");
-    final run = env("GITHUB_RUN_ID");
+    final repo = os\env("GITHUB_REPOSITORY") ?? "";
+    final run = os\env("GITHUB_RUN_ID") ?? "";
     if (repo != "" and run != "") {
         text = text + ">\n> [Full run summary](https://github.com/" + repo + "/actions/runs/" + run
             + ") - hotspots, ownership, volatility, dependency graph.\n";
@@ -433,7 +494,7 @@ fun resolved() > str {
 }
 
 // The sections that get a fixed place in the comment. Anything unlisted appends, so a new
-// advisor needs no entry here and the rest keep the order of the steps in action.yml.
+// advisor needs no entry here and the rest keep the order advise.buzz runs them in.
 //
 // unclaimed leads because it is the finding that undercuts the others: a file no project
 // declares reruns its containing project on every touch without moving a cache key, and
@@ -617,8 +678,9 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     // would build `repos//issues//comments` and fail on the far side, blaming GitHub for
     // a missing local variable, so say which of the two modes is missing its input.
     if (repo == "" or pr == "") {
-        throw "advice: nowhere to publish \"" + name + "\". For a pull request, set REPO "
-            + "and PR_NUMBER (the advice composite action passes both). A local run is "
+        throw "advice: nowhere to publish \"" + name + "\". For a pull request, run it from "
+            + "an event carrying one: GITHUB_REPOSITORY names the repository and the payload "
+            + "at GITHUB_EVENT_PATH the pull request. A local run is "
             + "driven by magus diff, which sets " + mode_env + "=" + mode_local + " and "
             + "reads each section back as one JSON line instead of posting it.";
     }
@@ -866,19 +928,87 @@ test "a retraction is still a section" {
 }
 
 test "local mode supplies the pull-request facts a working tree has not got" {
-    assert\equal(localFallback("PR_BASE", base: "main"), want: "main",
-        message: "the base is the driver's, passed through");
-    std\assert(localFallback("PR_NUMBER", base: "main") != "",
+    final pr = localPullRequest("", base: "main");
+    assert\equal(pr.base, want: "main", message: "the base is the driver's, passed through");
+    std\assert(pr.number != "",
         message: "non-empty, or every advisor reads the run as 'not a pull request' and says nothing");
-    std\assert(localFallback("PR_HEAD_SHA", base: "main") != "",
-        message: "same guard: all three must be set together");
+    std\assert(pr.headSha != "", message: "same guard: all three must be set together");
 }
 
 test "local mode invents nothing beyond those three" {
-    assert\equal(localFallback("GITHUB_TOKEN", base: "main"), want: "",
-        message: "a credential is never conjured for a local run");
-    assert\equal(localFallback("FIX_LABEL", base: "main"), want: "",
-        message: "consent for a writer is not something a local default can give");
+    final pr = localPullRequest("", base: "main");
+    assert\equal(pr.headRef, want: "", message: "no branch, so no fixer has anywhere to push");
+    assert\equal(pr.headRepo, want: "", message: "no head repository either");
+    assert\equal(pr.author, want: "", message: "and nobody to welcome");
+}
+
+test "eventPullRequest reads a pull_request event" {
+    final payload = serialize\jsonEncode({"pull_request": {
+        "number": 42,
+        "base": {"ref": "main"},
+        "head": {"sha": "abc123", "ref": "topic", "repo": {"full_name": "o/r"}},
+        "user": {"login": "someone"},
+    }});
+    final pr = eventPullRequest(payload, repo: "o/r");
+    assert\equal(pr.repo, want: "o/r", message: "the repository is the runner's");
+    assert\equal(pr.number, want: "42", message: "the number, as text");
+    assert\equal(pr.base, want: "main", message: "the base branch");
+    assert\equal(pr.headSha, want: "abc123", message: "the head commit, not the merge commit");
+    assert\equal(pr.headRef, want: "topic", message: "the head branch");
+    assert\equal(pr.headRepo, want: "o/r", message: "the head repository");
+    assert\equal(pr.author, want: "someone", message: "who opened it");
+}
+
+test "eventPullRequest names a fork's head repository" {
+    final payload = serialize\jsonEncode({"pull_request": {
+        "number": 7,
+        "base": {"ref": "main"},
+        "head": {"sha": "def456", "ref": "patch-1", "repo": {"full_name": "fork/r"}},
+    }});
+    final pr = eventPullRequest(payload, repo: "o/r");
+    std\assert(pr.headRepo != pr.repo, message: "a fork reads as one, so no fixer pushes to it");
+    assert\equal(pr.headRepo, want: "fork/r", message: "and says whose it is");
+}
+
+test "eventPullRequest tolerates a fork that was deleted" {
+    final payload = serialize\jsonEncode({"pull_request": {
+        "number": 7, "base": {"ref": "main"}, "head": {"sha": "def456", "ref": "x", "repo": null},
+    }});
+    assert\equal(eventPullRequest(payload, repo: "o/r").headRepo, want: "",
+        message: "GitHub sends null for a deleted head repository");
+}
+
+test "an event with no pull request advises on nothing" {
+    final pr = eventPullRequest(serialize\jsonEncode({"ref": "refs/heads/main"}), repo: "o/r");
+    assert\equal(pr.number, want: "", message: "a push carries no pull request");
+    assert\equal(pr.base, want: "", message: "so every advisor's guard reads it as none");
+    assert\equal(pr.headSha, want: "", message: "all three empty together");
+}
+
+test "eventPullRequest refuses a payload it cannot read" {
+    final notObject = eventPullRequest("[]", repo: "o/r") catch PullRequest{number = "refused"};
+    assert\equal(notObject.number, want: "refused", message: "a payload that is not an object");
+    final noNumber = eventPullRequest(serialize\jsonEncode({"pull_request": {"base": {"ref": "main"}}}),
+        repo: "o/r") catch PullRequest{number = "refused"};
+    assert\equal(noNumber.number, want: "refused", message: "a pull request with no number");
+}
+
+test "decodeInputs reads the inputs context" {
+    final inputs = decodeInputs(serialize\jsonEncode({"doctor": "true", "fanout-share": "0.5"}));
+    assert\equal(inputs["doctor"] ?? "", want: "true", message: "a switch");
+    assert\equal(inputs["fanout-share"] ?? "", want: "0.5", message: "a tuning value");
+    std\assert(inputs["pr-number"] == null, message: "an input not passed is absent");
+}
+
+test "decodeInputs reads no inputs as none" {
+    std\assert(decodeInputs("").len() == 0, message: "an advisor run on its own uses its defaults");
+}
+
+test "decodeInputs refuses anything but an object of strings" {
+    final notObject = decodeInputs("[\"doctor\"]") catch {"refused": "yes"};
+    std\assert(notObject["refused"] != null, message: "a list is not the inputs context");
+    final notString = decodeInputs(serialize\jsonEncode({"doctor": true})) catch {"refused": "yes"};
+    std\assert(notString["refused"] != null, message: "an action input is always a string");
 }
 
 test "CI diffs the pull request's commits" {
@@ -893,8 +1023,8 @@ test "CI diffs the pull request's commits" {
 test "the local-mode variables are spelled as the driver spells them" {
     // cmd/magus/diff_advice.go holds the only other copy of these three strings, and
     // nothing at runtime couples the two: rename one side alone and collecting() stays
-    // false, so env() supplies no pull-request facts and every advisor reaches publish()
-    // with an empty repo and pr - ten "nowhere to publish" notes and not one finding.
+    // false, so pullRequest() looks for an Actions event payload a local run never has -
+    // ten "GITHUB_EVENT_PATH is not set" notes and not one finding.
     assert\equal(mode_env, want: "MAGUS_INTERNAL_ADVICE_MODE", message: "the mode variable");
     assert\equal(mode_local, want: "local", message: "and the value that turns local mode on");
     assert\equal(base_env, want: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH",
