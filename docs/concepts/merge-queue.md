@@ -668,6 +668,7 @@ functions, each taking one record:
 | `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                              |
 | `flag`           | the change plus `{flag, on}`: `changes_generator`, and whether to show it                   | `true` once the change shows the flag exactly when `on`                          |
 | `list_artifacts` | `{source}`                                                                                  | `{run, complete, artifacts: [{name, url}], headers?}`                            |
+
 All but `list_artifacts` are required, and a script missing one is refused when it
 opens; `list_artifacts` is required of a provider `apply` follows through a run. Every
 returned key without a `?` is required: a missing one is an error, never a zero value,
