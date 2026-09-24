@@ -323,3 +323,7 @@ tags/pinning/
 # MAGUS_NO_WAIT was removed when a held lock or budget began refusing at once; its tag
 # index went with the pages that documented it.
 tags/magus-no-wait/
+
+# The read-ack guard rule folded into person-only; rule pages are generated, so the old
+# name gets no alias.
+reference/rules/read-ack/
