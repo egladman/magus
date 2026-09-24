@@ -28,6 +28,14 @@ const (
 	advisoryNewFile       hint.MarkerKind = "new-file"
 	advisoryLeaseTerminal hint.MarkerKind = "lease-terminal"
 	advisoryLeaseInvalid  hint.MarkerKind = "lease-invalid"
+	// advisorySplitRun covers two shapes of the same mistake: `magus run` (or `affected`)
+	// takes one target and many projects, so the same target run twice on different
+	// project sets is usually one call typed twice. On ONE line it is a denyRuleName,
+	// like advisoryChainedRun beside it, because a chain worth questioning on sight is
+	// worth questioning every time it is typed again. ACROSS two calls it is held to one
+	// firing per session (see internal/guard/splitrun.go), since the session already
+	// knows and a second reminder of the same standing fact teaches nothing new.
+	advisorySplitRun hint.MarkerKind = "split-run"
 	// advisorySharedCheckout fires on a SPAWN, which is the one moment the choice between
 	// one checkout and two is still free to make.
 	advisorySharedCheckout hint.MarkerKind = "shared-checkout"

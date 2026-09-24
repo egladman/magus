@@ -18,9 +18,12 @@
 // bool that the remote-cache subsystem detects by name and invokes with the
 // work-unit Target and an input callback cb, reading the boolean result of:
 //
-//   enabled(target, cb)   -> bool   active here? (gates fetch/push; ignores cb)
-//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit
-//   put_artifact(target, cb) -> bool   upload artifact at src;     true=stored
+//   enabled(target, cb)      -> bool   active here? (gates fetch/push; ignores cb)
+//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit, false=miss
+//   has_artifact(target, cb) -> bool   stored? without downloading
+//   put_artifact(target, cb) -> bool   upload artifact at src; true=uploaded, false=already present
+//
+// A request that fails throws: the cache counts it as a failure, never as a miss.
 //
 // A contract function reads its inputs by calling cb(io) with an empty map: the
 // host writes the cache inputs ({project, hash, dest/src}) into io, which the
@@ -130,6 +133,17 @@ fun rpc(method: str, payload: any) > any !> any {
     return http\post(url, serialize\jsonEncode(payload), headers);
 }
 
+// url_field reads a signed URL out of a Twirp response under its protobuf name
+// (signed_upload_url), which is what the service sends and what BuildKit's type=gha
+// client reads, or else its lowerCamel JSON name, which the official toolkit's decoder
+// also accepts. Reading only the camel name found nothing, and put_artifact took that
+// empty URL for "already stored": every push reported success and uploaded nothing.
+fun url_field(decoded: serialize\Boxed, proto_name: str, json_name: str) > str {
+    final v = decoded.q(proto_name).stringValue();
+    if (v != "") { return v; }
+    return decoded.q(json_name).stringValue();
+}
+
 // snippet bounds a server's response body so a warning stays one readable line. A Twirp
 // error body is a short JSON object; anything longer is an HTML error page whose first
 // characters already say which proxy produced it.
@@ -138,50 +152,62 @@ fun snippet(body: str) > str {
     return body.sub(0, len: 200) + "...";
 }
 
-// cache_warn names a protocol step that did not do what the contract says. The contract
-// returns a bare bool, so magus can only report "did not store artifact"; this spell owns
-// the protocol and is the only layer that can say which step failed.
-fun cache_warn(step: str, detail: str) > void {
-    std\print("magus:notice:github-actions cache: {step}: {detail}");
+// cache_fail throws for a protocol step that did not do what the contract says. The
+// contract's false means miss (get) or already present (put), so a failure must not
+// return one: a service rejecting every read would read as a cold cache.
+fun cache_fail(step: str, detail: str) > void !> any {
+    throw "github-actions cache: {step}: {detail}";
 }
 
-// get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
-// true on a hit (dest written), false on a miss or when not running under Actions.
-//
-// A miss and a FAILURE both return false - the contract has no third answer - so every
-// error is announced before it is flattened. Otherwise a service rejecting every read is
-// indistinguishable from a cold cache.
+// download_url asks the service where the entry for hash is stored; "" when it holds
+// none. ok=false is the service's miss.
+fun download_url(hash: str) > str !> any {
+    final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
+    if (res["status"] != 200) {
+        cache_fail("GetCacheEntryDownloadURL", "status {res["status"]}: {snippet("{res["body"]}")}");
+    }
+    final decoded = serialize\jsonDecode(res["body"]);
+    if (!decoded.q("ok").booleanValue()) { return ""; }
+    final loc = url_field(decoded, "signed_download_url", "signedDownloadUrl");
+    if (loc == "") {
+        cache_fail("GetCacheEntryDownloadURL", "ok=true but no download URL: {snippet("{res["body"]}")}");
+    }
+    return loc;
+}
+
+// get_artifact downloads the cache artifact for payload.hash into payload.dest: true on
+// a hit (dest written), false on a miss or when not running under Actions. A failed
+// request throws.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
-    final hash = "{io["hash"]}";
-    final dest = "{io["dest"]}";
-    final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
-    if (res["status"] != 200) {
-        cache_warn("GetCacheEntryDownloadURL", "status {res["status"]}: {snippet("{res["body"]}")}");
-        return false;
-    }
-    final decoded = serialize\jsonDecode(res["body"]);
-    if (!decoded.q("ok").booleanValue()) { return false; }   // ok=false ⇒ miss
-    final loc = decoded.q("signedDownloadUrl").stringValue();
-    if (loc == "") {
-        cache_warn("GetCacheEntryDownloadURL", "ok=true but no signedDownloadUrl");
-        return false;
-    }
+    final loc = download_url("{io["hash"]}");
+    if (loc == "") { return false; }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
-    final dcode = http\download(loc, dest, {});
+    final dcode = http\download(loc, "{io["dest"]}", {});
     if (dcode != 200) {
-        cache_warn("blob GET", "status {dcode}");
-        return false;
+        cache_fail("blob GET", "status {dcode}");
     }
     return true;
 }
 
-// put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
-// success or when another runner already stored the same key, else false.
-export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
+// has_artifact reports whether the service holds payload.hash, without downloading it:
+// the lookup half of get_artifact.
+export fun has_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
+    final io = {};
+    cb(io);
+    return download_url("{io["hash"]}") != "";
+}
+
+// put_artifact uploads the artifact at payload.src for payload.hash: true once
+// uploaded, false when the entry is already stored (a 409) or another job holds the
+// reservation (ok=false), neither of which is a failure. A failed request throws.
+export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
+    if (!in_actions() or base() == "" or !has_token()) {
+        cache_fail("put_artifact", "not running under GitHub Actions with a cache token");
+    }
     final io = {};
     cb(io);
     final hash = "{io["hash"]}";
@@ -190,34 +216,34 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
 
     // 1. Reserve the entry → pre-signed Azure upload URL.
     final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
-    if (cres["status"] == 409) { return true; }   // another runner already reserved this key
+    if (cres["status"] == 409) { return false; }
     if (cres["status"] != 200) {
-        cache_warn("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}");
-        return false;
+        cache_fail("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}");
     }
-    final upload = serialize\jsonDecode(cres["body"]).q("signedUploadUrl").stringValue();
-    if (upload == "") { return true; }             // ok=false with no URL ⇒ entry already exists
+    final created = serialize\jsonDecode(cres["body"]);
+    if (!created.q("ok").booleanValue()) { return false; }
+    final upload = url_field(created, "signed_upload_url", "signedUploadUrl");
+    if (upload == "") {
+        cache_fail("CreateCacheEntry", "ok=true but no upload URL: {snippet("{cres["body"]}")}");
+    }
 
     // 2. Upload the artifact to Azure as a single Put Blob (chunk_size 0 = whole
     //    file, no Content-Range). Azure returns 201 Created on success.
     final ures = http\upload_chunked("PUT", upload, src, 0, mut {"x-ms-blob-type": "BlockBlob"});
     final ucode = ures[0];
     if (ucode != 201 and ucode != 200) {
-        cache_warn("blob PUT", "status {ucode}: {snippet("{ures[1]}")}");
-        return false;
+        cache_fail("blob PUT", "status {ucode}: {snippet("{ures[1]}")}");
     }
 
     // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
-    //    so send sizeBytes as a string.
+    //    so send size_bytes as a string.
     final fres = rpc("FinalizeCacheEntryUpload",
-        {"key": key, "sizeBytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
+        {"key": key, "size_bytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
     if (fres["status"] != 200) {
-        cache_warn("FinalizeCacheEntryUpload", "status {fres["status"]}: {snippet("{fres["body"]}")}");
-        return false;
+        cache_fail("FinalizeCacheEntryUpload", "status {fres["status"]}: {snippet("{fres["body"]}")}");
     }
     if (!serialize\jsonDecode(fres["body"]).q("ok").booleanValue()) {
-        cache_warn("FinalizeCacheEntryUpload", "ok=false: {snippet("{fres["body"]}")}");
-        return false;
+        cache_fail("FinalizeCacheEntryUpload", "ok=false: {snippet("{fres["body"]}")}");
     }
     return true;
 }
@@ -587,6 +613,15 @@ test "the cache service accepts nothing but a 64-character lowercase hex `versio
         final hex = (ch >= "0" and ch <= "9") or (ch >= "a" and ch <= "f");
         assert\isTrue(hex, "character " + ch + " is not lowercase hex");
     }
+}
+
+test "url_field reads the service's protobuf name and still accepts lowerCamel" {
+    final proto = serialize\jsonDecode("\{\"ok\":true,\"signed_upload_url\":\"https://blob/a\"}");
+    assert\equal(url_field(proto, "signed_upload_url", "signedUploadUrl"), "https://blob/a", "protobuf name");
+    final camel = serialize\jsonDecode("\{\"ok\":true,\"signedUploadUrl\":\"https://blob/b\"}");
+    assert\equal(url_field(camel, "signed_upload_url", "signedUploadUrl"), "https://blob/b", "lowerCamel name");
+    final none = serialize\jsonDecode("\{\"ok\":false}");
+    assert\equal(url_field(none, "signed_upload_url", "signedUploadUrl"), "", "absent under both");
 }
 
 test "escapeData keeps a multi-line secret inside one add-mask command" {

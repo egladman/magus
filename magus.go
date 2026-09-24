@@ -735,7 +735,12 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
-	cfgOpts := []cache.Option{cache.WithMutable(m.cfg.Cache.WriteEnabled())}
+	cfgOpts := []cache.Option{cache.WithLocalWrite(m.cfg.Cache.WriteEnabled())}
+	// Only a declared value is passed: undeclared, the cache decides from the signing
+	// key, while a declared true is a requirement it must be able to honor.
+	if v := m.cfg.Cache.Remote.Write.Enabled; v != nil {
+		cfgOpts = append(cfgOpts, cache.WithRemoteWrite(*v))
+	}
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}

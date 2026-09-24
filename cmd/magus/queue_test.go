@@ -42,6 +42,7 @@ export fun list_changes(io: {str: any}) > any {
 export fun approval_at(io: {str: any}) > any {
     return {"approved": true, "head": io["commit"], "base": "main", "method": io["method"], "queued": true, "shared_with": [<str>]};
 }
+export fun list_green(io: {str: any}) > any { return {"changes": [<any>]}; }
 export fun post_status(io: {str: any}) > bool { return true; }
 export fun retarget(io: {str: any}) > bool { return true; }
 export fun kick_back(io: {str: any}) > bool { return true; }
@@ -190,9 +191,17 @@ func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.RemoteURL)
 }
 
+func withOutput(t *testing.T, format string) {
+	t.Helper()
+	prev := global.output
+	t.Cleanup(func() { global.output = prev })
+	global.output = format
+}
+
 // describe prints what the provider reports, so a tool reads the queue label and the
 // merge methods from the provider rather than knowing them.
 func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
+	withOutput(t, "json")
 	f := newQueueFixture(t, "", "")
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
 	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
@@ -202,6 +211,105 @@ func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
 
 	_, err = f.run(t, "", "describe", "--provider", "local.buzz")
 	require.ErrorContains(t, err, "--base")
+}
+
+// setupProvider describes a setup naming the status context and app describe was asked
+// about, so a test reads the query from the answer.
+const setupProvider = `
+export fun describe(io: {str: any}) > any {
+    if (io["status_context"] == "") {
+        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"]};
+    }
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "queue_label": "queue: ",
+        "setup": {
+            "status_context": io["status_context"],
+            "credential": {"id": "812", "name": "{io["app"]}"},
+            "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["pull_request"]}],
+            "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
+            "steps": [
+                {"title": "Allow auto-merge", "command": "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
+                {"title": "Install it", "url": "https://github.com/apps/q/installations/new"},
+            ],
+        }};
+}
+`
+
+func newSetupFixture(t *testing.T) *queueFixture {
+	t.Helper()
+	f := newQueueFixture(t, "", "")
+	src, err := os.ReadFile(f.provider)
+	require.NoError(t, err)
+	src = []byte(strings.Replace(string(src), "export fun describe(", "fun unused(", 1) + setupProvider)
+	require.NoError(t, os.WriteFile(f.provider, src, 0o644))
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
+	return f
+}
+
+// By default describe prints the setup as a script: every fact a comment, every step a
+// command or a link. magus runs none of it.
+func TestQueueDescribePrintsTheSetupStepsAPersonRuns(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q")
+	require.NoError(t, err)
+	assert.Equal(t, `# local.buzz on main: merge methods squash, merge; stacks merge atomic; a stack queues by the label "queue: <method>"
+# the queue posts "merge-queue" as 812 (q)
+# main requires "merge-queue" from integration 15368 (not seen reported)
+# main requires "ci gate" from any source (seen on pull_request)
+# allow_auto_merge is false; the queue needs true
+
+# 1. Allow auto-merge
+gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true
+
+# 2. Install it
+# open https://github.com/apps/q/installations/new
+`, string(out))
+}
+
+// -o json carries the setup as the capabilities document's structure.
+func TestQueueDescribeJSONCarriesTheSetup(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "json", "--provider", "local.buzz", "--base", "main", "--status-context", "gate")
+	require.NoError(t, err)
+	var doc struct {
+		Schema string      `json:"schema"`
+		Setup  types.Setup `json:"setup"`
+	}
+	require.NoError(t, json.Unmarshal(out, &doc))
+	assert.Equal(t, types.SchemaCapabilities, doc.Schema)
+	assert.Equal(t, types.Setup{
+		StatusContext: "gate",
+		Credential:    types.Integration{ID: "812"},
+		RequiredChecks: []types.RequiredCheck{
+			{Context: "merge-queue", Integration: "15368"},
+			{Context: "ci gate", Events: []string{"pull_request"}},
+		},
+		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
+		Steps: []types.SetupStep{
+			{Title: "Allow auto-merge", Command: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
+			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
+		},
+	}, doc.Setup)
+}
+
+// An empty --status-context asks for no setup: the merge-queue advisor reads the
+// capabilities on a pull request token that cannot read checks.
+func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "json", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"]}`+"\n", string(out))
+}
+
+func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
+	withOutput(t, "yaml")
+	f := newQueueFixture(t, "", "")
+	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
+	var misuse errUsage
+	require.ErrorAs(t, err, &misuse)
+	assert.ErrorContains(t, err, "-o yaml is not supported")
 }
 
 // The three steps as a workflow drives them, over nothing to merge: every path the

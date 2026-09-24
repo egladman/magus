@@ -311,21 +311,104 @@ func (_c *MockProvider_ListChanges_Call) RunAndReturn(run func(ctx context.Conte
 	return _c
 }
 
+// ListGreen provides a mock function for the type MockProvider
+func (_mock *MockProvider) ListGreen(ctx context.Context, q types.ListQuery, statusContext string) ([]types.GreenChange, error) {
+	ret := _mock.Called(ctx, q, statusContext)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListGreen")
+	}
+
+	var r0 []types.GreenChange
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.ListQuery, string) ([]types.GreenChange, error)); ok {
+		return returnFunc(ctx, q, statusContext)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.ListQuery, string) []types.GreenChange); ok {
+		r0 = returnFunc(ctx, q, statusContext)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.GreenChange)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, types.ListQuery, string) error); ok {
+		r1 = returnFunc(ctx, q, statusContext)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProvider_ListGreen_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListGreen'
+type MockProvider_ListGreen_Call struct {
+	*mock.Call
+}
+
+// ListGreen is a helper method to define mock.On call
+//   - ctx context.Context
+//   - q types.ListQuery
+//   - statusContext string
+func (_e *MockProvider_Expecter) ListGreen(ctx interface{}, q interface{}, statusContext interface{}) *MockProvider_ListGreen_Call {
+	return &MockProvider_ListGreen_Call{Call: _e.mock.On("ListGreen", ctx, q, statusContext)}
+}
+
+func (_c *MockProvider_ListGreen_Call) Run(run func(ctx context.Context, q types.ListQuery, statusContext string)) *MockProvider_ListGreen_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.ListQuery
+		if args[1] != nil {
+			arg1 = args[1].(types.ListQuery)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvider_ListGreen_Call) Return(greenChanges []types.GreenChange, err error) *MockProvider_ListGreen_Call {
+	_c.Call.Return(greenChanges, err)
+	return _c
+}
+
+func (_c *MockProvider_ListGreen_Call) RunAndReturn(run func(ctx context.Context, q types.ListQuery, statusContext string) ([]types.GreenChange, error)) *MockProvider_ListGreen_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // MergeChange provides a mock function for the type MockProvider
-func (_mock *MockProvider) MergeChange(ctx context.Context, c types.Change, m types.MergeOptions) error {
+func (_mock *MockProvider) MergeChange(ctx context.Context, c types.Change, m types.MergeOptions) (types.MergeResult, error) {
 	ret := _mock.Called(ctx, c, m)
 
 	if len(ret) == 0 {
 		panic("no return value specified for MergeChange")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, types.MergeOptions) error); ok {
+	var r0 types.MergeResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, types.MergeOptions) (types.MergeResult, error)); ok {
+		return returnFunc(ctx, c, m)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, types.MergeOptions) types.MergeResult); ok {
 		r0 = returnFunc(ctx, c, m)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(types.MergeResult)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, types.Change, types.MergeOptions) error); ok {
+		r1 = returnFunc(ctx, c, m)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockProvider_MergeChange_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MergeChange'
@@ -364,12 +447,12 @@ func (_c *MockProvider_MergeChange_Call) Run(run func(ctx context.Context, c typ
 	return _c
 }
 
-func (_c *MockProvider_MergeChange_Call) Return(err error) *MockProvider_MergeChange_Call {
-	_c.Call.Return(err)
+func (_c *MockProvider_MergeChange_Call) Return(mergeResult types.MergeResult, err error) *MockProvider_MergeChange_Call {
+	_c.Call.Return(mergeResult, err)
 	return _c
 }
 
-func (_c *MockProvider_MergeChange_Call) RunAndReturn(run func(ctx context.Context, c types.Change, m types.MergeOptions) error) *MockProvider_MergeChange_Call {
+func (_c *MockProvider_MergeChange_Call) RunAndReturn(run func(ctx context.Context, c types.Change, m types.MergeOptions) (types.MergeResult, error)) *MockProvider_MergeChange_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -118,6 +118,7 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
+        "preflight": {"skip_cache": "installs node_modules, which no cache entry records; a replay restores nothing"},
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         // index-generate renders `magus describe graph -o markdown`, so its output is a
         // function of the WHOLE knowledge graph - every source file in the workspace and

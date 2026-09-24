@@ -103,13 +103,13 @@ How the provider's own credential is scoped is a separate question, answered und
 Every subcommand writes JSONL events (`mergequeue.event/v1`) on stdout. Hook output and
 errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 1.
 
-| Subcommand | Reads                                          | Writes                                              | Rights                       |
-| ---------- | ---------------------------------------------- | --------------------------------------------------- | ---------------------------- |
-| `describe` | the provider                                   | a `mergequeue.capabilities/v1` document             | read                         |
-| `ls`       | the provider                                   | a `mergequeue.changes/v1` document                  | read                         |
-| `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                         | read                         |
-| `validate` | the plan                                       | the plan and one `mergequeue.verdict/v1` per change | read; runs the changes' code |
-| `apply`    | a source: the plan, then verdicts as they come | merges through the provider                         | write; runs no change's code |
+| Subcommand | Reads                                          | Writes                                                                 | Rights                       |
+| ---------- | ---------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1` document with `-o json` | read                         |
+| `ls`       | the provider                                   | a `mergequeue.changes/v1` document                                     | read                         |
+| `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                                            | read                         |
+| `validate` | the plan                                       | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
+| `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                            | write; runs no change's code |
 
 ```sh
 magus queue ls --provider github --base main > changes.json
@@ -159,7 +159,9 @@ and is refused with `--once`. Each update commit the queue pushes is committed b
 committer the provider's `describe` names; `--committer "Name <email>"` overrides it,
 for example `--committer "Release Bot <release-bot@example.com>"`. magus has no default:
 with neither, a change that needs an update commit waits with `WAIT_NO_COMMITTER` and
-apply stops with an error.
+apply stops with an error. `--app <slug>` names the app whose token the provider writes
+with, when it is not the job's own; apply then checks that the base requires the queue's
+status from that app.
 
 A run source asks the provider's `list_artifacts` for the run's `mergequeue-plan`
 artifact, then for each `mergequeue-verdict-<id>` artifact as the run uploads it, and
@@ -384,9 +386,14 @@ verdicts pass between them one change at a time:
    source merges each change whose predecessors have merged, and stops once the
    validation run completes.
 
-The apply token is the job's own, so no long-lived secret exists. A merge made with
-the Actions token starts no workflow, so once anything merges the job dispatches main's
-CI, CD and the queue's next run itself.
+The apply token is the job's own unless the repository adds the queue's own GitHub App
+(see [Setting it up on GitHub](#setting-it-up-on-github)), so by default no long-lived
+secret exists. Most merges are made by GitHub's auto-merge on behalf of whoever enabled
+it, and start main's CI, CD and the queue's next run like any merge. A merge the queue
+makes itself with the Actions token starts no workflow, so after one the job dispatches
+those runs itself; `apply` marks each `merged` event GitHub made with `by_provider`, and
+the job reads that to decide. With the app's token the queue's own merges start those
+runs themselves, and the workflow tells the job not to dispatch.
 
 Before each merge, apply re-reads the change's approval, merge intent, base and merge
 method from the provider, rebuilds its candidate, and predicts the tree main will carry:
@@ -401,13 +408,25 @@ the next run. Right before asking for the merge, apply reads intent, base and he
 more. A kick-back is carried out only on the head it was decided for; a head pushed since
 waits for a decision of its own.
 
-The queue's status reads `pending` while it asks for a merge and `success` only once the
-change has merged. A required status that went green first would let anyone merge the
-change onto whatever main had become, so the queue's credential has to merge while its
-own status is still pending, which means bypassing it. See [Providers](#providers) for
-what that bypass grants on GitHub.
+The queue's status, `merge-queue`, is main's only required check. It reads `pending`
+while a change waits and `success` only on the commit apply is about to see merged: right
+before it goes green, apply reads main again and confirms it is still the tip the merge
+was predicted onto, and a change whose main moved waits for the next run instead. Then the
+provider merges it (on GitHub, auto-merge does, as soon as the required check passes), or,
+if the provider does not merge it on its own in time, apply asks it to. No credential
+bypasses the status. A success apply cannot follow through, because the provider refused
+the merge or applying stopped, goes back to `pending` before apply returns, and every run
+starts by setting back to `pending` any success an earlier run left on an open change.
 
-Why not have validation post a `magus/queue` status per candidate and trigger apply on
+The queue validates the merge result, not the branch, so GitHub's "Require branches to
+be up to date before merging" stays off: it would force every head onto main's tip, which
+the queue's candidates already account for, and the queue cannot push an update to a
+fork's branch. What that leaves is a push to main from outside the queue (an admin's
+bypass) between apply's read of main and the merge. The merge then lands on a main nobody
+validated; apply's check after the merge finds main does not carry the predicted tree and
+stops, and the next run plans from the new tip.
+
+Why not have validation post a `merge-queue` status per candidate and trigger apply on
 the status event? Posting a status needs `statuses: write` in the job that runs
 pull-request code, and branch protection requires exactly that status, so a pull
 request could mark itself green. Statuses posted with the Actions token do not start
@@ -429,6 +448,81 @@ main carries the predicted tree in the shape the merge method gives (one new com
 squash, a merge commit whose second parent is what it handed over, a line of commits for
 a rebase), and stops otherwise.
 
+## Setting it up on GitHub
+
+The queue runs on the job's own Actions token and needs no secret. That is the whole
+setup for most repositories, and adding the queue's own GitHub App later is
+configuration alone: the workflows are the same files either way.
+
+`magus queue describe` reads how the repository is wired and prints the rest as `gh`
+commands, each under a comment saying what it does. magus never runs them, and never
+changes a setting itself. It reads over the network with your token, so pass one:
+
+```sh
+GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main
+```
+
+`-o json` prints the same as the `setup` of a `mergequeue.capabilities/v1` document: the
+status the queue posts and who its credential posts it as, every check the base requires
+and the integration each is pinned to, the repository settings the queue needs, and the
+steps.
+
+### Without a credential: three steps
+
+1. Commit `.github/workflows/queue.yaml` and `.github/workflows/queue-apply.yaml` (this
+   repository's are the reference). Both setups use them unchanged.
+2. Run the commands `describe` prints: allow auto-merge, and a ruleset of its own that
+   requires `merge-queue` from GitHub Actions (integration 15368) with "Require branches
+   to be up to date before merging" off. Your other rulesets stay as they are. On a
+   phone, the same is Settings > General > Pull Requests > "Allow auto-merge", and
+   Settings > Rules > Rulesets > New branch ruleset: target the default branch, "Require
+   status checks to pass", add `merge-queue` with GitHub Actions as its source.
+3. Decide about the required checks `describe` lists as running on `pull_request`. A push
+   the queue makes with the Actions token (an update commit or a regeneration) starts
+   runs that wait for someone to approve them, so those checks go unreported on it. Take
+   them out of the required set, as this repository did with `ci gate`, or accept that
+   such a change waits until someone approves its runs, or add the app.
+
+Require `merge-queue` only once the queue is on the default branch. Before that, nothing
+posts it, and every merge waits on it.
+
+### The queue's own GitHub App: five more steps
+
+Add it when any of these holds:
+
+- a second person has write access, since anyone with write access can post a status
+  from GitHub Actions, and only a status pinned to an app nobody else holds cannot be
+  forged;
+- you want to keep required checks that run on `pull_request`, since the app's pushes
+  start them like anyone's;
+- a pull request touches `.github/workflows`, which the Actions token cannot merge;
+- you want main's `push` workflows to start on every merge, with nothing dispatched and
+  nothing run twice.
+
+1. Open the registration link `describe` printed last and click "Create GitHub App". It
+   is pre-filled: private, no webhook, and contents, pull requests, commit statuses,
+   actions and workflows write.
+2. On the app's page, generate a private key. A `.pem` downloads.
+3. Install the app on this repository alone.
+4. Run `describe` again with `--app <slug>`, and run the commands it prints: they create
+   the `magus-queue` environment with its secrets released to the default branch only,
+   set the `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's client id, store the key as
+   the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, and delete the download. On a
+   phone, paste the key into Settings > Environments > magus-queue > Add secret.
+5. Apply the ruleset change it prints, which pins `merge-queue` to the app's id: a
+   `gh api` rewrite of the ruleset step 2 created, or a link for any other.
+
+The next `queue-apply` run finds the variable and the secret. `setup-magus` mints a token
+for this repository alone that expires when the job ends, and the queue merges, pushes,
+commits and posts its status as the app's bot. The key lives in the environment, and a
+pull request's run is evaluated against its merge ref, so no pull request's workflow can
+read it.
+
+`apply` refuses to start, with [MGS3019](../reference/codes/sandbox/MGS3019.md), when the
+ruleset pins `merge-queue` to one integration and it holds another's token: GitHub would
+count none of the statuses it posts. That happens when step 5 is skipped, or when the
+secret goes missing and the job falls back to its own token.
+
 ## Providers
 
 A provider is a Buzz script run on an embedded gopherbuzz VM. It exports these
@@ -436,12 +530,13 @@ functions, each taking one record:
 
 | Function         | Receives                                                                | Returns                                                                          |
 | ---------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `describe`       | `{base, remote_url}`                                                    | `{stack_merge, linear_stacks, methods, queue_label?, committer?}`                |
+| `describe`       | `{base, remote_url, status_context, app, setup_steps}`                  | `{stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}`        |
 | `list_changes`   | `{base, remote_url}`                                                    | `{changes, merged, unqueued}`                                                    |
 | `approval_at`    | the change plus `{commit}`                                              | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}` |
+| `list_green`     | `{base, remote_url, context}`                                           | `{changes: [{id, repo, head}]}`                                                  |
 | `post_status`    | the change plus `{commit, context, state, description}`                 | `true` when recorded                                                             |
 | `retarget`       | the change plus `{base}`                                                | `true` once the change targets `base`                                            |
-| `merge_change`   | the change plus `{commit, message, through}`                            | `{merged, reason?}`                                                              |
+| `merge_change`   | the change plus `{commit, message, through}`                            | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit}` | `true` when both the comment and the removal happened                            |
 | `list_artifacts` | `{source}`                                                              | `{complete, artifacts: [{name, url}], headers?}`                                 |
 
@@ -455,13 +550,22 @@ prefix of the label that queues a change, followed by its method, for a provider
 merge intent is a label; `magus queue describe` prints it for tools such as the pull
 request advisor. `committer` is `{name, email}`, the identity the provider's automation
 pushes as, which commits every update commit unless `--committer` overrides it.
-`approval_at` must
+`setup` is asked for with a `status_context`: `{status_context, credential: {id, name?},
+required_checks: [{context, integration?, events?}], settings: [{name, value, want}],
+app?, steps: [{title, command? or url?}]}`. `credential` is the integration the write
+credential posts statuses as (the `app` named, else the provider's default),
+`required_checks` what the base requires and the integration each is pinned to, and
+`steps` only when `setup_steps` is true, since they cost reads a job's token may not be
+allowed. A provider that returns no `setup` skips apply's credential check. `approval_at` must
 name the change's current head, base and merge method, whether it still carries merge
 intent (`queued`), and the other open changes whose head branch is its branch
 (`shared_with`); `approved_commit` names an older commit its approvals stand at, which
-the queue carries over only across a rebase that changed nothing. `through` lists the
-changes beneath a stack's top that merge in the same call, lowest first, each with the
-commit it must still be at.
+the queue carries over only across a rebase that changed nothing. `list_green` names
+every open change, whatever it targets, whose head carries the status `context` at
+success. `through` lists the changes beneath a stack's top that merge in the same call,
+lowest first, each with the commit it must still be at. `merge_change` sets
+`by_provider` when the provider merged the change on its own rather than on this call;
+left out, it reads as the call's merge.
 
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
@@ -482,16 +586,21 @@ removes the intent where it lives: its own auto-merge, its own label, and the la
 its stack's top. Queuing it again re-queues the change. Its `describe` reports the label
 prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
-identity a workflow's token pushes as.
+identity a workflow's token pushes as; with the queue's app, `queue-apply.yaml` passes the
+app's bot as `--committer`. Its setup reads the base's rulesets and classic branch
+protection, the app with `--app`, and for the steps the checks and workflow runs on the
+head of the most recently updated pull request from the repository, which is how it
+tells which required checks run on `pull_request`. A read refused with 403 or 404 names
+the permission it needs.
 
-On GitHub the queue's credential merges past its own pending status as a bypass actor of
-a ruleset. A ruleset's bypass list bypasses every rule in that ruleset, not one rule:
-required reviews, signed commits, code scanning and all. Put the queue's required status
-in a ruleset of its own whose only rule it is, with the queue's actor as its only bypass
-actor, so the other rulesets still apply to every merge the queue makes. Its `describe`
-narrows `methods` to what the repository settings and every active ruleset rule
-targeting the base branch both allow, dropping `merge` when one of those rules requires
-a linear history, and errors when nothing is left in common.
+On GitHub, `merge_change` for a pull request with auto-merge on waits up to a minute for
+GitHub to merge it once the queue's status went green, then merges it itself through the
+API, pinned to the head. A merge GitHub made in the meantime reads as GitHub's unless
+the Actions bot made it. A stack, queued by label, has no auto-merge, so the queue always
+merges it itself. No merge needs a bypass actor. Its `describe` narrows `methods` to what
+the repository settings and every active ruleset rule targeting the base branch both
+allow, dropping `merge` when one of those rules requires a linear history, and errors
+when nothing is left in common.
 
 ## The library
 

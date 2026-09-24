@@ -93,7 +93,7 @@ jobs:
         name: Plan the queue
         env:
           QUEUE_STEP: plan
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPTH: '3'
         run: magus buzz tools/gha-queue.buzz
 

@@ -72,6 +72,13 @@ export fun approval_at(io: {str: any}) > any {
         "queued": true, "shared_with": ["40"]};
 }
 
+export fun list_green(io: {str: any}) > any {
+    if (io["context"] != "merge-queue") {
+        return {"changes": [<any>]};
+    }
+    return {"changes": [{"id": "{io["base"]}", "repo": "{io["remote_url"]}", "head": "` + headD + `"}]};
+}
+
 export fun post_status(io: {str: any}) > bool {
     return io["context"] == "merge-queue" and io["state"] == "success";
 }
@@ -83,7 +90,7 @@ export fun retarget(io: {str: any}) > bool {
 export fun merge_change(io: {str: any}) > any {
     final through = serialize\Boxed.init(io["through"]).listValue();
     final pinned = through.len() == 1 and through[0].q("id").stringValue() == "5" and through[0].q("commit").stringValue() == "` + headE + `";
-    return {"merged": io["message"] == "* body" and pinned, "reason": "head moved"};
+    return {"merged": io["message"] == "* body" and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
 }
 
 export fun kick_back(io: {str: any}) > bool {
@@ -113,6 +120,61 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 	assert.Equal(t, types.Capabilities{StackMerge: types.StackMergeAtomic, LinearStacks: true,
 		Methods: []types.MergeMethod{types.MethodSquash, types.MethodMerge}, QueueLabel: "queue: ",
 		Committer: magustypes.Person{Name: "bot", Email: "bot@example.com"}}, got)
+}
+
+// setupScript answers describe with a setup built from what it was asked.
+const setupScript = `
+export fun describe(io: {str: any}) > any {
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "setup": {
+        "status_context": io["status_context"],
+        "credential": {"id": "812", "name": io["app"]},
+        "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
+        "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
+        "app": {"slug": io["app"], "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
+            "environment": "magus-queue", "variable": "V", "secret": "S"},
+        "steps": [{"title": "Install it", "url": "https://github.com/apps/q/installations/new"}, {"title": "Store it", "command": "gh secret set S"}],
+    }};
+}
+export fun list_changes(io: {str: any}) > any { return {}; }
+export fun approval_at(io: {str: any}) > any { return {}; }
+export fun list_green(io: {str: any}) > any { return {}; }
+export fun post_status(io: {str: any}) > bool { return true; }
+export fun retarget(io: {str: any}) > bool { return true; }
+export fun merge_change(io: {str: any}) > any { return {}; }
+export fun kick_back(io: {str: any}) > bool { return true; }
+`
+
+func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
+	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", SetupSteps: true})
+	require.NoError(t, err)
+	assert.Equal(t, &types.Setup{
+		StatusContext: "gate",
+		Credential:    types.Integration{ID: "812", Name: "q"},
+		RequiredChecks: []types.RequiredCheck{
+			{Context: "merge-queue", Integration: "15368"},
+			{Context: "ci gate", Events: []string{"true"}},
+		},
+		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
+		App: &types.App{Slug: "q", ID: "812", ClientID: "Iv1", InstallURL: "https://github.com/apps/q/installations/new",
+			Environment: "magus-queue", Variable: "V", Secret: "S"},
+		Steps: []types.SetupStep{
+			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
+			{Title: "Store it", Command: "gh secret set S"},
+		},
+	}, got.Setup)
+}
+
+// A setup a person could not follow is the provider's error, named where it broke.
+func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
+	for _, tc := range []struct{ from, to, want string }{
+		{`"credential": {"id": "812", "name": io["app"]},`, ``, `setup: field "credential" is missing`},
+		{`{"id": "812", "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
+		{`"command": "gh secret set S"`, `"command": "gh secret set S", "url": "https://x"`, `exactly one of a command or a URL`},
+		{`"status_context": io["status_context"],`, `"status_context": "",`, `setup for no status context`},
+	} {
+		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate"})
+		require.ErrorContains(t, err, tc.want, tc.to)
+	}
 }
 
 func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T) {
@@ -173,6 +235,19 @@ func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 	require.ErrorContains(t, err, `field "linear_stacks" is missing`)
 }
 
+func TestListGreenDecodesTheChangesCarryingTheStatus(t *testing.T) {
+	got, err := open(t, script).ListGreen(context.Background(), types.ListQuery{Base: "12", RemoteURL: "acme/acme"}, "merge-queue")
+	require.NoError(t, err)
+	assert.Equal(t, []types.GreenChange{{ID: "12", Repo: "acme/acme", Head: headD}}, got)
+	got, err = open(t, script).ListGreen(context.Background(), types.ListQuery{Base: "12"}, "other")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	_, err = open(t, script).ListGreen(context.Background(), types.ListQuery{Base: ".."}, "merge-queue")
+	require.ErrorContains(t, err, `list_green: changes[0]: change id ".."`)
+	_, err = open(t, strings.Replace(script, `"head": "`+headD+`"}]}`, `"head": "d"}]}`, 1)).ListGreen(context.Background(), types.ListQuery{Base: "12"}, "merge-queue")
+	require.ErrorContains(t, err, `head "d" is not a full commit id`)
+}
+
 func TestApprovalDecodesAtTheCommitAsked(t *testing.T) {
 	got, err := open(t, script).ApprovalAt(context.Background(), change, headD)
 	require.NoError(t, err)
@@ -198,9 +273,15 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	require.ErrorContains(t, p.PostStatus(ctx, change, headA, types.CommitStatus{Context: "other", State: types.StateSuccess}), "provider refused")
 	require.NoError(t, p.Retarget(ctx, change, "main"))
 	require.ErrorContains(t, p.Retarget(ctx, change, "dev"), "provider refused")
-	require.NoError(t, p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body",
-		Through: []types.PinnedChange{{ID: "5", Commit: headE}}}))
-	require.ErrorContains(t, p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other"}), "not merged: head moved")
+	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body",
+		Through: []types.PinnedChange{{ID: "5", Commit: headE}}})
+	require.NoError(t, err)
+	assert.Equal(t, types.MergeResult{}, merged, "the queue's own call merged the stack")
+	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body"})
+	require.NoError(t, err)
+	assert.Equal(t, types.MergeResult{ByProvider: true}, merged)
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other"})
+	require.ErrorContains(t, err, "not merged: head moved")
 	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c"}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))
 	kick.Paths = nil
@@ -216,7 +297,7 @@ func TestListArtifactsDecodesTheListing(t *testing.T) {
 
 func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
 	_, err := newScript(context.Background(), "half", `export fun list_changes(io: {str: any}) > any { return {}; }`)
-	require.EqualError(t, err, `provider "half" does not export describe, approval_at, post_status, retarget, merge_change, kick_back`)
+	require.EqualError(t, err, `provider "half" does not export describe, approval_at, list_green, post_status, retarget, merge_change, kick_back`)
 
 	noRuns := open(t, strings.Split(script, "export fun list_artifacts")[0])
 	assert.False(t, noRuns.ListsArtifacts())

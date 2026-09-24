@@ -10,7 +10,7 @@ import (
 )
 
 // Provider is where changes are reviewed and merged, GitHub and the like. Planning
-// calls Describe and ApprovalAt; the rest write, and only applying calls them.
+// calls Describe and ApprovalAt; applying also calls ListGreen and the rest, which write.
 type Provider interface {
 	// Describe reports what the provider supports.
 	Describe(ctx context.Context, q ListQuery) (Capabilities, error)
@@ -20,14 +20,19 @@ type Provider interface {
 	ListChanges(ctx context.Context, q ListQuery) (Changes, error)
 	// ApprovalAt reports c's review state at commit exactly.
 	ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error)
+	// ListGreen returns every open change whose head carries the commit status
+	// statusContext at success, whatever branch it targets, since a stacked change is
+	// pointed at the base once the change beneath it merges.
+	ListGreen(ctx context.Context, q ListQuery, statusContext string) ([]GreenChange, error)
 	// PostStatus sets s on commit.
 	PostStatus(ctx context.Context, c Change, commit string, s CommitStatus) error
 	// Retarget points c at base. Already targeting it is success.
 	Retarget(ctx context.Context, c Change, base string) error
-	// MergeChange merges c with its own merge method. It errors when the provider
-	// refused, including when c's head is no longer m.Commit or a change in m.Through is
-	// no longer at its pinned head.
-	MergeChange(ctx context.Context, c Change, m MergeOptions) error
+	// MergeChange sees c merged with its own merge method, by the provider on its own or
+	// on this call, and says which. It errors when the provider refused, including when
+	// c's head is no longer m.Commit or a change in m.Through is no longer at its pinned
+	// head.
+	MergeChange(ctx context.Context, c Change, m MergeOptions) (MergeResult, error)
 	// KickBack removes c's merge intent, wherever it lives, and tells its author why.
 	KickBack(ctx context.Context, c Change, commit string, k Kick) error
 }
@@ -55,6 +60,14 @@ type Approval struct {
 	BranchSharedWith []string
 }
 
+// GreenChange is an open change whose head carries the queue's status at success. It
+// holds what [Provider.PostStatus] needs to set that status again.
+type GreenChange struct {
+	ID   string
+	Repo string
+	Head string
+}
+
 // CommitState is a commit status's state.
 type CommitState string
 
@@ -75,6 +88,16 @@ type CommitStatus struct {
 type ListQuery struct {
 	Base      string // branch the queue merges into
 	RemoteURL string // the remote's URL, for the provider to name its repository
+
+	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
+	// the base requires and who the write credential posts as. App names the app whose
+	// credential the queue writes with (github: a GitHub App's slug); empty is the
+	// provider's default credential. SetupSteps also asks for the steps that finish
+	// wiring the queue, which cost the provider more reads, some needing permissions an
+	// apply job does not hold.
+	StatusContext string
+	App           string
+	SetupSteps    bool
 }
 
 // StackMerge is how a provider merges a stack of changes.
@@ -101,6 +124,81 @@ type Capabilities struct {
 	// Committer is the identity the provider's automation pushes as, which commits what
 	// the queue writes to a change's branch. Zero when the provider names none.
 	Committer magustypes.Person
+	// Setup is nil unless [ListQuery.StatusContext] asked for it and the provider reports
+	// one.
+	Setup *Setup
+}
+
+// Setup is how the queue is wired on the provider as the provider reads it now, and the
+// steps that finish wiring it. The queue never runs a step: a person does.
+type Setup struct {
+	// StatusContext is the commit status the queue posts, as asked.
+	StatusContext string `json:"status_context"`
+	// Credential is who the write credential posts statuses as.
+	Credential Integration `json:"credential"`
+	// RequiredChecks are the checks the base requires before a change merges, the queue's
+	// own status among them once it is wired.
+	RequiredChecks []RequiredCheck `json:"required_checks"`
+	// Settings are the provider's repository settings the queue depends on.
+	Settings []Setting `json:"settings,omitempty"`
+	// App is the app the credential belongs to, when [ListQuery.App] named one and steps
+	// were asked for.
+	App *App `json:"app,omitempty"`
+	// Steps are what a person runs or opens, in order; empty when the provider reports
+	// nothing left to do or steps were not asked for.
+	Steps []SetupStep `json:"steps"`
+}
+
+// Integration is who posts a commit status: a GitHub App's id and name, say.
+type Integration struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
+// String renders i as "id (name)", or the id alone when it has no name.
+func (i Integration) String() string {
+	if i.Name == "" {
+		return i.ID
+	}
+	return i.ID + " (" + i.Name + ")"
+}
+
+// RequiredCheck is one check the base requires.
+type RequiredCheck struct {
+	Context string `json:"context"`
+	// Integration is the only integration whose status counts; empty accepts anyone's.
+	Integration string `json:"integration,omitempty"`
+	// Events are the events the provider saw report this check, when steps were asked
+	// for ("pull_request"); empty when it saw none report it.
+	Events []string `json:"events,omitempty"`
+}
+
+// Setting is one repository setting: its value now and the value the queue needs.
+type Setting struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Want  string `json:"want"`
+}
+
+// App is the app a write credential belongs to and where a person manages it.
+type App struct {
+	Slug            string `json:"slug"`
+	ID              string `json:"id"`
+	ClientID        string `json:"client_id,omitempty"`
+	RegistrationURL string `json:"registration_url,omitempty"`
+	InstallURL      string `json:"install_url,omitempty"`
+	// Environment, Variable and Secret name where the queue job reads the app's
+	// credential from.
+	Environment string `json:"environment,omitempty"`
+	Variable    string `json:"variable,omitempty"`
+	Secret      string `json:"secret,omitempty"`
+}
+
+// SetupStep is one thing a person does: run Command, or open URL.
+type SetupStep struct {
+	Title   string `json:"title"`
+	Command string `json:"command,omitempty"`
+	URL     string `json:"url,omitempty"`
 }
 
 // Check reports whether c names a known stack merge and at least one valid merge method.
@@ -119,6 +217,31 @@ func (c Capabilities) Check() error {
 	if c.Committer != (magustypes.Person{}) && (c.Committer.Name == "" || c.Committer.Email == "") {
 		return fmt.Errorf("provider names committer %q <%s>, which needs a name and an email", c.Committer.Name, c.Committer.Email)
 	}
+	if c.Setup != nil {
+		return c.Setup.Check()
+	}
+	return nil
+}
+
+// Check reports whether s names the status it describes, who the credential posts as,
+// and steps a person can follow.
+func (s Setup) Check() error {
+	switch {
+	case s.StatusContext == "":
+		return errors.New("provider describes a setup for no status context")
+	case s.Credential.ID == "":
+		return errors.New("provider describes a setup without the integration its credential posts as")
+	}
+	for _, rc := range s.RequiredChecks {
+		if rc.Context == "" {
+			return errors.New("provider describes a required check with no context")
+		}
+	}
+	for _, st := range s.Steps {
+		if st.Title == "" || (st.Command == "") == (st.URL == "") {
+			return fmt.Errorf("provider describes setup step %q, which needs a title and exactly one of a command or a URL", st.Title)
+		}
+	}
 	return nil
 }
 
@@ -133,6 +256,14 @@ type MergeOptions struct {
 	// the same call ([StackMergeAtomic]), lowest first, each pinned to the head it must
 	// still be at.
 	Through []PinnedChange
+}
+
+// MergeResult is what a [Provider.MergeChange] that merged reports.
+type MergeResult struct {
+	// ByProvider says the provider merged the change on its own, as GitHub's auto-merge
+	// does on behalf of whoever enabled it, rather than on the queue's call. What a merge
+	// starts on the provider's side, a CI run on the base say, can differ between the two.
+	ByProvider bool
 }
 
 // PinnedChange is a change and the head it must still be at.

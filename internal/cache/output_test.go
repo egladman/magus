@@ -297,7 +297,7 @@ func TestPortableRefDeterministicAcrossCaches(t *testing.T) {
 
 	runOnce := func(t *testing.T) string {
 		t.Helper()
-		c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(true))
+		c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
 		require.NoError(t, err)
 		r, err := c.Run(context.Background(), makeStep(root), func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
@@ -987,7 +987,7 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 	require.False(t, miss.Hit)
 	require.NotEmpty(t, miss.Ref)
 
-	c2, err := Open(t.Context(), cdir, WithMutable(false))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
 	hit, err := c2.Run(context.Background(), step, build)
 	require.NoError(t, err)

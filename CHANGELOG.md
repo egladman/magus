@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The guard advises on a split `magus run` (`split-run`).** One target run on two
+  project sets, on one line or in two calls within ten minutes, gets the combined form,
+  once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
+- **The cache is two tiers under standard two-tier semantics.** Reads go local, then
+  remote; a remote hit is verified and promoted into the local tier; a build is stored in
+  both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
+  unset, it is written when a signing key is held; `true` makes remote writes required.
+- **A run that may write the remote tier backfills it.** A local hit whose key the remote
+  tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
+  contract gains that optional function.
+- **A failing remote tier degrades the run to the local tier.** The first failure is
+  reported and counted as failed, never missed, and the run stops asking.
 - **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
   `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
   read access only; apply rebuilds each candidate and merges it with the change's own
@@ -17,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   label and who commits the queue's update commits. The new `merge-queue` pull request
   advisor, off by default, reads it to name the label that queues an approved pull
   request.
+- **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
+  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
+  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
+  integration than its token's (MGS3019).
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
@@ -147,6 +163,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The merge queue needs no bypass actor.** Apply posts `success` right before a merge,
+  once main is still at the predicted tip, and GitHub's auto-merge merges; apply merges
+  itself after a minute. A success it cannot follow through goes back to `pending`.
+  Breaking for providers: `list_green` is required, and `merge_change` reports
+  `by_provider`, which `merged` events carry.
+- **Breaking (Go API): the cache's tiers share one shape.** `cache.WithMutable` is
+  `WithLocalWrite`, `WithRemoteStats` is `ContextWithRemoteStats`, `Cache.Remote()` is
+  `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
+  `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
+  `cache.Open` reads no environment.
+- **The `run.remote` record says `stored`, not `published`,** which names output bundles
+  only.
+- **`magus query output --publish` is refused when remote writes are off.**
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
   without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
   matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
@@ -263,6 +292,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   intersected repository settings alone; it now narrows `methods` to what every active
   ruleset rule targeting the base branch also allows, drops `merge` under a required
   linear history, and errors when nothing is left in common.
+- **`MAGUS.md` routing indexes are byte-identical on every machine.** Example columns rank
+  by the repository's own edges, not the binary's spell catalog; gitignored sources are
+  skipped; and the drift gate now catches an output a composed step writes, which let
+  five library indexes go stale.
+- **`magus session dispose` refuses without an interactive terminal and is denied to
+  agents.** Disposing an attention request records that a PERSON answered it. Outside a
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  (widened from `read-ack`) denies every spelling on every agent channel.
+- **The `output-pipe`/`output-redirect` exemption for `magus query output` and
+  `magus refs --text` now sees past a global flag.** It anchored on the first argument
+  after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
+  the check now reads argv the same way the read-ack rule does, ignoring where a global
+  flag sits.
+- **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
+  URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
+  the empty URL for an existing entry: every upload reported success, nothing was stored,
+  and every lookup missed. It reads either name.
+- **A failing remote store reads as failed, not missed.** Both shipped cache spells throw
+  on a failed request; `false` means not stored (get) or already stored (put).
+- **A remote-tier miss is visible.** Each prints `<project> not in the remote cache
+  (out...)` with the producing run's ref, the end-of-run line counts misses, and `-v`
+  adds a digest per key-input class.
+- **A remote hit is one `cache.hit` record, counted once its replay succeeds.** A local
+  replay that fails tries the remote tier before rebuilding.
+- **Knowledge shards on the remote tier are signed and verified,** and a run that may not
+  write the remote tier stores none.
+- **An unrecognized boolean in a `MAGUS_*` variable is an error** instead of silently
+  keeping the previous value.
+- **Imported cache files are 0644, and a running target's crash record survives the same
+  target running twice at once.** Stale inflight temp files and staging directories are
+  collected.
 - **Concurrent fetches into one repository no longer fail.** Two `git fetch` runs read
   each other's refs mid-update and failed with "bad object"; magus now fetches into a
   repository one at a time.
@@ -340,6 +400,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
+  command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
+  an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
+  the long forms its matcher already covered.
+- **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
+  Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
+  queue provider both read, in place of `GH_TOKEN`.
 
 ### Security
 

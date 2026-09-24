@@ -33,6 +33,9 @@ apply report what would merge and call nothing on the provider.
 .SS queue describe options
 .RS
 .TP
+\fB\-\-app\fR \fIslug\fR
+`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential
+.TP
 \fB\-\-base\fR \fIbranch\fR
 `branch` the queue merges into
 .TP
@@ -41,6 +44,9 @@ apply report what would merge and call nothing on the provider.
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-status\-context\fR \fIstring\fR (default: merge\-queue)
+Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup
 .TP
 \fB\-\-vcs\fR \fIbackend\fR (default: git)
 Version control `backend` of the checkout at \-\-root
@@ -126,6 +132,9 @@ Version control `backend` of the checkout at \-\-root
 .SS queue apply options
 .RS
 .TP
+\fB\-\-app\fR \fIslug\fR
+`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires \-\-status\-context from another integration (MGS3019)
+.TP
 \fB\-\-committer\fR \fIstring\fR
 "Name <email>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
 .TP
@@ -160,7 +169,7 @@ Version control `backend` of the checkout at \-\-root
 .RS
 .TP
 \fBdescribe\fR
-Ask the provider what it supports on a base: its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document
+Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with \-o json
 .TP
 \fBls\fR
 Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document
@@ -175,10 +184,16 @@ Build and gate a candidate per change, writing each verdict the moment it is dec
 Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)
 .RE
 .SH EXAMPLES
-\fISee the merge methods and the queue label\fR
+\fIPrint the commands that wire the queue up\fR
 .PP
 .EX
 magus queue describe --provider github --base main
+.EE
+.PP
+\fIPrint the commands that move it onto your own GitHub App\fR
+.PP
+.EX
+magus queue describe --provider github --base main --app acme-magus-queue
 .EE
 .PP
 \fIList what carries merge intent\fR
