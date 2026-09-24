@@ -47,17 +47,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `test`                                                                                 |
-| spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
+| spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `typescript`                                                                                              |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
-| tool       | built in | `magus query kind=tool`       | `go`, `pnpm`, `buf`                                                                                                         |
+| tool       | built in | `magus query kind=tool`       |                                                                                                                             |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
-| module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
+| module     | built in | `magus query kind=module`     |                                                                                                                             |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3012`, `MGS1002`, `MGS1028`                                                                                             |
-| doc        |     500+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
+| doc        |     600+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                              |
-| file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
-| function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `main`                                                                                                      |
+| file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `libs/mergequeue/provider/github.buzz`, `docs/render.buzz`                                                |
+| function   |    1000+ | `magus query kind=function`   | `main`, `apiBase`, `describe`                                                                                               |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
@@ -66,16 +66,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
 | .                               |      55 | `magus query project=.`                               | `test`, `buzz-test`, `generate`                          |
-| console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
+| console                         |       8 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
 | docs                            |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
-| libs/coldread                   |       8 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
-| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
+| docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
+| libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
+| libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
-| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
-| libs/pricing                    |       8 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
-| libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
-| libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
+| libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| libs/mergequeue                 |       9 | `magus query project=libs/mergequeue`                 | `build`, `format`, `generate`                            |
+| libs/pricing                    |       7 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
+| libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
+| libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
 
 ## Project: magus
@@ -148,7 +149,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `format`            | `format:rw` maintains declared source inputs.                                                                                                                                                                                                                 |
 | `security`          | security audits the dependency tree against the npm advisory database.                                                                                                                                                                                        |
 | `ci`                | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.                                                                                            |
-| `preflight`         |                                                                                                                                                                                                                                                               |
+| `install`           | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                 |
 | `diffdemo-generate` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 
 ## Project: docs
@@ -167,7 +168,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build-hljs`              | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.                                                                                                                                                                                                                                                                                                          |
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                                                                                                                                                                                                                                                                      |
 | `render`                  | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                                                                                                                                                                                                                                                                            |
-| `preflight`               |                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                                                                                                                                                                                  |
 | `index-generate`          | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.                                                                                                                                                                                                                                                                                       |
 | `content-generate`        | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `changelog-page`          | changelog-page renders the changelog as a docs page: every release from releases/*.yaml, and under [Unreleased] the fragments in changes/unreleased/.                                                                                                                                                                                                                                                                          |
@@ -186,7 +187,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `host-integration`        | host-integration is deliberately NOT a dependency of ci.                                                                                                                                                                                                             |
 | `ci`                      | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
 | `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
-| `preflight`               |                                                                                                                                                                                                                                                                      |
+| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                        |
 
 ## Project: libs/coldread
 
@@ -198,7 +199,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                              |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `preflight`      |                                                                                                                                                              |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                            |
 
 ## Project: libs/diagnostics
@@ -211,7 +211,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                            |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
-| `preflight`      |                                                                                                                                                            |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                          |
 
 ## Project: libs/diagram
@@ -233,8 +232,21 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-build`     | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.                                                                                                                                                       |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                                                                                             |
 | `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
-| `preflight`      |                                                                                                                                                                                                                                                                             |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                                                                                                                           |
+
+## Project: libs/mergequeue
+
+| Target           | What it does                                                                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`       | Regenerates the mocks and MAGUS.md and fails on drift.                                                                                                                |
+| `format`         | No go-mod-tidy: this package has no go.mod, so tidy here would rewrite the ROOT module's from a descendant project, the cross-project write magus rejects as MGS3001. |
+| `lint`           | go vet only.                                                                                                                                                          |
+| `build`          |                                                                                                                                                                       |
+| `test`           | No coverage profile: this package is part of the root module, so the root's `go test ./...` already records it in coverage.out.                                       |
+| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                       |
+| `preflight`      |                                                                                                                                                                       |
+| `mocks-generate` | Regenerates the testify mocks of the queue's contract (.mockery.yaml) into types/gen/mocks.                                                                           |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                     |
 
 ## Project: libs/pricing
 
@@ -246,7 +258,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                                                                              |
 | `test`           | No coverage profile, unlike the sibling libraries: those are separate modules whose statements the root suite never enters.                                                                                  |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                              |
-| `preflight`      |                                                                                                                                                                                                              |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                                                            |
 
 ## Project: libs/testlayout
@@ -259,7 +270,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                              |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `preflight`      |                                                                                                                                                              |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                            |
 
 ## Project: libs/textsearch
@@ -270,7 +280,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `lint`           | lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `test`           | test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.                                                                                    |
 | `ci`             | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.                                                                                     |
-| `preflight`      |                                                                                                                                                                        |
+| `install`        | install installs node_modules through the typescript spell's pnpm-install op.                                                                                          |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                      |
 
 ## Project: proto
