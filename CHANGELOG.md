@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The guard advises on a split `magus run` (`split-run`).** The same target run again on
+  a different project set is usually one call typed as two: on one line
+  (`magus run lint . && magus run lint docs`) it narrows the chained-run text to the
+  combined form, and across two separate calls within ten minutes it compares the
+  session's last `run`/`affected` invocation and advises once per session. Charms count
+  as part of the target identity, so `lint` and `lint:rw` are never combined.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the

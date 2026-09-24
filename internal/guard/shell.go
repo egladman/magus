@@ -1541,6 +1541,14 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// same line outranks it.
 	if chainedRunRe.MatchString(command) {
 		advisory = ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: advisoryChainedRun}}
+		// Narrowed to the combined-run form when every magus run/affected invocation on
+		// the line names the same target: charms included. A chain of genuinely
+		// different targets stays chained-run's text, and its own domain.
+		if parsed {
+			if text, ok := splitRunLineAdvice(cmds); ok {
+				advisory = ShellVerdict{Context: text, Rule: denyRule{Name: denyRuleName(advisorySplitRun)}}
+			}
+		}
 	}
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
