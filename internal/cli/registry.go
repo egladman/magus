@@ -2308,6 +2308,8 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
 		{Name: "baseline", Kind: FlagString, Doc: "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves"},
+		{Name: "conformance-min-cohort", Kind: FlagInt, Doc: "How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)"},
+		{Name: "conformance-min-share", Kind: FlagCustom, Doc: "The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},

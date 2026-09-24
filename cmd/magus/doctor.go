@@ -155,7 +155,7 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 	case outputName:
 		var names []string
 		for _, c := range out.Checks {
-			if c.Status != types.DoctorOK {
+			if c.Status != types.CheckOK {
 				names = append(names, c.Name)
 			}
 		}
@@ -202,10 +202,10 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 // checkGlyph renders a finding's level, except that a check which did not run gets its
 // own glyph rather than the pass it nominally returned.
 //
-// A skipped check carries DoctorOK because it found nothing wrong, which is true and
+// A skipped check carries CheckOK because it found nothing wrong, which is true and
 // misleading: nothing was looked at. Rendering it as [pass] is how a green report came
 // to mean "either fine or unexamined, and you cannot tell which from here".
-func checkGlyph(c types.DoctorCheck, color bool) string {
+func checkGlyph(c types.Check, color bool) string {
 	if c.Evidence == types.EvidenceUnknown {
 		if color {
 			return "\x1b[36m[unknown]\x1b[0m"
@@ -218,14 +218,14 @@ func checkGlyph(c types.DoctorCheck, color bool) string {
 // statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,
 // colored (green/red) when color is true. Mirrors the cache handler's glyphs so a
 // failed check and a failed build look identical across the tool.
-func statusGlyph(status types.DoctorCheckStatus, color bool) string {
+func statusGlyph(status types.CheckStatus, color bool) string {
 	label, code := "[?]", "0"
 	switch status {
-	case types.DoctorOK:
+	case types.CheckOK:
 		label, code = "[pass]", "32" // green
-	case types.DoctorFail:
+	case types.CheckFail:
 		label, code = "[fail]", "31" // red
-	case types.DoctorAdvice:
+	case types.CheckAdvice:
 		// Yellow, not red: it did not fail, and coloring it like a failure would
 		// undo the whole point of the level.
 		label, code = "[advice]", "33"
@@ -309,7 +309,7 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.DoctorReport) error {
 	var ran, failed int
 	for _, c := range out.Checks {
-		if c.Status == types.DoctorOK || len(c.Fix) == 0 {
+		if c.Status == types.CheckOK || len(c.Fix) == 0 {
 			continue
 		}
 		cmdline := "magus " + strings.Join(c.Fix, " ")

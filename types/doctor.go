@@ -7,20 +7,20 @@ package types
 // grepping console text for the word "fail". internal/doctor names these types
 // directly; there is no second spelling of them anywhere.
 
-// DoctorCheckStatus is one check's outcome. Advice is deliberately not a failure:
+// CheckStatus is one check's outcome. Advice is deliberately not a failure:
 // it is worth knowing and never a gate, which is the distinction the CI surface and
 // the tool share one word for.
-type DoctorCheckStatus string
+type CheckStatus string
 
-// DoctorFail and DoctorAdvice are a deliberate split, and which one a check returns
+// CheckFail and CheckAdvice are a deliberate split, and which one a check returns
 // is a statement about whose judgment is involved.
 //
-// DoctorFail is for a workspace that is WRONG in a way nobody's taste can rescue:
+// CheckFail is for a workspace that is WRONG in a way nobody's taste can rescue:
 // a dependency cycle, a magusfile that will not parse, two targets claiming one
 // output, a policy naming a target that does not exist. These are facts, they
 // break the build or corrupt the cache, and failing on them is not an opinion.
 //
-// DoctorAdvice is for a convention magus RECOMMENDS: how targets are named,
+// CheckAdvice is for a convention magus RECOMMENDS: how targets are named,
 // whether every project binds a language spell, whether a spell target carries a
 // doc comment. These are conventions that have worked well, documented so you can
 // take them, not requirements, because magus does not get to decide how your
@@ -41,9 +41,9 @@ type DoctorCheckStatus string
 // target, with its own tools, on its own terms. magus reports what it noticed and
 // gets out of the way.
 const (
-	DoctorOK     DoctorCheckStatus = "ok"
-	DoctorFail   DoctorCheckStatus = "fail"
-	DoctorAdvice DoctorCheckStatus = "advice"
+	CheckOK     CheckStatus = "ok"
+	CheckFail   CheckStatus = "fail"
+	CheckAdvice CheckStatus = "advice"
 )
 
 // Evidence says what a verdict RESTS ON, which is a different question from what the
@@ -80,12 +80,13 @@ const (
 	EvidenceUnknown  Evidence = "unknown"
 )
 
-// DoctorCheck is one validation and what it found.
-type DoctorCheck struct {
-	Name    string            `json:"name" yaml:"name"`
-	Status  DoctorCheckStatus `json:"status" yaml:"status"`
-	Message string            `json:"message,omitempty" yaml:"message,omitempty"`
-	Details []string          `json:"details,omitempty" yaml:"details,omitempty"`
+// Check is one validation and what it found: a doctor check over the workspace, or a
+// conformance check over a changed symbol (DiffSymbol.Checks).
+type Check struct {
+	Name    string      `json:"name" yaml:"name"`
+	Status  CheckStatus `json:"status" yaml:"status"`
+	Message string      `json:"message,omitempty" yaml:"message,omitempty"`
+	Details []string    `json:"details,omitempty" yaml:"details,omitempty"`
 	// Evidence is what this particular run of the check rests on. A check declares its
 	// usual evidence in the registry; a run that could not look sets EvidenceUnknown
 	// here, and one that looked harder than usual (tool-readiness under --probe) raises
@@ -125,6 +126,6 @@ type DoctorSummary struct {
 // DoctorReport is the full doctor output: every check, and the counts.
 type DoctorReport struct {
 	Workspace string        `json:"workspace" yaml:"workspace"`
-	Checks    []DoctorCheck `json:"checks" yaml:"checks"`
+	Checks    []Check       `json:"checks" yaml:"checks"`
 	Summary   DoctorSummary `json:"summary" yaml:"summary"`
 }

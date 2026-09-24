@@ -18,11 +18,11 @@ const expiringSoon = 14 * 24 * time.Hour
 // checkMCPTokens surfaces the daemon's auth credentials: whether the retrievable
 // cli token is present (with its fingerprint) and a summary of the named
 // connector tokens, flagging any that are expired or expiring within
-// expiringSoon. It is informational (always types.DoctorOK): an absent cli token is
+// expiringSoon. It is informational (always types.CheckOK): an absent cli token is
 // normal (the daemon mints one on start) and a stale connector entry is harmless
 // (it simply stops authenticating), so neither should fail a CI gate. The
 // check exists to make credential state and upcoming expiries visible.
-func (*runner) checkMCPTokens() types.DoctorCheck {
+func (*runner) checkMCPTokens() types.Check {
 	const name = "mcp-tokens"
 
 	cliMsg := "cli token: absent (the daemon mints one on start)"
@@ -32,7 +32,7 @@ func (*runner) checkMCPTokens() types.DoctorCheck {
 
 	store, err := auth.LoadConnectorStore()
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: cliMsg, Details: []string{"connector store: " + err.Error()}}
+		return types.Check{Name: name, Status: types.CheckOK, Message: cliMsg, Details: []string{"connector store: " + err.Error()}}
 	}
 
 	conns := store.List()
@@ -64,7 +64,7 @@ func (*runner) checkMCPTokens() types.DoctorCheck {
 	if !nearest.IsZero() {
 		connMsg += "; nearest expiry " + nearest.Format("2006-01-02")
 	}
-	return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: cliMsg + "; " + connMsg, Details: details}
+	return types.Check{Name: name, Status: types.CheckOK, Message: cliMsg + "; " + connMsg, Details: details}
 }
 
 // probeBridgeReachability issues a real HTTP GET to /api/v1/graph to confirm
@@ -78,16 +78,16 @@ func (*runner) checkMCPTokens() types.DoctorCheck {
 // magus spins up a per-process proc server for ordinary commands, so a plain `magus
 // doctor` adopts one, sets Reachable, and the skip below could never fire. Every fresh
 // machine failed here on a bridge nothing had started.
-func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorCheck {
+func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.Check {
 	const name = "bridge-reachability"
 	if d == nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "daemon info unavailable; bridge check skipped"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "daemon info unavailable; bridge check skipped"}
 	}
 	if !d.BridgeEnabled {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "bridge disabled via console.enabled: false"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "bridge disabled via console.enabled: false"}
 	}
 	if !d.MCPEnabled {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "bridge not served: mcp.enabled is false, and the bridge is mounted on the MCP server"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "bridge not served: mcp.enabled is false, and the bridge is mounted on the MCP server"}
 	}
 	// No persistent daemon means no bridge, necessarily. Reporting that as a FAILURE
 	// made `magus doctor` red on every machine with the daemon stopped (which is the
@@ -96,9 +96,9 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 	// check immediately above already says the daemon is down; saying it twice,
 	// once as a failure, is noise rather than information.
 	if !d.Persistent {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:     name,
-			Status:   types.DoctorOK,
+			Status:   types.CheckOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no persistent daemon, so the bridge is not expected; skipped",
 			Details:  []string{"start it to serve the console: " + hint.ServerStart.String()},
@@ -107,7 +107,7 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 	if d.MCPAddr == "" {
 		// Belt-and-suspenders: mcpAddrString normally falls back to the default
 		// address, so this only trips if daemonInfo was built without one.
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "MCP address unknown; bridge check skipped"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "MCP address unknown; bridge check skipped"}
 	}
 
 	url := fmt.Sprintf("http://%s/api/v1/graph", d.MCPAddr)
@@ -116,18 +116,18 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("bridge probe request failed: %s", err.Error()),
 		}
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		// Connection refused or timeout: the MCP HTTP server is not up.
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("bridge endpoint not reachable at %s", url),
 			Details: []string{
 				err.Error(),
@@ -141,24 +141,24 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
 		// 401 proves the guarded route exists: auth rejected the unauthenticated probe.
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: fmt.Sprintf("reachable at %s", url),
 			Details: []string{"bearer token: " + hint.ConfigTokenPrint.String()},
 		}
 	case http.StatusForbidden:
 		// 403 can come from the DNS-rebind guard; the server is up.
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: fmt.Sprintf("reachable at %s (dns-rebind guard active)", url),
 			Details: []string{"bearer token: " + hint.ConfigTokenPrint.String()},
 		}
 	default:
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("bridge responded with unexpected status %d at %s", resp.StatusCode, url),
 		}
 	}

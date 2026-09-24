@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -1485,6 +1486,27 @@ func adviseScripts(t *testing.T, src, list string) []string {
 	return scripts
 }
 
+// TestConformanceTablesCoverEveryCheck holds conformance.buzz's symbolChecks to the check
+// names types declares, both ways: a check with no table would report into nothing, and a
+// table with no check is a heading nobody can reach.
+func TestConformanceTablesCoverEveryCheck(t *testing.T) {
+	decls, err := os.ReadFile(filepath.Join("..", "..", "types", "diff.go"))
+	require.NoError(t, err)
+	script, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "conformance.buzz"))
+	require.NoError(t, err)
+
+	var declared []string
+	for _, m := range regexp.MustCompile(`\n\tCheck[A-Za-z]+ += "([a-z-]+)"`).FindAllStringSubmatch(string(decls), -1) {
+		declared = append(declared, m[1])
+	}
+	var tabled []string
+	for _, m := range regexp.MustCompile(`\{"check": "([a-z-]+)"`).FindAllStringSubmatch(string(script), -1) {
+		tabled = append(tabled, m[1])
+	}
+	require.NotEmpty(t, declared, "the scan found no check constants in types/diff.go")
+	assert.ElementsMatch(t, declared, tabled)
+}
+
 // TestLocalAdvisorsMatchAdviseBuzz is the gate on localAdvisors restating advise.buzz by
 // hand. A read-only advisor added to CI that never reaches `magus diff` is invisible
 // otherwise: both halves keep working, and the local command is simply quieter than the
@@ -1880,6 +1902,20 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 		})
 		require.NotEmpty(t, facts)
 		assert.Equal(t, "PUBLIC SURFACE: exports Open, Close", facts[0])
+	})
+
+	t.Run("conformance shows each check's message", func(t *testing.T) {
+		facts := diffFileFacts(types.DiffFile{
+			Path: "a.go",
+			Symbols: []types.DiffSymbol{{Label: "EntryPointFrom", Checks: []types.Check{{
+				Name: types.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
+				Message: "`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
+				Details: []string{"named <X>FromContext: BaseFromContext"},
+			}}}},
+		})
+		assert.Equal(t, []string{
+			"CONFORMANCE `EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
+		}, facts)
 	})
 
 	t.Run("public surface falls back to the consuming projects", func(t *testing.T) {

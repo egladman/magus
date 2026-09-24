@@ -33,7 +33,13 @@ export function modeChange(file: DiffFile): string | null {
   if (oldMode === undefined || newMode === undefined || oldMode === newMode) return null;
   return `mode ${oldMode} -> ${newMode}`;
 }
-import type { DiffAnnotation, DiffReview, ReviewChange } from "./session";
+import type {
+  Diff,
+  DiffAnnotation,
+  DiffReview,
+  DiffUncoveredReason,
+  ReviewChange,
+} from "./session";
 
 export interface OrderedFile {
   readonly file: DiffFile;
@@ -169,6 +175,27 @@ export interface Chip {
   readonly title: string;
 }
 
+// conformanceUnchecked is the line to show, in place of findings, when magus could not run the
+// conformance checks on this changeset; undefined when it ran them.
+export function conformanceUnchecked(diff: Diff | undefined): string | undefined {
+  const e = diff?.conformance_error;
+  if (!e) return undefined;
+  const code = e.code ? `[${e.code}] ` : "";
+  return `Conformance could not check this change: ${code}${e.message}`;
+}
+
+// conformanceUncovered is one line per touched project the conformance checks could not see, so
+// no silence there reads as a clean project.
+export function conformanceUncovered(diff: Diff | undefined): string[] {
+  return (diff?.uncovered ?? []).map(
+    (u) => `Conformance did not check ${u.project}: ${UNCOVERED_REASON[u.reason] ?? u.reason}`,
+  );
+}
+
+const UNCOVERED_REASON: Record<DiffUncoveredReason, string> = {
+  "no-indexer": "no symbol indexer",
+};
+
 export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];
@@ -248,6 +275,17 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
           "widened type reads the same as a break. Read them before deciding the bump.",
       });
     }
+  }
+
+  const checks = (a.symbols ?? []).flatMap((s) => s.checks ?? []);
+  if (checks.length > 0) {
+    chips.push({
+      text: checks.length === 1 ? "conformance" : `${checks.length} conformance`,
+      tone: "info",
+      title:
+        checks.map((c) => (c.message ?? c.name).replaceAll("`", "")).join(". ") +
+        ". Derived from how the rest of the workspace declares the same kind of thing: evidence, not a rule.",
+    });
   }
 
   // An unmeasured reach shows no chip at all. A "0 referents" chip on an unindexed workspace

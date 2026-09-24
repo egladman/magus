@@ -1495,6 +1495,10 @@
   margin-block-start: var(--pf-t--global--spacer--sm);
 }
 
+.console-diff-overview__note[data-tone="error"] {
+  color: var(--pf-t--global--text--color--status--danger--default);
+}
+
 /* Reduced motion.
  *
  * The surface animates in two places: the scroll container smooth-scrolls on hunk and file

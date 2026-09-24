@@ -161,7 +161,45 @@ type DiffSymbol struct {
 	// rendered no declaration.
 	Signature     string `json:"signature,omitempty"      yaml:"signature,omitempty"`
 	BaseSignature string `json:"base_signature,omitempty" yaml:"base_signature,omitempty"`
+	// Checks are what the conformance checks found about a symbol this change adds, renames or
+	// re-signs: each a fact about how the rest of the workspace declares the same kind of
+	// thing, with its counts, reported as CheckAdvice. Only findings that clear the checks' own
+	// bar appear, strongest first.
+	Checks []Check `json:"checks,omitempty" yaml:"checks,omitempty"`
 }
+
+// DiffOptions is what a review reads beyond its changed paths.
+type DiffOptions struct {
+	// Patch is the changeset's unified diff. Without a Baseline it is what tells a symbol the
+	// change adds from one it only edits, so a review of anything but the working tree passes
+	// its own; empty reads the working tree's.
+	Patch string `json:"-" yaml:"-"`
+	// Baseline is a `magus graph export --symbols` of the revision the change started from,
+	// which fills DiffSymbol.Change and Diff.API; BaselineLabel names it for the reader.
+	Baseline      *KnowledgeGraphOutput `json:"-" yaml:"-"`
+	BaselineLabel string                `json:"-" yaml:"-"`
+	// MinCohort and MinShare are the conformance checks' silence gates: how many declarations
+	// a norm needs, and the share that must agree. Zero takes 5 and 0.8.
+	MinCohort int     `json:"-" yaml:"-"`
+	MinShare  float64 `json:"-" yaml:"-"`
+}
+
+// The conformance checks, by Check.Name. Each derives its norm from the workspace's own symbol
+// index and never from a declared rule, so a finding is evidence for the author to weigh.
+const (
+	// CheckNamingAffix is a name missing the word run (a leading or trailing pair of words)
+	// that most declarations of its shape sharing a word with it carry.
+	CheckNamingAffix = "naming-affix"
+	// CheckNameCollision is a top-level name that a target, spell, op, charm or diagnostic of
+	// the workspace already carries.
+	CheckNameCollision = "name-collision"
+	// CheckRenameLeftover is a renamed symbol whose former name still appears in the files
+	// that reference it.
+	CheckRenameLeftover = "rename-leftover"
+	// CheckParamOrder is a function taking two parameters in the reverse of the order most
+	// functions in its scope that take both do.
+	CheckParamOrder = "param-order"
+)
 
 // DiffChurn is how often this file has been changing, and whether that is accelerating.
 //
@@ -341,6 +379,36 @@ type Diff struct {
 	API *DiffAPI `json:"api,omitempty" yaml:"api,omitempty"`
 	// Reviewed is the earlier pass this reader already made over these files, when there was one.
 	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
+	// ConformanceError is why the conformance checks could not run, with its MGS code: the
+	// symbol index could not be brought current for a project the change touched. When set,
+	// no symbol carries Checks, and that absence says nothing was checked, never that nothing
+	// was found.
+	ConformanceError *Diagnostic `json:"conformance_error,omitempty" yaml:"conformance_error,omitempty"`
+	// Uncovered names each project the change touched that the conformance checks could not
+	// see, and why, so their silence is never read as a clean project.
+	Uncovered []DiffUncovered `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
+}
+
+// DiffUncovered is one touched project the conformance checks did not cover. A coverage fact,
+// not a finding: it says what was not looked at, where a Check says what was found.
+type DiffUncovered struct {
+	Project string              `json:"project" yaml:"project"`
+	Reason  DiffUncoveredReason `json:"reason"  yaml:"reason"`
+}
+
+// DiffUncoveredReason is why the conformance checks could not see a touched project.
+type DiffUncoveredReason string
+
+// DiffUncoveredNoIndexer is a project bound to no spell with a symbol indexer, so the index
+// holds nothing of it to compare.
+const DiffUncoveredNoIndexer DiffUncoveredReason = "no-indexer"
+
+// Sentence renders the reason for a reader; an unknown value renders as itself.
+func (v DiffUncoveredReason) Sentence() string {
+	if v == DiffUncoveredNoIndexer {
+		return "no symbol indexer"
+	}
+	return string(v)
 }
 
 // DiffReviewed is what a reader already got through on an earlier pass over this changeset:

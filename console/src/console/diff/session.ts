@@ -40,6 +40,17 @@ export interface DiffSymbol {
   readonly qualified?: string;
   readonly signature?: string;
   readonly base_signature?: string;
+  readonly checks?: readonly Check[];
+}
+
+// Check is one conformance finding about a symbol the change adds, renames or re-signs: a fact
+// about how the rest of the workspace declares the same kind of thing, reported as advice.
+export interface Check {
+  readonly name: string;
+  readonly status: string;
+  readonly message?: string;
+  readonly details?: readonly string[];
+  readonly evidence?: string;
 }
 
 // DiffAPI is what the changeset did to the public API, present only when the review was
@@ -106,6 +117,10 @@ export interface DiffAnnotation {
 // hardest: the reader looked, and then the file moved under them.
 export type ReviewReadState = "read" | "unread" | "stale";
 
+// DiffUncoveredReason mirrors the DiffUncoveredReason constants: why the conformance checks
+// could not see a touched project.
+export type DiffUncoveredReason = "no-indexer";
+
 export interface Diff {
   readonly base: string;
   readonly files?: readonly DiffAnnotation[];
@@ -113,6 +128,18 @@ export interface Diff {
   readonly affected_projects?: readonly { path: string; seed: boolean }[];
   readonly notes?: readonly string[];
   readonly api?: DiffAPI;
+  // Why the conformance checks could not run. When set, no symbol carries checks, and that
+  // absence means nothing was checked.
+  readonly conformance_error?: {
+    readonly code: string;
+    readonly message: string;
+    readonly url?: string;
+  };
+  // Touched projects the conformance checks could not see, and why.
+  readonly uncovered?: readonly {
+    readonly project: string;
+    readonly reason: DiffUncoveredReason;
+  }[];
 }
 
 export interface CommentOrigin {

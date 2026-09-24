@@ -14,7 +14,7 @@ import (
 // runBoundaryList emits the list of runtime boundary types, so a test can iterate every
 // value that crosses Go -> Buzz instead of naming them by hand.
 //
-// A hand-maintained list is the failure this prevents. types.DoctorCheckStatus crossed
+// A hand-maintained list is the failure this prevents. types.CheckStatus crossed
 // as null for an unknown stretch because a type switch matches on identity and no test
 // covered every boundary type, and the same trap had already bitten types.BuzzObject
 // once. Sourcing the list from the registry that generates the mirrors means a new

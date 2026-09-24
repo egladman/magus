@@ -40,7 +40,7 @@ func TestTimeoutDeclarationsReportsACrowdedCeiling(t *testing.T) {
 		projectWith(".", map[string]types.Target{"security": {Timeout: "15m"}}),
 	})
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "declares a 15m timeout and has already run for 13m0s")
 }
@@ -54,7 +54,7 @@ func TestTimeoutDeclarationsReportsALooseCeiling(t *testing.T) {
 		projectWith(".", map[string]types.Target{"security": {Timeout: "12h"}}),
 	})
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "has never run longer than 5s")
 }
@@ -78,7 +78,7 @@ func TestTimeoutDeclarationsStaysQuiet(t *testing.T) {
 			got := newRunner(path).checkTimeoutDeclarations([]*types.Project{
 				projectWith(".", map[string]types.Target{"gate": {Timeout: tc.declared}}),
 			})
-			assert.Equal(t, types.DoctorOK, got.Status)
+			assert.Equal(t, types.CheckOK, got.Status)
 			assert.Empty(t, got.Details)
 		})
 	}
@@ -92,7 +92,7 @@ func TestTimeoutDeclarationsIgnoresUndeclaredTargets(t *testing.T) {
 		projectWith(".", map[string]types.Target{"go-test": {}}),
 	})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "every target is unbounded")
 }
 
@@ -119,6 +119,6 @@ func TestTimeoutDeclarationsSaysNothingWithoutAMeasurement(t *testing.T) {
 			projectWith(".", map[string]types.Target{"security": {Timeout: "15m"}}),
 		})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
 }

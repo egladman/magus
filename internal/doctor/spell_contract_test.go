@@ -13,7 +13,7 @@ import (
 func TestCheckSpellContract(t *testing.T) {
 	t.Run("no spells", func(t *testing.T) {
 		got := checkSpellContract(nil)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no spells registered", got.Message)
 	})
 
@@ -21,7 +21,7 @@ func TestCheckSpellContract(t *testing.T) {
 	// contract.
 	t.Run("unnamed spell", func(t *testing.T) {
 		got := checkSpellContract([]*spells.Spell{spells.NewSpell("")})
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "do not satisfy the required mgs_ contract")
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "<unnamed>: mgs_getName returned an empty name")
@@ -31,7 +31,7 @@ func TestCheckSpellContract(t *testing.T) {
 	// a magusfile exports, so it declares none statically and is entirely correct.
 	t.Run("targets supplied by the magusfile", func(t *testing.T) {
 		got := checkSpellContract([]*spells.Spell{spells.NewSpell("magusfile")})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "targets only (no optional hooks)")
 		assert.Contains(t, got.Details[0], "targets supplied by the magusfile, not the spell")
@@ -50,7 +50,7 @@ func TestCheckSpellContract(t *testing.T) {
 			spells.WithOpaque(),
 		)
 		got := checkSpellContract([]*spells.Spell{full})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "1 spell(s) satisfy the required mgs_ contract")
 		require.Len(t, got.Details, 1)
 		assert.Equal(t, "go: needs, provides, ignore-dirs, version-probe, language, opaque", got.Details[0])

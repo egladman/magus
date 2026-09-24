@@ -35,37 +35,37 @@ const releaseIndexWarnWindow = 45 * 24 * time.Hour
 // human running a workflow, not a repair `doctor --fix` may perform on someone's behalf.
 // The Fix arms it used to carry named `run release-index`, a target no workspace declares,
 // so the first finding would have failed `doctor --fix` outright.
-func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
+func (r *runner) checkReleaseIndexExpiry() types.Check {
 	const name = "release-index"
 
 	data, err := os.ReadFile(filepath.Join(r.root, servedIndexPath))
 	if os.IsNotExist(err) {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "not served from this workspace"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "not served from this workspace"}
 	}
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: fmt.Sprintf("read %s: %v", servedIndexPath, err)}
+		return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("read %s: %v", servedIndexPath, err)}
 	}
 
 	var idx struct {
 		ExpiresAt string `json:"expires_at"`
 	}
 	if err := json.Unmarshal(data, &idx); err != nil {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorFail,
+		return types.Check{
+			Name: name, Status: types.CheckFail,
 			Message: fmt.Sprintf("%s does not parse: %v", servedIndexPath, err),
 		}
 	}
 	if idx.ExpiresAt == "" {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorFail,
+		return types.Check{
+			Name: name, Status: types.CheckFail,
 			Message: "the served index declares no expires_at, so a stale copy can be replayed indefinitely",
 			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
 		}
 	}
 	deadline, err := time.Parse(time.RFC3339, idx.ExpiresAt)
 	if err != nil {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorFail,
+		return types.Check{
+			Name: name, Status: types.CheckFail,
 			Message: fmt.Sprintf("expires_at %q is not RFC3339, so no client can read the bound it sets", idx.ExpiresAt),
 		}
 	}
@@ -73,20 +73,20 @@ func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
 	left := time.Until(deadline)
 	switch {
 	case left <= 0:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorFail,
+		return types.Check{
+			Name: name, Status: types.CheckFail,
 			Message: fmt.Sprintf("the served release index expired %s ago; every `%s` is refusing it", roughly(-left), hint.SelfUpdate),
 			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
 		}
 	case left <= releaseIndexWarnWindow:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorAdvice,
+		return types.Check{
+			Name: name, Status: types.CheckAdvice,
 			Message: fmt.Sprintf("the served release index expires in %s (%s)", roughly(left), idx.ExpiresAt),
 			Details: []string{"a release re-signs it; the Release index workflow does too, if none is due"},
 		}
 	default:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: fmt.Sprintf("signed and good for another %s", roughly(left)),
 		}
 	}
@@ -124,18 +124,18 @@ func roughly(d time.Duration) string {
 // state (never synced) that is normal on a fresh install rather than a defect.
 //
 // So the command is named in the message and the human runs it.
-func (r *runner) checkRegistryFreshness() types.DoctorCheck {
+func (r *runner) checkRegistryFreshness() types.Check {
 	const name = "registry-freshness"
 
 	cached, err := registry.Load()
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
 	if len(cached) == 0 {
 		// Every source declined. magus ships a built-in one, so an empty list can only
 		// mean someone said no on purpose, and telling them to sync is the nag this
 		// design exists to avoid.
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "declined"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "declined"}
 	}
 
 	var never, stale []string
@@ -149,14 +149,14 @@ func (r *runner) checkRegistryFreshness() types.DoctorCheck {
 	}
 	switch {
 	case len(never) > 0:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorAdvice,
+		return types.Check{
+			Name: name, Status: types.CheckAdvice,
 			Message: fmt.Sprintf("never synced: %s", strings.Join(never, ", ")),
 			Details: []string{"run `" + hint.SelfRefresh.String() + "` to fill it in; that fetches a data file and does not upgrade magus"},
 		}
 	case len(stale) > 0:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorAdvice,
+		return types.Check{
+			Name: name, Status: types.CheckAdvice,
 			Message: fmt.Sprintf("data is older than its window: %s", strings.Join(stale, ", ")),
 			Details: []string{
 				"run `" + hint.SelfRefresh.String() + "` to update it",
@@ -164,8 +164,8 @@ func (r *runner) checkRegistryFreshness() types.DoctorCheck {
 			},
 		}
 	default:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: fmt.Sprintf("%d source(s), all fresh", len(cached)),
 		}
 	}

@@ -849,6 +849,25 @@ func ObjectFileReport(v types.FileReport) vm.Value {
 	return out
 }
 
+func ObjectCheck(v types.Check) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	out.MapSet("message", vm.StrValue(v.Message))
+	itemsDetails := make([]vm.Value, len(v.Details))
+	for indexDetails := range v.Details {
+		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
+	}
+	out.MapSet("details", vm.ListValue(itemsDetails))
+	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
+	itemsFix := make([]vm.Value, len(v.Fix))
+	for indexFix := range v.Fix {
+		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
+	}
+	out.MapSet("fix", vm.ListValue(itemsFix))
+	return out
+}
+
 func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -866,6 +885,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
 	out.MapSet("signature", vm.StrValue(v.Signature))
 	out.MapSet("baseSignature", vm.StrValue(v.BaseSignature))
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
+	}
+	out.MapSet("checks", vm.ListValue(itemsChecks))
 	return out
 }
 
@@ -965,6 +989,21 @@ func ObjectDiffReviewed(v types.DiffReviewed) vm.Value {
 	return out
 }
 
+func ObjectDiagnostic(v types.Diagnostic) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("message", vm.StrValue(v.Message))
+	out.MapSet("url", vm.StrValue(v.URL))
+	return out
+}
+
+func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("reason", vm.StrValue(string(v.Reason)))
+	return out
+}
+
 func ObjectDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -994,25 +1033,16 @@ func ObjectDiff(v types.Diff) vm.Value {
 	}
 	out.MapSet("api", optAPI)
 	out.MapSet("reviewed", ObjectDiffReviewed(v.Reviewed))
-	return out
-}
-
-func ObjectDoctorCheck(v types.DoctorCheck) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("status", vm.StrValue(string(v.Status)))
-	out.MapSet("message", vm.StrValue(v.Message))
-	itemsDetails := make([]vm.Value, len(v.Details))
-	for indexDetails := range v.Details {
-		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
+	optConformanceError := vm.Null
+	if v.ConformanceError != nil {
+		optConformanceError = ObjectDiagnostic((*v.ConformanceError))
 	}
-	out.MapSet("details", vm.ListValue(itemsDetails))
-	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
-	itemsFix := make([]vm.Value, len(v.Fix))
-	for indexFix := range v.Fix {
-		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
+	out.MapSet("conformanceError", optConformanceError)
+	itemsUncovered := make([]vm.Value, len(v.Uncovered))
+	for indexUncovered := range v.Uncovered {
+		itemsUncovered[indexUncovered] = ObjectDiffUncovered(v.Uncovered[indexUncovered])
 	}
-	out.MapSet("fix", vm.ListValue(itemsFix))
+	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
 	return out
 }
 
@@ -1030,7 +1060,7 @@ func ObjectDoctorReport(v types.DoctorReport) vm.Value {
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	itemsChecks := make([]vm.Value, len(v.Checks))
 	for indexChecks := range v.Checks {
-		itemsChecks[indexChecks] = ObjectDoctorCheck(v.Checks[indexChecks])
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
 	out.MapSet("summary", ObjectDoctorSummary(v.Summary))

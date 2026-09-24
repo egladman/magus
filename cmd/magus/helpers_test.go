@@ -27,14 +27,14 @@ import (
 // TestStatusGlyph maps every documented status to its plain (uncoloured) marker and
 // confirms the unknown-status fallback.
 func TestStatusGlyph(t *testing.T) {
-	assert.Equal(t, "[pass]", statusGlyph(types.DoctorOK, false))
-	assert.Equal(t, "[fail]", statusGlyph(types.DoctorFail, false))
+	assert.Equal(t, "[pass]", statusGlyph(types.CheckOK, false))
+	assert.Equal(t, "[fail]", statusGlyph(types.CheckFail, false))
 	assert.Equal(t, "[?]", statusGlyph("", false))
 	assert.Equal(t, "[?]", statusGlyph("unknown", false))
 	assert.Equal(t, "[?]", statusGlyph("OK", false)) // case-sensitive by design
 	// Coloured variant wraps the marker in ANSI but preserves the label.
-	assert.Contains(t, statusGlyph(types.DoctorFail, true), "[fail]")
-	assert.Contains(t, statusGlyph(types.DoctorFail, true), "\x1b[31m")
+	assert.Contains(t, statusGlyph(types.CheckFail, true), "[fail]")
+	assert.Contains(t, statusGlyph(types.CheckFail, true), "\x1b[31m")
 }
 
 // TestCanonicalTarget covers the short-alias expansions and the passthrough.
