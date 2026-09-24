@@ -337,12 +337,16 @@ tell you it has seen this exact tree fail before. When a miss lands on a key who
 recorded execution failed, the run prints one line before the target starts:
 
 ```text
-hint: inputs unchanged since outcc49db1f, which failed: tsc exit 2; read it with magus query output outcc49db1f
+hint: inputs unchanged since outcc49db1f, which failed: tsc exit 2; running it again, read that failure with magus query output outcc49db1f
 ```
 
 Nothing is replayed and nothing is skipped: the target runs exactly as it would have,
-and the line is context rather than a verdict. It appears once per cache key, so an
-edit that moves the inputs mints a different ref and the hint speaks again; `-s` keeps
+and the line is context rather than a verdict. The exit status is the new run's, so a
+failure that came from the environment (a tool lock held by another process, a killed
+run) passes once the environment clears. The ref it names is the failed attempt, not
+the step ref, so it still shows the failure after the new run records its result. It
+appears once per cache key, so an edit that moves the inputs mints a different key and
+the hint speaks again; `-s` keeps
 it, and `MAGUS_HINTS_ENABLED=false` (`hints.enabled: false` in `magus.yaml`) drops it with
 every other hint. The target's result record carries `"hint_id": "unchanged-failure"` in
 `-o jsonl`, which is the stable id to count rather than the wording above.

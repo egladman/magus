@@ -72,6 +72,7 @@ type Cache struct {
 	outputs        *OutputStore // per-execution captured-output store (target output refs)
 	exportMu       sync.RWMutex // guards Export/Import against concurrent Run writes
 	evictMu        sync.Mutex   // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
+	failureHinted  sync.Map     // cache key -> struct{}: keys emitUnchangedFailureHint already spoke for
 	// annotator folds failure output and raises notices for whichever CI
 	// provider is running the job; Nop off CI, so call sites never branch.
 	// annotateMu serializes a whole failure block (group open, dump, group
@@ -834,29 +835,38 @@ const maxHintErrChars = 120
 // emitUnchangedFailureHint names the recorded failure this step's cache key already
 // holds, and returns [HintUnchangedFailure] when it said so. Nothing is replayed: a
 // failure is deliberately not a cacheable result (docs/concepts/cache/output-refs.md),
-// so the step runs either way and the line is context, never a verdict. Empty when the
-// key has no stored execution, when the newest one passed, or when hints are off.
+// so the step runs either way and the line is context, never a verdict. It prints
+// BEFORE the run, so it says the step runs again: under -s a passing re-run prints
+// nothing else, and a bare "which failed" before exit 0 reads as a failure replayed as a
+// pass. Empty when the key has no stored execution, when the newest one passed, when
+// hints are off, or when this key was already hinted.
+//
+// The line names the failed ATTEMPT, not the step ref: the step ref resolves to the
+// key's newest attempt, so once the re-run passes it shows that pass instead.
 //
 // Once per key rather than per target, because the fact reported is about the KEY: a
-// re-run whose inputs moved hashes differently and deserves silence. The dedupe rides
-// interactive.Emit, which keys on the whole message; the ref inside it is derived from
-// the cache key, so one line per key per process falls out with no state of its own,
-// and one `magus run` invocation is one process.
+// re-run whose inputs moved hashes differently and deserves silence. The attempt id
+// differs per failure, so interactive.Emit's whole-message dedupe cannot do this.
 func (c *Cache) emitUnchangedFailureHint(hash string) string {
 	// A record-only run carries the same pointer as run.target.result's next breadcrumbs.
 	if c.outputs == nil || !interactive.HintsEnabled() || c.recordsOnly {
 		return ""
 	}
 	d, err := c.outputs.newestDescriptor(hash)
-	if err != nil || !d.Failed || d.Ref == "" {
+	// compat: see the v1-descriptor note in Attempts.
+	failed := cmp.Or(d.Attempt, d.Ref)
+	if err != nil || !d.Failed || failed == "" {
+		return ""
+	}
+	if _, dup := c.failureHinted.LoadOrStore(hash, struct{}{}); dup {
 		return ""
 	}
 	msg, _, _ := strings.Cut(d.ErrMsg, "\n")
 	if len(msg) > maxHintErrChars {
 		msg = msg[:maxHintErrChars] + "..."
 	}
-	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; read it with %s",
-		d.Ref, msg, hint.QueryOutput.With(d.Ref)))
+	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
+		failed, msg, hint.QueryOutput.With(failed)))
 	return HintUnchangedFailure
 }
 

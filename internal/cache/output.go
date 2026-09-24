@@ -94,6 +94,10 @@ type OutputDescriptor struct {
 	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
+	// PersistedNs orders attempts that share a TimestampMs: unix nanoseconds at Persist,
+	// strictly increasing within one process (see nextPersistNs). Zero on a descriptor
+	// written before the field existed.
+	PersistedNs int64 `json:"persisted_ns,omitempty"`
 
 	// The cache key pins a TREE STATE (via its source content hashes)
 	// without naming it: it deliberately contains no commit, branch, or base. Revision
@@ -224,13 +228,14 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	d.Key = cacheKey
 	d.KeyVersion = KeyVersion
 	d.Attempt = s.mintAttempt(cacheKey)
+	d.PersistedNs = nextPersistNs()
 	d.MagusVersion = types.MagusVersionFromContext(ctx)
 	dir := filepath.Join(s.outputsDir(), cacheKey)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return OutputDescriptor{}, err
 	}
-	// Temp + rename, matching AdoptImported: newestAttemptBlob picks the freshest
-	// blob by modtime, which (written in place with plain os.WriteFile) is
+	// Temp + rename, matching AdoptImported: until its descriptor lands, this blob is an
+	// orphan that newestAttemptBlob can pick by modtime, so written in place it is
 	// exactly the file a concurrent reader could catch mid-write.
 	//
 	// Not fsync'd: every executed step writes these, so two flushes a step were most of
@@ -299,52 +304,80 @@ func (s *OutputStore) StepRef(cacheKey string) string {
 // missing or unreadable (a Persist that died between its two writes) falls back to
 // file modtime, ranked beneath every descriptor-backed attempt.
 func newestAttemptBlob(dir string) string {
-	files, err := os.ReadDir(dir)
-	if err != nil {
+	blobs := attemptBlobsNewestFirst(dir)
+	if len(blobs) == 0 {
 		return ""
 	}
-	var best string
-	var bestDesc OutputDescriptor
-	var haveDesc bool
-	var bestOrphan, bestOrphanName string
-	var bestOrphanMod time.Time
+	return blobs[0]
+}
+
+// attemptBlobsNewestFirst returns the paths of every .out blob in a cache-key directory
+// in the order newestAttemptBlob and pruneKey both rank by: descriptor-backed attempts
+// by newerDescriptor, then orphans (no readable descriptor) by modtime, with equal
+// modtimes broken by the higher name so the order is deterministic.
+func attemptBlobsNewestFirst(dir string) []string {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	type attempt struct {
+		path    string
+		name    string
+		desc    OutputDescriptor
+		hasDesc bool
+		mod     time.Time
+	}
+	var attempts []attempt
 	for _, f := range files {
 		stem, ok := strings.CutSuffix(f.Name(), outExt)
 		if !ok {
 			continue
 		}
-		path := filepath.Join(dir, f.Name())
-		d, derr := readDescriptor(filepath.Join(dir, stem+descExt))
-		if derr == nil {
+		a := attempt{path: filepath.Join(dir, f.Name()), name: f.Name()}
+		if d, derr := readDescriptor(filepath.Join(dir, stem+descExt)); derr == nil {
 			// compat: see the v1-descriptor note in Attempts.
 			if d.Attempt == "" {
 				d.Attempt = stem
 			}
-			if !haveDesc || newerDescriptor(d, bestDesc) {
-				haveDesc, bestDesc, best = true, d, path
+			a.desc, a.hasDesc = d, true
+		} else if info, ierr := f.Info(); ierr == nil {
+			a.mod = info.ModTime()
+		} else {
+			continue
+		}
+		attempts = append(attempts, a)
+	}
+	slices.SortFunc(attempts, func(x, y attempt) int {
+		switch {
+		case x.hasDesc != y.hasDesc:
+			if x.hasDesc {
+				return -1
 			}
-			continue
+			return 1
+		case x.hasDesc:
+			if newerDescriptor(x.desc, y.desc) {
+				return -1
+			}
+			if newerDescriptor(y.desc, x.desc) {
+				return 1
+			}
+			return 0
+		case !x.mod.Equal(y.mod):
+			return y.mod.Compare(x.mod)
+		default:
+			return strings.Compare(y.name, x.name)
 		}
-		info, ierr := f.Info()
-		if ierr != nil {
-			continue
-		}
-		// Equal modtimes (a coarse-granularity filesystem) break by the higher name
-		// so the pick is deterministic.
-		if info.ModTime().After(bestOrphanMod) || (info.ModTime().Equal(bestOrphanMod) && f.Name() > bestOrphanName) {
-			bestOrphanMod = info.ModTime()
-			bestOrphan, bestOrphanName = path, f.Name()
-		}
+	})
+	paths := make([]string, len(attempts))
+	for i, a := range attempts {
+		paths[i] = a.path
 	}
-	if haveDesc {
-		return best
-	}
-	return bestOrphan
+	return paths
 }
 
 // LatestRefsByTarget returns the newest stored execution per (project, target): one
-// OutputDescriptor each, the most recent by TimestampMs (ties broken by attempt id,
-// then ref, so the choice is stable regardless of directory iteration order). It scans every cache-key
+// OutputDescriptor each, the most recent by newerDescriptor, so the choice is stable
+// regardless of directory iteration order. It scans every cache-key
 // directory's descriptor sidecars. This is what folds each target's last output ref onto
 // its knowledge-graph node without the graph builder parsing the store's on-disk layout.
 //
@@ -447,14 +480,39 @@ func bareTarget(reproTarget string) string {
 	return name
 }
 
+// lastPersistNs is the newest PersistedNs this process has handed out. Package-level
+// rather than per OutputStore: two stores in one process can write the same key dir.
+var lastPersistNs atomic.Int64
+
+// nextPersistNs returns the wall clock in unix nanoseconds, bumped past the previous
+// value when the clock has not advanced (coarse clocks, back-to-back persists), so two
+// attempts persisted by one process never tie. Across processes the nanosecond clock
+// alone orders them.
+func nextPersistNs() int64 {
+	for {
+		prev := lastPersistNs.Load()
+		next := max(time.Now().UnixNano(), prev+1)
+		if lastPersistNs.CompareAndSwap(prev, next) {
+			return next
+		}
+	}
+}
+
 // newerDescriptor reports whether a is the more recent execution than b: a later
-// timestamp wins, and an equal timestamp is broken by the higher attempt id, then the
-// higher ref, so the pick is deterministic (two runs minted in the same millisecond
-// still resolve the same way; the ref alone no longer discriminates attempts of one
-// step, which share it).
+// TimestampMs wins, then a later PersistedNs, so two runs in the same millisecond
+// resolve by when they were recorded. The attempt id and ref only make the pick
+// deterministic; they carry no order, since the attempt id is a hash.
 func newerDescriptor(a, b OutputDescriptor) bool {
 	if a.TimestampMs != b.TimestampMs {
 		return a.TimestampMs > b.TimestampMs
+	}
+	// compat(until: no store holds a descriptor without persisted_ns): an older
+	// descriptor carries zero, so a pair that includes one falls through to the attempt
+	// id and may rank a same-millisecond pair wrongly, as before the field existed.
+	// Observable: every outputs/*/*.json in the reachable stores carries persisted_ns;
+	// they age out under keep-last-K, so no migration is needed.
+	if a.PersistedNs != 0 && b.PersistedNs != 0 && a.PersistedNs != b.PersistedNs {
+		return a.PersistedNs > b.PersistedNs
 	}
 	if a.Attempt != b.Attempt {
 		return a.Attempt > b.Attempt
@@ -649,39 +707,21 @@ func readEvents(path string) ([]journal.Event, error) {
 	return events, nil
 }
 
-// pruneKey keeps the keepLast newest executions in a cache-key directory (by the .out blob's
-// modtime, newest first) and removes the rest: each blob together with its .json descriptor.
-// Best-effort.
+// pruneKey keeps the keepLast newest executions in a cache-key directory and removes the
+// rest: each blob together with its .json descriptor. Newest is the order the step ref
+// resolves by (attemptBlobsNewestFirst), never file modtime, so the attempt a bare ref
+// answers with is never the one pruned. Best-effort.
 func (s *OutputStore) pruneKey(dir string, keepLast int) {
 	if keepLast <= 0 {
 		return
 	}
-	files, err := os.ReadDir(dir)
-	if err != nil {
+	blobs := attemptBlobsNewestFirst(dir)
+	if len(blobs) <= keepLast {
 		return
 	}
-	type entry struct {
-		path string
-		mod  time.Time
-	}
-	var entries []entry
-	for _, f := range files {
-		if !strings.HasSuffix(f.Name(), outExt) {
-			continue
-		}
-		info, err := f.Info()
-		if err != nil {
-			continue
-		}
-		entries = append(entries, entry{path: filepath.Join(dir, f.Name()), mod: info.ModTime()})
-	}
-	if len(entries) <= keepLast {
-		return
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].mod.After(entries[j].mod) })
-	for _, e := range entries[keepLast:] {
-		_ = os.Remove(e.path)
-		_ = os.Remove(descriptorPath(e.path))
+	for _, path := range blobs[keepLast:] {
+		_ = os.Remove(path)
+		_ = os.Remove(descriptorPath(path))
 	}
 }
 

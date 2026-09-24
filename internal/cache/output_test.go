@@ -46,11 +46,12 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 
 	require.True(t, strings.HasPrefix(desc.Attempt, RefPrefix))
 	require.Len(t, desc.Attempt, len(RefPrefix)+attemptHexLen)
+	require.Positive(t, desc.PersistedNs)
 	assert.Equal(t, OutputDescriptor{
 		Ref: ref, Project: "svc/api", Target: "test",
 		Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200,
 		Key: "deadbeefcafef00d", KeyVersion: KeyVersion,
-		Attempt: desc.Attempt,
+		Attempt: desc.Attempt, PersistedNs: desc.PersistedNs,
 	}, desc)
 }
 
@@ -133,7 +134,7 @@ func TestOutputStorePersistRevisionRoundTrip(t *testing.T) {
 		TimestampMs: 1_700_000_000_000, DurationMs: 500,
 		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
 		Key: "cafebabecafebabe", KeyVersion: KeyVersion,
-		Attempt: desc.Attempt,
+		Attempt: desc.Attempt, PersistedNs: desc.PersistedNs,
 	}, desc)
 }
 
@@ -284,6 +285,47 @@ func TestOutputStoreAttemptsShareOnePortableRef(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "run 1\n", string(data))
 	assert.Equal(t, int64(100), desc.TimestampMs)
+}
+
+// TestOutputStoreSameMillisecondLaterAttemptWins persists pairs of attempts under one
+// TimestampMs. The attempt id is a hash, so ordering by it alone picks the earlier run
+// about half the time; across 32 pairs that loses with near certainty unless the
+// recorded PersistedNs decides.
+func TestOutputStoreSameMillisecondLaterAttemptWins(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	for i := range 32 {
+		key := fmt.Sprintf("samems%02d", i)
+		d := OutputDescriptor{Project: "p", Target: "lint", TimestampMs: 1000}
+		first, err := s.Persist(context.Background(), key, []byte("earlier\n"), d)
+		require.NoError(t, err)
+		second, err := s.Persist(context.Background(), key, []byte("later\n"), d)
+		require.NoError(t, err)
+		require.Greater(t, second.PersistedNs, first.PersistedNs)
+
+		newest, err := s.newestDescriptor(key)
+		require.NoError(t, err)
+		assert.Equal(t, second.Attempt, newest.Attempt, "pair %d: the step ref answers with the later run", i)
+
+		attempts, err := s.Attempts(first.Ref)
+		require.NoError(t, err)
+		require.Len(t, attempts, 2)
+		assert.Equal(t, second.Attempt, attempts[0].Attempt, "pair %d: --attempts lists the later run first", i)
+	}
+}
+
+// TestNewerDescriptorWithoutPersistedNs pins the fallback for descriptors written
+// before PersistedNs: a later TimestampMs still wins, and a same-millisecond pair
+// with one or both fields missing is still ordered deterministically.
+func TestNewerDescriptorWithoutPersistedNs(t *testing.T) {
+	old := OutputDescriptor{TimestampMs: 5, Attempt: "out00000001"}
+	later := OutputDescriptor{TimestampMs: 6, Attempt: "out00000000"}
+	assert.True(t, newerDescriptor(later, old))
+	assert.False(t, newerDescriptor(old, later))
+
+	legacy := OutputDescriptor{TimestampMs: 5, Attempt: "out00000002"}
+	stamped := OutputDescriptor{TimestampMs: 5, Attempt: "out00000001", PersistedNs: 5_000_001}
+	assert.NotEqual(t, newerDescriptor(legacy, stamped), newerDescriptor(stamped, legacy),
+		"a mixed pair still has exactly one newer side")
 }
 
 // TestPortableRefDeterministicAcrossCaches is the point of portable refs: two machines
@@ -469,6 +511,41 @@ func TestOutputStoreKeepLastK(t *testing.T) {
 	assert.Equal(t, defaultOutputKeepLast, outs, "retention keeps exactly K executions (each a blob + descriptor)")
 	_, _, err = s.ByRef(last)
 	assert.NoError(t, err, "the newest execution survives pruning")
+}
+
+// TestOutputStorePruneKeepsWhatTheRefResolvesTo sets every blob's mtime to the REVERSE
+// of the descriptor order, so a modtime ranking would prune exactly the attempts the
+// step ref answers with. The newest two share a millisecond, so PersistedNs decides
+// between them.
+func TestOutputStorePruneKeepsWhatTheRefResolvesTo(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	const key = "prunekey"
+	keyDir := filepath.Join(dir, "outputs", key)
+
+	var persisted []OutputDescriptor
+	for _, ts := range []int64{100, 200, 300, 400, 400} {
+		d, err := s.Persist(context.Background(), key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: ts})
+		require.NoError(t, err)
+		persisted = append(persisted, d)
+	}
+	base := time.Now()
+	for i, d := range persisted {
+		mod := base.Add(-time.Duration(i) * time.Minute)
+		blob := filepath.Join(keyDir, d.Attempt+outExt)
+		require.NoError(t, os.Chtimes(blob, mod, mod))
+	}
+
+	s.pruneKey(keyDir, 2)
+
+	attempts, err := s.Attempts(persisted[0].Ref)
+	require.NoError(t, err)
+	require.Len(t, attempts, 2)
+	assert.Equal(t, persisted[4].Attempt, attempts[0].Attempt, "the later of the same-millisecond pair survives first")
+	assert.Equal(t, persisted[3].Attempt, attempts[1].Attempt)
+	newest, err := s.newestDescriptor(key)
+	require.NoError(t, err)
+	assert.Equal(t, persisted[4].Attempt, newest.Attempt, "the step ref resolves to a survivor")
 }
 
 // TestOutputStorePrefixAndAmbiguity covers git-style prefix resolution.
