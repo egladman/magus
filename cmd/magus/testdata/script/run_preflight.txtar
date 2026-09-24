@@ -20,6 +20,7 @@ stderr 'name the target alone'
 # b's generate fails, so nothing of ci starts in either project.
 ! exec magus run ci a b --preflight generate
 stderr '\[MGS3020\] preflight generate failed in b; reproduce with `magus run generate b`'
+! exists log/a.generate
 ! exists log/a.lint
 ! exists log/a.ci
 ! exists log/b.lint
@@ -89,6 +90,7 @@ magus\project({"name": "preflight-root"});
 -- a/magusfile.buzz --
 import "magus";
 import "fs";
+import "proc";
 
 fun bump(name: str) > void !> any {
     final path = "../log/a." + name;
@@ -99,7 +101,13 @@ fun bump(name: str) > void !> any {
     fs\writeFile(path, seen + "ran\n");
 }
 
+// While b is broken, a's generate waits for b's failure to cancel it, so it can leave
+// no trace. Left to race b, it could append its line and then be cancelled before its
+// cache entry was written; the green run below then ran it again and counted two.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    if (fs\exists("../b/broken")) {
+        proc\exec("sleep", ["30"]);
+    }
     bump("generate");
 }
 

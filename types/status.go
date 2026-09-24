@@ -78,6 +78,11 @@ type StatusSnapshot struct {
 	// holds one indefinitely, and every other run simply waits. Surfacing who holds
 	// what turns that from a hang into a fact.
 	Locks []StatusLock `json:"locks,omitempty" yaml:"locks,omitempty"`
+	// PipeWaits are runs that have not taken their locks yet because a magus upstream of
+	// them in a shell pipe still holds, or may still take, a project they need. Without
+	// it such a run shows nowhere: it holds no lock and runs no target. Additive JSON,
+	// not on the proto event wire.
+	PipeWaits []StatusPipeWait `json:"pipe_waits,omitempty" yaml:"pipe_waits,omitempty"`
 	// Machine is the host-wide admission budget the daemon arbitrates: what every magus
 	// on this machine holds and who is queued for it. Nil when no daemon is running, or
 	// when the one that answered is a per-process proc server, which arbitrates nothing
@@ -255,6 +260,19 @@ type StatusLock struct {
 	// is a peer, days is something nobody knows is running. Named per AIP-142, which
 	// asks for a _time suffix on a timestamp rather than the _at spelling.
 	AcquireTime time.Time `json:"acquire_time,omitempty" yaml:"acquire_time,omitempty"`
+}
+
+// StatusPipeWait is one run waiting on the magus that writes its standard input.
+type StatusPipeWait struct {
+	// PID, Command and Dir identify the waiting run.
+	PID     int    `json:"pid" yaml:"pid"`
+	Command string `json:"command,omitempty" yaml:"command,omitempty"`
+	Dir     string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	// UpstreamPID and UpstreamCommand identify the stage it waits on.
+	UpstreamPID     int    `json:"upstream_pid" yaml:"upstream_pid"`
+	UpstreamCommand string `json:"upstream_command,omitempty" yaml:"upstream_command,omitempty"`
+	// WaitTime is when the wait began.
+	WaitTime time.Time `json:"wait_time,omitempty" yaml:"wait_time,omitempty"`
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the
