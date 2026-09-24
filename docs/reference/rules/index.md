@@ -37,7 +37,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [shared-stash](shared-stash.md)               | a bare stash push or pop, on a stack every worktree shares                                        |
 | [sibling-checkout](sibling-checkout.md)       | a magus command relocated into another checkout, judging a tree nobody ships                      |
 | [spawn-unbriefed](spawn-unbriefed.md)         | a subagent spawned before the multi-agent skill loaded                                            |
-| [stage-all](stage-all.md)                     | `git add -A`, which sweeps regenerated output into a commit about something else                  |
+| [stage-all](stage-all.md)                     | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output           |
 | [symbol-search](symbol-search.md)             | a recursive text search for a symbol the index defines and can enumerate                          |
 | [throwaway-copy](throwaway-copy.md)           | a run inside a temp or scratchpad copy, which leaves the real tree unverified                     |
 | [whole-tree](whole-tree.md)                   | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                        |
