@@ -225,6 +225,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`magus session dispose` refuses without an interactive terminal and is denied to
+  agents.** Disposing an attention request records that a PERSON answered it, and nothing
+  stopped an agent from closing any request, including one addressed to a person. The CLI
+  now refuses with the `--ack` sentence and exit 2 outside a terminal, and the guard rule
+  `person-only` (widened from `read-ack`) denies every spelling on every agent channel.
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
 - **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
