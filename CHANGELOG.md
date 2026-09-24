@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The guard advises on a split `magus run` (`split-run`).** One target run on two
+  project sets, on one line or in two calls within ten minutes, gets the combined form,
+  once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
 - **The cache is two tiers under standard two-tier semantics.** Reads go local, then
   remote; a remote hit is verified and promoted into the local tier; a build is stored in
   both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:

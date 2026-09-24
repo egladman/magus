@@ -229,6 +229,11 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryScopeDrift), Decision: "advise", Catches: "a write into a project this session has no dependency edge to"},
 	{Name: string(advisorySkillSource), Decision: "advise", Catches: "a write to an installed skill copy rather than to its source"},
 	{Name: string(advisorySourceRead), Decision: "advise", Catches: "an unbounded source read the symbol index has already answered"},
+	{Name: string(advisorySplitRun), Decision: "advise",
+		Catches: "the same target run again on a different project set, on one line or as a separate call",
+		Why: "`magus run` and `magus affected` take one target and many projects, so the same target run twice on two project sets is usually one call typed as two: `magus run lint . docs` covers what `magus run lint .` and `magus run lint docs` would otherwise cost as two workspace loads. " +
+			"It fires on TWO shapes. On one line (`magus run lint . && magus run lint docs`), it narrows the chained-run text to the combined form; a chain of genuinely different targets stays chained-run's text and domain. Across two separate calls, it compares the session's last magus run/affected invocation against this one: same target, same charms, a different project set, inside a ten-minute window. " +
+			"Charms count as part of the target identity, so `lint` and `lint:rw` are never combined into one call. Held to one firing per session for the cross-call shape; the one-line shape speaks every time, like chained-run beside it."},
 	{Name: string(advisoryStageClassify), Decision: "advise", Catches: "staging without classifying, when generated and source differ"},
 	{Name: string(advisoryStaleBinary), Decision: "advise",
 		Catches: "a verdict from a binary older than the rules in the tree around it",
@@ -279,7 +284,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryRegenSource, advisoryGraphStale, advisoryGateRepeat, advisoryFocus,
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
-	advisoryScopeDrift, advisoryNewSourceDir,
+	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the
