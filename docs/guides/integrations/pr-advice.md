@@ -23,10 +23,15 @@ not want to `false`:
 
 ```yaml
 - uses: egladman/magus/.github/actions/advice@v0.4.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     doctor: 'false'
     blast-radius: 'false'
 ```
+
+The token is never an input: the step sets `GITHUB_TOKEN` from a secret in its `env`,
+and the action fails when it is missing.
 
 To stop the comment entirely, drop the step. If you would rather keep the step and
 switch it off without editing the workflow, the job in magus's own `ci.yaml` is
@@ -135,6 +140,8 @@ by them, as this repository's `queue-advice.yaml` does:
 
 ```yaml
 - uses: egladman/magus/.github/actions/advice@v0.4.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     merge-queue: 'true'
 ```

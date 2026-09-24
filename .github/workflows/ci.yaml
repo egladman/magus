@@ -264,7 +264,7 @@ jobs:
         name: Find what wants regenerating
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
           CONFLICTING: ${{ runner.temp }}/conflicting.txt
         run: |
@@ -325,6 +325,8 @@ jobs:
       - name: Regenerate the pull request
         if: github.event_name == 'pull_request' && steps.work.outputs.requested == 'true'
         uses: ./.github/actions/advice
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fix-merge-conflict: 'true'
           fix-generated-drift: 'true'
@@ -349,7 +351,7 @@ jobs:
         if: github.event_name != 'pull_request' && steps.work.outputs.requested == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           BUZZ_INCLUDE_PATH: ${{ runner.temp }}/advice
           CONFLICTING: ${{ runner.temp }}/conflicting.txt
@@ -663,6 +665,8 @@ jobs:
       # The fixers are not here: they write, and the regenerate job runs them on the label.
       # offer-fix-label is what tells the conflict comment that job exists.
       - uses: ./.github/actions/advice
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           offer-fix-label: 'true'
           baseline: ${{ steps.baseline.outputs.path }}
