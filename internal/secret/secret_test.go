@@ -20,7 +20,7 @@ import (
 
 // withResolver returns a context carrying a fresh resolver, plus the resolver. Per-test
 // state, which is the whole point of the type: nothing leaks between tests, and nothing
-// leaks between runs in a long-lived daemon either.
+// leaks between runs in a long-lived server either.
 func withResolver(t *testing.T) (context.Context, *Resolver) {
 	t.Helper()
 	r := New()

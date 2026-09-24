@@ -5,10 +5,10 @@
 // What is pinned HERE is what a reader ends up looking at, and specifically the things a later
 // refactor would most plausibly break:
 //
-//   - ONE LIST, BOTH HOLDERS. The daemon's own maintenance and the work a session holds are the
-//     same kind of thing here, told apart by the holder on the row - and only what the daemon holds
+//   - ONE LIST, BOTH HOLDERS. The server's own maintenance and the work a session holds are the
+//     same kind of thing here, told apart by the holder on the row - and only what the server holds
 //     offers a Run control, which submits THAT row's job.
-//   - The EMPTY STATES stay apart. Per source: "no daemon", "the daemon will not serve this", and
+//   - The EMPTY STATES stay apart. Per source: "no server", "the server will not serve this", and
 //     "there is no work" are three different facts, and only the last means nothing is happening.
 //   - WHICH SOURCE OPENS is decided by the data. Jobs in hand means there is work to look at;
 //     anything else hands the view to Targets, which is what a person doing plain work came for. An
@@ -43,7 +43,7 @@ beforeEach(() => {
 
 // The default-host cell is module state shared with every other DOM test in this process (the suite
 // runs with --experimental-test-isolation=none), so it is restored after each test rather than left
-// pointing a sibling's surface at a daemon that is not there.
+// pointing a sibling's surface at a server that is not there.
 afterEach(() => {
   setDefaultHost("");
   globalThis.fetch = realFetch;
@@ -57,7 +57,7 @@ async function settle(turns = 12): Promise<void> {
   for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-// A job as the daemon serializes it: protobuf JSON, so an enum is its name and an int64 is a string.
+// A job as the server serializes it: protobuf JSON, so an enum is its name and an int64 is a string.
 function sessionJob(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     name: "jobs/" + id,
@@ -68,14 +68,14 @@ function sessionJob(id: string, extra: Record<string, unknown> = {}): Record<str
   };
 }
 
-function daemonJob(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return { name: "jobs/" + id, id, holder: "JOB_HOLDER_DAEMON", state: "declared", ...extra };
+function serverJob(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { name: "jobs/" + id, id, holder: "JOB_HOLDER_SERVER", state: "declared", ...extra };
 }
 
 type RunReply = { state: string } | { status: number; code: string; message: string };
 
-// serve points the view at a daemon that answers only the routes named here. Everything else is
-// refused, which is what a daemon that is not there looks like from the browser, and which the view
+// serve points the view at a server that answers only the routes named here. Everything else is
+// refused, which is what a server that is not there looks like from the browser, and which the view
 // must survive without blanking what it has.
 function serve(routes: {
   jobs?: () => unknown;
@@ -137,7 +137,7 @@ function okJobs(jobs: unknown[], overlaps: unknown[] = []): () => unknown {
   });
 }
 
-// refused is the daemon DECLINING the service, which is a different fact from one that broke.
+// refused is the server DECLINING the service, which is a different fact from one that broke.
 function refusedJobs(status: number, code: string, message: string): () => unknown {
   return () => ({
     ok: false,
@@ -226,20 +226,20 @@ function text(host: HTMLElement): string {
   return host.textContent ?? "";
 }
 
-test("with no daemon configured it says that, rather than showing an empty view", async () => {
+test("with no server configured it says that, rather than showing an empty view", async () => {
   const { host, teardown } = mount();
   try {
     await settle();
     assert.equal(phase(host), "empty");
-    assert.match(text(host), /No daemon connected/);
+    assert.match(text(host), /No server connected/);
   } finally {
     teardown();
   }
 });
 
-// A daemon that will not serve the job service is not a workspace with nothing happening in it.
+// A server that will not serve the job service is not a workspace with nothing happening in it.
 // Reached by asking for Jobs, because a refusal is exactly the case that hands the view to Targets.
-test("a daemon that refuses the job service says so, not that there is no work", async () => {
+test("a server that refuses the job service says so, not that there is no work", async () => {
   serve({ jobs: refusedJobs(403, "permission_denied", "job control is off") });
   const { host, teardown } = mount();
   try {
@@ -323,10 +323,10 @@ test("the jobs draw one node and one list row each", async () => {
 
 // ---- one list, both holders ------------------------------------------------
 
-test("a row says who holds the job, and the daemon's own carry what they maintain", async () => {
+test("a row says who holds the job, and the server's own carry what they maintain", async () => {
   serve({
     jobs: okJobs([
-      daemonJob("clear-cache", {
+      serverJob("clear-cache", {
         description: "Invalidate cached build entries",
         target: { sizeBytes: "2048", itemCount: "12" },
         lastRun: { endTime: new Date(Date.now() - 120_000).toISOString(), ok: true },
@@ -337,10 +337,10 @@ test("a row says who holds the job, and the daemon's own carry what they maintai
   const { host, teardown } = mount();
   try {
     await settle();
-    const daemon = rowFor(host, "clear-cache")?.textContent ?? "";
-    assert.match(daemon, /daemon/);
-    assert.match(daemon, /2\.0 KB, 12 items/);
-    assert.match(daemon, /last run 2m ago/);
+    const server = rowFor(host, "clear-cache")?.textContent ?? "";
+    assert.match(server, /server/);
+    assert.match(server, /2\.0 KB, 12 items/);
+    assert.match(server, /last run 2m ago/);
     const session = rowFor(host, "docs-rename")?.textContent ?? "";
     assert.match(session, /session/);
     assert.match(session, /opus/);
@@ -351,9 +351,9 @@ test("a row says who holds the job, and the daemon's own carry what they maintai
 
 // A session's job is held by that session: magus never starts one, so offering a control that
 // cannot work would be describing a capability that does not exist.
-test("only a job the daemon holds offers a Run control", async () => {
+test("only a job the server holds offers a Run control", async () => {
   serve({
-    jobs: okJobs([daemonJob("clear-cache"), sessionJob("docs-rename")]),
+    jobs: okJobs([serverJob("clear-cache"), sessionJob("docs-rename")]),
   });
   const { host, teardown } = mount();
   try {
@@ -368,7 +368,7 @@ test("only a job the daemon holds offers a Run control", async () => {
 // The one that carries the feature: the name comes off the RunJob request body, so disconnecting
 // the control from the client - a listener dropped, a row built from the wrong job - fails it.
 test("the Run action submits the job on the row", async () => {
-  serve({ jobs: okJobs([daemonJob("rotate-activities"), daemonJob("clear-cache")]) });
+  serve({ jobs: okJobs([serverJob("rotate-activities"), serverJob("clear-cache")]) });
   const { host, teardown } = mount();
   try {
     await settle();
@@ -382,11 +382,11 @@ test("the Run action submits the job on the row", async () => {
   }
 });
 
-// ALREADY_RUNNING is a success state on this contract - the daemon coalesced an identical in-flight
+// ALREADY_RUNNING is a success state on this contract - the server coalesced an identical in-flight
 // job - so it reads as a fact on the row rather than as a failure.
 test("a coalesced submit says already running", async () => {
   serve({
-    jobs: okJobs([daemonJob("rotate-activities")]),
+    jobs: okJobs([serverJob("rotate-activities")]),
     run: { state: "SUBMIT_STATE_ALREADY_RUNNING" },
   });
   const { host, teardown } = mount();
@@ -404,8 +404,8 @@ test("a coalesced submit says already running", async () => {
 
 test("a refused run names the reason and leaves the control pressable", async () => {
   serve({
-    jobs: okJobs([daemonJob("rotate-activities")]),
-    run: { status: 503, code: "unavailable", message: "job: no daemon socket to submit to" },
+    jobs: okJobs([serverJob("rotate-activities")]),
+    run: { status: 503, code: "unavailable", message: "job: no server socket to submit to" },
   });
   const { host, teardown } = mount();
   try {
@@ -414,7 +414,7 @@ test("a refused run names the reason and leaves the control pressable", async ()
     const btn = row.querySelector<HTMLButtonElement>(".console-plan-list__run");
     btn?.click();
     await settle();
-    assert.match(runState(row), /could not run rotate-activities: .*no daemon socket/);
+    assert.match(runState(row), /could not run rotate-activities: .*no server socket/);
     assert.equal(btn?.disabled, false, "still pressable - the reader can retry");
   } finally {
     teardown();
@@ -575,12 +575,12 @@ test("the card carries the job's kind and a truncated criteria", async () => {
   }
 });
 
-test("a daemon job's card still names its kind even with no criteria to show", async () => {
-  serve({ jobs: okJobs([daemonJob("clear-cache")]) });
+test("a server job's card still names its kind even with no criteria to show", async () => {
+  serve({ jobs: okJobs([serverJob("clear-cache")]) });
   const { host, teardown } = mount();
   try {
     await settle();
-    assert.equal(host.querySelector(".console-plan-node__goal")?.textContent, "daemon");
+    assert.equal(host.querySelector(".console-plan-node__goal")?.textContent, "server");
   } finally {
     teardown();
   }
@@ -685,7 +685,7 @@ test("the view says what a job is and links to Runs for target runs", async () =
     await settle();
     const intro = host.querySelector(".console-plan-intro")?.textContent ?? "";
     assert.match(intro, /Work someone owns/);
-    assert.match(intro, /the daemon's own maintenance/);
+    assert.match(intro, /the server's own maintenance/);
     assert.match(intro, /Target runs are in Runs/);
     const link = host.querySelector<HTMLButtonElement>(".console-plan-intro__link");
     assert.equal(link?.dataset.openSurface, "runs");
@@ -705,8 +705,8 @@ test("the view says what a job is and links to Runs for target runs", async () =
 });
 
 // The other half of that sentence, and the reason it is two sentences. Feeds that did not answer
-// cannot attribute a run to ANY job, which is a fact about the daemon; reporting it as the one above
-// would blame the job for a daemon that is not talking.
+// cannot attribute a run to ANY job, which is a fact about the server; reporting it as the one above
+// would blame the job for a server that is not talking.
 test("a job whose activity feeds could not be read says that instead", async () => {
   serve({ jobs: okJobs([sessionJob("root")]) });
   const { host, teardown } = mount();
@@ -722,9 +722,9 @@ test("a job whose activity feeds could not be read says that instead", async () 
   }
 });
 
-// ---- what the daemon reports about the work --------------------------------
+// ---- what the server reports about the work --------------------------------
 
-// Two jobs claiming one path is a FACT the daemon derived from two declarations, and the view's job
+// Two jobs claiming one path is a FACT the server derived from two declarations, and the view's job
 // is to put it in front of a reader. Nothing is blocked, reordered, or failed by it - and it is
 // drawn on BOTH rows, because either one is where the reader might be standing.
 test("an overlap warns on both rows and names the other job in the detail", async () => {
@@ -965,20 +965,20 @@ test("the overview leads with how the target view is anchored", async () => {
   }
 });
 
-test("a daemon with no target plan route names the missing endpoint", async () => {
+test("a server with no target plan route names the missing endpoint", async () => {
   serve({ jobs: okJobs([]), plan: () => ({ ok: false, status: 404 }) });
   const { host, teardown } = mount();
   try {
     await settle();
     assert.equal(phase(host), "empty");
     assert.match(text(host), /No target plan endpoint/);
-    assert.match(text(host), /lights up when the daemon serves \/api\/v1\/plan/);
+    assert.match(text(host), /lights up when the server serves \/api\/v1\/plan/);
   } finally {
     teardown();
   }
 });
 
-// Served-but-empty on the FOLLOWING read means the daemon had nothing to anchor to. That is a
+// Served-but-empty on the FOLLOWING read means the server had nothing to anchor to. That is a
 // different fact from a missing route, and the sentence has to say so.
 test("a served but empty target plan says nothing has run, not that the route is missing", async () => {
   serve({ jobs: okJobs([]), plan: okPlan({ target: "ci", anchor: "default", nodes: [] }) });
@@ -995,7 +995,7 @@ test("a served but empty target plan says nothing has run, not that the route is
 
 // ---- the target override ---------------------------------------------------
 
-// The default read names NO target: the daemon picks the anchor and the view follows the live run.
+// The default read names NO target: the server picks the anchor and the view follows the live run.
 // Sending one by accident would silently turn a live view into a browse of a fixed target.
 test("the default read names no target, and the override is what adds one", async () => {
   const asked: string[] = [];
@@ -1024,9 +1024,9 @@ test("the default read names no target, and the override is what adds one", asyn
 });
 
 // The console holds no list of the workspace's targets, so any sentence it wrote itself would be a
-// guess. The daemon named what it could not resolve; that is what reaches the screen. The body is
+// guess. The server named what it could not resolve; that is what reaches the screen. The body is
 // what the route actually sends - http.Error, so plain text, not a JSON envelope.
-test("an unknown target shows the daemon's own message, verbatim", async () => {
+test("an unknown target shows the server's own message, verbatim", async () => {
   serve({
     jobs: okJobs([]),
     plan: (url) =>
@@ -1116,7 +1116,7 @@ test("selecting a target shows its project, its target and a link to its capture
     assert.match(
       link?.getAttribute("href") ?? "",
       /port=7391/,
-      "and this daemon's port, so the viewer re-attaches here rather than wherever it was last",
+      "and this server's port, so the viewer re-attaches here rather than wherever it was last",
     );
   } finally {
     teardown();

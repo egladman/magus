@@ -119,7 +119,7 @@ func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 	assert.Empty(t, got.Viewed, "a corrupt progress file must not stop a review from opening")
 }
 
-// The daemon stamps the author from the transport. A body that claims otherwise is ignored,
+// The server stamps the author from the transport. A body that claims otherwise is ignored,
 // which is what stops an agent posting as the person.
 func TestCommentAuthorIsStampedNotClaimed(t *testing.T) {
 	s := NewStore("")
@@ -286,7 +286,7 @@ func TestContentAtIsTakenWhenTracked(t *testing.T) {
 }
 
 // A self-review remark is a sentence addressed to a teammate that has not been sent yet.
-// Losing eight of them to a daemon restart is losing the work, which is what happened while
+// Losing eight of them to a server restart is losing the work, which is what happened while
 // comments sat with the coordination state.
 func TestHumanDraftsSurviveARestart(t *testing.T) {
 	dir := t.TempDir()
@@ -334,7 +334,7 @@ func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
 	assert.Equal(t, []string{"still mine"}, bodies)
 }
 
-// Persistence is off with no state directory, which is what a test and a workspace-less daemon
+// Persistence is off with no state directory, which is what a test and a workspace-less server
 // get. It must degrade to memory rather than to a panic or a write into the working directory.
 func TestDraftsAreMemoryOnlyWithoutAStateDir(t *testing.T) {
 	s := NewStore("")

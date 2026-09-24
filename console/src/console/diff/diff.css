@@ -1133,7 +1133,7 @@
 }
 
 /* An agent's remark is tinted differently from the reader's own. Not decoration: in a paired
- * review the first question about any comment is who said it, and the daemon stamps that from
+ * review the first question about any comment is who said it, and the server stamps that from
  * the transport, so the color is reporting a fact rather than a claim. */
 .console-diff-row--comment[data-author="agent"] {
   border-inline-start-color: var(--pf-t--global--icon--color--status--info--default);

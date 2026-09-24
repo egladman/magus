@@ -3,7 +3,7 @@
 // seeing is decided by code a test can run without a browser (jobs.test.ts). The surface file next
 // door owns the SVG, the poll, and the keyboard.
 //
-// ONE KIND OF THING. A job is work with a HOLDER: the daemon holds its own maintenance jobs, and a
+// ONE KIND OF THING. A job is work with a HOLDER: the server holds its own maintenance jobs, and a
 // session holds the ones an orchestrator handed out. JobService.ListJobs returns both, so this
 // module never branches on which it has - a catalog job is a root with no children, which the tree
 // below already draws.
@@ -22,11 +22,11 @@ import {
   type JobOverlap,
 } from "@wire/job/v1alpha1/job_pb";
 import {
-  createDaemonTransport,
+  createServerTransport,
   getLiveToken,
   isCapabilityDenied,
   isUnreachable,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { errMessage } from "../../lib/guards";
 import { humanBytes } from "../activity/adapter";
 import { layoutLayered, LAYERED_COL_W, LAYERED_ROW_H } from "../graph/layout";
@@ -69,7 +69,7 @@ export const STATE_MARK: Record<JobState, string> = {
 // Who runs it, in the one word the list and the detail both use.
 export const HOLDER_LABEL: Record<JobHolder, string> = {
   [JobHolder.UNSPECIFIED]: "",
-  [JobHolder.DAEMON]: "daemon",
+  [JobHolder.SERVER]: "server",
   [JobHolder.SESSION]: "session",
 };
 
@@ -91,7 +91,7 @@ export function isTerminal(s: JobState): boolean {
 export const STALE_AFTER_MS = 10 * 60 * 1000;
 
 // isStale is that threshold applied to one job. A terminal job is never stale - it is finished -
-// and one with no timestamp is not either: an unstamped job is a fact about a daemon that did not
+// and one with no timestamp is not either: an unstamped job is a fact about a server that did not
 // send one, and dressing it as a dead worker would be an invented alarm.
 export function isStale(terminal: boolean, updatedSec: number, nowMs: number): boolean {
   if (terminal || updatedSec <= 0) return false;
@@ -110,8 +110,8 @@ export function ageLabel(updatedSec: number, nowMs: number): string {
   return Math.floor(secs / 86400) + "d";
 }
 
-// normalizeState maps whatever the daemon said onto the five known states. An unrecognized value (a
-// newer daemon, a state this console predates) becomes "declared" - the least-claiming of the five,
+// normalizeState maps whatever the server said onto the five known states. An unrecognized value (a
+// newer server, a state this console predates) becomes "declared" - the least-claiming of the five,
 // because it asserts only that the job exists. Nothing unknown may ever read as a pass or a fail.
 // The raw string is kept on the node so the detail can show what was actually served.
 export function normalizeState(v: unknown): JobState {
@@ -148,7 +148,7 @@ export function sizeLine(job: Job): string {
 }
 
 // lastRunLine is when the job last finished and whether it worked. "" when it has not run under
-// this daemon, which is a different fact from a run that failed and must not read as one.
+// this server, which is a different fact from a run that failed and must not read as one.
 export function lastRunLine(job: Job, nowMs: number): string {
   const last = job.lastRun;
   if (!last?.endTime) return "";
@@ -173,7 +173,7 @@ export interface JobNode {
   readonly id: string;
   readonly job: Job;
   readonly state: JobState;
-  // Exactly what the daemon said, "" when it said nothing. Shown in the detail whenever it is not
+  // Exactly what the server said, "" when it said nothing. Shown in the detail whenever it is not
   // one of the five, so an unrecognized state is visible rather than quietly rendered as declared.
   readonly rawState: string;
   // The parent this listing can actually resolve, or null. A job naming a parent the listing does
@@ -186,7 +186,7 @@ export interface JobNode {
   readonly readOnly: boolean;
   readonly holder: JobHolder;
   // The reported pairs this job is IN, both sides of each kept so the list can name the other job
-  // and the paths without going back to the model. Empty on every job when the daemon reports no
+  // and the paths without going back to the model. Empty on every job when the server reports no
   // overlaps, which is the ordinary case.
   readonly overlaps: readonly JobOverlap[];
 }
@@ -210,7 +210,7 @@ export interface JobTree {
   // The jobs that named a parent this listing does not carry. A partial listing is a fact worth
   // reporting, not a shape to silently flatten.
   readonly dangling: readonly string[];
-  // The overlapping pairs, exactly as the daemon reported them and in its order.
+  // The overlapping pairs, exactly as the server reported them and in its order.
   readonly overlaps: readonly JobOverlap[];
 }
 
@@ -336,7 +336,7 @@ export function buildJobTree(jobs: readonly Job[], overlaps: readonly JobOverlap
   };
 }
 
-// jobState is the state a job reads as. A catalog job the daemon is running right now carries
+// jobState is the state a job reads as. A catalog job the server is running right now carries
 // `running` on its own flag rather than in the lifecycle string, so the flag is honored first: a job
 // visibly in flight must never be drawn as declared.
 function jobState(job: Job): JobState {
@@ -514,15 +514,15 @@ export function layoutNodes(model: Placeable): NodeLayout {
 
 // JobClient is the one connection a mount opens, built once and reused by every read and every
 // submit it makes - the same shape the other Connect surfaces use (activity, status, viewer), with
-// the bearer token and the daemon origin already wired by lib/daemon.
+// the bearer token and the server origin already wired by lib/server.
 export type JobClient = Client<typeof JobService>;
 
 export function jobClient(host: string): JobClient {
-  return createClient(JobService, createDaemonTransport(host, getLiveToken()));
+  return createClient(JobService, createServerTransport(host, getLiveToken()));
 }
 
 // JobsRead is the three answers the service can give, kept apart because they mean different things
-// to a reader staring at an empty screen: there are no jobs, the daemon declines to serve them, or
+// to a reader staring at an empty screen: there are no jobs, the server declines to serve them, or
 // it could not be read at all. Collapsing them into one "no data" is how a declined capability comes
 // to look like an idle workspace.
 export type JobsRead =
@@ -531,10 +531,10 @@ export type JobsRead =
   | { readonly kind: "unreachable"; readonly detail: string }
   | { readonly kind: "unreadable"; readonly detail: string };
 
-// listJobs reads every job the daemon holds and every one a session does. A daemon that does not
+// listJobs reads every job the server holds and every one a session does. A server that does not
 // mount the service, or refuses this token, answers with a capability denial rather than an outage
-// (lib/daemon's isCapabilityDenied), and that is reported as its own kind: a reader told "no jobs"
-// when the truth is "this daemon will not say" has been told the wrong thing.
+// (lib/server's isCapabilityDenied), and that is reported as its own kind: a reader told "no jobs"
+// when the truth is "this server will not say" has been told the wrong thing.
 export async function listJobs(client: JobClient, signal?: AbortSignal): Promise<JobsRead> {
   try {
     const resp = await client.listJobs({}, { signal });
@@ -545,7 +545,7 @@ export async function listJobs(client: JobClient, signal?: AbortSignal): Promise
   }
 }
 
-// SubmitOutcome is what a submit did. ALREADY_RUNNING is a SUCCESS on this contract - the daemon
+// SubmitOutcome is what a submit did. ALREADY_RUNNING is a SUCCESS on this contract - the server
 // coalesced an identical job rather than starting a second - so it is a fact about the job, not a
 // failure; only a real refusal (an unknown name, no socket, a rejected token) is one.
 export type SubmitOutcome =
@@ -554,7 +554,7 @@ export type SubmitOutcome =
   | { readonly kind: "refused"; readonly detail: string };
 
 // submitJob runs one job by its resource name and returns immediately, which is the whole contract:
-// the daemon holds it from here, and the activity trail is where its result lands.
+// the server holds it from here, and the activity trail is where its result lands.
 export async function submitJob(
   client: JobClient,
   name: string,

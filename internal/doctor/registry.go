@@ -46,7 +46,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:     "sockets",
-		Doc:      "live and leftover daemon sockets in the magus socket directory",
+		Doc:      "the server, broker and per-process pool sockets in the magus socket directory, live and leftover",
 		Evidence: types.EvidenceMeasured,
 		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkStaleSockets() },
 	},
@@ -281,10 +281,10 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkJobTree() },
 	},
 	{
-		Name:     "daemon-version",
-		Doc:      "whether the daemon answering this workspace is the same build as the binary asking",
+		Name:     "server-version",
+		Doc:      "whether the server answering this workspace is the same build as the binary asking",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkDaemonVersion() },
+		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkServerVersion() },
 	},
 	{
 		Name:           "agent-skills",
@@ -529,7 +529,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:           "workspace-registration",
-		Doc:            "whether this workspace is loaded in the daemon, and what else is",
+		Doc:            "whether this workspace is loaded in the server, and what else is",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkWorkspaceRegistration() },

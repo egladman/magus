@@ -593,10 +593,10 @@ func TestDiffSymbolIDsAreWhatASymbolAnchorNames(t *testing.T) {
 	assert.Equal(t, []string{"m types/Diff#"}, diffSymbolIDs(rev), "deduplicated, and an unindexed symbol is not an id")
 }
 
-// stubDiffSession is the daemon's /api/v1/diff/session route, holding every request until the
+// stubDiffSession is the server's /api/v1/diff/session route, holding every request until the
 // test lets go.
 //
-// The holding is what makes the queue observable at all: a daemon that answers empties the
+// The holding is what makes the queue observable at all: a server that answers empties the
 // queue as fast as a keyboard can fill it, and every decision in diffBridge is about the case
 // where one has stopped.
 type stubDiffSession struct {
@@ -675,7 +675,7 @@ func viewedDigests(ops []diffSessionOp) []string {
 
 // TestDiffBridgeQueueKeepsTheNewestCursor pins which end of a full queue is dropped.
 //
-// A backlog means the daemon stopped keeping up, and the only cursor still worth sending is the
+// A backlog means the server stopped keeping up, and the only cursor still worth sending is the
 // last one: every entry behind it names somewhere the reader has already walked past. A plain
 // non-blocking send drops the arriving op, which keeps exactly the stale ones and throws away
 // the only true one.
@@ -756,13 +756,13 @@ func TestDiffBridgeCloseDrainsAndTheSenderExits(t *testing.T) {
 		"a mark made on the last keypress is not lost to the process exiting")
 }
 
-// TestDiffBridgeCloseGivesUpOnAWedgedDaemon is the other half of the same bargain: quitting is
+// TestDiffBridgeCloseGivesUpOnAWedgedServer is the other half of the same bargain: quitting is
 // bounded whether or not anything answers, and the sender still exits.
 //
 // Nothing releases the handler here, so the post is on the wire for the whole test. Cancelling
-// it is the only thing that ends the goroutine; abandoning it left one talking to the daemon
+// it is the only thing that ends the goroutine; abandoning it left one talking to the server
 // about a session the reader had walked away from, with nobody to receive the answer.
-func TestDiffBridgeCloseGivesUpOnAWedgedDaemon(t *testing.T) {
+func TestDiffBridgeCloseGivesUpOnAWedgedServer(t *testing.T) {
 	stub := newStubDiffSession(t)
 	b := stub.bridge()
 
@@ -773,7 +773,7 @@ func TestDiffBridgeCloseGivesUpOnAWedgedDaemon(t *testing.T) {
 	start := time.Now()
 	b.close()
 	assert.Less(t, time.Since(start), diffBridgeClose+2*diffBridgeWrite,
-		"a wedged daemon must not hold the shell")
+		"a wedged server must not hold the shell")
 
 	select {
 	case <-b.done:
@@ -786,7 +786,7 @@ func TestDiffBridgeCloseGivesUpOnAWedgedDaemon(t *testing.T) {
 // channel the key loop can still send on turns a late keypress into a panic.
 func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 	stub := newStubDiffSession(t)
-	stub.unblock() // an answering daemon; this is about the queue, not the wire
+	stub.unblock() // an answering server; this is about the queue, not the wire
 	b := stub.bridge()
 
 	b.SetViewed("d0", true)
@@ -860,7 +860,7 @@ func TestAColorizedPatchNamesColorAsTheCause(t *testing.T) {
 }
 
 // recordingSync is the inner sync earnedSync wraps, so a test can assert the wrapper still
-// forwards every mark: the daemon and the console read the reader's progress through it, and
+// forwards every mark: the server and the console read the reader's progress through it, and
 // a wrapper that swallowed marks would desynchronize them silently.
 type recordingSync struct {
 	marks  []string
@@ -956,7 +956,7 @@ func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 	assert.Empty(t, store)
 }
 
-// The wrapper is a side channel, not a replacement: the daemon and the console read the
+// The wrapper is a side channel, not a replacement: the server and the console read the
 // reader's progress through the inner sync, and swallowing a mark would desynchronize them.
 func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})

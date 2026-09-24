@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Catalog names. These are the stable identity of each daemon maintenance job: the
+// Catalog names. These are the stable identity of each server maintenance job: the
 // `magus job run <name>` leaf, the map key callers switch on, and (for the rotate jobs)
 // the leaf of their `server <name>` worker. They are exported constants rather than bare
 // literals so a rename is a compile error at every use site instead of a silent miss.
@@ -21,21 +21,21 @@ const (
 )
 
 // CatalogEntry is one named background maintenance job: a stable Name (the CLI leaf and
-// the wire identity) and the Argv the daemon dispatches for it. Worker argvs reuse
+// the wire identity) and the Argv the server dispatches for it. Worker argvs reuse
 // existing magus commands where one fits (sync-graph runs `graph build`, clear-cache runs
 // `clean --cache`); a job with no existing command has a dedicated worker leaf
 // (rotate-activities runs `server rotate-activities`).
 //
 // This is the leaf shared by the producers that must agree on that mapping: the
 // `magus job run <name>` CLI submitter, the magus.job.v1alpha1 JobService RPC handlers,
-// the daemon's job dispatch (which admits exactly these worker argvs and rejects anything
+// the server's job dispatch (which admits exactly these worker argvs and rejects anything
 // else submitted as a job), and the maintenance scheduler. A job is submitted through the
 // same fire-and-forget proc mechanism as any adopted work (proc.SubmitJob). This catalog
 // holds no execution logic; it only names the jobs and the commands they run.
 type CatalogEntry struct {
 	Name string   // stable identifier: the `magus job run <name>` leaf and the RPC's job identity
 	Desc string   // one-line human description, for listing and usage
-	Argv []string // the worker command the daemon runs; the head token must be a real subcommand
+	Argv []string // the worker command the server runs; the head token must be a real subcommand
 }
 
 // catalog is the authoritative maintenance-job set. Order is the display order for
@@ -99,7 +99,7 @@ func Lookup(name string) (CatalogEntry, bool) {
 }
 
 // IsWorkerArgv reports whether argv exactly matches a registered job's worker command. The
-// daemon's job dispatch uses it as an allowlist so a JobRequest can only run a recognized
+// server's job dispatch uses it as an allowlist so a JobRequest can only run a recognized
 // job's worker, never an arbitrary command handed to the fire-and-forget RPC.
 func IsWorkerArgv(argv []string) bool {
 	for _, j := range catalog {
@@ -112,6 +112,6 @@ func IsWorkerArgv(argv []string) bool {
 
 // ActionString is the canonical trail "action" for a job argv: the space-joined command.
 // It is the ONE place that format is defined, so the producer that records a job run (the
-// daemon's OnJobDone callback) and the consumers that look a run up by action (the
+// server's OnJobDone callback) and the consumers that look a run up by action (the
 // scheduler's due-check and the JobService metadata) cannot drift apart on how a run is keyed.
 func ActionString(argv []string) string { return strings.Join(argv, " ") }

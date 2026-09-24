@@ -85,7 +85,7 @@ func TestAttributeRunAdoptsAncestryFromTheEnvironment(t *testing.T) {
 	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), journal.InvocationIDFromContext(ctx)))
 }
 
-// An identity already on the context is the CLI's or the daemon's, and taking a second one
+// An identity already on the context is the CLI's or the server's, and taking a second one
 // would orphan the first: the journal file, the pool entry and the locks are all keyed on
 // it, and a descendant comparing ancestry would stop recognizing its parent.
 func TestAttributeRunKeepsAnIdentityItWasGiven(t *testing.T) {
@@ -179,7 +179,7 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	assert.Nil(t, events[1].Command, "the lineage rides the started event alone")
 }
 
-// TestBeginInvocationReusesAnIDFromTheContext: the daemon mints the id before
+// TestBeginInvocationReusesAnIDFromTheContext: the server mints the id before
 // adopting a call, so its pool entry can deep-link to this run's live log. Minting
 // a second one here would break that link.
 func TestBeginInvocationReusesAnIDFromTheContext(t *testing.T) {

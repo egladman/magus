@@ -1,18 +1,19 @@
 ---
 title: Concurrency
 order: 8
-description: How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the daemon-owned machine budget that keeps every magus on the host from oversubscribing it.
+description: How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the broker-held machine budget that keeps every magus on the host from oversubscribing it.
 tags:
   [
     concurrency,
     parallelism,
     workspace-lock,
     scheduler,
-    daemon,
+    broker,
     needs,
     machine budget,
     admission,
     memory_mb,
+    jobserver,
   ]
 ---
 
@@ -39,7 +40,7 @@ runs targets concurrently where the graph allows. `magus\needs` edges order the 
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
 much of it runs at once ([targets](targets.md)). Nested `magus` invocations a magusfile
 spawns adopt into this same pool rather than standing up their own
-([daemon](../guides/integrations/daemon.md)).
+([the broker and the server](../guides/integrations/server.md)).
 
 All of this lives inside one process. It orders nothing in a _second_ `magus` you
 start in another terminal: the two invocations have separate graphs and separate
@@ -60,6 +61,41 @@ overrides both. A CI job that wants every core asks for it explicitly - a
 
 `concurrency_profile` sizes the machine budget's memory the same way, not just the
 pool's core count: see [below](#across-the-whole-machine-the-budget).
+
+### Tools that run their own jobs: the jobserver
+
+A slot count only helps if the tool inside the target honors it. `make`, `cargo` and
+the `cc` crate schedule their own parallel jobs, so a target holding 4 slots can still
+start 16 compilers. To close that gap, magus acts as a
+[GNU make jobserver](https://www.gnu.org/software/make/manual/html_node/Job-Slots.html)
+for every step that runs holding **two or more** slots.
+
+- The step's processes get `MAKEFLAGS` and `CARGO_MAKEFLAGS` naming a pipe preloaded
+  with one token per slot beyond the first. The process magus starts holds the
+  implicit first one, so a `make` the step runs never has more jobs going than the
+  step holds slots. Two processes the step runs side by side each hold an implicit
+  token of their own.
+- The pool belongs to one step. It is opened when the step's body starts and closed
+  when it returns, so a child that dies holding tokens cannot shrink anything else's
+  grant. A step replayed from the cache opens none.
+- `proc\withSlots(n, callback)` seats a pool of `n` for its callback, replacing the
+  step's.
+- A step holding one slot gets no pool, and that covers every target that declares
+  nothing. A pool of zero tokens would make `cargo build` run one `rustc` at a time
+  where it uses every core today. Declaring `slots` (or a `memory_mb` that converts
+  to more than one slot) is what opts a target in.
+
+The pipe form (`--jobserver-auth=3,4`) is the only one every GNU make reads: 3.81
+(macOS's `/usr/bin/make`) knows only `--jobserver-fds`, and 4.2 and 4.3 exit with an
+error on the 4.4 `fifo:` form. The limits follow from the protocol:
+
+- A `-jN` on the tool's own command line starts a pool of its own and ignores this
+  one. Run `make` without `-j` to share the step's slots.
+- ninja 1.13 reads only the `fifo:` form. It prints a warning and schedules itself as
+  it would with no magus above it.
+- A target that sets `MAKEFLAGS` in its own environment keeps its value.
+- Windows gets no pool. GNU make there shares slots through a named semaphore, and a
+  process cannot inherit extra descriptors, so children schedule themselves as before.
 
 ## Across separate runs: the workspace lock
 
@@ -109,7 +145,7 @@ ran, and the same invocation succeeds once the holder finishes.
 Two exceptions queue instead, because the holder shares something with the run that
 wants the lock:
 
-- **The same process.** The daemon runs adopted nested runs, background jobs and its
+- **The same process.** The server runs adopted nested runs, background jobs and its
   own symbol indexer in one process. Those queue for a project rather than refusing
   each other.
 - **The same run.** A `ci` target whose parallel steps each run `magus run build
@@ -139,6 +175,47 @@ There is no priority to set. A sibling worktree is a different tree and still re
 ancestors is still refused as [MGS3007](../reference/codes/sandbox/MGS3007.md). A holder
 that does not answer within thirty seconds is refused exactly like any other contention.
 
+### Piping one magus into another
+
+A shell pipe between two magus runs is supported, including when both need the same
+project:
+
+```sh
+magus affected ci --plan --preflight generate | magus run ci-shard:gha
+```
+
+The two stages start together, so without help one of them reaches the lock first and
+the other is refused. Instead, a run whose standard input is written by another magus
+process takes no lock while that upstream stage holds, or has yet to take, a project it
+needs. It drains the pipe while it waits, so the upstream never blocks writing, and
+its targets read the same bytes afterwards. When the wait is for a real conflict,
+the run says so:
+
+```text
+magus: waiting for pid 40118 (magus affected ci --plan --preflight generate), upstream
+of this run in a pipe, to finish with the projects this run needs before taking their locks.
+```
+
+`magus status` lists such a run under "waiting on a pipe upstream".
+
+Stages on different projects run at once and stream. A downstream run waits only until
+the upstream has taken its locks, then starts as soon as it sees they do not overlap
+with its own. A read-only upstream, like `magus ls` or `magus status --watch`, never
+holds a reader back. Three or more magus stages work the same way: each stage
+considers every magus stage upstream of it.
+
+The upstream is proven from the kernel, never taken on trust: the run follows its stdin
+back to the processes writing it, and counts one as a magus stage only when it runs the
+same magus executable. Tools in between, like `magus ... | jq ... | magus ...` or
+`| tee log |`, are followed through the same way: the run reads which pipes they hold,
+never their arguments. Input that no magus feeds, like `echo x | cat | magus run ...`,
+proves nothing, so a lock held elsewhere is refused as above. Two different magus
+binaries also meet as strangers, and so does everything on Windows, where no kernel
+interface proves who writes an anonymous pipe. A run nested in
+another never waits on its own ancestor, which is still
+[MGS3007](../reference/codes/sandbox/MGS3007.md). A pipe that loops back into the run
+reading it is refused with [MGS3023](../reference/codes/sandbox/MGS3023.md).
+
 ## Across the whole machine: the budget
 
 The lock protects a project's outputs. Nothing in it protects the machine: two runs
@@ -148,17 +225,17 @@ work against one host. Measured on a ten-core workstation: four concurrent gates
 load average 13.7, and tests failing because they were starved rather than wrong.
 
 So before a step starts, magus takes its concurrency slots and its declared
-`memory_mb` from a budget shared by every magus on the machine. The budget lives in
-the [daemon](../guides/integrations/daemon.md) - one daemon per user means one budget
-per machine - and a run starts one if none is up.
+`memory_mb` from a budget shared by every magus on the machine: the host's capacity.
+It lives in the [broker](../guides/integrations/server.md) - one broker per user means
+one budget per machine - and a run starts one if none is up.
 
 Key properties:
 
 - **Per machine, not per workspace.** The whole point is the worktree this run
-  cannot see. The budget is a share of the memory the daemon may commit, and the
-  daemon's concurrency capacity - both sized by the same `concurrency_profile` that
+  cannot see. The budget is a share of the memory the broker may commit, and the
+  machine's cores - both sized by the same `concurrency_profile` that
   decided the pool's width above: `balanced` and `conservative` reserve a quarter of
-  memory for the OS, the daemon's own process, and everything else sharing the
+  memory for the OS, magus's own processes, and everything else sharing the
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
   fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
@@ -173,31 +250,35 @@ Key properties:
   the budget - pid, project, target, and directory - so a caller can go see why and
   retry once it frees. A step kept out only by its own process or its own run waits
   for them, on the same terms as the lock.
-- **It fails open.** A daemon that will not start, or that dies mid-run, leaves the
-  run unarbitrated and finishing, having said once that it is. Claims are retired by
-  process liveness, so nothing has to release cleanly.
+- **What a missing broker means is a setting.** `broker: best-effort` (the default)
+  leaves a run whose broker will not start, or dies mid-run, unarbitrated and
+  finishing, having said once that it is. `broker: required` refuses the step instead
+  ([MGS3022](../reference/codes/sandbox/MGS3022.md), exit 69), and `broker: off` never
+  asks one. Nothing has to release cleanly: each claim rides the run's one connection
+  to the broker, and a run that dies, even to `SIGKILL`, releases it when the kernel
+  closes that connection.
 - **Only runs pay for it, and only for as long as they need it.** `magus ls`,
   `describe`, and `query` cost the same however loaded the machine is, so none of them
-  starts a daemon. A daemon a run started exits by itself after ten minutes in which
-  nothing held a claim and no client asked it for anything; one you started with
-  `magus server start` stays up until you stop it.
+  starts a broker. The broker exits by itself ten minutes after it last held a claim
+  or a service with a dependent.
 
 `magus status` shows the whole budget: what is held, and by whom, across every
 worktree on the machine.
 
-## Relationship to the daemon
+## Relationship to the broker and the server
 
-The [daemon](../guides/integrations/daemon.md) is the long-lived process that hosts the shared pool,
-owns the machine budget, and serves clients. It is the natural single point that
+The [broker](../guides/integrations/server.md) is the per-user process that holds the host's
+capacity and the shared services runs keep warm. It is the natural single point that
 knows what is running everywhere, which is why the budget lives there and why a run
-starts one.
+starts one. The server, which a person starts for MCP and the console, asks the broker
+like any run.
 
-It does not run your work. A top-level `magus run` executes in your own process and
-prints to your own terminal; it asks the daemon for admission and nothing else. A
+Neither runs your work. A top-level `magus run` executes in your own process and
+prints to your own terminal; it asks the broker for capacity and nothing else. A
 nested `magus` a magusfile spawns still adopts into its parent's pool, which is where
 its output belongs.
 
-The workspace lock is the floor underneath both: it holds even with no daemon in the
+The workspace lock is the floor underneath both: it holds even with no broker in the
 loop, because it is an OS file lock rather than a process anyone has to start. The
 three compose - ordering inside a run, exclusion per project, capacity per machine.
 
@@ -205,6 +286,6 @@ three compose - ordering inside a run, exclusion per project, capacity per machi
 
 - [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
-- [Daemon](../guides/integrations/daemon.md): the persistent process that owns the machine budget.
+- [The broker and the server](../guides/integrations/server.md): the process that owns the machine budget, and the one a person starts.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
 - [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, and the two ways it refuses.

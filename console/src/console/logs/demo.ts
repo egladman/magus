@@ -1,5 +1,5 @@
 import { must } from "../../lib/guards";
-// demo.ts - the daemon-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
+// demo.ts - the server-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
 // magus.viewer.v1alpha1 Journals and REVEAL the primary one incrementally so the page feels like a live run
 // streaming in. The primary (streamed) invocation is the failing services/identity:test run an agent
 // kicked off ~92m ago - the beat where a libs/authkit contract change takes down a downstream token
@@ -192,7 +192,7 @@ function ciSweepJournal(): Journal {
 }
 
 // demoJournal builds ONE invocation's journal from the shared scenario, for the run browser. The
-// daemon-free showcase has no /api/v1/run to read, and a browser whose rows do not open is a picture
+// server-free showcase has no /api/v1/run to read, and a browser whose rows do not open is a picture
 // of a feature rather than the feature - so the same buildJournal the streamed demo uses renders any
 // row the tree lists. Returns null for an id the scenario does not know.
 //

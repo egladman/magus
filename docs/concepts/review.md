@@ -261,7 +261,7 @@ not know your build.
 Three things keep it honest:
 
 - **It runs what the magusfile declares, and nothing else.** The console names a target and a
-  project, never a command. The daemon admits the run only if that project declares that target,
+  project, never a command. The server admits the run only if that project declares that target,
   so a browser-reachable button is strictly less capable than a terminal.
 - **A verdict is about a TREE STATE.** Edit anything and the answer greys out and says
   `passed - since edited`, because a green tick over code you have since changed is a wrong

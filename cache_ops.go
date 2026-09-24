@@ -72,7 +72,7 @@ type CacheStats struct {
 }
 
 // CacheStats returns this workspace's live cache counters (hits/misses/errors) accumulated
-// since the cache was opened. In daemon mode the cache is long-lived, so these grow across
+// since the cache was opened. In server mode the cache is long-lived, so these grow across
 // adopted runs: the source for the /dashboard cache-activity panel. Zero value when no cache
 // is attached (an Inspect workspace).
 func (m *Magus) CacheStats() CacheStats {
@@ -125,7 +125,7 @@ func (c *MetricsCollector) Collect(ctx context.Context) (metricdata.ResourceMetr
 }
 
 // MetricsCollector returns a narrow accessor over this workspace's in-process metrics
-// ManualReader for the daemon's derived-dashboard aggregation, or (nil, false) when metrics
+// ManualReader for the server's derived-dashboard aggregation, or (nil, false) when metrics
 // collection was not enabled at Open (the CLI default). Unlike [Magus.MetricsSnapshot] (OTLP
 // bytes for external export), this reads raw metricdata (histogram buckets and counters)
 // with no exporter hop and without exposing the generated dashboard proto here.

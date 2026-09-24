@@ -105,7 +105,7 @@ heap: 30660 objects live, 30660 peak this run
 question a paused stack cannot: where you _are_ says nothing about what filled
 memory getting there.
 
-The peak is rebased per invocation, so under `magus server` a long-lived daemon
+The peak is rebased per invocation, so under `magus server` a long-lived server
 reports what the current run did rather than the worst of everything it has ever
 served.
 

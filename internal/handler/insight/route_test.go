@@ -51,7 +51,7 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	}
 }
 
-// The error names the daemon's workspace path, so it stays in the log.
+// The error names the server's workspace path, so it stays in the log.
 func TestInsightHandler_ErrorReturns500(t *testing.T) {
 	h := NewHandler(fakeInsightSource{insightErr: errors.New("git -C /Users/dev/repo log: scan boom")}, nil)
 	w := httptest.NewRecorder()

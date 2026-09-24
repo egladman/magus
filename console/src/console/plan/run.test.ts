@@ -76,7 +76,7 @@ test("edges keep the contract's orientation - from is the dependency", () => {
   );
 });
 
-// A response is parsed from the network, so it arrives with whatever a daemon (or a proxy, or a
+// A response is parsed from the network, so it arrives with whatever a server (or a proxy, or a
 // partial write) produced. None of it may cost the reader the whole picture.
 test("a node with no id is dropped rather than drawn as something no edge can reach", () => {
   const plan = parseRunPlan({ nodes: [{ id: "" }, { project: "." }, null, "nope", { id: "a" }] });
@@ -127,7 +127,7 @@ test("a body that is not the documented shape yields an empty plan rather than t
 
 // ---- states ----------------------------------------------------------------
 
-test("an unrecognized state reads as idle and keeps what the daemon said", () => {
+test("an unrecognized state reads as idle and keeps what the server said", () => {
   const plan = parseRunPlan({ nodes: [{ id: "a", state: "skipped" }] });
   const node = plan.byId.get("a");
   assert.equal(node?.state, "idle", "nothing unknown may ever read as a pass or a fail");
@@ -170,7 +170,7 @@ test("an unrecognized anchor reads as default, never as following something live
   );
 });
 
-test("the anchor phrase says how the daemon chose, in the daemon's four ways", () => {
+test("the anchor phrase says how the server chose, in the server's four ways", () => {
   const at = (anchor: string): string => anchorPhrase(parseRunPlan({ target: "ci", anchor }));
   assert.equal(at("running"), "following the running ci");
   assert.equal(at("recent"), "last run: ci");
@@ -178,7 +178,7 @@ test("the anchor phrase says how the daemon chose, in the daemon's four ways", (
   assert.equal(at("explicit"), "ci");
 });
 
-test("a plan whose target the daemon did not name gets no phrase rather than an invented one", () => {
+test("a plan whose target the server did not name gets no phrase rather than an invented one", () => {
   assert.equal(anchorPhrase(parseRunPlan({ anchor: "running", nodes: [{ id: "a" }] })), "");
   assert.equal(runOverviewLine(parseRunPlan({ nodes: [{ id: "a" }] })), "1 target. 0 fail.");
 });
@@ -264,7 +264,7 @@ test("project-level ordering edges survive beside the intra-project steps", () =
 
 // ---- the URL ---------------------------------------------------------------
 
-// The bare URL is what tells the daemon to pick the anchor itself. Naming a target is an override,
+// The bare URL is what tells the server to pick the anchor itself. Naming a target is an override,
 // and sending one by accident would silently turn a live view into a browse of a fixed target.
 test("following names no target; overriding names one, encoded", () => {
   assert.equal(runPlanUrl("127.0.0.1:7391", ""), "http://127.0.0.1:7391/api/v1/plan");
@@ -290,7 +290,7 @@ async function stubFetch<T>(impl: () => unknown, body: () => Promise<T>): Promis
   }
 }
 
-// The reason this distinction exists: on every daemon that predates the run plan, GET /api/v1/plan
+// The reason this distinction exists: on every server that predates the run plan, GET /api/v1/plan
 // 404s. Reporting that as an empty plan would tell a reader nothing has run.
 test("a 404 is absent - the route is missing, not the plan", async () => {
   const read = await stubFetch(
@@ -309,9 +309,9 @@ test("a 501 is absent too - an unimplemented route is a missing one", async () =
 });
 
 // The console holds no list of the workspace's targets, so anything it wrote here itself would be a
-// guess. The daemon named what it could not resolve, and that sentence is what a reader can act on.
+// guess. The server named what it could not resolve, and that sentence is what a reader can act on.
 // The route writes it with http.Error, so the body IS the message: plain text, taken verbatim.
-test("a 400 is an unknown target, carrying the daemon's own words", async () => {
+test("a 400 is an unknown target, carrying the server's own words", async () => {
   const read = await stubFetch(
     () => ({
       ok: false,

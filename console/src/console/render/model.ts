@@ -1,6 +1,6 @@
 // model.ts - the render model shared by every console surface that shows foldable,
 // status-accented sections of text: the log viewer (a run's captured output) and the
-// activity view (the daemon's audit trail). It is the neutral shape both the log viewer's
+// activity view (the server's audit trail). It is the neutral shape both the log viewer's
 // event/text parsers and the activity adapter produce, so the same DOM renderer
 // (sections.ts) paints them identically. Pure types, no DOM, no imports.
 

@@ -54,12 +54,12 @@ report it, which a rule should read as unknown.
 
 Each entry of `commands`:
 
-| field     | what it is                                                                                   |
-| --------- | -------------------------------------------------------------------------------------------- |
-| `program` | the program's base name                                                                      |
-| `args`    | its arguments as the shell would pass them; a variable or substitution renders empty         |
-| `repeats` | true inside a `while` or `until` loop, which reruns it until a condition changes; not `for`  |
-| `path`    | the program's file when the line names it by a path, made absolute against `dir` (below)     |
+| field     | what it is                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------- |
+| `program` | the program's base name                                                                     |
+| `args`    | its arguments as the shell would pass them; a variable or substitution renders empty        |
+| `repeats` | true inside a `while` or `until` loop, which reruns it until a condition changes; not `for` |
+| `path`    | the program's file when the line names it by a path, made absolute against `dir` (below)    |
 
 `commands` is what the built-in rules read: the line is parsed rather than matched, and
 wrappers (`env`, `timeout`, `nohup`, `sh -c`, `eval`, ...) are peeled to the program
@@ -119,13 +119,13 @@ which denies when it runs out, therefore has an order of magnitude to spare.
 an agent writes through its host's edit tools, after the built-in path rules. It is
 strengthen only, fails open, and runs from both sides exactly as the command rule does.
 
-| field                  | what it is                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| `path`                 | the file as the host named it                                                   |
-| `workspace`            | the root of the workspace holding `path`, empty when none does                  |
-| `content`              | a whole-file write's new content; empty for an edit                             |
-| `oldText`, `newText`   | an edit's replaced text and its replacement; empty for a whole-file write       |
-| `host`, `session`, `parent`, `role`, `lease` | the caller, as on a command request                       |
+| field                                        | what it is                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `path`                                       | the file as the host named it                                             |
+| `workspace`                                  | the root of the workspace holding `path`, empty when none does            |
+| `content`                                    | a whole-file write's new content; empty for an edit                       |
+| `oldText`, `newText`                         | an edit's replaced text and its replacement; empty for a whole-file write |
+| `host`, `session`, `parent`, `role`, `lease` | the caller, as on a command request                                       |
 
 The texts are read from the host's payload by shape. An edit shape magus does not read
 leaves all three empty, which a rule should take as unknown rather than as an empty file.

@@ -79,7 +79,7 @@ test("rowOf separates a failed run from one that worked", () => {
   assert.equal(rowOf(event({ kind: Kind.RUN, preview: "gate lint" })).mark, "ok");
 });
 
-// A feed that silently binned what it could not classify would go quiet exactly when the daemon
+// A feed that silently binned what it could not classify would go quiet exactly when the server
 // grew something new to say, and nothing on screen would admit it.
 test("rowOf renders a kind it does not know rather than dropping it", () => {
   const row = rowOf(event({ kind: Kind.MEMORY, action: "memory.get", preview: "read" }));

@@ -1,16 +1,16 @@
-// Package share implements the daemon side of "share to phone": an on-demand,
+// Package share implements the server side of "share to phone": an on-demand,
 // time-boxed LAN listener that serves the console's READ surface to a phone on
 // the same network, guarded by a single short-lived read-only token.
 //
-// Deliberately a THIRD listener, distinct from the daemon's loopback-bound standing
+// Deliberately a THIRD listener, distinct from the server's loopback-bound standing
 // ones: it binds the machine's LAN IPv4 on an ephemeral port and exists only while a
 // share is active. There is no loopback guard (the phone is remote, which is the
 // point), so the TOKEN is the sole gate, and listener and token are created and
 // destroyed together so neither outlives the other.
 //
 // This package is the subject of two figures on the docs site; edit them alongside it.
-// magus:diagram daemon-share (the boxes "/api/v1/share" and "LAN listener").
-// magus:diagram daemon-http (the box "/api/v1/share").
+// magus:diagram server-share (the boxes "/api/v1/share" and "LAN listener").
+// magus:diagram server-http (the box "/api/v1/share").
 //
 // The console app is served from the SAME origin as its API on this listener, so
 // the phone's browser never issues a cross-origin request and CORS never engages.
@@ -182,7 +182,7 @@ func WithListenAddr(addr netip.Addr) option {
 	return func(m *Manager) { m.selectAddr = func() (netip.Addr, error) { return addr, nil } }
 }
 
-// NewManager returns a Manager whose listeners are torn down when parent is cancelled (daemon
+// NewManager returns a Manager whose listeners are torn down when parent is cancelled (server
 // shutdown).
 func NewManager(parent context.Context, log *slog.Logger, opts ...option) *Manager {
 	if log == nil {
@@ -197,7 +197,7 @@ func NewManager(parent context.Context, log *slog.Logger, opts ...option) *Manag
 
 // Route is one data route a share serves: its handler, the format its refusals are written
 // in, and the Need of each path under it (a Connect service names each procedure; a plain
-// route names itself). They are the same Needs the loopback daemon holds the route to.
+// route names itself). They are the same Needs the loopback server holds the route to.
 type Route struct {
 	Handler http.Handler
 	Format  rpcerr.Format
@@ -262,7 +262,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	mux := http.NewServeMux()
 	// Static console: unauthenticated. The app shell is not a secret; it reads the
 	// fragment token and replays it as a bearer on the guarded API routes below. It is
-	// the SAME console.StaticHandler the loopback daemon mounts, so a phone reload of a
+	// the SAME console.StaticHandler the loopback server mounts, so a phone reload of a
 	// clean /console/<surface>/ path hits the shell SPA fallback (not a 404) and gets
 	// the same strict CSP.
 	mux.Handle("/console/", console.StaticHandler(consoleDir))
@@ -292,7 +292,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 		mux.Handle(pattern, h)
 	}
 	// The TTL and the parent lifetime are one context: whichever fires first
-	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
+	// (timeout, server shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
 	// event: there is never a live listener with a dead token or vice versa.
 	//
@@ -311,7 +311,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
-	// the parent context is already cancelled (daemon shutting down), the watcher below
+	// the parent context is already cancelled (server shutting down), the watcher below
 	// must find m.cur pointing at THIS link so Close/CloseIf can tear it down: a
 	// listener published only after the goroutines start could serve on an address no
 	// management surface knows to revoke. There is still exactly one live share:
@@ -333,7 +333,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 		// WithoutCancel, not Background: this runs precisely BECAUSE ctx is done, so a
 		// shutdown context derived from it directly would arrive already cancelled and
 		// Shutdown would return without draining a single connection. WithoutCancel drops
-		// the cancellation while keeping whatever values the daemon's context carries,
+		// the cancellation while keeping whatever values the server's context carries,
 		// which is what anything logging during shutdown reads.
 		shutCtx, sc := context.WithTimeout(context.WithoutCancel(ctx), grace)
 		defer sc()
@@ -501,7 +501,7 @@ func remoteHost(r *http.Request) string {
 	return host
 }
 
-// Close tears down the active share, if any. Idempotent. Called on daemon
+// Close tears down the active share, if any. Idempotent. Called on server
 // shutdown so no listener outlives the process.
 func (m *Manager) Close() {
 	m.mu.Lock()

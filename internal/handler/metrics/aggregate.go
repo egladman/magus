@@ -1,4 +1,4 @@
-// Package metrics is the daemon's derived-dashboard presentation layer for magus's OTel
+// Package metrics is the server's derived-dashboard presentation layer for magus's OTel
 // metrics. It rolls raw in-process metricdata (histogram buckets and counters, read via
 // otlp.Collector) into the magus.metrics.v1alpha1 wire types the /dashboard consumes,
 // maintains a rolling sample ring for backfill, and implements the Connect MetricsService.

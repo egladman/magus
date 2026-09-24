@@ -6,7 +6,7 @@
 // bloated records, and a human list/edit/delete surface is the safety valve.
 //
 // A record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: clients must render them
-// as text, never as trusted HTML. The daemon mounts this on the loopback listener behind
+// as text, never as trusted HTML. The server mounts this on the loopback listener behind
 // the same bearer guard as the other console services and never on the LAN share listener.
 package memory
 

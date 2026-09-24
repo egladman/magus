@@ -208,7 +208,7 @@ func TestMetricsAreOffUnlessAskedFor(t *testing.T) {
 	assert.Nil(t, collector)
 }
 
-// TestMetricsCollectionYieldsAReadableSnapshot covers the daemon's path: with
+// TestMetricsCollectionYieldsAReadableSnapshot covers the server's path: with
 // collection on, both the OTLP bytes and the raw metricdata are available from the
 // same instruments, with no exporter hop for the second.
 func TestMetricsCollectionYieldsAReadableSnapshot(t *testing.T) {

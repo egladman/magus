@@ -87,7 +87,7 @@ var Os = Module{
 		},
 		{
 			Name:    "exit",
-			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.",
+			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.",
 			Args:    []Arg{{Name: "code", Type: TypeInt}},
 			Returns: nil,
 			Raises:  true,
@@ -223,9 +223,9 @@ func OsSleep(ctx context.Context, ms float64) error {
 }
 
 // OsExit aborts the current run by returning a types.ExitError carrying code. It
-// deliberately does not call os.Exit: a target may run inside a daemon serving
+// deliberately does not call os.Exit: a target may run inside a server serving
 // other workspaces, where os.Exit would kill unrelated work. The error propagates
-// to the CLI (and daemon), which translate it into the process exit status. It
+// to the CLI (and server), which translate it into the process exit status. It
 // also records the code on ctx (types.CaptureExit) so it survives when the engine
 // stringifies the error type away; the interpreter reads it back. See types.ExitError.
 func OsExit(ctx context.Context, code int) error {
@@ -416,7 +416,7 @@ func shellFlag(shell string) string {
 type withEnvKey struct{}
 
 // OsWithEnv injects extra env vars for subprocesses spawned during the
-// callback without mutating the daemon's process-global environment.
+// callback without mutating the server's process-global environment.
 // Overrides are propagated via ctx and merged at exec time in applySandboxPolicy.
 func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 	// Merge with any outer with_env overrides already on ctx.
@@ -497,7 +497,8 @@ func retryFloat(v any) (float64, bool) {
 // runner) does not oversubscribe the global budget. With no limiter on ctx (e.g. a
 // standalone run) it just invokes cb. Mirrors archive.*: the build slot already
 // held is handed back while the n are reserved, so peak in-flight stays within the
-// cap rather than cap+n.
+// cap rather than cap+n. Processes cb starts share a jobserver of n slots
+// (run.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
 func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
@@ -510,6 +511,13 @@ func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 			return fmt.Errorf("os.with_slots: %w", err)
 		}
 		defer lim.ReleaseN(n)
+		// The step's own pool was sized to the slots just handed back.
+		seated, closeJobserver, err := run.SeatJobserver(ctx, n)
+		if err != nil {
+			return fmt.Errorf("os.with_slots: %w", err)
+		}
+		defer closeJobserver()
+		ctx = seated
 	}
 	_, callErr := cb.Call(ctx)
 	return callErr

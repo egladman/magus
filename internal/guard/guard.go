@@ -1099,7 +1099,7 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 }
 
 // appendHookActivity contributes a best-effort, normalized observation to the same durable
-// trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
+// trail used by MCP and server actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
 //
@@ -1204,7 +1204,7 @@ func hookSearchHints(cacheDir string) *hint.Translator {
 }
 
 // hookLocation resolves the local workspace cache because a hook runs as a short-lived
-// client process, outside the daemon's memory. Tests can pin a temporary base through context so
+// client process, outside the server's memory. Tests can pin a temporary base through context so
 // a guard unit test never writes its checkout's real activity trail; hookContextAt pins the
 // checkout a host's envelope named the same way.
 func hookLocation(ctx context.Context, deps Dependencies) location {

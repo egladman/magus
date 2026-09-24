@@ -4,12 +4,12 @@
 // 	protoc        (unknown)
 // source: magus/job/v1alpha1/job.proto
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the daemon's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
-// fire-and-forget, coalescing mechanism the daemon uses for any adopted work, so an identical
-// in-flight job is never started twice. Every RPC requires the daemon bearer token; the service
+// fire-and-forget, coalescing mechanism the server uses for any adopted work, so an identical
+// in-flight job is never started twice. Every RPC requires the server bearer token; the service
 // is mounted behind the same guard as /mcp and never served unauthenticated. buf-breaking gates
 // this file: fields and RPCs may be ADDED (old clients ignore unknown fields), never renumbered
 // or removed. The response carries a full metadata snapshot (last run, current size) so a client
@@ -88,26 +88,26 @@ func (SubmitState) EnumDescriptor() ([]byte, []int) {
 }
 
 // JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
-// daemon's own housekeeping from work a session was handed without asking a second door.
+// server's own housekeeping from work a session was handed without asking a second door.
 type JobHolder int32
 
 const (
 	JobHolder_JOB_HOLDER_UNSPECIFIED JobHolder = 0
-	JobHolder_JOB_HOLDER_DAEMON      JobHolder = 1 // the daemon's own maintenance catalog
 	JobHolder_JOB_HOLDER_SESSION     JobHolder = 2 // work an orchestrator declared for somebody else to hold
+	JobHolder_JOB_HOLDER_SERVER      JobHolder = 3 // the server's own maintenance catalog
 )
 
 // Enum value maps for JobHolder.
 var (
 	JobHolder_name = map[int32]string{
 		0: "JOB_HOLDER_UNSPECIFIED",
-		1: "JOB_HOLDER_DAEMON",
 		2: "JOB_HOLDER_SESSION",
+		3: "JOB_HOLDER_SERVER",
 	}
 	JobHolder_value = map[string]int32{
 		"JOB_HOLDER_UNSPECIFIED": 0,
-		"JOB_HOLDER_DAEMON":      1,
 		"JOB_HOLDER_SESSION":     2,
+		"JOB_HOLDER_SERVER":      3,
 	}
 )
 
@@ -147,7 +147,7 @@ type RunJobResponse struct {
 	InvocationId string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"` // the running job's invocation id (the new one, or the coalesced one)
 	// Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
 	// not an absolute URL, because the reader is the console itself and resolves it against
-	// its own origin. Empty only when the daemon coalesced a submit it could not name, since
+	// its own origin. Empty only when the server coalesced a submit it could not name, since
 	// a run with no invocation has nothing to link to.
 	ConsoleUrl    string `protobuf:"bytes,3,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
 	Job           *Job   `protobuf:"bytes,4,opt,name=job,proto3" json:"job,omitempty"` // the job's descriptor plus its last-run and current-size metadata
@@ -1175,11 +1175,11 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\vSubmitState\x12\x1c\n" +
 	"\x18SUBMIT_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SUBMIT_STATE_SUBMITTED\x10\x01\x12 \n" +
-	"\x1cSUBMIT_STATE_ALREADY_RUNNING\x10\x02*V\n" +
+	"\x1cSUBMIT_STATE_ALREADY_RUNNING\x10\x02*o\n" +
 	"\tJobHolder\x12\x1a\n" +
-	"\x16JOB_HOLDER_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11JOB_HOLDER_DAEMON\x10\x01\x12\x16\n" +
-	"\x12JOB_HOLDER_SESSION\x10\x022\xb4\x01\n" +
+	"\x16JOB_HOLDER_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12JOB_HOLDER_SESSION\x10\x02\x12\x15\n" +
+	"\x11JOB_HOLDER_SERVER\x10\x03\"\x04\b\x01\x10\x01*\x11JOB_HOLDER_DAEMON2\xb4\x01\n" +
 	"\n" +
 	"JobService\x12U\n" +
 	"\bListJobs\x12#.magus.job.v1alpha1.ListJobsRequest\x1a$.magus.job.v1alpha1.ListJobsResponse\x12O\n" +

@@ -27,7 +27,7 @@ type ToolDescriptor struct {
 	Params      []ParamDescriptor `json:"params,omitempty"      yaml:"params,omitempty"`
 }
 
-// Registry is the canonical list of MCP tools the magus daemon exposes.
+// Registry is the canonical list of MCP tools the magus server exposes.
 var Registry = []ToolDescriptor{
 	{
 		Name:        "magus_describe",

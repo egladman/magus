@@ -1,35 +1,39 @@
 ---
 title: magus server
 generated_from: internal/cli/registry.go
-description: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.
-tags: [cli, magus server, daemon, server, socket, persistent]
+description: "Start, stop, reload or check the magus server a person starts: MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch."
+tags: [cli, magus server, server, mcp, console, socket, persistent]
 ---
 
 # magus-server
 
-Manage the persistent magus daemon
+Manage the magus server: MCP, the console, APIs and background jobs
 
 ## Synopsis
 
-**magus** server \<start|stop|reload|job\> [flags]
+**magus** server \<start|stop|status|reload\> [flags]
 
 ## Description
 
-Start, stop, or check the liveness of a persistent magus daemon.
+Start, stop, reload or check the magus server.
 
-By default every magus invocation starts a short-lived proc server that dies
-when the command exits. The persistent daemon keeps the server alive across
-invocations so workspace discovery, config loading, and the content-addressed
-cache are paid for once. Nested magus calls (from build scripts, editor
-integrations, etc.) forward work to the daemon automatically.
+The server is the background process a person asks for. It serves MCP and the
+console over HTTP, the APIs behind them, background jobs and scheduled
+maintenance, and keeps each workspace's knowledge graph and symbol indexes
+current. It keeps workspaces warm, so nested magus calls that forward to it pay
+for discovery and config once. Nothing starts it but \`magus server start\` (and
+\`graph export --follow\`, which asks for the console by name), and it runs
+until stopped.
+
+It is not what holds this host's capacity: that is \`magus broker\`, which a
+run starts on its own. The server asks the broker like any run does.
 
 The socket address is resolved in priority order:
-  --socket flag  \>  MAGUS_DAEMON_ADDRESS env  \>  daemon.address in magus.yaml  \>
-  stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)
+  --socket flag  \>  MAGUS_SERVER_ADDRESS env  \>  server.address in magus.yaml  \>
+  default ($XDG_RUNTIME_DIR/magus/server.sock)
 
-The socket file acts as the lock: present means a daemon is running, absent
-means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
-check for the file with [ -S "$socket" ] before starting one.
+A detached server logs to $XDG_STATE_HOME/magus/server.log; under
+--foreground it logs to stderr for the supervisor to keep.
 
 ### server start options
 
@@ -38,51 +42,48 @@ check for the file with [ -S "$socket" ] before starting one.
 
 ### server stop options
 
-**--services**
-: Stop the daemon's hosted services, leaving the daemon running
-
 **--socket** *string*
-: Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
+: Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
 ### server status options
 
 **--socket** *string*
-: Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
+: Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
 ### server reload options
 
 **--socket** *string*
-: Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
+: Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
 ## Subcommands
 
 **start**
-: Start a persistent daemon (auto-backgrounds by default; --foreground blocks)
+: Start the server (auto-backgrounds by default; --foreground blocks)
 
 **stop**
-: Send a graceful shutdown request to a running daemon
+: Send a graceful shutdown request to the running server
 
 **status**
-: The daemon: whether it is up and where you reach it
+: The server: whether it is up and where you reach it
 
 **reload**
-: Re-read configuration without restarting: drop the daemon's open workspaces
+: Re-read configuration without restarting: drop the server's open workspaces
 
 ## Examples
 
-*Start the daemon (auto-backgrounds)*
+*Start the server (auto-backgrounds)*
 
 ```sh
 magus server start
 ```
 
-*Run the daemon in the foreground (supervisor or debugging)*
+*Run the server in the foreground (supervisor or debugging)*
 
 ```sh
 magus server start --foreground
 ```
 
-*Stop the running daemon*
+*Stop the running server*
 
 ```sh
 magus server stop
@@ -94,7 +95,7 @@ magus server stop
 magus server reload
 ```
 
-*Inspect daemon pool state*
+*Everything running on this host*
 
 ```sh
 magus status
@@ -103,10 +104,10 @@ magus status
 *Use a custom socket path*
 
 ```sh
-magus --daemon-address unix:///tmp/m.sock server start
+magus --server-address unix:///tmp/m.sock server start
 ```
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-queue**(1)](magus-queue.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-queue**(1)](magus-queue.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

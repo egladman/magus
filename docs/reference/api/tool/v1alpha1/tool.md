@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, toolservice]
 
 ToolService serves the toolchain view. Read-only: nothing here installs, selects, or moves a version.
 
-Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:90](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L90). Part of the [daemon API](../../index.md).
+Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:90](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L90). Part of the [server API](../../index.md).
 
 ## Methods
 

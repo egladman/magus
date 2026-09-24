@@ -117,7 +117,7 @@ var denyRuleDocs = []RuleDoc{
 			"This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files."},
 	{Name: string(denyRuleTokenState), Decision: "deny",
 		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
-		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the daemon checks, so reading one hands a session a grant and writing one mints a token. " +
+		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. " +
 			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
 			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
