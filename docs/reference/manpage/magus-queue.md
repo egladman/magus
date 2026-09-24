@@ -43,6 +43,9 @@ apply report what would merge and call nothing on the provider.
 
 ### queue describe options
 
+**--app** *slug*
+: \`slug\` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential
+
 **--base** *branch*
 : \`branch\` the queue merges into
 
@@ -51,6 +54,9 @@ apply report what would merge and call nothing on the provider.
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
+
+**--status-context** *string* (default: merge-queue)
+: Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup
 
 **--vcs** *backend* (default: git)
 : Version control \`backend\` of the checkout at --root
@@ -132,6 +138,9 @@ apply report what would merge and call nothing on the provider.
 
 ### queue apply options
 
+**--app** *slug*
+: \`slug\` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)
+
 **--committer** *string*
 : "Name \<email\>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
 
@@ -165,7 +174,7 @@ apply report what would merge and call nothing on the provider.
 ## Subcommands
 
 **describe**
-: Ask the provider what it supports on a base: its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document
+: Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json
 
 **ls**
 : Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document
@@ -181,10 +190,16 @@ apply report what would merge and call nothing on the provider.
 
 ## Examples
 
-*See the merge methods and the queue label*
+*Print the commands that wire the queue up*
 
 ```sh
 magus queue describe --provider github --base main
+```
+
+*Print the commands that move it onto your own GitHub App*
+
+```sh
+magus queue describe --provider github --base main --app acme-magus-queue
 ```
 
 *List what carries merge intent*

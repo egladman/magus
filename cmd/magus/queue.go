@@ -85,7 +85,7 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus queue <subcommand> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  describe  ask the provider for its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document")
+	fmt.Fprintln(w, "  describe  ask the provider what it supports and what wiring the queue up still takes; prints the steps, or a mergequeue.capabilities/v1 document with -o json")
 	fmt.Fprintln(w, "  ls        ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document")
 	fmt.Fprintln(w, "  plan      check approval, find stacks, drop what conflicts with the base, partition by affected set")
 	fmt.Fprintln(w, "  validate  build and gate a candidate per change, writing each verdict as it is decided (read access only)")
@@ -244,6 +244,13 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
+	opts, err := ResolveOutput(global.output)
+	if err != nil {
+		return err
+	}
+	if opts.Format != FormatText && opts.Format != FormatJSON && opts.Format != FormatJSONL {
+		return usagef("magus queue describe: -o %s is not supported (want text, json or jsonl)", opts.Format)
+	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -257,11 +264,78 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url})
+	// An empty --status-context asks for no setup, whose reads need permissions a pull
+	// request job's token may lack.
+	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
 	if err != nil {
 		return err
 	}
-	return mergequeue.WriteCapabilities(e.stdout, f.Base, caps)
+	if opts.Format != FormatText {
+		return mergequeue.WriteCapabilities(e.stdout, f.Base, caps)
+	}
+	if err := caps.Check(); err != nil {
+		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
+	}
+	return writeQueueSetup(e.stdout, f.Provider, f.Base, caps)
+}
+
+// writeQueueSetup renders what describe read as a script a person reads and then runs
+// step by step: every fact is a comment, every step a command or a link to open.
+func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities) error {
+	var b strings.Builder
+	methods := make([]string, len(caps.Methods))
+	for i, m := range caps.Methods {
+		methods[i] = string(m)
+	}
+	fmt.Fprintf(&b, "# %s on %s: merge methods %s; stacks merge %s", provider, base, strings.Join(methods, ", "), caps.StackMerge)
+	if caps.QueueLabel != "" {
+		fmt.Fprintf(&b, "; a stack queues by the label %q", caps.QueueLabel+"<method>")
+	}
+	b.WriteString("\n")
+	s := caps.Setup
+	if s == nil {
+		fmt.Fprintf(&b, "# no setup: --status-context is empty, or provider %s reports none\n", provider)
+		_, err := io.WriteString(w, b.String())
+		return err
+	}
+	fmt.Fprintf(&b, "# the queue posts %q as %s\n", s.StatusContext, s.Credential)
+	if len(s.RequiredChecks) == 0 {
+		fmt.Fprintf(&b, "# %s requires no check\n", base)
+	}
+	for _, rc := range s.RequiredChecks {
+		from := "any source"
+		if rc.Integration != "" {
+			from = "integration " + rc.Integration
+		}
+		seen := "not seen reported"
+		if len(rc.Events) > 0 {
+			seen = "seen on " + strings.Join(rc.Events, ", ")
+		}
+		fmt.Fprintf(&b, "# %s requires %q from %s (%s)\n", base, rc.Context, from, seen)
+	}
+	for _, st := range s.Settings {
+		fmt.Fprintf(&b, "# %s is %s; the queue needs %s\n", st.Name, st.Value, st.Want)
+	}
+	if a := s.App; a != nil {
+		fmt.Fprintf(&b, "# app %s is integration %s", a.Slug, a.ID)
+		if a.ClientID != "" {
+			fmt.Fprintf(&b, ", client id %s", a.ClientID)
+		}
+		b.WriteString("\n")
+	}
+	if len(s.Steps) == 0 {
+		b.WriteString("# nothing left to set up\n")
+	}
+	for i, st := range s.Steps {
+		fmt.Fprintf(&b, "\n# %d. %s\n", i+1, st.Title)
+		if st.URL != "" {
+			fmt.Fprintf(&b, "# open %s\n", st.URL)
+			continue
+		}
+		b.WriteString(strings.TrimRight(st.Command, "\n") + "\n")
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
 }
 
 func queueLs(ctx context.Context, e *queueEnv, args []string) error {
@@ -504,7 +578,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	a.StatusContext, a.Interval, a.DryRun, a.Committer, a.Events = f.StatusContext, f.Interval, globalCfg.DryRun, who, events
+	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, events
 	if f.Regenerate != "" {
 		a.Regenerate = mergequeue.CommandRegenerate(f.Regenerate, pl, mergequeue.NewHookLog(e.stderr))
 	}

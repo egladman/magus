@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   label and who commits the queue's update commits. The new `merge-queue` pull request
   advisor, off by default, reads it to name the label that queues an approved pull
   request.
+- **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
+  It reads the status the base requires and who it is pinned to, auto-merge, and the
+  required checks that run on `pull_request`; `--app <slug>` prints the steps for the
+  queue's own GitHub App, which `setup-magus` turns into a token with no workflow edit.
+  `-o json` prints the setup; magus runs none of it. `apply` refuses a status pinned to
+  another integration than its token's (MGS3019).
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged

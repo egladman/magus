@@ -119,6 +119,7 @@ Two layers run together:
 - [MGS3014](MGS3014.md): gate superseded by a later gate on the same tree.
 - [MGS3016](MGS3016.md): a daemon call against a workspace that failed to load.
 - [MGS3017](MGS3017.md): a daemon call against a workspace still loading.
+- [MGS3019](MGS3019.md): the merge queue's status is required from another integration than its credential's.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

@@ -122,6 +122,61 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 		Committer: magustypes.Person{Name: "bot", Email: "bot@example.com"}}, got)
 }
 
+// setupScript answers describe with a setup built from what it was asked.
+const setupScript = `
+export fun describe(io: {str: any}) > any {
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "setup": {
+        "status_context": io["status_context"],
+        "credential": {"id": "812", "name": io["app"]},
+        "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
+        "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
+        "app": {"slug": io["app"], "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
+            "environment": "magus-queue", "variable": "V", "secret": "S"},
+        "steps": [{"title": "Install it", "url": "https://github.com/apps/q/installations/new"}, {"title": "Store it", "command": "gh secret set S"}],
+    }};
+}
+export fun list_changes(io: {str: any}) > any { return {}; }
+export fun approval_at(io: {str: any}) > any { return {}; }
+export fun list_green(io: {str: any}) > any { return {}; }
+export fun post_status(io: {str: any}) > bool { return true; }
+export fun retarget(io: {str: any}) > bool { return true; }
+export fun merge_change(io: {str: any}) > any { return {}; }
+export fun kick_back(io: {str: any}) > bool { return true; }
+`
+
+func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
+	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", SetupSteps: true})
+	require.NoError(t, err)
+	assert.Equal(t, &types.Setup{
+		StatusContext: "gate",
+		Credential:    types.Integration{ID: "812", Name: "q"},
+		RequiredChecks: []types.RequiredCheck{
+			{Context: "merge-queue", Integration: "15368"},
+			{Context: "ci gate", Events: []string{"true"}},
+		},
+		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
+		App: &types.App{Slug: "q", ID: "812", ClientID: "Iv1", InstallURL: "https://github.com/apps/q/installations/new",
+			Environment: "magus-queue", Variable: "V", Secret: "S"},
+		Steps: []types.SetupStep{
+			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
+			{Title: "Store it", Command: "gh secret set S"},
+		},
+	}, got.Setup)
+}
+
+// A setup a person could not follow is the provider's error, named where it broke.
+func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
+	for _, tc := range []struct{ from, to, want string }{
+		{`"credential": {"id": "812", "name": io["app"]},`, ``, `setup: field "credential" is missing`},
+		{`{"id": "812", "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
+		{`"command": "gh secret set S"`, `"command": "gh secret set S", "url": "https://x"`, `exactly one of a command or a URL`},
+		{`"status_context": io["status_context"],`, `"status_context": "",`, `setup for no status context`},
+	} {
+		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate"})
+		require.ErrorContains(t, err, tc.want, tc.to)
+	}
+}
+
 func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T) {
 	got, err := open(t, script).ListChanges(context.Background(), types.ListQuery{Base: "main", RemoteURL: "git@github.com:acme/acme.git"})
 	require.NoError(t, err)

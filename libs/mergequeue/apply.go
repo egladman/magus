@@ -36,6 +36,10 @@ type Applier struct {
 	// StatusContext names the commit status an Applier posts; empty means
 	// [DefaultStatusContext].
 	StatusContext string
+	// App names the app the provider's write credential belongs to (github: a GitHub
+	// App's slug); empty is the provider's default credential. Run refuses to start when
+	// the base requires StatusContext from an integration other than the credential's.
+	App string
 	// Interval is how long to wait between polls while verdicts are outstanding.
 	Interval time.Duration
 	// DryRun reports what would merge and calls nothing on the provider.
@@ -87,11 +91,14 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 	}
 	r := &applyRun{Applier: a, plan: plan, committer: a.Committer, merged: map[string]bool{}, got: map[string]types.Verdict{}, rebuilt: map[string]string{}}
 	if !a.DryRun {
-		caps, err := a.provider.Describe(ctx, types.ListQuery{Base: plan.Base, RemoteURL: plan.RemoteURL})
+		caps, err := a.provider.Describe(ctx, types.ListQuery{Base: plan.Base, RemoteURL: plan.RemoteURL, StatusContext: a.statusContext(), App: a.App})
 		if err != nil {
 			return fmt.Errorf("describe the provider: %w", err)
 		}
 		if err := caps.Check(); err != nil {
+			return err
+		}
+		if err := checkCredential(caps.Setup, plan.Base); err != nil {
 			return err
 		}
 		r.caps = caps
@@ -162,6 +169,26 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		case <-time.After(max(a.Interval, 10*time.Millisecond)):
 		}
 	}
+}
+
+// checkCredential refuses a base that requires the queue's status from an integration
+// other than the one the credential posts as: the provider would count none of the
+// statuses the queue posts, so nothing would merge. A provider that reports no setup
+// proves nothing either way.
+func checkCredential(s *types.Setup, base string) error {
+	if s == nil {
+		return nil
+	}
+	for _, rc := range s.RequiredChecks {
+		if rc.Context != s.StatusContext || rc.Integration == "" || rc.Integration == s.Credential.ID {
+			continue
+		}
+		return magustypes.DiagnosticErrorf(magustypes.QueueCredentialMismatch,
+			"%s requires status %q from integration %s, and the queue's credential posts it as %s; "+
+				"pin %q to %s or give the queue integration %s's credential (magus queue describe prints the pin)",
+			base, rc.Context, rc.Integration, s.Credential, rc.Context, s.Credential.ID, rc.Integration)
+	}
+	return nil
 }
 
 type applyRun struct {
@@ -1180,11 +1207,11 @@ func (r *applyRun) revokeStale(ctx context.Context) error {
 	return nil
 }
 
-func (r *applyRun) statusContext() string {
-	if r.StatusContext == "" {
+func (a *Applier) statusContext() string {
+	if a.StatusContext == "" {
 		return DefaultStatusContext
 	}
-	return r.StatusContext
+	return a.StatusContext
 }
 
 func (r *applyRun) post(ctx context.Context, c types.Change, commit string, state types.CommitState, desc string) error {
