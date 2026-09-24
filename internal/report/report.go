@@ -53,6 +53,7 @@ const (
 	TypeRunDetach             = "run.detach"
 	TypeLockSuperseded        = "lock.superseded"
 	TypeLockSupersedeRefused  = "lock.supersede_refused"
+	TypeLockPipeWait          = "lock.pipe_wait"
 	TypeNotice                = "run.notice"
 )
 
@@ -265,6 +266,13 @@ type LockSupersedeRefused struct {
 	BoundMs   int64  `json:"bound_ms"`
 }
 
+// LockPipeWait reports that this run is waiting, before taking any project lock, for
+// the magus upstream of it in a shell pipe to release or settle the projects it needs.
+type LockPipeWait struct {
+	UpstreamPID int    `json:"upstream_pid"`
+	Command     string `json:"command,omitempty"`
+}
+
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
 // that has no dedicated event type of its own. Code is the diagnostic code (e.g.
 // an MGS####) when the notice carries one, and Message does not repeat it. Attrs
@@ -342,6 +350,7 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
 	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
 	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
+	reflect.TypeOf(LockPipeWait{}):          TypeLockPipeWait,
 	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }

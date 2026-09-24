@@ -1,0 +1,34 @@
+# Only an adjacent magus stage is proven. With `cat` between them the reader's writer is
+# cat, so the two magus stages meet at the lock as strangers, as before: exactly one of
+# them is refused, naming the other.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+! exec bash -c 'set -o pipefail; magus run holdslow . | cat | magus run consume .'
+stderr 'locked by another magus process'
+! stderr 'waiting for pid'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "holdslow": {"skip_cache": "holds the project"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+export fun holdslow(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sleep", ["2"]);
+    io\stdout.write("done\n");
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdin.readAll();
+}
