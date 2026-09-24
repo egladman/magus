@@ -4,4 +4,4 @@
   `SetDaemon` and `ServeDaemon` are `Server`, `SetServer` and `Serve`;
   `types.EntryPointDaemon`, `HolderDaemon`, `DaemonRequired` and `DaemonSocketWithheld`
   are `EntryPointServer`, `HolderServer`, `ServerRequired` and `ProcSocketWithheld`. The
-  `internal/daemon` package is `internal/serverhttp`.
+  `internal/daemon` package is `internal/server`.

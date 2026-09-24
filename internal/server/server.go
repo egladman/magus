@@ -1,4 +1,4 @@
-// Package serverhttp is the HTTP composition of `magus server`: it mounts the MCP
+// Package server is the HTTP composition of `magus server`: it mounts the MCP
 // Streamable-HTTP handler, the k8s health routes, and the browser Graph
 // Explorer console onto one loopback listener, applying the shared bearer
 // and DNS-rebind guards. It is the composition point that ties together
@@ -7,8 +7,8 @@
 //
 // The CLI injects a *Server into the root magus package via
 // magus.SetServer; magus.Serve then delegates here. That indirection
-// keeps magus free of an import cycle (serverhttp depends on magus, not vice versa).
-package serverhttp
+// keeps magus free of an import cycle (server depends on magus, not vice versa).
+package server
 
 import (
 	"context"

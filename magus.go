@@ -173,7 +173,7 @@ type Magus struct {
 // the console and its API routes. The CLI injects it under `magus server` ONLY, so
 // ordinary command paths never construct one, and it is an interface so the root magus
 // package need not import the handler packages that depend on it. The concrete
-// *serverhttp.Server satisfies it.
+// *server.Server satisfies it.
 type Server interface {
 	Serve(ctx context.Context) error
 }

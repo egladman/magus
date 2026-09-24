@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/serverhttp"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/types"
 )
 
@@ -233,7 +233,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 	status := serverSnapshot(os.Getenv(proc.SocketEnv))
 	srvCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	d := serverhttp.NewUnloaded(internalmcp.Options{
+	d := server.NewUnloaded(internalmcp.Options{
 		Logger:     slog.Default(),
 		Version:    version,
 		Build:      types.BuildInfo{Version: version, Commit: commit, Date: buildDate},
@@ -243,7 +243,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 		HealthRoutes: healthRoutes(status, readinessExtras{
 			services: bridgeServices,
 		}),
-	}, serverhttp.Unloaded{
+	}, server.Unloaded{
 		Root: root,
 		Err:  func() rpcerr.Error { return serverRegistry.unavailable(root) },
 	}, bridgeServerOptions()...)
@@ -305,21 +305,21 @@ func healthRoutes(status statusFunc, extras readinessExtras) map[string]http.Han
 // bridgeServerOptions wires the server-wide registries (runs, hosted services, every
 // workspace's activity) into the bridge's HTTP server. Each is nil for a bridge started without
 // the multi-workspace server, and the option is then left unset.
-func bridgeServerOptions() []serverhttp.Option {
-	var opts []serverhttp.Option
+func bridgeServerOptions() []server.Option {
+	var opts []server.Option
 	// The live-run registry (built by startServer) backs the dashboard's runs view;
 	// without it the status report simply omits runs.
 	if serverRuns != nil {
-		opts = append(opts, serverhttp.WithRuns(serverRuns.Snapshot))
+		opts = append(opts, server.WithRuns(serverRuns.Snapshot))
 	}
 	// The broker's status backs the dashboard's capacity and services views the same way.
-	opts = append(opts, serverhttp.WithBrokerStatus(bridgeBroker))
+	opts = append(opts, server.WithBrokerStatus(bridgeBroker))
 	// The activity view is server-wide, so it reads every loaded workspace's trail, not just this
 	// bridge's: an agent hook runs as a short-lived client outside the server and writes to ITS
 	// workspace's cache dir, so a bridge-only view misses every other workspace's agent activity.
 	// Same registry the WorkspaceLister reports from.
 	if serverRegistry != nil {
-		opts = append(opts, serverhttp.WithActivityWorkspaces(serverRegistry.activityWorkspaces))
+		opts = append(opts, server.WithActivityWorkspaces(serverRegistry.activityWorkspaces))
 	}
 	return opts
 }
@@ -330,7 +330,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 	// Capture the server's own socket now (set by startServer) so the health handlers
 	// query this server, not whatever a per-request discovery scan happens to find.
 	status := serverSnapshot(os.Getenv(proc.SocketEnv))
-	m.SetServer(serverhttp.New(internalmcp.Options{
+	m.SetServer(server.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,

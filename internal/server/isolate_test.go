@@ -1,6 +1,6 @@
 // cross-cutting: the package's TestMain, which keeps every test here off the user's runtime dir
 
-package serverhttp
+package server
 
 import (
 	"testing"

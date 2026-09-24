@@ -1,6 +1,6 @@
 // cross-cutting: every mount in server.go and share.go against auth's verifier and httpx's guard
 
-package serverhttp
+package server
 
 import (
 	"bytes"
