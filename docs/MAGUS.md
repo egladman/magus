@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v14). Query it instead of grepping:
+This workspace has a knowledge graph. Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -43,41 +43,7 @@ magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 
-| Kind       |     Size | List them                     | Anchors (most connected)                                                                                                    |
-| ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
-| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `test`                                                                                 |
-| spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
-| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
-| tool       | built in | `magus query kind=tool`       |                                                                                                                             |
-| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
-| module     | built in | `magus query kind=module`     |                                                                                                                             |
-| method     | built in | `magus query kind=method`     |                                                                                                                             |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1002`                                                                                             |
-| doc        |     600+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
-| dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                              |
-| file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `libs/mergequeue/provider/github.buzz`, `docs/render.buzz`                                                |
-| function   |    1000+ | `magus query kind=function`   | `main`, `apiBase`, `describe`                                                                                               |
-| import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
-| rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
-| package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
-| link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
-
-| Project                         | Targets | Scope a query                                         | Key targets                                              |
-| ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      54 | `magus query project=.`                               | `test`, `buzz-test`, `generate`                          |
-| console                         |       8 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
-| docs                            |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
-| libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
-| libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
-| libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
-| libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
-| libs/mergequeue                 |       9 | `magus query project=libs/mergequeue`                 | `build`, `format`, `generate`                            |
-| libs/pricing                    |       7 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
-| libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
-| libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                |
-| proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
+Scope a query to this index: `magus query project=docs`. `magus graph stats` sizes up the whole workspace.
 
 ## Project: docs
 
@@ -96,7 +62,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                                                                                                                                                                                                                                                                      |
 | `render`                  | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                                                                                                                                                                                                                                                                            |
 | `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                                                                                                                                                                                                                                                                                  |
-| `index-generate`          | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.                                                                                                                                                                                                                                                                                       |
+| `index-generate`          | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile, so it stays in lockstep with the targets.                                                                                                                                                                                                                                                                                               |
 | `content-generate`        | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `changelog-page`          | changelog-page renders the changelog as a docs page: every release from releases/*.yaml, and under [Unreleased] the fragments in changes/unreleased/.                                                                                                                                                                                                                                                                          |
 | `conventions`             | conventions holds every doc page to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.                                                                                                                                                                                                                          |

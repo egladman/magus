@@ -327,7 +327,6 @@ jobs:
           fix-generated-drift: 'true'
           fix-label: ${{ env.FIX_LABEL }}
           merge-conflicts: 'false'
-          hand-edited-generated: 'false'
           target-outputs: 'false'
           doctor: 'false'
           version-floor: 'false'
