@@ -224,7 +224,10 @@ describe("the shell sign-in gate", () => {
     assert.ok(page);
     assert.match(page.textContent ?? "", /Sign in to this daemon/);
     const cmd = page.querySelector("[data-sign-in-command]")?.textContent ?? "";
-    assert.match(cmd, /\/console\/runs\/#token=\$\(magus config token print\)"$/);
+    assert.match(
+      cmd,
+      /\/console\/runs\/#code=\$\(magus config console token create --code --expires 12h\)"$/,
+    );
     assert.doesNotMatch(cmd, /test-token/);
   });
 

@@ -48,10 +48,10 @@ const (
 	// fact again. A caller that DOES name a session needs no window: the id is the
 	// session, and its return is the same session.
 	//
-	// It is the LAST resort rather than the human default. A person at a prompt passes
-	// no --session, and keying them on a clock made the gate mean "in the last two
-	// hours", so the same advisory went quiet on a second deliberate look and came back
-	// unbidden the next morning. SessionFromTerminal is what gives them a real one.
+	// It is the LAST resort rather than the terminal default. A caller at a prompt passes
+	// no --session, and keying it on a clock made the gate mean "in the last two hours",
+	// so the same advisory went quiet on a second deliberate look and came back unbidden
+	// the next morning. WindowFromTerminal is what gives it a real key.
 	anonWindow = 2 * time.Hour
 
 	// markerRetention is how long any marker survives the sweep. Long enough that a
@@ -66,29 +66,30 @@ type Gate struct {
 	session  string
 }
 
-// NewGate keys the gate on the cache dir the caller already resolved and an opaque
-// session key: the host's session id, or a key naming the caller within it, as the
-// guard's callerKey does. An empty cacheDir means magus could not locate a workspace,
-// and the gate then suppresses nothing.
-func NewGate(cacheDir, session string) Gate {
-	return Gate{cacheDir: cacheDir, session: strings.TrimSpace(session)}
+// NewGate keys the gate on the cache dir the caller already resolved and an opaque key
+// naming who the notices are held for: a host session, a terminal window, or a caller
+// within either, as the guard's callerKey does. An empty key is the anonymous window. An
+// empty cacheDir means magus could not locate a workspace, and the gate then suppresses
+// nothing.
+func NewGate(cacheDir, key string) Gate {
+	return Gate{cacheDir: cacheDir, session: strings.TrimSpace(key)}
 }
 
-// SessionFromTerminal derives a session id for a caller that named none, from the
-// terminal it is attached to. Empty when there is no terminal to read, which is the
-// pipeline and CI case and correctly falls back to anonWindow.
+// WindowFromTerminal names the terminal window a caller runs in, the key a gate holds
+// notices under when no host delivered a session. Empty when there is no terminal to
+// read, which is the pipeline and CI case and correctly falls back to anonWindow.
 //
-// A person is the caller this exists for. An agent host passes --session and has always
-// had a real one; a person at a prompt passes nothing and so shared one "anon" bucket
-// with every other unattributed run on the machine, held on a two-hour clock. That is
-// not what they mean by a session: they mean this terminal, until they close it.
+// A window is not a session: a session is the host's conversation id, and a caller at a
+// terminal has none. Without this key such a caller shared one "anon" bucket with every
+// other unattributed run on the machine, held on a two-hour clock, when what it means is
+// this terminal, until it is closed.
 //
 // The terminal is read from the environment a terminal emulator sets, and falls back to
 // the parent process id, which is the shell that invoked magus. Neither is a secret and
 // neither is trusted: MarkerPath hashes whatever comes back, so a value holding
 // separators or anything else cannot pick a path. Getting it WRONG costs an advisory
 // shown twice or held once too long, never a wrong verdict.
-func SessionFromTerminal(env func(string) string, ppid int, isTerminal bool) string {
+func WindowFromTerminal(env func(string) string, ppid int, isTerminal bool) string {
 	if !isTerminal {
 		return ""
 	}

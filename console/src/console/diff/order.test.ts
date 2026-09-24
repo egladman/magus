@@ -1,8 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { order, visibleFiles, settled, stats, riskChips } from "./order";
+import {
+  conformanceUncovered,
+  conformanceUnchecked,
+  order,
+  visibleFiles,
+  settled,
+  stats,
+  riskChips,
+} from "./order";
 import type { DiffFile } from "./parse";
-import type { DiffAnnotation, DiffSession, DiffSymbol } from "./session";
+import type { DiffAnnotation, DiffReview, DiffSymbol } from "./session";
 
 function file(path: string, additions = 1, deletions = 0): DiffFile {
   return {
@@ -20,7 +28,7 @@ function ann(path: string, over: Partial<DiffAnnotation> = {}): DiffAnnotation {
   return { path, role: "source", reach: 0, surface: "unknown", ...over };
 }
 
-function session(files: DiffAnnotation[]): DiffSession {
+function session(files: DiffAnnotation[]): DiffReview {
   return {
     id: "rev1",
     base: "working",
@@ -233,6 +241,67 @@ test("one commit is singular", () => {
 test("no churn data renders no churn chip", () => {
   const chips = riskChips(ann("x.go", { reach: 3 }));
   assert.equal(chips.filter((c) => c.text.includes("commit")).length, 0);
+});
+
+test("conformance checks on a symbol earn one chip carrying each message", () => {
+  const check = (name: string, message: string) => ({
+    name,
+    status: "advice",
+    message,
+    evidence: "inferred",
+  });
+  const chips = riskChips(
+    ann("trail.go", {
+      symbols: [
+        {
+          id: "s",
+          label: "EntryPointFrom",
+          ref_count: 0,
+          file_count: 0,
+          external_file_count: 0,
+          checks: [
+            check("naming-affix", "`EntryPointFrom`: 8 of 9 functions are named `<X>FromContext`"),
+            check("param-order", "`EntryPointFrom` takes `b` before `a`"),
+          ],
+        },
+      ],
+    }),
+  );
+  const chip = chips.find((c) => c.text === "2 conformance");
+  assert.ok(chip, "both findings are counted");
+  assert.match(
+    chip.title,
+    /^EntryPointFrom: 8 of 9 functions are named <X>FromContext\. EntryPointFrom takes b before a\. /,
+  );
+  assert.equal(
+    riskChips(ann("quiet.go", { symbols: [] })).find((c) => c.text.endsWith("conformance")),
+    undefined,
+  );
+});
+
+test("a changeset conformance could not check says so, with its code", () => {
+  assert.equal(
+    conformanceUnchecked({
+      base: "working",
+      conformance_error: {
+        code: "MGS7003",
+        message: "the symbol index could not be brought current",
+      },
+    }),
+    "Conformance could not check this change: [MGS7003] the symbol index could not be brought current",
+  );
+  assert.equal(conformanceUnchecked({ base: "working" }), undefined, "checked, so nothing to say");
+});
+
+test("each touched project the checks could not see is named", () => {
+  assert.deepEqual(
+    conformanceUncovered({
+      base: "working",
+      uncovered: [{ project: "docs", reason: "no-indexer" }],
+    }),
+    ["Conformance did not check docs: no symbol indexer"],
+  );
+  assert.deepEqual(conformanceUncovered({ base: "working" }), []);
 });
 
 test("no annotation yields no chips rather than empty placeholders", () => {

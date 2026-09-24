@@ -1014,22 +1014,22 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 		},
 		{
 			Name:  "mcp",
-			Short: "Manage the MCP server auth token",
+			Short: "Manage MCP connector tokens",
 			Children: []Command{
 				{
 					Name:  "connector",
-					Short: "Manage connector tokens",
+					Short: "Manage connector tokens (mcp=write)",
 					Children: []Command{
 						{
 							Name:  "create",
 							Short: "Mint a connector token",
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this connector token (default: connector-N)"},
-								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
 							},
 						},
-						{Name: "ls", Short: "List connector tokens: names, fingerprints, and expiry (never the secret)"},
-						{Name: "revoke", Short: "Revoke a connector token"},
+						{Name: "ls", Short: "List every stored token: names, ids, classes, grants, and expiry (never the secret)"},
+						{Name: "revoke", Short: "Revoke a stored token by exact id or exact name"},
 					},
 				},
 			},
@@ -1045,7 +1045,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
-				{Name: "print", Short: "Print the current operator token to stdout"},
+				{Name: "print", Short: "Print the current operator token to stdout (denied to agent sessions)"},
 				{Name: "revoke", Short: "Delete the operator token (the daemon mints a fresh one on next start)"},
 				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
 			},
@@ -1063,12 +1063,13 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							Short: "Mint a console token",
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this console token (default: console-N)"},
-								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
 								{Name: "viewer", Kind: FlagBool, Doc: "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share"},
+								{Name: "code", Kind: FlagBool, Doc: "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once"},
 							},
 						},
-						{Name: "ls", Short: "List console tokens"},
-						{Name: "revoke", Short: "Revoke a console token"},
+						{Name: "ls", Short: "List every stored token"},
+						{Name: "revoke", Short: "Revoke a stored token by exact id or exact name"},
 					},
 				},
 			},
@@ -1171,7 +1172,7 @@ needs to reach it - the endpoint, the auth token command, and a liveness
 probe - and exits non-zero, since it starts nothing itself.
 
   magus server start                    start the daemon (MCP comes up with it)
-  magus config token print              print the bearer token
+  magus config mcp connector create     mint a bearer token for one client
   magus status --probe=liveness,mcp     confirm the endpoint is serving
 
 Per-client configuration lives in docs/guides/integrations/mcp.md, not in
@@ -1380,10 +1381,11 @@ not block every tool call.`,
 	Flags: []Flag{
 		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)"},
+		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only); required with --transport"},
 		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3022)"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
+		{Name: "agent", Kind: FlagString, Doc: "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
 		{Name: "observes-skill-loads", Kind: FlagBool, Doc: "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down"},
@@ -1717,14 +1719,16 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 
 var sessionCommand = Command{
 	Name:        "session",
-	Short:       "What sessions did and what they are blocked on: humans read and dispose, hosts write",
-	Description: "One family over the repository's session store: list what sessions ran, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all.",
+	Short:       "What magus invocations did and what agents are blocked on: humans read and dispose, hosts write",
+	Description: "One family over the repository's session store: list what magus invocations ran and the host session each ran in, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all.",
 	Tags:        []string{"cli", "magus session", "sessions", "attention", "history", "worktrees", "agents", "guard"},
 	Long: `One noun over the repository's session store, with a human side and a
 machine side.
 
-Humans read it. The bare command lists past magus sessions with the targets
-each one ran and how those runs ended; ` + "`session attention`" + ` lists the requests
+Humans read it. The bare command lists past magus invocations with the targets
+each one ran and how those runs ended, the OS user that ran it, and the host
+session it ran in (a dash when no host delivered one: the invocation is
+unattributed); ` + "`session attention`" + ` lists the requests
 agents have raised - work blocked on input or on approval - and
 ` + "`session dispose`" + ` closes one. Nothing closes a request automatically: there is
 no expiry, no severity inference and no auto-dispose flag, because a request
@@ -1747,8 +1751,8 @@ rather than failing the read.
 
 The listing takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
-against each session's last fact, not its first, so a long session that is
-still working stays listed however long ago it began.
+against each invocation's last fact, not its first, so a long one that is still
+working stays listed however long ago it began.
 
 --brief answers the listing's own question, where does the work stand, for a
 model instead of a person. It prints this checkout read off disk: branch and
@@ -1762,11 +1766,11 @@ session-start event and hand the model state instead of prose.`,
 	Usage: "magus session [ls] [flags]",
 	Flags: []Flag{
 		{Name: "brief", Kind: FlagBool, Doc: "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)"},
-		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
-		{Name: "since", Kind: FlagString, Doc: "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
+		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many invocations (0 for all)"},
+		{Name: "since", Kind: FlagString, Doc: "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},
 	Children: []Command{
-		{Name: "ls", Short: "List past sessions and the targets they ran (the default)"},
+		{Name: "ls", Short: "List past magus invocations and the targets they ran (the default)"},
 		{
 			Name:        "load",
 			Short:       "Load a normalized agent-session event stream from a host transcript",
@@ -1943,7 +1947,7 @@ none. This is the only command that opens one.`,
 		},
 	},
 	Examples: []Example{
-		{"Show recent sessions", "magus session"},
+		{"Show recent invocations", "magus session"},
 		{"Show today's work", "magus session --since 24h"},
 		{"Hand a compacted session this checkout's state", "magus session --brief"},
 		{"Full session records as JSON", "magus session -o json"},
@@ -2187,7 +2191,7 @@ shows what it is doing.`,
 		},
 	},
 	Examples: []Example{
-		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'"},
+		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
 		{"Declare it from a record", "magus job fork --stdin < job.json"},
 		{"Take it in this checkout", "magus job exec session-load/core"},
 		{"Give up this checkout's binding", "magus job exec --vacate"},
@@ -2307,6 +2311,8 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
 		{Name: "baseline", Kind: FlagString, Doc: "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves"},
+		{Name: "conformance-min-cohort", Kind: FlagInt, Doc: "How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)"},
+		{Name: "conformance-min-share", Kind: FlagCustom, Doc: "The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},

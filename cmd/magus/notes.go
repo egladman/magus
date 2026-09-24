@@ -948,7 +948,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 // session's own. A transcript holding only your half of a conversation is not a transcript of
 // the conversation: the question a reader has months later is what was decided, and the answer
 // is nearly always in what somebody else said back.
-func captureFromSession(sess *types.DiffSession, threads []types.ReviewThread, title string, tags []string) store.Capture {
+func captureFromSession(sess *types.DiffReview, threads []types.ReviewThread, title string, tags []string) store.Capture {
 	// Grouped by file, because that is how a reviewer looks for a thread later ("what did we
 	// say about key.go"). Comment order within a file is left alone: it is the order the
 	// conversation happened in, and sorting it would break the replies.
@@ -1006,10 +1006,10 @@ func captureFromSession(sess *types.DiffSession, threads []types.ReviewThread, t
 // thing it must not.
 func commentAuthor(c types.DiffComment) string {
 	if c.Author != types.DiffAuthorAgent {
-		// "reviewer", not the "human" the enum spells, and not a name. The session records
-		// that a person wrote this and never which person, so a name would be invented; and
-		// "You" would be a lie to everyone except the one reader who captured it, which is
-		// exactly the wrong reader to optimize a committed note for.
+		// "reviewer", not a name. The session records which route and credential wrote this,
+		// never which person, so a name would be invented; and "You" would be a lie to
+		// everyone except the one reader who captured it, which is exactly the wrong reader to
+		// optimize a committed note for.
 		return "reviewer"
 	}
 	if c.AgentName == "" {
@@ -1021,7 +1021,7 @@ func commentAuthor(c types.DiffComment) string {
 // captureName derives a note name from the patch the thread was written against, so two
 // captures from different reviews cannot collide and a repeat of the SAME review is caught by
 // the exists check rather than silently overwriting.
-func captureName(sess *types.DiffSession) string {
+func captureName(sess *types.DiffReview) string {
 	digest := sess.AsOf
 	if len(digest) > 12 {
 		digest = digest[:12]
@@ -1040,29 +1040,29 @@ func captureName(sess *types.DiffSession) string {
 // unsent human ones, which is what a person writing alone in `magus diff` produces, so the
 // absence of a daemon is a smaller transcript rather than no transcript. The caller says which
 // one it got; see notesCapture's output.
-func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffSession, bool) {
-	if sess := daemonDiffSession(ctx); sess != nil {
+func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool) {
+	if sess := daemonDiffReview(ctx); sess != nil {
 		return sess, true
 	}
 	patch, _ := m.WorkingDiff(ctx, nil)
-	return storedDiffSession(m.CacheDir(), patch), false
+	return storedDiffReview(m.CacheDir(), patch), false
 }
 
-// storedDiffSession rebuilds what a capture needs from the files the store persists.
+// storedDiffReview rebuilds what a capture needs from the files the store persists.
 //
-// AsOf is the patch digest attachDiffSession would have stamped with no daemon in the picture,
+// AsOf is the patch digest attachDiffReview would have stamped with no daemon in the picture,
 // so the note this capture names is the one either path would have named for this tree. No
 // patch leaves it EMPTY rather than digesting the empty string, which would name every such
 // capture the same note and make the second one collide with the first.
-func storedDiffSession(cacheDir, patch string) *types.DiffSession {
-	sess := &types.DiffSession{Comments: changeset.NewStore(cacheDir).LoadDrafts()}
+func storedDiffReview(cacheDir, patch string) *types.DiffReview {
+	sess := &types.DiffReview{Comments: changeset.NewStore(cacheDir).LoadDrafts()}
 	if patch != "" {
 		sess.AsOf = changeset.PatchDigest(patch)
 	}
 	return sess
 }
 
-// daemonDiffSession reads the running daemon's review session, or nil when there is no daemon,
+// daemonDiffReview reads the running daemon's review session, or nil when there is no daemon,
 // no token, or nothing attached. Every failure is nil rather than an error: the caller has one
 // message to print for all of them, and it is about the session rather than the transport.
 //
@@ -1070,8 +1070,8 @@ func storedDiffSession(cacheDir, patch string) *types.DiffSession {
 // symbol shards and walks a reverse closure, and it wants the paths under review. This one
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
-func daemonDiffSession(ctx context.Context) *types.DiffSession {
-	token, err := auth.Load()
+func daemonDiffReview(ctx context.Context) *types.DiffReview {
+	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil
 	}
@@ -1090,7 +1090,7 @@ func daemonDiffSession(ctx context.Context) *types.DiffSession {
 	if resp.StatusCode != http.StatusOK {
 		return nil
 	}
-	var sess types.DiffSession
+	var sess types.DiffReview
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		return nil
 	}
@@ -1119,7 +1119,7 @@ func reviewThreads(ctx context.Context, m *magus.Magus) ([]types.ReviewThread, s
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
 func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, reason string, served bool) {
-	token, err := auth.Load()
+	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil, "", false
 	}
@@ -1168,7 +1168,7 @@ func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir s
 	threads, err := bindings.ReviewThreads(ctx, at)
 	// The watermark is PERSISTED, so the new-thread mark survives without the daemon that
 	// normally applies it. Reading it here never moves it, for the reason the handler gives.
-	watermark := types.DiffSession{SeenThreads: changeset.NewStore(cacheDir).LoadSeenThreads()}
+	watermark := types.DiffReview{SeenThreads: changeset.NewStore(cacheDir).LoadSeenThreads()}
 	fresh := make(map[string]struct{})
 	for _, id := range watermark.UnseenThreads(threads) {
 		fresh[id] = struct{}{}

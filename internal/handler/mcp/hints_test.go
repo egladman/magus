@@ -147,7 +147,7 @@ func TestFirstRef(t *testing.T) {
 func TestWrapAppliesHintsAndCountsTheirBytes(t *testing.T) {
 	t.Parallel()
 
-	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} }
+	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
 
 	t.Run("soft error result gets the hint and its bytes are measured", func(t *testing.T) {
 		tel := &fakeTel{}

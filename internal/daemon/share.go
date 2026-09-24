@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,10 +11,12 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,21 +30,21 @@ type shareResponse struct {
 }
 
 // shareRequest is the optional JSON body: the lifetime the operator picked in the
-// console before minting. Zero or absent means the default; the share manager
-// clamps any value to [share.MinTTL, share.MaxTTL], so the handler passes it through
-// without validating.
+// console before minting. Zero or absent means the default; a value outside
+// [auth.MinShareTTL, auth.MaxShareTTL] is refused, not clamped.
 type shareRequest struct {
 	TTLSeconds int `json:"ttl_seconds"`
 }
 
 // newShareHandler returns the POST /api/v1/share handler. It is mounted on the
-// loopback listener behind RequireLoopbackPeer + the cli/connector bearer guard,
+// loopback listener behind RequireLoopbackPeer and the console=write bearer guard,
 // so only the local, already-authenticated console can trigger a share. Each POST
-// mints a fresh read-only token and opens a new LAN listener, superseding any
-// active one. consoleDir is the built console served to the phone; when it is
-// empty (no build found), the endpoint fails with a clear, actionable message
-// rather than opening a listener that would 404 the app.
-func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]share.Route, log *slog.Logger) http.Handler {
+// mints a fresh share token within the caller's grant and opens a new LAN listener,
+// superseding any active one. consoleDir is the built console served to the phone;
+// when it is empty (no build found), the endpoint fails with a clear, actionable
+// message rather than opening a listener that would 404 the app. Every mint is recorded to the
+// trail under trailDir.
+func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]share.Route, trailDir string, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			handler.RefuseMethod(w, r, http.MethodPost)
@@ -54,14 +58,28 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			}, log)
 			return
 		}
-		// The body is optional: an absent or malformed body means "use the default
-		// lifetime", so a decode error is not fatal: it leaves req zero and Start
-		// falls back to the default. The manager clamps whatever ttl arrives.
+		// The body is optional, so an empty one means the default lifetime; a body that
+		// does not parse is refused rather than read as the default.
 		handler.LimitRequestBody(w, r)
 		var req shareRequest
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		sess, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
-		if err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			refuseShare(w, r, rpcerr.Error{
+				Code:    connect.CodeInvalidArgument,
+				Reason:  types.ShareRequestMalformed,
+				Message: "the share request body is not JSON of the form {\"ttl_seconds\": N}: " + err.Error(),
+			}, log)
+			return
+		}
+		minter := trail.CredentialFromContext(r.Context())
+		link, err := mgr.Start(minter.Grant, consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
+		switch {
+		case errors.Is(err, auth.ErrExceedsGrant):
+			refuseShare(w, r, rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.GrantInsufficient, Message: err.Error()}, log)
+			return
+		case errors.Is(err, auth.ErrShareLifetime):
+			refuseShare(w, r, rpcerr.Error{Code: connect.CodeInvalidArgument, Reason: types.TokenLifetimeOutOfRange, Message: err.Error()}, log)
+			return
+		case err != nil:
 			// A missing LAN interface (the common case) is a client-actionable
 			// condition, not a server fault: report it as 503 with the guidance
 			// share.SelectLANIPv4 already put in the message.
@@ -72,12 +90,13 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			}, log)
 			return
 		}
+		trail.AppendMint(r.Context(), trailDir, "share.mint", trail.MintRecord{Minted: link.Credential, Expires: link.ExpiresAt, Minter: minter})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		if err := json.NewEncoder(w).Encode(shareResponse{
-			URL:        sess.URL,
-			ExpiresAt:  sess.ExpiresAt.UTC().Format(time.RFC3339),
-			Superseded: sess.Superseded,
+			URL:        link.URL,
+			ExpiresAt:  link.ExpiresAt.UTC().Format(time.RFC3339),
+			Superseded: link.Superseded,
 		}); err != nil {
 			log.WarnContext(r.Context(), "[SHARE] encode response", slog.String("error", err.Error()))
 		}

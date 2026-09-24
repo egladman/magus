@@ -137,6 +137,9 @@ is one implementation to reason about and two ways to run it.
 #                    surface whose payload is not one string, such as an MCP
 #                    tool call (a tool name plus a params object)
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+#   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
+#                    subagent's command is graded under the job it was spawned for
+#                    rather than as its parent
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   HOST_ADVISE_BRANCH  the advise arm of that template
@@ -166,8 +169,10 @@ is one implementation to reason about and two ways to run it.
 # The host name and the session are ATTRIBUTION to magus, not policy. magus records them
 # on its activity event so a reader can tell which host produced an observation;
 # neither one can change the verdict, and a host whose event carries no session
-# id records none and is judged exactly the same. This file does read the host name for
-# one thing, which reply shape its host can parse, and that is why it must be given.
+# id records none and is judged exactly the same. The subagent id is the exception:
+# magus grades a subagent it saw spawned under that spawn's job. This file does read the
+# host name for one thing, which reply shape its host can parse, and that is why it must
+# be given.
 #
 # __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 # magus's own configuration surface, so a variable this template invents must stay
@@ -193,7 +198,7 @@ is one implementation to reason about and two ways to run it.
 # denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 # permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 # names the person's own terminal.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -211,6 +216,7 @@ is one implementation to reason about and two ways to run it.
 # the first one would terminate a ${...} expansion, silently truncating it.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 # The host this entry is wired into, from the entry's own argv and nowhere else: never the
 # event's shape, never the environment, never a default. Without it `magus shell` refuses
@@ -291,6 +297,9 @@ case $event in
 esac
 
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
+# Forwarded because this file selects one field out of the envelope: without it a
+# subagent's command reaches magus looking like its parent's.
+agent=$(printf '%s' "$event" | jq -r ".$HOST_AGENT_PATH // empty" 2>/dev/null)
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
 event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)
 
@@ -419,7 +428,7 @@ fi
 
 # Attribution is BEST EFFORT; the verdict is not.
 #
-# --agent-name and --session postdate the current magus release, and this template is downloaded and run
+# --agent-name, --session and --agent postdate the current magus release, and this template is downloaded and run
 # against whatever binary a reader already has. Passing them unconditionally does not degrade the
 # guard, it BREAKS it: an older binary rejects the unknown flag, prints its usage to stdout, and
 # exits non-zero, so the host receives no verdict at all and every deny and advise rule silently
@@ -478,7 +487,7 @@ guard_failure_notice() {
 # --transport sh names this form as the caller; the Buzz port says buzz. magus keeps a
 # deny's full text and its once-per-session notices per host, transport and session.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
@@ -552,9 +561,10 @@ wasteful, not destructive.
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
-# `--agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
-# magus-command.sh: the host name is REQUIRED on this script's argv, and both are
-# attribution recorded on the activity event, never an input to the verdict.
+# `--agent-name <host>`, HOST_SESSION_PATH and HOST_AGENT_PATH work exactly as they do
+# in magus-command.sh: the host name is REQUIRED on this script's argv, all three are
+# attribution recorded on the activity event, and the subagent id also selects the job
+# that subagent was spawned for.
 #
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-command.sh. It records what HOST_RESPONSE RENDERS, not
@@ -564,7 +574,7 @@ wasteful, not destructive.
 # before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 # Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 # renders as a deny.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
@@ -572,6 +582,7 @@ wasteful, not destructive.
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 # The host this entry is wired into, from the entry's own argv only; see magus-command.sh.
 agent_name=
@@ -646,6 +657,7 @@ case $event in
 esac
 
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+agent=$(printf '%s' "$event" | jq -r ".$HOST_AGENT_PATH // empty")
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 
 # Which payload magus gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects.
@@ -675,7 +687,7 @@ if [ -z "$HOST_RESPONSE" ]; then
   renders_ask=--renders-ask
 fi
 
-# Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate the current magus
+# Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate the current magus
 # release, and an older binary rejects the unknown flag outright - printing usage to stdout and
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
@@ -694,7 +706,7 @@ guard() {
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
@@ -767,7 +779,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -971,6 +983,9 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 //   HOST_TOOL_PATH   dot-path to the tool name, which decides whether the whole envelope
 //                    is forwarded rather than one field selected out of it
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+//   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
+//                    subagent's command is graded under the job it was spawned for
+//                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 //   HOST_RESPONSE    Go template rendering your host's reply
 //   HOST_ADVISE_BRANCH  the advise arm of that template
@@ -995,8 +1010,10 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // The host name and the session are ATTRIBUTION to magus, not policy. magus records them
 // on its activity event so a reader can tell which host produced an observation;
 // neither one can change the verdict, and a host whose event carries no session
-// id records none and is judged exactly the same. This file does read the host name for
-// one thing, which reply shape its host can parse, and that is why it must be given.
+// id records none and is judged exactly the same. The subagent id is the exception:
+// magus grades a subagent it saw spawned under that spawn's job. This file does read the
+// host name for one thing, which reply shape its host can parse, and that is why it must
+// be given.
 //
 // __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 // magus's own configuration surface, so a variable this template invents must stay
@@ -1032,7 +1049,7 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // wired to magus-command.sh. The arms ship ahead of the wiring for the same reason
 // the deny arm shipped ahead of its first rule, so a Codex config can move to Buzz
 // without a window where a decision renders as nothing.
-// magus-guard-template: 17
+// magus-guard-template: 18
 // magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
 // claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
@@ -1577,6 +1594,7 @@ fun main(args: [str]) > void {
 
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
     final agentName = agentNameOf(args);
     // Overridable alongside the other dot-paths rather than fixed: a host that points
@@ -1588,6 +1606,9 @@ fun main(args: [str]) > void {
     // Read BEFORE the availability check below, because the notices that check prints
     // are held to one firing per session and the session id is what keys them.
     final session = field(event, dotPath: sessionPath);
+    // Forwarded because this file selects one field out of the envelope: without it a
+    // subagent's command reaches magus looking like its parent's.
+    final agent = field(event, dotPath: agentPath);
     final transcript = field(event, dotPath: transcriptPath);
     final eventName = field(event, dotPath: "hook_event_name");
     final toolName = field(event, dotPath: toolPath);
@@ -1626,7 +1647,7 @@ fun main(args: [str]) > void {
 
     // Attribution is BEST EFFORT; the verdict is not.
     //
-    // --agent-name and --session postdate the current magus release, and this template is
+    // --agent-name, --session and --agent postdate the current magus release, and this template is
     // downloaded and run against whatever binary a reader already has. Passing them
     // unconditionally does not degrade the guard, it BREAKS it: an older binary rejects the
     // unknown flag, prints its usage to stdout, and exits non-zero, so the host receives no
@@ -1646,7 +1667,7 @@ fun main(args: [str]) > void {
     // deny's full text and its once-per-session notices per host, transport and session.
     final attributed = mut [<str>];
     foreach (flag in guard.flags) { attributed.append(flag); }
-    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript]) {
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
@@ -1723,9 +1744,9 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
-//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths
-//                    into the event; the tool name is what decides whether the whole
-//                    envelope goes rather than one field selected out of it
+//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_AGENT_PATH, HOST_TRANSCRIPT_PATH
+//                    dot-paths into the event; the tool name is what decides whether the
+//                    whole envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
 //   __MAGUS_BIN      the binary, when it is not on PATH
@@ -1750,7 +1771,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // coverage declaration states what a HOST gets. The Codex ask arm is implemented and
 // graded here anyway, so a Codex config can move to Buzz with no window in which a
 // decision renders as nothing.
-// magus-guard-template: 17
+// magus-guard-template: 18
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -1943,6 +1964,7 @@ fun main(args: [str]) > void {
     final agentName = agentNameOf(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
 
     // The binary is resolved BEFORE stdin is drained, where magus-command.buzz reads first.
@@ -1969,6 +1991,9 @@ fun main(args: [str]) > void {
         return;
     }
     final session = field(event, dotPath: sessionPath);
+    // Forwarded for the reason magus-command.buzz forwards it: a selected path carries no
+    // subagent id of its own.
+    final agent = field(event, dotPath: agentPath);
     final transcript = field(event, dotPath: transcriptPath);
 
     // Codex is the host the entry names, exactly as magus-command.buzz decides it. No
@@ -1995,7 +2020,7 @@ fun main(args: [str]) > void {
     }
     final guard = Guard{ bin = bin, payload = payload, response = response };
 
-    // Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate
+    // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
     // printing usage to stdout and exiting non-zero, which leaves the host with no verdict
     // rather than an unattributed one. Try with attribution, fall back to the call this
@@ -2004,7 +2029,7 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript];
+    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {
@@ -2070,7 +2095,7 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -2294,7 +2319,7 @@ does, so it selects nothing and imports no JSON reader at all.
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, matching the templates beside it and the
 // missing `set -e` in the sh copy. A hook that can fail is a hook that can break
@@ -2471,7 +2496,7 @@ escape its sh twin builds out of a pipeline is one byte-indexed loop here.
 // carries no verdict on no surface. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, matching the templates beside it and the
 // missing `set -e` in the sh copy. A hook that can fail is a hook that can break the
@@ -2716,7 +2741,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
@@ -2846,7 +2871,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.

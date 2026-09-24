@@ -380,6 +380,35 @@ export fun help(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, want, help.Spells, "string-literal mentions must not count")
 }
 
+// TestDispatchOnly pins the static proof a target does nothing but call spell ops with
+// its own context: any other statement, argument, callee or helper call withholds it,
+// since the engine schedules a dispatch-only target as the ops themselves.
+func TestDispatchOnly(t *testing.T) {
+	g := Extract(`import "magus/spell/typescript";
+import "magus/spell/md";
+fun helper(ctx: magus\Context) > void { typescript["pnpm-install"](ctx); }
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
+export fun both(c: magus\Context, args: [str]) > void { typescript["pnpm-install"](c); md.markdownlint(c); }
+export fun extra(ctx: magus\Context, args: [str]) > void { typescript["pnpm-install"](ctx); ctx.needs(install); }
+export fun viaHelper(ctx: magus\Context, args: [str]) > void { helper(ctx); }
+export fun noArg(ctx: magus\Context, args: [str]) > void { typescript["pnpm-install"](); }
+export fun otherArg(ctx: magus\Context, args: [str]) > void { typescript["pnpm-install"](args); }
+export fun computed(ctx: magus\Context, args: [str]) > void { typescript[args[0]](ctx); }
+export fun notSpell(ctx: magus\Context, args: [str]) > void { other["x"](ctx); }
+export fun empty(ctx: magus\Context, args: [str]) > void {}
+`)
+	want := map[string]bool{
+		"install": true, "both": true,
+		"extra": false, "via-helper": false, "no-arg": false, "other-arg": false,
+		"computed": false, "not-spell": false, "empty": false,
+	}
+	got := map[string]bool{}
+	for _, n := range g {
+		got[n.Name] = n.DispatchOnly
+	}
+	assert.Equal(t, want, got)
+}
+
 // TestNameNormalization pins the fix for the node-vs-edge name mismatch: node
 // names and dependency identifiers must both be normalized the way the run path
 // registers targets (kebab-case), so a camelCase function and a hyphenated

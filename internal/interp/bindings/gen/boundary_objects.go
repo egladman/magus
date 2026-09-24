@@ -236,6 +236,7 @@ func ObjectTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsSpells[indexSpells] = ObjectTargetSpellUse(v.Spells[indexSpells])
 	}
 	out.MapSet("spells", vm.ListValue(itemsSpells))
+	out.MapSet("dispatchOnly", vm.BoolValue(v.DispatchOnly))
 	itemsCrossDependencies := make([]vm.Value, len(v.CrossDependencies))
 	for indexCrossDependencies := range v.CrossDependencies {
 		itemsCrossDependencies[indexCrossDependencies] = ObjectCrossTargetRef(v.CrossDependencies[indexCrossDependencies])
@@ -848,6 +849,25 @@ func ObjectFileReport(v types.FileReport) vm.Value {
 	return out
 }
 
+func ObjectCheck(v types.Check) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	out.MapSet("message", vm.StrValue(v.Message))
+	itemsDetails := make([]vm.Value, len(v.Details))
+	for indexDetails := range v.Details {
+		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
+	}
+	out.MapSet("details", vm.ListValue(itemsDetails))
+	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
+	itemsFix := make([]vm.Value, len(v.Fix))
+	for indexFix := range v.Fix {
+		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
+	}
+	out.MapSet("fix", vm.ListValue(itemsFix))
+	return out
+}
+
 func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -865,6 +885,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
 	out.MapSet("signature", vm.StrValue(v.Signature))
 	out.MapSet("baseSignature", vm.StrValue(v.BaseSignature))
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
+	}
+	out.MapSet("checks", vm.ListValue(itemsChecks))
 	return out
 }
 
@@ -964,6 +989,21 @@ func ObjectDiffReviewed(v types.DiffReviewed) vm.Value {
 	return out
 }
 
+func ObjectDiagnostic(v types.Diagnostic) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("message", vm.StrValue(v.Message))
+	out.MapSet("url", vm.StrValue(v.URL))
+	return out
+}
+
+func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("reason", vm.StrValue(string(v.Reason)))
+	return out
+}
+
 func ObjectDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -993,25 +1033,16 @@ func ObjectDiff(v types.Diff) vm.Value {
 	}
 	out.MapSet("api", optAPI)
 	out.MapSet("reviewed", ObjectDiffReviewed(v.Reviewed))
-	return out
-}
-
-func ObjectDoctorCheck(v types.DoctorCheck) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("status", vm.StrValue(string(v.Status)))
-	out.MapSet("message", vm.StrValue(v.Message))
-	itemsDetails := make([]vm.Value, len(v.Details))
-	for indexDetails := range v.Details {
-		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
+	optConformanceError := vm.Null
+	if v.ConformanceError != nil {
+		optConformanceError = ObjectDiagnostic((*v.ConformanceError))
 	}
-	out.MapSet("details", vm.ListValue(itemsDetails))
-	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
-	itemsFix := make([]vm.Value, len(v.Fix))
-	for indexFix := range v.Fix {
-		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
+	out.MapSet("conformanceError", optConformanceError)
+	itemsUncovered := make([]vm.Value, len(v.Uncovered))
+	for indexUncovered := range v.Uncovered {
+		itemsUncovered[indexUncovered] = ObjectDiffUncovered(v.Uncovered[indexUncovered])
 	}
-	out.MapSet("fix", vm.ListValue(itemsFix))
+	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
 	return out
 }
 
@@ -1029,7 +1060,7 @@ func ObjectDoctorReport(v types.DoctorReport) vm.Value {
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	itemsChecks := make([]vm.Value, len(v.Checks))
 	for indexChecks := range v.Checks {
-		itemsChecks[indexChecks] = ObjectDoctorCheck(v.Checks[indexChecks])
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
 	out.MapSet("summary", ObjectDoctorSummary(v.Summary))
@@ -1342,10 +1373,32 @@ func ObjectJobUnattributedWrite(v types.JobUnattributedWrite) vm.Value {
 	return out
 }
 
-func ObjectJobActor(v types.JobActor) vm.Value {
+func ObjectGrant(v types.Grant) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("tokens", vm.IntValue(int64(v.Tokens)))
+	out.MapSet("mcp", vm.IntValue(int64(v.MCP)))
+	out.MapSet("console", vm.IntValue(int64(v.Console)))
+	return out
+}
+
+func ObjectCredential(v types.Credential) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("class", vm.StrValue(string(v.Class)))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("grant", ObjectGrant(v.Grant))
+	return out
+}
+
+func ObjectOrigin(v types.Origin) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("user", vm.StrValue(v.User))
+	out.MapSet("uid", vm.StrValue(v.UID))
+	out.MapSet("entryPoint", vm.StrValue(string(v.EntryPoint)))
 	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("agent", vm.StrValue(v.Agent))
+	out.MapSet("credential", ObjectCredential(v.Credential))
 	return out
 }
 
@@ -1514,7 +1567,7 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("writeProof", vm.StrValue(string(v.WriteProof)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
-	out.MapSet("registeredBy", ObjectJobActor(v.RegisteredBy))
+	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))
@@ -1688,7 +1741,75 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 	return out
 }
 
-func ObjectSpawnVerdict(v types.SpawnVerdict) vm.Value {
+func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("program", vm.StrValue(v.Program))
+	itemsArgs := make([]vm.Value, len(v.Args))
+	for indexArgs := range v.Args {
+		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
+	}
+	out.MapSet("args", vm.ListValue(itemsArgs))
+	out.MapSet("repeats", vm.BoolValue(v.Repeats))
+	return out
+}
+
+func ObjectCheckoutState(v types.CheckoutState) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	itemsRemoteBranches := make([]vm.Value, len(v.RemoteBranches))
+	for indexRemoteBranches := range v.RemoteBranches {
+		itemsRemoteBranches[indexRemoteBranches] = vm.StrValue(v.RemoteBranches[indexRemoteBranches])
+	}
+	out.MapSet("remoteBranches", vm.ListValue(itemsRemoteBranches))
+	return out
+}
+
+func ObjectCommandRequest(v types.CommandRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("command", vm.StrValue(v.Command))
+	out.MapSet("description", vm.StrValue(v.Description))
+	itemsCommands := make([]vm.Value, len(v.Commands))
+	for indexCommands := range v.Commands {
+		itemsCommands[indexCommands] = ObjectCommandInvocation(v.Commands[indexCommands])
+	}
+	out.MapSet("commands", vm.ListValue(itemsCommands))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	optCheckout := vm.Null
+	if v.Checkout != nil {
+		optCheckout = ObjectCheckoutState((*v.Checkout))
+	}
+	out.MapSet("checkout", optCheckout)
+	return out
+}
+
+func ObjectWriteRequest(v types.WriteRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
+	out.MapSet("content", vm.StrValue(v.Content))
+	out.MapSet("oldText", vm.StrValue(v.OldText))
+	out.MapSet("newText", vm.StrValue(v.NewText))
+	return out
+}
+
+func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))

@@ -122,7 +122,7 @@ const (
 	// loaded, tightened by an edit that is live, loosened by one waiting on approval,
 	// settled by approval, or removed. Written only on a change, so the lineage of a
 	// workspace's policy reads as one row per step. The request blob carries each source
-	// path with its working-tree and approved git blob ids, never a source body.
+	// path with its working-tree and approved content ids, never a source body.
 	KindGuardPolicy Kind = "guard_policy"
 )
 
@@ -132,35 +132,37 @@ const (
 	OutcomeError = "error"
 )
 
-// Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Actor/
+// Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Origin/
 // Action/Outcome) is common to every kind; the payload refs point into the blob store so a large
 // body never bloats the line. Field names are snake_case and match the journal's Event where
 // they overlap (Ts, DurationMs).
 //
-// Host and Session duplicate what an agent-hook event also records in its request blob, and that
-// duplication is deliberate: a reader grouping a page of 200 rows by agent host must not have to
-// fetch 200 blobs to do it. They stay short, so the "lines stay small" invariant holds.
+// Who acted is the [types.Origin], one field per channel, rather than one string a reader must
+// guess the kind of. Its Host and Session duplicate what an agent-hook event also records in its
+// request blob, and that duplication is deliberate: a reader grouping a page of 200 rows by
+// agent host must not have to fetch 200 blobs to do it. They stay short, so the "lines stay
+// small" invariant holds. [Append] stamps the OS account on every event.
 type Event struct {
-	Ts        int64  `json:"ts"`                   // unix milliseconds at the action's start
-	Kind      Kind   `json:"kind"`                 // one of the Kind* constants
-	Actor     string `json:"actor"`                // who: an agent id, "daemon", a user
-	UserAgent string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
-	Host      string `json:"host,omitempty"`       // the agent host that produced the action, as its own wrapper named itself; "" when the producer could not know
-	Session   string `json:"session,omitempty"`    // the host's own session id, when its event carried one
-	Workspace string `json:"workspace,omitempty"`  // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
-	Action    string `json:"action"`               // the specific action: a tool name, a job command, "connector.create"
+	Ts           int64  `json:"ts"`                   // unix milliseconds at the action's start
+	Kind         Kind   `json:"kind"`                 // one of the Kind* constants
+	UserAgent    string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
+	types.Origin `json:",inline"`
+	Workspace    string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
+	Action       string `json:"action"`              // the specific action: a tool name, a job command, "connector.create"
 	// Lease is the lease this action belongs to, when the producer could
 	// correlate one (a marker line, or the BAGGAGE channel); ""
 	// when uncorrelated.
-	Lease         string `json:"lease,omitempty"`
-	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
-	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurationMs    int64  `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
-	RequestRef    string `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
-	ResponseRef   string `json:"response_ref,omitempty"`  // blob ref for the response body
-	Preview       string `json:"preview,omitempty"`       // opening characters of the response, for list views
-	RequestBytes  int64  `json:"request_bytes,omitempty"` // full request length
-	ResponseBytes int64  `json:"response_bytes,omitempty"`
+	Lease string `json:"lease,omitempty"`
+	// LeaseFrom is which source answered Lease, on the events whose producer resolved one.
+	LeaseFrom     types.LeaseSource `json:"lease_from,omitempty"`
+	Outcome       string            `json:"outcome"`                 // one of the Outcome* constants
+	Error         string            `json:"error,omitempty"`         // error text when Outcome is OutcomeError
+	DurationMs    int64             `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
+	RequestRef    string            `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
+	ResponseRef   string            `json:"response_ref,omitempty"`  // blob ref for the response body
+	Preview       string            `json:"preview,omitempty"`       // opening characters of the response, for list views
+	RequestBytes  int64             `json:"request_bytes,omitempty"` // full request length
+	ResponseBytes int64             `json:"response_bytes,omitempty"`
 	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
 	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
 	VerdictRef string `json:"verdict_ref,omitempty"`
@@ -205,8 +207,8 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 // AgentCommand is the normalized, host-independent observation an agent hook contributes to the
 // trail. Command and Path are mutually exclusive in the supplied hooks: the former is a shell-tool
 // invocation, the latter a file-edit invocation. Host integrations may omit identity fields when
-// their hook event does not expose them; the event remains attributable to the generic "agent"
-// actor rather than pretending to know more than the host supplied.
+// their hook event does not expose them; the event is then unattributed rather than pretending
+// to know more than the host supplied.
 // Transcript is the host's own record of the session this observation came from, as an
 // absolute path on the machine that produced it. It is a POINTER, never content: the trail
 // stays a record of paths and timings, and a reader who wants what was actually said opens
@@ -217,14 +219,16 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 // the path is what a reader follows to see the rest. A host that exposes no transcript sends
 // none, exactly as with the other identity fields.
 //
-// Lease is the lease a producer already knew this observation belongs to, and is
-// usually empty: a hook observes a command, not a lease, so nothing in the host event names
-// one and [AppendAgentCommand] falls back to the environment channel.
+// Lease is the lease the producer resolved for this observation through job.LeaseQuery,
+// with LeaseFrom naming its source; empty when nothing answered.
 type AgentCommand struct {
-	Actor      string
-	Workspace  string
+	Workspace string
+	// EntryPoint is where the observation entered magus; empty records a hook.
+	EntryPoint types.EntryPoint
 	Host       string
 	Session    string
+	// Agent is the host's subagent id, empty for the main conversation.
+	Agent      string
 	Transcript string
 	Event      string
 	Tool       string
@@ -235,8 +239,9 @@ type AgentCommand struct {
 	Context    string
 	// Rule is the guard's stable denial identifier. It is empty for a pass,
 	// advisory, or a deny whose producer cannot identify a single rule.
-	Rule  string
-	Lease string
+	Rule      string
+	Lease     string
+	LeaseFrom types.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -246,6 +251,9 @@ type AgentCommand struct {
 	// PolicyDigest and DecidedBy link the verdict to the rules that reached it; see Event.
 	PolicyDigest string
 	DecidedBy    string
+	// RuleFailures are the workspace command rules that judged nothing, empty when every
+	// rule answered.
+	RuleFailures []RuleFailure
 }
 
 const agentCommandSchemaVersion = 1
@@ -269,7 +277,21 @@ type agentCommandResponse struct {
 	Rule          string `json:"rule,omitempty"`
 	// No schema bump: an added optional field a reader can ignore leaves every existing
 	// blob readable and every existing reader correct.
-	PreauthorizedBy string `json:"preauthorized_by,omitempty"`
+	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
+	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
+}
+
+// redactFailures redacts each failure's error text, which quotes workspace code and may
+// quote a command line.
+func redactFailures(ctx context.Context, in []RuleFailure) []RuleFailure {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]RuleFailure, len(in))
+	for i, f := range in {
+		out[i] = RuleFailure{Side: f.Side, Error: secret.RedactString(ctx, f.Error)}
+	}
+	return out
 }
 
 // AppendAgentCommand writes one normalized agent-hook observation into the existing activity
@@ -309,30 +331,26 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Context:         command.Context,
 		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
+		RuleFailures:    redactFailures(ctx, command.RuleFailures),
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
-	// A supplied lease is what the producer could correlate at the observation itself and wins;
-	// the BAGGAGE channel is this process's own claim about itself and fills the gap. A supplied one that
-	// fails types.ValidJobID falls through to the environment rather than being stamped, on the same
-	// reasoning as everywhere else: no join beats a wrong one.
+	// The lease is the one the producer resolved through job.LeaseQuery, recorded as given:
+	// reading BAGGAGE here as well would be a second resolution order. One that fails
+	// types.ValidJobID is dropped with its source, since no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
 	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
-	lease := command.Lease
+	lease, leaseFrom := command.Lease, command.LeaseFrom
 	if !types.ValidJobID(lease) {
-		lease = LeaseFromEnv()
+		lease, leaseFrom = "", ""
 	}
 
 	action := command.Tool
 	if action == "" {
 		action = "command"
-	}
-	actor := command.Actor
-	if actor == "" {
-		actor = "agent"
 	}
 	preview := "observed"
 	if command.Decision != "" {
@@ -341,12 +359,11 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	Append(ctx, base, Event{
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
-		Actor:         actor,
-		Host:          command.Host,
-		Session:       command.Session,
+		Origin:        hookOrigin(types.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
+		LeaseFrom:     leaseFrom,
 		Outcome:       OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
@@ -376,10 +393,14 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // its coverage vocabulary (deny=model, advise=model, pass=none), and a bare Model field here
 // would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
-	Actor         string
-	Workspace     string
-	Host          string
-	Session       string
+	Workspace string
+	// EntryPoint is where the observation entered magus; empty records a hook.
+	EntryPoint types.EntryPoint
+	Host       string
+	Session    string
+	// Agent is the host's id for the subagent that spawned, empty for the main
+	// conversation.
+	Agent         string
 	Event         string
 	Tool          string
 	Child         string
@@ -395,11 +416,11 @@ type AgentSpawn struct {
 	Target string
 	// RuleFailures are the workspace spawn rules that judged nothing, empty when every
 	// rule answered.
-	RuleFailures []SpawnRuleFailure
+	RuleFailures []RuleFailure
 }
 
-// SpawnRuleFailure is one side of a workspace spawn rule that judged nothing, and why.
-type SpawnRuleFailure struct {
+// RuleFailure is one side of a workspace guard rule that judged nothing, and why.
+type RuleFailure struct {
 	// Side is worktree or approved, the values Event.DecidedBy names them by.
 	Side  string `json:"side"`
 	Error string `json:"error"`
@@ -422,8 +443,8 @@ type agentSpawnRequest struct {
 	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
 	DeclaredModel string `json:"declared_model,omitempty"`
 	// Target and RuleFailures are additive for the reason DeclaredModel is.
-	Target       string             `json:"target,omitempty"`
-	RuleFailures []SpawnRuleFailure `json:"rule_failures,omitempty"`
+	Target       string        `json:"target,omitempty"`
+	RuleFailures []RuleFailure `json:"rule_failures,omitempty"`
 }
 
 const (
@@ -459,10 +480,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// repository would pay for one bad payload.
 	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
-	failures := make([]SpawnRuleFailure, len(spawn.RuleFailures))
-	for i, f := range spawn.RuleFailures {
-		failures[i] = SpawnRuleFailure{Side: f.Side, Error: secret.RedactString(ctx, f.Error)}
-	}
+	failures := redactFailures(ctx, spawn.RuleFailures)
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
 		Host:          spawn.Host,
@@ -489,16 +507,10 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	case action == "":
 		action = ActionAgentSpawn
 	}
-	actor := spawn.Actor
-	if actor == "" {
-		actor = "agent"
-	}
 	Append(ctx, base, Event{
 		Ts:           time.Now().UnixMilli(),
 		Kind:         KindAgentSpawn,
-		Actor:        actor,
-		Host:         spawn.Host,
-		Session:      spawn.Session,
+		Origin:       hookOrigin(types.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
 		Workspace:    spawn.Workspace,
 		Action:       action,
 		Lease:        lease,
@@ -514,10 +526,9 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 // none: the magus.lease member of the W3C BAGGAGE channel. See [SpawnFromEnv], which
 // reads the rest of what that environment claimed.
 //
-// This is the second of the two lease channels, and the two say different things. The
-// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a spawn it
-// is making; the environment is the WORKER's own claim about itself. The ENVIRONMENT
-// wins where both are available, because this is what [job.ActingLease] reads first.
+// It is the worker's own claim about itself, unlike a prompt's lease line (see
+// leaseFromContext), which is the orchestrator's assertion about a spawn it is making.
+// Grading ranks it last, below every record; see job.LeaseQuery.Resolve.
 func LeaseFromEnv() string { return SpawnFromEnv().Lease }
 
 // leaseScanBytes bounds the head of the handed context the marker may appear in. The marker
@@ -586,6 +597,7 @@ func Append(ctx context.Context, base string, e Event) {
 		return
 	}
 	e = redactEvent(ctx, e)
+	e.Origin = StampOrigin(ctx, e.Origin)
 	line, err := json.Marshal(e)
 	if err != nil {
 		return
@@ -771,10 +783,10 @@ func Rotate(base string) { rotate(base, maxEvents) }
 
 // minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
 // file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,
-// Actor, Action and Outcome have no omitempty, so even an all-empty event marshals to about 65
-// bytes plus a newline. Rounding down to 64 keeps the check conservative: it can only ever decide
-// to look when it did not need to, never to skip when it did.
-const minEventBytes = 64
+// Action and Outcome have no omitempty, so even an all-empty event marshals to 43 bytes plus a
+// newline. Rounding down to 40 keeps the check conservative: it can only ever decide to look when
+// it did not need to, never to skip when it did.
+const minEventBytes = 40
 
 // perKindFloor is how many of a kind's newest events survive a rotate regardless of how loud
 // its neighbors are.
@@ -1000,8 +1012,8 @@ func ValidRef(ref string) bool {
 
 // redactEvent masks every free-text field on an event.
 //
-// The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
-// Workspace, Lease and the blob refs are enumerated values, identities and content addresses, none
+// The structural fields are deliberately left alone: Kind, Outcome, the Origin, Workspace,
+// Lease and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing, the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a

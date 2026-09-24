@@ -118,7 +118,7 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
-        "preflight": {"skip_cache": "installs node_modules, which no cache entry records; a replay restores nothing"},
+        "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         // index-generate renders `magus describe graph -o markdown`, so its output is a
         // function of the WHOLE knowledge graph - every source file in the workspace and
@@ -145,7 +145,7 @@ magus\project({
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
-        // render is the FAST re-render path (site_render only, no MAGUS.md/changelog/
+        // render is the FAST re-render path (site_render and the changelog page, no MAGUS.md/
         // JS-bundle rebuild, no drift gate) the workspace-root `serve` dev loop calls on
         // a docs change. skip_cache so every invocation actually re-renders gen/.
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
@@ -169,20 +169,14 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
-
+// install installs node_modules through the typescript spell's pnpm-install op. That
+// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
+// stamp, so an unchanged tree forks nothing and a canceled install, which leaves a
+// node_modules that EXISTS but is incomplete, reinstalls. Reached once per invocation
+// through install, so the fan-out of build-* targets below does not race several
+// installs in the same directory.
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-// Always let pnpm validate the install. A canceled or interrupted install leaves a
-// node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))`
-// guard this replaced read that tree as ready and handed the missing packages to
-// esbuild instead - surfacing as `Could not resolve "@codemirror/view"` from
-// build-playground-editor, which reads like a source bug rather than a half-installed
-// tree. On a warm tree --frozen-lockfile is about a second and changes nothing.
-// Reached once per invocation through preflight, so the fan-out of build-* targets
-// below does not race several installs in the same directory.
-fun install() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-}
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
@@ -241,11 +235,11 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // changed" than by "a binary artifact changed". Costs nothing at runtime - a read
         // is hashed, not executed, so no buf step enters this project's boundary.
         workspace\file("proto/magus/**/*.proto"),
-        workspace\file("proto/gen/descriptor.binpb"), workspace\file("CHANGELOG.md"),
+        workspace\file("proto/gen/descriptor.binpb"),
         workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
     // entry here that needs a recursive glob; every other generator here writes flat.
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "changelog.md", "benchmarks/**/*.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
     // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
@@ -255,7 +249,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // pruneContentPageCopies removes only byte-identical numeric collisions
         // next to pages it just regenerated. Those copies are still source files
         // until removed, so name that narrow mutation boundary explicitly.
-        "reference/config *.md", "changelog *.md");
+        "reference/config *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
@@ -265,31 +259,6 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-ruledocs", "-out", "./reference/rules"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
-    // The changelog as a docs page. CHANGELOG.md is generated at the repo ROOT (magus-utils,
-    // from releases/*.yaml) and sits outside this project's walk, so a reader upgrading has
-    // nowhere on the site to see what changed. Copying it in with frontmatter hands it to the
-    // ordinary page pipeline - search index, breadcrumbs, related cards, the orphan gate - with
-    // no renderer change at all, the same way the generated manpages arrive. Copy, not a
-    // symlink: the walk reads real files, and a link would leave the page's provenance chip
-    // pointing outside the project.
-    // Links inside CHANGELOG.md are written for GitHub, where they resolve from the repo
-    // ROOT ("docs/concepts/knowledge.md"). This page sits INSIDE docs/, so the prefix has to
-    // come off or every one of them 404s - which the asset-integrity gate catches, and did.
-    // Rewriting here rather than in CHANGELOG.md keeps the file correct in both places.
-    // CONTRIBUTING.md is the other root-relative target, and it needs a different rewrite
-    // than the docs/ prefix: it is not a docs page at all. site/development.buzz renders the
-    // repo-root file as a synthesized page under development/, so the GitHub-correct
-    // "CONTRIBUTING.md" has to become that URL rather than just losing a prefix. Trailing
-    // slash and no anchor here so an existing "#naming" suffix survives the join.
-    final changelogMd = fs\readFile("../CHANGELOG.md")
-        .split("](docs/").join("](")
-        .split("](CONTRIBUTING.md").join("](development/contributing/");
-    fs\writeFile("changelog.md",
-        "---\ntitle: Changelog\ngenerated_from: CHANGELOG.md\n"
-        + "description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.\n"
-        + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
-        + changelogMd);
-
     // Benchmark results as docs pages, the same way and for the same reason: a result
     // that lives only in the repository is one a reader never meets. Each committed
     // report under benchmarks/agent/reports (written by `agent-bench-report --publish`)
@@ -298,7 +267,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("benchmarks");
     // A report sits at reports/<date>/<provider>/<model>.md and keeps that path on
     // the site, so a URL names the run the way the tree does.
-    final contentPages: mut [str] = mut ["reference/config.md", "changelog.md", "benchmarks/build-tools.md"];
+    final contentPages: mut [str] = mut ["reference/config.md", "benchmarks/build-tools.md"];
     foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
         final rel = report.value.split("../benchmarks/agent/reports/").join("");
         final segments = rel.split("/");
@@ -373,6 +342,36 @@ fun isDecimalCopySuffix(suffix: str) > bool {
     return true;
 }
 
+// changelog-page renders the changelog as a docs page: every release from releases/*.yaml,
+// and under [Unreleased] the fragments in changes/unreleased/. It is build output and
+// never committed (.gitignore), because a committed page would move with every fragment
+// and put a shared file back into every pull request the fragments keep apart. The root
+// CHANGELOG.md carries the same releases with an empty [Unreleased].
+//
+// A page rather than a link to the root file: the ordinary page pipeline (search index,
+// breadcrumbs, related cards, the orphan gate) picks it up with no renderer change.
+// Links in the changelog are written for GitHub, resolving from the repo ROOT
+// ("docs/concepts/knowledge.md"). This page sits INSIDE docs/, so the prefix comes off or
+// every one of them 404s, which the asset-integrity gate catches. CONTRIBUTING.md is
+// not a docs page at all: site/development.buzz synthesizes it under development/, so
+// that link becomes the URL. Trailing slash and no anchor, so a "#naming" suffix survives.
+export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(workspace\file("releases/*.yaml"), workspace\file("changes/unreleased/*.md"),
+        workspace\file("cmd/magus-utils/**/*.go"), workspace\file("internal/**/*.go"),
+        workspace\file("go.mod"), workspace\file("go.sum"));
+    ctx.writesFiles("changelog.md");
+    go["go-run"](ctx, {"args": ["../cmd/magus-utils", "generate-changelog", "-releases", "../releases",
+        "-unreleased", "../changes/unreleased", "-changelog", "changelog.md"]});
+    final changelogMd = fs\readFile("changelog.md")
+        .split("](docs/").join("](")
+        .split("](CONTRIBUTING.md").join("](development/contributing/");
+    fs\writeFile("changelog.md",
+        "---\ntitle: Changelog\ngenerated_from: CHANGELOG.md\n"
+        + "description: Every change to magus, newest first, in Keep a Changelog format, starting with the unreleased entries. Generated from changes/unreleased/ and releases/*.yaml.\n"
+        + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
+        + changelogMd);
+}
+
 // site-generate owns publication. It cannot replay while it reads VCS state; the
 // public generate target still lets the independent content stages fan out first.
 //
@@ -385,7 +384,7 @@ fun isDecimalCopySuffix(suffix: str) > bool {
 // hashes gen/ into the service-worker precache and the site manifest, so a bundle written
 // after it would ship with a manifest that does not describe it.
 export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(build_hljs, build_playground_editor, build_playground);
+    ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
     ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
@@ -407,10 +406,10 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
 // full 536-page render to gate bytes that are not tracked.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs generate refreshes the committed derived content; `magus run build docs` renders the site itself, and `magus run render docs` is the fast docs/blog preview");
-    ctx.needs(preflight);
+    ctx.needs(install);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
-        "reference/rules", "reference/api", "changelog.md"];
+        "reference/rules", "reference/api"];
     // The three pages content-generate INJECTS into rather than writes whole. It declares them
     // itself, but the write is attributed to this composed target as well, so the declaration has
     // to exist in both places or a run that actually changes one trips MGS4007.
@@ -419,7 +418,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // change in the same run that regenerates them, so the composed target almost never wrote one
     // and the missing declaration never fired.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
-        "reference/config *.md", "changelog *.md");
+        "reference/config *.md");
     // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md, the root
     // CHANGELOG.md, assets/gen (the README's diagram pair), and the derived Markdown in
     // CONTENT. gen/ is absent because it is ignored, and an ignored path is never dirty, so
@@ -439,9 +438,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
     // these paths at all - it used to be inert there and fire only in CI.
     final before = drift\hashes(GENERATED);
-    // changelog-generate runs FIRST, alone: content-generate now copies CHANGELOG.md in as a
-    // docs page, so the two no longer own disjoint outputs and cannot share a stage - fanned
-    // out together, the page could be written from the previous release's changelog.
+    // changelog-generate refreshes the root CHANGELOG.md this gate covers. Its own stage,
+    // ahead of the fan-out below: both it and content-generate compile Go under internal/.
     ctx.needs(workspace\changelog_generate);
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
@@ -517,7 +515,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
 }
 // lint runs the client-side TypeScript gates: tsc for type errors and Biome for the
 // banned patterns (no `any`, no non-null assertions - see biome.json). Both need
-// node_modules, which it reaches through format -> generate -> preflight; proc.exec raises
+// node_modules, which it reaches through format -> generate -> install; proc.exec raises
 // on a non-zero exit, so either gate fails lint.
 //
 // Markdown formatting is dprint, run once from the root project (its scope is
@@ -570,7 +568,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
 // pnpm-workspace.yaml cooling period is the stronger half of this.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     advisories\audit();
 }
 
@@ -602,7 +600,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // than a second one, and full reflection means std/validate_wasm.go's no-op stub -
 // there because TinyGo's wasm reflect omits NumIn/NumOut - can go.
 export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.needs(gopherbuzz\build);
     ctx.writesFiles("gen/playground/buzz.wasm", "gen/playground/wasm_exec.js");
     fs\mkdirAll("gen/playground");
@@ -658,7 +656,7 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
 // works offline without any CDN. Bump the version in package.json and the next generate picks
 // it up; gen/ is not committed, so generate runs this as one of its stages.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
     proc\exec("pnpm", ["run", "build-hljs"], ".", {});
@@ -671,7 +669,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
 // every published byte needs a target CI can run - a script nothing invokes would have
 // shipped a playground with no editor.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
     proc\exec("pnpm", ["run", "build-editor"], ".", {});
@@ -680,6 +678,8 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> an
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
 export fun render(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
+    // The one page no checkout carries, so a fresh tree would render without it.
+    ctx.needs(changelog_page);
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\projectGraph());
 }

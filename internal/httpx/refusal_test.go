@@ -20,7 +20,21 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-var rejectAll = func(string) bool { return false }
+var rejectAll Verifier = func(string) (types.Credential, bool) { return types.Credential{}, false }
+
+// anyNeed is a need every test credential below meets; the refusals here are about the token.
+var anyNeed = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
+
+// built unwraps a guard constructor for a test. A build error answers every request 500 with
+// the error text, so the status assertion that follows names it.
+func built(h http.Handler, err error) http.Handler {
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		})
+	}
+	return h
+}
 
 // wireStatus is the AIP-193 HTTP/1.1+JSON body, decoded the way a client would.
 type wireStatus struct {
@@ -61,7 +75,7 @@ func TestBearerRefusalIsAIPStatusJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer nope")
 	rr := httptest.NewRecorder()
-	BearerGuard(rpcerr.FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
+	built(BearerGuard(rpcerr.FormatJSON, rejectAll, anyNeed, okHandler)).ServeHTTP(rr, req)
 	t.Logf("%s", rr.Body.Bytes())
 
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
@@ -100,7 +114,7 @@ func TestRebindRefusalOmitsTheBearerChallenge(t *testing.T) {
 // client parses rather than a shape this test assumes.
 func TestBearerRefusalSpeaksConnectOnConnectMounts(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(BearerGuard(rpcerr.FormatConnect, rejectAll, okHandler))
+	srv := httptest.NewServer(built(BearerGuard(rpcerr.FormatConnect, rejectAll, anyNeed, okHandler)))
 	t.Cleanup(srv.Close)
 	url := srv.URL + "/magus.probe.v1alpha1.ProbeService/Call"
 
@@ -157,7 +171,7 @@ func TestJSONMountIgnoresConnectLookingRequests(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	BearerGuard(rpcerr.FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
+	built(BearerGuard(rpcerr.FormatJSON, rejectAll, anyNeed, okHandler)).ServeHTTP(rr, req)
 
 	assert.Equal(t, "UNAUTHENTICATED", decodeStatus(t, rr.Body.Bytes()).Error.Status)
 }

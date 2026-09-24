@@ -19,11 +19,13 @@ guard
 guard.advise
 guard.allow
 guard.bash
+guard.command
 guard.count
 guard.deny
 guard.once
 guard.shell
 guard.spawn
+guard.write
 harness
 harness.provider
 hasCharm

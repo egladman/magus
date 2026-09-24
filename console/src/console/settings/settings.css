@@ -286,7 +286,7 @@
 }
 .console-settings-tokens__row {
   display: grid;
-  grid-template-columns: minmax(6rem, auto) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(8rem, auto) auto;
+  grid-template-columns: minmax(6rem, auto) minmax(6rem, auto) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(8rem, auto) auto;
   align-items: center;
   gap: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);

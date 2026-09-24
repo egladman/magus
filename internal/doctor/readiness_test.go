@@ -22,7 +22,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 
 	t.Run("no gates", func(t *testing.T) {
 		got := (&runner{}).checkReadinessProbes([]*types.Project{{}})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no spell gates an op on a tool being reachable", got.Message)
 	})
 
@@ -31,7 +31,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 	// is OK: an advice nobody can clear is one every docker workspace carries forever.
 	t.Run("lists the gate without running it", func(t *testing.T) {
 		got := (&runner{}).checkReadinessProbes(gated)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "1 tool(s) gated on a readiness probe", got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Equal(t, "compose: docker gated on `magus-doctor-no-such-bin info`", got.Details[0])
@@ -47,7 +47,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 	// honest answer for a tool that is down is no.
 	t.Run("probing a tool that is down fails", func(t *testing.T) {
 		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(gated)
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Equal(t, "1 of 1 gated tool(s) not ready", got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "docker NOT ready")
@@ -69,7 +69,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 			},
 		}}
 		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(up)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "1 gated tool(s), all ready", got.Message)
 		assert.Equal(t, types.EvidenceMeasured, got.Evidence)
 	})

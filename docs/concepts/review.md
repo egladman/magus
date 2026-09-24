@@ -313,6 +313,12 @@ magus ranked these by what they can break, consequence first.
 
 - `main.go` - source; in .
 
+## Conformance
+
+magus could not check this change against the workspace's conventions. Nothing below means nothing was found.
+
+- [MGS7003] no symbol index loaded for ., so the conformance checks could not run; build it with `magus graph build`
+
 ## What magus could not measure
 
 Do not read any of these as evidence that there is nothing there.

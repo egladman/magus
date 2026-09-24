@@ -10,39 +10,34 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Actor is the party a job-store write is made by: the lease it is bound to, and the
-// session and host that identify it.
+// Actor is the party a job-store write is made by: the lease it is bound to.
 //
-// BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor is the orchestrator
-// or the person at a terminal and may write anything; a bound one is a worker acting
-// under one row, and the rules below are what it may do to the book from inside it.
-// Binding is the checkout's lease marker or the BAGGAGE channel, the same two the guard
-// reads, so a worker cannot be one party to the guard and another to the store.
+// BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor may write anything; a
+// bound one is a worker acting under one row, and the rules below are what it may do to
+// the book from inside it. Unbound says nothing about who is writing: an orchestrator and
+// an agent that never bound its checkout are both unbound. Binding is the checkout's lease
+// marker or the BAGGAGE channel, the same two the guard reads, so a worker cannot be one
+// party to the guard and another to the store.
+//
+// Who the writer is beyond its lease is not the actor's: a row's registered_by is stamped
+// from the write's context (trail.StampOrigin), where each door put its entry point,
+// credential and host.
 type Actor struct {
 	// Lease is the row this session acts under, empty when it acts under none.
 	Lease string
-	// Session and Host identify the actor on the rows it creates. Both are best-effort:
-	// a person at a terminal has neither, and no rule keys on them.
-	Session string
-	Host    string
 }
 
 // ActingActor is the party this process acts as for the checkout whose cache dir is
-// cacheDir: the bound lease from [ActingLease], and the identity the trace channel
-// carries. A process with no lease and no trace is the unbound actor, which is what a
-// person running `magus job fork` is.
-func ActingActor(cacheDir string) Actor {
-	spawn := trail.SpawnFromEnv()
-	return Actor{Lease: ActingLease(cacheDir), Session: spawn.TraceID, Host: spawn.Spawner}
+// cacheDir: the lease [ActingLease] resolves from the checkout's binding and this
+// process's BAGGAGE claim. A process with no lease is the unbound actor; a binding that
+// cannot be read is an error, never the unbound actor.
+func ActingActor(cacheDir string) (Actor, error) {
+	lease, _, err := ActingLease(cacheDir, trail.LeaseFromEnv())
+	return Actor{Lease: lease}, err
 }
 
 // Bound reports whether this actor is a worker acting under a lease.
 func (a Actor) Bound() bool { return a.Lease != "" }
-
-// leaseActor is what a row stores about the session that created it.
-func (a Actor) leaseActor() types.JobActor {
-	return types.JobActor{Session: a.Session, Host: a.Host}
-}
 
 // grading is what KIND of write reaches [Store.mutate], which decides two things: whether
 // the acting party's boundary applies to it, and which store-owned fields it may set. Both

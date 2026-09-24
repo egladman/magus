@@ -107,7 +107,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : View or update magus configuration. See [**magus-config**(1)](magus-config.md).
 
 **session**
-: What sessions did and what they are blocked on: humans read and dispose, hosts write. See [**magus-session**(1)](magus-session.md).
+: What magus invocations did and what agents are blocked on: humans read and dispose, hosts write. See [**magus-session**(1)](magus-session.md).
 
 **memory**
 : Durable cross-session project memory. See [**magus-memory**(1)](magus-memory.md).
@@ -257,6 +257,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_MCP_ADDRESS**
 : host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: **mcp.address**.
+
+**MAGUS_MCP_INSECURE_BIND**
+: Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: **mcp.insecure_bind**.
 
 **MAGUS_HINTS_ENABLED**
 : When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: **hints.enabled**.

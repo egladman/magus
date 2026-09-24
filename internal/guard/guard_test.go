@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -153,9 +154,6 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.Bind(one.ID))
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.Bind(two.ID))
 
-	assert.Equal(t, one.ID, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.ActingLease())
-	assert.Equal(t, two.ID, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.ActingLease())
-
 	first := Judge(ctx, Dependencies{}, Request{
 		Input: "internal/guard/spawn.go", IsPath: true, Session: "session-one", Host: "test-host",
 	})
@@ -169,7 +167,7 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 }
 
 // TestHostUnnamedRefusesWithTheCodeAndTheRemedy pins the whole verdict: a deny, never an
-// ask or a pass, carrying MGS3022 and the command that fixes it, and naming no transport so
+// ask or a pass, carrying MGS3022 and the command that fixes it, and naming no form so
 // the sh and Buzz forms of one template reply byte for byte alike.
 func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 	t.Parallel()
@@ -187,16 +185,37 @@ func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 func TestJudgeRefusesInstalledGlueThatNamesNoHost(t *testing.T) {
 	t.Parallel()
 	for _, host := range []string{"", "  "} {
-		got := Judge(context.Background(), Dependencies{}, Request{Input: "ls", Transport: "sh", Host: host})
+		got := Judge(context.Background(), Dependencies{}, Request{Input: "ls", Form: "sh", Host: host})
 		assert.Equal(t, hostUnnamed(), got, "host %q", host)
 	}
 }
 
-// TestJudgeLeavesCallersWithoutATransportAlone keeps the refusal to installed glue. A person
-// running `magus shell` names no transport and no host, and is judged as before.
-func TestJudgeLeavesCallersWithoutATransportAlone(t *testing.T) {
+// TestJudgeLeavesCallersWithoutAFormAlone keeps the refusal to installed glue. A person
+// running `magus shell` names no form and no host, and is judged as before.
+func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 	t.Parallel()
 	got := Judge(context.Background(), testDependencies(), Request{Input: ""})
 	assert.Equal(t, "pass", got.Decision, "an empty input from a person passes")
 	assert.NotContains(t, got.Reason, string(types.HookHostUnnamed))
+}
+
+// A command typed at a terminal is the CLI's: it records no session and is not an agent's,
+// while its terminal window still keys what the guard remembers for it.
+func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	dir := t.TempDir()
+	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), types.EntryPointCLI)
+
+	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
+
+	events := trailEvents(t, dir, trail.KindAgentCommand)
+	require.Len(t, events, 1)
+	assert.Equal(t, types.EntryPointCLI, events[0].EntryPoint)
+	assert.Empty(t, events[0].Session, "a terminal window is not a host session")
+	assert.NotContains(t, events[0].Label(), "agent", "a terminal call is never labeled an agent")
+
+	assert.Equal(t, "test-host/tty:w1", hookAttribution{Host: "test-host", Window: "tty:w1"}.factsKey())
+	assert.Equal(t, "test-host/s1", hookAttribution{Host: "test-host", Session: "s1", Window: "tty:w1"}.factsKey(),
+		"a host session wins over the window")
+	assert.Empty(t, hookAttribution{Host: "test-host"}.factsKey(), "neither leaves the gate its anonymous window")
 }

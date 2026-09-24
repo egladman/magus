@@ -112,7 +112,7 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_isOpaque`          | `() > bool`                       | true when another tool owns the dependency graph (a package manager), so magus does not try to infer one                                                                                                                                                                        |
 | `mgs_listRequiredGlobs` | `() > [Path]`                     | files a project MUST have for this spell to bind                                                                                                                                                                                                                                |
 | `mgs_listProvidedGlobs` | `() > [Path]`                     | files this spell's operations produce                                                                                                                                                                                                                                           |
-| `mgs_listManifests`     | `() > [Path]`                     | dependency manifests, read for the project graph                                                                                                                                                                                                                                |
+| `mgs_listManifests`     | `() > [Manifest]`                 | dependency manifests, read for the project graph, with the lockfiles each resolves into and how each lockfile installs (see [Installs](#installs))                                                                                                                              |
 | `mgs_listIgnoreDirs`    | `() > [Path]`                     | directories to prune from source expansion (`node_modules`, `target`)                                                                                                                                                                                                           |
 | `mgs_getTools`          | `() > {str: Tool}`                | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), the oldest version its ops work against (`floor`), and how it prints its findings (`diagnostics`) |
 
@@ -157,6 +157,55 @@ A version probe is worth more thought than it looks. If a tool changes what pass
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
 Anything pinned by a manifest the spell already reads (a `go.mod` the `go` spell claims)
 needs no probe; anything that is just "whatever is on PATH" does.
+
+### Installs
+
+A manifest's `installs` map says how each lockfile is materialized, keyed by the lockfile,
+since the lockfile is what names the package manager. Each entry names the op magus
+registers it under: `name` is required, binary + capability (`pnpm-install`,
+`go-mod-download`), never the bare capability alone, so two ecosystems' installs never
+collide under one name and neither collides with the canonical top-level `install`
+target a magusfile composes them into. Entries that share a `name` (two lock candidates
+the same binary installs, such as `package-lock.json` and `npm-shrinkwrap.json` both
+running `npm ci`) register as ONE op, live for whichever of their lockfiles the project
+has, the nearest one walking up to the workspace root.
+
+```buzz
+Manifest{value = "package.json",
+         lockCandidates = ["pnpm-lock.yaml", "package-lock.json"],
+         installs = {"pnpm-lock.yaml": Install{
+             name = "pnpm-install",
+             command = Command{bin = "pnpm", args = ["install", "--frozen-lockfile", "--prefer-offline"],
+                               charms = {"update": ...}},
+             dir = "node_modules",
+             relocatable = true,
+             stamps = ["node_modules/.pnpm/lock.yaml"],
+             inputs = [".npmrc", "pnpm-workspace.yaml"],
+             tools = ["node", "pnpm"]}}}
+```
+
+- `command` must never write the lockfile. Its `update` charm is the one that re-resolves
+  and rewrites it, and a run with that charm is never replayed.
+- `stamps` are files the tool writes when an install finishes. A recorded install replays
+  only while each stamp reads as it did when that install finished, so a deleted or
+  interrupted tree runs the tool again. A stamp the tool writes before it finishes serves
+  a stale tree, so name one only after checking when the tool writes it. With no stamps
+  the install always runs.
+- The key is the manifest, the lockfile, `inputs`, the versions of `tools`, and the
+  platform. Nothing else in the project moves it.
+- `relocatable` lets magus seed an absent `dir` on macOS with one clone of the whole tree
+  from another checkout of the repository before the command runs. Leave it off for a tree
+  that records its own absolute path, such as a Python venv.
+
+A lockfile among `lockCandidates` with no `installs` entry makes its op fail on a
+project that uses it, rather than run another manager's command against it.
+
+A project composes the op it actually needs into its own top-level `install` target
+(`build`/`test`/`lint` need `install`, not the spell op by name):
+
+```buzz
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
+```
 
 ### Declaring how a tool reports findings
 

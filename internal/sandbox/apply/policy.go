@@ -215,7 +215,10 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 //
 // An unreadable job store fails OPEN with a warning, matching the guard: a lease id that
 // stops resolving must not brick the checkout a person is working in.
-func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location, leaseID string) *sandbox.Policy {
+//
+// from is the source that answered leaseID; the narrowed policy carries it so a denial
+// can say whether the boundary was bound or only claimed.
+func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location, leaseID string, from types.LeaseSource) *sandbox.Policy {
 	if policy == nil || loc.Root == "" || leaseID == "" {
 		return policy
 	}
@@ -253,6 +256,7 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location
 	narrowed := *policy
 	narrowed.FS = filesystem.Ruleset{Rules: rules}
 	narrowed.Lease = row.ID
+	narrowed.LeaseFrom = from
 	slog.InfoContext(ctx, "magus: narrowed the sandbox write grant to a lease boundary",
 		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(granted))
 	return &narrowed

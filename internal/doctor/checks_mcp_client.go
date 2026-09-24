@@ -10,17 +10,17 @@ import (
 // checkMCPClient reports whether wired harness spells declare user-owned MCP
 // setup guidance (hint, docs, and/or register sketch). Magus does not write or
 // inspect host MCP client files.
-func (r *runner) checkMCPClient() types.DoctorCheck {
+func (r *runner) checkMCPClient() types.Check {
 	const name = "mcp-client"
 	root := r.ws.Root()
 	wired := workspaceHarnesses(r.ws)
 	ctx := agent.ContextWithWiredHarnesses(r.runCtx(), wired)
 	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: "cannot list harnesses: " + err.Error()}
+		return types.Check{Name: name, Status: types.CheckAdvice, Message: "cannot list harnesses: " + err.Error()}
 	}
 	if len(ids) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no harnesses wired"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no harnesses wired"}
 	}
 
 	var details []string
@@ -51,10 +51,10 @@ func (r *runner) checkMCPClient() types.DoctorCheck {
 
 	msg := fmt.Sprintf("%d wired harness(es); %d declare MCP setup hints (Magus does not write host MCP config)",
 		len(ids), guided)
-	status := types.DoctorOK
+	status := types.CheckOK
 	if problems > 0 {
-		status = types.DoctorAdvice
+		status = types.CheckAdvice
 		msg = fmt.Sprintf("%s; %d load problem(s)", msg, problems)
 	}
-	return types.DoctorCheck{Name: name, Status: status, Message: msg, Details: details, Evidence: types.EvidenceDeclared}
+	return types.Check{Name: name, Status: status, Message: msg, Details: details, Evidence: types.EvidenceDeclared}
 }

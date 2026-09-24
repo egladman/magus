@@ -27,9 +27,10 @@
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
-# `--agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
-# magus-command.sh: the host name is REQUIRED on this script's argv, and both are
-# attribution recorded on the activity event, never an input to the verdict.
+# `--agent-name <host>`, HOST_SESSION_PATH and HOST_AGENT_PATH work exactly as they do
+# in magus-command.sh: the host name is REQUIRED on this script's argv, all three are
+# attribution recorded on the activity event, and the subagent id also selects the job
+# that subagent was spawned for.
 #
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-command.sh. It records what HOST_RESPONSE RENDERS, not
@@ -39,7 +40,7 @@
 # before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 # Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 # renders as a deny.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
@@ -47,6 +48,7 @@
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 # The host this entry is wired into, from the entry's own argv only; see magus-command.sh.
 agent_name=
@@ -121,6 +123,7 @@ case $event in
 esac
 
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+agent=$(printf '%s' "$event" | jq -r ".$HOST_AGENT_PATH // empty")
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 
 # Which payload magus gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects.
@@ -150,7 +153,7 @@ if [ -z "$HOST_RESPONSE" ]; then
   renders_ask=--renders-ask
 fi
 
-# Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate the current magus
+# Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate the current magus
 # release, and an older binary rejects the unknown flag outright - printing usage to stdout and
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
@@ -169,7 +172,7 @@ guard() {
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

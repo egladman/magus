@@ -118,7 +118,6 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	trail.Append(context.Background(), dir, trail.Event{
 		Ts:         1000,
 		Kind:       trail.KindJob,
-		Actor:      "daemon",
 		Action:     "run test libs/authkit",
 		Outcome:    trail.OutcomeError,
 		Error:      "2 tests failed",

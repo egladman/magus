@@ -12,7 +12,7 @@
 
 import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/daemon";
 
-// The wire shapes, mirroring types.Review and types.DiffSession. Hand-written rather than
+// The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
 // same as the insight and outputs readers beside them.
 
@@ -40,6 +40,17 @@ export interface DiffSymbol {
   readonly qualified?: string;
   readonly signature?: string;
   readonly base_signature?: string;
+  readonly checks?: readonly Check[];
+}
+
+// Check is one conformance finding about a symbol the change adds, renames or re-signs: a fact
+// about how the rest of the workspace declares the same kind of thing, reported as advice.
+export interface Check {
+  readonly name: string;
+  readonly status: string;
+  readonly message?: string;
+  readonly details?: readonly string[];
+  readonly evidence?: string;
 }
 
 // DiffAPI is what the changeset did to the public API, present only when the review was
@@ -106,6 +117,10 @@ export interface DiffAnnotation {
 // hardest: the reader looked, and then the file moved under them.
 export type ReviewReadState = "read" | "unread" | "stale";
 
+// DiffUncoveredReason mirrors the DiffUncoveredReason constants: why the conformance checks
+// could not see a touched project.
+export type DiffUncoveredReason = "no-indexer";
+
 export interface Diff {
   readonly base: string;
   readonly files?: readonly DiffAnnotation[];
@@ -113,13 +128,46 @@ export interface Diff {
   readonly affected_projects?: readonly { path: string; seed: boolean }[];
   readonly notes?: readonly string[];
   readonly api?: DiffAPI;
+  // Why the conformance checks could not run. When set, no symbol carries checks, and that
+  // absence means nothing was checked.
+  readonly conformance_error?: {
+    readonly code: string;
+    readonly message: string;
+    readonly url?: string;
+  };
+  // Touched projects the conformance checks could not see, and why.
+  readonly uncovered?: readonly {
+    readonly project: string;
+    readonly reason: DiffUncoveredReason;
+  }[];
+}
+
+// CommentCredential mirrors types.Credential: the verified bearer, never its secret. id is the
+// identity; name is a label a later token can reuse.
+export interface CommentCredential {
+  readonly class?: "operator" | "token" | "share";
+  readonly id?: string;
+  readonly name?: string;
+  readonly grant?: { readonly tokens?: string; readonly mcp?: string; readonly console?: string };
+}
+
+export interface CommentOrigin {
+  readonly user?: string;
+  readonly entry_point?: string;
+  readonly host?: string;
+  readonly credential?: CommentCredential;
 }
 
 export interface DiffComment {
   readonly id: string;
   readonly path: string;
   readonly hunk: number;
-  readonly author: "human" | "agent";
+  // The door the remark came through, stamped by the daemon. "unattributed" is the review
+  // route: a draft its reader may publish or discard. It does not say a person wrote it.
+  readonly author: "unattributed" | "agent";
+  // Where the write came from: the OS account, the entry point, and the credential or MCP
+  // client that carried it.
+  readonly origin?: CommentOrigin;
   readonly agent_name?: string;
   readonly body: string;
   readonly resolved: boolean;
@@ -197,7 +245,7 @@ export interface DiffSuggestion {
   readonly declined: boolean;
 }
 
-export interface DiffSession {
+export interface DiffReview {
   readonly id: string;
   readonly base: string;
   // The patch identity the daemon used to compute this session. Context requests carry it back
@@ -272,18 +320,18 @@ export async function fetchSession(
   host: string,
   paths: readonly string[],
   signal: AbortSignal,
-): Promise<DiffSession> {
+): Promise<DiffReview> {
   const q = paths.map((p) => `path=${encodeURIComponent(p)}`).join("&");
   const res = await fetch(`http://${host}/api/v1/diff?${q}`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffSession;
+  return (await res.json()) as DiffReview;
 }
 
 // Fetches the live session without replacing the review snapshot.
-export async function fetchReviewSession(host: string, signal: AbortSignal): Promise<DiffSession> {
+export async function fetchReviewSession(host: string, signal: AbortSignal): Promise<DiffReview> {
   const res = await fetch(`http://${host}/api/v1/diff/session`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffSession;
+  return (await res.json()) as DiffReview;
 }
 
 // SessionOp is one mutation of the human's half of the session. Every one of these is stamped
@@ -320,7 +368,7 @@ export async function mutate(
   host: string,
   op: SessionOp,
   signal: AbortSignal,
-): Promise<DiffSession | null> {
+): Promise<DiffReview | null> {
   try {
     const res = await fetch(`http://${host}/api/v1/diff/session`, {
       method: "POST",
@@ -332,7 +380,7 @@ export async function mutate(
       reportHttpStatus(host, "the review session", res.status);
       return null;
     }
-    return (await res.json()) as DiffSession;
+    return (await res.json()) as DiffReview;
   } catch (e) {
     reportFetchFailure(host, "the review session", e);
     return null;
@@ -379,7 +427,7 @@ export async function publish(
   summary: string,
   verdict: ReviewVerdict,
   signal: AbortSignal,
-): Promise<DiffSession> {
+): Promise<DiffReview> {
   const res = await fetch(`http://${host}/api/v1/diff/session`, {
     method: "POST",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -392,7 +440,7 @@ export async function publish(
     // several unrelated situations they are in.
     throw new Error((await res.text()).trim() || `daemon answered ${res.status}`);
   }
-  return (await res.json()) as DiffSession;
+  return (await res.json()) as DiffReview;
 }
 
 // reply answers one thread on the host's review.

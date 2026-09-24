@@ -70,13 +70,6 @@ var denyRuleDocs = []RuleDoc{
 			"A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. " +
 			"A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. " +
 			"A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line."},
-	{Name: string(denyRuleCIWatch), Decision: "deny",
-		Catches: "a `gh` invocation that BLOCKS until CI finishes, rather than asking once",
-		Why: "Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: a person merges, not the watcher. " +
-			"Measured in one session: four watches, every one green, every one a turn spent re-reading a verdict that was already true. " +
-			"It is also the second half of a duplicate, since a gate already run locally is the same command on the same tree, and waiting for CI to agree pays twice for one answer. " +
-			"`gh pr list --state open --json number,mergeable,statusCheckRollup` answers every open pull request in one call. " +
-			"Iterating on a run that is already RED is the case worth following, and polling that command serves it too."},
 	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
 		Catches: "a trailing `echo $?`, which repeats an exit status the harness already reports",
 		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +
@@ -116,6 +109,17 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. " +
 			"That is why it is refused however the write is spelled: `capture` files a review transcript as a note and `promote` writes a memory record into the SHARED store, where the commit puts a person's name on prose they never read. " +
 			"`magus memory put <name>` is the agent-writable store, where every entry cites a ref a later reader can re-run."},
+	{Name: string(denyRuleCredentialVerb), Decision: "deny",
+		Catches: "an agent minting, printing, rotating or revoking a credential through the CLI",
+		Why: "An agent holds the token it was given, and a session that mints another holds a grant nobody handed it. " +
+			"Refused: the console and connector token `create` and `revoke` commands, `magus graph export --open --follow` (its link carries a sign-in code), and `magus config token print`, `generate` and `revoke`, the operator token that reaches token management. " +
+			"It holds however the binary is spelled: `./magus`, a path, `go run ./cmd/magus`, or inside a `$(...)` substitution. " +
+			"This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files."},
+	{Name: string(denyRuleTokenState), Decision: "deny",
+		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
+		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the daemon checks, so reading one hands a session a grant and writing one mints a token. " +
+			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
+			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
 		Catches: "magus output piped into a filter, when magus projects the record itself",
 		Why: "magus projects its own record, so the filter is answering a question the command takes a flag for: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field, `-s` to silence progress. " +

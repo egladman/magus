@@ -259,7 +259,8 @@ export function adoptDaemonOrigin(): boolean {
     consumeLiveToken(params);
     return false;
   }
-  if (params.token === undefined && getLiveToken() === null) return false; // not our flow
+  if (params.token === undefined && params.code === undefined && getLiveToken() === null)
+    return false; // not our flow
 
   ownOrigin = true;
   // Only a device on a NON-loopback LAN share origin becomes read-only; the
@@ -425,11 +426,29 @@ export async function fetchReadiness(
 
 const TOKEN_KEY = "magus-live-token";
 const REMEMBER_KEY = "magus-live-remember";
-// SCOPED_KEY records that the stored bearer has already been exchanged for a
-// console-scoped token, so the exchange runs once rather than minting a fresh token on
-// every page load. It is CLEARED whenever a new token arrives, because a fresh paste may
-// be the operator token again and would then need exchanging in its turn.
-const SCOPED_KEY = "magus-live-scoped";
+
+// consumeLinkCode takes a CLI link's one-time sign-in code (#code=mgx_...) out of the fragment
+// and returns it, or null when there is none. The code is held in memory only, never stored:
+// it is spent on its first use, and the caller trades it for the token that IS stored.
+export function consumeLinkCode(params: HashParams = parseHash()): string | null {
+  const code = params.code;
+  if (!code) return null;
+  stripFragmentKey(params, "code");
+  return code;
+}
+
+// stripFragmentKey rewrites the fragment without key, keeping every other key (#port= and the
+// surface's own directives) so a reload stays where it was.
+function stripFragmentKey(params: HashParams, key: string): void {
+  const kept: string[] = [];
+  for (const k of Object.keys(params)) {
+    if (k === key) continue;
+    // A bare fragment key (value "") is re-emitted bare so line tokens like "L10-L20" survive.
+    kept.push(params[k] === "" ? k : k + "=" + encodeURIComponent(params[k]));
+  }
+  const next = kept.length ? "#" + kept.join("&") : "";
+  history.replaceState(null, "", location.pathname + location.search + next);
+}
 
 // consumeLiveToken stashes the bearer token from the URL fragment and strips ONLY
 // the token from the fragment (keeping #port= and any other keys intact so a reload
@@ -446,9 +465,6 @@ export function consumeLiveToken(params: HashParams): void {
     // token, which comes back Unauthenticated and reads to the user as "not available".
     (remembered ? localStorage : sessionStorage).setItem(TOKEN_KEY, params.token);
     (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
-    // A new token is an unknown tier until something proves otherwise.
-    sessionStorage.removeItem(SCOPED_KEY);
-    localStorage.removeItem(SCOPED_KEY);
   } catch (e) {
     reportFailure(
       "Sign-in",
@@ -458,14 +474,7 @@ export function consumeLiveToken(params: HashParams): void {
       "token:storage",
     );
   }
-  const kept: string[] = [];
-  for (const k of Object.keys(params)) {
-    if (k === "token") continue;
-    // A bare fragment key (value "") is re-emitted bare so line tokens like "L10-L20" survive.
-    kept.push(params[k] === "" ? k : k + "=" + encodeURIComponent(params[k]));
-  }
-  const next = kept.length ? "#" + kept.join("&") : "";
-  history.replaceState(null, "", location.pathname + location.search + next);
+  stripFragmentKey(params, "token");
 }
 
 export function getLiveToken(): string | null {
@@ -494,36 +503,14 @@ export function setLiveToken(token: string): boolean {
   }
 }
 
-// clearLiveToken forgets the stored bearer and its exchange mark, in both stores.
+// clearLiveToken forgets the stored bearer, in both stores.
 export function clearLiveToken(): void {
   try {
     for (const store of [sessionStorage, localStorage]) {
       store.removeItem(TOKEN_KEY);
-      store.removeItem(SCOPED_KEY);
     }
   } catch {
     // not-a-failure: storage is disabled, so there was no stored token to forget
-  }
-}
-
-// hasScopedToken reports whether the stored bearer has already been exchanged. It is a
-// cache, not a security check: a false negative costs one refused RPC, and the tier is
-// enforced by the daemon either way.
-export function hasScopedToken(): boolean {
-  try {
-    return (sessionStorage.getItem(SCOPED_KEY) || localStorage.getItem(SCOPED_KEY)) === "1";
-  } catch {
-    // not-a-failure: a cache miss costs one refused RPC; the daemon enforces the tier
-    return false;
-  }
-}
-
-// markScopedToken records a completed exchange, in the same store the token went to.
-export function markScopedToken(): void {
-  try {
-    (isRemembered() ? localStorage : sessionStorage).setItem(SCOPED_KEY, "1");
-  } catch {
-    // not-a-failure: storage disabled, so the exchange simply reruns next load
   }
 }
 
@@ -847,10 +834,12 @@ export function signalAuthLost(host: string): void {
   );
 }
 
-// signInCommand is the shell line that opens url signed in. The token is a substitution the reader's
-// shell expands, so the page never holds or displays it. The opener follows the browser's platform,
-// which is the machine a loopback daemon runs on. Windows gets PowerShell's opener, since cmd.exe
-// never expands $(...).
+// signInCommand is the shell line that opens url signed in. The code is a substitution the reader's
+// shell expands, so the page never displays it, and what lands in the opener's argv is a one-time
+// code that lives a minute, which the console trades for a console token expiring in 12 hours
+// (console.OpenCommandAs is the daemon's twin of this line). The opener follows the browser's
+// platform, which is the machine a loopback daemon runs on. Windows gets PowerShell's opener, since
+// cmd.exe never expands $(...).
 export function signInCommand(url: string, platform = browserPlatform()): string {
   const sep = url.includes("#") ? "&" : "#";
   const opener = /mac/i.test(platform)
@@ -858,7 +847,9 @@ export function signInCommand(url: string, platform = browserPlatform()): string
     : /win/i.test(platform)
       ? "Start-Process"
       : "xdg-open";
-  return opener + ' "' + url + sep + 'token=$(magus config token print)"';
+  return (
+    opener + ' "' + url + sep + 'code=$(magus config console token create --code --expires 12h)"'
+  );
 }
 
 function browserPlatform(): string {

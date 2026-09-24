@@ -30,7 +30,13 @@ import (
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
 // pre-tool-use hook uses. A person passes the command as an operand instead; both reach
 // the same evaluator, and the operand path has its own cases below.
+//
+// It judges by the built-in rules alone: these tests run inside magus's own checkout, whose
+// Buzz policy is not what they are about. guard_plumbing_test.go covers workspace rules.
 func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
+	saved := guardRoot
+	guardRoot = func() (string, error) { return "", errors.New("no workspace rules in this test") }
+	defer func() { guardRoot = saved }()
 	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
 }
 
@@ -339,7 +345,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, "agent", got.Actor)
+	assert.Equal(t, types.EntryPointHook, got.EntryPoint, "a piped call is the hook's")
 	assert.Equal(t, "/repo/magus", got.Workspace)
 	assert.Equal(t, "shell.command", got.Action)
 	assert.Equal(t, "guard: deny", got.Preview)
@@ -368,7 +374,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, "agent", got.Actor)
+	assert.Equal(t, types.EntryPointHook, got.EntryPoint)
 	assert.Equal(t, "file.write", got.Action)
 	assert.Equal(t, "guard: advise", got.Preview)
 	body, err := trail.ReadBlob(dir, got.RequestRef)
@@ -413,9 +419,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	got.RequestBytes, got.ResponseBytes = 0, 0
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
-		Actor:     "agent",
-		Host:      "claude-code",
-		Session:   "abc123",
+		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "shell.command",
 		Outcome:   trail.OutcomeOK,
@@ -610,9 +614,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentSpawn,
-		Actor:     "agent",
-		Host:      "claude-code",
-		Session:   "abc123",
+		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
 		Lease:     "notes-store-6b",
@@ -1009,7 +1011,7 @@ func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	require.NoError(t, shellStdin(ctx, strings.NewReader(filepath.Join(ws.Root(), "drift-fixture.txt")),
 		&out, []string{"--path", "--session", "session-1", "--agent-name", "claude-code"}))
 
-	assert.Equal(t, []string{"."}, touchedProjects(hint.NewGate(base, guard.SessionKey("claude-code", "session-1"))),
+	assert.Equal(t, []string{"."}, touchedProjects(hint.NewGate(base, guard.FactsKey("claude-code", "session-1"))),
 		"a workspace-root file belongs to the root project, whatever else this workspace declares")
 }
 
@@ -1182,10 +1184,18 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &leased,
 		[]string{"--lease", narrowLease().ID, "-o", "json"}))
 	assert.Contains(t, leased.String(), `"lease": "harness/lease-scoped-deny"`)
+	assert.Contains(t, leased.String(), `"lease_from": "flag"`)
 
 	var unbound bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &unbound, []string{"-o", "json"}))
-	assert.NotContains(t, unbound.String(), `"lease"`, "a session nobody leased names no row")
+	assert.NotContains(t, unbound.String(), `"lease`, "a session nobody leased names no row and no source")
+
+	// --lease takes no default from the environment, so a BAGGAGE claim reaches the verdict
+	// as the claim it is rather than as a flag that would outrank every record.
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+narrowLease().ID)
+	var claimed bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &claimed, []string{"-o", "json"}))
+	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
 }
 
 // TestHookCmdAdvisesAnInvalidLeaseOnEverySurface: the notice lived inside gradeLeasedWrite,
@@ -1323,7 +1333,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 // flag reaches the rule, a denial exits with the blocking status, and the flag outranks
 // the environment.
 func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
-	ctx, root, _ := fleetFixture(t, fleetLeases()...)
+	ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
 	run := func(stdin string, args ...string) (string, error) {
 		global = globalFlags{}
 		var out strings.Builder
@@ -1340,7 +1350,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		assert.Equal(t, "deny\n", got)
 	})
 
-	t.Run("the baggage member supplies the default", func(t *testing.T) {
+	t.Run("the baggage claim answers when no record does", func(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, "userId=alice,"+trail.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "-o", "name")
 		var silent errSilent
@@ -1363,6 +1373,102 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "--lease", "lease-a", "-o", "name")
 		require.NoError(t, err, "acting as the owner must not be denied")
+	})
+
+	// The claim ranks below every record. Before, --lease defaulted to BAGGAGE, so the
+	// hook's inherited lease-b was passed in as a flag and outranked both of these.
+	t.Run("the session's binding outranks the baggage claim", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "")
+		require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("lease-a"))
+		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		got, err := run(owned, "--path", "--session", "bound-session", "-o", "json")
+		require.NoError(t, err, "graded under the binding's lease-a, whose ground this is")
+		assert.Contains(t, got, `"lease": "lease-a"`)
+		assert.Contains(t, got, `"lease_from": "contested"`)
+	})
+
+	t.Run("a subagent's spawn record outranks the baggage claim", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "")
+		spawned := `{"session_id":"spawn-session","hook_event_name":"PostToolUse","tool_name":"Agent",` +
+			`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
+			`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
+		_, err := run(spawned, "--agent-name", "claude-code", "-o", "name")
+		require.NoError(t, err)
+		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		got, err := run(owned, "--path", "--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3", "-o", "json")
+		require.NoError(t, err, "graded under the spawn's lease-a, whose ground this is")
+		assert.Contains(t, got, `"lease": "lease-a"`)
+		assert.Contains(t, got, `"lease_from": "contested"`, "the claim named another lease")
+	})
+}
+
+// TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource pins that the guard refuses
+// `magus agent harness apply|install|remove` under a lease from any source. The CLI refuses
+// them too, but it cannot see the subagent or the host session, so a worker attributed by
+// either would otherwise rewire the hooks that grade it.
+func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
+	const rewire = "magus agent harness apply"
+	spawned := `{"session_id":"spawn-session","hook_event_name":"PostToolUse","tool_name":"Agent",` +
+		`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
+		`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
+	for name, tc := range map[string]struct {
+		setup func(t *testing.T, ctx context.Context, cacheDir string)
+		args  []string
+		want  string
+	}{
+		"flag": {args: []string{"--lease", "lease-a"}, want: `"lease_from": "flag"`},
+		"env": {
+			setup: func(t *testing.T, _ context.Context, _ string) {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+			},
+			want: `"lease_from": "env"`,
+		},
+		"marker": {
+			setup: func(t *testing.T, _ context.Context, cacheDir string) {
+				require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("lease-a"))
+			},
+			args: []string{"--session", "bound-session"},
+			want: `"lease_from": "marker"`,
+		},
+		"agent": {
+			setup: func(t *testing.T, ctx context.Context, _ string) {
+				require.NoError(t, shellStdin(ctx, strings.NewReader(spawned), io.Discard, []string{"--agent-name", "claude-code", "-o", "name"}))
+			},
+			args: []string{"--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3"},
+			want: `"lease_from": "agent"`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			global = globalFlags{}
+			t.Setenv(trail.EnvBaggage, "")
+			ctx, _, cacheDir := fleetFixture(t, fleetLeases()...)
+			if tc.setup != nil {
+				tc.setup(t, ctx, cacheDir)
+			}
+			var out bytes.Buffer
+			err := shellStdin(ctx, strings.NewReader(rewire), &out, append(tc.args, "-o", "json"))
+			require.Error(t, err, "a bound worker is refused the harness")
+			assert.Contains(t, out.String(), "leave the host harness alone")
+			assert.Contains(t, out.String(), tc.want)
+		})
+	}
+
+	t.Run("an unbound caller rewires its own hosts", func(t *testing.T) {
+		global = globalFlags{}
+		t.Setenv(trail.EnvBaggage, "")
+		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		var out bytes.Buffer
+		require.NoError(t, shellStdin(ctx, strings.NewReader(rewire), &out, []string{"-o", "json"}))
+		assert.NotContains(t, out.String(), "leave the host harness alone")
+	})
+
+	t.Run("verify is a read", func(t *testing.T) {
+		global = globalFlags{}
+		t.Setenv(trail.EnvBaggage, "")
+		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		var out bytes.Buffer
+		_ = shellStdin(ctx, strings.NewReader("magus agent harness verify"), &out, []string{"--lease", "lease-a", "-o", "json"})
+		assert.NotContains(t, out.String(), "leave the host harness alone")
 	})
 }
 

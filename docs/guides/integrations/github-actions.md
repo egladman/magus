@@ -356,8 +356,9 @@ kept too.
 ```
 
 One comment describing what your build graph noticed: generated files edited by hand,
-files no project claims, a change that reaches most of the workspace. Every advisor is an
-input, and every one can be silenced per pull request with a label. See
+files no project claims, a change that reaches most of the workspace. The pull request
+comes from the triggering event, so the step takes no pull request inputs. Every advisor
+is an input, and every one can be silenced per pull request with a label. See
 [Pull request advice](pr-advice.md).
 
 ## Merge queue

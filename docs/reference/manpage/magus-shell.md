@@ -78,6 +78,9 @@ not block every tool call.
 
 ## Options
 
+**--agent** *string*
+: The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job
+
 **--agent-name** *string*
 : Name of the agent host this invocation came from (attribution only); required with --transport
 
@@ -85,7 +88,7 @@ not block every tool call.
 : The host's hook event name (e.g. PreToolUse)
 
 **--lease** *string*
-: The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)
+: The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
 
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass

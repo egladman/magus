@@ -116,6 +116,12 @@ performance metric, and a performance metric gets gamed rather than met.
 **--baseline** *graph export --symbols -o json*
 : The base's \`graph export --symbols -o json\`: adds what each changed symbol did to the API and the smallest semver bump that proves
 
+**--conformance-min-cohort** *int*
+: How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)
+
+**--conformance-min-share** *string*
+: The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)
+
 **--generated**
 : Include declared target outputs, which are folded away by default
 

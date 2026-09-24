@@ -138,7 +138,8 @@ type VCSDriver interface {
 	// repo-relative with forward slashes. The exceptions: the path filters of Dirty,
 	// DirtyFiles, DirtyDiff, TrackedFiles, IgnoredFiles and RangeDiff are the backend's
 	// pathspecs, relative to dir; CheckoutProvisioner's dir names a checkout outside the
-	// repository; Bundler's file is an absolute path.
+	// repository; CheckoutLister returns absolute checkout roots; Bundler's file is an
+	// absolute path.
 	Bisector
 	MergeDriverInstaller
 	RefreshHookInstaller
@@ -147,6 +148,7 @@ type VCSDriver interface {
 	RemoteReporter
 	RemoteConfigReporter
 	DefaultRefReporter
+	CheckoutStateReporter
 	PushStatusReporter
 	RevTimeReporter
 	TrackedFileReporter
@@ -164,6 +166,7 @@ type VCSDriver interface {
 	TreeMerger
 	GeneratedPathReporter
 	CheckoutProvisioner
+	CheckoutLister
 	RevisionFetcher
 	Pusher
 	Bundler
@@ -375,6 +378,7 @@ const (
 	CapRemoteReporter        VCSCapability = "RemoteReporter"
 	CapRemoteConfigReporter  VCSCapability = "RemoteConfigReporter"
 	CapDefaultRefReporter    VCSCapability = "DefaultRefReporter"
+	CapCheckoutStateReporter VCSCapability = "CheckoutStateReporter"
 	CapPushStatusReporter    VCSCapability = "PushStatusReporter"
 	CapRevTimeReporter       VCSCapability = "RevTimeReporter"
 	CapTrackedFileReporter   VCSCapability = "TrackedFileReporter"
@@ -392,6 +396,7 @@ const (
 	CapTreeMerger            VCSCapability = "TreeMerger"
 	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
 	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
+	CapCheckoutLister        VCSCapability = "CheckoutLister"
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
 	CapPusher                VCSCapability = "Pusher"
 	CapBundler               VCSCapability = "Bundler"
@@ -493,6 +498,18 @@ type RemoteConfigReporter interface {
 	ConfiguredRemote(dir string) (string, error)
 }
 
+// CheckoutLister is the capability to list every checkout of the repository containing
+// root (a git worktree set) by reading files, without starting the backend. Unlike
+// CheckoutProvisioner.Checkouts it lists every checkout, not only those magus made. The
+// install op seeds a missing dependency tree from a sibling, on a path where a
+// subprocess per project is not affordable; the missing context.Context is that
+// contract, as it is for RemoteConfigReporter.
+type CheckoutLister interface {
+	// OtherCheckouts returns the root of every OTHER live checkout of root's repository,
+	// primary first. A checkout whose directory is gone is omitted.
+	OtherCheckouts(root string) ([]string, error)
+}
+
 // DefaultRefReporter is the capability (sibling of RemoteReporter) to report the
 // repository's default branch, e.g. "main", independent of whatever branch is currently
 // checked out. Committed artifacts (MAGUS.md's forge links) use it so their URLs stay
@@ -503,6 +520,25 @@ type DefaultRefReporter interface {
 	// branch, hg's "default", jj's trunk()) for the repo containing dir, or ""
 	// with ErrVCSUnsupported when it cannot be determined.
 	DefaultRef(ctx context.Context, dir string) (string, error)
+}
+
+// CheckoutState is which branch a checkout is on and which branches its repository
+// records its remotes as having.
+type CheckoutState struct {
+	// Branch is the branch the checkout is on, "" when it is on none (git's detached HEAD).
+	Branch string
+	// RemoteBranches are the remotes' branches as of the last fetch, each named
+	// `<remote>/<branch>`. A branch a remote has that was never fetched is absent.
+	RemoteBranches []string
+}
+
+// CheckoutStateReporter is the capability (sibling of DefaultRefReporter) to report a
+// CheckoutState without reading the working tree. It answers a rule about a push, which
+// needs these two facts and none of what Metadata spends a status on. Callers treat
+// ErrVCSUnsupported as unknown.
+type CheckoutStateReporter interface {
+	// CheckoutState returns the state of the checkout containing dir.
+	CheckoutState(ctx context.Context, dir string) (CheckoutState, error)
 }
 
 // PushStatusReporter is the capability to report whether a commit has already left the

@@ -15,6 +15,9 @@
 #                    surface whose payload is not one string, such as an MCP
 #                    tool call (a tool name plus a params object)
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+#   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
+#                    subagent's command is graded under the job it was spawned for
+#                    rather than as its parent
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   HOST_ADVISE_BRANCH  the advise arm of that template
@@ -44,8 +47,10 @@
 # The host name and the session are ATTRIBUTION to magus, not policy. magus records them
 # on its activity event so a reader can tell which host produced an observation;
 # neither one can change the verdict, and a host whose event carries no session
-# id records none and is judged exactly the same. This file does read the host name for
-# one thing, which reply shape its host can parse, and that is why it must be given.
+# id records none and is judged exactly the same. The subagent id is the exception:
+# magus grades a subagent it saw spawned under that spawn's job. This file does read the
+# host name for one thing, which reply shape its host can parse, and that is why it must
+# be given.
 #
 # __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 # magus's own configuration surface, so a variable this template invents must stay
@@ -71,7 +76,7 @@
 # denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 # permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 # names the person's own terminal.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -89,6 +94,7 @@
 # the first one would terminate a ${...} expansion, silently truncating it.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 # The host this entry is wired into, from the entry's own argv and nowhere else: never the
 # event's shape, never the environment, never a default. Without it `magus shell` refuses
@@ -169,6 +175,9 @@ case $event in
 esac
 
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
+# Forwarded because this file selects one field out of the envelope: without it a
+# subagent's command reaches magus looking like its parent's.
+agent=$(printf '%s' "$event" | jq -r ".$HOST_AGENT_PATH // empty" 2>/dev/null)
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
 event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)
 
@@ -297,7 +306,7 @@ fi
 
 # Attribution is BEST EFFORT; the verdict is not.
 #
-# --agent-name and --session postdate the current magus release, and this template is downloaded and run
+# --agent-name, --session and --agent postdate the current magus release, and this template is downloaded and run
 # against whatever binary a reader already has. Passing them unconditionally does not degrade the
 # guard, it BREAKS it: an older binary rejects the unknown flag, prints its usage to stdout, and
 # exits non-zero, so the host receives no verdict at all and every deny and advise rule silently
@@ -356,7 +365,7 @@ guard_failure_notice() {
 # --transport sh names this form as the caller; the Buzz port says buzz. magus keeps a
 # deny's full text and its once-per-session notices per host, transport and session.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
@@ -102,6 +103,9 @@ type Session struct {
 	// The file search still decides WHICH path an import names; this decides only
 	// what bytes that path holds. Set via SetSourceReader.
 	sourceReader func(path string) ([]byte, error)
+	// parseCache is shared with other sessions by the host; nil lexes every source
+	// afresh. Set via WithParseCache.
+	parseCache *ParseCache
 	// importedTypes accumulates the exported object/enum declarations of flat
 	// imported .buzz modules, so compileShared can hand them to the checker and
 	// the importing file can name those types in annotations and literals. The
@@ -224,7 +228,7 @@ func (s *Session) DeclareModuleTypes(boundName, src string) {
 	// bug in the host and must not read as an empty declaration: collectImportedModule
 	// ignores parse errors because a real import is re-parsed by the Exec that follows,
 	// and nothing re-parses this.
-	if _, err := parseModed(src, !s.embedded); err != nil {
+	if _, err := s.parse(src); err != nil {
 		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
 	}
 	s.collectImportedModule(boundName, src)
@@ -465,6 +469,13 @@ func WithREPL() Option {
 	return func(s *Session) { s.repl = true }
 }
 
+// WithParseCache has the session, and the child and import sessions it creates, lex
+// through c. Pass one cache to every session that should share it. A nil c, like
+// omitting the option, lexes every source afresh.
+func WithParseCache(c *ParseCache) Option {
+	return func(s *Session) { s.parseCache = c }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -489,8 +500,8 @@ func NewSession(ctx context.Context, opts ...Option) *Session {
 }
 
 // NewChild creates an isolated session that inherits this session's import
-// resolution (search paths, include dirs, native modules, module resolver)
-// but starts with a fresh top-level scope and its own loaded-path set. io.runFile
+// resolution (search paths, include dirs, native modules, module resolver) and
+// parse cache, but starts with a fresh top-level scope and its own loaded-path set. io.runFile
 // uses it so a run file cannot see or mutate the caller's globals — parity with
 // upstream buzz, whose runFile executes the file in its own scope, not the caller's.
 func (s *Session) NewChild() *Session {
@@ -501,6 +512,7 @@ func (s *Session) NewChild() *Session {
 	c.nativeModules = s.nativeModules
 	c.moduleResolver = s.moduleResolver
 	c.sourceReader = s.sourceReader
+	c.parseCache = s.parseCache
 	return c
 }
 
@@ -745,7 +757,7 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 // a line not typed yet.
 func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, warnings []typeError, parseErr error) {
 	parseStart := time.Now()
-	prog, unused, err := parseModedTracked(code, !s.embedded)
+	prog, unused, err := parseModedTracked(s.parseCache, code, !s.embedded)
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseParse, time.Since(parseStart), err)
 	}
@@ -1095,7 +1107,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 				// host receives an empty string. Set it on v: the namespace is not bound
 				// in env until after this point, which is why it has to be the module
 				// value in hand rather than a lookup by name.
-				declareEnumValues(v, src, s.embedded)
+				s.declareEnumValues(v, src)
 				// An OBJECT the declarations export needs a runtime definition for the
 				// same reason an enum needs a runtime value: the checker knowing the
 				// type is not enough to CONSTRUCT one. Without this, `HttpRetry{...}`
@@ -1251,7 +1263,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 // typed namespace object for the import instead of using `any`). Parse errors
 // are ignored: the subsequent Exec re-parses the same source authoritatively.
 func (s *Session) collectImportedModule(boundName, src string) {
-	prog, err := parseModed(src, !s.embedded)
+	prog, err := s.parse(src)
 	if err != nil {
 		return
 	}
@@ -1304,8 +1316,8 @@ func (s *Session) collectImportedModule(boundName, src string) {
 //
 // Cost is one parse of the declaration source that collectImportedModule has already
 // done, once per module per session, and a map insert per enum. Nothing runs per call.
-func declareEnumValues(mod vmpackage.Value, src string, embedded bool) {
-	prog, err := parseModed(src, !embedded)
+func (s *Session) declareEnumValues(mod vmpackage.Value, src string) {
+	prog, err := s.parse(src)
 	if err != nil {
 		return
 	}
@@ -1338,7 +1350,7 @@ func declareEnumValues(mod vmpackage.Value, src string, embedded bool) {
 // Nothing is emitted for a source with no exported object, which is most of them,
 // so the common import pays one parse and no execution.
 func (s *Session) declareObjectTypes(src string) {
-	prog, err := parseModed(src, !s.embedded)
+	prog, err := s.parse(src)
 	if err != nil {
 		// A malformed declaration source is already reported by the collect step;
 		// failing here too would surface the same typo twice.
@@ -1373,7 +1385,7 @@ func (s *Session) declareObjectTypes(src string) {
 	//
 	// Collecting a declaration source merges its types into the session-wide list,
 	// so a file may reference a type another bundle declares and still check
-	// cleanly; magus's own declarations do exactly that, naming DoctorCheckStatus
+	// cleanly; magus's own declarations do exactly that, naming CheckStatus
 	// from gen/types/doctorcheck.buzz. Executing has no such luxury: it needs the
 	// source to be self-contained, and a cross-bundle reference is undefined.
 	//
@@ -1418,21 +1430,42 @@ func (s *Session) rememberModuleType(boundName string, d ast.Node) {
 // declaration (nil if it declares none). Upstream Buzz exposes a no-alias
 // import's exports under this full path; gopherbuzz mirrors that in
 // bindNamespacePath, in addition to its own basename/splat conveniences.
+//
+// Only the leading statements are parsed. Every caller either has already executed
+// src or is about to, so a parse error later in the file surfaces there.
 func (s *Session) declaredNamespace(src string) []string {
-	prog, err := parseModed(src, !s.embedded)
-	if err != nil {
+	toks, err := s.parseCache.tokenize(src)
+	if err != nil || len(toks) == 0 {
 		return nil
 	}
-	for _, stmt := range prog.Stmts {
+	// Comments are not tokens, so these are the only first tokens that can reach a
+	// namespace: `;` and `export name;` parse to no statement.
+	switch toks[0].Kind {
+	case token.Namespace, token.Semicolon, token.Export:
+	default:
+		return nil
+	}
+	p := newParser(toks)
+	p.strict = !s.embedded
+	for !p.check(token.EOF) {
+		stmt, err := p.parseStmt()
+		if err != nil {
+			return nil
+		}
+		if stmt == nil {
+			continue
+		}
 		if ns, ok := stmt.(*ast.NamespaceStmt); ok {
 			return strings.Split(ns.Name, `\`)
 		}
-		// The namespace decl, if present, leads the file (after nothing that
-		// binds a name); stop at the first non-namespace statement so we don't
-		// scan the whole body.
-		break
+		return nil
 	}
 	return nil
+}
+
+// parse parses src in this session's mode, lexing through its parse cache.
+func (s *Session) parse(src string) (*ast.Program, error) {
+	return parseModed(s.parseCache, src, !s.embedded)
 }
 
 // bindNamespacePath makes a flat import's exports reachable under its declared
@@ -1556,6 +1589,7 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.moduleDecls = s.moduleDecls
 	sub.moduleResolver = s.moduleResolver
 	sub.sourceReader = s.sourceReader
+	sub.parseCache = s.parseCache
 
 	// Inherit what the parent has already collected from its own flat imports.
 	// loadedPaths is shared (just above), so a module the parent imported returns

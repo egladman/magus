@@ -1,38 +1,60 @@
 // tokens.ts - the Settings "Access tokens" section: a LIST + REVOKE view over the daemon's
-// connector tokens and the active share token, spoken to over magus.token.v1alpha1.TokenService.
+// stored tokens and the active share link, spoken to over magus.token.v1alpha1.TokenService.
 //
-// It is VIEW-AND-REVOKE ONLY, matching the service: there is deliberately NO mint control.
-// Minting a durable credential stays a CLI-only operation (`magus config mcp connector`), so
-// the browser has no path to forge one - that is what closes the XSS-to-durable-credential
-// escalation, and re-adding a mint button here would reopen it. The operator (cli) token is
-// structurally absent from ListTokens and unrevokable, so it never appears and is never a
-// revoke target.
+// It has no mint control. The service needs tokens=write, which only the operator token holds,
+// and a console link never carries the operator token, so this page is normally refused and the
+// section hidden (opts.onDenied). The operator token is structurally absent from ListTokens and
+// unrevokable, so it never appears and is never a revoke target.
 //
-// Everything shown - names, fingerprints - is rendered through textContent (via h()), never
-// as HTML, so a token name can carry no markup into the page.
+// Everything shown - names, ids, grants - is rendered through textContent (via h()), never as
+// HTML, so a token name can carry no markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
-import { TokenService, TokenScope, type TokenInfo } from "@wire/token/v1alpha1/token_pb";
+import {
+  CredentialClass,
+  Level,
+  TokenService,
+  type Grant,
+  type TokenInfo,
+} from "@wire/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
-// scopeLabel names a token's class for the operator. Only connector and share tokens ever
-// reach a ListTokens response (the operator token is invisible by construction); an
-// unspecified/unknown scope falls back to a plain "Token" so a future class still renders.
-function scopeLabel(scope: TokenScope): string {
-  switch (scope) {
-    case TokenScope.CONNECTOR:
-      return "Connector";
-    case TokenScope.SHARE_READ:
-      return "Read-only share";
-    default:
+// classLabel names a token's class for the operator. The operator token never reaches a
+// ListTokens response; the grant beside it says what each may do.
+function classLabel(c: CredentialClass): string {
+  switch (c) {
+    case CredentialClass.STORED:
       return "Token";
+    case CredentialClass.SHARE:
+      return "Read-only share";
+    case CredentialClass.EXCHANGE:
+      return "Link code";
+    default:
+      return "Unknown";
   }
 }
 
-// expiryLabel renders a token's expiry as a local date-time, or "Never expires" when the
-// expires timestamp is unset (a non-expiring connector token).
+// grantLabel renders a grant the way the CLI does ("mcp=write,console=read"), naming only the
+// surfaces it reaches.
+function grantLabel(g: Grant | undefined): string {
+  if (!g) return "nothing";
+  const level = (l: Level): string =>
+    l === Level.WRITE ? "write" : l === Level.READ ? "read" : "";
+  const parts: string[] = [];
+  for (const [surface, l] of [
+    ["tokens", g.tokens],
+    ["mcp", g.mcp],
+    ["console", g.console],
+  ] as const) {
+    if (level(l)) parts.push(surface + "=" + level(l));
+  }
+  return parts.join(",") || "nothing";
+}
+
+// expiryLabel renders a token's expiry as a local date-time. Every token the daemon lists
+// expires; "Never expires" is only what an unset timestamp would mean.
 function expiryLabel(t: TokenInfo): string {
   const ts = t.expireTime;
   if (!ts) return "Never expires";
@@ -121,7 +143,7 @@ export function buildTokensSection(
 
     const head = h("div", "console-settings-tokens__row console-settings-tokens__row--head");
     head.setAttribute("role", "row");
-    for (const label of ["Type", "Name", "Fingerprint", "Expires", ""]) {
+    for (const label of ["Class", "Grant", "Name", "ID", "Expires", ""]) {
       const cell = h("span", "console-settings-tokens__cell", label);
       cell.setAttribute("role", "columnheader");
       head.append(cell);
@@ -135,8 +157,11 @@ export function buildTokensSection(
       const type = h("span", "console-settings-tokens__cell");
       type.setAttribute("role", "cell");
       const label = h("span", "pf-v6-c-label pf-m-compact");
-      label.append(h("span", "pf-v6-c-label__content", scopeLabel(t.scope)));
+      label.append(h("span", "pf-v6-c-label__content", classLabel(t.class)));
       type.append(label);
+
+      const grant = h("span", "console-settings-tokens__cell", grantLabel(t.grant));
+      grant.setAttribute("role", "cell");
 
       const name = h(
         "span",
@@ -145,11 +170,7 @@ export function buildTokensSection(
       );
       name.setAttribute("role", "cell");
 
-      const fp = h(
-        "span",
-        "console-settings-tokens__cell console-settings-tokens__fp",
-        t.identifier,
-      );
+      const fp = h("span", "console-settings-tokens__cell console-settings-tokens__fp", t.id);
       fp.setAttribute("role", "cell");
 
       const exp = h(
@@ -169,13 +190,13 @@ export function buildTokensSection(
       revoke.type = "button";
       // The label already reads "Revoke"; the descriptive title/aria-label names WHICH token so the
       // control's effect is unambiguous (the repo's explicit-labeling standard).
-      const who = (t.name ? t.name : scopeLabel(t.scope)) + " (" + t.identifier + ")";
+      const who = (t.name ? t.name : classLabel(t.class)) + " (" + t.id + ")";
       revoke.title = "Revoke token " + who;
       revoke.setAttribute("aria-label", "Revoke token " + who);
       revoke.addEventListener("click", () => void revokeToken(t, revoke));
       actionCell.append(revoke);
 
-      row.append(type, name, fp, exp, actionCell);
+      row.append(type, grant, name, fp, exp, actionCell);
       table.append(row);
     }
     return table;
@@ -184,19 +205,19 @@ export function buildTokensSection(
   // revokeToken confirms, calls RevokeToken by fingerprint, then reloads the list. Revoking the
   // share token also closes its LAN listener - the server handles that teardown, not the UI.
   async function revokeToken(t: TokenInfo, btn: HTMLButtonElement): Promise<void> {
-    const who = t.name ? t.name : scopeLabel(t.scope);
-    const isShare = t.scope === TokenScope.SHARE_READ;
+    const who = t.name ? t.name : classLabel(t.class);
+    const isShare = t.class === CredentialClass.SHARE;
     const detail = isShare
       ? 'Revoke the share token "' +
         who +
         '"? This also closes the read-only share listener immediately.'
-      : 'Revoke connector token "' +
+      : 'Revoke token "' +
         who +
         '"? Any client using it will stop working. This cannot be undone - mint a new one from the CLI if needed.';
     if (!confirm(detail)) return;
     btn.disabled = true;
     try {
-      await client.revokeToken({ name: t.identifier });
+      await client.revokeToken({ name: t.id });
       if (stale) return;
       showToast("Access tokens", "Revoked " + who + ".");
       await renderList();

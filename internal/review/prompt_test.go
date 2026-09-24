@@ -87,6 +87,34 @@ func TestPromptOmitsSectionsWithNothingInThem(t *testing.T) {
 	assert.NotContains(t, out, "could not measure", "a changeset with no caveats has no caveats section")
 }
 
+func TestPromptCarriesConformanceChecks(t *testing.T) {
+	rev := types.Diff{Base: "main", Files: []types.DiffFile{{Path: "internal/trail/trail.go", Symbols: []types.DiffSymbol{{
+		Label: "EntryPointFrom",
+		Checks: []types.Check{{
+			Name: types.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
+			Message: "`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
+		}},
+	}}}}}
+
+	out := renderPrompt(t, rev, nil)
+
+	assert.Contains(t, out, "## Conformance")
+	assert.Contains(t, out, "- `EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext` (`internal/trail/trail.go`)")
+	assert.NotContains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), "## Conformance", "no finding, no section")
+
+	uncovered := renderPrompt(t, types.Diff{Base: "main", Uncovered: []types.DiffUncovered{
+		{Project: "docs", Reason: types.DiffUncoveredNoIndexer},
+	}}, nil)
+	assert.Contains(t, uncovered, "## Conformance", "an unchecked project is named under the checks' heading")
+	assert.Contains(t, uncovered, "- not checked: `docs` (no symbol indexer)")
+
+	unchecked := renderPrompt(t, types.Diff{Base: "main", ConformanceError: &types.Diagnostic{
+		Code: string(types.SymbolIndexNotCurrent), Message: "the symbol index could not be brought current",
+	}}, nil)
+	assert.Contains(t, unchecked, "## Conformance", "could not check is said, never left as silence")
+	assert.Contains(t, unchecked, "- [MGS7003] the symbol index could not be brought current")
+}
+
 // TestPromptCarriesWhatCouldNotBeMeasured: magus's own caveats are the difference between
 // "nothing depends on this" and "nobody looked". Dropping them invites the model to read silence
 // as a clean bill of health, which is the failure mode every annotation in the report guards.

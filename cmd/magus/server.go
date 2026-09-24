@@ -180,6 +180,7 @@ const daemonDetachEnv = "MAGUS_DAEMON_DETACH"
 const daemonReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointDaemon)
 	var sf *gen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
 		sf = gen.BindServerStart(fs)
@@ -212,7 +213,7 @@ func serverStart(ctx context.Context, args []string) error {
 	// it is printed here rather than left in the log. A console that is not mounted says
 	// so: a silent absence is what sends somebody reading daemon.go.
 	if u := consoleRootURL(); u != "" {
-		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` prints one)\n", u, hint.ConfigTokenPrint)
+		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` mints one)\n", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenExpires()))
 	} else {
 		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
 	}
@@ -1140,12 +1141,12 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
-	// The watermark is the READER's; see DiffSession.SeenThreads for why it cannot be the job's.
-	if unseen := (types.DiffSession{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
+	// The watermark is the READER's; see DiffReview.SeenThreads for why it cannot be the job's.
+	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
-			Actor:     "daemon",
+			Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 			Workspace: m.Root(),
 			Action:    "review.said",
 			Outcome:   trail.OutcomeOK,
@@ -1168,7 +1169,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
-		Actor:     "daemon",
+		Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 		Workspace: m.Root(),
 		Action:    "review.merged",
 		Outcome:   trail.OutcomeOK,

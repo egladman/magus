@@ -44,6 +44,7 @@ var scribes = map[string]func(args []string) error{
 	"migrate":            runMigrate,
 	"release-index":      runReleaseIndex,
 	"generate-changelog": runGenerateChangelog,
+	"lint-fragments":     runLintFragments,
 }
 
 func main() {

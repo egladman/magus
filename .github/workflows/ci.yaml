@@ -337,28 +337,33 @@ jobs:
           api-surface: 'false'
           first-contribution: 'false'
 
-      # The scripts, not the advice action: an action step cannot loop, and each pull request
-      # needs its own branch checked out by name. main's copy of them, taken before any branch
+      # The script, not the advice action: an action step cannot loop, and each pull request
+      # needs its own branch checked out by name. main's copy of it, taken before any branch
       # is checked out over the workspace.
+      #
+      # A push event carries no pull request, so each one gets the event a pull_request run
+      # would have had: GitHub's own pull request object, under the same key.
       - name: Settle labelled pull requests this push put in conflict
         if: github.event_name != 'pull_request' && steps.work.outputs.requested == 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
           BUZZ_INCLUDE_PATH: ${{ runner.temp }}/advice
           CONFLICTING: ${{ runner.temp }}/conflicting.txt
         run: |
           set -euo pipefail
           cp -R .github/actions/advice "$BUZZ_INCLUDE_PATH"
+          ADVICE_INPUTS=$(jq -cn --arg label "$FIX_LABEL" '{"fix-merge-conflict": "true", "fix-label": $label}')
+          export ADVICE_INPUTS
           status=0
           while read -r number ref; do
+            event="$RUNNER_TEMP/event-$number.json"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '{pull_request: .}' > "$event"
             git fetch --no-tags origin "+refs/heads/$ref:refs/remotes/origin/$ref"
             git merge --abort 2>/dev/null || true
             git clean -fd
             git checkout --force -B "$ref" "origin/$ref"
-            PR_NUMBER="$number" PR_BASE=main PR_HEAD_REF="$ref" PR_HEAD_REPO="$REPO" \
-              FIX_CONFLICTS=true magus buzz "$BUZZ_INCLUDE_PATH/fix-merge-conflict.buzz" </dev/null \
+            GITHUB_EVENT_PATH="$event" magus buzz "$BUZZ_INCLUDE_PATH/fix-merge-conflict.buzz" </dev/null \
               || { echo "::warning::could not settle #$number"; status=1; }
           done < "$CONFLICTING"
           exit "$status"

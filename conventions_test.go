@@ -141,9 +141,9 @@ func itoa(n int) string {
 }
 
 // bearerRe matches a `token=` carrying something long enough to be a real bearer
-// rather than a placeholder. auth.Generate mints 256 bits base64url-encoded, so a
-// live token is 43 characters; the documented forms (`token=...`, `token=<bearer>`)
-// are far shorter and contain characters this class excludes.
+// rather than a placeholder. A live token is a class prefix plus 49 base62 characters;
+// the documented forms (`token=...`, `token=<bearer>`) are far shorter and contain
+// characters this class excludes.
 var bearerRe = regexp.MustCompile(`token=[A-Za-z0-9_-]{20,}`)
 
 // TestDocsCarryNoBearerToken keeps a live daemon token out of committed documentation.
@@ -3734,9 +3734,9 @@ func (ix symbolIndex) addBuzzName(lit string) {
 	}
 }
 
-// installCall matches a package-manager install run from a magusfile, directly or through
-// the install() helper each JS project defines.
-var installCall = regexp.MustCompile(`\binstall\(\)|"(pnpm|npm|yarn)",\s*\["(install|ci)"`)
+// installCall matches a package-manager install run from a magusfile, directly, through an
+// install() helper, or through a spell's install op.
+var installCall = regexp.MustCompile(`\binstall\(\)|"(pnpm|npm|yarn)",\s*\["(install|ci)"|\["(pnpm-install|npm-ci|go-mod-download|uv-sync|cargo-fetch)"\]`)
 
 // exportedTarget matches the head of a target definition, capturing its name.
 var exportedTarget = regexp.MustCompile(`(?m)^export fun (\w+)\(`)

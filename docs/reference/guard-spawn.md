@@ -7,7 +7,8 @@ tags: [guard, agents, spawn, subagents, policy, magusfile, hooks, strengthen-onl
 # magus\guard.spawn
 
 `magus\guard.spawn` is the spawn-time sibling of
-[`magus\guard.shell`](../guides/integrations/agents/guard.md). The root magusfile
+[`magus\guard.shell`](../guides/integrations/agents/guard.md) and
+[`magus\guard.command`](guard-command.md). The root magusfile
 registers one function; the agent guard calls it on every subagent spawn and every
 message to an existing subagent it sees, hands it the request, and adds its answer
 to the built-in verdict.
@@ -19,7 +20,7 @@ that decision can live in your tree, in Buzz, versioned with the code it governs
 ```buzz
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     if (req.kind == "spawn" and req.model == "") {
         return magus\guard.deny("Name a model for this spawn.");
     }
@@ -85,10 +86,10 @@ Every job member that writes raises inside a rule.
 
 A spawn whose title (`description`) reads `<parent>/<role> <job>`, where `<job>` names
 a declared, running or exited job, attributes the new agent to that job. From then on
-every hook call carrying that agent's id is graded under the job's lease, as if its
-shell had `BAGGAGE=magus.lease=<job>`: an explicit `--lease` still wins, and the agent's
-job outranks the session's `magus job exec` binding, because a subagent shares its
-parent's session id and only its agent id tells the two apart.
+every hook call carrying that agent's id is graded under the job's lease. An explicit
+`--lease` still wins. The agent's job outranks the session's `magus job exec` binding,
+because a subagent shares its parent's session id and only its agent id tells the two
+apart, and it outranks a `BAGGAGE` claim, as every record does.
 
 When the job has not reported a base and the spawn did not ask for its own checkout,
 magus records this checkout's revision and dirty-patch digest for it, the values
@@ -115,12 +116,14 @@ non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md)
 
 ## Tighten live, loosen on approval
 
-When the magusfile is under version control and a `.buzz` file differs from the
-checked-out commit, the guard evaluates the rule twice: once from the working tree and
-once from the committed sources, and keeps the stricter answer. An edit that tightens
-applies on the next spawn; one that loosens waits for a commit. The committed
-side reads each file through the VCS layer rather than a checkout. Local spells
-imported by path are read from the working tree on both sides.
+When the magusfile is under version control and a file its root load read differs from
+the checked-out commit, the guard evaluates the rule twice: once from the working tree
+and once from the committed sources, and keeps the stricter answer. An edit that tightens
+applies on the next spawn; one that loosens waits for a commit. The committed side reads
+the changed files through the VCS layer rather than a checkout, and the unchanged ones
+from disk. Local spells imported by path are read from the working tree on both sides.
+Both sides load the root magusfile alone, never the whole workspace; see
+[what the guard costs](guard-command.md#what-it-costs).
 
 ## Hosts
 

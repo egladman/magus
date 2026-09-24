@@ -44,7 +44,7 @@ pointer); Magus does not write `.cursor/mcp.json`.
 
 ```sh
 magus server start
-export MAGUS_MCP_TOKEN="$(magus config token print)"   # or a connector token
+magus config mcp connector create --name cursor --expires 366d   # shown once: store it as MAGUS_MCP_TOKEN
 magus agent harness apply --id cursor   # prints setup hint; wires hooks only
 ```
 
@@ -200,7 +200,7 @@ script also accepts `file_path`.
 # note in magus-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none

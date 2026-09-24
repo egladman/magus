@@ -27,7 +27,7 @@ func seedGreenGate(t *testing.T, root, fp string) {
 		Outcome: sessions.OutcomePass, Fingerprint: fp,
 		Projects: []string{"."}, Charms: []string{"quiet"},
 		Inv: "inv123",
-	}, sessions.SessionStart{Workspace: root}))
+	}, sessions.InvocationStart{Workspace: root}))
 }
 
 // stubPool pins the load answer for one test, restoring the real probe after.
@@ -181,7 +181,7 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
 		Target: types.TargetCI, Ref: "b", Commit: "c1",
 		Outcome: sessions.OutcomeFail, Fingerprint: "fp-1",
-	}, sessions.SessionStart{Workspace: root}))
+	}, sessions.InvocationStart{Workspace: root}))
 	stubPool(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}

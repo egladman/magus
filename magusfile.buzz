@@ -14,6 +14,11 @@ import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
+// This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
+import "./tools/policy/guard" as agentpolicy;
+magus\guard.command(agentpolicy\judge);
+magus\guard.spawn(agentpolicy\judgeSpawn);
+magus\guard.write(agentpolicy\judgeWrite);
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -333,9 +338,6 @@ magus\project({
             "skip_cache": "composes the gates and reads nothing itself; its key is the whole tree, so it can never replay",
             "timeout": "45m",
         },
-		// Preserves the hand-authored Unreleased section in place; caching a prior
-		// file would overwrite a later edit that is intentionally outside releases/.
-		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
         "git-hooks-install": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
@@ -1086,9 +1088,11 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./internal/cli/..."]);
 }
 
-// CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
-// reverse docs -> root output edge while letting docs publication depend on the same
-// execution stage.
+// CHANGELOG.md is a root artifact, generated from releases/*.yaml alone: its [Unreleased]
+// stays empty because unreleased entries are fragments under changes/unreleased/, which
+// the docs changelog page renders at build time. Keeping its generator beside the file
+// avoids a reverse docs -> root output edge while letting docs publication depend on the
+// same execution stage.
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
     // This target COMPILES the module (`go run ./cmd/magus-utils`), and internal/spell
     // go:embeds files spells-generate writes. Without the edge the two race inside generate's
@@ -1147,20 +1151,21 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Fails a feat, fix, perf or breaking pull request that changes shipped code without adding
-// a bullet to CHANGELOG.md's [Unreleased] section. tools/changelog.buzz holds the rule and
-// decides which paths ship. The title comes from the event under gha; to check a branch by
-// hand, pass the title after `--`.
+// a changelog fragment under changes/unreleased/, and any pull request whose fragment is
+// malformed. tools/changelog.buzz holds the rule and decides which paths ship. The title
+// comes from the event under gha; to check a branch by hand, pass the title after `--`.
 export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-changelog");
-    if (vcs\name() != "git") {
-        throw "pr-changelog: reads the base CHANGELOG.md with `git show`, and this checkout is {vcs\name()}";
-    }
     final base = vcs\base();
     var changed = mut [<str>];
     foreach (f in vcs\changedFiles(base)) { changed.append(f.value); }
-    final before = vcs\cmd(["show", base + ":CHANGELOG.md"], {"quiet": true}).stdout;
-    final added = changelog\addedEntries(releaser\unreleasedBody(before),
-        releaser\unreleasedBody(fs\readFile("CHANGELOG.md")));
+    var added = mut [<str>];
+    foreach (path in changelog\fragments(changed)) {
+        if (fs\exists(path)) { added.append(path); }
+    }
+    if (added.len() > 0) {
+        proc\exec("go", ["run", "./cmd/magus-utils", "lint-fragments"] + added);
+    }
     final problem = changelog\problem(title, changed: changed, added: added);
     if (problem != "") {
         throw "pr-changelog: against {base}: {problem}";
@@ -1170,7 +1175,7 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("pr-changelog: \"{title}\" owes no entry against {base}");
         return;
     }
-    magus\log.info("pr-changelog: {added.len()} new [Unreleased] entry(s) cover {owed.len()} shipped path(s)");
+    magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
 }
 
 // Installs a shim in git's hooks directory for every tools/git-hooks/<hook>.buzz, so the
@@ -2056,7 +2061,7 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Builds docs/gen/public/release/index.json from releases/*.yaml, signs it into
-// index.json.sig, regenerates the files derived from the changelog the cut rewrote,
+// index.json.sig, regenerates the files derived from the manifest the cut wrote,
 // and, under the cd charm, publishes whatever changed as a pull request. args[0] is
 // what produced the index, as a sentence fragment ("the v0.4.0 release", "a manual
 // refresh"); it names the commit and the pull request.
@@ -2104,8 +2109,8 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
         buildArgs.append("-no-sign");
     }
     proc\exec("go", buildArgs);
-    // The cut rewrote CHANGELOG.md, and the knowledge graph and the docs changelog are
-    // derived from it, so publish them regenerated or the pull request is born failing
+    // The cut added a manifest, and CHANGELOG.md and the knowledge graph are derived
+    // from it, so publish them regenerated or the pull request is born failing
     // its own drift gate (the v0.4.2 index PR was). Two compositions, deliberately
     // different. The root's regeneration is `generate`'s *-generate fan-out rather
     // than ctx.needs(generate), because the gate half of generate would throw at
@@ -2343,14 +2348,13 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         checks.append(passed("release manifest", manifest + " is absent, as cut requires"));
     }
 
-    if (!fs\exists("CHANGELOG.md")) {
-        checks.append(failed("changelog", "CHANGELOG.md is missing; cut reads the release notes out of it"));
-    } else if (releaser\unreleasedBody(fs\readFile("CHANGELOG.md")) == "") {
-        checks.append(failed("changelog", "CHANGELOG.md's [Unreleased] section is empty, so "
+    final fragments = fs\glob(changelog\FRAGMENT_DIR + "*.md");
+    if (fragments.len() == 0) {
+        checks.append(failed("changelog", changelog\FRAGMENT_DIR + " holds no changelog fragments, so "
             + "`magus-utils cut` would refuse and this release would publish binaries with no notes. "
-            + "Write the entry before tagging"));
+            + "Write the entries before tagging"));
     } else {
-        checks.append(passed("changelog", "CHANGELOG.md's [Unreleased] section has content for cut to move"));
+        checks.append(passed("changelog", changelog\FRAGMENT_DIR + " holds {fragments.len()} fragment(s) for cut to fold"));
     }
 
     // (d) The trigger, from both sides. A nested tag that matched would run the whole
@@ -2718,7 +2722,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //   internal/agent/skills/**          go:embed pulls in the DIRECTORY, so a non-.md file
     //                                     added there is a compile-time input too
     //   internal/agent/agents-section.md  go:embed
-    //   CHANGELOG.md                      cmd/magus-utils/release_test.go parses it
+    //   CHANGELOG.md, changes/**/*.md     cmd/magus-utils/release_test.go parses them
     //
     // Narrowing this does NOT stop a markdown edit re-running `format`, which reads every
     // .md because dprint and markdownlint genuinely format them all. What it stops is the
@@ -2742,7 +2746,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.buzz", "mise.toml", "magus.yaml",
                    "**/*.lock",
                    "docs/**/*.md", "internal/agent/skills/**",
-                   "internal/agent/agents-section.md", "CHANGELOG.md",
+                   "internal/agent/agents-section.md", "CHANGELOG.md", "changes/**/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
                    "internal/registry/testdata/*",
                    "benchmarks/agent/internal/bench/testdata/*",
@@ -2971,7 +2975,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz");
+        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
@@ -3027,6 +3031,10 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         } else {
             cover_for(mod.value, ["--embedded"], {});
         }
+    }
+    // The agent policy is a magusfile import like the tools above it.
+    foreach (mod in fs\glob("tools/policy/*.buzz")) {
+        cover_for(mod.value, ["--embedded"], {});
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
     // nothing ran until 2026-08-09. That gap is why a broken escaper shipped: every one
@@ -3216,8 +3224,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // missing when `unlabeled` reached main through CHANGELOG.md. It surfaced one shard
     // over, in the docs project, because docs/changelog.md is a GENERATED MIRROR of the
     // root file - so the error pointed at generated output while the fix belonged here.
-    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md"];
-    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md");
+    // Unreleased entries live in changes/, so that directory is prose too.
+    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "changes"];
+    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md",
+        "changes/**/*.md");
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
     proc\exec("actionlint", []);

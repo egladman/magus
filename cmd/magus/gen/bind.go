@@ -45,6 +45,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.VCS.Name, "vcs-name", cfg.VCS.Name, "MAGUS_VCS_NAME")
 	fs.StringVar(&cfg.VCS.BaseRef, "vcs-base-ref", cfg.VCS.BaseRef, "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref.")
 	fs.StringVar(&cfg.MCP.Address, "mcp-address", cfg.MCP.Address, "MAGUS_MCP_ADDRESS")
+	fs.BoolVar(&cfg.MCP.InsecureBind, "mcp-insecure-bind", cfg.MCP.InsecureBind, "MAGUS_MCP_INSECURE_BIND: InsecureBind permits a non-loopback Address.")
 	fs.StringVar(&cfg.Log.Format, "log-format", cfg.Log.Format, "MAGUS_LOG_FORMAT: Format is pretty|plain|text|json.")
 	fs.StringVar(&cfg.Log.Level, "log-level", cfg.Log.Level, "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.")
 	fs.StringVar(&cfg.Knowledge.PublishedRef, "knowledge-published-ref", cfg.Knowledge.PublishedRef, "MAGUS_KNOWLEDGE_PUBLISHED_REF: PublishedRef is the OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>.")

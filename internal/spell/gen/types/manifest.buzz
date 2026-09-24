@@ -8,4 +8,5 @@
 export object Manifest {
     value: str = "",
     lockCandidates: [str] = [],
+    installs: {str: Install} = {},
 }

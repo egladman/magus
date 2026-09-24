@@ -89,7 +89,7 @@ jobs:
           # checker that would reject the file for it.
           grep -v '^version:' dist/SHA256SUMS > "$RUNNER_TEMP/sums"
           (cd dist && sha256sum -c "$RUNNER_TEMP/sums")
-          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
+          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
           go run ./cmd/magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
           rm -rf dist
 

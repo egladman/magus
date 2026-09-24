@@ -1,13 +1,13 @@
 ---
 title: magus session
 generated_from: internal/cli/registry.go
-description: "One family over the repository's session store: list what sessions ran, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all."
+description: "One family over the repository's session store: list what magus invocations ran and the host session each ran in, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all."
 tags: [cli, magus session, sessions, attention, history, worktrees, agents, guard]
 ---
 
 # magus-session
 
-What sessions did and what they are blocked on: humans read and dispose, hosts write
+What magus invocations did and what agents are blocked on: humans read and dispose, hosts write
 
 ## Synopsis
 
@@ -18,8 +18,10 @@ What sessions did and what they are blocked on: humans read and dispose, hosts w
 One noun over the repository's session store, with a human side and a
 machine side.
 
-Humans read it. The bare command lists past magus sessions with the targets
-each one ran and how those runs ended; \`session attention\` lists the requests
+Humans read it. The bare command lists past magus invocations with the targets
+each one ran and how those runs ended, the OS user that ran it, and the host
+session it ran in (a dash when no host delivered one: the invocation is
+unattributed); \`session attention\` lists the requests
 agents have raised - work blocked on input or on approval - and
 \`session dispose\` closes one. Nothing closes a request automatically: there is
 no expiry, no severity inference and no auto-dispose flag, because a request
@@ -42,8 +44,8 @@ rather than failing the read.
 
 The listing takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
-against each session's last fact, not its first, so a long session that is
-still working stays listed however long ago it began.
+against each invocation's last fact, not its first, so a long one that is still
+working stays listed however long ago it began.
 
 --brief answers the listing's own question, where does the work stand, for a
 model instead of a person. It prints this checkout read off disk: branch and
@@ -61,10 +63,10 @@ session-start event and hand the model state instead of prose.
 : Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)
 
 **--limit** *int*
-: Show at most this many sessions (0 for all)
+: Show at most this many invocations (0 for all)
 
 **--since** *string*
-: Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp
+: Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp
 
 ### session load options
 
@@ -101,7 +103,7 @@ session-start event and hand the model state instead of prose.
 ## Subcommands
 
 **ls**
-: List past sessions and the targets they ran (the default)
+: List past magus invocations and the targets they ran (the default)
 
 **load**
 : Load a normalized agent-session event stream from a host transcript
@@ -137,7 +139,7 @@ session-start event and hand the model state instead of prose.
 
 ## Examples
 
-*Show recent sessions*
+*Show recent invocations*
 
 ```sh
 magus session

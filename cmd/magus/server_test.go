@@ -361,7 +361,7 @@ func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
 	})
 	reader := changeset.NewStore(m.CacheDir())
 	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
-	reader.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorHuman)
+	reader.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
 
 	require.NoError(t, serverCheckReview(ctx, root, nil))
 

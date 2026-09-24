@@ -2,40 +2,21 @@
 // @generated from file magus/token/v1alpha1/token.proto (package magus.token.v1alpha1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.token.v1alpha1 is the console-facing TokenService: the typed MANAGEMENT
-// surface for the daemon's auth tokens. It is VIEW-AND-REVOKE ONLY - it can list
-// tokens and revoke them, but it can NEVER mint one. Minting stays a CLI-only
-// operation (`magus config mcp connector`); the browser has no path to a durable
-// credential, which closes the XSS-to-durable-credential escalation by construction.
-// It is a SECOND door onto the same on-disk connector store the CLI writes - not a
-// second store - plus a read/revoke view of the daemon's in-memory share token. Two
-// tokens are deliberately out of reach here:
-//   - the OPERATOR token (the built-in cli credential, auto-seeded on first daemon
-//     start): it is bootstrap-only and managed SOLELY by the CLI. It lives in a store
-//     this service never opens, so it is structurally INVISIBLE and IMMUTABLE to the
-//     browser-facing surface - it can be neither enumerated by ListTokens nor targeted
-//     by RevokeToken (a revoke keyed on its fingerprint returns NotFound and leaves it
-//     on disk), so the management UI can never lock the operator out of the daemon it
-//     authenticates against. This is by construction, not by convention: see
-//     TokenScope's TOKEN_SCOPE_OPERATOR and the handler's boundary tests.
-//   - there is NO renew/extend RPC by design: a token is reminted (via the CLI),
-//     never extended, for cryptographic hygiene (a fresh secret on rotation, not a
-//     longer-lived one).
+// Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
+// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// the same token store the CLI writes (tokens.d) and the same share manager the share
+// endpoint drives, never a second store.
 //
-// Access policy - the three-tier credential model, enforced at the mount:
-//   - cli token (operator): the ONLY credential accepted on ANY TokenService RPC.
-//     Token management is operator-tier because whoever can revoke tokens owns the
-//     daemon.
-//   - connector token (MCP client): valid on the data surfaces (/mcp, the console
-//     read/control services) but REJECTED here - a client credential must never
-//     revoke credentials (privilege self-replication).
-//   - share token (read-only viewer): valid only on the ephemeral LAN share
-//     listener, which never mounts this service; it cannot reach any RPC here.
+// Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
+// viewer, connector or share token is refused at the mount with 403. A mint and a revoke are
+// ALSO checked against the caller's own grant (a token is never granted, or revoked, beyond
+// what its caller holds), so the mount is defense in depth rather than the rule.
 //
-// The service is mounted on the loopback listener behind a cli-token-only bearer
-// guard and NEVER on the LAN share listener. buf-breaking gates this file: fields
-// and RPCs may be ADDED (old clients ignore unknown fields), never renumbered or
-// removed.
+// The operator token is out of reach here: it lives in a file this service never opens, so it
+// is neither listed nor revocable, and the management UI cannot lock the operator out. There
+// is no renew RPC: a token is reminted, never extended.
+//
+// buf-breaking gates this file: fields and RPCs may be ADDED, never renumbered or removed.
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
@@ -48,44 +29,71 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/token/v1alpha1/token.proto.
  */
 export const file_magus_token_v1alpha1_token: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEirwEKCVRva2VuSW5mbxIMCgRuYW1lGAEgASgJEhIKCmlkZW50aWZpZXIYAiABKAkSLwoFc2NvcGUYAyABKA4yIC5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlblNjb3BlEi8KC2V4cGlyZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBUoECAYQB1IHY3JlYXRlZFIJbGFzdF91c2VkIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IkUKEkxpc3RUb2tlbnNSZXNwb25zZRIvCgZ0b2tlbnMYASADKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8iowEKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEjkKBXNjb3BlGAIgASgOMiAubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5TY29wZUIIukgFggECEAESNAoLZXhwaXJlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSACIAQFCDgoMX2V4cGlyZV90aW1lIlUKE0NyZWF0ZVRva2VuUmVzcG9uc2USLgoFdG9rZW4YASABKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8SDgoGc2VjcmV0GAIgASgJIisKElJldm9rZVRva2VuUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABKrEBCgpUb2tlblNjb3BlEhsKF1RPS0VOX1NDT1BFX1VOU1BFQ0lGSUVEEAASGAoUVE9LRU5fU0NPUEVfT1BFUkFUT1IQAxIZChVUT0tFTl9TQ09QRV9DT05ORUNUT1IQARIaChZUT0tFTl9TQ09QRV9TSEFSRV9SRUFEEAISFwoTVE9LRU5fU0NPUEVfQ09OU09MRRAEEhwKGFRPS0VOX1NDT1BFX0NPTlNPTEVfUkVBRBAFMq0CCgxUb2tlblNlcnZpY2USXwoKTGlzdFRva2VucxInLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXF1ZXN0GigubWFndXMudG9rZW4udjFhbHBoYTEuTGlzdFRva2Vuc1Jlc3BvbnNlElgKC1Jldm9rZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuUmV2b2tlVG9rZW5SZXF1ZXN0Gh8ubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5JbmZvEmIKC0NyZWF0ZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuQ3JlYXRlVG9rZW5SZXF1ZXN0GikubWFndXMudG9rZW4udjFhbHBoYTEuQ3JlYXRlVG9rZW5SZXNwb25zZULjAQoYY29tLm1hZ3VzLnRva2VuLnYxYWxwaGExQgpUb2tlblByb3RvUAFaSWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL3Rva2VuL3YxYWxwaGExO3Rva2VudjFhbHBoYTGiAgNNVFiqAhRNYWd1cy5Ub2tlbi5WMWFscGhhMcoCFE1hZ3VzXFRva2VuXFYxYWxwaGEx4gIgTWFndXNcVG9rZW5cVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhZNYWd1czo6VG9rZW46OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEijAEKBUdyYW50EisKBnRva2VucxgBIAEoDjIbLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxldmVsEigKA21jcBgCIAEoDjIbLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxldmVsEiwKB2NvbnNvbGUYAyABKA4yGy5tYWd1cy50b2tlbi52MWFscGhhMS5MZXZlbCL3AQoJVG9rZW5JbmZvEgwKBG5hbWUYASABKAkSCgoCaWQYCCABKAkSNAoFY2xhc3MYCSABKA4yJS5tYWd1cy50b2tlbi52MWFscGhhMS5DcmVkZW50aWFsQ2xhc3MSKgoFZ3JhbnQYByABKAsyGy5tYWd1cy50b2tlbi52MWFscGhhMS5HcmFudBIvCgtleHBpcmVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgCEANKBAgDEARKBAgEEAVKBAgGEAdSCmlkZW50aWZpZXJSBXNjb3BlUgdjcmVhdGVkUglsYXN0X3VzZWQiEwoRTGlzdFRva2Vuc1JlcXVlc3QiRQoSTGlzdFRva2Vuc1Jlc3BvbnNlEi8KBnRva2VucxgBIAMoCzIfLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbyKhAQoSQ3JlYXRlVG9rZW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSNAoLZXhwaXJlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSACIAQESKgoFZ3JhbnQYBCABKAsyGy5tYWd1cy50b2tlbi52MWFscGhhMS5HcmFudEIOCgxfZXhwaXJlX3RpbWVKBAgCEANSBXNjb3BlIlUKE0NyZWF0ZVRva2VuUmVzcG9uc2USLgoFdG9rZW4YASABKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8SDgoGc2VjcmV0GAIgASgJIisKElJldm9rZVRva2VuUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABKj8KBUxldmVsEhUKEUxFVkVMX1VOU1BFQ0lGSUVEEAASDgoKTEVWRUxfUkVBRBABEg8KC0xFVkVMX1dSSVRFEAIqqgEKD0NyZWRlbnRpYWxDbGFzcxIgChxDUkVERU5USUFMX0NMQVNTX1VOU1BFQ0lGSUVEEAASHQoZQ1JFREVOVElBTF9DTEFTU19PUEVSQVRPUhABEhsKF0NSRURFTlRJQUxfQ0xBU1NfU1RPUkVEEAISGgoWQ1JFREVOVElBTF9DTEFTU19TSEFSRRADEh0KGUNSRURFTlRJQUxfQ0xBU1NfRVhDSEFOR0UQBDKtAgoMVG9rZW5TZXJ2aWNlEl8KCkxpc3RUb2tlbnMSJy5tYWd1cy50b2tlbi52MWFscGhhMS5MaXN0VG9rZW5zUmVxdWVzdBooLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXNwb25zZRJYCgtSZXZva2VUb2tlbhIoLm1hZ3VzLnRva2VuLnYxYWxwaGExLlJldm9rZVRva2VuUmVxdWVzdBofLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbxJiCgtDcmVhdGVUb2tlbhIoLm1hZ3VzLnRva2VuLnYxYWxwaGExLkNyZWF0ZVRva2VuUmVxdWVzdBopLm1hZ3VzLnRva2VuLnYxYWxwaGExLkNyZWF0ZVRva2VuUmVzcG9uc2VC4wEKGGNvbS5tYWd1cy50b2tlbi52MWFscGhhMUIKVG9rZW5Qcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy90b2tlbi92MWFscGhhMTt0b2tlbnYxYWxwaGExogIDTVRYqgIUTWFndXMuVG9rZW4uVjFhbHBoYTHKAhRNYWd1c1xUb2tlblxWMWFscGhhMeICIE1hZ3VzXFRva2VuXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OlRva2VuOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_buf_validate_validate]);
 
 /**
- * TokenInfo describes one manageable token WITHOUT its secret, minimized to exactly
- * what a view+revoke UI needs. A read-only list is still an intelligence surface -
- * names, timing, and expiries let a viewer fingerprint the deployment - so it carries
- * ONLY: a short revoke handle (identifier, the prefix-only fingerprint, never the token
- * bytes or the full hash), the token class (scope), the expiry, and the user-chosen
- * name (the operator needs the name to know which token to revoke). It deliberately
- * omits the raw secret, the full hash, any filesystem path, the creation time, and
- * every other internal storage detail: none is needed to revoke, all would help a
- * viewer map the infrastructure.
+ * Grant is what a token may do: one level per surface, as the daemon enforces it.
+ *
+ * @generated from message magus.token.v1alpha1.Grant
+ */
+export type Grant = Message<"magus.token.v1alpha1.Grant"> & {
+  /**
+   * @generated from field: magus.token.v1alpha1.Level tokens = 1;
+   */
+  tokens: Level;
+
+  /**
+   * @generated from field: magus.token.v1alpha1.Level mcp = 2;
+   */
+  mcp: Level;
+
+  /**
+   * @generated from field: magus.token.v1alpha1.Level console = 3;
+   */
+  console: Level;
+};
+
+/**
+ * Describes the message magus.token.v1alpha1.Grant.
+ * Use `create(GrantSchema)` to create a new message.
+ */
+export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
+  messageDesc(file_magus_token_v1alpha1_token, 0);
+
+/**
+ * TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
+ * revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
+ * hash), the class, the grant, the expiry, and the name. A list is still an intelligence
+ * surface, so it omits the full hash, any filesystem path, and the creation time.
  *
  * @generated from message magus.token.v1alpha1.TokenInfo
  */
 export type TokenInfo = Message<"magus.token.v1alpha1.TokenInfo"> & {
   /**
-   * connector name, or a label for the share token
+   * the token's name, or a label for the share link
    *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * prefix-only fingerprint; the Revoke key
+   * the 8-hex id; a Revoke key
    *
-   * @generated from field: string identifier = 2;
+   * @generated from field: string id = 8;
    */
-  identifier: string;
+  id: string;
 
   /**
-   * @generated from field: magus.token.v1alpha1.TokenScope scope = 3;
+   * @generated from field: magus.token.v1alpha1.CredentialClass class = 9;
    */
-  scope: TokenScope;
+  class: CredentialClass;
 
   /**
-   * unset means the token never expires
-   *
+   * @generated from field: magus.token.v1alpha1.Grant grant = 7;
+   */
+  grant?: Grant;
+
+  /**
    * @generated from field: google.protobuf.Timestamp expire_time = 5;
    */
   expireTime?: Timestamp;
@@ -96,7 +104,7 @@ export type TokenInfo = Message<"magus.token.v1alpha1.TokenInfo"> & {
  * Use `create(TokenInfoSchema)` to create a new message.
  */
 export const TokenInfoSchema: GenMessage<TokenInfo> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 0);
+  messageDesc(file_magus_token_v1alpha1_token, 1);
 
 /**
  * @generated from message magus.token.v1alpha1.ListTokensRequest
@@ -109,7 +117,7 @@ export type ListTokensRequest = Message<"magus.token.v1alpha1.ListTokensRequest"
  * Use `create(ListTokensRequestSchema)` to create a new message.
  */
 export const ListTokensRequestSchema: GenMessage<ListTokensRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 1);
+  messageDesc(file_magus_token_v1alpha1_token, 2);
 
 /**
  * @generated from message magus.token.v1alpha1.ListTokensResponse
@@ -126,32 +134,33 @@ export type ListTokensResponse = Message<"magus.token.v1alpha1.ListTokensRespons
  * Use `create(ListTokensResponseSchema)` to create a new message.
  */
 export const ListTokensResponseSchema: GenMessage<ListTokensResponse> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 2);
+  messageDesc(file_magus_token_v1alpha1_token, 3);
 
 /**
  * @generated from message magus.token.v1alpha1.CreateTokenRequest
  */
 export type CreateTokenRequest = Message<"magus.token.v1alpha1.CreateTokenRequest"> & {
   /**
-   * A human label, unique among stored tokens. Empty asks the daemon to derive one.
+   * A human label, unique among stored tokens, that does not look like an id. Empty asks the
+   * daemon to derive one.
    *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * Must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; anything else is refused.
-   *
-   * @generated from field: magus.token.v1alpha1.TokenScope scope = 2;
-   */
-  scope: TokenScope;
-
-  /**
-   * Absent means the token never expires.
+   * Required: when the token dies, in the future and at most 366 days out.
    *
    * @generated from field: optional google.protobuf.Timestamp expire_time = 3;
    */
   expireTime?: Timestamp;
+
+  /**
+   * The grant to mint. Console levels only; within the caller's own grant.
+   *
+   * @generated from field: magus.token.v1alpha1.Grant grant = 4;
+   */
+  grant?: Grant;
 };
 
 /**
@@ -159,14 +168,12 @@ export type CreateTokenRequest = Message<"magus.token.v1alpha1.CreateTokenReques
  * Use `create(CreateTokenRequestSchema)` to create a new message.
  */
 export const CreateTokenRequestSchema: GenMessage<CreateTokenRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 3);
+  messageDesc(file_magus_token_v1alpha1_token, 4);
 
 /**
- * CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource,
- * because the secret is NOT part of the resource: TokenInfo is deliberately secret-free
- * so that listing tokens cannot leak one, and the plaintext exists only in this reply and
- * is unrecoverable afterwards. Returning TokenInfo alone would drop the one value the
- * caller needs; adding the secret TO TokenInfo would put it on every List response.
+ * CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because
+ * the secret is NOT part of the resource: TokenInfo is secret-free so that listing tokens
+ * cannot leak one, and the plaintext exists only in this reply.
  *
  * @generated from message magus.token.v1alpha1.CreateTokenResponse
  */
@@ -189,16 +196,14 @@ export type CreateTokenResponse = Message<"magus.token.v1alpha1.CreateTokenRespo
  * Use `create(CreateTokenResponseSchema)` to create a new message.
  */
 export const CreateTokenResponseSchema: GenMessage<CreateTokenResponse> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 4);
+  messageDesc(file_magus_token_v1alpha1_token, 5);
 
 /**
  * @generated from message magus.token.v1alpha1.RevokeTokenRequest
  */
 export type RevokeTokenRequest = Message<"magus.token.v1alpha1.RevokeTokenRequest"> & {
   /**
-   * The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted
-   * here too, since it identifies the same token and is what a listing gives a reader to
-   * copy.
+   * The token's exact id (8 hex digits), or its exact name.
    *
    * @generated from field: string name = 1;
    */
@@ -210,86 +215,95 @@ export type RevokeTokenRequest = Message<"magus.token.v1alpha1.RevokeTokenReques
  * Use `create(RevokeTokenRequestSchema)` to create a new message.
  */
 export const RevokeTokenRequestSchema: GenMessage<RevokeTokenRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 5);
+  messageDesc(file_magus_token_v1alpha1_token, 6);
 
 /**
- * TokenScope names the CLASS a token belongs to in the credential model,
- * so a client can group and label listed tokens - and so the full taxonomy is named
- * in one place even for the class this service never lists. A connector token is a
- * full MCP bearer minted for an external client; a share-read token is the short-lived,
- * read-only secret behind "share to phone"; the operator token is the built-in cli
- * credential.
+ * Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+ * every lower one. The zero value is none.
  *
- * @generated from enum magus.token.v1alpha1.TokenScope
+ * @generated from enum magus.token.v1alpha1.Level
  */
-export enum TokenScope {
+export enum Level {
   /**
-   * @generated from enum value: TOKEN_SCOPE_UNSPECIFIED = 0;
+   * none
+   *
+   * @generated from enum value: LEVEL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
-   * TOKEN_SCOPE_OPERATOR is the built-in cli token: auto-seeded on first daemon start,
-   * the bootstrap "god" credential that authenticates the operator to the daemon. It is
-   * managed SOLELY by the CLI and is structurally invisible+immutable to this service -
-   * it lives in a store this handler never opens, so it can be neither listed nor
-   * revoked here and this value therefore NEVER appears in a ListTokensResponse. It
-   * exists in the enum to name the class, not because the wire ever carries it.
-   *
-   * @generated from enum value: TOKEN_SCOPE_OPERATOR = 3;
+   * @generated from enum value: LEVEL_READ = 1;
    */
-  OPERATOR = 3,
+  READ = 1,
 
   /**
-   * TOKEN_SCOPE_CONNECTOR reaches /mcp and nothing else: the tier an external agent
-   * holds.
-   *
-   * @generated from enum value: TOKEN_SCOPE_CONNECTOR = 1;
+   * @generated from enum value: LEVEL_WRITE = 2;
    */
-  CONNECTOR = 1,
-
-  /**
-   * TOKEN_SCOPE_SHARE_READ is the short-lived secret behind "share to phone", minted by
-   * the LAN share listener rather than stored. Distinct from CONSOLE_READ, which reaches
-   * the same routes but is a stored, named token with its own lifetime.
-   *
-   * @generated from enum value: TOKEN_SCOPE_SHARE_READ = 2;
-   */
-  SHARE_READ = 2,
-
-  /**
-   * TOKEN_SCOPE_CONSOLE reaches the console read and write surfaces, never /mcp.
-   *
-   * @generated from enum value: TOKEN_SCOPE_CONSOLE = 4;
-   */
-  CONSOLE = 4,
-
-  /**
-   * TOKEN_SCOPE_CONSOLE_READ is the viewer tier: the console's read surface alone.
-   *
-   * @generated from enum value: TOKEN_SCOPE_CONSOLE_READ = 5;
-   */
-  CONSOLE_READ = 5,
+  WRITE = 2,
 }
 
 /**
- * Describes the enum magus.token.v1alpha1.TokenScope.
+ * Describes the enum magus.token.v1alpha1.Level.
  */
-export const TokenScopeSchema: GenEnum<TokenScope> = /*@__PURE__*/
+export const LevelSchema: GenEnum<Level> = /*@__PURE__*/
   enumDesc(file_magus_token_v1alpha1_token, 0);
 
 /**
- * TokenService is a VIEW-AND-REVOKE surface over the daemon's connector and share
- * tokens: List reveals only fingerprints (never the secret bytes) and Revoke removes
- * a token by its fingerprint or name. There is deliberately no mint RPC - minting is
- * CLI-only, so the browser cannot create a durable credential.
+ * CredentialClass is which kind of token a record is, carried in the token's prefix.
+ *
+ * @generated from enum magus.token.v1alpha1.CredentialClass
+ */
+export enum CredentialClass {
+  /**
+   * @generated from enum value: CREDENTIAL_CLASS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * mgo_; never listed here
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_OPERATOR = 1;
+   */
+  OPERATOR = 1,
+
+  /**
+   * mgs_
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_STORED = 2;
+   */
+  STORED = 2,
+
+  /**
+   * mgl_
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_SHARE = 3;
+   */
+  SHARE = 3,
+
+  /**
+   * mgx_, a console link's one-time code
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_EXCHANGE = 4;
+   */
+  EXCHANGE = 4,
+}
+
+/**
+ * Describes the enum magus.token.v1alpha1.CredentialClass.
+ */
+export const CredentialClassSchema: GenEnum<CredentialClass> = /*@__PURE__*/
+  enumDesc(file_magus_token_v1alpha1_token, 1);
+
+/**
+ * TokenService lists, mints and revokes stored tokens, and lists and revokes the active share
+ * link. No response ever carries a secret except CreateTokenResponse, once.
  *
  * @generated from service magus.token.v1alpha1.TokenService
  */
 export const TokenService: GenService<{
   /**
-   * ListTokens returns every connector token plus the active share token (if any),
-   * each described by a prefix-only fingerprint - never the secret bytes.
+   * ListTokens returns every stored token plus the active share link (if any), each described
+   * without its secret.
    *
    * @generated from rpc magus.token.v1alpha1.TokenService.ListTokens
    */
@@ -299,9 +313,8 @@ export const TokenService: GenService<{
     output: typeof ListTokensResponseSchema;
   },
   /**
-   * RevokeToken removes a connector token or the share token by identifier.
-   * Revoking the share token also closes its LAN listener. The cli token is not
-   * revocable here.
+   * RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+   * the share link also closes its LAN listener. The operator token is not revocable here.
    *
    * @generated from rpc magus.token.v1alpha1.TokenService.RevokeToken
    */
@@ -311,17 +324,10 @@ export const TokenService: GenService<{
     output: typeof TokenInfoSchema;
   },
   /**
-   * CreateToken mints a console or viewer token and returns its secret ONCE.
-   *
-   * It cannot escalate, and that is a property of the MOUNT rather than of any check
-   * here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier
-   * and nothing else, so a console, viewer, or connector token cannot reach this method
-   * to call it at all. The only caller who can already dominates every scope it may mint.
-   *
-   * What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE_READ only.
-   * OPERATOR is refused because that credential lives in a file this service never opens
-   * and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a
-   * browser would cross the exact tier boundary this model exists to draw.
+   * CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+   * console grants only (a browser has no business minting an /mcp token), never more than
+   * the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+   * is refused, never shortened.
    *
    * @generated from rpc magus.token.v1alpha1.TokenService.CreateToken
    */

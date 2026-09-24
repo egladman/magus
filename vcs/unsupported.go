@@ -96,6 +96,10 @@ func (declines[N]) DefaultRef(context.Context, string) (string, error) {
 	return "", decline[N](types.CapDefaultRefReporter)
 }
 
+func (declines[N]) CheckoutState(context.Context, string) (types.CheckoutState, error) {
+	return types.CheckoutState{}, decline[N](types.CapCheckoutStateReporter)
+}
+
 func (declines[N]) CommitPushed(context.Context, string, string) (bool, bool, error) {
 	return false, false, decline[N](types.CapPushStatusReporter)
 }
@@ -206,6 +210,10 @@ func (declines[N]) RemoveCheckout(context.Context, string, string) error {
 
 func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
 	return nil, decline[N](types.CapCheckoutProvisioner)
+}
+
+func (declines[N]) OtherCheckouts(string) ([]string, error) {
+	return nil, decline[N](types.CapCheckoutLister)
 }
 
 func (declines[N]) FetchRef(context.Context, string, string, string) (string, error) {

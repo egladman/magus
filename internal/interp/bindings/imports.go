@@ -12,9 +12,9 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -56,7 +56,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 			if rerr != nil {
 				continue
 			}
-			prog, perr := buzz.ParseEmbedded(string(b))
+			prog, perr := parsecache.Shared().ParseEmbedded(string(b))
 			if perr != nil || prog == nil {
 				continue
 			}

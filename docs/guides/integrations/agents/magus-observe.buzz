@@ -39,7 +39,7 @@
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, deliberately.
 //

@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/interp/engine"
+	"github.com/egladman/magus/internal/parsecache"
 	core "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -26,7 +27,7 @@ func init() {
 type engineImpl struct{}
 
 func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) {
-	return &session{core: core.NewSession(ctx, core.WithEmbedded()), ctx: ctx}, nil
+	return &session{core: core.NewSession(ctx, core.WithEmbedded(), core.WithParseCache(parsecache.Shared())), ctx: ctx}, nil
 }
 
 // session wraps a *core.Session and satisfies engine.Session. ctx is the

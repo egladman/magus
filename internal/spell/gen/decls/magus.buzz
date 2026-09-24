@@ -124,6 +124,15 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object Check {
+    name: str = "",
+    status: CheckStatus = CheckStatus.none,
+    message: str = "",
+    details: [str] = [],
+    evidence: str = "",
+    fix: [str] = [],
+}
+
 export object DiffSymbol {
     id: str = "",
     label: str = "",
@@ -136,6 +145,7 @@ export object DiffSymbol {
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
+    checks: [Check] = [],
 }
 
 export object DiffTouch {
@@ -194,6 +204,17 @@ export object DiffReviewed {
     files: int = 0,
 }
 
+export object Diagnostic {
+    code: str = "",
+    message: str = "",
+    url: str = "",
+}
+
+export object DiffUncovered {
+    project: str = "",
+    reason: DiffUncoveredReason = DiffUncoveredReason.none,
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
@@ -202,15 +223,8 @@ export object Diff {
     notes: [str] = [],
     api: DiffAPI? = null,
     reviewed: DiffReviewed = DiffReviewed{},
-}
-
-export object DoctorCheck {
-    name: str = "",
-    status: DoctorCheckStatus = DoctorCheckStatus.none,
-    message: str = "",
-    details: [str] = [],
-    evidence: str = "",
-    fix: [str] = [],
+    conformanceError: Diagnostic? = null,
+    uncovered: [DiffUncovered] = [],
 }
 
 export object DoctorSummary {
@@ -222,7 +236,7 @@ export object DoctorSummary {
 
 export object DoctorReport {
     workspace: str = "",
-    checks: [DoctorCheck] = [],
+    checks: [Check] = [],
     summary: DoctorSummary = DoctorSummary{},
 }
 
@@ -473,6 +487,7 @@ export object TargetGraphNode {
     dependencies: [str] = [],
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
+    dispatchOnly: bool = false,
     crossDependencies: [CrossTargetRef] = [],
     chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],
@@ -498,7 +513,7 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
-export object SpawnVerdict {
+export object GuardVerdict {
     decision: str = "",
     reason: str = "",
 }
@@ -532,9 +547,27 @@ export object JobUnattributedWrite {
     at: int = 0,
 }
 
-export object JobActor {
-    session: str = "",
+export object Grant {
+    tokens: int = 0,
+    mcp: int = 0,
+    console: int = 0,
+}
+
+export object Credential {
+    class: str = "",
+    id: str = "",
+    name: str = "",
+    grant: Grant = Grant{},
+}
+
+export object Origin {
+    user: str = "",
+    uid: str = "",
+    entryPoint: str = "",
     host: str = "",
+    session: str = "",
+    agent: str = "",
+    credential: Credential = Credential{},
 }
 
 export object JobResultValidation {
@@ -604,7 +637,7 @@ export object Job {
     writeProof: str = "",
     reportedBase: str = "",
     baseVerdict: str = "",
-    registeredBy: JobActor = JobActor{},
+    registeredBy: Origin = Origin{},
     registered: int = 0,
     created: int = 0,
     updated: int = 0,
@@ -638,6 +671,42 @@ export object SpawnRequest {
     role: str = "",
     lease: Job? = null,
     target: SpawnTarget? = null,
+}
+
+export object CommandInvocation {
+    program: str = "",
+    args: [str] = [],
+    repeats: bool = false,
+}
+
+export object CheckoutState {
+    branch: str = "",
+    remoteBranches: [str] = [],
+}
+
+export object CommandRequest {
+    host: str = "",
+    session: str = "",
+    command: str = "",
+    description: str = "",
+    commands: [CommandInvocation] = [],
+    parent: str = "",
+    role: str = "",
+    lease: Job? = null,
+    checkout: CheckoutState? = null,
+}
+
+export object WriteRequest {
+    host: str = "",
+    session: str = "",
+    parent: str = "",
+    role: str = "",
+    lease: Job? = null,
+    path: str = "",
+    workspace: str = "",
+    content: str = "",
+    oldText: str = "",
+    newText: str = "",
 }
 
 export object JobOverlap {
@@ -723,14 +792,16 @@ export object ci {
 
 // Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.
 export object guard {
-    static extern fun advise(text: str) > SpawnVerdict;
-    static extern fun allow() > SpawnVerdict;
+    static extern fun advise(text: str) > GuardVerdict;
+    static extern fun allow() > GuardVerdict;
     static extern fun bash(rule: {str: any}) > void;
+    static extern fun command(rule: Function) > void;
     static extern fun count(key: str) > int;
-    static extern fun deny(text: str) > SpawnVerdict;
+    static extern fun deny(text: str) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: Function) > void;
+    static extern fun write(rule: Function) > void;
 }
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.
