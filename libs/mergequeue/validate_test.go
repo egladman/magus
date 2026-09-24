@@ -80,7 +80,7 @@ func redFor(ids ...string) func(types.Change) types.GateResult {
 	return func(c types.Change) types.GateResult {
 		for _, id := range ids {
 			if c.ID == id {
-				return types.GateResult{Summary: "`make test` exited 1"}
+				return types.GateResult{Summary: "the gate exited 1"}
 			}
 		}
 		return types.GateResult{Green: true}
@@ -157,15 +157,21 @@ func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
 	d.gates(redFor("2"))
 	plan := planOf([]types.Change{one, two, three})
 	v, dir := validating(t, d, plan)
+	v.Reproduce = types.Reproduction{Gate: `make test BASE="$MERGEQUEUE_ONTO"`}
 	require.NoError(t, v.Run(t.Context(), plan))
 
 	got := recorded(t, dir)
+	c1 := candidateOf(base, one.Head)
 	assert.Equal(t, types.DecisionMerge, got["1"].Decision)
 	assert.Equal(t, types.DecisionKick, got["2"].Decision)
 	assert.Equal(t, types.CodeKickRed, got["2"].Code)
-	assert.Equal(t, "the gate failed: `make test` exited 1", got["2"].Reason)
-	assert.Contains(t, got["2"].Report, "Push a fix and queue the change again.")
-	c1 := candidateOf(base, one.Head)
+	assert.Equal(t, "the gate exited 1", got["2"].Reason)
+	assert.Equal(t, "The merge queue built this change at `"+short(two.Head)+"` onto the candidate of #1 (`"+short(c1)+"`), and the gate exited 1.\n",
+		got["2"].Report, "what failed on which commits, and no hook line")
+	for id, vd := range got {
+		assert.Equal(t, `make test BASE="$MERGEQUEUE_ONTO"`, vd.Gate, "every verdict records the gate it ran: %s", id)
+		assert.Empty(t, vd.Regenerate, id)
+	}
 	assert.Equal(t, types.DecisionMerge, got["3"].Decision)
 	assert.Equal(t, "1", got["3"].After, "rebuilt onto what validated")
 	assert.Equal(t, c1, got["3"].Onto)
@@ -238,7 +244,8 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 	assert.Equal(t, types.CodeKickRefused, got["1"].Code)
 	assert.Equal(t, "building its candidate failed: `make gen` exited 2", got["1"].Reason)
 	assert.Equal(t, []string{"gen/x.go"}, got["1"].Paths)
-	assert.Contains(t, got["1"].Report, "`make gen` exited 2. Run `make gen` and push.")
+	assert.Equal(t, "The merge queue built this change at `"+short(one.Head)+"` onto `main` at `"+short(base)+"`, and building its candidate failed: `make gen` exited 2.\n\nRun `make gen` and push.\n",
+		got["1"].Report)
 	assert.Equal(t, types.DecisionMerge, got["2"].Decision)
 }
 

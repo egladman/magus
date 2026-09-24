@@ -78,19 +78,22 @@ export fun planArgs(dir: str, depth: str) > [str] {
         "--out", dir + "/plan.json"];
 }
 
-// private runs line with every cache it writes in the candidate's own scratch directory:
-// a cache shared between candidates would let one change's hook plant a result, or a
-// module, another candidate's gate then trusts.
-export fun private(line: str) > str {
-    return `MAGUS_CACHE_DIR="$MERGEQUEUE_SCRATCH/magus" GOCACHE="$MERGEQUEUE_SCRATCH/go-build" ` +
-        `GOMODCACHE="$MERGEQUEUE_SCRATCH/go-mod" XDG_CACHE_HOME="$MERGEQUEUE_SCRATCH/cache" ` + line;
-}
+// SCRATCH puts every cache a hook writes in the candidate's own scratch directory: a
+// cache shared between candidates would let one change's hook plant a result, or a
+// module, another candidate's gate then trusts. The queue sets them, so the hook lines
+// stay ones a person can run as they are.
+final SCRATCH = ["--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
+    "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"];
 
 // validateArgs keeps $MERGEQUEUE_ONTO literal: the queue sets it for each hook.
 export fun validateArgs(dir: str, change: str) > [str] {
-    return ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
-        "--gate", private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`),
-        "--regenerate", private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`)];
+    final args = mut ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
+        "--gate", `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`,
+        "--regenerate", `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`];
+    foreach (a in SCRATCH) {
+        args.append(a);
+    }
+    return args;
 }
 
 // applyArgs polls every 15s: each poll is two API requests on the job's Actions token,
@@ -101,7 +104,10 @@ export fun validateArgs(dir: str, change: str) > [str] {
 // provider names who commits each update commit and the credential is the job's token.
 export fun applyArgs(run: str, repo: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", "--provider", "github", "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`)];
+        "--regenerate", `MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`];
+    foreach (a in SCRATCH) {
+        args.append(a);
+    }
     if (committer != "") {
         args.append("--committer");
         args.append(committer);
@@ -314,29 +320,31 @@ test "outputs render a compact matrix and its count" {
     assert\equal(outputs([<str>]), want: `matrix={"include":[]}` + "\ncount=0\n", message: "no jobs");
 }
 
-test "validation hooks see MERGEQUEUE_ONTO unexpanded and keep their caches private" {
-    final args = validateArgs("/t/queue", change: "482");
-    assert\equal(args[0], want: "queue", message: "magus queue");
-    assert\equal(args[5], want: "482", message: "--only names the change");
-    assert\equal(args[9], want: private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`), message: "gate");
-    assert\equal(args[11], want: private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`), message: "regenerate");
-    assert\equal(private("x").startsWith(`MAGUS_CACHE_DIR="$MERGEQUEUE_SCRATCH/magus" `), want: true, message: "magus's cache is the candidate's own");
+test "validation hooks are lines a person can run, with MERGEQUEUE_ONTO unexpanded and caches the queue keeps private" {
+    assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--plan", "/t/queue/plan.json", "--only", "482",
+        "--verdicts", "/t/queue/verdicts",
+        "--gate", `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`,
+        "--regenerate", `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`,
+        "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
+        "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"], message: "argv");
 }
 
 test "apply follows the validation run as its source and regenerates in the sandbox" {
     assert\equal(applyArgs("99", repo: "o/r", committer: "", app: ""), want: ["queue", "apply", "--provider", "github", "--status-context", "merge-queue",
         "--interval", "15s",
-        "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`), "run:o/r/runs/99"], message: "argv");
+        "--regenerate", `MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`,
+        "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
+        "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache", "run:o/r/runs/99"], message: "argv");
 }
 
 test "with the queue app, apply commits as its bot and checks the status is pinned to it" {
     final args = applyArgs("99", repo: "o/r", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q");
-    assert\equal(args.len(), want: 15, message: "two flags more");
-    assert\equal(args[10], want: "--committer", message: "the committer flag");
-    assert\equal(args[11], want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "one argument, spaces and all");
-    assert\equal(args[12], want: "--app", message: "the app flag");
-    assert\equal(args[13], want: "q", message: "the app's slug");
-    assert\equal(args[14], want: "run:o/r/runs/99", message: "the source stays last");
+    assert\equal(args.len(), want: 23, message: "two flags more");
+    assert\equal(args[18], want: "--committer", message: "the committer flag");
+    assert\equal(args[19], want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "one argument, spaces and all");
+    assert\equal(args[20], want: "--app", message: "the app flag");
+    assert\equal(args[21], want: "q", message: "the app's slug");
+    assert\equal(args[22], want: "run:o/r/runs/99", message: "the source stays last");
 }
 
 test "apply takes the queue app's slug and committer together or neither" {

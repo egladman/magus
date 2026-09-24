@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc        |     600+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                              |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `libs/mergequeue/provider/github.buzz`, `docs/render.buzz`                                                |
-| function   |    1000+ | `magus query kind=function`   | `main`, `apiBase`, `describe`                                                                                               |
+| function   |    1000+ | `magus query kind=function`   | `apiBase`, `main`, `kick_back`                                                                                              |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
