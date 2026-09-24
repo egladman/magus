@@ -326,7 +326,28 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 		}
 		c.Affected, c.UnboundedBy = affected, unboundedBy
 	}
+	if c.AuthorRegenerates, err = authorRegenerates(ctx, r.facts, paths); err != nil {
+		return nil, fmt.Errorf("regeneration of %s: %w", c.Label(), err)
+	}
 	return nil, nil //nolint:nilnil // no verdict is planning's answer that c is admitted
+}
+
+// authorRegenerates returns the generated files among changed whose regeneration the
+// build tool cannot prove runs none of changed: the proof applying needs before it
+// regenerates them itself.
+func authorRegenerates(ctx context.Context, f types.BuildFacts, changed []string) ([]string, error) {
+	generated, err := outputs(ctx, f, changed)
+	if err != nil || len(generated) == 0 {
+		return nil, err
+	}
+	g, err := f.Generation(ctx, generated, changed)
+	if err != nil {
+		return nil, fmt.Errorf("generation of %s: %w", joinPaths(generated), err)
+	}
+	if regenerationProven(g) {
+		return nil, nil
+	}
+	return generated, nil
 }
 
 // planRefs is every change in is a listed change may carry the head of.

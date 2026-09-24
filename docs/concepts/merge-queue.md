@@ -58,17 +58,24 @@ the queue's `merge-queue` status is main's required check, auto-merge cannot fir
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
 about to see that pull request merged.
 
-| To                          | Do                                                      |
-| --------------------------- | ------------------------------------------------------- |
-| queue a pull request        | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
-| queue a stack               | label its top pull request `queue: squash`              |
-| take it out                 | `gh pr merge <n> --disable-auto`, or remove the label   |
-| list what is queued         | `magus queue ls --provider github --base main`          |
-| tell one is queued          | it carries the label `merge-queue: queued`              |
-| tell one was kicked back    | it carries the label `merge-queue: rejected`            |
-| see why one is waiting      | its `merge-queue` status, which reads `waiting: <why>`  |
-| see why one was kicked back | the queue's newest comment on it                        |
-| land it past the queue      | `gh pr merge <n> --admin`: an admin's bypass, see below |
+| To                           | Do                                                      |
+| ---------------------------- | ------------------------------------------------------- |
+| queue a pull request         | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
+| queue a stack                | label its top pull request `queue: squash`              |
+| take it out                  | `gh pr merge <n> --disable-auto`, or remove the label   |
+| list what is queued          | `magus queue ls --provider github --base main`          |
+| tell one is queued           | it carries the label `merge-queue: queued`              |
+| tell one was kicked back     | it carries the label `merge-queue: rejected`            |
+| tell one changes a generator | it carries the label `merge-queue: changes a generator` |
+| see why one is waiting       | its `merge-queue` status, which reads `waiting: <why>`  |
+| see why one was kicked back  | the queue's newest comment on it                        |
+| land it past the queue       | `gh pr merge <n> --admin`: an admin's bypass, see below |
+
+A queued pull request carries `merge-queue: changes a generator` beside
+`merge-queue: queued` when it touches generated files the queue cannot regenerate
+itself: the build tool cannot prove their regeneration runs none of the pull request's
+own code. Nothing is wrong yet, but when main moves those files the queue kicks it back,
+and only you can merge main in and regenerate.
 
 A pull request the queue kicks back gets a new comment, and its auto-merge or label is
 removed. The comment says what failed on which commits, links the validation run, and
@@ -615,6 +622,7 @@ functions, each taking one record:
 | `merge_change`   | the change plus `{commit, message, through}`                                                | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                            |
 | `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                              |
+| `flag`           | the change plus `{flag, on}`: `changes_generator`, and whether to show it                   | `true` once the change shows the flag exactly when `on`                          |
 | `list_artifacts` | `{source}`                                                                                  | `{complete, artifacts: [{name, url}], headers?}`                                 |
 
 All but `list_artifacts` are required, and a script missing one is refused when it
@@ -651,6 +659,17 @@ from an unqueued change still showing it, marks `rejected` after a kick-back and
 the mark after a merge. A failed `mark` is a notice and applying goes on: the status and
 the comment are the record.
 
+A flag is a property the change shows beside its mark, set and cleared on its own; a
+queued change can carry any flag. `changes_generator` says the queue cannot regenerate
+the change's generated files itself. Planning records on each change it admits the
+generated files it touches whose regeneration the build tool cannot prove runs none of
+the change's code (`--facts generation`, the proof apply needs before it regenerates);
+apply flags every admitted change holding any when it starts and unflags the rest, and
+leaves a change planning held as it is. A kick-back for that same reason flags the change
+first, since apply may have needed files regenerated that the change does not touch, and
+passes `kick_back` the flag as `flag` (empty otherwise) for its comment to name. A
+failed `flag` is a notice, as a failed `mark` is.
+
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
 over 32 MiB is an error, never a shorter answer. The records a script receives hold
@@ -672,11 +691,15 @@ validation run, collapsed blocks for reproducing it (`gh run download` of the pl
 top), and one JSON line of its code and files. It then removes the intent where it
 lives: its own auto-merge, its own label, and the label on its stack's top. Last it
 minimizes as outdated its own earlier kick-back comments on the pull request; a failure
-there is printed to the apply job's log and does not fail the kick-back. Its `mark` manages
-two labels, `merge-queue: queued` and `merge-queue: rejected`, creating either with a
-description the first time a repository needs it; neither starts with `"queue: "`, so
-neither reads as merge intent. Its `describe` reports the label
-prefix `"queue: "` and the committer
+there is printed to the apply job's log and does not fail the kick-back. It shows state
+and properties as three labels, each created with a description the first time a
+repository needs it: `mark` swaps between `merge-queue: queued` and
+`merge-queue: rejected`, and `flag` adds or removes `merge-queue: changes a generator`
+for `changes_generator` beside either. A kick-back carrying that flag names the label in
+its comment. A label GitHub refuses to create for any reason but that the repository
+already has it is an error naming GitHub's reason. None of these
+labels starts with `"queue: "`, so none reads as merge intent. Its `describe` reports
+the label prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
 identity a workflow's token pushes as; with the queue's app, `queue-apply.yaml` passes the
 app's bot as `--committer`. Its setup reads the base's rulesets and classic branch
@@ -708,14 +731,14 @@ run with `Run`), the pure decisions they share (stack detection, partitioning, a
 carry-over), the document codecs, the verdict directory, the artifact follower and the
 command hooks.
 
-| Interface        | What it answers                                                         | magus's implementation      |
-| ---------------- | ----------------------------------------------------------------------- | --------------------------- |
-| `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)    | magus's `types.VCSDriver`   |
-| `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
-| `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
-| `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs | `client.Workspace`          |
-| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark | the `provider` Buzz scripts |
-| `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
+| Interface        | What it answers                                                               | magus's implementation      |
+| ---------------- | ----------------------------------------------------------------------------- | --------------------------- |
+| `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)          | magus's `types.VCSDriver`   |
+| `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation)       | magus's `types.VCSDriver`   |
+| `PushVCS`        | `BuildVCS` plus a leased push (applying)                                      | magus's `types.VCSDriver`   |
+| `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs       | `client.Workspace`          |
+| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark, flag | the `provider` Buzz scripts |
+| `ArtifactLister` | the artifacts a validation run uploaded                                       | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so
 which merge base a prediction takes, which conflicts are the author's and which
