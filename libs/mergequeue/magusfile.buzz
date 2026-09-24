@@ -33,10 +33,6 @@ magus\project({
     "targets": {
         // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
-        // index-generate renders `magus describe graph -o markdown`, a function of the
-        // WHOLE knowledge graph, which no input glob can key. Every other library carries
-        // the same opt-out.
-        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
     },
 });
 
@@ -60,14 +56,14 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-utils", "mockassert", "--config", "libs/mergequeue/.mockery.yaml"], "../..");
 }
 
-// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+// Renders MAGUS.md, this project's target catalog, from this magusfile.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so `magus vcs resolve` can find the target that settles a conflict here.
     ctx.writesFiles("MAGUS.md");
-    // A routing change anywhere rewrites the originating project's index, so a sibling
-    // MAGUS.md moving is the keyable signal; see libs/coldread for the full reasoning.
-    ctx.readsFiles("../../**/MAGUS.md");
-    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    // Scoped to this project; see libs/coldread for why these are its inputs.
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    final doc = magus\describe(["graph", "-o", "markdown", "libs/mergequeue"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 

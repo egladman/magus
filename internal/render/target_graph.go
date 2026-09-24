@@ -130,6 +130,9 @@ func magnitude(n int) string {
 // repo-agnostic: `magus describe graph -o markdown` produces it for any magus
 // workspace, which is how a project's MAGUS.md is generated and drift-checked.
 // Output is deterministic (no timestamps) so it can back a drift gate.
+//
+// routing supplies the workspace-wide tables. Pass nil for an index scoped to some
+// projects, so nothing outside them can change its bytes.
 func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing *types.KnowledgeRouting, explorerURL string, defaultCharms []string) error {
 	var b md.Builder
 
@@ -199,11 +202,10 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing 
 			" - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).")
 	}
 
-	if routing != nil {
-		writeRouting(&b, *routing, explorerURL)
-	}
+	projects := nonEmptyProjects(out)
+	writeRouting(&b, routing, projects, explorerURL)
 
-	for _, p := range nonEmptyProjects(out) {
+	for _, p := range projects {
 		b.Heading(2, "Project: "+projectLabel(p))
 		if len(p.Cycle) > 0 {
 			b.Paragraph("> dependency cycle: " + strings.Join(p.Cycle, " -> "))
@@ -229,14 +231,17 @@ func firstDocLine(doc string) string {
 	return strings.ReplaceAll(strings.TrimSpace(doc), "|", `\|`)
 }
 
-// writeRouting emits the "query first" section from the knowledge graph: the
-// retrieval verbs, a per-kind entry table, and per-project rows. It routes the
-// reader's next action to a magus query (counts + the query to run + a few
-// high-degree anchor nodes); it never dumps graph data, so it stays diff-stable
-// across routine edits. Generated per-repo and drift-gated like the rest of MAGUS.md.
+// writeRouting emits the "query first" section: the retrieval verbs, then either the
+// workspace-wide tables from r (a per-kind entry table and per-project rows) or, when r
+// is nil, the scoped queries for the projects this index covers. It routes the reader's
+// next action to a magus query (counts + the query to run + a few high-degree anchor
+// nodes); it never dumps graph data, so it stays diff-stable across routine edits.
 // When explorerURL is non-empty, the query-string cells are emitted as Markdown
 // links that open the Graph Explorer pre-seeded with that query (#q=...).
-func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
+//
+// A nil r is what keeps a scoped index a function of its own projects: every figure in
+// the tables, schema version included, moves with changes outside them.
+func writeRouting(b *md.Builder, r *types.KnowledgeRouting, projects []types.TargetGraphProject, explorerURL string) {
 	b.Heading(2, "Query first")
 	// Deliberately NOT the node and edge totals. They move on almost every commit
 	// (a doc, a file, a function is enough), so a committed, drift-gated file carrying
@@ -244,8 +249,12 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	// `magus graph stats` reports the live counts to anyone who wants them, and it is
 	// right there in the block below. The schema version stays: it changes when the
 	// graph's SHAPE does, which is exactly when a reader should notice.
-	b.Paragraphf("This workspace has a knowledge graph (schema v%d). Query it instead "+
-		"of grepping:", r.SchemaVersion)
+	if r != nil {
+		b.Paragraphf("This workspace has a knowledge graph (schema v%d). Query it instead "+
+			"of grepping:", r.SchemaVersion)
+	} else {
+		b.Paragraph("This workspace has a knowledge graph. Query it instead of grepping:")
+	}
 	b.AlignedCodeBlock("sh", []md.CodeLine{
 		{Code: canon(hint.Query, `"<terms>"`), Note: "kind=spell, project=pkg/foo, relation=uses, free text, kind!=op"},
 		{Code: canon(hint.Explain, "<node>"), Note: "one node: its edges, provenance, blast radius"},
@@ -254,6 +263,16 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 		{Code: canon(hint.GraphExport, "-o", "json"), Note: "the whole graph (MCP: " + hint.ToolQuery.String() + ", " +
 			hint.ToolExplain.String() + ", " + hint.ToolPath.String() + ")"},
 	})
+
+	if r == nil {
+		scopes := make([]string, 0, len(projects))
+		for _, p := range projects {
+			scopes = append(scopes, queryCell(canon(hint.Query, "project="+p.Path), explorerURL))
+		}
+		b.Paragraph("Scope a query to this index: " + strings.Join(scopes, ", ") + ". " +
+			md.Code(canon(hint.GraphStats)) + " sizes up the whole workspace.")
+		return
+	}
 
 	// Magnitude, not an exact count. An exact count moved whenever any node was added
 	// anywhere, which churned this file constantly and buried real changes; it also
