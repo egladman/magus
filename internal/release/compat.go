@@ -1,14 +1,12 @@
 package release
 
 import (
-	"archive/tar"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,6 +16,8 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 
 	// Without the engine no magusfile is evaluated, and a tree that loads nothing
 	// reports zero breakage.
@@ -58,8 +58,9 @@ type CompatReport struct {
 // every load failure. The error return is for failing to run the check at all; a
 // tree that does not load is a finding, not an error.
 //
-// The tree comes from `git archive`, so it has no .git, and workspace providers are
-// skipped because an exported revision has no installed toolchain for them to run.
+// The tree is the revision exported through the VCS layer, so it carries no VCS
+// metadata, and workspace providers are skipped because an exported revision has no
+// installed toolchain for them to run.
 func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, error) {
 	if !interp.Available() {
 		return CompatReport{}, errors.New("release: compat check needs the Buzz interpreter linked")
@@ -70,7 +71,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	}
 	defer os.RemoveAll(scratch)
 	tree := filepath.Join(scratch, "tree")
-	if err := archiveTo(ctx, repoRoot, baseTag, tree); err != nil {
+	if err := exportTo(ctx, repoRoot, baseTag, tree); err != nil {
 		return CompatReport{}, err
 	}
 
@@ -205,78 +206,18 @@ func classify(err error) (codes []diagnostics.Code, uncoded []string) {
 	return nil, []string{err.Error()}
 }
 
-// archiveTo extracts rev of the repository at repoRoot into dir.
-func archiveTo(ctx context.Context, repoRoot, rev, dir string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", repoRoot, "archive", "--format=tar", rev)
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("release: git archive %s: %w", rev, err)
-	}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("release: git archive %s: %w", rev, err)
-	}
-	extractErr := untar(out, dir)
-	// Drain so git does not block on a full pipe after an extract failure.
-	_, _ = io.Copy(io.Discard, out)
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("release: git archive %s: %w: %s", rev, err, strings.TrimSpace(stderr.String()))
-	}
-	return extractErr
-}
-
-// untar extracts r into dir through an os.Root, which refuses any name, and any
-// symlink an earlier entry planted, that resolves outside dir.
-func untar(r io.Reader, dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("release: %w", err)
-	}
-	root, err := os.OpenRoot(dir)
+// exportTo writes rev of the repository at repoRoot into dir through the backend that
+// claims it.
+func exportTo(ctx context.Context, repoRoot, rev, dir string) error {
+	res, err := vcs.Resolve(ctx, repoRoot, "", types.VCSOptions{})
 	if err != nil {
 		return fmt.Errorf("release: %w", err)
 	}
-	defer root.Close()
-	tr := tar.NewReader(r)
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("release: read archive: %w", err)
-		}
-		if err := extract(root, h, tr); err != nil {
-			return fmt.Errorf("release: extract %s: %w", h.Name, err)
-		}
+	if res.VCS == nil {
+		return errors.New("release: version control is disabled, so there is no revision to export")
 	}
-}
-
-func extract(root *os.Root, h *tar.Header, r io.Reader) error {
-	name := filepath.FromSlash(h.Name)
-	switch h.Typeflag {
-	case tar.TypeDir:
-		return root.MkdirAll(name, 0o755)
-	case tar.TypeReg:
-		if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-			return err
-		}
-		f, err := root.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, h.FileInfo().Mode().Perm())
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(f, r); err != nil {
-			f.Close()
-			return err
-		}
-		return f.Close()
-	case tar.TypeSymlink:
-		if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-			return err
-		}
-		return root.Symlink(h.Linkname, name)
-	default:
-		// pax_global_header carries the commit id and nothing to extract.
-		return nil
+	if err := res.VCS.ExportRevision(ctx, repoRoot, rev, dir); err != nil {
+		return fmt.Errorf("release: export %s: %w", rev, err)
 	}
+	return nil
 }

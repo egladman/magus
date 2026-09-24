@@ -237,6 +237,7 @@ subcommand memory
 subcommand notes
 subcommand path
 subcommand query
+subcommand queue
 subcommand refs
 subcommand run
 subcommand self

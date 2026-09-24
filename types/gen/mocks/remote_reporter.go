@@ -38,8 +38,8 @@ func (_m *MockRemoteReporter) EXPECT() *MockRemoteReporter_Expecter {
 }
 
 // RemoteURL provides a mock function for the type MockRemoteReporter
-func (_mock *MockRemoteReporter) RemoteURL(ctx context.Context, dir string) (string, error) {
-	ret := _mock.Called(ctx, dir)
+func (_mock *MockRemoteReporter) RemoteURL(ctx context.Context, dir string, name string) (string, error) {
+	ret := _mock.Called(ctx, dir, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RemoteURL")
@@ -47,16 +47,16 @@ func (_mock *MockRemoteReporter) RemoteURL(ctx context.Context, dir string) (str
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, error)); ok {
-		return returnFunc(ctx, dir)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
+		return returnFunc(ctx, dir, name)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
-		r0 = returnFunc(ctx, dir)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
+		r0 = returnFunc(ctx, dir, name)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, dir)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, dir, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -71,11 +71,12 @@ type MockRemoteReporter_RemoteURL_Call struct {
 // RemoteURL is a helper method to define mock.On call
 //   - ctx context.Context
 //   - dir string
-func (_e *MockRemoteReporter_Expecter) RemoteURL(ctx interface{}, dir interface{}) *MockRemoteReporter_RemoteURL_Call {
-	return &MockRemoteReporter_RemoteURL_Call{Call: _e.mock.On("RemoteURL", ctx, dir)}
+//   - name string
+func (_e *MockRemoteReporter_Expecter) RemoteURL(ctx interface{}, dir interface{}, name interface{}) *MockRemoteReporter_RemoteURL_Call {
+	return &MockRemoteReporter_RemoteURL_Call{Call: _e.mock.On("RemoteURL", ctx, dir, name)}
 }
 
-func (_c *MockRemoteReporter_RemoteURL_Call) Run(run func(ctx context.Context, dir string)) *MockRemoteReporter_RemoteURL_Call {
+func (_c *MockRemoteReporter_RemoteURL_Call) Run(run func(ctx context.Context, dir string, name string)) *MockRemoteReporter_RemoteURL_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -85,9 +86,14 @@ func (_c *MockRemoteReporter_RemoteURL_Call) Run(run func(ctx context.Context, d
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -98,7 +104,7 @@ func (_c *MockRemoteReporter_RemoteURL_Call) Return(s string, err error) *MockRe
 	return _c
 }
 
-func (_c *MockRemoteReporter_RemoteURL_Call) RunAndReturn(run func(ctx context.Context, dir string) (string, error)) *MockRemoteReporter_RemoteURL_Call {
+func (_c *MockRemoteReporter_RemoteURL_Call) RunAndReturn(run func(ctx context.Context, dir string, name string) (string, error)) *MockRemoteReporter_RemoteURL_Call {
 	_c.Call.Return(run)
 	return _c
 }

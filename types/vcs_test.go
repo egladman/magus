@@ -1,11 +1,22 @@
 package types
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// A caller written against either sentinel degrades the same way, whether a backend
+// returned the bare sentinel ("no remote") or declined a whole capability.
+func TestUnsupportedErrorsMatchBothSentinels(t *testing.T) {
+	assert.ErrorIs(t, ErrVCSUnsupported, errors.ErrUnsupported)
+	declined := &VCSUnsupportedError{VCS: "jj", Capability: CapBisector}
+	assert.ErrorIs(t, declined, ErrVCSUnsupported)
+	assert.ErrorIs(t, declined, errors.ErrUnsupported)
+	assert.EqualError(t, declined, "vcs: jj does not support Bisector")
+}
 
 // TestCommitBuzzObject covers the Buzz boundary map, including the RFC3339 date
 // formatting and the nested author record.

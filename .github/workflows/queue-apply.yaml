@@ -1,0 +1,89 @@
+name: Queue apply
+
+# The merge queue's apply half: merges what a Queue run validates, each pull request as
+# its own commit through the GitHub API with its own merge method, authored by its
+# author, the moment its candidate and every candidate beneath it in its partition are
+# green.
+#
+# workflow_run on `requested` rather than `completed`: this job starts beside validation
+# and `magus queue apply run:<owner>/<name>/runs/<id>` follows it, downloading each
+# verdict artifact as its validation job uploads it, so a green change merges while
+# slower ones are still validating. `completed` would wait for the slowest job of the
+# whole run. workflow_run always runs this file as main has it, with its own token and
+# secrets, which a pull request cannot reach.
+#
+# It never executes pull-request code: it builds magus, which runs the queue, from main,
+# reads only verdicts from the artifacts, and rebuilds each candidate itself from the
+# change's head. Where a merge needs generated files regenerated, it runs main's own
+# regeneration in magus's sandbox, and only after the workspace proves the change touches
+# none of that regeneration's code; otherwise the change goes back to its author. Before
+# each merge it re-checks approval, merge intent, base and merge method, and that its
+# rebuild is the candidate validation gated; after each, it stops unless main carries the
+# tree it predicted.
+#
+# The write credential is this job's own Actions token, so no long-lived secret exists.
+# Its pushes and merges start no workflow, so once anything merges the job dispatches
+# ci.yaml, cd.yaml and the queue's next run on main itself. The queue posts success on
+# magus/queue only after a merge, so the GitHub Actions app must be a bypass actor for
+# that required status. A bypass covers every rule of its ruleset, so magus/queue sits in
+# a ruleset of its own whose only rule it is, and the other rulesets still apply.
+
+on:
+  workflow_run:
+    workflows: [Queue]
+    types: [requested]
+
+concurrency:
+  group: queue-apply
+  cancel-in-progress: false
+
+permissions:
+  contents: write # merge, and push a regeneration onto a queued branch
+  pull-requests: write # comment on a kick-back and disable its auto-merge
+  statuses: write # magus/queue
+  actions: write # follow the validation run, download its artifacts, dispatch main's runs
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  apply:
+    name: queue apply
+    runs-on: ubuntu-latest
+    # Validation's own ceiling plus the plan job's.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          filter: blob:none
+          # A regeneration is pushed to a queued branch with this job's token.
+          token: ${{ github.token }}
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      # main's source, never the pull request's: this checkout is the default branch.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # main's regeneration runs `magus`, which runs `go` off PATH: the pinned toolchain,
+      # not the one setup-magus's source build prepended.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # Also dispatches main's runs once anything merged, even when applying then failed.
+      - name: Merge each change as it goes green
+        env:
+          QUEUE_STEP: apply
+          GH_TOKEN: ${{ github.token }}
+          MERGEQUEUE_TOKEN: ${{ github.token }}
+          RUN: ${{ github.event.workflow_run.id }}
+          MAIN: ${{ github.event.repository.default_branch }}
+        run: magus buzz tools/gha-queue.buzz

@@ -129,6 +129,25 @@ inputs:
       a regular contributor never sees it.
     required: false
     default: 'true'
+  merge-queue:
+    description: >
+      Name the label that queues an approved pull request, while it could join `magus
+      queue` and has not: open, approved, targeting `merge-queue-base`, not from a fork,
+      with neither auto-merge nor a queue label. The label and the merge methods come from
+      `magus queue describe`. Retracts once the pull request is queued, merged or closed.
+
+      OFF by default: it only makes sense where the queue runs, and it needs a workflow
+      that reruns on labels and reviews, which the other advisors do not.
+    required: false
+    default: 'false'
+  merge-queue-base:
+    description: The branch the merge queue merges into.
+    required: false
+    default: ${{ github.event.repository.default_branch }}
+  merge-queue-provider:
+    description: The `magus queue` provider, a built-in name or a .buzz file.
+    required: false
+    default: 'github'
   fix-generated-drift:
     description: >
       Regenerate drifted generated files and PUSH the result to the pull request branch.
@@ -389,6 +408,19 @@ runs:
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: magus buzz "$GITHUB_ACTION_PATH/first-contribution.buzz"
+
+    - name: Name the merge queue's label
+      if: inputs.merge-queue == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        QUEUE_BASE: ${{ inputs.merge-queue-base }}
+        QUEUE_PROVIDER: ${{ inputs.merge-queue-provider }}
+      run: magus buzz "$GITHUB_ACTION_PATH/merge-queue.buzz"
 
     # Last, and deliberately after the read-only advisors: these push, which moves the
     # head every earlier advisor just reported on.
