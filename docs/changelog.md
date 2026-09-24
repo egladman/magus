@@ -295,6 +295,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The GitHub provider no longer offers a merge method a ruleset refuses.** `describe`
+  intersected repository settings alone; it now narrows `methods` to what every active
+  ruleset rule targeting the base branch also allows, drops `merge` under a required
+  linear history, and errors when nothing is left in common.
 - **`MAGUS.md` routing indexes are byte-identical on every machine.** Example columns rank
   by the repository's own edges, not the binary's spell catalog; gitignored sources are
   skipped; and the drift gate now catches an output a composed step writes, which let
