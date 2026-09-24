@@ -10,22 +10,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
-
-// ErrUnavailable is returned, wrapped, when no broker answers: nothing is listening,
-// or the connection closed under a request. Under `broker: required` a step refuses
-// with it; under best-effort the step runs unarbitrated.
-var ErrUnavailable = errors.New("broker: unavailable")
-
-// Error is an error frame a broker answered with. Code, not Message, is what to act on.
-type Error struct {
-	Code    ErrorCode
-	Message string
-}
-
-func (e *Error) Error() string { return e.Message }
 
 // dialTimeout bounds one connect and hello. The broker loads nothing, so an answer
 // slower than this is a wedged broker rather than a busy one.
@@ -90,7 +76,7 @@ func NewClient(addr string, opts ...ClientOption) *Client {
 	dir, _ := os.Getwd()
 	c := &Client{
 		addr:  addr,
-		hello: hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args},
+		hello: hello{Magic: helloMagic, Protocol: ProtocolVersion, MinProtocol: MinProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args},
 		held:  map[string]*heldClaim{},
 		done:  make(chan struct{}),
 	}
@@ -168,16 +154,16 @@ func (c *Client) Release(ctx context.Context, id string) {
 	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote}, nil)
 }
 
-// AcquireService starts, or reuses, the shared service svc under key and returns once
+// AcquireService starts, or reuses, the shared service spec under key and returns once
 // it is ready. The reference rides this connection: ReleaseService drops it, and so
-// does the connection closing. An *Error with CodeNoServices means the broker hosts
-// none and the caller runs the service itself.
-func (c *Client) AcquireService(ctx context.Context, key string, svc spells.Service) error {
+// does the connection closing. ErrNoServices (the broker hosts none) and ErrUnsupported
+// (it predates something spec asks for) both mean the caller runs the service itself.
+func (c *Client) AcquireService(ctx context.Context, key string, spec ServiceSpec) error {
 	cn, err := c.open(ctx)
 	if err != nil {
 		return err
 	}
-	return cn.roundTrip(ctx, c.next(), typeServiceAcquire, serviceRequest{Key: key, Service: &svc}, typeServiceReply, nil, nil)
+	return cn.roundTrip(ctx, c.next(), typeServiceAcquire, serviceAcquireRequest{Key: key, Service: spec.wire()}, typeServiceReply, nil, nil)
 }
 
 // ReleaseService drops one reference AcquireService took. The broker keeps the service
@@ -187,7 +173,7 @@ func (c *Client) ReleaseService(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	return cn.roundTrip(ctx, c.next(), typeServiceRelease, serviceRequest{Key: key}, typeServiceReply, nil, nil)
+	return cn.roundTrip(ctx, c.next(), typeServiceRelease, serviceReleaseRequest{Key: key}, typeServiceReply, nil, nil)
 }
 
 // StopServices stops every service the broker hosts and returns how many, leaving the
@@ -216,14 +202,24 @@ func (c *Client) Status(ctx context.Context) (types.StatusBroker, error) {
 	return st, err
 }
 
-// Shutdown stops the broker. Every claim on the host is dropped with it; runs already
-// going keep going, unarbitrated or refused according to their broker policy.
+// Shutdown stops the broker and returns once it has hung up, which it does after it
+// stops accepting. Every claim on the host is dropped with it; runs already going keep
+// going, unarbitrated or refused according to their broker policy. Under a supervisor
+// holding the socket, the next connection starts another broker.
 func (c *Client) Shutdown(ctx context.Context) error {
 	cn, err := c.connect(ctx)
 	if err != nil {
 		return err
 	}
-	return cn.roundTrip(ctx, c.next(), typeShutdown, shutdownRequest{Magic: shutdownMagic}, typeShutdownReply, nil, nil)
+	if err := cn.roundTrip(ctx, c.next(), typeShutdown, shutdownRequest{Magic: shutdownMagic}, typeShutdownReply, nil, nil); err != nil {
+		return err
+	}
+	select {
+	case <-cn.dead:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Close hangs up, which releases everything this client holds on the broker. Safe to
@@ -248,15 +244,13 @@ func (c *Client) Close() error {
 
 func (c *Client) next() uint64 { return c.nextID.Add(1) }
 
-// connect returns the live connection, dialing one when there is none. A fresh
-// connection re-asserts every claim this client still holds before any other request
-// uses it, so a new broker learns about running steps before it seats anything else.
 // open is connect for a call that takes something from the broker, which is the only
 // kind that may start one. The redial loop uses connect, so a broker that will not
-// start is not respawned every tick.
+// start is not respawned every tick. A broker that answered but refused the hello
+// (ErrProtocol) is live, and starting another would only lose the bind to it.
 func (c *Client) open(ctx context.Context) (*conn, error) {
 	cn, err := c.connect(ctx)
-	if err == nil || c.start == nil || !errors.Is(err, ErrUnavailable) {
+	if err == nil || c.start == nil || !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrProtocol) {
 		return cn, err
 	}
 	c.mu.Lock()
@@ -268,6 +262,9 @@ func (c *Client) open(ctx context.Context) (*conn, error) {
 	return c.connect(ctx)
 }
 
+// connect returns the live connection, dialing one when there is none. A fresh
+// connection re-asserts every claim this client still holds before any other request
+// uses it, so a new broker learns about running steps before it seats anything else.
 func (c *Client) connect(ctx context.Context) (*conn, error) {
 	if cn := c.live(); cn != nil {
 		return cn, nil
@@ -296,7 +293,12 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 	cn := newConn(nc, c.lost)
 	var hr helloReply
-	if err := cn.roundTrip(dctx, c.next(), typeHello, c.hello, typeHelloReply, &hr, nil); err != nil {
+	err = cn.roundTrip(dctx, c.next(), typeHello, c.hello, typeHelloReply, &hr, nil)
+	if err == nil && (hr.Protocol < c.hello.MinProtocol || hr.Protocol > c.hello.Protocol) {
+		err = &Error{Code: CodeProtocol, Message: fmt.Sprintf("broker: chose protocol %d, outside the %d..%d this client offered",
+			hr.Protocol, c.hello.MinProtocol, c.hello.Protocol)}
+	}
+	if err != nil {
 		_ = nc.Close()
 		// A broker speaking another protocol is no arbiter for this client either.
 		return nil, fmt.Errorf("%w: hello: %w", ErrUnavailable, err)

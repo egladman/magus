@@ -1,0 +1,1 @@
+{"key":"pg","service":{"command":["postgres","-D","/data"],"readiness":["pg_isready"],"stop":["pg_ctl","stop"],"idle_ms":1800000}}

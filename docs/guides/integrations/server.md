@@ -85,6 +85,44 @@ magus broker                    # run one in this process, logging to stderr
 
 `magus broker status` exits non-zero when none is running, so a script can chain on it.
 
+### Supervising the broker
+
+A run starting the broker is enough on its own. To have a supervisor own it instead,
+print the units and install them yourself; magus never writes them:
+
+```sh
+magus broker units systemd   # magus-broker.socket and magus-broker.service
+magus broker units launchd   # ~/Library/LaunchAgents/magus.broker.plist
+magus broker units -o json   # the same, as {supervisor, path, content} records
+```
+
+Under systemd the socket unit owns `broker.sock` and starts the broker on the first
+connection, which is socket activation: no spawn race and no orphan. The broker takes the
+socket over through `LISTEN_PID` and `LISTEN_FDS`, still exits when idle, and systemd
+starts it again on the next connection. A handed-over socket is checked strictly: a
+malformed variable, more than one socket, anything but a listening unix stream socket,
+or a socket bound anywhere but `broker.sock` stops the broker with an error.
+
+launchd hands a socket over only through `launch_activate_socket`, a C call magus does
+not make. The launchd agent therefore starts the broker at login with `--idle-exit 0` and
+keeps it alive, and the broker binds `broker.sock` itself. The agent pins `TMPDIR` and
+`XDG_RUNTIME_DIR` to the values `magus broker units` saw, because the socket's path is
+derived from them and launchd starts agents with an environment of its own.
+
+### The broker's wire
+
+The broker's protocol is versioned. A client's hello offers the versions it speaks, the
+broker picks the newest both share, and a client it shares none with is refused with the
+`protocol` error code. `magus status` prints the broker's version as `proto N`.
+
+- Within a version, changes are additive only: a new frame, an optional field or a new
+  error code. A peer ignores a field it does not know, except in a service acquire,
+  where the broker refuses it (`unsupported`) and the run hosts the service itself.
+- Every error crosses as a stable code plus a message, and the Go client matches the
+  code (`errors.Is(err, broker.ErrNoServices)`), never the text.
+- A new version keeps answering the previous one for at least one release, so a run
+  from an older magus still reaches a newer broker.
+
 The `broker` setting in `magus.yaml` (also `--broker` and `MAGUS_BROKER`) decides what a
 run does about it:
 
@@ -276,7 +314,8 @@ network, not the public internet - see [MCP security](mcp.md#security-keep-this-
 ## Keeping the server running
 
 The server is a local process, and the MCP endpoint is only up while it runs. Pick one way
-to keep it alive. The broker needs none of this: a run starts it.
+to keep it alive. The broker needs none of this, since a run starts it; to supervise it
+anyway, see [Supervising the broker](#supervising-the-broker).
 
 **A shell profile (simplest, good while iterating on magus itself).** Ensure a server is up
 whenever you open a shell by adding this to `~/.zprofile`, `~/.bashrc`, or equivalent:

@@ -1,0 +1,15 @@
+{"send":{"type":"hello","id":1,"body":{"magic":"magus-broker-v1","protocol":1,"pid":4242,"dir":"/src/a","argv":["magus","run","test"],"version":"v0.5.0"}},"expect":"hello.reply"}
+{"send":{"type":"claim","id":2,"body":{"claim":{"project":"api","target":"test","memory_mb":512,"slots":1,"pid":4242}}},"expect":"claim.reply"}
+{"send":{"type":"claim","id":3,"body":{"claim":{"project":"api","target":"lint","pid":4242},"reassert":true}},"expect":"claim.reply"}
+{"send":{"type":"status","id":4},"expect":"status.reply"}
+{"send":{"type":"release","id":5,"body":{"claim_id":"a-claim-this-connection-never-took"}},"expect":"release.reply"}
+{"send":{"type":"service.acquire","id":6,"body":{"key":"pg","service":{"command":["postgres","-D","/data"],"readiness":["pg_isready"],"stop":["pg_ctl","stop"],"idle_ms":1800000}}},"expect":"service.reply"}
+{"send":{"type":"service.acquire","id":7,"body":{"key":"pg","service":{"command":["postgres"],"env":{"PGDATA":"/d"}}}},"expect":"error","code":"unsupported"}
+{"send":{"type":"service.acquire","id":8,"body":{"key":"pg","service":{}}},"expect":"error","code":"malformed"}
+{"send":{"type":"service.release","id":9,"body":{"key":"pg"}},"expect":"service.reply"}
+{"send":{"type":"service.stopall","id":10},"expect":"service.reply"}
+{"send":{"type":"claim","id":11,"body":{"claim":{"project":".","target":"t"},"from_a_newer_client":true}},"expect":"claim.reply"}
+{"send":{"type":"a.frame.from.a.newer.client","id":12},"expect":"error","code":"unknown-type"}
+{"send":{"type":"claim","id":13,"body":"not an object"},"expect":"error","code":"malformed"}
+{"send":{"type":"shutdown","id":14,"body":{"magic":"not-the-shutdown-magic"}},"expect":"error","code":"malformed"}
+{"send":{"type":"shutdown","id":15,"body":{"magic":"magus-broker-shutdown-v1"}},"expect":"shutdown.reply"}

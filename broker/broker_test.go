@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/testenv"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,6 +30,9 @@ const holderEnv = "MAGUS_BROKER_TEST_HOLDER"
 func TestMain(m *testing.M) {
 	if addr := os.Getenv(holderEnv); addr != "" {
 		os.Exit(holdUntilKilled(addr))
+	}
+	if addr := os.Getenv(activatedEnv); addr != "" {
+		os.Exit(serveActivated(addr))
 	}
 	testenv.Main(m)
 }
@@ -244,13 +246,15 @@ func TestAConnectionWithoutStateDoesNotPinTheBroker(t *testing.T) {
 type fakeHost struct {
 	mu       sync.Mutex
 	refs     map[string]int
+	last     ServiceSpec
 	stopped  bool
 	startErr error
 }
 
-func (h *fakeHost) Acquire(_ context.Context, key string, _ spells.Service) error {
+func (h *fakeHost) Acquire(_ context.Context, key string, spec ServiceSpec) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.last = spec
 	if h.startErr != nil {
 		return h.startErr
 	}
@@ -297,7 +301,7 @@ func TestServiceReferencesRideTheConnection(t *testing.T) {
 	host := &fakeHost{}
 	serve(t, addr, WithServices(host))
 	c := dial(t, addr)
-	svc := spells.Service{Command: spells.Command{Bin: "postgres"}}
+	svc := ServiceSpec{Command: []string{"postgres"}}
 	require.NoError(t, c.AcquireService(t.Context(), "pg", svc))
 	require.NoError(t, c.AcquireService(t.Context(), "pg", svc))
 	require.NoError(t, c.ReleaseService(t.Context(), "pg"))
@@ -322,17 +326,22 @@ func TestServiceErrorsCarryTheirCode(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr)
 	c := dial(t, addr)
-	err := c.AcquireService(t.Context(), "pg", spells.Service{})
-	var be *Error
-	require.ErrorAs(t, err, &be)
-	assert.Equal(t, CodeNoServices, be.Code, "a broker hosting nothing says so by code, and the run hosts the service itself")
+	pg := ServiceSpec{Command: []string{"postgres"}}
+	err := c.AcquireService(t.Context(), "pg", pg)
+	require.ErrorIs(t, err, ErrNoServices, "a broker hosting nothing says so by code, and the run hosts the service itself")
+	assert.NotErrorIs(t, err, ErrService)
 
 	failing := testAddr(t)
 	serve(t, failing, WithServices(&fakeHost{startErr: errors.New("readiness failed")}))
-	err = dial(t, failing).AcquireService(t.Context(), "pg", spells.Service{})
+	fc := dial(t, failing)
+	err = fc.AcquireService(t.Context(), "pg", pg)
+	require.ErrorIs(t, err, ErrService)
+	var be *Error
 	require.ErrorAs(t, err, &be)
-	assert.Equal(t, CodeService, be.Code)
-	assert.Contains(t, be.Message, "readiness failed")
+	assert.Equal(t, &Error{Code: CodeService, Message: "readiness failed"}, be)
+
+	err = fc.AcquireService(t.Context(), "pg", ServiceSpec{})
+	require.ErrorIs(t, err, ErrMalformed, "a service with no command is refused before any host sees it")
 }
 
 func TestNoBrokerIsUnavailable(t *testing.T) {

@@ -7,8 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/egladman/magus/internal/proc/endpoint"
@@ -57,10 +55,9 @@ func Listen(ctx context.Context, addr string) (net.Listener, error) {
 	return ln, nil
 }
 
-// addrInUse matches the platform's "address already in use", which Windows spells as a
-// WSA error that syscall.EADDRINUSE does not match.
+// addrInUse matches the platform's "address already in use" by errno.
 func addrInUse(err error) bool {
-	return err != nil && (errors.Is(err, syscall.EADDRINUSE) || strings.Contains(err.Error(), "address already in use"))
+	return err != nil && errors.Is(err, errAddrInUse)
 }
 
 // Live reports whether something accepts connections on addr, within 100ms.

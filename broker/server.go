@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -13,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +31,7 @@ const helloTimeout = 10 * time.Second
 // service is ready and adds one dependent; Release drops one. The broker calls Release
 // once per Acquire a connection made when that connection closes, however it closed.
 type ServiceHost interface {
-	Acquire(ctx context.Context, key string, svc spells.Service) error
+	Acquire(ctx context.Context, key string, spec ServiceSpec) error
 	Release(key string)
 	// StopAll stops every hosted service, returning how many, and leaves the host usable.
 	StopAll() int
@@ -146,9 +147,22 @@ type server struct {
 // session is what one connection holds. It is released whole when the connection
 // closes.
 type session struct {
-	hello    hello
+	hello hello
+	// protocol is the version negotiated for this connection. Every version this build
+	// answers reads the same frames today; a later one branches on it.
+	protocol int
 	claims   map[string]struct{}
 	services map[string]int
+}
+
+// negotiate picks the newest protocol version both the hello and this broker speak, or
+// 0 when they share none.
+func negotiate(h hello) int {
+	v := min(h.Protocol, ProtocolVersion)
+	if v < max(cmp.Or(h.MinProtocol, h.Protocol), MinProtocolVersion) {
+		return 0
+	}
+	return v
 }
 
 func (s *server) accept(ln net.Listener) error {
@@ -224,18 +238,23 @@ func (s *server) handle(conn net.Conn) {
 		return
 	}
 	var h hello
-	if first.Type != typeHello || decodeBody(first, &h) != nil || h.Magic != helloMagic || h.Protocol != ProtocolVersion {
+	proto := 0
+	if first.Type == typeHello && decodeBody(first, &h) == nil && h.Magic == helloMagic {
+		proto = negotiate(h)
+	}
+	if proto == 0 {
 		_ = w.write(typeError, first.ID, errorReply{Code: CodeProtocol,
-			Message: fmt.Sprintf("broker: expected a hello speaking protocol %d", ProtocolVersion)})
+			Message: fmt.Sprintf("broker: expected a hello speaking a protocol in %d..%d (pid %d offered %d..%d)",
+				MinProtocolVersion, ProtocolVersion, h.PID, cmp.Or(h.MinProtocol, h.Protocol), h.Protocol)})
 		s.forget(conn, nil)
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
-	sess := &session{hello: h, claims: map[string]struct{}{}, services: map[string]int{}}
+	sess := &session{hello: h, protocol: proto, claims: map[string]struct{}{}, services: map[string]int{}}
 	s.mu.Lock()
 	s.conns[conn] = sess
 	s.mu.Unlock()
-	_ = w.write(typeHelloReply, first.ID, helloReply{PID: os.Getpid(), Protocol: ProtocolVersion, Version: s.opts.version})
+	_ = w.write(typeHelloReply, first.ID, helloReply{PID: os.Getpid(), Protocol: proto, Version: s.opts.version})
 
 	var reqs sync.WaitGroup
 	for {
@@ -338,18 +357,24 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		_ = w.write(typeReleaseReply, f.ID, nil)
 
 	case typeServiceAcquire:
-		var req serviceRequest
-		if err := decodeBody(f, &req); err != nil || req.Service == nil || req.Key == "" {
-			fail(CodeMalformed, "broker: a service acquire needs a key and a service")
+		var req serviceAcquireRequest
+		if err := decodeBody(f, &req); err != nil || req.Key == "" || len(req.Service.Command) == 0 {
+			fail(CodeMalformed, "broker: a service acquire needs a key and a command")
 			return
 		}
 		if s.opts.services == nil {
-			fail(CodeNoServices, "broker: this broker hosts no services")
+			fail(CodeNoServices, "%s", ErrNoServices.Message)
+			return
+		}
+		// Decoded twice rather than strictly once, so a frame that is not JSON stays
+		// malformed and only a member this broker does not know is unsupported.
+		if err := json.UnmarshalStrict(f.Body, &req); err != nil {
+			fail(CodeUnsupported, "broker: this broker predates part of the service %q asks for; host it in-process: %v", req.Key, err)
 			return
 		}
 		// The broker's own context, not the request's: the service outlives the run
 		// that asked for it.
-		if err := s.opts.services.Acquire(s.ctx, req.Key, *req.Service); err != nil {
+		if err := s.opts.services.Acquire(s.ctx, req.Key, req.Service.spec()); err != nil {
 			fail(CodeService, "%v", err)
 			return
 		}
@@ -359,7 +384,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		_ = w.write(typeServiceReply, f.ID, serviceReply{})
 
 	case typeServiceRelease:
-		var req serviceRequest
+		var req serviceReleaseRequest
 		if err := decodeBody(f, &req); err != nil {
 			fail(CodeMalformed, "broker: decode service release: %v", err)
 			return

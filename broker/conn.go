@@ -97,8 +97,9 @@ func (cn *conn) call(ctx context.Context, id uint64, typ string, body any, late 
 	}
 }
 
-// roundTrip is call plus decoding: an error frame becomes an *Error, a reply of another
-// type is a protocol error, and the body lands in out when out is non-nil.
+// roundTrip is call plus decoding: an error frame becomes an *Error carrying its code,
+// a reply the client cannot read is an *Error with CodeProtocol, and the body lands in
+// out when out is non-nil.
 func (cn *conn) roundTrip(ctx context.Context, id uint64, typ string, body any, replyType string, out any, late func(frame)) error {
 	f, err := cn.call(ctx, id, typ, body, late)
 	if err != nil {
@@ -106,19 +107,19 @@ func (cn *conn) roundTrip(ctx context.Context, id uint64, typ string, body any, 
 	}
 	if f.Type == typeError {
 		var er errorReply
-		if err := decodeBody(f, &er); err != nil {
-			return fmt.Errorf("broker: %s: undecodable error reply: %w", typ, err)
+		if err := decodeBody(f, &er); err != nil || er.Code == "" {
+			return &Error{Code: CodeProtocol, Message: fmt.Sprintf("broker: %s: an error reply with no readable code: %s", typ, f.Body)}
 		}
 		return &Error{Code: er.Code, Message: er.Message}
 	}
 	if f.Type != replyType {
-		return fmt.Errorf("broker: %s: unexpected reply %q", typ, f.Type)
+		return &Error{Code: CodeProtocol, Message: fmt.Sprintf("broker: %s: unexpected reply %q", typ, f.Type)}
 	}
 	if out == nil {
 		return nil
 	}
 	if err := decodeBody(f, out); err != nil {
-		return fmt.Errorf("broker: %s: decode reply: %w", typ, err)
+		return &Error{Code: CodeProtocol, Message: fmt.Sprintf("broker: %s: decode reply: %v", typ, err)}
 	}
 	return nil
 }

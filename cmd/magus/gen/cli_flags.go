@@ -89,6 +89,8 @@ const (
 	FlagAgentTar = "tar"
 	// broker stop: --services
 	FlagBrokerStopServices = "services"
+	// broker: --idle-exit
+	FlagBrokerIdleExit = "idle-exit"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --check
@@ -1834,6 +1836,24 @@ type ServerReloadFlags struct {
 func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 	var f ServerReloadFlags
 	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
+	return &f
+}
+
+// BrokerFlags are the flags declared for `magus broker`.
+type BrokerFlags struct {
+	IdleExit time.Duration // --idle-exit
+}
+
+// BrokerDefaults carries the defaults `magus broker` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type BrokerDefaults struct {
+	IdleExit time.Duration // --idle-exit
+}
+
+// BindBroker registers `magus broker`'s flags on fs and returns the destination.
+func BindBroker(fs *flag.FlagSet, d BrokerDefaults) *BrokerFlags {
+	var f BrokerFlags
+	fs.DurationVar(&f.IdleExit, FlagBrokerIdleExit, d.IdleExit, "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive")
 	return &f
 }
 
