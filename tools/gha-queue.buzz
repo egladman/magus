@@ -5,6 +5,7 @@
 //
 //	QUEUE_STEP=plan      magus buzz tools/gha-queue.buzz   plan the queue; write the validation matrix (DEPTH)
 //	QUEUE_STEP=validate  magus buzz tools/gha-queue.buzz   validate one change of the plan (CHANGE)
+//	QUEUE_STEP=planned   magus buzz tools/gha-queue.buzz   write ran=true when validation run RUN plans
 //	QUEUE_STEP=apply     magus buzz tools/gha-queue.buzz   merge what validation run RUN uploads onto MAIN
 //	                                                       (DISPATCH; COMMITTER and APP with the queue app)
 //
@@ -148,6 +149,23 @@ export fun dispatches(queueMerged: bool, dispatch: bool) > [str] {
     return DISPATCH;
 }
 
+// planRan reads `gh run view --json status,jobs` of a validation run: whether its plan
+// job runs, or null while the run has not said. queue.yaml skips the plan on a pull
+// request event without merge intent, and a run cancelled while it waited for the one
+// ahead of it ends with no plan job at all.
+export fun planRan(view: str) > bool? !> any {
+    final run = serialize\jsonDecode(view);
+    foreach (job in run.q("jobs").listValue()) {
+        if (job.q("name").stringValue() == "queue plan") {
+            return job.q("conclusion").stringValue() != "skipped";
+        }
+    }
+    if (run.q("status").stringValue() == "completed") {
+        return false;
+    }
+    return null;
+}
+
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
 fun capture(cmd: str, args: [str]) > str !> any {
     final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
@@ -176,6 +194,20 @@ fun validate() > void !> any {
     proc\exec("magus", args: validateArgs(queueDir(), change: need("CHANGE")), opts: {});
 }
 
+// planned polls every 10s, one API request each, for as long as the validation run
+// waits on the run ahead of it.
+fun planned() > void !> any {
+    final args = ["run", "view", need("RUN"), "--repo", need("GITHUB_REPOSITORY"), "--json", "status,jobs"];
+    while (true) {
+        final ran = planRan(capture("gh", args: args));
+        if (ran != null) {
+            fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={ran!}\n");
+            return;
+        }
+        os\sleep(10000.0);
+    }
+}
+
 fun apply() > void !> any {
     final branch = need("MAIN");
     final repo = need("GITHUB_REPOSITORY");
@@ -201,10 +233,12 @@ export fun main() > void !> any {
         plan();
     } else if (step == "validate") {
         validate();
+    } else if (step == "planned") {
+        planned();
     } else if (step == "apply") {
         apply();
     } else {
-        throw "queue: QUEUE_STEP must be plan, validate or apply; got \"" + step + "\"";
+        throw "queue: QUEUE_STEP must be plan, validate, planned or apply; got \"" + step + "\"";
     }
 }
 
@@ -218,6 +252,22 @@ fun planDoc(depth: int, partitions: [[str]]) > str {
         groups.append(group);
     }
     return encode({"schema": "mergequeue.plan/v1", "depth": depth, "partitions": groups});
+}
+
+test "apply runs once the plan job runs, and not when it was skipped or never made" {
+    final view = fun (status: str, conclusion: str?) > str {
+        final jobs = mut [<{str: any}>];
+        if (conclusion != null) {
+            jobs.append({"name": "queue plan", "conclusion": conclusion!});
+        }
+        return encode({"status": status, "jobs": jobs});
+    };
+    assert\equal(planRan(view("in_progress", conclusion: "skipped")), want: false, message: "no merge intent");
+    assert\equal(planRan(view("in_progress", conclusion: "success")), want: true, message: "planned");
+    assert\equal(planRan(view("completed", conclusion: "failure")), want: true, message: "apply resets stale statuses whatever the plan did");
+    assert\equal(planRan(view("in_progress", conclusion: "")), want: true, message: "running");
+    assert\equal(planRan(view("completed", conclusion: null)), want: false, message: "cancelled before it started");
+    assert\equal(planRan(view("queued", conclusion: null)), want: null, message: "still waiting");
 }
 
 test "each partition gives its first depth changes a validation job" {
