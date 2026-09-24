@@ -161,7 +161,7 @@ func TestPlanAdmission(t *testing.T) {
 		wantCode types.Code
 		wantSet  []string
 	}{
-		// Planning never fetches a fork's head: nothing from it reaches the queue's clones.
+		// Alone in the listing, nothing can be built on a fork, so its head is never fetched.
 		"a fork is kicked back unfetched": {c: types.Change{ID: "1", Head: head("1"), Base: "main", Method: types.MethodSquash, Fork: true},
 			want: types.DecisionKick, wantCode: types.CodeKickRefused},
 		"a head on the base has merged": {c: change("1", "a"), admit: &admitting{onBase: true}, want: types.DecisionMerged},
@@ -249,4 +249,72 @@ func TestPlanPeelsAMergeOfTheBaseOffTheChangeBeneath(t *testing.T) {
 	assert.Equal(t, types.CodeWaitBelow, byID["2"].Code, "held on the change beneath, never blamed")
 	assert.Equal(t, top, byID["2"].Change.StackBase)
 	assert.Equal(t, "1", byID["2"].Change.Below)
+}
+
+// mergeOfBaseOnto says head is a merge of the base, at onBase, into top, and top sits on
+// the base.
+func (d doubles) mergeOfBaseOnto(head, top, onBase string) {
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, head).Return(magustypes.Commit{ID: head, Parents: []string{top, onBase}}, nil)
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, onBase, base).Return(true, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, top).Return(magustypes.Commit{ID: top, Parents: []string{base}}, nil)
+}
+
+// Before, a change built on an unqueued one, which then had main merged into it, carried
+// that change's commits but not its head, and was admitted.
+func TestPlanHoldsAChangeBuiltOnAnUnqueuedChangeBeneathAMergeOfTheBase(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	c := change("2", "a")
+	u := types.UnqueuedChange{ID: "7", Head: head("u merge")}
+	top := head("u top")
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, c.Head, []string(nil)).
+		Return([]magustypes.Commit{{ID: c.Head, Parents: []string{top}}, {ID: top, Parents: []string{base}}}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, c.Head).Return(magustypes.Commit{ID: c.Head, Parents: []string{top}}, nil)
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, u.Head).Return(nil)
+	d.mergeOfBaseOnto(u.Head, top, head("b1"))
+
+	in := changes(c)
+	in.Unqueued = []types.UnqueuedChange{u}
+	plan, err := planner(t, d).Run(t.Context(), in)
+	require.NoError(t, err)
+	require.Len(t, plan.Verdicts, 1)
+	assert.Equal(t, types.CodeWaitUnqueuedBelow, plan.Verdicts[0].Code)
+	assert.Equal(t, "carries the commits of #7, which is open but not queued", plan.Verdicts[0].Reason)
+	assert.Empty(t, plan.Partitions)
+}
+
+// The same for a fork: its head is fetched for its ancestry, and a change built on its
+// top waits on its kick-back rather than merging its commits.
+func TestPlanHoldsAChangeBuiltOnAForkBeneathAMergeOfTheBase(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	fork := types.Change{ID: "1", Head: head("f merge"), Base: "main", Method: types.MethodSquash, Fork: true}
+	c := change("2", "a")
+	top := head("f top")
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, fork.Head).Return(nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, fork.Head, []string(nil)).
+		Return([]magustypes.Commit{{ID: fork.Head, Parents: []string{top, head("b1")}}, {ID: top, Parents: []string{base}}}, nil)
+	d.mergeOfBaseOnto(fork.Head, top, head("b1"))
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, c.Head, []string(nil)).
+		Return([]magustypes.Commit{{ID: c.Head, Parents: []string{top}}, {ID: top, Parents: []string{base}}}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, c.Head).Return(magustypes.Commit{ID: c.Head, Parents: []string{top}}, nil)
+	// Admitted on its own, then held for the fork beneath it.
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, c.Head, base).Return(false, nil)
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil)
+	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
+
+	plan, err := planner(t, d).Run(t.Context(), changes(fork, c))
+	require.NoError(t, err)
+	byID := map[string]types.Verdict{}
+	for _, v := range plan.Verdicts {
+		byID[v.Change.ID] = v
+	}
+	assert.Equal(t, types.CodeKickRefused, byID["1"].Code)
+	assert.Equal(t, types.CodeWaitBelowKicked, byID["2"].Code)
+	assert.Equal(t, top, byID["2"].Change.StackBase)
+	assert.Empty(t, plan.Partitions)
 }

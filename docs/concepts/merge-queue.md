@@ -214,6 +214,10 @@ list is a proof that the change reaches nothing.
 that main carries each one's `commit` and refuses the whole input when it does not.
 `unqueued` lists every other open change: a queued change carrying the head of one waits
 with `WAIT_UNQUEUED_BELOW`, since merging it would merge that change's commits unqueued.
+So does one built on it before a merge of main went on top: planning fetches each
+unqueued head, peels those merges off, and holds a change carrying what is left. A change
+built on a fork waits on the fork's kick-back the same way; the fork's head is fetched
+for its ancestry only, and only when the listing holds another change.
 
 ## Stacks
 
@@ -354,7 +358,7 @@ a change the plan did not admit is dropped.
 | `WAIT_RETARGET`         | it targets another branch than the queue's base                      |
 | `WAIT_METHOD_CHANGED`   | its merge method changed since validation                            |
 | `WAIT_WITHDRAWN`        | its merge intent was withdrawn since it was listed                   |
-| `WAIT_UNQUEUED_BELOW`   | it carries the head of an open change nobody queued                  |
+| `WAIT_UNQUEUED_BELOW`   | it carries the commits of an open change nobody queued               |
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated        |
 | `KICK_RED`              | the gate was red on its candidate                                    |
 | `KICK_REFUSED`          | something the author has to fix that is neither                      |

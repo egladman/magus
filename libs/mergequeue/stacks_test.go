@@ -51,7 +51,13 @@ func TestStackDetection(t *testing.T) {
 		"a change carrying an unqueued change's head waits": {
 			in: stackInput{changes: []types.Change{child}, own: []map[string]bool{set("u", child.Head)}, tops: []string{child.Head},
 				unqueued: []types.UnqueuedChange{{ID: "7", Head: "u"}}},
-			wantCode: types.CodeWaitUnqueuedBelow, wantWhy: "carries the head of #7, which is open but not queued",
+			wantCode: types.CodeWaitUnqueuedBelow, wantWhy: "carries the commits of #7, which is open but not queued",
+		},
+		// It was built on #7 before a merge of the base went on top of #7.
+		"a change carrying an unqueued change's top waits": {
+			in: stackInput{changes: []types.Change{child}, own: []map[string]bool{set("u.top", child.Head)}, tops: []string{child.Head},
+				unqueued: []types.UnqueuedChange{{ID: "7", Head: "u.merge"}}, unqueuedTops: []string{"u.top"}},
+			wantCode: types.CodeWaitUnqueuedBelow, wantWhy: "carries the commits of #7, which is open but not queued",
 		},
 		"a declared parent that is not queued waits": {
 			in:       stackInput{changes: []types.Change{withParent(child, "8")}, own: []map[string]bool{set(child.Head)}, tops: []string{child.Head}},
@@ -230,7 +236,7 @@ func drawStacks(d *draw) stackWorld {
 			w.parentOf[id] = p.id
 			method = p.method
 			carries = maps.Clone(p.carried)
-			if fromHead || !p.queued && !p.merged {
+			if fromHead {
 				carries = maps.Clone(p.atHead)
 			}
 		}
@@ -240,9 +246,6 @@ func drawStacks(d *draw) stackWorld {
 		case 4:
 			method = types.MethodRebase
 		}
-		// A fork's or an unqueued change's top is never peeled: planning reads neither's
-		// history, so a change branched from either carries its head.
-		mergeOfBase = mergeOfBase && queued && !fork
 		for x := 1; x <= k; x++ {
 			carries[oid(id, fmt.Sprint(x))] = true
 		}
@@ -258,6 +261,7 @@ func drawStacks(d *draw) stackWorld {
 		w.ownOf[id] = atHead
 		if !queued {
 			w.in.unqueued = append(w.in.unqueued, types.UnqueuedChange{ID: id, Head: headID})
+			w.in.unqueuedTops = append(w.in.unqueuedTops, top)
 			continue
 		}
 		c := types.Change{ID: id, Head: headID, Base: "main", Method: method, Fork: fork}
@@ -269,12 +273,8 @@ func drawStacks(d *draw) stackWorld {
 		}
 		w.topOf[id] = top
 		listed = append(listed, c)
-		ownSet, topID := atHead, top
-		if fork {
-			ownSet, topID = nil, headID
-		}
-		listedOwn = append(listedOwn, ownSet)
-		listedTops = append(listedTops, topID)
+		listedOwn = append(listedOwn, atHead)
+		listedTops = append(listedTops, top)
 	}
 	if len(listed) > 1 && d.n(6) == 0 { // two listed changes at one head
 		listed[len(listed)-1].Head = listed[0].Head
@@ -295,7 +295,7 @@ func drawStacks(d *draw) stackWorld {
 //
 //	I13 stack order: an admitted change carrying a listed change's top is admitted after
 //	    it in the same partition, unless that change is already on the base; one carrying
-//	    an unqueued change's head is never admitted; and its stack base is the top of the
+//	    an unqueued change's head or top is never admitted; and its stack base is the top of the
 //	    change it was branched from, or the newest commit of a merged one it carries.
 //	I16 cascade without blame: what is stacked on a change planning settled waits, and
 //	    waits on a kicked change as WAIT_BELOW_KICKED; only a change's own decision kicks.
@@ -395,8 +395,8 @@ func stacksHold(t *testing.T, data []byte) {
 			}
 			assert.Equal(t, types.DecisionMerged, decision[id].Decision, "I13: #%s carries #%s, which is %s, and was admitted", c.ID, id, decision[id].Code)
 		}
-		for _, u := range w.in.unqueued {
-			assert.False(t, mine[u.Head], "I13: #%s carries the unqueued #%s and was admitted", c.ID, u.ID)
+		for k, u := range w.in.unqueued {
+			assert.False(t, mine[u.Head] || mine[w.in.unqueuedTops[k]], "I13: #%s carries the unqueued #%s and was admitted", c.ID, u.ID)
 		}
 		switch p := w.parentOf[c.ID]; {
 		case p == "":

@@ -94,7 +94,17 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 	if err != nil {
 		return types.Plan{}, err
 	}
-	stacks := stackInput{changes: changes, own: own, tops: tops, merged: in.Merged, mergedOwn: mergedOwn, unqueued: in.Unqueued}
+	unqueuedTops := make([]string, len(in.Unqueued))
+	if r.stacking() {
+		if err := p.each(ctx, len(in.Unqueued), func(ctx context.Context, i int) (err error) {
+			unqueuedTops[i], err = r.unqueuedTop(ctx, in.Unqueued[i])
+			return err
+		}); err != nil {
+			return types.Plan{}, err
+		}
+	}
+	stacks := stackInput{changes: changes, own: own, tops: tops, merged: in.Merged, mergedOwn: mergedOwn,
+		unqueued: in.Unqueued, unqueuedTops: unqueuedTops}
 	stacks.detect(verdicts)
 	if err := p.each(ctx, len(changes), func(ctx context.Context, i int) (err error) {
 		if verdicts[i] == nil {
@@ -185,11 +195,17 @@ func (r *planning) checkMerged(ctx context.Context) error {
 func (r *planning) stacking() bool { return len(r.heads) > 1 || len(r.in.Unqueued) > 0 }
 
 // fetch refuses a fork, fetches c's head and, when stacks are possible, returns the
-// commits c carries that the base does not, and its own top.
+// commits c carries that the base does not, and its own top. A fork's head is fetched
+// only then, to read its ancestry: a change built on the fork carries its commits, and
+// has to wait on its kick-back whatever the fork merged in since. Nothing of the fork
+// is built or run.
 func (r *planning) fetch(ctx context.Context, c types.Change) (*types.Verdict, map[string]bool, string, error) {
+	var refused *types.Verdict
 	if c.Fork {
-		// Its head still names it, so what is stacked on it waits on its kick-back.
-		return decided(c, types.DecisionKick, types.CodeKickRefused, "a change from a fork", forkReport), nil, c.Head, nil
+		refused = decided(c, types.DecisionKick, types.CodeKickRefused, "a change from a fork", forkReport)
+		if !r.stacking() {
+			return refused, nil, c.Head, nil
+		}
 	}
 	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
 		return nil, nil, "", fmt.Errorf("fetch %s: %w", c.Label(), err)
@@ -205,7 +221,22 @@ func (r *planning) fetch(ctx context.Context, c types.Change) (*types.Verdict, m
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("commits of %s: %w", c.Label(), err)
 	}
-	return nil, own, top, nil
+	return refused, own, top, nil
+}
+
+// unqueuedTop fetches u's head and returns its own top, which a change built on u
+// before a merge of the base into it carries instead of the head. A fetch is local when
+// the clone already holds the head, as a clone of every branch does for a change from
+// this repository.
+func (r *planning) unqueuedTop(ctx context.Context, u types.UnqueuedChange) (string, error) {
+	if err := r.vcs.FetchCommit(ctx, r.clone.Root, r.clone.Remote, u.Head); err != nil {
+		return "", fmt.Errorf("fetch the head of the unqueued #%s: %w", u.ID, err)
+	}
+	top, err := r.ownTop(ctx, u.Head)
+	if err != nil {
+		return "", fmt.Errorf("commits of the unqueued #%s: %w", u.ID, err)
+	}
+	return top, nil
 }
 
 // ownTop is head with the merges of the base into it peeled off: GitHub's "Update

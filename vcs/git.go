@@ -2510,6 +2510,30 @@ func (v gitVCS) GeneratedPaths(ctx context.Context, root, rev string, paths []st
 // own locking there is not built for contention.
 var worktreeAdmin sync.Mutex
 
+// fetches serializes fetches into one repository in this process, keyed by its
+// directory. Two concurrent `git fetch` runs read each other's refs mid-update: one
+// negotiates with a commit another has named but not finished writing, and fails with
+// "bad object" and "did not send all necessary objects".
+var fetches struct {
+	sync.Mutex
+	byDir map[string]*sync.Mutex
+}
+
+func lockFetches(dir string) (unlock func()) {
+	fetches.Lock()
+	if fetches.byDir == nil {
+		fetches.byDir = map[string]*sync.Mutex{}
+	}
+	mu, ok := fetches.byDir[dir]
+	if !ok {
+		mu = &sync.Mutex{}
+		fetches.byDir[dir] = mu
+	}
+	fetches.Unlock()
+	mu.Lock()
+	return mu.Unlock
+}
+
 // checkoutLockReason is the lock reason CreateCheckout records on each worktree it adds.
 // It marks the checkouts CheckoutProvisioner manages, and the lock keeps `git worktree prune`
 // from dropping one whose directory went missing before RemoveCheckout ran.
@@ -2666,6 +2690,8 @@ func (v gitVCS) FetchCommit(ctx context.Context, root, remote, id string) error 
 // ref the user reads moves. The fetched commit rests on gc's prune grace, two weeks by
 // default, which outlasts any caller that goes on to anchor it.
 func fetchCommit(ctx context.Context, dir, remote, src string) (id string, err error) {
+	unlock := lockFetches(dir)
+	defer unlock()
 	sweepScratchRefs(ctx, dir, "fetch")
 	tmp, err := scratchRef("fetch")
 	if err != nil {

@@ -262,6 +262,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Concurrent fetches into one repository no longer fail.** Two `git fetch` runs read
+  each other's refs mid-update and failed with "bad object"; magus now fetches into a
+  repository one at a time.
 - **Every git call magus makes is hardened the same way.** `GIT_DIR`, `GIT_REPLACE_REF_BASE`,
   `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
   git, including the shallow-clone deepening fetch, which re-added them. git never prompts

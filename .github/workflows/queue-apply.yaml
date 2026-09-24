@@ -34,7 +34,7 @@ on:
     types: [requested]
 
 concurrency:
-  group: magus-queue-apply
+  group: queue-apply
   cancel-in-progress: false
 
 permissions:
@@ -72,6 +72,11 @@ jobs:
         with:
           installation-strategy: source
           source-path: .
+
+      # main's regeneration runs `magus`, which runs `go` off PATH: the pinned toolchain,
+      # not the one setup-magus's source build prepended.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # Also dispatches main's runs once anything merged, even when applying then failed.
       - name: Merge each change as it goes green

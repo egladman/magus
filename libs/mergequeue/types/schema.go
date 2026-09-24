@@ -99,7 +99,7 @@ const (
 	CodeWaitRetarget        Code = "WAIT_RETARGET"         // it targets another branch than the queue's base
 	CodeWaitMethodChanged   Code = "WAIT_METHOD_CHANGED"   // its merge method changed since validation
 	CodeWaitWithdrawn       Code = "WAIT_WITHDRAWN"        // its merge intent was withdrawn since it was listed
-	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the head of an open change nobody queued
+	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the commits of an open change nobody queued
 
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
 	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate

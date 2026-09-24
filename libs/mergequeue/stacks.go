@@ -25,6 +25,8 @@ type stackInput struct {
 	merged    []types.MergedChange
 	mergedOwn [][]string // each merged change's own commits the base does not carry, newest first
 	unqueued  []types.UnqueuedChange
+	// unqueuedTops are the unqueued changes' tops, index for index; empty where unread.
+	unqueuedTops []string
 }
 
 // stackNode is a change another may be stacked on.
@@ -62,9 +64,9 @@ func (in stackInput) stack(i int) *types.Verdict {
 			nodes = append(nodes, stackNode{id: o.ID, head: in.tops[j], method: o.Method, open: true, own: in.own[j]})
 		}
 	}
-	for _, u := range in.unqueued {
-		if mine[u.Head] {
-			return decided(*c, types.DecisionWait, types.CodeWaitUnqueuedBelow, "carries the head of #"+u.ID+", which is open but not queued", "")
+	for k, u := range in.unqueued {
+		if mine[u.Head] || k < len(in.unqueuedTops) && mine[in.unqueuedTops[k]] {
+			return decided(*c, types.DecisionWait, types.CodeWaitUnqueuedBelow, "carries the commits of #"+u.ID+", which is open but not queued", "")
 		}
 	}
 	for j, m := range in.merged {
