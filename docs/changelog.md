@@ -62,6 +62,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Every wait and kick-back carries a code.** Verdicts, events and `kick_back` name one of
   a closed set (`WAIT_NOT_APPROVED`, `KICK_CONFLICT`, ...) beside the files at issue, and
   the GitHub provider writes them under its comment for a workflow to read.
+- **The `extended` charm**, for tests that need more of the host than the gate does.
+  A function target reads it with `ctx.hasCharm("extended")`. This repository's cgo
+  compression and shell completion tests now run only under it.
 - **A failing remote tier degrades the run to the local tier.** The first failure is
   reported and counted as failed, never missed, and the run stops asking.
 - **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
@@ -85,6 +88,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
   fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
+- **Diff drivers in the managed `.gitattributes` block**, with funcname patterns for
+  TypeScript and Buzz. `magus doctor` reports a missing one.
+- **A job's footprint.** `magus job wait` names the declaration each changed line lands
+  in, found with git's own funcname patterns and measured from the merge base, and
+  `magus ls jobs` compares footprints when it reports overlapping write paths. Lines
+  above a file's first declaration land in its `(preamble)`.
 - **Job rows and results carry `schema_version`.** An unknown version is rejected by name
   rather than field by field. Rows record `registered_by`.
 - **A lease's declared boundary is enforced.** The guard denies writes outside
@@ -178,6 +187,13 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
   step, one writing what the other reads with no `ctx.needs` path between them, fail at
   derivation. `magus doctor` checks every composed target.
+- **The merge queue labels pull requests** `merge-queue: queued` while it holds them
+  and `merge-queue: rejected` when it kicks one back.
+- **`--scratch-env NAME=DIR` on `magus queue validate` and `magus queue apply`** points
+  a variable at a directory inside each candidate's scratch space, so cache isolation
+  lives on the queue's flags rather than on the hook's command line. It may repeat.
+- **A kick-back comment reproduces the failure.** Each kick-back is a new comment with
+  the run's link and the command that failed, runnable as written.
 - **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
   affected listings and failing results carry up to three `{id, command, argv, why}`
   entries, filtered by the acting lease's role and journaled per session.
@@ -202,6 +218,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   default `agent_id`). Guard templates are at version 17; re-install them.
 - **A target whose inputs have not moved since it failed says so before rerunning.**
   Nothing is skipped (`hint_id: unchanged-failure`).
+- **`testkit.Environ`, `Isolate` and `Main` give a test an environment built from an
+  allowlist.** The sandbox's allowlist plus the Go toolchain's settings survive; HOME and
+  the XDG base directories move under a temp root; the broker and server are pinned off;
+  everything else is dropped. A package names any extra variables in its TestMain.
 - **A text filter over a backgrounded run's capture is denied like a pipe over magus.**
   Use `-o jsonl --tee <file>` for a capture a tool may consume.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
@@ -428,6 +448,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `magus session hints` as `deny-verdict`.
 - **The `run.remote` record says `stored`, not `published`,** which names output bundles
   only.
+- **`magus describe graph -o markdown <project>` renders only that project.** A scoped
+  index drops the workspace-wide kind and project tables, so a change elsewhere cannot
+  make it stale; the unscoped index keeps them. A project path that names no project is
+  now an error instead of an empty index.
 - **"Session" now means only the host's conversation; magus's per-process id is an
   invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
   `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is
@@ -457,6 +481,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Removed
 
+- **Breaking: the advice action's `hand-edited-generated` advisor and input.** It named
+  generated files as hand edits whenever no declared input of their project changed, which
+  was false for every output whose target opts out of the cache, such as a `MAGUS.md`
+  rendered from the whole graph. The drift gate already fails on a real hand edit. Delete
+  the key from `with:`.
 - **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
   `head-repo` inputs.** The action reads the pull request from the triggering event and
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
@@ -523,6 +552,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
   git, including the shallow-clone deepening fetch, which re-added them. git never prompts
   for credentials, and no signing, rerere or signature line changes what magus reads.
+- **Generated docs examples read the same wherever they are regenerated.** The
+  examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
+  state dir it inherits leaks run history into the captured `magus explain` output.
 - **A failed remote-cache exchange names the step that failed.**
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
