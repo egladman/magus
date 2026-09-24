@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
   grades the child under that job's lease and records its base.
+- **`magus\guard.command` registers a workspace shell-command rule.** One Buzz function
+  sees every agent shell command the built-ins pass, as parsed programs, and may deny or
+  advise, never lift a built-in deny. It fails open and is held to the committed copy as
+  `magus\guard.spawn` is. Both rules now return `GuardVerdict` (was `SpawnVerdict`) and
+  share `once`/`count`.
 - **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
@@ -215,6 +220,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Breaking: the `ci-watch` guard rule.** magus no longer denies `gh run watch` or the
+  `--watch` form of `gh pr checks` and `gh run view`: how a repository waits on its CI is
+  its own policy. A workspace that relied on the deny re-creates it with
+  `magus\guard.command`; magus's own repository does so in `tools/policy/guard.buzz`.
 - **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
   Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`

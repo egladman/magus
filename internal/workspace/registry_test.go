@@ -35,15 +35,31 @@ func TestWorkspaceRegistry_SpawnRuleReplaces(t *testing.T) {
 	assert.Nil(t, r.SpawnRule())
 
 	verdict := func(reason string) SpawnRule {
-		return func(context.Context, types.SpawnRequest, hint.Gate) (types.SpawnVerdict, error) {
-			return types.SpawnVerdict{Decision: types.SpawnDeny, Reason: reason}, nil
+		return func(context.Context, types.SpawnRequest, hint.Gate) (types.GuardVerdict, error) {
+			return types.GuardVerdict{Decision: types.GuardDeny, Reason: reason}, nil
 		}
 	}
 	r.SetSpawnRule(verdict("first"))
 	r.SetSpawnRule(verdict("second"))
 	got, err := r.SpawnRule()(context.Background(), types.SpawnRequest{}, hint.Gate{})
 	require.NoError(t, err)
-	assert.Equal(t, types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "second"}, got)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "second"}, got)
+}
+
+func TestWorkspaceRegistry_CommandRuleReplaces(t *testing.T) {
+	r := NewWorkspaceRegistry()
+	assert.Nil(t, r.CommandRule())
+
+	verdict := func(reason string) CommandRule {
+		return func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
+			return types.GuardVerdict{Decision: types.GuardAdvise, Reason: reason}, nil
+		}
+	}
+	r.SetCommandRule(verdict("first"))
+	r.SetCommandRule(verdict("second"))
+	got, err := r.CommandRule()(context.Background(), types.CommandRequest{}, hint.Gate{})
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAdvise, Reason: "second"}, got)
 }
 
 func TestWorkspaceRegistry_RegisterProject_ProjectPaths(t *testing.T) {

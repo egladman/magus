@@ -47,19 +47,19 @@ grep '"kind":"guard_policy"' .magus/activity/events.jsonl
 -- rule-advise.buzz --
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.advise("advise from the rule");
 });
 -- rule-deny.buzz --
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("no spawning here");
 });
 -- rule-allow.buzz --
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.allow();
 });
 -- spawn.json --

@@ -1688,7 +1688,40 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 	return out
 }
 
-func ObjectSpawnVerdict(v types.SpawnVerdict) vm.Value {
+func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("program", vm.StrValue(v.Program))
+	itemsArgs := make([]vm.Value, len(v.Args))
+	for indexArgs := range v.Args {
+		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
+	}
+	out.MapSet("args", vm.ListValue(itemsArgs))
+	out.MapSet("repeats", vm.BoolValue(v.Repeats))
+	return out
+}
+
+func ObjectCommandRequest(v types.CommandRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("command", vm.StrValue(v.Command))
+	out.MapSet("description", vm.StrValue(v.Description))
+	itemsCommands := make([]vm.Value, len(v.Commands))
+	for indexCommands := range v.Commands {
+		itemsCommands[indexCommands] = ObjectCommandInvocation(v.Commands[indexCommands])
+	}
+	out.MapSet("commands", vm.ListValue(itemsCommands))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	return out
+}
+
+func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))

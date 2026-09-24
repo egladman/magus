@@ -115,6 +115,14 @@ func (m *Magus) SpawnRule() workspace.SpawnRule {
 	return m.wsReg.SpawnRule()
 }
 
+// CommandRule returns the magus\guard.command rule the root magusfile registered, or nil.
+func (m *Magus) CommandRule() workspace.CommandRule {
+	if m.wsReg == nil {
+		return nil
+	}
+	return m.wsReg.CommandRule()
+}
+
 // ApprovedSpawnRule returns the magus\guard.spawn rule as the approved sources register it.
 // Nil with no error when nothing is pending (the working tree's rule already is the
 // approved one), when the workspace has no approval authority, or when the approved sources
@@ -125,6 +133,24 @@ func (m *Magus) SpawnRule() workspace.SpawnRule {
 // It loads the root magusfile a second time, reading every source it and its Buzz imports
 // read through the approval authority, so call it only for a spawn.
 func (m *Magus) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, error) {
+	reg, err := m.approvedRegistry(ctx)
+	if err != nil || reg == nil {
+		return nil, err
+	}
+	return reg.SpawnRule(), nil
+}
+
+// ApprovedCommandRule is ApprovedSpawnRule for the magus\guard.command rule. Call it only
+// for a shell command, and only when a stricter answer could still change the verdict.
+func (m *Magus) ApprovedCommandRule(ctx context.Context) (workspace.CommandRule, error) {
+	reg, err := m.approvedRegistry(ctx)
+	if err != nil || reg == nil {
+		return nil, err
+	}
+	return reg.CommandRule(), nil
+}
+
+func (m *Magus) approvedRegistry(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
 	approved, err := approvedPolicyAt(ctx, m.ws.Root, m.ws.VCSOptions)
 	if err != nil || approved == nil {
 		return nil, err
@@ -133,7 +159,7 @@ func (m *Magus) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, err
 	if err != nil || len(pending) == 0 {
 		return nil, err
 	}
-	return approvedSpawnRule(ctx, m.ws.Root, m.rootProjectPath(), m.resolver, approved, pending)
+	return approvedRegistry(ctx, m.ws.Root, m.rootProjectPath(), m.resolver, approved, pending)
 }
 
 // ApprovedSpawnRuleAt is ApprovedSpawnRule for the workspace at root when its working tree
@@ -141,6 +167,23 @@ func (m *Magus) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, err
 // broken or edited config (a version floor this binary is below, say) may be the failure,
 // and the approved sources are evaluated whether or not any of them looks pending.
 func ApprovedSpawnRuleAt(ctx context.Context, root string) (workspace.SpawnRule, error) {
+	reg, err := approvedRegistryAt(ctx, root)
+	if err != nil || reg == nil {
+		return nil, err
+	}
+	return reg.SpawnRule(), nil
+}
+
+// ApprovedCommandRuleAt is ApprovedSpawnRuleAt for the magus\guard.command rule.
+func ApprovedCommandRuleAt(ctx context.Context, root string) (workspace.CommandRule, error) {
+	reg, err := approvedRegistryAt(ctx, root)
+	if err != nil || reg == nil {
+		return nil, err
+	}
+	return reg.CommandRule(), nil
+}
+
+func approvedRegistryAt(ctx context.Context, root string) (*workspace.WorkspaceRegistry, error) {
 	approved, err := approvedPolicyAt(ctx, root, types.VCSOptions{})
 	if err != nil || approved == nil {
 		return nil, err
@@ -149,12 +192,13 @@ func ApprovedSpawnRuleAt(ctx context.Context, root string) (workspace.SpawnRule,
 	if err != nil {
 		return nil, err
 	}
-	return approvedSpawnRule(ctx, root, ".", secret.New(), approved, pending)
+	return approvedRegistry(ctx, root, ".", secret.New(), approved, pending)
 }
 
-// approvedSpawnRule evaluates the root magusfile at root as approved holds it. pending
-// names the sources the working tree changed, so a file it deleted is still found.
-func approvedSpawnRule(ctx context.Context, root, projectPath string, resolver *secret.Resolver, approved ApprovedPolicy, pending []string) (workspace.SpawnRule, error) {
+// approvedRegistry evaluates the root magusfile at root as approved holds it and returns
+// what it registered. pending names the sources the working tree changed, so a file it
+// deleted is still found. Nil with no error when there is no magusfile to evaluate.
+func approvedRegistry(ctx context.Context, root, projectPath string, resolver *secret.Resolver, approved ApprovedPolicy, pending []string) (*workspace.WorkspaceRegistry, error) {
 	if !interp.Available() {
 		return nil, nil //nolint:nilnil // without an interpreter no magusfile can register a rule
 	}
@@ -184,7 +228,7 @@ func approvedSpawnRule(ctx context.Context, root, projectPath string, resolver *
 			return nil, fmt.Errorf("approved magusfile: %w", err)
 		}
 	}
-	return reg.SpawnRule(), nil
+	return reg, nil
 }
 
 // approvedMagusfiles is the root magusfile's files as approved holds them, in whichever
@@ -241,32 +285,39 @@ type GuardPolicy struct {
 	Digest string
 	// Sources are the files the root magusfile's load read, which is where a spawn rule can
 	// come from, each named by the git blob id of the bytes read.
-	Sources    []interp.SourceFile
-	ShellRules int
-	SpawnRule  bool
+	Sources     []interp.SourceFile
+	ShellRules  int
+	SpawnRule   bool
+	CommandRule bool
 }
 
 // GuardPolicy describes the workspace guard rules this load registered.
 //
-// A spawn rule is code, so its digest covers every file its load read: an edit to any of
-// them counts as a policy change while a spawn rule is registered. Shell rules are data
-// and count only for themselves.
+// A spawn or command rule is code, so its digest covers every file its load read: an edit
+// to any of them counts as a policy change while either is registered. Shell rules are
+// data and count only for themselves.
 func (m *Magus) GuardPolicy() GuardPolicy {
 	rules := m.ShellRules()
 	spawn := m.SpawnRule() != nil
+	command := m.CommandRule() != nil
 	var sources []interp.SourceFile
 	if m.policyLog != nil {
 		sources = m.policyLog.Files()
 	}
-	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn}
-	if len(rules) == 0 && !spawn {
+	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command}
+	if len(rules) == 0 && !spawn && !command {
 		return policy
 	}
 	h := sha256.New()
 	for _, r := range rules {
 		fmt.Fprintf(h, "shell %q %q %q %q %q %q\n", r.Name, r.Decision, r.Program, r.Args, r.Reason, r.Dialect)
 	}
-	if spawn {
+	// Registering a command rule over the same files is still a new digest. The spawn
+	// rule's lines keep their spelling so its digests stay what they were.
+	if command {
+		fmt.Fprintln(h, "rule command")
+	}
+	if spawn || command {
 		for _, s := range sources {
 			fmt.Fprintf(h, "spawn %s %s\n", s.Path, s.BlobID)
 		}

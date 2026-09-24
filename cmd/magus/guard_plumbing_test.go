@@ -14,20 +14,24 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// denySpawns is a magusfile whose spawn rule denies every spawn.
-const denySpawns = `import "magus";
+// denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
+// denies every command.
+const denyRules = `import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("Name a model.");
+});
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    return magus\guard.deny("Not in this repository.");
 });
 `
 
-// committedDenyRule is a git repository whose committed root magusfile is denySpawns.
+// committedDenyRule is a git repository whose committed root magusfile is denyRules.
 func committedDenyRule(t *testing.T) string {
 	t.Helper()
 	root := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denySpawns), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denyRules), 0o644))
 	runGit(t, root, "add", "-A")
 	runGit(t, root, "commit", "-q", "-m", "init")
 	return root
@@ -59,9 +63,16 @@ func TestApprovedSpawnRuleAtSurvivesABrokenWorkingTree(t *testing.T) {
 			rule, err := magus.ApprovedSpawnRuleAt(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, rule)
-			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.SpawnRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
+			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
-			assert.Equal(t, types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "Name a model."}, got)
+			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, got)
+
+			command, err := magus.ApprovedCommandRuleAt(t.Context(), root)
+			require.NoError(t, err)
+			require.NotNil(t, command)
+			got, err = command(t.Context(), types.CommandRequest{Command: "ls", Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
+			require.NoError(t, err)
+			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Not in this repository."}, got)
 		})
 	}
 }
@@ -121,4 +132,20 @@ func TestUnreadableWorkspaceStillRunsTheCommittedRule(t *testing.T) {
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, "deny", v.Decision)
 	assert.Equal(t, "Name a model.", v.Reason)
+}
+
+// The command rule is resolved from the committed sources on the same terms, so breaking
+// the working tree cannot switch it off either.
+func TestUnreadableWorkspaceStillRunsTheCommittedCommandRule(t *testing.T) {
+	root := committedDenyRule(t)
+	resetWorkspaceMemo(t)
+	inspectOnce.Do(func() { inspectValue = otherRepository{} })
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Chdir(root)
+
+	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
+	v := guard.Judge(ctx, guardDependencies(), guard.Request{Input: "ls -la", Host: "claude-code"})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Contains(t, v.Reason, "Not in this repository.")
+	assert.Equal(t, "workspace:command", v.Rule)
 }

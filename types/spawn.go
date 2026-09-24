@@ -2,8 +2,6 @@ package types
 
 import (
 	"fmt"
-	"slices"
-	"strings"
 )
 
 // SpawnKind is which agent event a magus\guard.spawn rule is judging.
@@ -54,112 +52,6 @@ func (k *SpawnKind) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// SpawnRole is where the caller of a spawn stands, computed from the job store rather than
-// declared by anyone.
-type SpawnRole string
-
-const (
-	// SpawnRoleRoot is a session no lease binds: the orchestrator, or a person.
-	SpawnRoleRoot SpawnRole = "root"
-	// SpawnRoleWorker is a session a lease binds in this checkout.
-	SpawnRoleWorker SpawnRole = "worker"
-)
-
-// Values lists the roles a caller may name, excluding the zero value.
-func (r SpawnRole) Values() []string {
-	return []string{string(SpawnRoleRoot), string(SpawnRoleWorker)}
-}
-
-// Valid reports whether r is a declared role or unset.
-func (r SpawnRole) Valid() bool {
-	switch r {
-	case "", SpawnRoleRoot, SpawnRoleWorker:
-		return true
-	}
-	return false
-}
-
-// String renders r for an error message: the value, or "unset" when empty.
-func (r SpawnRole) String() string {
-	if r == "" {
-		return "unset"
-	}
-	return string(r)
-}
-
-// MarshalText writes the name as given.
-func (r SpawnRole) MarshalText() ([]byte, error) { return []byte(r), nil }
-
-// UnmarshalText sets r from a name, refusing one outside Values.
-func (r *SpawnRole) UnmarshalText(text []byte) error {
-	v := SpawnRole(text)
-	if !v.Valid() {
-		return fmt.Errorf("unknown spawn role %q (want one of %v)", text, v.Values())
-	}
-	*r = v
-	return nil
-}
-
-// SpawnDecision is what a magus\guard.spawn rule answers. The zero value allows, so an
-// empty SpawnVerdict{} is the pass a rule returns when it has nothing to say.
-type SpawnDecision string
-
-const (
-	// SpawnAllow adds nothing to the built-in verdict.
-	SpawnAllow SpawnDecision = "allow"
-	// SpawnAdvise lets the call through with context for the agent.
-	SpawnAdvise SpawnDecision = "advise"
-	// SpawnDeny blocks the call.
-	SpawnDeny SpawnDecision = "deny"
-)
-
-// Values lists the decisions a rule may return, excluding the zero value.
-func (d SpawnDecision) Values() []string {
-	return []string{string(SpawnAllow), string(SpawnAdvise), string(SpawnDeny)}
-}
-
-// Valid reports whether d is a declared decision or unset.
-func (d SpawnDecision) Valid() bool {
-	switch d {
-	case "", SpawnAllow, SpawnAdvise, SpawnDeny:
-		return true
-	}
-	return false
-}
-
-// String renders d for an error message: the value, or "unset" when empty.
-func (d SpawnDecision) String() string {
-	if d == "" {
-		return "unset"
-	}
-	return string(d)
-}
-
-// MarshalText writes the name as given.
-func (d SpawnDecision) MarshalText() ([]byte, error) { return []byte(d), nil }
-
-// UnmarshalText sets d from a name, refusing one outside Values.
-func (d *SpawnDecision) UnmarshalText(text []byte) error {
-	v := SpawnDecision(text)
-	if !v.Valid() {
-		return fmt.Errorf("unknown spawn decision %q (want one of %v)", text, v.Values())
-	}
-	*d = v
-	return nil
-}
-
-// rank orders decisions by strictness, so merging two verdicts keeps the stricter. An
-// undeclared decision ranks as deny: a verdict nobody can read must not pass as allow.
-func (d SpawnDecision) rank() int {
-	switch d {
-	case "", SpawnAllow:
-		return 0
-	case SpawnAdvise:
-		return 1
-	}
-	return 2
-}
-
 // SpawnRequest is what a magus\guard.spawn rule is handed: one agent spawn or
 // continuation, normalized from whichever host sent it.
 //
@@ -192,7 +84,7 @@ type SpawnRequest struct {
 	// caller is a root session or its spawn was never recorded.
 	Parent string
 	// Role is worker when a lease binds the calling session in this checkout.
-	Role SpawnRole
+	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
@@ -216,30 +108,4 @@ type SpawnTarget struct {
 	// plus cache-write tokens from the latest usage its host reported for it. Nil when
 	// the host reported none.
 	ContextTokens *int64
-}
-
-// SpawnVerdict is what a magus\guard.spawn rule returns. The zero value allows.
-type SpawnVerdict struct {
-	Decision SpawnDecision
-	// Reason is shown to the agent: the refusal for a deny, the context for an advise.
-	Reason string
-}
-
-// StricterSpawnVerdict merges two verdicts on one call, keeping the stricter decision:
-// deny over advise over allow. When both carry the same decision their reasons are both
-// kept, once each, so two rules that agree on a deny still explain themselves.
-func StricterSpawnVerdict(a, b SpawnVerdict) SpawnVerdict {
-	switch {
-	case a.Decision.rank() > b.Decision.rank():
-		return a
-	case b.Decision.rank() > a.Decision.rank():
-		return b
-	}
-	var reasons []string
-	for _, r := range []string{a.Reason, b.Reason} {
-		if r = strings.TrimSpace(r); r != "" && !slices.Contains(reasons, r) {
-			reasons = append(reasons, r)
-		}
-	}
-	return SpawnVerdict{Decision: a.Decision, Reason: strings.Join(reasons, "\n\n")}
 }

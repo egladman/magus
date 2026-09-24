@@ -38,6 +38,8 @@ type WorkspaceRegistry struct {
 	shellRules []ShellRule
 	// spawnRule is the function a magusfile registered via magus\guard.spawn, or nil.
 	spawnRule SpawnRule
+	// commandRule is the function a magusfile registered via magus\guard.command, or nil.
+	commandRule CommandRule
 	// harnesses are the spell names a magusfile wired as agent harnesses (via
 	// magus\harness.provider), in wiring order. Many hosts, like workspace.provider;
 	// unlike cache.remote's one.
@@ -60,7 +62,11 @@ type ShellRule struct {
 //
 // An error means the rule itself failed (it raised, returned something that is not a
 // verdict, or ran out of time), never that it denied: a deny is a verdict.
-type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (types.SpawnVerdict, error)
+type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (types.GuardVerdict, error)
+
+// CommandRule judges one agent shell command for magus\guard.command, with the same
+// facts and error contract as SpawnRule.
+type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (types.GuardVerdict, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -172,6 +178,20 @@ func (r *WorkspaceRegistry) SpawnRule() SpawnRule {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.spawnRule
+}
+
+// SetCommandRule records the magus\guard.command rule, on the terms of SetSpawnRule.
+func (r *WorkspaceRegistry) SetCommandRule(rule CommandRule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commandRule = rule
+}
+
+// CommandRule returns the magus\guard.command rule, or nil when none was registered.
+func (r *WorkspaceRegistry) CommandRule() CommandRule {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.commandRule
 }
 
 // AddHarness records a spell name a magusfile wired as an agent harness,

@@ -54,6 +54,8 @@ func guardDependencies() guard.Dependencies {
 	if m != nil {
 		deps.SpawnRule = m.SpawnRule()
 		deps.ApprovedSpawnRule = m.ApprovedSpawnRule
+		deps.CommandRule = m.CommandRule()
+		deps.ApprovedCommandRule = m.ApprovedCommandRule
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(m) }
 		return deps
 	}
@@ -66,6 +68,9 @@ func guardDependencies() guard.Dependencies {
 	deps.LoadFailure = loadErr
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
 		return magus.ApprovedSpawnRuleAt(ctx, root)
+	}
+	deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
+		return magus.ApprovedCommandRuleAt(ctx, root)
 	}
 	return deps
 }
@@ -91,9 +96,10 @@ func loadedWorkspace(ctx context.Context) (*magus.Magus, error) {
 func guardPolicyState(m *magus.Magus) guard.PolicyState {
 	policy := m.GuardPolicy()
 	return guard.PolicyState{
-		Digest:     policy.Digest,
-		ShellRules: policy.ShellRules,
-		SpawnRule:  policy.SpawnRule,
+		Digest:      policy.Digest,
+		ShellRules:  policy.ShellRules,
+		SpawnRule:   policy.SpawnRule,
+		CommandRule: policy.CommandRule,
 		Sources: func(ctx context.Context) []guard.PolicySource {
 			paths := make([]string, len(policy.Sources))
 			for i, s := range policy.Sources {

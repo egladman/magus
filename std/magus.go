@@ -47,7 +47,8 @@ var Magus = Module{
 		"the credentials read through it, `magus\\harness.provider(<spell>)` an agent-host harness " +
 		"(many hosts; like workspace.provider, unlike cache.remote's one), and `magus\\guard.shell(<rule>)` an additive " +
 		"shell-guard rule (strengthen-only; `magus\\guard.bash` is a deprecated alias), and `magus\\guard.spawn(<fun>)` the one " +
-		"function the agent guard calls on every spawn and continuation (see [magus\\guard.spawn](../guard-spawn.md)). Each provider takes an imported spell handle. " +
+		"function the agent guard calls on every spawn and continuation (see [magus\\guard.spawn](../guard-spawn.md)), and `magus\\guard.command(<fun>)` the one " +
+		"function it calls on every agent shell command (see [magus\\guard.command](../guard-command.md)). Each provider takes an imported spell handle. " +
 		"`magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback " +
 		"base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the " +
 		"credential on the way upstream and the child never holds it. It takes an object with " +
@@ -410,7 +411,7 @@ var Magus = Module{
 				{
 					Name: "spawn",
 					Doc: "Register the one function the agent guard calls on every agent spawn and every " +
-						"continuation of an existing subagent: fun(req: SpawnRequest) > SpawnVerdict. " +
+						"continuation of an existing subagent: fun(req: SpawnRequest) > GuardVerdict. " +
 						"Declared at the top level of the root magusfile, once. Strengthen only: its deny " +
 						"blocks, its advise fills silence, and nothing it returns lifts a built-in deny. A rule " +
 						"that raises or returns something other than a verdict fails open with an advisory " +
@@ -421,29 +422,41 @@ var Magus = Module{
 					Extern: true,
 				},
 				{
+					Name: "command",
+					Doc: "Register the one function the agent guard calls on every shell command an agent " +
+						"is about to run: fun(req: CommandRequest) > GuardVerdict. The function form of " +
+						"guard.shell, for a decision a program-and-args match cannot express. Declared at the " +
+						"top level of the root magusfile, once. Strengthen only, fails open, and is evaluated " +
+						"from both the committed and the working-tree sources, exactly as guard.spawn is. " +
+						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
+						"ships no rule.",
+					Args:   []Arg{{Name: "rule", Type: TypeFunc}},
+					Extern: true,
+				},
+				{
 					Name:    "allow",
-					Doc:     "The verdict a spawn rule returns to add nothing.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "SpawnVerdict"}},
+					Doc:     "The verdict a spawn or command rule returns to add nothing.",
+					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},
 				{
 					Name:    "advise",
-					Doc:     "The verdict a spawn rule returns to let the call through with text for the agent.",
+					Doc:     "The verdict a spawn or command rule returns to let the call through with text for the agent.",
 					Args:    []Arg{{Name: "text", Type: TypeString}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "SpawnVerdict"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},
 				{
 					Name:    "deny",
-					Doc:     "The verdict a spawn rule returns to block the call, with text saying why.",
+					Doc:     "The verdict a spawn or command rule returns to block the call, with text saying why.",
 					Args:    []Arg{{Name: "text", Type: TypeString}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "SpawnVerdict"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},
 				{
 					Name: "once",
 					Doc: "True the first time key is asked in the calling agent's session, false after. " +
-						"Only callable inside a spawn rule while the guard runs it.",
+						"Only callable inside a spawn or command rule while the guard runs it.",
 					Args:    []Arg{{Name: "key", Type: TypeString}},
 					Returns: []Ret{{Type: TypeBool}},
 					Extern:  true,
@@ -451,13 +464,13 @@ var Magus = Module{
 				{
 					Name: "count",
 					Doc: "Adds one to key's tally in the calling agent's session and returns the new " +
-						"total, starting at 1. Only callable inside a spawn rule while the guard runs it.",
+						"total, starting at 1. Only callable inside a spawn or command rule while the guard runs it.",
 					Args:    []Arg{{Name: "key", Type: TypeString}},
 					Returns: []Ret{{Type: TypeInt}},
 					Extern:  true,
 				},
 			},
-			Objects: []string{"SpawnRequest"},
+			Objects: []string{"SpawnRequest", "CommandRequest"},
 		},
 		{
 			Name: "harness",
@@ -552,7 +565,7 @@ var Magus = Module{
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
 						"workspace; raises MGS1022 only when there is no workspace to read. " +
-						"Inside a magus\\guard.spawn rule it answers from the rows the guard read for " +
+						"Inside a magus\\guard.spawn or magus\\guard.command rule it answers from the rows the guard read for " +
 						"that call, and every other job member raises there: the store is read-only " +
 						"to a rule.",
 					Returns: []Ret{{Type: TypeAnyMap, Object: "JobList"}},

@@ -175,12 +175,15 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
 	{Name: "JobStatus", Type: reflect.TypeFor[types.JobStatus](), RuntimeObject: true},
 	{Name: "GateStatus", Type: reflect.TypeFor[types.GateStatus](), RuntimeObject: true},
-	// magus\guard.spawn's pair, after Job because SpawnRequest.lease is one. The guard
-	// hands a rule the request and the rule hands back the verdict, so both need encoders:
-	// allow/advise/deny build the verdict on the Go side.
+	// magus\guard.spawn's and magus\guard.command's requests, after Job because each
+	// request's lease is one, and the verdict both return. The guard hands a rule the
+	// request and the rule hands back the verdict, so all need encoders: allow/advise/deny
+	// build the verdict on the Go side.
 	{Name: "SpawnTarget", Type: reflect.TypeFor[types.SpawnTarget](), RuntimeObject: true},
 	{Name: "SpawnRequest", Type: reflect.TypeFor[types.SpawnRequest](), RuntimeObject: true},
-	{Name: "SpawnVerdict", Type: reflect.TypeFor[types.SpawnVerdict](), RuntimeObject: true},
+	{Name: "CommandInvocation", Type: reflect.TypeFor[types.CommandInvocation](), RuntimeObject: true},
+	{Name: "CommandRequest", Type: reflect.TypeFor[types.CommandRequest](), RuntimeObject: true},
+	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

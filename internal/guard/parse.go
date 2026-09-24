@@ -794,27 +794,6 @@ func fileFindFires(cmds []hint.Invocation) bool {
 	})
 }
 
-// ciWatchFires reports a gh invocation that BLOCKS until a CI run reaches a terminal
-// state: `gh run watch`, and the --watch form of `gh run view` and `gh pr checks`.
-//
-// Reading a result that already exists (`gh run view --log`, a bare `gh pr checks`) is
-// untouched. The rule is about the WAITING.
-func ciWatchFires(cmds []hint.Invocation) bool {
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		if path.Base(c.Name) != "gh" {
-			return false
-		}
-		ops := operands(c.Args, "")
-		if len(ops) >= 2 && ops[0] == "run" && ops[1] == "watch" {
-			return true
-		}
-		if !hasFlag(c.Args, 0, "watch") {
-			return false
-		}
-		return len(ops) >= 2 && (ops[0] == "run" && ops[1] == "view" || ops[0] == "pr" && ops[1] == "checks")
-	})
-}
-
 // docReaders are the commands that read or search a file's text.
 var docReaders = map[string]bool{
 	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,

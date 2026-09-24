@@ -7,7 +7,8 @@ tags: [guard, agents, spawn, subagents, policy, magusfile, hooks, strengthen-onl
 # magus\guard.spawn
 
 `magus\guard.spawn` is the spawn-time sibling of
-[`magus\guard.shell`](../guides/integrations/agents/guard.md). The root magusfile
+[`magus\guard.shell`](../guides/integrations/agents/guard.md) and
+[`magus\guard.command`](guard-command.md). The root magusfile
 registers one function; the agent guard calls it on every subagent spawn and every
 message to an existing subagent it sees, hands it the request, and adds its answer
 to the built-in verdict.
@@ -19,7 +20,7 @@ that decision can live in your tree, in Buzz, versioned with the code it governs
 ```buzz
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     if (req.kind == "spawn" and req.model == "") {
         return magus\guard.deny("Name a model for this spawn.");
     }

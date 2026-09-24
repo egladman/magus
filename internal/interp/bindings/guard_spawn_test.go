@@ -40,7 +40,7 @@ fun describe(req: SpawnRequest) > str {
     return "{req.kind}|{req.host}|{req.model}|{req.role}|{lease}|{agent}|{req.parent}";
 }
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     if (req.model == "") { return magus\guard.deny(describe(req)); }
     return magus\guard.advise(describe(req));
 });
@@ -53,21 +53,21 @@ func TestSpawnRuleSeesTheRequestAfterTheLoadCloses(t *testing.T) {
 
 	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
 	got, err := rule(t.Context(), types.SpawnRequest{
-		Kind: types.SpawnKindSpawn, Host: "claude-code", Role: types.SpawnRoleRoot,
+		Kind: types.SpawnKindSpawn, Host: "claude-code", Role: types.AgentRoleRoot,
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "spawn|claude-code||root|||"}, got)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "spawn|claude-code||root|||"}, got)
 
 	idle := int64(90_000)
 	got, err = rule(t.Context(), types.SpawnRequest{
-		Kind: types.SpawnKindContinue, Host: "claude-code", Model: "sonnet", Role: types.SpawnRoleWorker,
+		Kind: types.SpawnKindContinue, Host: "claude-code", Model: "sonnet", Role: types.AgentRoleWorker,
 		Lease:  &types.Job{ID: "guard-spawn"},
 		Target: &types.SpawnTarget{Agent: "auditor", IdleMs: &idle},
 		Parent: "orchestrator/brisk-heron/implement adr 0002",
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.SpawnVerdict{
-		Decision: types.SpawnAdvise,
+	assert.Equal(t, types.GuardVerdict{
+		Decision: types.GuardAdvise,
 		Reason:   "continue|claude-code|sonnet|worker|guard-spawn|auditor|orchestrator/brisk-heron/implement adr 0002",
 	}, got)
 }
@@ -78,7 +78,7 @@ func TestSpawnRuleOnceAndCountAreSessionScoped(t *testing.T) {
 	rule, err := loadSpawnRule(t, `
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     final n = magus\guard.count("spawns");
     if (magus\guard.once("first")) { return magus\guard.advise("first of {n}"); }
     return magus\guard.advise("again {n}");
@@ -109,10 +109,10 @@ func TestSpawnRuleFailuresAreErrors(t *testing.T) {
 		name, body, want string
 	}{
 		{"throws", `if (req.host == "") { throw "boom"; } return magus\guard.allow();`, "the rule raised"},
-		// Declared to return `any`, not `SpawnVerdict`: a rule statically typed to return
-		// SpawnVerdict cannot return a str at all (BZZ1005 catches it before this runs),
-		// so exercising decodeSpawnVerdict's runtime check needs a looser signature.
-		{"returns a non-verdict value", `return "not a verdict";`, "not a SpawnVerdict"},
+		// Declared to return `any`, not `GuardVerdict`: a rule statically typed to return
+		// GuardVerdict cannot return a str at all (BZZ1005 catches it before this runs),
+		// so exercising decodeGuardVerdict's runtime check needs a looser signature.
+		{"returns a non-verdict value", `return "not a verdict";`, "not a GuardVerdict"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,17 +131,17 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
 }
 
 // allow() is the pass a rule returns when it has nothing to say; verdicts are built only
-// with allow()/advise(text)/deny(text), never a SpawnVerdict{} literal.
+// with allow()/advise(text)/deny(text), never a GuardVerdict{} literal.
 func TestSpawnRuleAllowAllows(t *testing.T) {
 	rule, err := loadSpawnRule(t, `
 import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict { return magus\guard.allow(); });
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict { return magus\guard.allow(); });
 `)
 	require.NoError(t, err)
 	got, err := rule(t.Context(), types.SpawnRequest{}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.SpawnVerdict{Decision: types.SpawnAllow}, got)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
 }
 
 // Each way of registering a rule the guard could not honor stops the load with MGS1045.
@@ -156,19 +156,19 @@ func TestSpawnRuleMisdeclarationIsCoded(t *testing.T) {
 
 	t.Run("not a function", func(t *testing.T) {
 		err := callVoidDirect(t, register(t.Context()), vm.StrValue("rule"))
-		require.ErrorContains(t, err, string(types.GuardSpawnMisdeclared))
+		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "expected one function")
 	})
 	t.Run("registered twice", func(t *testing.T) {
 		spawn := register(t.Context())
 		require.NoError(t, callVoidDirect(t, spawn, fn))
 		err := callVoidDirect(t, spawn, fn)
-		require.ErrorContains(t, err, string(types.GuardSpawnMisdeclared))
+		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "already registered")
 	})
 	t.Run("outside the root magusfile", func(t *testing.T) {
 		err := callVoidDirect(t, register(interp.WithProjectPath(t.Context(), "libs/foo")), fn)
-		require.ErrorContains(t, err, string(types.GuardSpawnMisdeclared))
+		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "register it in the root magusfile")
 	})
 	t.Run("the root project registers", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestSpawnHelpersRefuseOutsideARule(t *testing.T) {
 import "magus";
 final told = magus\guard.once("x");
 `)
-	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn rule")
+	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn or magus\\guard.command rule")
 }
 
 // A rule reads the job rows the guard pinned and the facts magus recorded about a
@@ -219,14 +219,14 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
 	cases := []struct {
 		name    string
 		req     types.SpawnRequest
-		want    types.SpawnVerdict
+		want    types.GuardVerdict
 		wantErr string
 	}{
 		{"a continue sees its target", types.SpawnRequest{Kind: types.SpawnKindContinue, Target: &types.SpawnTarget{Agent: "brisk-heron", Description: "orchestrator/integrator guard-facts", Model: "sonnet", ContextTokens: &tokens}},
-			types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "guard-facts;guard-docs;|refused|orchestrator/integrator guard-facts|sonnet|19925"}, ""},
+			types.GuardVerdict{Decision: types.GuardAdvise, Reason: "guard-facts;guard-docs;|refused|orchestrator/integrator guard-facts|sonnet|19925"}, ""},
 		{"a target the host reported no usage for", types.SpawnRequest{Kind: types.SpawnKindContinue, Target: &types.SpawnTarget{Agent: "ghost"}},
-			types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "guard-facts;guard-docs;|refused|||none"}, ""},
-		{"a write raises", types.SpawnRequest{Kind: types.SpawnKindSpawn}, types.SpawnVerdict{}, "read-only"},
+			types.GuardVerdict{Decision: types.GuardAdvise, Reason: "guard-facts;guard-docs;|refused|||none"}, ""},
+		{"a write raises", types.SpawnRequest{Kind: types.SpawnKindSpawn}, types.GuardVerdict{}, "read-only"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

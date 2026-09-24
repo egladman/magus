@@ -70,13 +70,6 @@ var denyRuleDocs = []RuleDoc{
 			"A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. " +
 			"A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. " +
 			"A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line."},
-	{Name: string(denyRuleCIWatch), Decision: "deny",
-		Catches: "a `gh` invocation that BLOCKS until CI finishes, rather than asking once",
-		Why: "Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: a person merges, not the watcher. " +
-			"Measured in one session: four watches, every one green, every one a turn spent re-reading a verdict that was already true. " +
-			"It is also the second half of a duplicate, since a gate already run locally is the same command on the same tree, and waiting for CI to agree pays twice for one answer. " +
-			"`gh pr list --state open --json number,mergeable,statusCheckRollup` answers every open pull request in one call. " +
-			"Iterating on a run that is already RED is the case worth following, and polling that command serves it too."},
 	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
 		Catches: "a trailing `echo $?`, which repeats an exit status the harness already reports",
 		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +

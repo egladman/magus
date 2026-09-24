@@ -323,3 +323,8 @@ tags/pinning/
 # MAGUS_NO_WAIT was removed when a held lock or budget began refusing at once; its tag
 # index went with the pages that documented it.
 tags/magus-no-wait/
+
+# The ci-watch rule left the shipped guard: how a repository waits on CI is its own
+# policy, written with magus\guard.command. A rule page is generated per shipped rule,
+# so it retires rather than aliases.
+reference/rules/ci-watch/

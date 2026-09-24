@@ -1,0 +1,317 @@
+// This repository's rules for the coding agents that work on it, registered from the root
+// magusfile with magus\guard.command. They are this repository's preference, not a magus
+// default: nothing here is compiled into or shipped with magus. Copy them as a reference
+// for your own repository's policy.
+//
+// Edits apply at once when they tighten a rule. A loosening waits until it is committed,
+// because the guard runs the committed copy of this file beside the working tree's and keeps
+// the stricter answer.
+//
+// Rules, each keyed on the parsed programs a command runs, never on the raw line:
+//   ci-watch (deny): a gh invocation that blocks until CI or the merge queue finishes.
+//   ci-batch-poll (advise once per session): one pull request's CI read piecemeal.
+//   queue-poll (advise once per session): the merge queue's state read through GitHub.
+namespace agentpolicy;
+
+import "std";
+import "magus";
+
+// The one command that answers CI for every open pull request.
+final board = "gh pr list --state open --json number,mergeable,statusCheckRollup";
+
+final ciWatchDenial = "Ask for the board once, when you need the answer:\n"
+    + "  {board}\n"
+    + "Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: "
+    + "the human merges, not you. Poll that command instead while you are acting on a RED run.\n"
+    + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
+    + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
+
+final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole board at once:\n"
+    + "  {board}\n"
+    + "One call answers every open pull request, and green changes nothing: the human merges.";
+
+final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
+    + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
+
+// judge is the rule the root magusfile registers.
+export fun judge(req: CommandRequest) > GuardVerdict {
+    final programs = mut [<Program>];
+    foreach (c in req.commands) {
+        programs.append(Program{ name = c.program, args = c.args, repeats = c.repeats });
+    }
+    return decide(programs, once: fun (key: str) > bool {
+        return magus\guard.once(key);
+    });
+}
+
+// Program is one program a command runs, copied out of the request because a Buzz test
+// cannot build the host's CommandInvocation.
+object Program {
+    name: str,
+    args: [str],
+    repeats: bool,
+}
+
+// decide is judge over the programs, with the once-per-session gate passed in so the tests
+// below can count firings without a guard session.
+export fun decide(programs: [Program], once: fun (key: str) > bool) > GuardVerdict {
+    final calls = ghCalls(programs);
+    foreach (call in calls) {
+        if (blocksOnCI(call)) {
+            return magus\guard.deny(ciWatchDenial);
+        }
+    }
+    foreach (call in calls) {
+        if (pollsQueue(call)) {
+            if (once("queue-poll")) { return magus\guard.advise(queuePollAdvice); }
+            return magus\guard.allow();
+        }
+    }
+    foreach (call in calls) {
+        if (readsOneCI(call)) {
+            if (once("ci-batch-poll")) { return magus\guard.advise(ciBatchAdvice); }
+            return magus\guard.allow();
+        }
+    }
+    return magus\guard.allow();
+}
+
+// GhCall is one gh invocation: its arguments, and whether something runs it again and
+// again (a while or until loop, or the watch program).
+object GhCall {
+    args: [str],
+    repeats: bool,
+}
+
+fun ghCalls(programs: [Program]) > [GhCall] {
+    final calls = mut [<GhCall>];
+    foreach (c in programs) {
+        if (c.name == "gh") {
+            calls.append(GhCall{ args = c.args, repeats = c.repeats });
+        } else if (c.name == "watch") {
+            // `watch [flags] gh ...` reruns gh every interval.
+            foreach (i, arg in c.args) {
+                if (arg == "gh") {
+                    calls.append(GhCall{ args = c.args.sub(i + 1), repeats = true });
+                    break;
+                }
+            }
+        }
+    }
+    return calls;
+}
+
+// blocksOnCI: `gh run watch`, the --watch form of `gh run view` and `gh pr checks`, and any
+// CI or queue read a loop or watch repeats. Reading a result that already exists is left
+// to the advisories: the rule is about the WAITING.
+fun blocksOnCI(call: GhCall) > bool {
+    if (runs(call, first: "run", second: "watch")) {
+        return true;
+    }
+    if (hasFlag(call.args, long: "--watch") and (runs(call, first: "run", second: "view") or runs(call, first: "pr", second: "checks"))) {
+        return true;
+    }
+    return call.repeats and (readsOneCI(call) or pollsQueue(call));
+}
+
+// readsOneCI: one pull request's or one commit's checks, where the board answers them all.
+fun readsOneCI(call: GhCall) > bool {
+    if (runs(call, first: "pr", second: "checks")) {
+        return true;
+    }
+    if (runs(call, first: "pr", second: "view") and jsonFields(call.args).indexOf("statusCheckRollup") != null) {
+        return true;
+    }
+    final ops = operands(call.args);
+    if (ops.len() > 1 and ops[0] == "api") {
+        foreach (suffix in ["/check-runs", "/check-suites", "/status", "/statuses"]) {
+            if (ops[1].endsWith(suffix)) { return true; }
+        }
+    }
+    return false;
+}
+
+// pollsQueue: the merge queue's runs or its marks on a pull request, read through GitHub.
+fun pollsQueue(call: GhCall) > bool {
+    if (runs(call, first: "run", second: "list") or runs(call, first: "run", second: "view")) {
+        return isQueueWorkflow(flagValue(call.args, long: "--workflow", short: "-w") ?? "");
+    }
+    if (runs(call, first: "pr", second: "view") or runs(call, first: "pr", second: "checks")) {
+        var aimed = false;
+        foreach (arg in call.args) {
+            if (arg.indexOf("queue") != null) { aimed = true; }
+        }
+        if (!aimed) { return false; }
+        final fields = jsonFields(call.args);
+        return runs(call, first: "pr", second: "checks")
+            or fields.indexOf("labels") != null
+            or fields.indexOf("statusCheckRollup") != null;
+    }
+    return false;
+}
+
+fun isQueueWorkflow(name: str) > bool {
+    return name.startsWith("queue") and (name.endsWith(".yaml") or name.endsWith(".yml"));
+}
+
+// runs reports whether call's first two operands are first and second: `gh pr checks`.
+fun runs(call: GhCall, first: str, second: str) > bool {
+    final ops = operands(call.args);
+    return ops.len() > 1 and ops[0] == first and ops[1] == second;
+}
+
+// The gh flags that take the next word as their value, so it is not read as an operand.
+final valueFlags = [
+    "-R", "--repo", "-w", "--workflow", "-b", "--branch", "-L", "--limit", "-q", "--jq",
+    "--json", "-i", "--interval", "-t", "--template", "-u", "--user", "-s", "--state",
+    "-e", "--event", "-c", "--commit", "-X", "--method", "-H", "--header", "-f", "-F",
+    "--field", "--raw-field",
+];
+
+fun operands(args: [str]) > [str] {
+    final ops = mut [<str>];
+    var skip = false;
+    foreach (arg in args) {
+        if (skip) {
+            skip = false;
+        } else if (arg.startsWith("-")) {
+            skip = arg.indexOf("=") == null and valueFlags.indexOf(arg) != null;
+        } else {
+            ops.append(arg);
+        }
+    }
+    return ops;
+}
+
+fun hasFlag(args: [str], long: str) > bool {
+    foreach (arg in args) {
+        if (arg == long or arg.startsWith(long + "=")) { return true; }
+    }
+    return false;
+}
+
+// flagValue is the value given to a flag spelled long or short ("" when it has no short
+// form), or null when the flag is absent.
+fun flagValue(args: [str], long: str, short: str) > str? {
+    foreach (i, arg in args) {
+        if ((arg == long or (short != "" and arg == short)) and i + 1 < args.len()) {
+            return args[i + 1];
+        }
+        if (arg.startsWith(long + "=")) {
+            return arg.sub(long.len() + 1);
+        }
+    }
+    return null;
+}
+
+// jsonFields lists the fields a --json flag asks for.
+fun jsonFields(args: [str]) > [str] {
+    final value = flagValue(args, long: "--json", short: "") ?? "";
+    if (value == "") { return [<str>]; }
+    return value.split(",");
+}
+
+// request is the programs a command runs, each spelled as its argv. A leading "loop:" marks
+// the program as repeated by a while loop.
+fun request(argvs: [[str]]) > [Program] {
+    final programs = mut [<Program>];
+    foreach (argv in argvs) {
+        var words = argv;
+        var repeats = false;
+        if (words[0] == "loop:") {
+            repeats = true;
+            words = words.sub(1);
+        }
+        programs.append(Program{ name = words[0], args = words.sub(1), repeats = repeats });
+    }
+    return programs;
+}
+
+// counter is a fresh once-per-session gate.
+fun counter() > fun (key: str) > bool {
+    final seen = mut {<str: bool>};
+    return fun (key: str) > bool {
+        if (seen[key] ?? false) { return false; }
+        seen[key] = true;
+        return true;
+    };
+}
+
+test "a gh call that blocks until CI finishes is denied" {
+    foreach (argv in [
+        ["gh", "run", "watch", "34069443069"],
+        ["gh", "run", "watch", "34069443069", "--exit-status", "--interval", "60"],
+        ["gh", "pr", "checks", "183", "--watch"],
+        ["gh", "run", "view", "34069443069", "--watch"],
+        ["gh", "--repo", "egladman/magus", "pr", "checks", "183", "--watch=true"],
+    ]) {
+        final v = decide(request([argv]), once: counter());
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("GREEN CHANGES NOTHING") != null, message: "keeps the reason");
+        std\assert(v.reason.indexOf(board) != null, message: "names the board");
+    }
+}
+
+test "a CI read that a loop or watch repeats is a watch too" {
+    final looped = decide(request([["loop:", "gh", "pr", "checks", "183"], ["loop:", "sleep", "30"]]), once: counter());
+    std\assert(looped.decision == "deny", message: "a while loop over gh pr checks");
+    final watched = decide(request([["watch", "-n", "30", "gh", "pr", "view", "183", "--json", "statusCheckRollup"]]), once: counter());
+    std\assert(watched.decision == "deny", message: "the watch program over gh pr view");
+}
+
+test "watching the merge queue's runs is denied, naming the queue" {
+    foreach (argv in [
+        ["loop:", "gh", "run", "list", "--workflow", "queue.yaml"],
+        ["watch", "gh", "run", "list", "--workflow=queue-apply.yaml"],
+        ["loop:", "gh", "run", "view", "--workflow", "queue-apply.yaml"],
+    ]) {
+        final v = decide(request([argv]), once: counter());
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's own answer");
+    }
+}
+
+test "reading one pull request's CI is advised once per session" {
+    final once = counter();
+    foreach (argv in [
+        ["gh", "pr", "checks", "183"],
+        ["gh", "pr", "view", "183", "--json", "state,statusCheckRollup"],
+        ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs"],
+    ]) {
+        std\assert(decide(request([argv]), once: counter()).decision == "advise", message: argv.join(" "));
+    }
+    final first = decide(request([["gh", "pr", "checks", "183"]]), once: once);
+    std\assert(first.decision == "advise", message: "the first read is advised");
+    std\assert(first.reason.indexOf(board) != null, message: "names the board");
+    std\assert(decide(request([["gh", "pr", "checks", "184"]]), once: once).decision == "allow", message: "and only once");
+}
+
+test "polling the merge queue through GitHub is advised once per session" {
+    final once = counter();
+    foreach (argv in [
+        ["gh", "run", "list", "--workflow", "queue.yaml"],
+        ["gh", "run", "list", "-w", "queue-apply.yaml", "--limit", "5"],
+        ["gh", "pr", "view", "212", "--json", "labels", "--jq", ".labels[] | select(.name == \"queue\")"],
+        ["gh", "pr", "view", "212", "--json", "statusCheckRollup", "--jq", ".statusCheckRollup[] | select(.context == \"magus/queue\")"],
+    ]) {
+        final v = decide(request([argv]), once: counter());
+        std\assert(v.decision == "advise", message: argv.join(" "));
+        std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's answer, not the board");
+    }
+    std\assert(decide(request([["gh", "run", "list", "--workflow", "queue.yaml"]]), once: once).decision == "advise", message: "first");
+    std\assert(decide(request([["gh", "run", "list", "--workflow", "queue.yaml"]]), once: once).decision == "allow", message: "only once");
+}
+
+test "the board itself, an unrelated gh run list, and other programs stay silent" {
+    foreach (argv in [
+        ["gh", "pr", "list", "--state", "open", "--json", "number,mergeable,statusCheckRollup"],
+        ["gh", "run", "list", "--branch", "main", "--limit", "5"],
+        ["gh", "run", "list", "--workflow", "ci.yaml"],
+        ["gh", "run", "view", "34069443069", "--log"],
+        ["gh", "pr", "view", "183", "--json", "labels"],
+        ["watch", "-n", "5", "free", "-m"],
+        ["git", "status"],
+    ]) {
+        std\assert(decide(request([argv]), once: counter()).decision == "allow", message: argv.join(" "));
+    }
+}

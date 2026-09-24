@@ -258,11 +258,11 @@ const (
 	// path holds no spell, the spell there has another name than the embedded one it
 	// replaces, or it names an embedded spell this magus does not ship.
 	SpellOverrideInvalid DiagnosticCode = "MGS1044"
-	// GuardSpawnMisdeclared is a magus\guard.spawn registration the workspace cannot use:
-	// one that is not a function, a second one in the same load, or one outside the root
-	// magusfile. The load stops, because a rule that silently did not register is a guard
-	// that looks enforced and is not.
-	GuardSpawnMisdeclared DiagnosticCode = "MGS1045"
+	// GuardRuleMisdeclared is a magus\guard.spawn or magus\guard.command registration the
+	// workspace cannot use: one that is not a function, a second one in the same load, or
+	// one outside the root magusfile. The load stops, because a rule that silently did not
+	// register is a guard that looks enforced and is not.
+	GuardRuleMisdeclared DiagnosticCode = "MGS1045"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -531,7 +531,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
-	SpellOverrideInvalid, GuardSpawnMisdeclared,
+	SpellOverrideInvalid, GuardRuleMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

@@ -246,6 +246,9 @@ type AgentCommand struct {
 	// PolicyDigest and DecidedBy link the verdict to the rules that reached it; see Event.
 	PolicyDigest string
 	DecidedBy    string
+	// RuleFailures are the workspace command rules that judged nothing, empty when every
+	// rule answered.
+	RuleFailures []RuleFailure
 }
 
 const agentCommandSchemaVersion = 1
@@ -269,7 +272,21 @@ type agentCommandResponse struct {
 	Rule          string `json:"rule,omitempty"`
 	// No schema bump: an added optional field a reader can ignore leaves every existing
 	// blob readable and every existing reader correct.
-	PreauthorizedBy string `json:"preauthorized_by,omitempty"`
+	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
+	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
+}
+
+// redactFailures redacts each failure's error text, which quotes workspace code and may
+// quote a command line.
+func redactFailures(ctx context.Context, in []RuleFailure) []RuleFailure {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]RuleFailure, len(in))
+	for i, f := range in {
+		out[i] = RuleFailure{Side: f.Side, Error: secret.RedactString(ctx, f.Error)}
+	}
+	return out
 }
 
 // AppendAgentCommand writes one normalized agent-hook observation into the existing activity
@@ -309,6 +326,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Context:         command.Context,
 		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
+		RuleFailures:    redactFailures(ctx, command.RuleFailures),
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
@@ -395,11 +413,11 @@ type AgentSpawn struct {
 	Target string
 	// RuleFailures are the workspace spawn rules that judged nothing, empty when every
 	// rule answered.
-	RuleFailures []SpawnRuleFailure
+	RuleFailures []RuleFailure
 }
 
-// SpawnRuleFailure is one side of a workspace spawn rule that judged nothing, and why.
-type SpawnRuleFailure struct {
+// RuleFailure is one side of a workspace guard rule that judged nothing, and why.
+type RuleFailure struct {
 	// Side is worktree or approved, the values Event.DecidedBy names them by.
 	Side  string `json:"side"`
 	Error string `json:"error"`
@@ -422,8 +440,8 @@ type agentSpawnRequest struct {
 	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
 	DeclaredModel string `json:"declared_model,omitempty"`
 	// Target and RuleFailures are additive for the reason DeclaredModel is.
-	Target       string             `json:"target,omitempty"`
-	RuleFailures []SpawnRuleFailure `json:"rule_failures,omitempty"`
+	Target       string        `json:"target,omitempty"`
+	RuleFailures []RuleFailure `json:"rule_failures,omitempty"`
 }
 
 const (
@@ -459,10 +477,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// repository would pay for one bad payload.
 	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
-	failures := make([]SpawnRuleFailure, len(spawn.RuleFailures))
-	for i, f := range spawn.RuleFailures {
-		failures[i] = SpawnRuleFailure{Side: f.Side, Error: secret.RedactString(ctx, f.Error)}
-	}
+	failures := redactFailures(ctx, spawn.RuleFailures)
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
 		Host:          spawn.Host,

@@ -224,6 +224,12 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   Buzz function called on every subagent spawn and continuation with a normalized
   request, answering allow, advise or deny. Strengthen only, like the shell rules.
   magus ships none; see [magus\guard.spawn](../../../reference/guard-spawn.md).
+- **A workspace command rule** (`magus\guard.command(fun)` in the root magusfile): one
+  Buzz function called on every shell command the rules above let through, with the
+  parsed programs it runs, answering allow, advise or deny. The function form of
+  `magus\guard.shell`, for a rule a program-and-args match cannot express. magus ships
+  none; [magus\guard.command](../../../reference/guard-command.md) walks through writing
+  a repository policy.
 
 | dialect | parser                        |
 | ------- | ----------------------------- |

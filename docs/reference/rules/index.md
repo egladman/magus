@@ -21,7 +21,6 @@ name is the entry below. `magus describe rules` prints the same list.
 | [cache-dir-write](cache-dir-write.md)         | a write into this checkout's magus cache dir, which magus alone owns                              |
 | [capture-filter](capture-filter.md)           | a filter over a run capture or log, which cuts the failure block apart                            |
 | [cd](cd.md)                                   | a `cd` before a magus command, when the project is an argument                                    |
-| [ci-watch](ci-watch.md)                       | a `gh` invocation that BLOCKS until CI finishes, rather than asking once                          |
 | [exit-status-echo](exit-status-echo.md)       | a trailing `echo $?`, which repeats an exit status the harness already reports                    |
 | [interpreter-rewrite](interpreter-rewrite.md) | an inline interpreter rewriting a file this tree already carries                                  |
 | [merge-side-checkout](merge-side-checkout.md) | a checkout of one merge side over a conflicted file, which discards the merge                     |

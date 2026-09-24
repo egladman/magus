@@ -16,11 +16,11 @@ const (
 	// PolicyLoaded is the first effective rule set this cache has seen.
 	PolicyLoaded = "loaded"
 	// PolicyTightened is an unapproved edit whose added rules are live. An edit to an
-	// existing spawn rule records as this too: under stricter-of evaluation only its
-	// tightening takes effect before approval.
+	// existing spawn or command rule records as this too: under stricter-of evaluation only
+	// its tightening takes effect before approval.
 	PolicyTightened = "tightened"
-	// PolicyLoosenPending is an unapproved edit that removes the spawn rule, which has no
-	// effect on a spawn until it is approved. A removed shell rule has no approved twin to
+	// PolicyLoosenPending is an unapproved edit that removes the spawn or command rule,
+	// which has no effect until it is approved. A removed shell rule has no approved twin to
 	// wait on, so it records as committed.
 	PolicyLoosenPending = "loosen_pending"
 	// PolicyCommitted is a rule set whose sources match the approved ones again, so what
@@ -46,19 +46,21 @@ type PolicySource struct {
 // PolicyState is the effective workspace rule set as one hook call sees it.
 type PolicyState struct {
 	// Digest names the rule set; "" when the working tree declares no guard rule.
-	Digest     string
-	ShellRules int
-	SpawnRule  bool
+	Digest      string
+	ShellRules  int
+	SpawnRule   bool
+	CommandRule bool
 	// Sources resolves each policy source's approved id. It can run a process per file, so
 	// it is called only when the record can change; nil when there is no approval authority.
 	Sources func(ctx context.Context) []PolicySource
 }
 
 type policyMarker struct {
-	Digest     string `json:"digest"`
-	ShellRules int    `json:"shell_rules"`
-	SpawnRule  bool   `json:"spawn_rule"`
-	Pending    bool   `json:"pending"`
+	Digest      string `json:"digest"`
+	ShellRules  int    `json:"shell_rules"`
+	SpawnRule   bool   `json:"spawn_rule"`
+	CommandRule bool   `json:"command_rule,omitempty"`
+	Pending     bool   `json:"pending"`
 }
 
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
@@ -104,7 +106,7 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	}
 	pending := slices.ContainsFunc(sources, func(s PolicySource) bool { return s.Worktree != s.Approved })
 	action := classifyPolicy(prev, seen, now, pending)
-	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, Pending: pending}
+	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, Pending: pending}
 	if action != "" {
 		body, _ := json.Marshal(policyEvent{SchemaVersion: 1, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
@@ -139,7 +141,7 @@ func classifyPolicy(prev policyMarker, seen bool, now PolicyState, pending bool)
 		return PolicyRemoved
 	case !pending:
 		return PolicyCommitted
-	case prev.SpawnRule && !now.SpawnRule:
+	case prev.SpawnRule && !now.SpawnRule, prev.CommandRule && !now.CommandRule:
 		return PolicyLoosenPending
 	case now.ShellRules < prev.ShellRules:
 		// Shell rules have no approved twin, so a dropped one is in effect at once.
