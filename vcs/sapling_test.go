@@ -171,7 +171,7 @@ func slMergeConflict(t *testing.T) string {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "gone.txt"), []byte("changed\n"), 0o644))
 	vcsTestRun(t, dir, "sl", "commit", "-m", "sideB")
 
-	require.NoError(t, saplingVCS{}.StartMerge(t.Context(), dir, other),
+	require.NoError(t, saplingVCS{}.StartMerge(t.Context(), dir, other, types.Person{}),
 		"StartMerge must treat a CONFLICTING merge as started, not as a failure")
 	return dir
 }
@@ -373,7 +373,7 @@ func TestSaplingStartMergeRefusesWhenOneIsUnderway(t *testing.T) {
 	dir := slMergeConflict(t) // already leaves a merge in progress
 	other := slRev(t, dir, "p1(.)")
 
-	err := saplingVCS{}.StartMerge(t.Context(), dir, other)
+	err := saplingVCS{}.StartMerge(t.Context(), dir, other, types.Person{})
 	require.Error(t, err, "a second StartMerge must not report success over an in-progress merge")
 	assert.Contains(t, err.Error(), "already in progress")
 }

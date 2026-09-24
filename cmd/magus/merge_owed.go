@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -159,8 +160,8 @@ func settleOwedRegeneration(ctx context.Context, m *magus.Magus, driver types.VC
 	if err != nil {
 		return owedSettlement{}, err
 	}
-	if resolver, ok := driver.(types.ConflictResolver); ok && len(paths) > 0 {
-		if s.staged, _, err = stagePaths(ctx, m.Root(), driver.Name(), resolver, paths); err != nil {
+	if len(paths) > 0 {
+		if s.staged, _, err = stagePaths(ctx, m.Root(), driver, paths); err != nil {
 			return owedSettlement{}, err
 		}
 	}
@@ -205,15 +206,14 @@ func projectDepth(path string) int {
 // foldCommand is how to fold staged output into HEAD: an amend when HEAD is an unpushed
 // git commit, "" when it may already be published or the backend cannot say.
 func foldCommand(ctx context.Context, root string, driver types.VCSDriver) string {
-	pr, ok := driver.(types.PushStatusReporter)
-	if !ok || driver.Name() != "git" {
+	if driver.Name() != "git" {
 		return ""
 	}
 	head, err := driver.Metadata(ctx, root)
 	if err != nil {
 		return ""
 	}
-	if pushed, known, err := pr.CommitPushed(ctx, root, head.ID); err != nil || !known || pushed {
+	if pushed, known, err := driver.CommitPushed(ctx, root, head.ID); err != nil || !known || pushed {
 		return ""
 	}
 	return "git commit --amend --no-edit"
@@ -261,15 +261,14 @@ func installRegenHooks(ctx context.Context) {
 	if err != nil || res.VCS == nil {
 		return
 	}
-	installer, ok := res.VCS.(types.RegenHookInstaller)
-	if !ok {
-		return
-	}
 	root, err := res.VCS.Root(ctx, cwd)
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallRegenHook(ctx, root, hint.JobRun.With(job.NameRegenerateOwed))
+	installed, err := res.VCS.InstallRegenHook(ctx, root, hint.JobRun.With(job.NameRegenerateOwed))
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS regenerate hook", slog.String("error", err.Error()))
 		return

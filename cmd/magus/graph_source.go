@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -47,11 +46,11 @@ func githubRawBase(blobBase string) string {
 	return "https://raw.githubusercontent.com/" + strings.Replace(strings.TrimPrefix(blobBase, p), "/blob/", "/", 1)
 }
 
-// deriveSourceBase resolves the workspace's VCS remote (via the optional
-// types.RemoteReporter capability) and turns it into a forge blob-URL base, so a
-// node's relative `source` path can be linked to the RIGHT repository. Returns ""
-// (no link) whenever the remote is missing, the backend lacks the capability, or
-// the forge is not one we can build a browse URL for: never a guessed/wrong link.
+// deriveSourceBase resolves the workspace's VCS remote (via the types.RemoteReporter
+// capability) and turns it into a forge blob-URL base, so a node's relative `source`
+// path can be linked to the RIGHT repository. Returns "" (no link) whenever the remote
+// is missing, the backend cannot report one, or the forge is not one we can build a
+// browse URL for: never a guessed/wrong link.
 func deriveSourceBase(ctx context.Context, root string) string {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
@@ -61,11 +60,7 @@ func deriveSourceBase(ctx context.Context, root string) string {
 	if err != nil || res.VCS == nil {
 		return ""
 	}
-	reporter, ok := res.VCS.(types.RemoteReporter)
-	if !ok {
-		return ""
-	}
-	remote, err := reporter.RemoteURL(ctx, ws.Root())
+	remote, err := res.VCS.RemoteURL(ctx, ws.Root(), "")
 	if err != nil || remote == "" {
 		return ""
 	}
@@ -74,10 +69,8 @@ func deriveSourceBase(ctx context.Context, root string) string {
 	// stay byte-identical no matter which feature branch or worktree generated them.
 	// When the backend can't report a default branch, forgeBlobBase defaults to "main".
 	branch := ""
-	if brancher, ok := res.VCS.(types.DefaultRefReporter); ok {
-		if b, err := brancher.DefaultRef(ctx, ws.Root()); err == nil {
-			branch = b
-		}
+	if b, err := res.VCS.DefaultRef(ctx, ws.Root()); err == nil {
+		branch = b
 	}
 	return forgeBlobBase(remote, branch)
 }

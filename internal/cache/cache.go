@@ -7,10 +7,9 @@ package cache
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -28,7 +27,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/ci/annotate"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
@@ -49,26 +47,31 @@ type Cache struct {
 	// in Open from the two fields below, which is where the caller's logger exists.
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
-	mutable         bool // true = read+write (default); false = read-only
-	sizeMB          int
-	maxImportBytes  int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
-	log             *slog.Logger
-	logLevel        slog.Level // effective minimum level; used by captureRun
-	silent          bool       // silent output mode: bounded failure dumps + bubbled important lines
-	collapse        bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
-	recordsOnly     bool       // -o jsonl: no free text on the terminal; see WithRecordOnlyOutput
-	hits            atomic.Int64
-	misses          atomic.Int64
-	errs            atomic.Int64
-	savedMs         atomic.Int64  // summed Manifest.DurationMs over hits: work replayed instead of run
-	diskMu          sync.Mutex    // guards the memoized on-disk size below
-	diskBytes       int64         // last computed cache size in bytes
-	diskAt          time.Time     // when diskBytes was computed (zero = never)
-	mtimes          *mtimeStore   // mtime fast-path for source hashing
-	outputs         *OutputStore  // per-execution captured-output store (target output refs)
-	exportMu        sync.RWMutex  // guards Export/Import against concurrent Run writes
-	evictMu         sync.Mutex    // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
-	remote          RemoteBackend // optional remote backend; nil = local-only
+	// The tiers Run walks, local first, built once in Open from the option inputs below.
+	local          *localTier
+	remote         *remoteTier // nil when no backend is configured
+	tiers          []tier
+	localWrite     bool
+	remoteWrite    *bool // nil = follow localWrite; set = declared, and required when true
+	backend        RemoteBackend
+	sizeMB         int
+	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
+	log            *slog.Logger
+	logLevel       slog.Level // effective minimum level; used by captureRun
+	silent         bool       // silent output mode: bounded failure dumps + bubbled important lines
+	collapse       bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
+	recordsOnly    bool       // -o jsonl: no free text on the terminal; see WithRecordOnlyOutput
+	hits           atomic.Int64
+	misses         atomic.Int64
+	errs           atomic.Int64
+	savedMs        atomic.Int64 // summed Manifest.DurationMs over hits: work replayed instead of run
+	diskMu         sync.Mutex   // guards the memoized on-disk size below
+	diskBytes      int64        // last computed cache size in bytes
+	diskAt         time.Time    // when diskBytes was computed (zero = never)
+	mtimes         *mtimeStore  // mtime fast-path for source hashing
+	outputs        *OutputStore // per-execution captured-output store (target output refs)
+	exportMu       sync.RWMutex // guards Export/Import against concurrent Run writes
+	evictMu        sync.Mutex   // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	// annotator folds failure output and raises notices for whichever CI
 	// provider is running the job; Nop off CI, so call sites never branch.
 	// annotateMu serializes a whole failure block (group open, dump, group
@@ -271,32 +274,21 @@ func deferMtimeFlush() RunOption {
 	return func(rc *runCtx) { rc.deferMtimeFlush = true }
 }
 
-// Open returns a Cache rooted at dir (created on demand). MAGUS_CACHE_WRITE_ENABLED=false
-// opens read-only (replays hits, never writes). Logger respects MAGUS_LOG_FORMAT/LEVEL.
+// Open returns a Cache rooted at dir (created on demand). It reads no environment:
+// every setting arrives as an Option, which the caller resolves from its config. It
+// errors on a write configuration that cannot take effect (see buildTiers).
 func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	dir = filepath.Clean(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", dir, err)
 	}
-	mutable := true
-	if v := strings.ToLower(os.Getenv("MAGUS_CACHE_WRITE_ENABLED")); v == "false" || v == "0" {
-		mutable = false
-	}
-	defaultLevel := slog.LevelInfo
-	if v := os.Getenv("MAGUS_LOG_LEVEL"); v != "" {
-		var lvl slog.Level
-		if err := lvl.UnmarshalText([]byte(v)); err == nil {
-			defaultLevel = lvl
-		}
-	}
-	log := newLogger(os.Getenv("MAGUS_LOG_FORMAT"), defaultLevel)
 	c := &Cache{
-		dir:      dir,
-		inflight: newInflight(dir),
-		mutable:  mutable,
-		log:      log,
-		logLevel: defaultLevel,
-		outputs:  NewOutputStore(dir),
+		dir:        dir,
+		inflight:   newInflight(dir),
+		localWrite: true,
+		log:        newLogger("", slog.LevelInfo),
+		logLevel:   slog.LevelInfo,
+		outputs:    NewOutputStore(dir),
 		// Annotations go to stderr alongside the failure dump they wrap.
 		annotator: annotate.Detect(),
 		platform:  runtime.GOOS + "/" + runtime.GOARCH,
@@ -312,11 +304,47 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	if err := c.initSigning(); err != nil {
 		return nil, err
 	}
-	if c.sizeMB == 0 {
-		c.sizeMB = parseSizeMB()
+	if err := c.buildTiers(); err != nil {
+		return nil, err
 	}
 	warnIfCoarseMtimeResolution(ctx, dir, c.log)
 	return c, nil
+}
+
+// buildTiers decides, once, which tiers this cache may write. The remote tier is
+// written only when the local tier is, since its entries are exported from the local
+// store; unset, it is written when a signed entry could be, so a machine holding only
+// the trust set reads the remote tier and never writes it. A declared WithRemoteWrite
+// is a requirement: true with no way to honor it is an error, not a quiet no-op.
+func (c *Cache) buildTiers() error {
+	c.local = &localTier{c: c, write: c.localWrite}
+	c.tiers = []tier{c.local}
+	declared := c.remoteWrite != nil
+	if declared && *c.remoteWrite && !c.localWrite {
+		return errors.New("magus/cache: remote writes are on but local writes are off; " +
+			"the remote tier is written from the local one, so enable local writes or turn remote writes off")
+	}
+	if c.backend == nil {
+		return nil
+	}
+	r := &remoteTier{c: c, backend: c.backend}
+	switch {
+	case !c.localWrite:
+		r.off = "local writes are off"
+	case declared && !*c.remoteWrite:
+		r.off = "remote writes are off"
+	case c.verifier != nil && c.signer == nil:
+		if declared {
+			return errors.New("magus/cache: remote writes are required but there is no signing key (MAGUS_CACHE_SIGNING_KEY); " +
+				"a trust set is declared, so every reader would refuse an unsigned entry")
+		}
+		r.off = "no signing key"
+	default:
+		r.write, r.required = true, declared
+	}
+	c.remote = r
+	c.tiers = append(c.tiers, r)
+	return nil
 }
 
 // annotations returns the CI annotator, falling back to Nop for a Cache
@@ -349,7 +377,7 @@ func (c *Cache) initSigning() error {
 	// Defense in depth: the cache package is the trust boundary, so it enforces its
 	// own invariant rather than relying on a caller to. A remote backend with no
 	// verifier imports unsigned artifacts, so refuse it unless explicitly opted in.
-	if c.remote != nil && c.verifier == nil && !c.insecureRemote {
+	if c.backend != nil && c.verifier == nil && !c.insecureRemote {
 		return errors.New("magus/cache: remote backend configured without a trust set; " +
 			"pass WithTrustedKeys, or WithInsecureRemote to accept unsigned artifacts")
 	}
@@ -374,11 +402,6 @@ func (c *Cache) Stats() Stats {
 		SavedMs: c.savedMs.Load(),
 	}
 }
-
-// Remote returns the configured remote backend, or nil when local-only. Exposed
-// so subsystems with their own artifacts (the knowledge-graph shard store) can
-// ride the same backend as build artifacts, under the same signing/verification.
-func (c *Cache) Remote() RemoteBackend { return c.remote }
 
 // Dir returns the cache's root directory. Subsystems that write sibling artifacts
 // next to the cache (the symbol index a `scip` op produces) resolve their paths under
@@ -506,109 +529,23 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// runs on success, so the forced rebuild refreshes the entry instead of leaving
 	// it stale for the next ordinary run.
 	if !s.NoCache && !s.SkipReplay {
-		manifest, mErr := c.readManifest(s.ProjectPath, hash)
-		fromRemote := false
-		if mErr != nil && c.remote != nil {
-			// Local miss (manifest absent or unreadable): pull the artifact from the
-			// remote backend into the local cache, then re-read so the shared hit path
-			// below replays it.
-			if c.fetchFromRemote(ctx, s.ProjectPath, hash) {
-				if m, err := c.readManifest(s.ProjectPath, hash); err == nil {
-					manifest, mErr, fromRemote = m, nil, true
-				} else {
+		// Each tier in order, local first. A replay that fails (a missing blob, a partial
+		// restore) moves on to the next tier once rather than straight to a rebuild.
+		for i, t := range c.tiers {
+			e, err := t.lookup(ctx, &s, hash)
+			if err != nil {
+				if !errors.Is(err, errTierMiss) && t == tier(c.local) {
 					c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
-						fmt.Sprintf("remote manifest %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
+						fmt.Sprintf("local entry %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
 				}
+				continue
 			}
-		}
-		if mErr == nil {
-			// Cache hit: local, or just populated from the remote backend.
-			replayCtx, endReplay := tracer.StartSpan(ctx, "magus.cache.replay")
-			paths, err := c.replay(replayCtx, manifest, s.WorkspaceRoot)
-			endReplay(err)
-			result.Duration = time.Since(start)
-			if err == nil {
-				result.Hit = true
-				result.Outputs = paths
-				// A hit never invokes the target, so re-capture the value the entry
-				// recorded. Without this a target returning a value prints it on the
-				// first run and nothing on the second.
-				types.RecordReturn(ctx, s.ProjectPath, s.Target, manifest.Return)
-				c.hits.Add(1)
-				// The work this hit avoided, as measured when the entry was written. Entries from
-				// before the field existed carry zero and add nothing, so the total understates.
-				c.savedMs.Add(manifest.DurationMs)
-				result.Saved = time.Duration(manifest.DurationMs) * time.Millisecond
-				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
-				// Quiet mode suppresses log replay; passing projects stay silent.
-				// Stderr, not stdout, matching captureRun's miss path: stdout is
-				// reserved for structured output (-o json|yaml|jsonl|template) and
-				// nothing else, so a replayed log on stdout corrupted it on a hit.
-				if c.logLevel < slog.LevelError && !c.recordsOnly && len(logData) > 0 {
-					_, _ = os.Stderr.Write(logData)
-				}
-				// A hit regenerated nothing, so reuse the existing ref for this cache
-				// key rather than minting a duplicate; persist fresh only if the store
-				// has no record yet (e.g. cache imported without its output store), in
-				// which case store the raw cached log verbatim (which also emits a result
-				// event via recordOutput).
-				ref := ""
-				if c.outputs != nil {
-					ref = c.outputs.StepRef(hash)
-					if ref == "" {
-						// A remote import ships the producer's descriptor without its
-						// output blob; completing it with the replayed log bytes makes
-						// this machine resolve the SAME ref the producer printed.
-						if adopted, ok := c.outputs.AdoptImported(hash, logData); ok {
-							ref = adopted
-						}
-					}
-				}
-				if ref == "" {
-					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil, true)
-				} else {
-					// The ref already exists, so recordOutput is skipped and nothing reaches the
-					// journal. A cache hit is still a target OUTCOME, so emit a cached result event
-					// here; otherwise a fully-cached run's log (and the live viewer) shows the run
-					// with no per-target results.
-					journal.Emit(ctx, journal.Event{
-						Ts:         time.Now().UnixMilli(),
-						Inv:        journal.InvocationIDFromContext(ctx),
-						Project:    s.ProjectPath,
-						Target:     reproTarget(s),
-						Kind:       journal.KindResult,
-						Level:      "info",
-						Status:     journal.StatusCached,
-						Ref:        ref,
-						DurationMs: result.Duration.Milliseconds(),
-					})
-				}
-				event := "cache.hit"
-				if fromRemote {
-					event = "cache.remote.hit"
-				}
-				c.log.InfoContext(ctx,
-					event,
-					append(netAttrs(netRec),
-						slog.String("project", s.ProjectPath),
-						slog.String("label", s.Label),
-						slog.String("target", reproTarget(s)),
-						slog.Int64("duration", int64(result.Duration)),
-						slog.String("hash", shortHash(hash)),
-						slog.String("ref", ref),
-					)...,
-				)
-				result.Ref = ref
-				if rc.onHit != nil {
-					rc.onHit(&result)
-				}
-				rc.fireResults(rc.step, &result, nil)
-				return result, nil
+			if r, ok := c.replayHit(ctx, rc, s, hash, e, start, netRec); ok {
+				e.done()
+				c.backfill(ctx, s, hash, i)
+				return r, nil
 			}
-			c.log.WarnContext(ctx,
-				"cache.warn",
-				slog.String("msg", fmt.Sprintf("replay failed for %s (%s); rebuilding", s.ProjectPath, shortHash(hash))),
-			)
+			e.done()
 		}
 	}
 
@@ -617,7 +554,120 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 
 	result.HintID = c.emitUnchangedFailureHint(hash)
+	return c.runMiss(ctx, rc, s, hash, fn, start, netRec, result)
+}
 
+// replayHit replays e into the workspace and reports the hit, or reports why it could
+// not and returns false so Run tries the next tier. A remote entry counts as a remote
+// hit only here, once its outputs are restored.
+func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
+	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
+	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
+	paths, err := c.replayFrom(replayCtx, e.manifest, s.WorkspaceRoot, e.root)
+	endReplay(err)
+	result.Duration = time.Since(start)
+	if err != nil {
+		if e.remote != "" {
+			remoteStatsFrom(ctx).failed(e.bytes)
+		}
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
+			fmt.Sprintf("replay from %s failed for %s (%s): %v", cmp.Or(e.remote, "the local tier"), s.ProjectPath, shortHash(hash), err)))
+		return result, false
+	}
+	if e.remote != "" {
+		remoteStatsFrom(ctx).hit(e.bytes)
+	}
+	// A hit in the local store is a use, whether it was already there or just promoted,
+	// so it is the last thing eviction reaches.
+	if e.root == c.dir && c.local.writes() {
+		c.markUsed(s.ProjectPath, hash)
+	}
+	if e.promoted {
+		c.evictOldest(ctx, c.sizeCap())
+	}
+	result.Hit = true
+	result.Outputs = paths
+	// A hit never invokes the target, so re-capture the value the entry recorded.
+	// Without this a target returning a value prints it on the first run and nothing
+	// on the second.
+	types.RecordReturn(ctx, s.ProjectPath, s.Target, e.manifest.Return)
+	c.hits.Add(1)
+	// The work this hit avoided, as measured when the entry was written. Entries from
+	// before the field existed carry zero and add nothing, so the total understates.
+	c.savedMs.Add(e.manifest.DurationMs)
+	result.Saved = time.Duration(e.manifest.DurationMs) * time.Millisecond
+	logData, _ := os.ReadFile(logPathIn(e.root, s.ProjectPath, hash))
+	// Quiet mode suppresses log replay; passing projects stay silent. Stderr, not
+	// stdout, matching captureRun's miss path: stdout is reserved for structured
+	// output (-o json|yaml|jsonl|template), so a replayed log on stdout corrupted it.
+	if c.logLevel < slog.LevelError && !c.recordsOnly && len(logData) > 0 {
+		_, _ = os.Stderr.Write(logData)
+	}
+	// A hit regenerated nothing, so reuse the existing ref for this cache key rather
+	// than minting a duplicate; persist fresh only if the store has no record yet (e.g.
+	// cache imported without its output store), storing the raw cached log verbatim.
+	ref := ""
+	if c.outputs != nil {
+		ref = c.outputs.StepRef(hash)
+		if ref == "" {
+			// A remote import ships the producer's descriptor without its output blob;
+			// completing it with the replayed log bytes makes this machine resolve the
+			// SAME ref the producer printed.
+			if adopted, ok := c.outputs.AdoptImported(hash, logData); ok {
+				ref = adopted
+			}
+		}
+	}
+	if ref == "" {
+		ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil, true)
+	} else {
+		// recordOutput is skipped, so nothing reaches the journal otherwise; a cache hit
+		// is still a target OUTCOME, and a fully-cached run would show no results.
+		journal.Emit(ctx, journal.Event{
+			Ts:         time.Now().UnixMilli(),
+			Inv:        journal.InvocationIDFromContext(ctx),
+			Project:    s.ProjectPath,
+			Target:     reproTarget(s),
+			Kind:       journal.KindResult,
+			Level:      "info",
+			Status:     journal.StatusCached,
+			Ref:        ref,
+			DurationMs: result.Duration.Milliseconds(),
+		})
+	}
+	attrs := append(netAttrs(netRec),
+		slog.String("project", s.ProjectPath),
+		slog.String("label", s.Label),
+		slog.String("target", reproTarget(s)),
+		slog.Int64("duration", int64(result.Duration)),
+		slog.String("hash", shortHash(hash)),
+		slog.String("ref", ref),
+	)
+	if e.remote != "" {
+		attrs = append(attrs, slog.String("remote", e.remote), slog.Int64("bytes", e.bytes))
+	}
+	c.log.InfoContext(ctx, "cache.hit", attrs...)
+	result.Ref = ref
+	if rc.onHit != nil {
+		rc.onHit(&result)
+	}
+	rc.fireResults(rc.step, &result, nil)
+	return result, true
+}
+
+// backfill hands an entry hit in tier i to every later tier that may be written, so a
+// remote tier that lacks it gets it without this run waiting.
+func (c *Cache) backfill(ctx context.Context, s Step, hash string, i int) {
+	for _, t := range c.tiers[i+1:] {
+		if b, ok := t.(backfiller); ok && t.writes() {
+			b.backfill(ctx, s, hash)
+		}
+	}
+}
+
+// runMiss executes fn, then stores the entry in every tier this run may write.
+func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn func(context.Context) error, start time.Time, netRec *httpx.Recorder, result Result) (Result, error) {
+	tracer := tracerFromContext(ctx)
 	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
 	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
 	preSources, preErr := c.fingerprintSources(ctx, rc.step)
@@ -689,10 +739,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// is skipped rather than filed. The run keeps its result and stays green.
 	//
 	// Without it a concurrent peer rewriting a generated file inside this window produced
-	// an entry mapping the OLD key to output built from the NEW bytes, and pushToRemote
-	// below handed that to every other machine. A failing stat was the lucky outcome; this
-	// is the one that was silent.
-	storable := c.mutable && !s.NoCache
+	// an entry mapping the OLD key to output built from the NEW bytes, and the remote tier
+	// handed that to every other machine. A failing stat was the lucky outcome; this is
+	// the one that was silent.
+	storable := c.local.writes() && !s.NoCache
 	if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
 		storable = false
 		c.log.WarnContext(ctx, fmt.Sprintf(
@@ -700,9 +750,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
 	}
 
+	var snap *Manifest
 	if storable {
 		_, endSnap := tracer.StartSpan(ctx, "magus.cache.snapshot")
-		outs, err := c.snapshot(ctx, s, hash, time.Since(start))
+		m, outs, err := c.snapshot(ctx, s, hash, time.Since(start))
 		endSnap(err)
 		if err != nil {
 			// Reported like the sibling runErr path: fn already succeeded, so without
@@ -710,7 +761,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			// vanishes mid-run instead of failing loudly.
 			return fail(fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err))
 		}
-		result.Outputs = outs
+		snap, result.Outputs = m, outs
 	}
 
 	result.Duration = time.Since(start)
@@ -718,14 +769,19 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil, false)
 	result.Ref = ref
 
-	// Push AFTER recordOutput, never before: the artifact ships this run's output
-	// descriptor and key inputs, and recordOutput is what writes them. Pushing first
-	// exported an entry with no descriptor at all (or, on a repeat miss, a previous
-	// attempt's), so a consumer could not resolve the producer's ref: the whole
-	// point of shipping them.
-	if storable {
-		if c.remote != nil {
-			c.pushToRemote(ctx, s, hash)
+	// Stored AFTER recordOutput, never before: the remote entry ships this run's output
+	// descriptor and key inputs, and recordOutput is what writes them, so a consumer
+	// resolves the producer's ref. Each tier in order, and a tier that may not be
+	// written stops the walk: the remote tier is never written without the local one.
+	if snap != nil {
+		for _, t := range c.tiers {
+			if !t.writes() {
+				break
+			}
+			if err := t.store(ctx, &s, snap); err != nil {
+				c.misses.Add(-1)
+				return fail(err)
+			}
 		}
 		c.evictOldest(ctx, c.sizeCap())
 	}
@@ -1373,12 +1429,12 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	return c.gcBlobs(ctx)
 }
 
-// safeCachePath joins name (a tar entry's slash-separated path) onto the cache
-// root and rejects any result that escapes it. It is the single definition of the
+// safePathIn joins name (a tar entry's slash-separated path) onto a store root and
+// rejects any result that escapes it. It is the single definition of the
 // path-traversal guard shared by [Cache.Import] and importArtifact.
-func (c *Cache) safeCachePath(name string) (string, error) {
-	clean := filepath.Clean(filepath.Join(c.dir, filepath.FromSlash(name)))
-	if !strings.HasPrefix(clean, c.dir+string(filepath.Separator)) && clean != c.dir {
+func safePathIn(root, name string) (string, error) {
+	clean := filepath.Clean(filepath.Join(root, filepath.FromSlash(name)))
+	if !strings.HasPrefix(clean, root+string(filepath.Separator)) && clean != root {
 		return "", fmt.Errorf("magus/cache: unsafe path %q", name)
 	}
 	return clean, nil
@@ -1490,7 +1546,7 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			return fmt.Errorf("magus/cache: import tar: %w", err)
 		}
 
-		clean, err := c.safeCachePath(hdr.Name)
+		clean, err := safePathIn(c.dir, hdr.Name)
 		if err != nil {
 			return err
 		}
@@ -1512,63 +1568,22 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			// A cas/ entry is content-addressed: its bytes must hash to the name it
 			// is stored under, so a poisoned archive cannot slip content that never
 			// hashes to its address into the store (replay never re-hashes on read).
-			// This matches importArtifact's CAS check. Manifests are NOT authenticated
-			// here: `magus config cache import` is an explicit operator action (the
-			// operator vouches for the archive by running it), and replay-side path
-			// containment bounds where any imported manifest can write.
+			// Manifests are NOT authenticated here: `magus config cache import` is an
+			// explicit operator action (the operator vouches for the archive by running
+			// it), and replay-side path containment bounds where any imported manifest
+			// can write. The size cap is per member, as the archive is the operator's.
 			rel, err := filepath.Rel(c.dir, clean)
 			if err != nil {
 				return fmt.Errorf("magus/cache: import rel %q: %w", clean, err)
 			}
-			isBlob := strings.HasPrefix(filepath.ToSlash(rel), "cas/")
-			// Stage to a uniquely named temp beside the final path; rename in
-			// only after the size cap and hash check pass. The cache is shared
-			// machine-wide: a write at the final path would let a concurrent
-			// replay read a torn blob, and a rejected member would first
-			// truncate the valid CAS blob other manifests still reference.
-			f, err := os.CreateTemp(filepath.Dir(clean), filepath.Base(clean)+".import-*.tmp")
-			if err != nil {
-				return fmt.Errorf("magus/cache: import create %q: %w", clean, err)
+			rel = filepath.ToSlash(rel)
+			wantSum := ""
+			if strings.HasPrefix(rel, "cas/") {
+				wantSum = path.Base(rel)
 			}
-			tmp := f.Name()
-			// Read limit+1 to detect an oversized entry rather than silently
-			// truncating: io.LimitReader alone stops at the cap and io.Copy
-			// returns nil, which would commit a corrupt/truncated blob.
-			limit := c.importLimit()
-			h := sha256.New()
-			var w io.Writer = f
-			if isBlob {
-				w = io.MultiWriter(f, h)
-			}
-			n, err := io.Copy(w, io.LimitReader(tr, limit+1))
-			if err != nil {
-				_ = f.Close()
-				_ = os.Remove(tmp)
-				return fmt.Errorf("magus/cache: import write %q: %w", clean, err)
-			}
-			if n > limit {
-				_ = f.Close()
-				_ = os.Remove(tmp)
-				return fmt.Errorf("magus/cache: import %q: %w", clean, errImportTooLarge)
-			}
-			if err := f.Close(); err != nil {
-				_ = os.Remove(tmp)
-				return fmt.Errorf("magus/cache: import close %q: %w", clean, err)
-			}
-			if isBlob {
-				if want, got := path.Base(filepath.ToSlash(rel)), hex.EncodeToString(h.Sum(nil)); got != want {
-					_ = os.Remove(tmp)
-					return fmt.Errorf("magus/cache: import blob %s content hashes to %s", want, got)
-				}
-			}
-			// CreateTemp makes the file 0600; the committed file was always 0644.
-			if err := file.Chmod(tmp, 0o644); err != nil {
-				_ = os.Remove(tmp)
-				return fmt.Errorf("magus/cache: import chmod %q: %w", clean, err)
-			}
-			if err := os.Rename(tmp, clean); err != nil {
-				_ = os.Remove(tmp)
-				return fmt.Errorf("magus/cache: import commit %q: %w", clean, err)
+			budget := c.importLimit()
+			if _, err := writeCacheFile(tr, clean, wantSum, &budget); err != nil {
+				return fmt.Errorf("magus/cache: import %q: %w", clean, err)
 			}
 		}
 	}
@@ -1634,7 +1649,7 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 }
 
 func (c *Cache) logPath(projectPath, hash string) string {
-	return filepath.Join(c.dir, "logs", flattenPath(projectPath), hash+".log")
+	return logPathIn(c.dir, projectPath, hash)
 }
 
 // captureRun runs fn while teeing stdout/stderr to logPath via context writers.

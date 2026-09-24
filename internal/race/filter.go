@@ -1,45 +1,45 @@
 package race
 
 import (
-	"bytes"
-	"os/exec"
-	"strings"
+	"context"
+	"path/filepath"
 	"sync"
+
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
-// gitFilter checks whether a path is tracked by git. Tracked files are
-// the only ones eligible for race findings — tool-generated files,
-// caches, and build artifacts are excluded by definition.
-type gitFilter struct {
-	root    string
-	once    sync.Once
-	tracked map[string]struct{}
+// trackedFilter checks whether a path is tracked by the workspace's VCS. Tracked files
+// are the only ones eligible for race findings: tool-generated files, caches, and build
+// artifacts are excluded by definition.
+type trackedFilter struct {
+	tracked func() map[string]struct{}
 }
 
-func newGitFilter(root string) *gitFilter {
-	return &gitFilter{root: root}
-}
-
-// Allow returns true if path is committed to git (appears in --cached output)
-// and should be considered for race detection.
-func (f *gitFilter) Allow(path string) bool {
-	f.once.Do(f.build)
-	_, ok := f.tracked[path]
-	return ok
-}
-
-func (f *gitFilter) build() {
-	f.tracked = make(map[string]struct{})
-	out, err := exec.Command("git", "-C", f.root, "ls-files", "--cached", "-z").Output() //nolint:noctx // one-shot git probe at filter init; no ctx is plumbed here
-	if err != nil {
-		// Not a git repo or git unavailable; allow nothing (no race findings).
-		return
-	}
-	for _, rel := range bytes.Split(out, []byte{0}) {
-		if len(rel) == 0 {
-			continue
+// newTrackedFilter lists root's tracked files on the first Allow, so a run with nothing to
+// filter spawns nothing. Not a repository, or a backend that cannot answer, allows nothing,
+// so there are no race findings.
+func newTrackedFilter(ctx context.Context, root string) *trackedFilter {
+	return &trackedFilter{tracked: sync.OnceValue(func() map[string]struct{} {
+		out := map[string]struct{}{}
+		res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+		if err != nil || res.VCS == nil {
+			return out
 		}
-		abs := f.root + "/" + strings.TrimPrefix(string(rel), "./")
-		f.tracked[abs] = struct{}{}
-	}
+		// "." is the whole tree in one listing.
+		files, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
+		if err != nil {
+			return out
+		}
+		for _, rel := range files {
+			out[filepath.Join(root, filepath.FromSlash(rel))] = struct{}{}
+		}
+		return out
+	})}
+}
+
+// Allow returns true if path is tracked and should be considered for race detection.
+func (f *trackedFilter) Allow(path string) bool {
+	_, ok := f.tracked()[path]
+	return ok
 }

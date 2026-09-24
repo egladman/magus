@@ -73,6 +73,10 @@ magus\project({
     // to it.
     "outputs": ["gen/**"],
     "targets": {
+        // preflight's whole effect is node_modules, which no cache entry records. A hit on
+        // a fresh checkout (a restored CI store, a remote-tier entry) replayed nothing and
+        // left build without its packages.
+        "preflight": {"skip_cache": "installs node_modules, which no cache entry records; a replay restores nothing"},
         // build rebuilds the committed gen/ and gates on drift, so it must run every time.
         // Its own vcs\isDirty check is inert (see build below); skip_cache is what keeps
         // the rebuild honest.

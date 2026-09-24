@@ -23,10 +23,15 @@ not want to `false`:
 
 ```yaml
 - uses: egladman/magus/.github/actions/advice@v0.4.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   with:
     doctor: 'false'
     blast-radius: 'false'
 ```
+
+The token is never an input: the step sets `GITHUB_TOKEN` from a secret in its `env`,
+and the action fails when it is missing.
 
 To stop the comment entirely, drop the step. If you would rather keep the step and
 switch it off without editing the workflow, the job in magus's own `ci.yaml` is
@@ -102,7 +107,8 @@ outside both: `git diff` reports tracked paths, so a brand new file no project c
 invisible until you `git add` it.
 
 **`first-contribution` does not run.** It asks the forge who opened the pull request,
-which is not a question a working tree can answer.
+which is not a question a working tree can answer. Neither does `merge-queue`, for the
+same reason: it reads the pull request's review state and labels.
 
 ## What each advisor says
 
@@ -120,8 +126,25 @@ which is not a question a working tree can answer.
 | `missing-target`        | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
 | `api-surface`           | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
 | `first-contribution`    | the author has no merged pull request here yet                                                                                                           |
+| `merge-queue`           | off by default; the pull request is approved and could join `magus queue` but has not, naming the label and the methods the provider allows              |
 | `fix-generated-drift`   | off by default; regenerates drifted files and pushes them, and only with a label                                                                         |
 | `fix-merge-conflict`    | off by default; merges the base in, settles conflicts in generated files by regenerating, and pushes                                                     |
+
+`merge-queue` appears only while the pull request is open, approved, targets
+`merge-queue-base` (the default branch unless set), comes from this repository, and
+carries neither auto-merge nor a queue label. It reads the label's prefix and the allowed
+merge methods from `magus queue describe --provider <merge-queue-provider>`, so it names
+what the provider accepts, and it retracts once the pull request is queued, merged or
+closed. Those states change on labels and reviews, so run it from a workflow triggered
+by them, as this repository's `queue-advice.yaml` does:
+
+```yaml
+- uses: egladman/magus/.github/actions/advice@v0.4.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    merge-queue: 'true'
+```
 
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because

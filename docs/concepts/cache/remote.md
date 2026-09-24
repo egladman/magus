@@ -40,18 +40,25 @@ any machine will replay.
 
 magus itself knows nothing about S3 or GitHub. A provider is a
 [spell](../spells.md) that declares no operations and instead exports the cache
-contract: three functions the remote-cache subsystem detects by name and invokes:
+contract: functions the remote-cache subsystem detects by name and invokes:
 
-| function                   | when                             | does                                            |
-| -------------------------- | -------------------------------- | ----------------------------------------------- |
-| `enabled(target, cb)`      | once, before fetch/push          | is the provider active here? (gates everything) |
-| `get_artifact(target, cb)` | on a local cache miss            | download the artifact into `dest`; `true` = hit |
-| `put_artifact(target, cb)` | after building a missed artifact | upload the artifact at `src`; `true` = stored   |
+| function                   | when                              | returns                                                        |
+| -------------------------- | --------------------------------- | -------------------------------------------------------------- |
+| `enabled(target, cb)`      | once, before any other call       | is the provider active here? (gates everything)                |
+| `get_artifact(target, cb)` | on a local-tier miss              | download into `dest`; `true` = hit, `false` = not stored       |
+| `put_artifact(target, cb)` | after a build, and for a backfill | upload `src`; `true` = stored, `false` = already stored        |
+| `has_artifact(target, cb)` | before a backfill (optional)      | is it stored? without downloading; absent = cannot say         |
+| `prune(target, cb)`        | `config cache prune --remote`     | evict by retention policy (optional); `true` = the sweep ended |
 
-(A fourth, `prune`, evicts artifacts by retention policy.) These are not
-operations a target composes; they are the contract the remote-cache subsystem
-calls. Everything provider-specific (auth, transport) stays in the spell, in pure
-Buzz. See [spells.md](../spells.md) and [engines.md](../engines.md).
+A function that cannot do its job **throws**. A throw is a failure: counted as
+failed, never as missed, and it degrades the run to the local tier. A provider must
+not return `false` for a failed request, since that would read as a cold cache or as
+another writer's entry. Without `has_artifact` the remote tier is not backfilled:
+uploading every hit to find out would cost more than the miss it saves.
+
+These are not operations a target composes; they are the contract the remote-cache
+subsystem calls. Everything provider-specific (auth, transport) stays in the spell,
+in pure Buzz. See [spells.md](../spells.md) and [engines.md](../engines.md).
 
 ## Wiring a provider
 
@@ -280,22 +287,39 @@ either variable, setting it can be the only thing turning the cache on - a setup
 looks configured, ships a `trusted_keys` block, and verifies nothing. Let the trust set
 be the switch.
 
-## Read-only on untrusted refs (defense in depth)
+## Never write the remote tier from untrusted refs (defense in depth)
 
-Signatures are the primary defense; opening the cache read-only on untrusted refs
-is a complementary one. Even though an unsigned PR push could never replay
-anywhere, you can also stop a PR from writing the store at all (**replay hits,
-never publish**) by gating mutability on the event. The same flag suppresses the
-remote `put_artifact` upload:
+The remote cache is the **remote tier**; `.magus/` is the **local tier**. Lookup reads
+the local tier, then the remote tier, and each is written independently (see
+[Cache tiers](../cache.md#cache-tiers)).
+
+Signatures are the primary defense; keeping untrusted refs off the remote tier is a
+complementary one. Even though an unsigned PR push could never replay anywhere, you
+can also stop a PR from uploading to the remote tier at all (**replay hits, never
+store**) by declaring remote-tier writes off on the event:
 
 ```yaml
-# in your CI workflow env
-MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+# in your CI workflow env: false on a pull request, unset elsewhere
+MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name == 'pull_request' && 'false' || '' }}
 ```
 
-`MAGUS_CACHE_WRITE_ENABLED=false` (config key `cache.write.enabled`) opens the cache
-read-only; the default is mutable. See the
+`MAGUS_CACHE_REMOTE_WRITE_ENABLED=false` (config key `cache.remote.write.enabled`)
+suppresses every `put_artifact` upload, backfill, published output bundle and
+knowledge shard, while the run keeps writing its local tier, so a CI cache step that
+saves `.magus` between a PR's pushes still has entries to carry. Leave it unset on
+trusted pushes rather than `true`: unset, the remote tier is written whenever the
+signing key is present and a failing store degrades the run; `true` makes every
+remote write required, so an outage fails the build. To write neither tier, set
+`MAGUS_CACHE_WRITE_ENABLED=false` instead; `true` for the remote tier with the local
+tier off is a config error. See the
 [supply-chain note in the README](../../../README.md#shared-cache-trust-signing-and-read-only-refs).
+
+A remote-tier lookup that finds nothing prints
+`<project> not in the remote cache (out...)`, naming the ref the producing run
+printed for that key; a hit prints `(cached from <backend>, <size>, ...)`; and the
+end-of-run line counts restored, missed, stored and failed. At `-v` the miss also
+carries one digest per key-input class, masked as stored key inputs are, so two
+machines that should share an entry show which class differs.
 
 ## Observability
 
@@ -311,13 +335,14 @@ under their own `.remote` prefix and are never folded into the local
 
 ## Writing your own provider
 
-Any store reachable over HTTP can be a provider. Implement the three functions
-(`enabled`/`get_artifact`/`put_artifact`) in a spell: read inputs from the `cb(io)`
-callback (`io.hash`, `io.dest`/`io.src`), use the `http` byte primitives
-(`http\download`/`upload_chunked`/`byteSize`) and `crypto` for request signing
-(e.g. AWS SigV4 via `crypto\hmacSha256`), and
-return the boolean result. The two shipped providers are worked examples; start
-from whichever transport is closest.
+Any store reachable over HTTP can be a provider. Implement the contract functions
+(`enabled`/`get_artifact`/`put_artifact`, and `has_artifact` so the remote tier can be
+backfilled) in a spell: read inputs from the `cb(io)` callback (`io.hash`,
+`io.dest`/`io.src`), use the `http` byte primitives
+(`http\download`/`upload_chunked`/`byteSize`, `http\request("HEAD", ...)` for
+`has_artifact`) and `crypto` for request signing (e.g. AWS SigV4 via
+`crypto\hmacSha256`), return the boolean result, and throw on a failed request. The two
+shipped providers are worked examples; start from whichever transport is closest.
 
 A provider is a pure byte mover: **artifact signing and verification happen in
 magus's core, not in the spell.** A provider never sees, produces, or checks a

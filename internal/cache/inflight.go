@@ -38,7 +38,8 @@ type inflight struct {
 	path string // this process's own file
 
 	mu      sync.Mutex
-	running map[string]inflightTarget
+	running map[uint64]inflightTarget
+	next    uint64 // keys each start: one target can run twice at once (other charms or args)
 }
 
 // inflightTarget is one running target. Pid and Started together identify the run: a pid
@@ -64,19 +65,21 @@ func newInflight(dir string) *inflight {
 	return &inflight{
 		dir:     dir,
 		path:    filepath.Join(dir, inflightPrefix+strconv.Itoa(pid)+".json"),
-		running: map[string]inflightTarget{},
+		running: map[uint64]inflightTarget{},
 	}
 }
 
-// start records a target as running and returns the function that clears it.
+// start records a target as running and returns the function that clears it, and only
+// it: a second concurrent run of the same project and target has its own record.
 func (i *inflight) start(project, target string) func() {
 	if i == nil {
 		return func() {}
 	}
-	key := project + "\x00" + target
 	host, _ := os.Hostname()
 
 	i.mu.Lock()
+	i.next++
+	key := i.next
 	i.running[key] = inflightTarget{
 		Project: project, Target: target,
 		Pid: os.Getpid(), Host: host, Started: time.Now(),
@@ -183,6 +186,10 @@ func (i *inflight) takeAbandoned() []inflightTarget {
 	var dead []inflightTarget
 	for _, e := range entries {
 		name := e.Name()
+		if isStale(i.dir, e, time.Now()) {
+			_ = os.RemoveAll(filepath.Join(i.dir, name))
+			continue
+		}
 		if !strings.HasPrefix(name, inflightPrefix) || !strings.HasSuffix(name, ".json") {
 			continue
 		}
@@ -215,6 +222,25 @@ func (i *inflight) takeAbandoned() []inflightTarget {
 	}
 	sortTargets(dead)
 	return dead
+}
+
+// staleAfter is how old a leftover temp file or staging directory must be before it is
+// collected. A live writer holds one for milliseconds, and a staging directory for one
+// replay, so an hour is past any of them.
+const staleAfter = time.Hour
+
+// isStale reports whether e is litter a killed run left in the cache root: an inflight
+// temp file its rename never consumed, or a remote-tier staging directory it never
+// removed.
+func isStale(dir string, e os.DirEntry, now time.Time) bool {
+	name := e.Name()
+	temp := strings.HasPrefix(name, inflightPrefix) && strings.HasSuffix(name, ".tmp")
+	staging := e.IsDir() && strings.HasPrefix(name, stagingPrefix)
+	if !temp && !staging {
+		return false
+	}
+	info, err := os.Lstat(filepath.Join(dir, name))
+	return err == nil && now.Sub(info.ModTime()) > staleAfter
 }
 
 // abandonedMessage renders the post-mortem, or "" when nothing was left behind. It names

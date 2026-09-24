@@ -295,7 +295,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 // It is also used by the hash tests, so it must stay a package-level helper.
 func newBareCache(t *testing.T) *Cache {
 	t.Helper()
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(true))
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
 	require.NoError(t, err, "Open")
 	return c
 }

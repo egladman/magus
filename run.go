@@ -1345,7 +1345,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Run-scoped remote-cache counters. Installed here rather than held on Cache
 	// because the daemon reuses one Cache per workspace across runs and can serve two
 	// adopted runs at once; RemoteSummary below reads them back off ctx.
-	ctx = cache.WithRemoteStats(ctx)
+	ctx = cache.ContextWithRemoteStats(ctx)
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
@@ -2254,18 +2254,12 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	// have: there is no committed form for it to disagree with. Gating those was this
 	// check's first false positive, on a `ci` target whose build legitimately rewrites its
 	// own gen/ tree.
-	//
-	// A backend that cannot answer leaves the set alone rather than guessing. Guessing
-	// either way is worse than the question going unasked: assume tracked and every build
-	// artifact becomes a gate failure, assume untracked and the gate covers nothing.
-	if reporter, ok := res.VCS.(types.TrackedFileReporter); ok {
-		tracked, terr := reporter.TrackedFiles(ctx, dir, moved)
-		if terr != nil {
-			return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
-				dir, target, res.VCS.Name(), terr)
-		}
-		moved = tracked
+	tracked, terr := res.VCS.TrackedFiles(ctx, dir, moved)
+	if terr != nil {
+		return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
+			dir, target, res.VCS.Name(), terr)
 	}
+	moved = tracked
 	if len(moved) == 0 {
 		return nil
 	}

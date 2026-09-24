@@ -75,7 +75,7 @@ jobs:
         if: inputs.tag != ''
         env:
           TAG: ${{ inputs.tag }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           gh release download "$TAG" --dir dist --clobber
@@ -93,6 +93,6 @@ jobs:
       - name: Publish the release index
         env:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REASON: ${{ inputs.tag != '' && format('recovering the {0} release', inputs.tag) || 'a manual refresh' }}
         run: magus run release-index:cd --no-default-charms -- "$REASON"
