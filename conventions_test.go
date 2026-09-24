@@ -2843,6 +2843,8 @@ var establishedCompoundNames = map[string]bool{
 	"jsonv2":  true, // names the GOEXPERIMENT
 	"libproc": true, // the Darwin API
 	"vmstat":  true, // the Darwin tool
+	// GNU make's name for the token protocol internal/proc/run implements.
+	"jobserver": true,
 }
 
 // grandfatheredCompoundNames are concatenations already in the tree when this check
@@ -3665,7 +3667,7 @@ const sockdirPackage = "github.com/egladman/magus/internal/proc/sockdir"
 // runs on. A test binary that links the socket directory can resolve the person's real
 // one, and then Open dials their broker, claims capacity from it, and prints the
 // not-arbitrated warning when none is up; a run binds its pool beside their server.
-// internal/testenv points the process at a private directory and pins the broker off, and
+// libs/testkit points the process at a private directory and pins the broker off, and
 // this holds every such binary to calling it from TestMain.
 //
 // The link graph is go list's, not a hand-kept list: the binaries that can reach the
@@ -3685,15 +3687,15 @@ func TestTestBinariesNeverReachTheUserRuntimeDir(t *testing.T) {
 		}
 		checked++
 		assert.True(t, testMainIsolates(t, dir),
-			"%s links %s but no TestMain in %s calls internal/testenv, so its tests can reach the "+
-				"person's real runtime directory: add `func TestMain(m *testing.M) { testenv.Main(m) }`",
+			"%s links %s but no TestMain in %s calls testkit.Main or testkit.Isolated, so its tests "+
+				"can reach the person's real runtime directory: add `func TestMain(m *testing.M) { testkit.Main(m) }`",
 			strings.TrimSuffix(path, ".test"), sockdirPackage, dir)
 	}
 	require.NotZero(t, checked, "no test binary links %s; this gate went quiet rather than red", sockdirPackage)
 }
 
-// testMainIsolates reports whether a TestMain among dir's test files calls into
-// internal/testenv.
+// testMainIsolates reports whether a TestMain among dir's test files calls testkit.Main
+// or testkit.Isolated.
 func testMainIsolates(t *testing.T, dir string) bool {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
@@ -3709,7 +3711,8 @@ func testMainIsolates(t *testing.T, dir string) bool {
 			found := false
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				if sel, ok := n.(*ast.SelectorExpr); ok {
-					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "testenv" {
+					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "testkit" &&
+						(sel.Sel.Name == "Main" || sel.Sel.Name == "Isolated") {
 						found = true
 					}
 				}

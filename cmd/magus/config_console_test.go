@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,7 +22,7 @@ import (
 // audit has no workspace trail to land in and writes none into this repository's.
 func outsideAnyWorkspace(t *testing.T) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Chdir(t.TempDir())
 }
 
@@ -51,7 +52,7 @@ func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
 // Every CLI mint writes one trail event naming what was minted, by class, id and grant, and
 // by whom, and none carries the secret.
 func TestCLIMintsAreAudited(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 	t.Chdir(root)

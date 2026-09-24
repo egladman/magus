@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,7 +121,7 @@ func TestSessionBriefNamesWhatItCouldNotRead(t *testing.T) {
 // a file this test wrote, which is the property the whole surface rests on: a brief
 // that could be produced without the checkout would be a summary again.
 func TestSessionBriefReadsTheCheckout(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	ctx := context.Background()
@@ -209,7 +210,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 // A terminal lease has stopped competing for its paths, so a rehydrating session
 // must not be told to bind it.
 func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	ctx := context.Background()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))

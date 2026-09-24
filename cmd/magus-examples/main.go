@@ -18,6 +18,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // Each fixture is written once and shared by every example that names it, in order, so an
@@ -169,26 +171,27 @@ func renderExamples() (map[string]string, error) {
 		return nil, fmt.Errorf("build magus: %w", err)
 	}
 
-	dirs := map[string]string{}
+	written := map[string]fixtureRun{}
 	defer func() {
-		for _, dir := range dirs {
-			_ = os.RemoveAll(dir)
+		for _, run := range written {
+			_ = os.RemoveAll(run.dir)
+			_ = os.RemoveAll(run.envRoot)
 		}
 	}()
 	out := make(map[string]string, len(examples))
 	for _, ex := range examples {
-		dir, ok := dirs[ex.fixture]
+		run, ok := written[ex.fixture]
 		if !ok {
 			files, known := fixtures[ex.fixture]
 			if !known {
 				return nil, fmt.Errorf("example %s names unknown fixture %q", ex.slug, ex.fixture)
 			}
-			if dir, err = writeFixture(files); err != nil {
+			if run, err = newFixtureRun(files); err != nil {
 				return nil, err
 			}
-			dirs[ex.fixture] = dir
+			written[ex.fixture] = run
 		}
-		text, err := capture(bin, dir, ex.argv)
+		text, err := capture(bin, run, ex.argv)
 		if err != nil {
 			return nil, fmt.Errorf("example %s (%s): %w", ex.slug, ex.command(), err)
 		}
@@ -197,22 +200,43 @@ func renderExamples() (map[string]string, error) {
 	return out, nil
 }
 
+// fixtureRun is one written fixture and the environment every example against it runs
+// in. The environment's root sits beside the fixture, not in it, so nothing it holds is
+// a file the fixture's own commands can see.
+type fixtureRun struct {
+	dir     string
+	envRoot string
+	env     []string
+}
+
+func newFixtureRun(files map[string]string) (fixtureRun, error) {
+	dir, err := writeFixture(files)
+	if err != nil {
+		return fixtureRun{}, err
+	}
+	envRoot, err := os.MkdirTemp("", "magus-examples-env-")
+	if err != nil {
+		return fixtureRun{}, errors.Join(fmt.Errorf("temp env root: %w", err), os.RemoveAll(dir))
+	}
+	env, err := testkit.Environ(envRoot)
+	if err != nil {
+		return fixtureRun{}, errors.Join(err, os.RemoveAll(dir), os.RemoveAll(envRoot))
+	}
+	return fixtureRun{dir: dir, envRoot: envRoot, env: env}, nil
+}
+
 // capture runs the magus binary with argv in the fixture dir and returns its stdout.
-// Diagnostics ([warn]/[note]) go to stderr, so stdout is the clean command output;
-// the server is disabled so a running `magus server` cannot influence the result.
+// Diagnostics ([warn]/[note]) go to stderr, so stdout is the clean command output.
 //
-// XDG_STATE_HOME is redirected into the fixture for a reason MAGUS_SERVER_ENABLED
-// does not cover: `explain` ends with a Graph Explorer deep-link, and that link
-// carries the server auth token, which auth.Load reads from a FILE in the state dir
-// whether or not a server is running. Captured on a developer's machine the examples
-// therefore embedded a real token in committed, published documentation; captured on
-// a runner they did not, so the same command produced two different pages and the
-// drift gate failed on CI alone. An empty state dir gives a machine-independent link
-// and nothing to leak.
-func capture(bin, dir string, argv []string) (string, error) {
+// The environment is testkit.Environ's, so the page reads the same wherever it is
+// regenerated. Two leaks forced that: `explain`'s Graph Explorer deep-link carries the
+// server auth token, read from a file in the state dir whether or not a server runs, so
+// a developer's capture embedded a real token; and an inherited MAGUS_CACHE_DIR (the
+// merge queue's per-candidate cache) carries run history `explain` prints.
+func capture(bin string, run fixtureRun, argv []string) (string, error) {
 	cmd := exec.Command(bin, argv...)
-	cmd.Dir = dir
-	cmd.Env = captureEnv(os.Environ(), dir)
+	cmd.Dir = run.dir
+	cmd.Env = run.env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -226,25 +250,6 @@ func capture(bin, dir string, argv []string) (string, error) {
 		text += "\n"
 	}
 	return text, nil
-}
-
-// captureEnv is environ without any MAGUS_ variable, with the cache and state dirs inside
-// the fixture dir. An inherited MAGUS_CACHE_DIR, such as the merge queue's per-candidate
-// cache, carries run history `explain` prints (last_output_ref), so a page captured there
-// differed from one captured anywhere else.
-func captureEnv(environ []string, dir string) []string {
-	env := make([]string, 0, len(environ)+4)
-	for _, kv := range environ {
-		if !strings.HasPrefix(kv, "MAGUS_") && !strings.HasPrefix(kv, "XDG_CACHE_HOME=") && !strings.HasPrefix(kv, "XDG_STATE_HOME=") {
-			env = append(env, kv)
-		}
-	}
-	return append(env,
-		"MAGUS_SERVER_ENABLED=false",
-		"MAGUS_BROKER=off",
-		"MAGUS_CACHE_DIR="+filepath.Join(dir, "cache", "magus"),
-		"XDG_CACHE_HOME="+filepath.Join(dir, "cache"),
-		"XDG_STATE_HOME="+filepath.Join(dir, "state"))
 }
 
 // inject replaces the content between each example's markers with its snippet. A

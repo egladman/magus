@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,7 +55,7 @@ func fleetFixture(t *testing.T, leases ...types.Job) (context.Context, string) {
 	// The ledger now lives in the per-repository state directory, and the guard resolves
 	// it with no seam a test can reach, so the environment is what keeps this off the
 	// developer's own ledger.
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root, cacheDir := t.TempDir(), t.TempDir()
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
@@ -674,8 +675,8 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 	const spawned = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 	t.Run("spawn ancestry and no lease advises", func(t *testing.T) {
-		t.Setenv(trail.EnvTraceparent, spawned)
 		ctx, root := fleetFixture(t)
+		t.Setenv(trail.EnvTraceparent, spawned)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go"))
 
 		require.Equal(t, "advise", got.Decision)
@@ -686,8 +687,8 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 	})
 
 	t.Run("no ancestry stays silent", func(t *testing.T) {
-		t.Setenv(trail.EnvTraceparent, "")
 		ctx, root := fleetFixture(t)
+		t.Setenv(trail.EnvTraceparent, "")
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go")).Decision,
 			"a run carrying no trace context IS a person, and a person editing their own checkout is owed silence")
 	})
@@ -695,14 +696,14 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 	t.Run("a malformed claim stays silent", func(t *testing.T) {
 		// Dropped rather than salvaged, which is trail.SpawnFromEnv's contract. A value that
 		// does not parse claims nothing, so there is no worker here to teach.
-		t.Setenv(trail.EnvTraceparent, "not-a-traceparent")
 		ctx, root := fleetFixture(t)
+		t.Setenv(trail.EnvTraceparent, "not-a-traceparent")
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go")).Decision)
 	})
 
 	t.Run("an enrolled worker stays silent", func(t *testing.T) {
-		t.Setenv(trail.EnvTraceparent, spawned)
 		ctx, root := fleetFixture(t)
+		t.Setenv(trail.EnvTraceparent, spawned)
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-a", filepath.Join(root, "internal/thing/x.go")).Decision,
 			"naming a lease is the whole thing being asked for")
 	})
@@ -710,8 +711,8 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 	t.Run("a live ledger grades instead", func(t *testing.T) {
 		// The rule fills a silence and never competes: with live rows on record the existing
 		// grading answers, and this advisory is not reached at all.
-		t.Setenv(trail.EnvTraceparent, spawned)
 		ctx, root := fleetFixture(t, fleetLeases()...)
+		t.Setenv(trail.EnvTraceparent, spawned)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "lease-a", "the collision report is the more specific answer")

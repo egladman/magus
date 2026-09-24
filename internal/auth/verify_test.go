@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -69,7 +70,7 @@ func plantRecord(t *testing.T, name, secret string, grant types.Grant) {
 // match the operator file, the operator secret can never match the store, and a share secret
 // never verifies on loopback, even when a record carries its hash.
 func TestVerifyRoutesByClass(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	op, err := EnsureOperator(t.Context(), slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 

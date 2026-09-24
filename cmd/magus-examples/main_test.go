@@ -48,22 +48,6 @@ func TestReviewFixtureHasNoIndexer(t *testing.T) {
 	}
 }
 
-// A capture inherits nothing that points magus at another cache or state dir.
-func TestCaptureEnvIsTheFixtures(t *testing.T) {
-	got := captureEnv([]string{
-		"PATH=/bin", "MAGUS_CACHE_DIR=/scratch/magus", "MAGUS_LOG_LEVEL=debug",
-		"XDG_CACHE_HOME=/scratch/cache", "XDG_STATE_HOME=/home/state",
-	}, "/fixture")
-	assert.Equal(t, []string{
-		"PATH=/bin",
-		"MAGUS_SERVER_ENABLED=false",
-		"MAGUS_BROKER=off",
-		"MAGUS_CACHE_DIR=" + filepath.Join("/fixture", "cache", "magus"),
-		"XDG_CACHE_HOME=" + filepath.Join("/fixture", "cache"),
-		"XDG_STATE_HOME=" + filepath.Join("/fixture", "state"),
-	}, got)
-}
-
 // TestDocsHaveExampleMarkers: every example the generator produces has a marker pair on
 // the page it names, so `content-generate` can never render an example with nowhere to
 // land. Each example is checked against ITS OWN page rather than one shared file: an
