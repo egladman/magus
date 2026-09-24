@@ -85,6 +85,30 @@ magus broker                    # run one in this process, logging to stderr
 
 `magus broker status` exits non-zero when none is running, so a script can chain on it.
 
+The broker also keeps the line of steps waiting for capacity, which a run joins only
+with `capacity_wait` set (or for a step waiting on its own run). A waiter's place rides
+its connection like a claim does, so a run that exits leaves the line at once. Status
+prints a `wait` row per waiter with its place and the pids blocking it; see
+[Waiting in line](../../concepts/concurrency.md#waiting-in-line) for the order and why
+it cannot deadlock.
+
+A Go program reaches the same line through the `broker` package:
+
+```go
+release, err := c.Acquire(ctx, types.MachineClaim{Project: "api", Target: "test", Slots: 2},
+    broker.WithWait(10*time.Minute),
+    broker.WithWaitFunc(func(w types.MachineWait) { log.Printf("blocked by %d claims", len(w.BlockedBy)) }))
+var waited *broker.WaitError
+if errors.As(err, &waited) {
+    // Gave up: errors.Is(err, context.DeadlineExceeded); waited.Holders names who held it.
+    return waited
+}
+defer release()
+```
+
+A library never starts a broker on its own; `broker.WithStart` hands a client the
+function that does.
+
 ### Supervising the broker
 
 A run starting the broker is enough on its own. To have a supervisor own it instead,
@@ -120,6 +144,10 @@ broker picks the newest both share, and a client it shares none with is refused 
   where the broker refuses it (`unsupported`) and the run hosts the service itself.
 - Every error crosses as a stable code plus a message, and the Go client matches the
   code (`errors.Is(err, broker.ErrNoServices)`), never the text.
+- `claim.wait` is the one request with more than one answer: `claim.waiting` frames
+  sharing its id each time what keeps it out changes, then one `claim.reply`.
+  `claim.leave` takes it out of line. A broker that predates the line answers
+  `unknown-type`, and the client asks it again every 100 ms instead, in no order.
 - A new version keeps answering the previous one for at least one release, so a run
   from an older magus still reaches a newer broker.
 

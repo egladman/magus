@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -31,8 +32,8 @@ func WithIdentity(argv []string, version string) ClientOption {
 	return func(c *Client) { c.hello.Argv, c.hello.Version = argv, version }
 }
 
-// WithStart sets how a client brings up a broker when none answers a Request or an
-// AcquireService: start runs once per such call and reports whether one should now
+// WithStart sets how a client brings up a broker when none answers a Request, a Wait or
+// an AcquireService: start runs once per such call and reports whether one should now
 // answer, and the call dials again only then. Status, Release and Shutdown never start
 // one. Without it, those calls fail with ErrUnavailable.
 func WithStart(start func(context.Context) bool) ClientOption {
@@ -236,8 +237,12 @@ func (c *Client) Close() error {
 	c.cur = nil
 	c.held = map[string]*heldClaim{}
 	c.mu.Unlock()
-	if cn != nil {
-		return cn.nc.Close()
+	if cn == nil {
+		return nil
+	}
+	// A broker that hung up first already closed it, and hanging up is all Close owes.
+	if err := cn.nc.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		return err
 	}
 	return nil
 }

@@ -581,6 +581,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_BROKER: Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and sha...",
 	},
 	{
+		GoPath:   "CapacityWait",
+		YamlPath: "capacity_wait",
+		EnvVar:   "MAGUS_CAPACITY_WAIT",
+		Flag:     fieldtype.FlagNames{Long: "capacity-wait"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_CAPACITY_WAIT: CapacityWait is how long a step kept out of this host's capacity by another magus invocation waits in the broker's li...",
+	},
+	{
 		GoPath:   "MaxFailures",
 		YamlPath: "max_failures",
 		EnvVar:   "MAGUS_MAX_FAILURES",

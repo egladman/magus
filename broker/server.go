@@ -87,6 +87,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 		executable: exe,
 		started:    time.Now(),
 		conns:      map[net.Conn]*session{},
+		waiters:    map[uint64]*waiter{},
 		stop:       make(chan struct{}),
 		ctx:        ctx,
 	}
@@ -139,6 +140,12 @@ type server struct {
 	inflight   int
 	closing    bool
 
+	// qmu orders every change to the budget with the frames that report it, so a waiter
+	// reads its updates and its grant in the order they happened. Taken before mu.
+	qmu      sync.Mutex
+	waiters  map[uint64]*waiter
+	nextWait uint64
+
 	stop     chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
@@ -153,6 +160,17 @@ type session struct {
 	protocol int
 	claims   map[string]struct{}
 	services map[string]int
+	// waits maps a claim.wait's request ID to its key in the line. Guarded by qmu.
+	waits map[uint64]uint64
+}
+
+// waiter is a claim.wait still in line: where to write its frames, and the last state
+// it was sent, so it hears again only when that changes.
+type waiter struct {
+	sess  *session
+	w     *frameWriter
+	reqID uint64
+	last  *types.MachineWait
 }
 
 // negotiate picks the newest protocol version both the hello and this broker speak, or
@@ -203,11 +221,11 @@ func (s *server) touch() {
 	s.mu.Unlock()
 }
 
-// idleFor is how long the broker has held nothing: no claim, no service reference, no
-// request in flight. A connection that holds none of those (a server that only says
-// hello, a status query) does not keep it up.
+// idleFor is how long the broker has held nothing: no claim, no waiter, no service
+// reference, no request in flight. A connection that holds none of those (a server that
+// only says hello, a status query) does not keep it up.
 func (s *server) idleFor(now time.Time) time.Duration {
-	holding := len(s.budget.Snapshot().Holders) > 0
+	holding := len(s.budget.Snapshot().Holders) > 0 || len(s.budget.Waiting()) > 0
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.inflight > 0 {
@@ -250,7 +268,7 @@ func (s *server) handle(conn net.Conn) {
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
-	sess := &session{hello: h, protocol: proto, claims: map[string]struct{}{}, services: map[string]int{}}
+	sess := &session{hello: h, protocol: proto, claims: map[string]struct{}{}, services: map[string]int{}, waits: map[uint64]uint64{}}
 	s.mu.Lock()
 	s.conns[conn] = sess
 	s.mu.Unlock()
@@ -288,8 +306,10 @@ func (s *server) handle(conn net.Conn) {
 	s.forget(conn, sess)
 }
 
-// forget drops conn and releases everything its session holds.
+// forget drops conn and releases everything its session holds: its claims, its places
+// in line and its service references.
 func (s *server) forget(conn net.Conn, sess *session) {
+	s.qmu.Lock()
 	s.mu.Lock()
 	delete(s.conns, conn)
 	var claims []string
@@ -302,17 +322,56 @@ func (s *server) forget(conn net.Conn, sess *session) {
 		sess.claims, sess.services = map[string]struct{}{}, map[string]int{}
 	}
 	s.mu.Unlock()
+	waits := 0
+	if sess != nil {
+		for _, key := range sess.waits {
+			s.budget.Leave(key)
+			delete(s.waiters, key)
+			waits++
+		}
+		sess.waits = map[uint64]uint64{}
+	}
 	for _, id := range claims {
 		s.budget.Release(id)
 	}
+	if len(claims) > 0 || waits > 0 {
+		s.settle()
+	}
+	s.qmu.Unlock()
 	for key, n := range services {
 		for range n {
 			s.opts.services.Release(key)
 		}
 	}
-	if len(claims) > 0 || len(services) > 0 {
+	if len(claims) > 0 || len(services) > 0 || waits > 0 {
 		s.opts.log.InfoContext(s.ctx, "broker: released a closed connection's hold",
-			slog.Int("pid", sess.hello.PID), slog.Int("claims", len(claims)), slog.Int("services", len(services)))
+			slog.Int("pid", sess.hello.PID), slog.Int("claims", len(claims)), slog.Int("waits", waits), slog.Int("services", len(services)))
+	}
+}
+
+// settle seats every waiter that fits now, then tells each one still waiting what
+// changed since it last heard. Callers hold qmu.
+func (s *server) settle() {
+	for _, sc := range s.budget.Seat() {
+		wt := s.waiters[sc.Key]
+		delete(s.waiters, sc.Key)
+		if wt == nil {
+			s.budget.Release(sc.Verdict.ID)
+			continue
+		}
+		delete(wt.sess.waits, wt.reqID)
+		s.mu.Lock()
+		wt.sess.claims[sc.Verdict.ID] = struct{}{}
+		s.mu.Unlock()
+		_ = wt.w.write(typeClaimReply, wt.reqID, claimReply{Verdict: sc.Verdict})
+	}
+	for _, q := range s.budget.Waiting() {
+		wt := s.waiters[q.Key]
+		if wt == nil || (wt.last != nil && sameWaitReport(*wt.last, q.Wait)) {
+			continue
+		}
+		wt.last = &q.Wait
+		_ = wt.w.write(typeWaiting, wt.reqID, q.Wait)
 	}
 }
 
@@ -328,6 +387,8 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			return
 		}
 		c := s.attribute(sess, req.Claim)
+		s.qmu.Lock()
+		defer s.qmu.Unlock()
 		var v types.MachineVerdict
 		if req.Reassert {
 			v = types.MachineVerdict{Granted: true, Fits: true, ID: s.budget.Assert(c)}
@@ -340,6 +401,52 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			s.mu.Unlock()
 		}
 		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
+		s.settle()
+
+	case typeWait:
+		var req claimRequest
+		if err := decodeBody(f, &req); err != nil || req.Reassert {
+			fail(CodeMalformed, "broker: a claim.wait needs a claim and no reassert")
+			return
+		}
+		c := s.attribute(sess, req.Claim)
+		s.qmu.Lock()
+		defer s.qmu.Unlock()
+		s.nextWait++
+		key := s.nextWait
+		v := s.budget.Enqueue(key, c)
+		switch {
+		case v.Granted:
+			s.mu.Lock()
+			sess.claims[v.ID] = struct{}{}
+			s.mu.Unlock()
+			_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
+		case !v.Fits:
+			_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
+		default:
+			s.waiters[key] = &waiter{sess: sess, w: w, reqID: f.ID}
+			sess.waits[f.ID] = key
+		}
+		s.settle()
+
+	case typeLeave:
+		var req leaveRequest
+		if err := decodeBody(f, &req); err != nil {
+			fail(CodeMalformed, "broker: decode leave: %v", err)
+			return
+		}
+		s.qmu.Lock()
+		defer s.qmu.Unlock()
+		key, waiting := sess.waits[req.WaitID]
+		left := waiting && s.budget.Leave(key)
+		if waiting {
+			delete(sess.waits, req.WaitID)
+			delete(s.waiters, key)
+		}
+		_ = w.write(typeLeaveReply, f.ID, leaveReply{Left: left})
+		if left {
+			s.settle()
+		}
 
 	case typeRelease:
 		var req releaseRequest
@@ -347,6 +454,8 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			fail(CodeMalformed, "broker: decode release: %v", err)
 			return
 		}
+		s.qmu.Lock()
+		defer s.qmu.Unlock()
 		s.mu.Lock()
 		_, mine := sess.claims[req.ClaimID]
 		delete(sess.claims, req.ClaimID)
@@ -355,6 +464,9 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			s.budget.Release(req.ClaimID)
 		}
 		_ = w.write(typeReleaseReply, f.ID, nil)
+		if mine {
+			s.settle()
+		}
 
 	case typeServiceAcquire:
 		var req serviceAcquireRequest
@@ -451,7 +563,12 @@ func (s *server) status() types.StatusBroker {
 		Executable:      s.executable,
 		StartTime:       s.started,
 		Capacity:        s.budget.Snapshot(),
+		Order:           cache.MachineOrder,
+		BackfillLimit:   cache.BackfillLimit,
 		IdleExitSeconds: int(s.opts.idleExit / time.Second),
+	}
+	for _, q := range s.budget.Waiting() {
+		st.Waiting = append(st.Waiting, q.Wait)
 	}
 	if s.opts.services != nil {
 		st.Services = s.opts.services.Snapshot()

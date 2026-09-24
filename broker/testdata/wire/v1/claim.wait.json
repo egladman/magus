@@ -1,0 +1,1 @@
+{"claim":{"project":"api","target":"test","memory_mb":512,"slots":2,"pid":4242,"dir":"/src/a","command":"magus run test","invocation":"inv-2"}}

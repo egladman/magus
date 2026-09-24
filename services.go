@@ -45,7 +45,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(os.Args, m.version))
 		m.ownsBroker = true
 	}
-	opts := []cache.Option{cache.WithMachineAdmission(m.broker)}
+	opts := []cache.Option{cache.WithMachineAdmission(m.broker), cache.WithMachineWait(m.cfg.CapacityWait)}
 	if policy.Resolved() == types.BrokerRequired {
 		opts = append(opts, cache.WithMachineAdmissionRequired())
 	}

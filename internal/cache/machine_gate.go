@@ -2,12 +2,14 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -17,9 +19,26 @@ import (
 // MachineAdmitter is the budget as a client reaches it: the broker, over the one
 // connection this process holds to it.
 type MachineAdmitter interface {
+	// Request asks once and answers at once.
 	Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
+	// Wait joins the broker's line and returns once c is seated, turns out never to
+	// fit, or ctx ends. onWait hears each change in what keeps c out. An error with ctx
+	// still live means the broker went away and took the line with it.
+	Wait(ctx context.Context, c types.MachineClaim, onWait func(types.MachineWait)) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
 }
+
+// Why a wait ended early, as its context's cause.
+var (
+	errWaitExpired = errors.New("waited as long as capacity_wait allows")
+	errWaitForeign = errors.New("kept out by another invocation, with no capacity_wait to wait on it")
+	errWaitBlind   = errors.New("kept out by another invocation, with no ancestry to tell it from a parent")
+)
+
+// maxRequeues bounds how often one step joins a successor broker's line under
+// `broker: required` after the broker it waited on went away. A broker that dies this
+// often is a broker to report, not to keep trusting.
+const maxRequeues = 3
 
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
 // that still holds this step's local limiter slot, so it must never outlast a sick
@@ -28,10 +47,6 @@ type MachineAdmitter interface {
 // A var, not a const, for the same reason as elsewhere in this package: a timing a test
 // cannot shorten is a timing that either costs real wall-clock or goes uncovered.
 var machineReleaseTimeout = 5 * time.Second
-
-// machinePollEvery paces a step kept out only by claims its own process or run holds.
-// The budget has no wakeup to push across the socket, so the step asks again.
-const machinePollEvery = 100 * time.Millisecond
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
@@ -55,7 +70,7 @@ const ExitCodeMachineDeclaration = 78
 const ExitCodeBrokerUnavailable = 69
 
 // machineGate is the client half of admission: it asks the budget, and either proceeds,
-// waits on its own run, or refuses.
+// waits in the broker's line, or refuses.
 type machineGate struct {
 	admit MachineAdmitter
 	log   *slog.Logger
@@ -63,54 +78,204 @@ type machineGate struct {
 	// required refuses a step the admitter could not answer for, where the default
 	// admits it unarbitrated.
 	required bool
+	// patience is how long a step may wait in line behind other invocations; zero
+	// refuses it at once.
+	patience time.Duration
+	// waiting counts this process's steps in line, so a broker dying under them can
+	// say how many it released.
+	waiting atomic.Int64
+	// released is the one seat a step released by a dead broker runs on under
+	// best-effort, so a full host is not handed every waiter at once.
+	released chan struct{}
+}
+
+func newMachineGate(admit MachineAdmitter, log *slog.Logger, required bool, patience time.Duration) *machineGate {
+	return &machineGate{admit: admit, log: log, required: required, patience: max(patience, 0), released: make(chan struct{}, 1)}
 }
 
 // acquire claims the machine budget for one step and returns the function that frees
 // it, or an MGS3009 error naming who holds it.
 //
 // A step declaring nothing still takes a slot: concurrency is the half every step
-// spends. A step kept out only by claims of its own process or its own run waits for
-// them, until ctx ends; one kept out by any other magus invocation is refused at once
-// (exit 75), since magus never waits on another magus invocation.
+// spends. A step kept out only by claims of its own process or its own run waits in
+// line for them, until ctx ends. One kept out by another magus invocation waits for at
+// most capacity_wait and is then refused (exit 75); with no capacity_wait, the default,
+// it is refused at once.
 //
-// A broker that dies, or a transport that breaks, admits the step and says so once
-// under best-effort; under required it refuses with MGS3022 (exit 69).
+// A broker that cannot be reached, or a transport that breaks, admits the step and says
+// so once under best-effort; under required it refuses with MGS3022 (exit 69).
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
 	if g == nil || g.admit == nil {
 		return func() {}, nil
 	}
-	for {
-		v, err := g.admit.Request(ctx, c)
-		if err != nil {
-			if g.required {
-				return nil, brokerUnavailableError(c, err)
-			}
-			return g.admitOpen(ctx, err), nil
+	v, err := g.admit.Request(ctx, c)
+	if err != nil {
+		if g.required {
+			return nil, brokerUnavailableError(c, err)
+		}
+		return g.admitOpen(ctx, err), nil
+	}
+	blind := blindToOwnAncestry(ctx)
+	switch {
+	case v.Granted:
+		return g.releaser(v.ID), nil
+	case !v.Fits:
+		return nil, machineDoesNotFitError(c, v)
+	case v.OwnRun:
+	case blind:
+		// A nested magus that cannot name its ancestors cannot be excused from its own
+		// parent's claim, so it would wait on the run waiting for it. The refusal names
+		// the fix rather than the holders.
+		return nil, machineBlindError(c, v)
+	case g.patience == 0:
+		return nil, machineBusyError(c, v, 0)
+	}
+	return g.wait(ctx, c, v, blind)
+}
+
+// stepWait is one step's wait in line: what it last heard, and whether its bound has
+// passed. mu guards all of it, since the bound's timer runs on its own goroutine.
+type stepWait struct {
+	g       *machineGate
+	claim   types.MachineClaim
+	blind   bool
+	started time.Time
+
+	mu      sync.Mutex
+	last    types.MachineWait
+	expired bool
+	cancel  context.CancelCauseFunc
+}
+
+// wait holds a step in the broker's line until it is seated. It holds no claim while it
+// waits: the step's whole need is granted at once or not at all, which is why a line of
+// such waits cannot deadlock (see MachineBudget.Enqueue).
+func (g *machineGate) wait(ctx context.Context, c types.MachineClaim, first types.MachineVerdict, blind bool) (func(), error) {
+	g.waiting.Add(1)
+	defer g.waiting.Add(-1)
+	s := &stepWait{g: g, claim: c, blind: blind, started: time.Now(),
+		last: types.MachineWait{Claim: c, OwnRun: first.OwnRun, BlockedBy: first.Holders, Ahead: first.Ahead}}
+	stopBeat := beatWhileWaiting(ctx)
+	defer stopBeat()
+	for requeues := 0; ; requeues++ {
+		wctx, cancel := context.WithCancelCause(ctx)
+		s.mu.Lock()
+		s.cancel = cancel
+		s.mu.Unlock()
+		var bound *time.Timer
+		if g.patience > 0 {
+			bound = time.AfterFunc(max(g.patience-time.Since(s.started), 0), s.expire)
+		}
+		v, err := g.admit.Wait(wctx, c, func(w types.MachineWait) { s.heard(ctx, w) })
+		cause := context.Cause(wctx)
+		cancel(nil)
+		if bound != nil {
+			bound.Stop()
 		}
 		switch {
-		case v.Granted:
+		case err == nil && v.Granted:
 			return g.releaser(v.ID), nil
-		case !v.Fits:
+		case err == nil && !v.Fits:
 			return nil, machineDoesNotFitError(c, v)
-		case v.OwnRun:
-			// Falls out of the switch to the wait below.
-		case blindToOwnAncestry(ctx):
-			// A nested magus that cannot name its ancestors cannot be excused from its own
-			// parent's claim, so the refusal names the fix rather than the holders.
-			return nil, machineBlindError(c, v)
-		default:
-			return nil, machineBusyError(c, v)
-		}
-		// The holders are this run's own steps, whose progress feeds the stall watchdog,
-		// or another invocation of this process, whose progress does not; beat for the
-		// latter, or a run queued in the server trips MGS3012.
-		ProgressFromContext(ctx).Beat()
-		select {
-		case <-ctx.Done():
+		case err == nil:
+			return nil, fmt.Errorf("machine budget: the broker ended %s %s's wait without an answer", displayProject(c.Project), c.Target)
+		case ctx.Err() != nil:
 			return nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
-		case <-time.After(machinePollEvery):
+		case errors.Is(cause, errWaitBlind):
+			return nil, machineBlindError(c, s.verdict())
+		case errors.Is(cause, errWaitExpired), errors.Is(cause, errWaitForeign):
+			return nil, machineBusyError(c, s.verdict(), time.Since(s.started))
+		}
+		// The broker went away and took the line with it.
+		if !g.required {
+			return g.releasedByDeadBroker(ctx, c, err)
+		}
+		if requeues == maxRequeues {
+			return nil, brokerUnavailableError(c, err)
+		}
+		g.log.WarnContext(ctx, fmt.Sprintf("magus: the broker went away while %s %s waited for capacity; waiting again on the broker that replaces it, whose line starts over, so its place in line is lost (broker: required)",
+			displayProject(c.Project), c.Target))
+	}
+}
+
+// heard takes one report from the broker: it says the first time the step waits on
+// other invocations and each time who that is changes, and ends the wait when its
+// bound, or the lack of one, says it must not go on.
+func (s *stepWait) heard(ctx context.Context, w types.MachineWait) {
+	s.mu.Lock()
+	s.last = w
+	if !w.OwnRun {
+		switch {
+		case s.blind:
+			s.cancel(errWaitBlind)
+		case s.g.patience == 0:
+			s.cancel(errWaitForeign)
+		case s.expired:
+			s.cancel(errWaitExpired)
 		}
 	}
+	s.mu.Unlock()
+	// A wait on its own run is how every full run proceeds, and says nothing; a wait on
+	// someone else is what a person needs to hear about.
+	if !w.OwnRun && s.g.patience > 0 && !s.blind {
+		s.g.log.InfoContext(ctx, describeMachineWait(s.claim, w, s.g.patience))
+	}
+}
+
+// expire ends the wait if what keeps the step out now is another invocation. A wait on
+// its own run outlasts the bound: capacity_wait bounds waiting on others.
+func (s *stepWait) expire() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.expired = true
+	if !s.last.OwnRun {
+		s.cancel(errWaitExpired)
+	}
+}
+
+// verdict is the last report as a refusal would name it.
+func (s *stepWait) verdict() types.MachineVerdict {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return types.MachineVerdict{Fits: true, Holders: s.last.BlockedBy, Ahead: s.last.Ahead}
+}
+
+// releasedByDeadBroker is best-effort's answer to a broker that died under a waiting
+// step: run it unarbitrated, and say so. The host it was waiting for was full, which is
+// exactly when every waiter proceeding at once does the most harm, so the steps this
+// process releases run one at a time on a seat of their own.
+func (g *machineGate) releasedByDeadBroker(ctx context.Context, c types.MachineClaim, err error) (func(), error) {
+	g.log.WarnContext(ctx, fmt.Sprintf("magus: the broker went away while %d step(s) of this run waited for capacity; %s %s runs unarbitrated, one released step at a time (broker: best-effort)",
+		g.waiting.Load(), displayProject(c.Project), c.Target), slog.String("error", err.Error()))
+	select {
+	case g.released <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
+	}
+	var once sync.Once
+	return func() { once.Do(func() { <-g.released }) }, nil
+}
+
+// beatWhileWaiting keeps the stall watchdog fed while a step waits. The holders may be
+// another invocation, whose progress the watchdog cannot see, and a legitimate wait
+// must not read as a wedged run (MGS3012).
+func beatWhileWaiting(ctx context.Context) (stop func()) {
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(lockWaitHeartbeat)
+		defer t.Stop()
+		for {
+			ProgressFromContext(ctx).Beat()
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 // blindToOwnAncestry reports a run that is inside a magus process tree and cannot say
@@ -212,13 +377,72 @@ func workingDir() string {
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
 
-// machineBusyError is the fail-fast answer: another magus invocation fills the machine
-// right now, and the same command will succeed later.
-func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
+// machineBusyError is the answer when another magus invocation fills the machine: at
+// once without capacity_wait, or once waited has used it up. The same command succeeds
+// later.
+func machineBusyError(c types.MachineClaim, v types.MachineVerdict, waited time.Duration) error {
+	what := "not starting " + displayProject(c.Project) + " " + c.Target
+	if waited > 0 {
+		what += " after waiting " + roundWait(waited).String()
+	}
+	why := "this machine's build budget is full"
+	if len(v.Ahead) > 0 {
+		why = fmt.Sprintf("%d step(s) of other runs have waited longer for this host, and later steps have gone past them as often as the line allows (%s)",
+			len(v.Ahead), strings.TrimPrefix(describeMachineHolders(v.Ahead), "held by "))
+	}
+	state := describeMachineDeclaration(c)
+	if v.BudgetMB > 0 || v.BudgetSlots > 0 {
+		state += ", and " + describeMachineRemaining(v)
+	}
+	next := ""
+	if waited == 0 {
+		next = " `--capacity-wait DURATION` waits in line for it instead."
+	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this machine's build budget is full; %s, and %s. %s",
-		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
+		"%s: %s; %s. %s.%s", what, why, state, describeMachineHolders(v.Holders), next)}
+}
+
+// roundWait keeps a wait readable: whole seconds, or tens of milliseconds under one.
+func roundWait(d time.Duration) time.Duration {
+	if d < time.Second {
+		return d.Round(10 * time.Millisecond)
+	}
+	return d.Round(time.Second)
+}
+
+// describeMachineWait is the line a step prints when it starts waiting on other
+// invocations, and again each time who that is changes.
+func describeMachineWait(c types.MachineClaim, w types.MachineWait, patience time.Duration) string {
+	need := fmt.Sprintf("%d slot", max(c.Slots, 1))
+	if max(c.Slots, 1) != 1 {
+		need += "s"
+	}
+	if c.MemoryMB > 0 {
+		need += ", " + FormatMB(c.MemoryMB)
+	}
+	held := make([]string, 0, len(w.BlockedBy))
+	for _, h := range w.BlockedBy {
+		who := fmt.Sprintf("pid %d (%s %s", h.PID, displayProject(h.Project), h.Target)
+		if h.Command != "" {
+			who += ", " + h.Command
+		}
+		if h.Dir != "" {
+			who += " in " + h.Dir
+		}
+		who += ")"
+		if !h.Since.IsZero() {
+			who += " since " + h.Since.Local().Format("15:04")
+		}
+		held = append(held, who)
+	}
+	msg := fmt.Sprintf("magus: %s %s is waiting up to %s for %s", displayProject(c.Project), c.Target, patience, need)
+	if len(held) > 0 {
+		msg += ": held by " + strings.Join(held, "; ")
+	}
+	if len(w.Ahead) > 0 {
+		msg += fmt.Sprintf("; behind %d older waiter(s) of other runs", len(w.Ahead))
+	}
+	return msg
 }
 
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit

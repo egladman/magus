@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -261,8 +262,15 @@ type fakeAdmitter struct {
 	mu       sync.Mutex
 	budget   *MachineBudget
 	requests int
+	waits    int
 	fail     error
 	released []string
+	// lose ends the next loseLeft waits in line with this error, as a broker dying
+	// under them would.
+	lose     error
+	loseLeft int
+	nextKey  uint64
+	seated   map[uint64]types.MachineVerdict
 }
 
 func (f *fakeAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
@@ -282,11 +290,87 @@ func (f *fakeAdmitter) Release(_ context.Context, id string) {
 	f.budget.Release(id)
 }
 
+// Wait is the broker's line in-process: the same budget calls the broker makes, with a
+// short poll standing in for the frames it would push.
+func (f *fakeAdmitter) Wait(ctx context.Context, c types.MachineClaim, onWait func(types.MachineWait)) (types.MachineVerdict, error) {
+	f.mu.Lock()
+	f.waits++
+	if f.fail != nil {
+		defer f.mu.Unlock()
+		return types.MachineVerdict{}, f.fail
+	}
+	if f.seated == nil {
+		f.seated = map[uint64]types.MachineVerdict{}
+	}
+	f.nextKey++
+	key := f.nextKey
+	v := f.budget.Enqueue(key, c)
+	f.mu.Unlock()
+	if v.Granted || !v.Fits {
+		return v, nil
+	}
+	var last *types.MachineWait
+	for {
+		f.mu.Lock()
+		for _, s := range f.budget.Seat() {
+			f.seated[s.Key] = s.Verdict
+		}
+		got, seated := f.seated[key]
+		delete(f.seated, key)
+		var cur *types.MachineWait
+		for _, q := range f.budget.Waiting() {
+			if q.Key == key {
+				cur = &q.Wait
+			}
+		}
+		var lose error
+		if f.loseLeft > 0 {
+			lose = f.lose
+			f.loseLeft--
+		}
+		f.mu.Unlock()
+		switch {
+		case seated:
+			return got, nil
+		case lose != nil:
+			f.budget.Leave(key)
+			return types.MachineVerdict{}, lose
+		}
+		if cur != nil && onWait != nil && (last == nil || !sameTestWait(*last, *cur)) {
+			onWait(*cur)
+			last = cur
+		}
+		select {
+		case <-ctx.Done():
+			if !f.budget.Leave(key) {
+				f.mu.Lock()
+				if s, ok := f.seated[key]; ok {
+					f.budget.Release(s.ID)
+					delete(f.seated, key)
+				}
+				f.mu.Unlock()
+			}
+			return types.MachineVerdict{}, ctx.Err()
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
+
+func sameTestWait(a, b types.MachineWait) bool {
+	pids := func(cs []types.MachineClaimant) []int {
+		out := make([]int, 0, len(cs))
+		for _, c := range cs {
+			out = append(out, c.PID)
+		}
+		return out
+	}
+	return a.OwnRun == b.OwnRun && slices.Equal(pids(a.BlockedBy), pids(b.BlockedBy)) && len(a.Ahead) == len(b.Ahead)
+}
+
 func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
 	t.Helper()
 	adm := &fakeAdmitter{budget: b}
-	g := &machineGate{admit: adm, log: newLogger("", 0)}
-	return g, adm
+	return newMachineGate(adm, newLogger("", 0), false, 0), adm
 }
 
 func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
@@ -690,4 +774,270 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	}
 	assert.NotEqual(t, ExitCodeMachineBusy, ExitCodeMachineDeclaration,
 		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
+}
+
+// recordLog keeps every message logged through it, safe for the goroutines a wait runs.
+type recordLog struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (r *recordLog) Enabled(context.Context, slog.Level) bool { return true }
+func (r *recordLog) Handle(_ context.Context, rec slog.Record) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.msgs = append(r.msgs, rec.Message)
+	return nil
+}
+func (r *recordLog) WithAttrs([]slog.Attr) slog.Handler { return r }
+func (r *recordLog) WithGroup(string) slog.Handler      { return r }
+
+func (r *recordLog) matching(sub string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, m := range r.msgs {
+		if strings.Contains(m, sub) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func waitingGate(t *testing.T, b *MachineBudget, required bool, patience time.Duration) (*machineGate, *fakeAdmitter, *recordLog) {
+	t.Helper()
+	t.Setenv("MAGUS_LEVEL", "0")
+	adm := &fakeAdmitter{budget: b}
+	log := &recordLog{}
+	return newMachineGate(adm, slog.New(log), required, patience), adm, log
+}
+
+func TestTheLineSeatsOldestFirstAndLeaveRemoves(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	held := b.Request(types.MachineClaim{Project: "h", Target: "t", PID: 1})
+	require.True(t, held.Granted)
+	for i, key := range []uint64{1, 2, 3} {
+		v := b.Enqueue(key, types.MachineClaim{Project: "w", Target: "t", PID: 10 + i})
+		require.False(t, v.Granted)
+		require.True(t, v.Fits)
+	}
+	assert.True(t, b.Leave(2))
+	assert.False(t, b.Leave(2), "a key leaves once")
+	assert.Empty(t, b.Seat(), "nothing fits while the holder holds")
+
+	b.Release(held.ID)
+	seated := b.Seat()
+	require.Len(t, seated, 1)
+	assert.Equal(t, uint64(1), seated[0].Key)
+	waiting := b.Waiting()
+	require.Len(t, waiting, 1)
+	assert.Equal(t, uint64(3), waiting[0].Key)
+	assert.Equal(t, 1, waiting[0].Wait.Position)
+	assert.Equal(t, []int{10}, pidsOf(waiting[0].Wait.BlockedBy))
+}
+
+// TestAWaitersBlockedByLeavesOutItsOwnRun keeps the report to what a person can act on:
+// another invocation's claims, not the ones its own run will release.
+func TestAWaitersBlockedByLeavesOutItsOwnRun(t *testing.T) {
+	b, _ := testBudget(t, 0, 2)
+	require.True(t, b.Request(types.MachineClaim{Project: "own", Target: "t", PID: 5, Invocation: "5:r"}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Project: "other", Target: "t", PID: 6}).Granted)
+	b.Enqueue(1, types.MachineClaim{Project: "w", Target: "t", PID: 5, Invocation: "5:s"})
+	waiting := b.Waiting()
+	require.Len(t, waiting, 1)
+	assert.Equal(t, []int{6}, pidsOf(waiting[0].Wait.BlockedBy))
+	assert.True(t, waiting[0].Wait.OwnRun, "it fits beside pid 6, so its own run is what keeps it out")
+}
+
+// TestANestedChildGoesPastABarrier is the deadlock the line must not build: a parent
+// blocked in exec on its child, the child held back by a waiter that is waiting for the
+// parent.
+func TestANestedChildGoesPastABarrier(t *testing.T) {
+	b, _ := testBudget(t, 1000, 0)
+	parent := b.Request(types.MachineClaim{Project: "p", Target: "t", PID: 1, Invocation: "1:root", MemoryMB: 500})
+	require.True(t, parent.Granted)
+	b.Enqueue(1, types.MachineClaim{Project: "big", Target: "t", PID: 2, MemoryMB: 900})
+	b.queue[0].passed = BackfillLimit
+
+	stranger := b.Request(types.MachineClaim{Project: "s", Target: "t", PID: 3, MemoryMB: 10})
+	assert.False(t, stranger.Granted, "a stranger stops at the barrier")
+	assert.Len(t, stranger.Ahead, 1)
+
+	child := b.Request(types.MachineClaim{Project: "c", Target: "t", PID: 4, MemoryMB: 10,
+		Invocation: "4:child", Ancestors: []string{"1:root"}})
+	assert.True(t, child.Granted, "the child of a holder goes past: the barrier waits on its parent")
+	assert.Equal(t, BackfillLimit, b.queue[0].passed, "and does not count as passing it")
+}
+
+func TestTheGateWaitsForAnotherInvocationWithinItsBound(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	g, _, log := waitingGate(t, b, false, 5*time.Second)
+	other := b.Request(types.MachineClaim{Project: "api", Target: "test", PID: 900, Dir: "/src/a", Command: "magus run test"})
+	require.True(t, other.Granted)
+
+	done := acquireAsync(t.Context(), g, types.MachineClaim{Project: "web", Target: "build", PID: 100})
+	require.Eventually(t, func() bool { return len(log.matching("is waiting")) == 1 }, 5*time.Second, time.Millisecond)
+	line := log.matching("is waiting")[0]
+	assert.Contains(t, line, "magus: web build is waiting up to 5s for 1 slot: held by pid 900 (api test, magus run test in /src/a) since")
+	requireWaits(t, done, func() { b.Release(other.ID) })
+}
+
+func TestTheGateRefusesAtItsBoundNamingTheHolder(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	g, adm, log := waitingGate(t, b, false, 150*time.Millisecond)
+	require.True(t, b.Request(types.MachineClaim{Project: "api", Target: "test", PID: 900}).Granted)
+
+	started := time.Now()
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: "web", Target: "build", PID: 100})
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeMachineBusy, stated.ExitCode())
+	assert.GreaterOrEqual(t, time.Since(started), 150*time.Millisecond)
+	assert.Contains(t, err.Error(), "not starting web build after waiting")
+	assert.Contains(t, err.Error(), "held by pid 900 api test")
+	assert.NotContains(t, err.Error(), "--capacity-wait", "it already waited")
+	assert.Len(t, log.matching("is waiting"), 1, "one line when it started, none on a timer")
+	assert.Empty(t, b.Waiting(), "the wait left the line")
+	assert.Equal(t, 1, adm.waits)
+}
+
+func TestWithoutABoundTheGateRefusesAtOnceAndSaysHowToWait(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	g, adm, _ := waitingGate(t, b, false, 0)
+	require.True(t, b.Request(types.MachineClaim{Project: "api", Target: "test", PID: 900}).Granted)
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: "web", Target: "build", PID: 100})
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Contains(t, err.Error(), "`--capacity-wait DURATION` waits in line for it instead")
+	assert.Zero(t, adm.waits, "refusal is still the default: it never joins the line")
+}
+
+// TestTheBoundDoesNotCutAWaitOnItsOwnRun: capacity_wait bounds waiting on others. A step
+// kept out only by its own run's claims waits for them however long the bound is.
+func TestTheBoundDoesNotCutAWaitOnItsOwnRun(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	g, _, log := waitingGate(t, b, false, 20*time.Millisecond)
+	own := b.Request(types.MachineClaim{Project: "a", Target: "t", PID: 100})
+	require.True(t, own.Granted)
+	done := acquireAsync(t.Context(), g, types.MachineClaim{Project: "b", Target: "t", PID: 100})
+	time.Sleep(100 * time.Millisecond)
+	requireWaits(t, done, func() { b.Release(own.ID) })
+	assert.Empty(t, log.matching("is waiting"), "a wait on its own run says nothing")
+}
+
+func TestTheGateReportsEachHolderChange(t *testing.T) {
+	b, _ := testBudget(t, 0, 2)
+	g, _, log := waitingGate(t, b, false, 10*time.Second)
+	a := b.Request(types.MachineClaim{Project: "a", Target: "t", PID: 1})
+	c := b.Request(types.MachineClaim{Project: "c", Target: "t", PID: 2})
+	done := acquireAsync(t.Context(), g, types.MachineClaim{Project: "w", Target: "t", PID: 100, Slots: 2})
+	require.Eventually(t, func() bool { return len(log.matching("is waiting")) == 1 }, 5*time.Second, time.Millisecond)
+	b.Release(c.ID)
+	require.Eventually(t, func() bool { return len(log.matching("is waiting")) == 2 }, 5*time.Second, time.Millisecond)
+	lines := log.matching("is waiting")
+	assert.Contains(t, lines[0], "pid 1 ")
+	assert.Contains(t, lines[0], "pid 2 ")
+	assert.NotContains(t, lines[1], "pid 2 ", "the second line names the holders left")
+	requireWaits(t, done, func() { b.Release(a.ID) })
+}
+
+// TestABlindNestedRunIsStillRefused is the Go consult's trap 13: a nested magus that
+// cannot name its parent would wait on its own parent forever, so it refuses whatever
+// the bound.
+func TestABlindNestedRunIsStillRefused(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	adm := &fakeAdmitter{budget: b}
+	g := newMachineGate(adm, slog.New(&recordLog{}), false, time.Minute)
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "")
+	require.True(t, b.Request(types.MachineClaim{Project: "p", Target: "t", PID: 900}).Granted)
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: "w", Target: "t", PID: 100})
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeMachineDeclaration, stated.ExitCode())
+	assert.Zero(t, adm.waits)
+}
+
+var errBrokerGone = errors.New("broker: unavailable: the broker went away")
+
+// TestABrokerDyingUnderBestEffortReleasesWaitersOneAtATime is graybeard's T4: the host
+// was full, so the waiters a dead broker releases run one at a time, and each says how
+// many were released.
+func TestABrokerDyingUnderBestEffortReleasesWaitersOneAtATime(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	g, adm, log := waitingGate(t, b, false, time.Minute)
+	require.True(t, b.Request(types.MachineClaim{Project: "p", Target: "t", PID: 900}).Granted)
+
+	type result struct {
+		release func()
+		err     error
+	}
+	results := make(chan result, 2)
+	for _, target := range []string{"one", "two"} {
+		go func() {
+			release, err := g.acquire(t.Context(), types.MachineClaim{Project: "w", Target: target, PID: 100})
+			results <- result{release, err}
+		}()
+	}
+	require.Eventually(t, func() bool { return len(b.Waiting()) == 2 }, 5*time.Second, time.Millisecond)
+	adm.mu.Lock()
+	adm.lose, adm.loseLeft = errBrokerGone, 2
+	adm.mu.Unlock()
+
+	first := <-results
+	require.NoError(t, first.err)
+	select {
+	case r := <-results:
+		t.Fatalf("a second released step ran beside the first: %v", r.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	first.release()
+	second := <-results
+	require.NoError(t, second.err)
+	second.release()
+	lines := log.matching("runs unarbitrated")
+	require.Len(t, lines, 2, "one line each")
+	assert.Contains(t, lines[0], "while 2 step(s) of this run waited")
+}
+
+func TestABrokerDyingUnderRequiredWaitsAgainThenRefuses(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	g, adm, log := waitingGate(t, b, true, time.Minute)
+	holder := b.Request(types.MachineClaim{Project: "p", Target: "t", PID: 900})
+	require.True(t, holder.Granted)
+
+	adm.mu.Lock()
+	adm.lose, adm.loseLeft = errBrokerGone, 100
+	adm.mu.Unlock()
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: "w", Target: "t", PID: 100})
+	require.ErrorIs(t, err, types.BrokerUnavailable)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
+	assert.Equal(t, maxRequeues+1, adm.waits)
+	assert.Len(t, log.matching("its place in line is lost"), maxRequeues)
+
+	adm.mu.Lock()
+	adm.loseLeft, adm.waits = 0, 0
+	adm.mu.Unlock()
+	done := acquireAsync(t.Context(), g, types.MachineClaim{Project: "w", Target: "t", PID: 100})
+	require.Eventually(t, func() bool { return len(b.Waiting()) == 1 }, 5*time.Second, time.Millisecond)
+	adm.mu.Lock()
+	adm.loseLeft = 1
+	adm.mu.Unlock()
+	require.Eventually(t, func() bool {
+		adm.mu.Lock()
+		defer adm.mu.Unlock()
+		return adm.waits == 2 && len(b.Waiting()) == 1
+	}, 5*time.Second, time.Millisecond, "it joined the successor's line")
+	requireWaits(t, done, func() { b.Release(holder.ID) })
+}
+
+func pidsOf(cs []types.MachineClaimant) []int {
+	out := make([]int, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, c.PID)
+	}
+	return out
 }

@@ -11,5 +11,8 @@
 {"send":{"type":"claim","id":11,"body":{"claim":{"project":".","target":"t"},"from_a_newer_client":true}},"expect":"claim.reply"}
 {"send":{"type":"a.frame.from.a.newer.client","id":12},"expect":"error","code":"unknown-type"}
 {"send":{"type":"claim","id":13,"body":"not an object"},"expect":"error","code":"malformed"}
+{"send":{"type":"claim.wait","id":16,"body":{"claim":{"project":"api","target":"build","slots":1,"pid":4242}}},"expect":"claim.reply"}
+{"send":{"type":"claim.leave","id":17,"body":{"wait_id":99}},"expect":"claim.leave.reply"}
+{"send":{"type":"claim.wait","id":18,"body":{"claim":{"project":"api","target":"x"},"reassert":true}},"expect":"error","code":"malformed"}
 {"send":{"type":"shutdown","id":14,"body":{"magic":"not-the-shutdown-magic"}},"expect":"error","code":"malformed"}
 {"send":{"type":"shutdown","id":15,"body":{"magic":"magus-broker-shutdown-v1"}},"expect":"shutdown.reply"}

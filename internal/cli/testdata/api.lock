@@ -8,6 +8,7 @@ config cache.remote.trusted_keys
 config cache.remote.write.enabled
 config cache.size_mb
 config cache.write.enabled
+config capacity_wait
 config ci.max_shards
 config ci.record_runs
 config ci.runner_pool_budget

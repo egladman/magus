@@ -241,6 +241,45 @@ func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 	assert.Nil(t, none.GetServer())
 }
 
+// TestStatusProtoCarriesTheLine pins the waiting line onto the dashboard's wire: each
+// waiter's place, what it asks for, and what keeps it out, plus how the line is served.
+func TestStatusProtoCarriesTheLine(t *testing.T) {
+	since := time.UnixMilli(1700)
+	blocker := types.MachineClaimant{Project: "api", Target: "test", PID: 48190, Slots: 4, Since: since}
+	s := toProto(t, types.StatusSnapshot{Broker: &types.StatusBroker{
+		PID: 1, Order: "fifo-backfill", BackfillLimit: 4,
+		Waiting: []types.MachineWait{
+			{Claim: types.MachineClaim{Project: "web", Target: "build", PID: 48412, Slots: 2, MemoryMB: 8 << 10, Command: "magus run build"},
+				Position: 1, Since: since, BlockedBy: []types.MachineClaimant{blocker}, PassedOver: 3},
+			{Claim: types.MachineClaim{Project: "web", Target: "lint", PID: 48500}, Position: 2, Since: since, OwnRun: true,
+				Ahead: []types.MachineClaimant{{Project: "web", Target: "build", PID: 48412, Since: since}}},
+		},
+	}}, types.BuildInfo{Version: "v1"})
+
+	b := s.GetBroker()
+	require.NotNil(t, b)
+	assert.Equal(t, "fifo-backfill", b.GetOrder())
+	assert.Equal(t, int32(4), b.GetBackfillLimit())
+	require.Len(t, b.GetWaiting(), 2)
+	first := b.GetWaiting()[0]
+	assert.Equal(t, int32(1), first.GetPosition())
+	assert.Equal(t, int64(1700), first.GetStartTime().AsTime().UnixMilli())
+	assert.Equal(t, "web", first.GetClaim().GetProject())
+	assert.Equal(t, int32(48412), first.GetClaim().GetPid())
+	assert.Equal(t, int32(2), first.GetClaim().GetSlots())
+	assert.Equal(t, int32(8<<10), first.GetClaim().GetMemoryMb())
+	assert.Equal(t, "magus run build", first.GetClaim().GetCommand())
+	assert.Nil(t, first.GetClaim().GetStartTime(), "a waiter has not been granted")
+	require.Len(t, first.GetBlockedBy(), 1)
+	assert.Equal(t, int32(48190), first.GetBlockedBy()[0].GetPid())
+	assert.Equal(t, int32(3), first.GetPassedOver())
+	second := b.GetWaiting()[1]
+	assert.True(t, second.GetOwnRun())
+	assert.Equal(t, int32(1), second.GetClaim().GetSlots(), "every step takes at least one slot")
+	require.Len(t, second.GetAhead(), 1)
+	assert.Equal(t, int32(48412), second.GetAhead()[0].GetPid())
+}
+
 // TestStatusProtoCarriesSecretProviderName pins that the selected provider's NAME reaches
 // the dashboard, and that a workspace which declared none reports empty rather than
 // inventing the built-in one's name. The console keys "is a provider declared" off exactly

@@ -649,6 +649,16 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     const running = runningTargets.length;
     const queued = runs.flatMap((run) => run.targets).filter((t) => t.state === "queued").length;
     const total = hits + misses;
+    const brokerHolders = runningTargets.map((t, i) => ({
+      project: t.args[2] || ".",
+      target: t.args[1] || "",
+      pid: 48210 + i,
+      slots: 1,
+      memoryMb: 512,
+      dir: "/Users/eli/Repos/acme",
+      command: "magus " + t.args.join(" "),
+      startTime: t.startTime,
+    }));
     return {
       health: { label: "healthy", cls: "ok" },
       pool: { capacity: CAPACITY, running, queued },
@@ -737,17 +747,34 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         heldSlots: running,
         budgetMb: 16_384,
         heldMb: running * 512,
-        holders: runningTargets.map((t, i) => ({
-          project: t.args[2] || ".",
-          target: t.args[1] || "",
-          pid: 48210 + i,
-          slots: 1,
-          memoryMb: 512,
-          dir: "/Users/eli/Repos/acme",
-          command: "magus " + t.args.join(" "),
-          startTime: t.startTime,
-        })),
+        holders: brokerHolders,
         idleExitSeconds: 600,
+        // A two-slot step from another worktree waits in line whenever the scenario's running work
+        // leaves it no room, so the tile shows who is waiting on whom.
+        waiting:
+          running + 2 > CAPACITY
+            ? [
+                {
+                  claim: {
+                    project: "web",
+                    target: "build",
+                    pid: 48412,
+                    slots: 2,
+                    memoryMb: 4 * 1024,
+                    dir: "/Users/eli/Repos/acme/.worktrees/checkout-flow",
+                    command: "magus run build web --capacity-wait 10m",
+                  },
+                  position: 1,
+                  startTime: timestampFromMs(now - 12_000),
+                  ownRun: false,
+                  blockedBy: brokerHolders,
+                  ahead: [],
+                  passedOver: 0,
+                },
+              ]
+            : [],
+        order: "fifo-backfill",
+        backfillLimit: 4,
       },
       server: {
         pid: 48100,

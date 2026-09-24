@@ -8,6 +8,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   Health,
   TargetRun_State,
+  type Claim,
   type Status,
   type Pool,
   type Run,
@@ -201,6 +202,23 @@ export interface BrokerView {
   heldMb: number;
   holders: ClaimView[];
   idleExitSeconds: number;
+  // The line of steps waiting for capacity, oldest first, and how it is served. order is empty from
+  // a broker that predates the line.
+  waiting: WaitView[];
+  order: string;
+  backfillLimit: number;
+}
+
+// WaitView is one claim in the broker's line: its place, and what keeps it out. blockedBy is other
+// runs' claims; ahead is older waiters it may not pass; ownRun means only its own run's steps do.
+export interface WaitView {
+  claim: ClaimView;
+  position: number;
+  startTime?: Timestamp;
+  ownRun: boolean;
+  blockedBy: ClaimView[];
+  ahead: ClaimView[];
+  passedOver: number;
 }
 
 // ServerView is `magus server`: the person-started process serving MCP, the console, the APIs and
@@ -396,17 +414,32 @@ function mapBroker(b: Status["broker"]): BrokerView | null {
     heldSlots: cap?.heldSlots || 0,
     budgetMb: cap?.budgetMb || 0,
     heldMb: cap?.heldMb || 0,
-    holders: (cap?.holders || []).map((c) => ({
-      project: c.project || "",
-      target: c.target || "",
-      pid: c.pid || 0,
-      slots: c.slots || 0,
-      memoryMb: c.memoryMb || 0,
-      dir: c.dir || "",
-      command: c.command || "",
-      startTime: c.startTime,
-    })),
+    holders: (cap?.holders || []).map(mapClaim),
     idleExitSeconds: b.idleExitSeconds || 0,
+    waiting: (b.waiting || []).map((w) => ({
+      claim: mapClaim(w.claim),
+      position: w.position || 0,
+      startTime: w.startTime,
+      ownRun: w.ownRun,
+      blockedBy: (w.blockedBy || []).map(mapClaim),
+      ahead: (w.ahead || []).map(mapClaim),
+      passedOver: w.passedOver || 0,
+    })),
+    order: b.order || "",
+    backfillLimit: b.backfillLimit || 0,
+  };
+}
+
+function mapClaim(c: Claim | undefined): ClaimView {
+  return {
+    project: c?.project || "",
+    target: c?.target || "",
+    pid: c?.pid || 0,
+    slots: c?.slots || 0,
+    memoryMb: c?.memoryMb || 0,
+    dir: c?.dir || "",
+    command: c?.command || "",
+    startTime: c?.startTime,
   };
 }
 

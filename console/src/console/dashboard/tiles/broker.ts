@@ -11,7 +11,9 @@ import {
   relTime,
   type BrokerPolicy,
   type BrokerView,
+  type ClaimView,
   type DashboardState,
+  type WaitView,
 } from "../state";
 import { Card, h, type Tile } from "./card";
 import { fitRows } from "./density";
@@ -39,6 +41,31 @@ function share(held: string, budget: number, budgetText: string): string {
   return budget > 0 ? held + " of " + budgetText : held + " (budget unmeasured)";
 }
 
+// waitText is a waiter's row: its place, what it asks for, and what keeps it out, named the way
+// `magus status` names it in its blocked-by column.
+function waitText(w: WaitView): string {
+  const slots = Math.max(w.claim.slots, 1);
+  const detail = ["waiting, place " + w.position, slots + (slots === 1 ? " slot" : " slots")];
+  if (w.claim.memoryMb > 0) detail.push(fmtBytes(w.claim.memoryMb * 1024 * 1024));
+  if (w.claim.pid) detail.push("pid " + w.claim.pid);
+  const blocked: string[] = [];
+  if (w.blockedBy.length && !w.ownRun) blocked.push("blocked by pid " + pids(w.blockedBy));
+  if (w.ahead.length) blocked.push("behind pid " + pids(w.ahead));
+  detail.push(blocked.length ? blocked.join(", ") : "blocked by its own run");
+  const age = relTime(w.startTime);
+  if (age) detail.push("for " + age);
+  return detail.join(" - ");
+}
+
+function blockedKind(w: WaitView): string {
+  if (w.ahead.length) return "ahead";
+  return w.blockedBy.length && !w.ownRun ? "others" : "own-run";
+}
+
+function pids(cs: ClaimView[]): string {
+  return cs.map((c) => String(c.pid)).join(", ");
+}
+
 export function brokerTile(): Tile {
   const card = new Card("broker", "Broker", {
     term: "Broker",
@@ -54,17 +81,20 @@ export function brokerTile(): Tile {
   card.noteNode().replaceWith(stateLabel);
   const facts = h("ul", "console-dashboard-rowlist");
   const holders = h("ul", "console-dashboard-rowlist");
-  card.body.append(facts, holders);
+  const waiters = h("ul", "console-dashboard-rowlist");
+  waiters.setAttribute("aria-label", "waiting for capacity");
+  card.body.append(facts, holders, waiters);
 
   function render(b: BrokerView | null, policy: BrokerPolicy): void {
     card.el.hidden = false;
     holders.replaceChildren();
+    waiters.replaceChildren();
     if (!b) {
       state.textContent = policy === "off" ? "off" : "not running";
       facts.replaceChildren(fact("policy", ABSENT[policy]));
       return;
     }
-    state.textContent = "running";
+    state.textContent = b.waiting.length ? "running, " + b.waiting.length + " waiting" : "running";
     const rows = [
       fact("slots", share(String(b.heldSlots), b.budgetSlots, String(b.budgetSlots))),
       fact(
@@ -79,6 +109,11 @@ export function brokerTile(): Tile {
     if (b.idleExitSeconds > 0)
       rows.push(fact("exits", "after " + b.idleExitSeconds + "s holding nothing"));
     if (b.socket) rows.push(fact("socket", b.socket));
+    if (b.order) {
+      const limit =
+        b.backfillLimit > 0 ? ", passed over at most " + b.backfillLimit + " times" : "";
+      rows.push(fact("line", b.order + limit));
+    }
     facts.replaceChildren(...rows);
     for (const c of b.holders) {
       const li = h("li", "console-dashboard-row");
@@ -94,6 +129,16 @@ export function brokerTile(): Tile {
       // The holder's command and checkout are what name a holder from another worktree.
       li.title = [c.command, c.dir].filter(Boolean).join("\n");
       holders.append(li);
+    }
+    for (const w of b.waiting) {
+      const li = h("li", "console-dashboard-row");
+      li.dataset.blocked = blockedKind(w);
+      li.append(
+        h("code", "console-dashboard-row__cmd", (w.claim.project || ".") + ":" + w.claim.target),
+        h("span", "console-dashboard-row__meta", waitText(w)),
+      );
+      li.title = [w.claim.command, w.claim.dir].filter(Boolean).join("\n");
+      waiters.append(li);
     }
   }
 

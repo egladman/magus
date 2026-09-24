@@ -31,6 +31,8 @@ type MachineBudget struct {
 	budgetSlots int
 	claims      map[string]*machineEntry
 	seq         int64
+	// queue is the line of claims waiting for capacity, in arrival order.
+	queue []*machineWaiter
 
 	// now is the reading a test cannot stage. Nil means the real clock.
 	now func() time.Time
@@ -39,6 +41,41 @@ type MachineBudget struct {
 type machineEntry struct {
 	claim   types.MachineClaim
 	started time.Time
+}
+
+type machineWaiter struct {
+	key    uint64
+	claim  types.MachineClaim
+	since  time.Time
+	passed int
+}
+
+// MachineOrder names how the line is served, for status: oldest first, with bounded
+// backfill.
+const MachineOrder = "fifo-backfill"
+
+// BackfillLimit is how many later claims may be seated past a waiter before it becomes
+// a barrier that only its own run, and nested children of holders, may pass.
+//
+// Strict head-of-line order wastes the host whenever the oldest waiter is large: a
+// 16 GiB step at the head of the line would hold back every one-slot lint while
+// memory sat idle. Unbounded backfill starves that same step, since small claims keep
+// fitting into every gap it is waiting to see widen. Bounding it keeps both: a waiter
+// is passed at most this many times, then capacity drains toward it, because every
+// claim holding it belongs to a running step that ends. Small, because each pass can
+// cost the waiter a whole step's duration.
+const BackfillLimit = 4
+
+// SeatedClaim is a waiter Seat granted; Key is what Enqueue was given.
+type SeatedClaim struct {
+	Key     uint64
+	Verdict types.MachineVerdict
+}
+
+// QueuedClaim is a waiter still in line; Key is what Enqueue was given.
+type QueuedClaim struct {
+	Key  uint64
+	Wait types.MachineWait
 }
 
 // NewMachineBudget returns a budget of budgetMB megabytes and budgetSlots concurrency
@@ -62,13 +99,103 @@ func (b *MachineBudget) clock() time.Time {
 // Request asks for admission once. It grants and records the claim, or answers why not
 // and records nothing, and it never blocks: whether to ask again belongs to the client,
 // which the verdict's OwnRun tells.
+//
+// A claim that fits may still be refused for the line: see BackfillLimit and
+// MachineVerdict.Ahead.
 func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
 	if c.Slots < 1 {
 		c.Slots = 1
 	}
+	return b.request(c, len(b.queue))
+}
+
+// Enqueue asks for admission and, when the claim would fit an empty host but not this
+// one, puts it in line under key instead of refusing it. A granted verdict, or one that
+// does not fit, is final; any other means the claim is waiting, until Seat grants it or
+// Leave takes it out.
+//
+// Holding nothing while waiting is what keeps the line free of deadlock: a waiter asks
+// for a step's whole need at once and holds none of it until all of it is granted, and
+// every claim it waits behind belongs to a step that is running and will end. The one
+// holder that cannot end on its own, a parent blocked in exec on a nested magus, is
+// answered by freeSlot and by letting its children past the line.
+func (b *MachineBudget) Enqueue(key uint64, c types.MachineClaim) types.MachineVerdict {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if c.Slots < 1 {
+		c.Slots = 1
+	}
+	v := b.request(c, len(b.queue))
+	if !v.Granted && v.Fits {
+		b.queue = append(b.queue, &machineWaiter{key: key, claim: c, since: b.clock()})
+	}
+	return v
+}
+
+// Leave takes the waiter under key out of line and reports whether it was still there.
+// False means Seat already granted it, or it never waited.
+func (b *MachineBudget) Leave(key uint64) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i, w := range b.queue {
+		if w.key == key {
+			b.queue = slices.Delete(b.queue, i, i+1)
+			return true
+		}
+	}
+	return false
+}
+
+// Seat grants every waiter that can be seated now, oldest first, and returns them. The
+// caller runs it after anything that frees capacity or shortens the line.
+//
+// One pass suffices: a grant only takes capacity, so a waiter this pass skipped still
+// cannot be seated once a later one is.
+func (b *MachineBudget) Seat() []SeatedClaim {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []SeatedClaim
+	for i := 0; i < len(b.queue); {
+		w := b.queue[i]
+		v := b.request(w.claim, i)
+		if !v.Granted {
+			i++
+			continue
+		}
+		b.queue = slices.Delete(b.queue, i, i+1)
+		out = append(out, SeatedClaim{Key: w.key, Verdict: v})
+	}
+	return out
+}
+
+// Waiting reports the line, oldest first.
+func (b *MachineBudget) Waiting() []QueuedClaim {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]QueuedClaim, 0, len(b.queue))
+	for i, w := range b.queue {
+		othersMB, othersSlots := b.heldByOthers(w.claim)
+		ahead := b.barriers(w.claim, i)
+		out = append(out, QueuedClaim{Key: w.key, Wait: types.MachineWait{
+			Claim:    w.claim,
+			Position: i + 1,
+			Since:    w.since,
+			OwnRun:   len(ahead) == 0 && b.fits(w.claim, othersMB, othersSlots),
+			BlockedBy: b.claimants(func(_ string, held types.MachineClaim) bool {
+				return b.ownOrExcused(w.claim, held)
+			}),
+			Ahead:      ahead,
+			PassedOver: w.passed,
+		}})
+	}
+	return out
+}
+
+// request decides c as though it stood at position pos in line, and grants and records
+// it when it may be seated. Callers hold b.mu.
+func (b *MachineBudget) request(c types.MachineClaim, pos int) types.MachineVerdict {
 	heldMB, heldSlots := b.held(c.Ancestors)
 	v := types.MachineVerdict{
 		Fits:        b.fits(c, 0, 0),
@@ -81,15 +208,58 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	if !v.Fits {
 		return v
 	}
+	// A nested magus under a holder is how that holder finishes, so the line never
+	// holds it back: a waiter ahead of it would be waiting on it.
+	nested := b.nestedUnderHolder(c)
+	if !nested {
+		if v.Ahead = b.barriers(c, pos); len(v.Ahead) > 0 {
+			return v
+		}
+	}
 	if !b.fits(c, heldMB, heldSlots) && !b.freeSlot(c.Ancestors) {
 		othersMB, othersSlots := b.heldByOthers(c)
 		v.OwnRun = b.fits(c, othersMB, othersSlots)
 		return v
 	}
-
+	if !nested {
+		for _, w := range b.queue[:pos] {
+			if !sameMachineRun(w.claim, c) {
+				w.passed++
+			}
+		}
+	}
 	v.Granted, v.ID = true, b.record(c)
 	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+c.Slots
 	return v
+}
+
+// barriers are the waiters ahead of position pos, from invocations other than c's,
+// already passed over BackfillLimit times. Callers hold b.mu.
+func (b *MachineBudget) barriers(c types.MachineClaim, pos int) []types.MachineClaimant {
+	var out []types.MachineClaimant
+	for _, w := range b.queue[:pos] {
+		if w.passed >= BackfillLimit && !sameMachineRun(w.claim, c) {
+			out = append(out, claimant(w.claim, w.since))
+		}
+	}
+	return out
+}
+
+// nestedUnderHolder reports a claim one of whose ancestor invocations holds a claim: a
+// magus started by a running step. Callers hold b.mu.
+func (b *MachineBudget) nestedUnderHolder(c types.MachineClaim) bool {
+	for _, e := range b.claims {
+		if isMachineAncestor(e.claim.Invocation, c.Ancestors) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameMachineRun reports two claims from one invocation tree or one process, which the
+// line never orders against each other.
+func sameMachineRun(a, b types.MachineClaim) bool {
+	return (a.Run() != "" && a.Run() == b.Run()) || (a.PID != 0 && a.PID == b.PID)
 }
 
 // Assert records a claim without asking whether it fits, and returns its id. It is for
@@ -166,13 +336,15 @@ func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 // The same process covers the server's adopted runs and a run's own concurrent steps;
 // the same run covers sibling nested magus processes under one root.
 func (b *MachineBudget) heldByOthers(c types.MachineClaim) (mb, slots int) {
-	excused := b.excusedClaims(c.Ancestors)
-	run := c.Run()
-	return b.sum(func(id string, held types.MachineClaim) bool {
-		return excused[id] ||
-			(c.PID != 0 && held.PID == c.PID) ||
-			(run != "" && held.Run() == run)
-	})
+	return b.sum(func(_ string, held types.MachineClaim) bool { return b.ownOrExcused(c, held) })
+}
+
+// ownOrExcused reports a held claim that is not another invocation's as far as c is
+// concerned: one an ancestor of c holds, or one from c's own process or run.
+func (b *MachineBudget) ownOrExcused(c, held types.MachineClaim) bool {
+	return isMachineAncestor(held.Invocation, c.Ancestors) ||
+		(c.PID != 0 && held.PID == c.PID) ||
+		(c.Run() != "" && held.Run() == c.Run())
 }
 
 // sum totals every claim skip does not exclude.
@@ -260,16 +432,17 @@ func (b *MachineBudget) fits(c types.MachineClaim, mb, slots int) bool {
 // first, so a refusal names who is holding the budget.
 func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
 	excused := b.excusedClaims(ancestors)
+	return b.claimants(func(id string, _ types.MachineClaim) bool { return excused[id] })
+}
+
+// claimants lists every claim skip does not exclude, oldest first.
+func (b *MachineBudget) claimants(skip func(id string, c types.MachineClaim) bool) []types.MachineClaimant {
 	out := make([]types.MachineClaimant, 0, len(b.claims))
 	for id, e := range b.claims {
-		if excused[id] {
+		if skip(id, e.claim) {
 			continue
 		}
-		out = append(out, types.MachineClaimant{
-			Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
-			MemoryMB: e.claim.MemoryMB, Slots: e.claim.Slots,
-			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started,
-		})
+		out = append(out, claimant(e.claim, e.started))
 	}
 	slices.SortFunc(out, func(a, b types.MachineClaimant) int {
 		if !a.Since.Equal(b.Since) {
@@ -281,6 +454,14 @@ func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
 		return strings.Compare(a.Target, b.Target)
 	})
 	return out
+}
+
+func claimant(c types.MachineClaim, since time.Time) types.MachineClaimant {
+	return types.MachineClaimant{
+		Project: c.Project, Target: c.Target, PID: c.PID,
+		MemoryMB: c.MemoryMB, Slots: c.Slots,
+		Dir: c.Dir, Command: c.Command, Since: since,
+	}
 }
 
 func isMachineAncestor(invocation string, ancestors []string) bool {

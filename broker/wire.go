@@ -34,13 +34,21 @@ const (
 const helloMagic = "magus-broker-v1"
 
 // Frame types. A request carries a non-zero ID and its reply echoes it, so one
-// connection carries any number of requests at once. A later wait frame for a queued
-// claim has room here: it would share the claim's ID and precede its reply.
+// connection carries any number of requests at once.
+//
+// claim.wait is the one request answered by more than one frame: zero or more
+// claim.waiting frames sharing its ID, each sent when what keeps the claim out changes,
+// then one claim.reply. Its place in line rides the connection, so a closed connection
+// leaves the line, and claim.leave leaves it without closing.
 const (
 	typeHello          = "hello"
 	typeHelloReply     = "hello.reply"
 	typeClaim          = "claim"
 	typeClaimReply     = "claim.reply"
+	typeWait           = "claim.wait"
+	typeWaiting        = "claim.waiting"
+	typeLeave          = "claim.leave"
+	typeLeaveReply     = "claim.leave.reply"
 	typeRelease        = "release"
 	typeReleaseReply   = "release.reply"
 	typeServiceAcquire = "service.acquire"
@@ -99,6 +107,20 @@ type claimRequest struct {
 // recorded, and whether to ask again is the client's call.
 type claimReply struct {
 	Verdict types.MachineVerdict `json:"verdict"`
+}
+
+// claim.wait's body is a claimRequest without Reassert, and claim.waiting's is
+// types.MachineWait; both are part of this wire.
+
+// leaveRequest takes a waiting claim out of line, by the ID of its claim.wait.
+type leaveRequest struct {
+	WaitID uint64 `json:"wait_id"`
+}
+
+// leaveReply says whether the claim was still waiting. False means its claim.reply was
+// sent first: a grant the client must hand back if it no longer wants it.
+type leaveReply struct {
+	Left bool `json:"left"`
 }
 
 // releaseRequest returns a granted claim. An id the broker does not hold, or one another
