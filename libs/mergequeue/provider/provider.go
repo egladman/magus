@@ -6,9 +6,10 @@
 //	describe({base, remote_url})                   > {stack_merge, linear_stacks, methods}
 //	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [unqueued]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
+//	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
-//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, reason?}
+//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
 //	kick_back(change + {commit, code, report, paths, with, candidate_commit}) > bool
 //	list_artifacts({source})                       > {complete, artifacts: [{name, url}], headers?}
 //
@@ -56,6 +57,7 @@ const (
 	opDescribe      = "describe"
 	opListChanges   = "list_changes"
 	opApprovalAt    = "approval_at"
+	opListGreen     = "list_green"
 	opPostStatus    = "post_status"
 	opRetarget      = "retarget"
 	opMergeChange   = "merge_change"
@@ -66,7 +68,7 @@ const (
 // Every op but list_artifacts is required: branch protection requires the queue's status
 // once it is wired, so a provider that can list changes but not merge them would hold
 // every change forever.
-var ops = []string{opDescribe, opListChanges, opApprovalAt, opPostStatus, opRetarget, opMergeChange, opKickBack}
+var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack}
 
 // Script is a [types.Provider] backed by a Buzz script, and a
 // [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
@@ -309,6 +311,34 @@ func (p *Script) ApprovalAt(ctx context.Context, c types.Change, commit string) 
 	return a, nil
 }
 
+// ListGreen calls list_green. A record whose id or head git could read as something else
+// is an error, since the queue posts a status on that head.
+func (p *Script) ListGreen(ctx context.Context, q types.ListQuery, statusContext string) ([]types.GreenChange, error) {
+	r, err := p.callRecord(ctx, opListGreen, map[string]any{"base": q.Base, "remote_url": q.RemoteURL, "context": statusContext})
+	if err != nil {
+		return nil, err
+	}
+	var rows []record
+	if err := r.decode(required("changes", &rows)); err != nil {
+		return nil, err
+	}
+	out := make([]types.GreenChange, 0, len(rows))
+	for _, row := range rows {
+		var g types.GreenChange
+		if err := row.decode(required("id", &g.ID), required("repo", &g.Repo), required("head", &g.Head)); err != nil {
+			return nil, err
+		}
+		if err := types.CheckID(g.ID); err != nil {
+			return nil, fmt.Errorf("%s: %w", row.where, err)
+		}
+		if !types.IsObjectID(g.Head) {
+			return nil, fmt.Errorf("%s: head %q is not a full commit id", row.where, g.Head)
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
 // PostStatus calls post_status.
 func (p *Script) PostStatus(ctx context.Context, c types.Change, commit string, s types.CommitStatus) error {
 	params := changeParams(c)
@@ -326,8 +356,9 @@ func (p *Script) Retarget(ctx context.Context, c types.Change, base string) erro
 	return p.acknowledged(ctx, opRetarget, params)
 }
 
-// MergeChange calls merge_change.
-func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.MergeOptions) error {
+// MergeChange calls merge_change. A script that omits by_provider says the queue's call
+// merged the change.
+func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.MergeOptions) (types.MergeResult, error) {
 	params := changeParams(c)
 	params["commit"] = opts.Commit
 	params["message"] = opts.Message
@@ -338,20 +369,21 @@ func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.Mer
 	params["through"] = through
 	r, err := p.callRecord(ctx, opMergeChange, params)
 	if err != nil {
-		return err
+		return types.MergeResult{}, err
 	}
 	var merged bool
 	var reason string
-	if err := r.decode(required("merged", &merged), optional("reason", &reason)); err != nil {
-		return err
+	var res types.MergeResult
+	if err := r.decode(required("merged", &merged), optional("by_provider", &res.ByProvider), optional("reason", &reason)); err != nil {
+		return types.MergeResult{}, err
 	}
 	if !merged {
 		if reason == "" {
 			reason = "no reason given"
 		}
-		return fmt.Errorf("%s: not merged: %s", r.where, reason)
+		return types.MergeResult{}, fmt.Errorf("%s: not merged: %s", r.where, reason)
 	}
-	return nil
+	return res, nil
 }
 
 // KickBack calls kick_back.

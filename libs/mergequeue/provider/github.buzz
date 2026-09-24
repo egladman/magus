@@ -1,7 +1,8 @@
 // GitHub provider for the merge queue: `mergequeue --provider github`. It carries the
 // provider contract (see the provider package): describe, list_changes, approval_at,
-// post_status, retarget, merge_change, kick_back and list_artifacts. The queue decides
-// what to validate and merge; this file only speaks GitHub's REST and GraphQL APIs.
+// list_green, post_status, retarget, merge_change, kick_back and list_artifacts. The
+// queue decides what to validate and merge; this file only speaks GitHub's REST and
+// GraphQL APIs.
 //
 // # Merge intent
 //
@@ -21,16 +22,18 @@
 // Actions token. The writes use MERGEQUEUE_TOKEN and nothing else, so a job that does
 // not hold the write credential cannot write by accident. It needs contents, pull
 // requests and commit statuses write; the apply job's own Actions token is enough, and
-// since its merges start no workflow, that job dispatches the base branch's runs itself.
+// no bypass of any rule is needed.
 //
-// The queue posts success on its status only after a merge, so its credential has to
-// merge while that required status is still pending. A ruleset's bypass list is the only
-// way, and it bypasses every rule in that ruleset, not the one rule: required reviews,
-// signed commits, code scanning and all. Put the queue's required status in a ruleset of
-// its own whose only rule it is, and make the queue's actor the only bypass actor there;
-// the other rulesets then still apply to its merges. Merging a stack needs that actor in
-// Exempt mode and no "Restrict updates" rule, which is not yet verified on a real
-// repository.
+// # Who merges
+//
+// The queue posts success on its required status right before a merge. For a pull
+// request with auto-merge on, GitHub then merges it on behalf of whoever enabled
+// auto-merge, which starts the base branch's workflows; merge_change waits for that and
+// reports it (by_provider). Only when GitHub has not merged it in time does
+// merge_change merge it through the API itself, with the job's token, whose merges start
+// no workflow, so the caller dispatches the base branch's runs then. A stack, queued by
+// label with no auto-merge, is always merged by merge_change, which is not yet verified
+// on a real repository.
 //
 // # Listings
 //
@@ -67,6 +70,11 @@ final TIMELINE_PAGES = 30;
 // How long merge_change waits for an asynchronous stack merge to finish.
 final ASYNC_POLLS = 60;
 final ASYNC_POLL_MS = 5000.0;
+// How long merge_change waits for GitHub's auto-merge to merge a pull request whose
+// status just went green before merging it itself: 12 reads of the pull request, each
+// one request against the job token's hourly limit.
+final AUTO_MERGE_POLLS = 12;
+final AUTO_MERGE_POLL_MS = 5000.0;
 
 fun getenv(name: str) > str {
     final v = os\env(name);
@@ -692,6 +700,63 @@ export fun approval_at(io: {str: any}) > any !> any {
     };
 }
 
+final GREEN_QUERY = `query($owner: String!, $name: String!, $context: String!, $after: String) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { number headRefOid commits(last: 1) { nodes { commit { oid status { context(name: $context) { state } } } } } } } } }`;
+
+// greenFrom reads one page of open pull requests into the ones whose head carries the
+// queried status at success: {id, repo, head}.
+fun greenFrom(body: str, repo: str) > [any] !> any {
+    final green = mut [<any>];
+    foreach (pr in serialize\jsonDecode(body).q("data").q("repository").q("pullRequests").q("nodes").listValue()) {
+        final head = pr.q("headRefOid").stringValue();
+        foreach (n in pr.q("commits").q("nodes").listValue()) {
+            final c = n.q("commit");
+            if (c.q("oid").stringValue() == head and c.q("status").q("context").q("state").stringValue() == "SUCCESS") {
+                green.append({"id": "{pr.q("number").integerValue()}", "repo": repo, "head": head});
+            }
+        }
+    }
+    return green;
+}
+
+// greenNext is the cursor of the page of pull requests after the one in body, "" at
+// the end.
+fun greenNext(body: str) > str !> any {
+    final info = serialize\jsonDecode(body).q("data").q("repository").q("pullRequests").q("pageInfo");
+    if (info.q("hasNextPage").booleanValue()) {
+        return info.q("endCursor").stringValue();
+    }
+    return "";
+}
+
+// list_green lists every open pull request whose head carries the status at success,
+// whatever it targets: a stacked one is retargeted onto the base once the one beneath it
+// merges, and a success it carried then would count.
+export fun list_green(io: {str: any}) > any !> any {
+    final hdrs = reading("list_green");
+    final repo = repoOf(io);
+    final parts = repo.split("/");
+    final green = mut [<any>];
+    var after = "";
+    while (true) {
+        final vars = mut {<str: any>};
+        vars["owner"] = parts[0];
+        vars["name"] = parts[1];
+        vars["context"] = "{io["context"] ?? ""}";
+        if (after != "") {
+            vars["after"] = after;
+        }
+        final body = graphql(GREEN_QUERY, variables: vars, hdrs: hdrs);
+        foreach (g in greenFrom(body, repo: repo)) {
+            green.append(g);
+        }
+        after = greenNext(body);
+        if (after == "") {
+            break;
+        }
+    }
+    return {"changes": green};
+}
+
 // statusBody is GitHub's commit-status payload. GitHub rejects a description over 140
 // bytes, so a long reason is cut rather than losing the status.
 fun statusBody(state: str, context: str, description: str) > any {
@@ -777,11 +842,51 @@ fun movedFrom(repo: str, through: [serialize\Boxed], hdrs: {str: str}) > str !> 
     return "";
 }
 
+// awaitFrom decides, from one read of a pull request GitHub's auto-merge should merge at
+// commit, what merge_change does next: {next, reason}, next being "merged" once it
+// merged there, "wait" while it is open at commit with auto-merge on, and "refuse"
+// otherwise, since then neither GitHub nor the queue may merge it.
+fun awaitFrom(body: str, commit: str) > {str: str} !> any {
+    final pr = serialize\jsonDecode(body);
+    if (pr.q("head").q("sha").stringValue() != commit) {
+        return {"next": "refuse", "reason": "head moved to {pr.q("head").q("sha").stringValue()} before GitHub merged it"};
+    }
+    if (pr.q("merged").booleanValue()) {
+        return {"next": "merged", "reason": ""};
+    }
+    if (pr.q("state").stringValue() != "open") {
+        return {"next": "refuse", "reason": "closed before GitHub merged it"};
+    }
+    if (pr.q("auto_merge").q("merge_method").stringValue() == "") {
+        return {"next": "refuse", "reason": "auto-merge was disabled before GitHub merged it"};
+    }
+    return {"next": "wait", "reason": ""};
+}
+
+// mergedByOther reports whether anyone but the Actions token merged the pull request in
+// body: GitHub's auto-merge, on behalf of whoever enabled it, or a person. Either starts
+// the base branch's workflows, which the token's own merges do not. It tells a merge the
+// token's call raced apart from one whose answer was lost.
+fun mergedByOther(body: str) > bool !> any {
+    return serialize\jsonDecode(body).q("merged_by").q("login").stringValue() != (COMMITTER["name"] ?? "");
+}
+
+// mergeFailure reads GitHub's refusal of a merge call.
+fun mergeFailure(res: {str: any}) > any !> any {
+    return {"merged": false, "reason": "HTTP {res["status"]}: {serialize\jsonDecode("{res["body"]}").q("message").stringValue()}"};
+}
+
 // merge_change merges through the API, never by pushing, so branch protection and
-// authorship stay GitHub's: a squash is authored by the pull request's author. A stack
-// run (through set) goes through merge-async, which merges every pull request of the
-// stack up to this one; GitHub pins only the top's head, so every member's head is read
-// first, and the queue checks what merged afterwards. It is polled until this one
+// authorship stay GitHub's: a squash is authored by the pull request's author.
+//
+// A pull request with auto-merge on is GitHub's to merge once the queue's status went
+// green, on behalf of whoever enabled auto-merge, so merge_change first waits for that
+// (by_provider). If GitHub has not merged it in time, it merges it itself, pinned to
+// commit; a merge GitHub made in the meantime still reads as GitHub's.
+//
+// A stack run (through set) goes through merge-async, which merges every pull request of
+// the stack up to this one; GitHub pins only the top's head, so every member's head is
+// read first, and the queue checks what merged afterwards. It is polled until this one
 // merged.
 export fun merge_change(io: {str: any}) > any !> any {
     final hdrs = writing("merge_change");
@@ -792,11 +897,30 @@ export fun merge_change(io: {str: any}) > any !> any {
     final payload = serialize\jsonEncode(mergeBody(pr, commit: commit, method: "{io["method"] ?? ""}", message: "{io["message"] ?? ""}"));
     final through = serialize\Boxed.init(io["through"]).listValue();
     if (through.len() == 0) {
-        final res = mergequeue\request("PUT", url: url + "/merge", body: payload, headers: hdrs);
-        if (res["status"] == 200 or merged(url, commit: commit, hdrs: hdrs)) {
-            return {"merged": true, "reason": ""};
+        if (serialize\jsonDecode(pr).q("auto_merge").q("merge_method").stringValue() != "") {
+            var state = awaitFrom(pr, commit: commit);
+            var polls = 0;
+            while (state["next"] == "wait" and polls < AUTO_MERGE_POLLS) {
+                os\sleep(AUTO_MERGE_POLL_MS);
+                polls = polls + 1;
+                state = awaitFrom(expect(get(url, hdrs: hdrs), status: 200, what: "merge_change: read the pull request"), commit: commit);
+            }
+            if (state["next"] == "merged") {
+                return {"merged": true, "by_provider": true, "reason": ""};
+            }
+            if (state["next"] == "refuse") {
+                return {"merged": false, "reason": state["reason"] ?? ""};
+            }
         }
-        return {"merged": false, "reason": "HTTP {res["status"]}: {serialize\jsonDecode("{res["body"]}").q("message").stringValue()}"};
+        final res = mergequeue\request("PUT", url: url + "/merge", body: payload, headers: hdrs);
+        if (res["status"] == 200) {
+            return {"merged": true, "by_provider": false, "reason": ""};
+        }
+        final now = get(url, hdrs: hdrs);
+        if (now["status"] == 200 and (awaitFrom("{now["body"]}", commit: commit)["next"] ?? "") == "merged") {
+            return {"merged": true, "by_provider": mergedByOther("{now["body"]}"), "reason": ""};
+        }
+        return mergeFailure(res);
     }
     final moved = movedFrom(repo, through: through, hdrs: hdrs);
     if (moved != "") {
@@ -805,12 +929,12 @@ export fun merge_change(io: {str: any}) > any !> any {
     final res = mergequeue\request("PUT", url: url + "/merge-async", body: payload, headers: hdrs);
     // 409 is a merge of this stack already enqueued, which the polls below follow.
     if (res["status"] != 200 and res["status"] != 202 and res["status"] != 409) {
-        return {"merged": false, "reason": "HTTP {res["status"]}: {serialize\jsonDecode("{res["body"]}").q("message").stringValue()}"};
+        return mergeFailure(res);
     }
     var polls = 0;
     while (polls < ASYNC_POLLS) {
         if (merged(url, commit: commit, hdrs: hdrs)) {
-            return {"merged": true, "reason": ""};
+            return {"merged": true, "by_provider": false, "reason": ""};
         }
         os\sleep(ASYNC_POLL_MS);
         polls = polls + 1;
@@ -1115,6 +1239,44 @@ test "a squash carries the pull request title and the change's own commits" {
     assert\equal(authored["commit_message"], want: "my body", message: "the author's own body wins");
 }
 
+test "merge_change waits for auto-merge while the pull request is open at the commit" {
+    final at = "abc";
+    assert\equal(awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "abc"}, "auto_merge": {"merge_method": "squash"}}`, commit: at)["next"],
+        want: "wait", message: "GitHub has yet to merge it");
+    assert\equal(awaitFrom(`{"state": "closed", "merged": true, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at)["next"],
+        want: "merged", message: "GitHub merged it, and auto-merge is cleared by then");
+    final moved = awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "def"}, "auto_merge": {"merge_method": "squash"}}`, commit: at);
+    assert\equal(moved["next"], want: "refuse", message: "a new head is not what was validated");
+    assert\equal(moved["reason"], want: "head moved to def before GitHub merged it", message: "says where it moved");
+    assert\equal(awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at)["reason"],
+        want: "auto-merge was disabled before GitHub merged it", message: "a withdrawn intent is not merged by the queue either");
+    assert\equal(awaitFrom(`{"state": "closed", "merged": false, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at)["reason"],
+        want: "closed before GitHub merged it", message: "closed unmerged");
+}
+
+test "a merge the token's call raced is GitHub's unless the token made it" {
+    assert\equal(mergedByOther(`{"merged_by": {"login": "egladman"}}`), want: true, message: "auto-merge merges as whoever enabled it");
+    assert\equal(mergedByOther(`{"merged_by": {"login": "github-actions[bot]"}}`), want: false, message: "the token's own merge, its answer lost");
+}
+
+test "list_green keeps the open pull requests whose head carries the status at success" {
+    final body = `{"data": {"repository": {"pullRequests": {
+        "pageInfo": {"hasNextPage": true, "endCursor": "p2"},
+        "nodes": [
+        {"number": 4, "headRefOid": "h4", "commits": {"nodes": [{"commit": {"oid": "h4", "status": {"context": {"state": "SUCCESS"}}}}]}},
+        {"number": 5, "headRefOid": "h5", "commits": {"nodes": [{"commit": {"oid": "h5", "status": {"context": {"state": "PENDING"}}}}]}},
+        {"number": 6, "headRefOid": "h6", "commits": {"nodes": [{"commit": {"oid": "h6", "status": null}}]}},
+        {"number": 7, "headRefOid": "h7", "commits": {"nodes": [{"commit": {"oid": "older", "status": {"context": {"state": "SUCCESS"}}}}]}}
+    ]}}}}`;
+    final got = greenFrom(body, repo: "acme/acme");
+    assert\equal(got.len(), want: 1, message: "pending, no status and a stale commit are not green");
+    final four = serialize\Boxed.init(got[0]);
+    assert\equal(four.q("id").stringValue(), want: "4", message: "id");
+    assert\equal(four.q("repo").stringValue(), want: "acme/acme", message: "repo");
+    assert\equal(four.q("head").stringValue(), want: "h4", message: "head");
+    assert\equal(greenNext(body), want: "p2", message: "and where the next page starts");
+}
+
 test "a kick-back carries its facts as one JSON line after the report" {
     final body = kickBody({"code": "KICK_CONFLICT", "report": "conflicts", "paths": ["a.go", "b.go"], "with": [<str>], "candidate_commit": ""});
     assert\equal(body, want: "conflicts\n<!-- mergequeue: " + serialize\jsonEncode({"code": "KICK_CONFLICT", "paths": ["a.go", "b.go"], "with": [<str>], "candidate_commit": ""}) + " -->\n", message: "report, then facts");
@@ -1133,8 +1295,8 @@ test "a long status description is cut to what GitHub accepts" {
         i = i + 1;
     }
     final long = parts.join("");
-    assert\equal(statusBody("pending", context: "magus/queue", description: long)["description"].len(), want: 140, message: "140 bytes");
-    assert\equal(statusBody("success", context: "magus/queue", description: "ok")["description"], want: "ok", message: "a short one is untouched");
+    assert\equal(statusBody("pending", context: "merge-queue", description: long)["description"].len(), want: 140, message: "140 bytes");
+    assert\equal(statusBody("success", context: "merge-queue", description: "ok")["description"], want: "ok", message: "a short one is untouched");
 }
 
 test "a run names its repository and id, and its artifacts download from the API" {

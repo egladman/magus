@@ -25,11 +25,13 @@ const DefaultStatusContext = "merge-queue"
 // has not moved, that the provider's merge carries exactly the rebuilt tree, and
 // afterwards that the base branch does and has the shape the merge method gives.
 //
-// The status it posts reads success only once a change has merged. A required status
-// that goes green before the merge would let anyone merge the change on whatever the
-// base branch is by then, so the credential an Applier merges with must be allowed to
-// bypass the queue's own status check (see the provider's documentation for what else a
-// bypass grants).
+// The status it posts reads pending while a change waits, and success only on the commit
+// it is about to see merged, once it has read the base again and found it still at the
+// tip that commit's merge was predicted onto. The provider may then merge on its own, so
+// nothing needs to bypass the status. A success applying cannot follow through is set
+// back to pending, and each run first sets back any success an earlier run left. What
+// remains is a push to the base between that read and the merge, which the check after
+// the merge detects, stopping applying.
 type Applier struct {
 	// StatusContext names the commit status an Applier posts; empty means
 	// [DefaultStatusContext].
@@ -95,6 +97,9 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		r.caps = caps
 		if r.committer == (magustypes.Person{}) {
 			r.committer = caps.Committer
+		}
+		if err := r.revokeStale(ctx); err != nil {
+			return err
 		}
 	}
 	defer func() {
@@ -641,28 +646,32 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	case err != nil:
 		return false, fmt.Errorf("push the update commit of %s: %w", c.Label(), err)
 	}
-	if err := r.post(ctx, c, commit, types.StatePending, "applying candidate "+short(rd.cand)); err != nil {
-		return false, err
-	}
 	if ok, err := r.stillQueued(ctx, c, commit); !ok || err != nil {
 		return false, err
 	}
-	if err := r.provider.MergeChange(ctx, c, types.MergeOptions{Commit: commit, Message: v.Message}); err != nil {
-		return false, r.wait(ctx, c, commit, types.CodeWaitProviderRefused, "the provider refused the merge: "+err.Error())
+	now, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
+	if err != nil {
+		return false, err
+	}
+	if now != tip {
+		return false, r.wait(ctx, c, commit, types.CodeWaitRevalidate, baseMoved(r.plan.Base, now))
+	}
+	// Green before the merge: a provider that merges on its own once the status passes
+	// (GitHub's auto-merge) merges now, and one that does not takes the queue's call.
+	if err := r.post(ctx, c, commit, types.StateSuccess, "validated as "+short(rd.cand)+"; merging"); err != nil {
+		r.revokeOne(ctx, c, commit, err)
+		return false, err
+	}
+	res, err := r.provider.MergeChange(ctx, c, types.MergeOptions{Commit: commit, Message: v.Message})
+	if err != nil {
+		return false, r.wait(context.WithoutCancel(ctx), c, commit, types.CodeWaitProviderRefused, "the provider refused the merge: "+err.Error())
 	}
 	after, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
 	if err != nil {
 		return true, err
 	}
-	r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: commit})
-	if err := r.mergedAs(ctx, c, tip, after, commit, rd.tree, v.Method); err != nil {
-		return true, err
-	}
-	if err := r.post(ctx, c, commit, types.StateSuccess, "merged as "+short(after)); err != nil {
-		// The merge stands and the base carries the validated tree; the status is a record.
-		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: err.Error()})
-	}
-	return true, nil
+	r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: commit, ByProvider: res.ByProvider})
+	return true, r.mergedAs(ctx, c, tip, after, commit, rd.tree, v.Method)
 }
 
 // stillQueued reads c's merge intent, base and head again right before its merge, and
@@ -971,20 +980,35 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 	top := steps[len(steps)-1]
 	members := make([]types.Change, len(steps))
 	for i, st := range steps {
-		c := st.v.Change
-		members[i] = c
-		if err := r.post(ctx, c, c.Head, types.StatePending, "applying candidate "+short(st.cand)+" in a stack"); err != nil {
+		members[i] = st.v.Change
+	}
+	now, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
+	if err != nil {
+		return 0, err
+	}
+	if now != tip {
+		for _, st := range steps {
+			if err := r.wait(ctx, st.v.Change, st.v.Change.Head, types.CodeWaitRevalidate, baseMoved(r.plan.Base, now)); err != nil {
+				return 0, err
+			}
+		}
+		return len(run), nil
+	}
+	for i, st := range steps {
+		if err := r.post(ctx, st.v.Change, st.v.Change.Head, types.StateSuccess, "validated as "+short(st.cand)+"; merging in a stack"); err != nil {
+			r.revoke(ctx, steps[:i+1], err)
 			return 0, err
 		}
 	}
-	mergeErr := r.provider.MergeChange(ctx, top.v.Change, types.MergeOptions{Commit: top.v.Change.Head, Message: top.v.Message, Through: pins(members)})
+	res, mergeErr := r.provider.MergeChange(ctx, top.v.Change, types.MergeOptions{Commit: top.v.Change.Head, Message: top.v.Message, Through: pins(members)})
 	after, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
 	if err != nil {
+		r.revoke(ctx, steps, err)
 		return 0, err
 	}
 	if mergeErr != nil && after == tip {
 		for _, st := range steps {
-			if err := r.wait(ctx, st.v.Change, st.v.Change.Head, types.CodeWaitProviderRefused, "the provider refused the stack merge: "+mergeErr.Error()); err != nil {
+			if err := r.wait(context.WithoutCancel(ctx), st.v.Change, st.v.Change.Head, types.CodeWaitProviderRefused, "the provider refused the stack merge: "+mergeErr.Error()); err != nil {
 				return 0, err
 			}
 		}
@@ -992,19 +1016,41 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 	}
 	merged, err := r.stackMerged(ctx, tip, after, steps)
 	if err != nil {
+		r.revoke(ctx, steps, err)
 		return 0, err
 	}
 	for _, st := range steps[:merged] {
 		r.merged[st.v.Change.ID] = true
-		r.Events.Emit(Event{Kind: EventMerged, Change: st.v.Change.ID, Commit: st.v.Change.Head})
-		if err := r.post(ctx, st.v.Change, st.v.Change.Head, types.StateSuccess, "merged in a stack as "+short(after)); err != nil {
-			r.Events.Emit(Event{Kind: EventNotice, Change: st.v.Change.ID, Reason: err.Error()})
-		}
+		r.Events.Emit(Event{Kind: EventMerged, Change: st.v.Change.ID, Commit: st.v.Change.Head, ByProvider: res.ByProvider})
 	}
 	if merged < len(steps) {
-		return 0, &partialMergeError{top: top.v.Change.ID, merged: merged, total: len(steps), cause: mergeErr}
+		err := &partialMergeError{top: top.v.Change.ID, merged: merged, total: len(steps), cause: mergeErr}
+		r.revoke(ctx, steps[merged:], err)
+		return 0, err
 	}
 	return len(run), nil
+}
+
+// revoke sets the success applying posted on each of steps back to pending once applying
+// stopped without seeing it merged: a success left behind would let the change merge
+// later onto a base nobody validated. It reports what it cannot post and returns nothing,
+// since the caller is already returning cause.
+func (r *applyRun) revoke(ctx context.Context, steps []*ready, cause error) {
+	for _, st := range steps {
+		r.revokeOne(ctx, st.v.Change, st.v.Change.Head, cause)
+	}
+}
+
+func (r *applyRun) revokeOne(ctx context.Context, c types.Change, commit string, cause error) {
+	if err := r.post(context.WithoutCancel(ctx), c, commit, types.StatePending, "waiting: applying stopped before its merge: "+cause.Error()); err != nil {
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: err.Error()})
+	}
+}
+
+// baseMoved is why a change waits when base is no longer at the tip its merge was
+// predicted onto, right before it would go green.
+func baseMoved(base, now string) string {
+	return base + " moved to " + short(now) + " before its merge; validated again next run"
 }
 
 // ownDeltas reports whether what a provider merging a stack atomically produces is each
@@ -1118,11 +1164,31 @@ func (r *applyRun) wait(ctx context.Context, c types.Change, commit string, code
 	return r.post(ctx, c, commit, types.StatePending, "waiting: "+reason)
 }
 
-func (r *applyRun) post(ctx context.Context, c types.Change, commit string, state types.CommitState, desc string) error {
-	name := r.StatusContext
-	if name == "" {
-		name = DefaultStatusContext
+// revokeStale sets back to pending every success on an open change: nothing is about to
+// merge when a run starts, so any success is one an earlier run could not follow through.
+func (r *applyRun) revokeStale(ctx context.Context) error {
+	green, err := r.provider.ListGreen(ctx, types.ListQuery{Base: r.plan.Base, RemoteURL: r.plan.RemoteURL}, r.statusContext())
+	if err != nil {
+		return fmt.Errorf("list the changes carrying %s at success: %w", r.statusContext(), err)
 	}
+	for _, g := range green {
+		r.Events.Emit(Event{Kind: EventNotice, Change: g.ID, Commit: g.Head, Reason: "set back to pending the success an earlier run left on #" + g.ID})
+		if err := r.post(ctx, types.Change{ID: g.ID, Repo: g.Repo, Head: g.Head}, g.Head, types.StatePending, "waiting: an earlier run stopped before merging it"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *applyRun) statusContext() string {
+	if r.StatusContext == "" {
+		return DefaultStatusContext
+	}
+	return r.StatusContext
+}
+
+func (r *applyRun) post(ctx context.Context, c types.Change, commit string, state types.CommitState, desc string) error {
+	name := r.statusContext()
 	if err := r.provider.PostStatus(ctx, c, commit, types.CommitStatus{Context: name, State: state, Description: desc}); err != nil {
 		return fmt.Errorf("post %s on %s: %w", name, short(commit), err)
 	}

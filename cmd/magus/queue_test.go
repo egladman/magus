@@ -42,6 +42,7 @@ export fun list_changes(io: {str: any}) > any {
 export fun approval_at(io: {str: any}) > any {
     return {"approved": true, "head": io["commit"], "base": "main", "method": io["method"], "queued": true, "shared_with": [<str>]};
 }
+export fun list_green(io: {str: any}) > any { return {"changes": [<any>]}; }
 export fun post_status(io: {str: any}) > bool { return true; }
 export fun retarget(io: {str: any}) > bool { return true; }
 export fun kick_back(io: {str: any}) > bool { return true; }

@@ -21,12 +21,13 @@ name: Queue apply
 # rebuild is the candidate validation gated; after each, it stops unless main carries the
 # tree it predicted.
 #
-# The write credential is this job's own Actions token, so no long-lived secret exists.
-# Its pushes and merges start no workflow, so once anything merges the job dispatches
-# ci.yaml, cd.yaml and the queue's next run on main itself. The queue posts success on
-# magus/queue only after a merge, so the GitHub Actions app must be a bypass actor for
-# that required status. A bypass covers every rule of its ruleset, so magus/queue sits in
-# a ruleset of its own whose only rule it is, and the other rulesets still apply.
+# The write credential is this job's own Actions token, so no long-lived secret exists
+# and nothing bypasses a rule. merge-queue is main's only required status; the queue
+# posts success on it right before a merge, once main is still at the tip the merge was
+# predicted onto, and GitHub's auto-merge then merges the pull request on behalf of
+# whoever enabled it, which starts main's workflows. Only when GitHub has not merged it
+# within a minute does the queue merge it itself; its token's merges start no workflow,
+# so the job then dispatches ci.yaml, cd.yaml and the queue's next run on main.
 
 on:
   workflow_run:
@@ -40,7 +41,7 @@ concurrency:
 permissions:
   contents: write # merge, and push a regeneration onto a queued branch
   pull-requests: write # comment on a kick-back and disable its auto-merge
-  statuses: write # magus/queue
+  statuses: write # merge-queue
   actions: write # follow the validation run, download its artifacts, dispatch main's runs
 
 env:
@@ -78,7 +79,8 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # Also dispatches main's runs once anything merged, even when applying then failed.
+      # Also dispatches main's runs once the queue merged anything itself, even when
+      # applying then failed.
       - name: Merge each change as it goes green
         env:
           QUEUE_STEP: apply
