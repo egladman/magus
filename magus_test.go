@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/testenv"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -35,12 +36,12 @@ import (
 // queue's gate exports MAGUS_CACHE_DIR to give each candidate a cache of its own. Every
 // workspace a test opened then shared that one cache, so a test counting real
 // executions was served another test's entry. A test that wants one says so with
-// t.Setenv.
+// t.Setenv. testenv then keeps the run off the user's runtime dir and broker.
 func TestMain(m *testing.M) {
 	for _, v := range config.EnvVarDocs() {
 		_ = os.Unsetenv(v.EnvVar)
 	}
-	os.Exit(m.Run())
+	os.Exit(testenv.Wrap(m).Run())
 }
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
