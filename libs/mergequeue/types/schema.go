@@ -146,7 +146,7 @@ type Plan struct {
 
 // Check reports whether p is a plan the queue can validate and apply: a valid base and
 // base commit, every change once, each after the change it is stacked on, and planning's
-// verdicts deciding anything but merge.
+// verdicts deciding anything but merge, with no gate.
 func (p Plan) Check() error {
 	if err := checkBranch(p.Base); err != nil {
 		return fmt.Errorf("base: %w", err)
@@ -186,8 +186,11 @@ func (p Plan) Check() error {
 		if err := add(v.Change); err != nil {
 			return err
 		}
-		if v.Decision == DecisionMerge {
+		switch {
+		case v.Decision == DecisionMerge:
 			return fmt.Errorf("planning decides merge for %s, which only validation decides", v.Change.Label())
+		case v.Gate != "":
+			return fmt.Errorf("planning's verdict on %s names a gate, which only validation runs", v.Change.Label())
 		}
 		if err := v.Check(); err != nil {
 			return err
@@ -233,11 +236,15 @@ type Verdict struct {
 	// validated commits alone, 2 on top of one unvalidated candidate, and so on.
 	Depth      int   `json:"depth,omitempty"`
 	DurationMS int64 `json:"duration_ms,omitempty"` // gate wall time
+	// Gate and Regenerate are the hook command lines validation ran, recorded so a
+	// kick-back can say how to run them again; planning's verdicts carry neither.
+	Gate       string `json:"gate,omitempty"`
+	Regenerate string `json:"regenerate,omitempty"`
 }
 
 // Check reports whether v is a verdict an applier can act on: a valid change, commit ids
-// where it names commits, a code of its decision's class on every wait and kick, and
-// what a merge needs rebuilt on a merge.
+// where it names commits, a regeneration only beside a gate, a code of its decision's
+// class on every wait and kick, and what a merge needs rebuilt on a merge.
 func (v Verdict) Check() error {
 	if err := v.Change.Check(); err != nil {
 		return err
@@ -246,6 +253,9 @@ func (v Verdict) Check() error {
 		if id.v != "" && !IsObjectID(id.v) {
 			return fmt.Errorf("verdict on %s: %s %q is not a commit id", v.Change.Label(), id.name, id.v)
 		}
+	}
+	if v.Regenerate != "" && v.Gate == "" {
+		return fmt.Errorf("verdict on %s names a regeneration but no gate", v.Change.Label())
 	}
 	if v.After != "" {
 		if err := CheckID(v.After); err != nil {

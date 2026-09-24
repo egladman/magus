@@ -57,18 +57,23 @@ the queue's `merge-queue` status is main's required check, auto-merge cannot fir
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
 about to see that pull request merged.
 
-| To                     | Do                                                      |
-| ---------------------- | ------------------------------------------------------- |
-| queue a pull request   | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
-| queue a stack          | label its top pull request `queue: squash`              |
-| take it out            | `gh pr merge <n> --disable-auto`, or remove the label   |
-| list what is queued    | `magus queue ls --provider github --base main`          |
-| see why one is waiting | its `merge-queue` status, which reads `waiting: <why>`  |
-| land it past the queue | `gh pr merge <n> --admin`: an admin's bypass, see below |
+| To                          | Do                                                      |
+| --------------------------- | ------------------------------------------------------- |
+| queue a pull request        | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
+| queue a stack               | label its top pull request `queue: squash`              |
+| take it out                 | `gh pr merge <n> --disable-auto`, or remove the label   |
+| list what is queued         | `magus queue ls --provider github --base main`          |
+| tell one is queued          | it carries the label `merge-queue: queued`              |
+| tell one was kicked back    | it carries the label `merge-queue: rejected`            |
+| see why one is waiting      | its `merge-queue` status, which reads `waiting: <why>`  |
+| see why one was kicked back | the queue's newest comment on it                        |
+| land it past the queue      | `gh pr merge <n> --admin`: an admin's bypass, see below |
 
-A pull request the queue kicks back gets a comment naming what to fix, and its
-auto-merge or label is removed; fix it and queue it again. One that waits (for a review,
-for the change beneath it, for main to settle) stays queued and needs nothing.
+A pull request the queue kicks back gets a new comment, and its auto-merge or label is
+removed. The comment says what failed on which commits, links the validation run, and
+holds, collapsed, the files at issue and a block that runs the same validation on your
+machine; its last line is the command that queues it again. One that waits (for a
+review, for the change beneath it, for main to settle) stays queued and needs nothing.
 
 An admin merge skips validation and ordering both. The queue notices on its next run
 that main moved without it and plans again from the new tip, so nothing breaks, but
@@ -115,11 +120,11 @@ generated file, a candidate tree or a review proof from a verdict.
   request's own copy of the workflow, a fork's included, so that run could upload any
   plan and any verdict. With a run as its source, `apply` reads what started the run
   before it downloads anything, and refuses
-  ([MGS3024](../reference/codes/sandbox/MGS3024.md)) any run but the `--workflow`
+  ([MGS3027](../reference/codes/sandbox/MGS3027.md)) any run but the `--workflow`
   definition started by a push or a dispatch on `--base` of the repository itself.
 - **Apply pins what it can read itself.** The plan comes from validation's run, so apply
   checks it against its own facts and stops
-  ([MGS3025](../reference/codes/sandbox/MGS3025.md)) before merging anything that rests
+  ([MGS3028](../reference/codes/sandbox/MGS3028.md)) before merging anything that rests
   on a disagreement: the plan must name apply's own `--base` and remote, its base commit
   must be on the base apply reads, and a stacked change's stack base must be beneath its
   head, off the base, and the head the provider confirmed for the change beneath it (or
@@ -131,7 +136,8 @@ generated file, a candidate tree or a review proof from a verdict.
   commits; a verdict carries none.
 - **Candidates share nothing.** Each candidate gets a checkout and a scratch directory
   of its own (`MERGEQUEUE_SCRATCH`), so no change's hook can plant a cache entry another
-  candidate's gate replays; `tools/gha-queue.buzz` points magus's and Go's caches there. Every
+  candidate's gate replays; `tools/gha-queue.buzz` points magus's and Go's caches there
+  with `--scratch-env`. Every
   process a hook starts is killed when the hook exits, before its verdict is recorded; a
   process that leaves the hook's process group ends with the CI job.
 
@@ -171,10 +177,17 @@ magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
 magus queue validate --plan plan.json --verdicts verdicts \
   --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
-  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
+  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' \
+  --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build
 magus queue apply --provider github --base main \
-  --regenerate 'MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS' verdicts
+  --regenerate 'MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS' \
+  --scratch-env MAGUS_CACHE_DIR=magus verdicts
 ```
+
+`--scratch-env NAME=DIR`, on `validate` and `apply` and repeatable, sets `NAME` to
+`$MERGEQUEUE_SCRATCH/DIR` in every hook's environment, creating the directory. It keeps
+each candidate's caches its own without the hook line saying so, which leaves the line
+one a person can paste and run; each verdict records the lines validation ran.
 
 The checkout the queue works in is the one at magus's global `--root` (`-C`), before the
 subcommand as with git, and every relative path resolves against it. magus's other global
@@ -220,7 +233,7 @@ status from that app.
 
 A run source (`run:<owner>/<name>/runs/<id>` on GitHub) needs `--workflow`, the
 definition the run must have run. Every listing says what started the run: apply
-refuses the run ([MGS3024](../reference/codes/sandbox/MGS3024.md)), downloading nothing,
+refuses the run ([MGS3027](../reference/codes/sandbox/MGS3027.md)), downloading nothing,
 unless it ran `--workflow` on `--base` of its own repository, started by an event that
 runs the base's own copy of it (a push or a dispatch on GitHub). A source directory is
 the caller's own, and takes no `--workflow`.
@@ -263,7 +276,7 @@ a run, and `apply` says so before reading anything.
     {"id": "479", "head": "9f8e...", "commit": "3f9b...", "method": "squash"}
   ],
   "unqueued": [
-    {"id": "490", "head": "a1b2..."}
+    {"id": "490", "repo": "acme/acme", "head": "a1b2...", "mark": "queued"}
   ]
 }
 ```
@@ -405,7 +418,8 @@ directory that already holds one is an error.
 `reason`), or `merged` for a change whose head is already on the base; every `kick` and
 `wait` carries a `code`, and `paths` and `with` name the files at issue and the base
 commits that touched them. `after` is the change validated beneath this one and `onto`
-its candidate; `method` is the merge method it was validated under. `apply` polls the
+its candidate; `method` is the merge method it was validated under. `gate` and
+`regenerate` are the hook lines validation ran, which planning's verdicts never carry. `apply` polls the
 directory, and merges a change once its own verdict is green and `after` has merged. It
 trusts a verdict only as far as the plan vouches for it: a head, an `after`, an `onto`
 or a missing change beneath that the plan does not match merges nothing, and a verdict on
@@ -602,17 +616,18 @@ secret goes missing and the job falls back to its own token.
 A provider is a Buzz script run on an embedded gopherbuzz VM. It exports these
 functions, each taking one record:
 
-| Function         | Receives                                                                | Returns                                                                          |
-| ---------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `describe`       | `{base, remote_url, status_context, app, setup_steps}`                  | `{stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}`        |
-| `list_changes`   | `{base, remote_url}`                                                    | `{changes, merged, unqueued}`                                                    |
-| `approval_at`    | the change plus `{commit}`                                              | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}` |
-| `list_green`     | `{base, remote_url, context}`                                           | `{changes: [{id, repo, head}]}`                                                  |
-| `post_status`    | the change plus `{commit, context, state, description}`                 | `true` when recorded                                                             |
-| `retarget`       | the change plus `{base}`                                                | `true` once the change targets `base`                                            |
-| `merge_change`   | the change plus `{commit, message, through}`                            | `{merged, by_provider?, reason?}`                                                |
-| `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit}` | `true` when both the comment and the removal happened                            |
-| `list_artifacts` | `{source}`                                                              | `{run, complete, artifacts: [{name, url}], headers?}`                            |
+| Function         | Receives                                                                                    | Returns                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `describe`       | `{base, remote_url, status_context, app, setup_steps}`                                      | `{stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}`        |
+| `list_changes`   | `{base, remote_url}`                                                                        | `{changes, merged, unqueued}`                                                    |
+| `approval_at`    | the change plus `{commit}`                                                                  | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}` |
+| `list_green`     | `{base, remote_url, context}`                                                               | `{changes: [{id, repo, head}]}`                                                  |
+| `post_status`    | the change plus `{commit, context, state, description}`                                     | `true` when recorded                                                             |
+| `retarget`       | the change plus `{base}`                                                                    | `true` once the change targets `base`                                            |
+| `merge_change`   | the change plus `{commit, message, through}`                                                | `{merged, by_provider?, reason?}`                                                |
+| `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                            |
+| `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                              |
+| `list_artifacts` | `{source}`                                                                                  | `{run, complete, artifacts: [{name, url}], headers?}`                            |
 
 All but `list_artifacts` are required, and a script missing one is refused when it
 opens; `list_artifacts` is required of a provider `apply` follows through a run. Every
@@ -644,12 +659,19 @@ every open change, whatever it targets, whose head carries the status `context` 
 success. `through` lists the changes beneath a stack's top that merge in the same call,
 lowest first, each with the commit it must still be at. `merge_change` sets
 `by_provider` when the provider merged the change on its own rather than on this call;
-left out, it reads as the call's merge.
+left out, it reads as the call's merge. `kick_back`'s `source` is the validation run
+apply followed, empty for a directory, and `reproduce`, `{gate, regenerate}`, is there
+only when validation decided the kick: the hook lines that validate the change again.
+`list_changes`' `unqueued` records carry `repo?` and `mark?`, the mark the change shows
+now. Apply marks `queued` every change the plan admitted when it starts, clears that mark
+from an unqueued change still showing it, marks `rejected` after a kick-back and clears
+the mark after a merge. A failed `mark` is a notice and applying goes on: the status and
+the comment are the record.
 
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
 over 32 MiB is an error, never a shorter answer. The records a script receives hold
-strings, bools, lists of strings and lists of records. `--provider github` is built in;
+strings, bools, lists of strings, records and lists of records. `--provider github` is built in;
 `--provider path/to/provider.buzz` loads any other. The GitHub provider reads
 `GITHUB_TOKEN` or `MERGEQUEUE_TOKEN` for its reads and only `MERGEQUEUE_TOKEN` for its
 writes, so the read-only job cannot write by accident. Its listings page to completion or
@@ -660,9 +682,17 @@ Merge intent is GitHub's native auto-merge, and, for a stack, a `queue: <method>
 on its top pull request applied by someone who holds write access. The labeler is read
 from the pull request's timeline; a timeline too long to read, or a labeler whose
 permission cannot be looked up, leaves that stack unqueued and nothing else. Kicking a
-change back comments with the report and one JSON line of its code and files, then
-removes the intent where it lives: its own auto-merge, its own label, and the label on
-its stack's top. Queuing it again re-queues the change. Its `describe` reports the label
+change back posts a new comment, never an edit of an old one: the report, a link to the
+validation run, collapsed blocks for reproducing it (`gh run download` of the plan, then
+`magus queue validate --only` with the recorded hook lines) and for the files, the
+`gh pr merge <n> --auto --<method>` that queues it again (for a stack, the label on its
+top), and one JSON line of its code and files. It then removes the intent where it
+lives: its own auto-merge, its own label, and the label on its stack's top. Last it
+minimizes as outdated its own earlier kick-back comments on the pull request; a failure
+there is printed to the apply job's log and does not fail the kick-back. Its `mark` manages
+two labels, `merge-queue: queued` and `merge-queue: rejected`, creating either with a
+description the first time a repository needs it; neither starts with `"queue: "`, so
+neither reads as merge intent. Its `describe` reports the label
 prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
 identity a workflow's token pushes as; with the queue's app, `queue-apply.yaml` passes the
@@ -701,7 +731,7 @@ command hooks.
 | `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
 | `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
 | `BuildFacts`     | a change's affected set, how paths are written, what regenerating runs  | `client.Workspace`          |
-| `Provider`       | list, describe, approve, post a status, retarget, merge, kick back      | the `provider` Buzz scripts |
+| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark | the `provider` Buzz scripts |
 | `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so

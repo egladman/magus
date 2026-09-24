@@ -21,7 +21,6 @@ export object Advisor {
 // localAdvisors, which a test holds to this list).
 final reading = [
     Advisor{input = "merge-conflicts", script = "merge-conflict.buzz"},
-    Advisor{input = "hand-edited-generated", script = "hand-edited-generated.buzz"},
     Advisor{input = "target-outputs", script = "target-outputs.buzz"},
     Advisor{input = "doctor", script = "doctor.buzz"},
     Advisor{input = "version-floor", script = "version-floor.buzz"},

@@ -127,6 +127,9 @@ apply report what would merge and call nothing on the provider.
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
 
+**--scratch-env** *NAME=DIR*
+: \`NAME=DIR\` sets NAME to $MERGEQUEUE_SCRATCH/DIR for every hook, so the cache it names is the candidate's own; repeatable
+
 **--target** *target* (default: ci)
 : magus \`target\` the affected set is computed for; not with --facts
 
@@ -142,7 +145,7 @@ apply report what would merge and call nothing on the provider.
 : \`slug\` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)
 
 **--base** *branch*
-: \`branch\` the queue merges into; a plan naming another is refused (MGS3025), and a run: source must have run on it
+: \`branch\` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
 
 **--committer** *string*
 : "Name \<email\>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
@@ -165,6 +168,9 @@ apply report what would merge and call nothing on the provider.
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
 
+**--scratch-env** *NAME=DIR*
+: \`NAME=DIR\` sets NAME to $MERGEQUEUE_SCRATCH/DIR for the regeneration, so the cache it names is that rebuild's own; repeatable
+
 **--status-context** *string* (default: merge-queue)
 : Commit status the queue posts; branch protection requires it
 
@@ -175,7 +181,7 @@ apply report what would merge and call nothing on the provider.
 : Version control \`backend\` of the checkout at --root
 
 **--workflow** *definition*
-: \`definition\` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3024)
+: \`definition\` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)
 
 ## Subcommands
 

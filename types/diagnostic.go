@@ -434,12 +434,12 @@ const (
 	// something other than the base branch's own queue workflow started: a pull request's
 	// event, a fork, another branch or another workflow. What such a run uploads is its
 	// author's claim, so apply reads none of it.
-	QueueRunUntrusted DiagnosticCode = "MGS3024"
+	QueueRunUntrusted DiagnosticCode = "MGS3027"
 	// QueuePlanUnverified is a merge queue plan that disagrees with what apply reads
 	// itself: another base or remote, a base commit the base does not carry, or a stack
 	// base that is not the reviewed head of the change beneath. Apply stops before it
 	// merges anything that rests on it.
-	QueuePlanUnverified       DiagnosticCode = "MGS3025"
+	QueuePlanUnverified       DiagnosticCode = "MGS3028"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"

@@ -24,10 +24,12 @@ func validated(c types.Change, onto, after string) types.Verdict {
 }
 
 // applierFor wires an Applier to d for plan, whose verdicts arrive in one final poll.
+// Every mark succeeds unless the test set [doubles.marks] first.
 func applierFor(t *testing.T, d doubles, plan types.Plan, verdicts ...types.Verdict) *Applier {
 	t.Helper()
 	d.noCheckouts()
 	d.noneGreen()
+	d.marks(nil)
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Verdicts: verdicts, Done: true}, nil).Maybe()
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 	require.NoError(t, err)
@@ -331,6 +333,13 @@ func (d doubles) kicks(c types.Change, code types.Code, report string) {
 	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.MatchedBy(func(k types.Kick) bool {
 		return k.Code == code && strings.Contains(k.Report, report)
 	})).Return(nil).Once()
+}
+
+// kicksWith expects c kicked back at its head with exactly want.
+func (d doubles) kicksWith(c types.Change, want types.Kick) {
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
+	d.status(c, c.Head, types.StateFailure, "kicked back")
+	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, want).Return(nil).Once()
 }
 
 // waits expects c left queued at commit, its status naming reason.
@@ -644,6 +653,7 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	d.caps()
 	d.noCheckouts()
 	d.noneGreen()
+	d.marks(nil)
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Rejected: []types.RejectedVerdict{{Change: "1", Reason: "not a zip"}, {Change: "8", Reason: "x"}}, Done: true}, nil)
 	d.waits(one, one.Head, "its verdict could not be read: not a zip")
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
@@ -652,16 +662,18 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
 }
 
-// Planning's verdicts and validation's red ones reach the provider; a kick for a head
-// that moved since it was decided waits instead, since the new head gets its own
+// Planning's verdicts and validation's red ones reach the provider, each naming the run
+// they came from, and validation's with the hook lines to run it again; a kick for a
+// head that moved since it was decided waits instead, since the new head gets its own
 // decision.
 func TestSettledVerdictsReachTheProvider(t *testing.T) {
 	kicked, held, gone, red, moved := change("1", "a"), change("2", "b"), change("3", "c"), change("4", "d"), change("5", "e")
 	d := newDoubles(t)
 	d.caps()
-	d.kicks(kicked, types.CodeKickConflict, "conflicts")
+	d.kicksWith(kicked, types.Kick{Code: types.CodeKickConflict, Report: "conflicts in a.go", Source: "acme/widgets/runs/7"})
 	d.waits(held, held.Head, "not approved")
-	d.kicks(red, types.CodeKickRed, "the gate failed")
+	d.kicksWith(red, types.Kick{Code: types.CodeKickRed, Report: "the gate failed: exit 1", Source: "acme/widgets/runs/7",
+		Reproduce: &types.Reproduction{Gate: "make test", Regenerate: "make gen"}})
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, moved.Head).Return(types.Approval{Head: head("newer"), Base: "main", Method: types.MethodSquash}, nil)
 	d.waits(moved, head("newer"), "head moved to "+head("newer")[:12]+" since it was decided")
 	plan := planOf([]types.Change{red}, []types.Change{moved})
@@ -670,9 +682,11 @@ func TestSettledVerdictsReachTheProvider(t *testing.T) {
 		{Change: held, Decision: types.DecisionWait, Code: types.CodeWaitNotApproved, Reason: "not approved"},
 		{Change: gone, Decision: types.DecisionMerged, Reason: "its head is already on main"},
 	}
-	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed: exit 1"}
+	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed: exit 1",
+		Gate: "make test", Regenerate: "make gen"}
 	movedV := types.Verdict{BaseCommit: base, Change: moved, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
 	a := applierFor(t, d, plan, redV, movedV)
+	a.Source = "acme/widgets/runs/7"
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 
@@ -685,15 +699,91 @@ func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
 }
 
-// A dry run reports and calls nothing on the provider: no expectation is set on it.
+// A dry run reports and calls nothing on the provider: no expectation is set on it, and
+// it shows no mark.
 func TestApplyDryRunCallsNothingOnTheProvider(t *testing.T) {
 	d := newDoubles(t)
 	one := change("1", "a")
+	marks := d.marks(nil)
 	var out bytes.Buffer
 	a := applierFor(t, d, planOf([]types.Change{one}), validated(one, base, ""))
 	a.DryRun, a.Events = true, NewEvents(&out)
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
 	assert.Contains(t, out.String(), "dry run: would merge candidate "+candidateOf(base, one.Head)[:12])
+	assert.Empty(t, marks.entries())
+}
+
+// A run starts by marking queued what the plan admitted, the changes planning left
+// waiting included, and by clearing the queued mark an unqueued change still shows. A
+// change planning found merged loses its mark; a rejected mark on an unqueued change
+// stays for its author to read.
+func TestARunMarksWhatThePlanAdmittedAndClearsAQueuedMarkLeftBehind(t *testing.T) {
+	d := newDoubles(t)
+	one, two, held, gone := change("1", "a"), change("2", "b"), change("3"), change("5")
+	d.caps()
+	marks := d.marks(nil)
+	d.waits(held, held.Head, "r")
+	d.waits(one, one.Head, "not validated in this run")
+	d.waits(two, two.Head, "not validated in this run")
+	plan := planOf([]types.Change{one}, []types.Change{two})
+	plan.Verdicts = []types.Verdict{waiting("3"), {Change: gone, Decision: types.DecisionMerged, Reason: "its head is already on main"}}
+	plan.Unqueued = []types.UnqueuedChange{
+		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
+		{ID: "6", Repo: "acme/acme", Head: head("6"), Mark: types.MarkRejected},
+		{ID: "7", Repo: "acme/acme", Head: head("7")},
+	}
+	a := applierFor(t, d, plan)
+	require.NoError(t, a.Run(t.Context(), plan))
+	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued", "4 none in acme/acme", "5 none"}, marks.entries())
+}
+
+// A kick-back shows the rejected mark once the provider carried it out.
+func TestAKickBackMarksTheChangeRejected(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	d.caps()
+	marks := d.marks(nil)
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
+	d.status(c, c.Head, types.StateFailure, "kicked back")
+	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.Anything).Run(func(context.Context, types.Change, string, types.Kick) {
+		marks.add("kicked")
+	}).Return(nil).Once()
+	red := types.Verdict{BaseCommit: base, Change: c, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
+	a := applierFor(t, d, planOf([]types.Change{c}), red)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Equal(t, []string{"1 queued", "kicked", "1 rejected"}, marks.entries())
+}
+
+// A merge clears the mark, whoever merged it.
+func TestAMergeClearsTheMark(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	v := validated(c, base, "")
+	d.caps()
+	marks := d.marks(nil)
+	_, merge := d.cleanMerge(v, types.MergeResult{ByProvider: true})
+	merge.Run(func(mock.Arguments) { marks.add("merged") })
+	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Equal(t, []string{"1 queued", "merged", "1 none"}, marks.entries())
+}
+
+// A mark is a courtesy: one the provider cannot show is a notice, and the change still
+// merges and loses its mark.
+func TestAMarkThatFailsIsANoticeAndApplyingGoesOn(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	v := validated(c, base, "")
+	d.caps()
+	marks := d.marks(map[string]error{"1 queued": errors.New("labels down")})
+	d.cleanMerge(v, types.MergeResult{})
+	var out bytes.Buffer
+	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	a.Events = NewEvents(&out)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Contains(t, out.String(), `"kind":"notice","change":"1","reason":"could not mark #1 queued: labels down"`)
+	assert.Contains(t, out.String(), `"kind":"merged","change":"1"`)
+	assert.Equal(t, []string{"1 queued", "1 none"}, marks.entries())
 }
 
 func TestAChangeRetargetedAfterPlanningIsSkippedWithoutRetargeting(t *testing.T) {

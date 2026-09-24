@@ -31,7 +31,10 @@ type Validator struct {
 	// candidate. Nil leaves them as merged, which is only right when nothing generates
 	// them.
 	Regenerate types.RegenerateFunc
-	Events     *Events
+	// Reproduce is the hook command lines the gate and Regenerate run, recorded on
+	// every verdict so a kick-back can say how to run them again. Zero records none.
+	Reproduce types.Reproduction
+	Events    *Events
 
 	vcs     types.BuildVCS
 	clone   Clone
@@ -386,11 +389,13 @@ func (r *validation) verdict(f *flight, out outcome, attributable bool) (bool, e
 		}
 		v.Decision = types.DecisionKick
 		v.Reason = what + ": " + out.summary
-		detail := out.summary
-		if out.refused != nil && out.refused.Remedy != "" {
-			detail += ". " + out.refused.Remedy
+		remedy := ""
+		if out.refused != nil {
+			remedy = out.refused.Remedy
+		} else if out.summary != "" {
+			v.Reason = out.summary
 		}
-		v.Report = failureReport(r.plan.Base, f.change.Head, what, detail)
+		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
 		return false, r.decide(v)
 	}
 	v.Decision = types.DecisionMerge
@@ -413,7 +418,7 @@ func (r *validation) discard(ctx context.Context, cand types.Candidate) {
 // decide records v. A verdict the Applier would refuse to read is refused here, where
 // the step that wrote it can say so.
 func (r *validation) decide(v types.Verdict) error {
-	v.BaseCommit = r.plan.BaseCommit
+	v.BaseCommit, v.Gate, v.Regenerate = r.plan.BaseCommit, r.Reproduce.Gate, r.Reproduce.Regenerate
 	if err := v.Check(); err != nil {
 		return err
 	}
@@ -433,9 +438,18 @@ func conflictAhead(after string, conf sourceConflict) string {
 	return "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
 }
 
-func failureReport(base, head, what, summary string) string {
-	return fmt.Sprintf("The merge queue validated this change at `%s` on `%s`, and %s.\n\n%s\n\nPush a fix and queue the change again.\n",
-		short(head), base, what, summary)
+// failureReport says what failed on which commits. How to run it again, the files at
+// issue and how to queue the change again are the provider's to render from the kick.
+func failureReport(base, head, onto, after, failed, remedy string) string {
+	on := "`" + base + "` at `" + short(onto) + "`"
+	if after != "" {
+		on = "the candidate of #" + after + " (`" + short(onto) + "`)"
+	}
+	report := fmt.Sprintf("The merge queue built this change at `%s` onto %s, and %s.\n", short(head), on, failed)
+	if remedy != "" {
+		report += "\n" + remedy + "\n"
+	}
+	return report
 }
 
 func joinPaths(paths []string) string {

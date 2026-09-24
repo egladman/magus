@@ -62,7 +62,7 @@ export fun list_changes(io: {str: any}) > any {
             "method": "squash", "parent": "6",
         }],
         "merged": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
-        "unqueued": [{"id": "9", "head": "` + headF + `"}],
+        "unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "mark": "queued"}],
     };
 }
 
@@ -95,7 +95,13 @@ export fun merge_change(io: {str: any}) > any {
 
 export fun kick_back(io: {str: any}) > bool {
     final paths = io["paths"] ?? [<str>];
-    return io["report"] == "report" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c";
+    final repro = serialize\Boxed.init(io["reproduce"]);
+    return io["report"] == "report" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c"
+        and io["source"] == "o/r/runs/7" and repro.q("gate").stringValue() == "make test" and repro.q("regenerate").stringValue() == "";
+}
+
+export fun mark(io: {str: any}) > bool {
+    return io["id"] == "7" and io["repo"] == "acme/acme" and io["mark"] != "rejected";
 }
 
 export fun list_artifacts(io: {str: any}) > any {
@@ -146,6 +152,7 @@ export fun post_status(io: {str: any}) > bool { return true; }
 export fun retarget(io: {str: any}) > bool { return true; }
 export fun merge_change(io: {str: any}) > any { return {}; }
 export fun kick_back(io: {str: any}) > bool { return true; }
+export fun mark(io: {str: any}) > bool { return true; }
 `
 
 func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
@@ -192,8 +199,10 @@ func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T
 			Method: types.MethodSquash, Parent: "6",
 		}},
 		Merged:   []types.MergedChange{{ID: "6", Head: headD, Commit: headE, Method: types.MethodSquash}},
-		Unqueued: []types.UnqueuedChange{{ID: "9", Head: headF}},
+		Unqueued: []types.UnqueuedChange{{ID: "9", Repo: "acme/acme", Head: headF, Mark: types.MarkQueued}},
 	}, got)
+	_, err = open(t, strings.Replace(script, `"mark": "queued"`, `"mark": "merged"`, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `unqueued[0]: #9: mark "merged", want queued, rejected or none`)
 }
 
 func TestListChangesRefusesWhatGitCouldReadAsAnOption(t *testing.T) {
@@ -217,7 +226,7 @@ func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 		{`, "fork": true`, `list_changes: changes[0]: field "fork" is missing`},
 		{`"repo": "acme/acme", `, `list_changes: changes[0]: field "repo" is missing`},
 		{`"base": "{io["base"]}", `, `list_changes: changes[0]: field "base" is missing`},
-		{`"unqueued": [{"id": "9", "head": "` + headF + `"}],`, `list_changes: field "unqueued" is missing`},
+		{`"unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "mark": "queued"}],`, `list_changes: field "unqueued" is missing`},
 		{`, "method": "squash"}]`, `list_changes: merged[0]: field "method" is missing`},
 	} {
 		to := ""
@@ -286,10 +295,18 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	assert.Equal(t, types.MergeResult{ByProvider: true}, merged)
 	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other"})
 	require.ErrorContains(t, err, "not merged: head moved")
-	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c"}
+	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c",
+		Source: "o/r/runs/7", Reproduce: &types.Reproduction{Gate: "make test"}}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))
+	noRepro := kick
+	noRepro.Reproduce = nil
+	require.ErrorContains(t, p.KickBack(ctx, change, headA, noRepro), "provider refused", "no reproduce record reaches the script as null")
 	kick.Paths = nil
 	require.ErrorContains(t, p.KickBack(ctx, change, headA, kick), "provider refused")
+	require.NoError(t, p.Mark(ctx, change, types.MarkQueued))
+	require.NoError(t, p.Mark(ctx, change, types.MarkNone))
+	require.ErrorContains(t, p.Mark(ctx, change, types.MarkRejected), "provider refused")
+	require.EqualError(t, p.Mark(ctx, change, "merged"), `provider "echo": mark: mark "merged", want queued, rejected or none`)
 }
 
 func TestListArtifactsDecodesTheListing(t *testing.T) {
@@ -307,7 +324,7 @@ func TestAListingThatDoesNotSayWhatRanIsRefused(t *testing.T) {
 
 func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
 	_, err := newScript(context.Background(), "half", `export fun list_changes(io: {str: any}) > any { return {}; }`)
-	require.EqualError(t, err, `provider "half" does not export describe, approval_at, list_green, post_status, retarget, merge_change, kick_back`)
+	require.EqualError(t, err, `provider "half" does not export describe, approval_at, list_green, post_status, retarget, merge_change, kick_back, mark`)
 
 	noRuns := open(t, strings.Split(script, "export fun list_artifacts")[0])
 	assert.False(t, noRuns.ListsArtifacts())
