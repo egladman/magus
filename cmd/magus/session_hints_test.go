@@ -15,7 +15,7 @@ import (
 func loadedStore(t *testing.T, events []sessions.LoadEvent) sessions.Fold {
 	t.Helper()
 	dir := t.TempDir()
-	_, err := sessions.LoadEvents(dir, events, sessions.SessionStart{Workspace: dir})
+	_, err := sessions.LoadEvents(dir, events, sessions.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
@@ -115,14 +115,14 @@ func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
 		shellCall("s1", "a1", 1_000, "", nil, nil),
 		shellCall("s1", "a2", 2_000, "", nil, nil),
 	}
-	_, err := sessions.LoadEvents(dir, early, sessions.SessionStart{Workspace: dir})
+	_, err := sessions.LoadEvents(dir, early, sessions.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
 	joined := []sessions.LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"query-explain"}, nil),
 		shellCall("s1", "a2", 2_000, "", nil, []string{"query-explain"}),
 	}
-	_, err = sessions.LoadEvents(dir, joined, sessions.SessionStart{Workspace: dir})
+	_, err = sessions.LoadEvents(dir, joined, sessions.InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
 	fold, err := sessions.ReadAll(dir)

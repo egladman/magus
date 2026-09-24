@@ -27,17 +27,16 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/activity/v1alpha1/activity.proto.
  */
 export const file_magus_activity_v1alpha1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiZtYWd1cy9hY3Rpdml0eS92MWFscGhhMS9hY3Rpdml0eS5wcm90bxIXbWFndXMuYWN0aXZpdHkudjFhbHBoYTEisgMKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoEa2luZBgCIAEoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEjEKB291dGNvbWUYBSABKA4yIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJEhEKCWNvbnRlc3RlZBgRIAMoCSK9AQoNQWN0aXZpdHlRdWVyeRIsCgVraW5kcxgBIAMoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDgoGYWN0b3JzGAIgAygJEg8KB2FjdGlvbnMYAyADKAkSLQoEdGltZRgEIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZRINCgV1bml0cxgFIAMoCRIQCghzZXNzaW9ucxgGIAMoCRINCgVwYXRocxgHIAMoCSKGAQoZTGlzdEFjdGl2aXR5RXZlbnRzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCRI2CgZmaWx0ZXIYAyABKAsyJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eVF1ZXJ5Im0KGkxpc3RBY3Rpdml0eUV2ZW50c1Jlc3BvbnNlEjYKBmV2ZW50cxgBIAMoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJInIKGldhdGNoQWN0aXZpdHlFdmVudHNSZXF1ZXN0EjYKBmZpbHRlchgBIAEoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5UXVlcnkSHAoIYmFja2ZpbGwYAiABKAVCCrpIBxoFGOgHKAAiPgoRR2V0UGF5bG9hZFJlcXVlc3QSKQoDcmVmGAEgASgJQhy6SBlyFzIVXlthLXpdezIsOH1bMC05YS1mXSskIisKB1BheWxvYWQSDAoEYm9keRgBIAEoDBISCgpzaXplX2J5dGVzGAIgASgDKrICCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIMCghLSU5EX0pPQhACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhgKFEtJTkRfVE9LRU5fTElGRUNZQ0xFEAQSFwoTS0lORF9TQU5EQk9YX0RFTklBTBAFEg8KC0tJTkRfTUVNT1JZEAYSFgoSS0lORF9BR0VOVF9DT01NQU5EEAcSGQoVS0lORF9DUkVERU5USUFMX0dSQU5UEAgSFAoQS0lORF9BR0VOVF9TUEFXThAJEg4KCktJTkRfTk9URVMQChIUChBLSU5EX0ZJTEVfQ0hBTkdFEAsSDAoIS0lORF9SVU4QDBIVChFLSU5EX0dVQVJEX1BPTElDWRANKkUKB091dGNvbWUSFwoTT1VUQ09NRV9VTlNQRUNJRklFRBAAEg4KCk9VVENPTUVfT0sQARIRCg1PVVRDT01FX0VSUk9SEAIy4gIKD0FjdGl2aXR5U2VydmljZRJ9ChJMaXN0QWN0aXZpdHlFdmVudHMSMi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5MaXN0QWN0aXZpdHlFdmVudHNSZXF1ZXN0GjMubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuTGlzdEFjdGl2aXR5RXZlbnRzUmVzcG9uc2USWgoKR2V0UGF5bG9hZBIqLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkdldFBheWxvYWRSZXF1ZXN0GiAubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuUGF5bG9hZBJ0ChNXYXRjaEFjdGl2aXR5RXZlbnRzEjMubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuV2F0Y2hBY3Rpdml0eUV2ZW50c1JlcXVlc3QaJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eUV2ZW50MAFC+wEKG2NvbS5tYWd1cy5hY3Rpdml0eS52MWFscGhhMUINQWN0aXZpdHlQcm90b1ABWk9naXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9hY3Rpdml0eS92MWFscGhhMTthY3Rpdml0eXYxYWxwaGExogIDTUFYqgIXTWFndXMuQWN0aXZpdHkuVjFhbHBoYTHKAhdNYWd1c1xBY3Rpdml0eVxWMWFscGhhMeICI01hZ3VzXEFjdGl2aXR5XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIZTWFndXM6OkFjdGl2aXR5OjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
+  fileDesc("CiZtYWd1cy9hY3Rpdml0eS92MWFscGhhMS9hY3Rpdml0eS5wcm90bxIXbWFndXMuYWN0aXZpdHkudjFhbHBoYTEijAQKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoEa2luZBgCIAEoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEjEKB291dGNvbWUYBSABKA4yIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJEhEKCWNvbnRlc3RlZBgRIAMoCRIMCgR1c2VyGBIgASgJEhMKC2VudHJ5X3BvaW50GBMgASgJEhIKCmNyZWRlbnRpYWwYFCABKAkSDQoFYWdlbnQYFSABKAkSEgoKbGVhc2VfZnJvbRgWIAEoCSK9AQoNQWN0aXZpdHlRdWVyeRIsCgVraW5kcxgBIAMoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDgoGYWN0b3JzGAIgAygJEg8KB2FjdGlvbnMYAyADKAkSLQoEdGltZRgEIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZRINCgV1bml0cxgFIAMoCRIQCghzZXNzaW9ucxgGIAMoCRINCgVwYXRocxgHIAMoCSKGAQoZTGlzdEFjdGl2aXR5RXZlbnRzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCRI2CgZmaWx0ZXIYAyABKAsyJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eVF1ZXJ5Im0KGkxpc3RBY3Rpdml0eUV2ZW50c1Jlc3BvbnNlEjYKBmV2ZW50cxgBIAMoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJInIKGldhdGNoQWN0aXZpdHlFdmVudHNSZXF1ZXN0EjYKBmZpbHRlchgBIAEoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5UXVlcnkSHAoIYmFja2ZpbGwYAiABKAVCCrpIBxoFGOgHKAAiPgoRR2V0UGF5bG9hZFJlcXVlc3QSKQoDcmVmGAEgASgJQhy6SBlyFzIVXlthLXpdezIsOH1bMC05YS1mXSskIisKB1BheWxvYWQSDAoEYm9keRgBIAEoDBISCgpzaXplX2J5dGVzGAIgASgDKrICCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIMCghLSU5EX0pPQhACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhgKFEtJTkRfVE9LRU5fTElGRUNZQ0xFEAQSFwoTS0lORF9TQU5EQk9YX0RFTklBTBAFEg8KC0tJTkRfTUVNT1JZEAYSFgoSS0lORF9BR0VOVF9DT01NQU5EEAcSGQoVS0lORF9DUkVERU5USUFMX0dSQU5UEAgSFAoQS0lORF9BR0VOVF9TUEFXThAJEg4KCktJTkRfTk9URVMQChIUChBLSU5EX0ZJTEVfQ0hBTkdFEAsSDAoIS0lORF9SVU4QDBIVChFLSU5EX0dVQVJEX1BPTElDWRANKkUKB091dGNvbWUSFwoTT1VUQ09NRV9VTlNQRUNJRklFRBAAEg4KCk9VVENPTUVfT0sQARIRCg1PVVRDT01FX0VSUk9SEAIy4gIKD0FjdGl2aXR5U2VydmljZRJ9ChJMaXN0QWN0aXZpdHlFdmVudHMSMi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5MaXN0QWN0aXZpdHlFdmVudHNSZXF1ZXN0GjMubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuTGlzdEFjdGl2aXR5RXZlbnRzUmVzcG9uc2USWgoKR2V0UGF5bG9hZBIqLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkdldFBheWxvYWRSZXF1ZXN0GiAubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuUGF5bG9hZBJ0ChNXYXRjaEFjdGl2aXR5RXZlbnRzEjMubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuV2F0Y2hBY3Rpdml0eUV2ZW50c1JlcXVlc3QaJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eUV2ZW50MAFC+wEKG2NvbS5tYWd1cy5hY3Rpdml0eS52MWFscGhhMUINQWN0aXZpdHlQcm90b1ABWk9naXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9hY3Rpdml0eS92MWFscGhhMTthY3Rpdml0eXYxYWxwaGExogIDTUFYqgIXTWFndXMuQWN0aXZpdHkuVjFhbHBoYTHKAhdNYWd1c1xBY3Rpdml0eVxWMWFscGhhMeICI01hZ3VzXEFjdGl2aXR5XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIZTWFndXM6OkFjdGl2aXR5OjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
 
 /**
  * ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
  * kind, action, outcome) is common to every kind; the payload refs point into the activity
  * blob store (fetched via GetPayload) so a large request/response body never bloats the line.
- * For an MCP tool call: actor is the agent id, action is the tool name, request is the
- * arguments, response is the result. For an agent command observation: actor is the host-supplied
- * agent/session identity when available, action is the host tool name, request is the normalized
- * invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
- * action is "connector.create"/"connector.revoke", and the refs are empty.
+ * For an MCP tool call: action is the tool name, request is the arguments, response is the
+ * result. For an agent command observation: action is the host tool name, request is the
+ * normalized invocation, and response is the guard decision. For a token lifecycle event:
+ * action is the RPC method and the refs are empty.
  *
  * @generated from message magus.activity.v1alpha1.ActivityEvent
  */
@@ -55,7 +54,7 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
   kind: Kind;
 
   /**
-   * who: an agent id, "cli", a user
+   * the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
    *
    * @generated from field: string actor = 3;
    */
@@ -130,9 +129,9 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
    * The agent host behind the action and that host's own session id, empty when the producer
    * could not know them. The name is an opaque label the caller supplies, not a set magus
    * enumerates: a hook is told its host by the wrapper that ran it, because no local process can
-   * discover which agent host started it. An MCP call has no such wrapper and is attributed from
-   * its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by
-   * host rather than switching on kind first.
+   * discover which agent host started it. An MCP call is attributed from the client's handshake
+   * name, or its HTTP User-Agent when it recorded none, mapped into this same field so one view
+   * can group both kinds by host rather than switching on kind first.
    *
    * They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
    * grouped by host must not cost 200 GetPayload calls.
@@ -174,6 +173,44 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
    * @generated from field: repeated string contested = 17;
    */
   contested: string[];
+
+  /**
+   * Where the action came from, one field per channel, so a reader never guesses which kind of
+   * value a single string holds. user is the OS account the recording process ran as, read from
+   * the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
+   * credential names the bearer credential a daemon request presented, as the daemon verified
+   * it. agent is the host's subagent id within session. actor above is these rendered as one
+   * label for a row head, and filters match that label.
+   *
+   * @generated from field: string user = 18;
+   */
+  user: string;
+
+  /**
+   * @generated from field: string entry_point = 19;
+   */
+  entryPoint: string;
+
+  /**
+   * @generated from field: string credential = 20;
+   */
+  credential: string;
+
+  /**
+   * @generated from field: string agent = 21;
+   */
+  agent: string;
+
+  /**
+   * Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+   * spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+   * binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+   * BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+   * it takes magus's word for the concept rather than unit's.
+   *
+   * @generated from field: string lease_from = 22;
+   */
+  leaseFrom: string;
 };
 
 /**
@@ -198,7 +235,7 @@ export type ActivityQuery = Message<"magus.activity.v1alpha1.ActivityQuery"> & {
   kinds: Kind[];
 
   /**
-   * restrict to these actors
+   * restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
    *
    * @generated from field: repeated string actors = 2;
    */

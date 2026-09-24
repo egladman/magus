@@ -495,6 +495,38 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	return ""
 }
 
+// denyLeaseScopedHarness refuses, under a lease, the commands that rewire a host harness.
+// The hook wiring is what lets the guard see an agent at all, so a worker that could
+// rewrite it could stop being graded.
+//
+// `magus agent harness` refuses the same commands itself, but a CLI process knows only the
+// checkout's binding and its own BAGGAGE claim. The guard also knows the calling subagent
+// and the host session, so a worker attributed by either is refused here.
+func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, command string) string {
+	if actingLease == "" {
+		return ""
+	}
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
+			continue
+		}
+		words := magusSubcommandWords(c.Args)
+		for _, rewire := range []hint.Command{hint.AgentHarnessApply, hint.AgentHarnessInstall, hint.AgentHarnessRemove} {
+			if rewire.MatchedBy(words) {
+				return fmt.Sprintf(
+					"magus workspace: leave the host harness alone. "+leaseActorClause("rewire a host harness")+"\n"+
+						"`%s` would rewrite the hook wiring the guard grades your calls through, and this call acts under lease %s.",
+					command, actingLease)
+			}
+		}
+	}
+	return ""
+}
+
 // leaseRebind names what a parsed command would do to the ledger when it is one a bound
 // caller may not do, or "" for everything else. me reads where the acting lease stands,
 // and is called only on the paths that need it.
@@ -551,27 +583,6 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 		return "declare a job"
 	}
 	return ""
-}
-
-// magusSubcommandWords is the bare words of a magus argv, stopping at `--` because
-// everything past it belongs to an underlying tool. Flags are skipped wherever they sit,
-// since magus accepts them before and after the subcommand.
-//
-// A flag's VALUE is a bare word too (`--root /tmp/x ledger accept`), which this reads as a
-// subcommand token and so does not match. That is the safe direction: the rule fails to
-// fire rather than firing on a path that happened to end in a verb.
-func magusSubcommandWords(args []string) []string {
-	var words []string
-	for _, a := range args {
-		if a == "--" {
-			break
-		}
-		if a == "" || a[0] == '-' {
-			continue
-		}
-		words = append(words, a)
-	}
-	return words
 }
 
 // jobToolRebind judges one call to the job tool against the job the caller holds, naming

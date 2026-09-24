@@ -45,7 +45,11 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 // not an error: callers need its violations to decide what to repair. result=nil uses
 // the result and attempt filed by Exit; a supplied result is resolved in this checkout.
 func Wait(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver, observe Observer) (types.JobStatus, error) {
-	if actor := store.Actor(); actor.Bound() {
+	actor, err := store.Actor()
+	if err != nil {
+		return types.JobStatus{}, err
+	}
+	if actor.Bound() {
 		return types.JobStatus{}, fmt.Errorf("job: this checkout holds the lease on %s and a holder does not verify its own work", actor.Lease)
 	}
 	jobs, err := store.List()

@@ -29,6 +29,10 @@ import (
 // future scope cannot silently widen an existing token's reach.
 const ShareScopeRead = "read"
 
+// ShareCredential names a share token wherever a credential is recorded. One share is
+// live at a time, so the tier is the whole name.
+const ShareCredential = "share"
+
 // ShareToken is one minted share credential, held in daemon memory only. It
 // stores the hash of the secret (never the secret itself), its scope, and its
 // expiry. The zero value verifies nothing.

@@ -1337,8 +1337,13 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}
 	// A Buzz process keeps the lease it was launched under in context. Do not
 	// rediscover it from the mutable environment at each job-store write: a script
-	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run.
-	if lease := proc.LeaseFromContext(ctx); lease != "" {
+	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
+	// the claim, so the checkout's marker still outranks it.
+	if claim := proc.LeaseFromContext(ctx); claim != "" {
+		lease, _, err := job.ActingLease(loc.CacheDir, claim)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", member, err)
+		}
 		loc.Actor = &job.Actor{Lease: lease}
 	}
 	return job.NewStore(loc), nil

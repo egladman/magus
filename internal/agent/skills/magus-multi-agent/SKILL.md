@@ -620,13 +620,13 @@ request magus could answer on its own would not have needed a person{{end}}. A w
 that raised one waits for the disposition instead of choosing for itself.
 
 `magus session` is how the root audits what a job actually RAN, as opposed
-to what it reported. Each session carries the job it was launched under -
+to what it reported. Each invocation carries the job it was launched under -
 the same `magus.lease` channel - along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
 repository identity, so a worker in its own worktree is still listed here{{if .Full}}.
 Attribution is cooperative and every one of those values is a CLAIM magus records
-rather than corroborates: an empty lease means the session claimed none, which is
-the ordinary answer for anything a person ran by hand, never an error{{end}}. `magus session --since 2h -o json` is the
+rather than corroborates: an empty lease means the invocation claimed none, which
+makes it unattributed, never an error; its OS user says whose account ran it{{end}}. `magus session --since 2h -o json` is the
 form that answers what the fleet has been doing.
 
 {{if .Full}}Course-correct at explicit checkpoints: after a child proposes new

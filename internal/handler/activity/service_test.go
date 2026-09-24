@@ -54,16 +54,19 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	dir = t.TempDir()
 	respRef, _ = trail.WriteBlob(t.Context(), dir, "mcp", []byte("the result body"))
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 1, Kind: trail.KindMCPToolCall, Actor: "claude", UserAgent: "claude-code/1.2.3",
+		Ts: 1, Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3",
+		Origin: types.Origin{EntryPoint: types.EntryPointMCP, Host: "claude"},
 		Action: "magus_query", Outcome: trail.OutcomeOK,
 		ResponseRef: respRef, Preview: "the result body", DurationMs: 12,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 2, Kind: trail.KindTokenLifecycle, Actor: "cli",
+		Ts: 2, Kind: trail.KindTokenLifecycle,
+		Origin: types.Origin{EntryPoint: types.EntryPointRPC, Credential: "console-1"},
 		Action: "connector.create", Outcome: trail.OutcomeOK,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 3, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws/a",
+		Ts: 3, Kind: trail.KindJob, Workspace: "/ws/a",
+		Origin: types.Origin{EntryPoint: types.EntryPointDaemon},
 		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurationMs: 40,
 	})
 	agentReqBody := []byte(`{"schema_version":1,"tool":"Bash","command":"go test ./..."}`)
@@ -71,8 +74,9 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	agentReq, _ := trail.WriteBlob(t.Context(), dir, "agent", agentReqBody)
 	agentResp, _ := trail.WriteBlob(t.Context(), dir, "agent", agentRespBody)
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 4, Kind: trail.KindAgentCommand, Actor: "session:abc", Workspace: "/ws/a",
-		Host: "codex", Session: "abc",
+		Ts: 4, Kind: trail.KindAgentCommand, Workspace: "/ws/a",
+		Origin: types.Origin{EntryPoint: types.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
+		Lease:  "fleet/a", LeaseFrom: types.LeaseSourceMarker,
 		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
 		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
 	})
@@ -90,7 +94,13 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	// newest first: an agent observation preserves its payload references and workspace.
 	assert.Equal(t, "Bash", events[0].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, events[0].GetKind())
-	assert.Equal(t, "session:abc", events[0].GetActor())
+	user := trail.LocalOrigin(t.Context()).User
+	assert.Equal(t, types.Origin{User: user, Host: "codex", Agent: "a1"}.Label(), events[0].GetActor())
+	assert.Equal(t, user, events[0].GetUser(), "the OS account rides the wire on its own field")
+	assert.Equal(t, "hook", events[0].GetEntryPoint())
+	assert.Equal(t, "a1", events[0].GetAgent())
+	assert.Equal(t, "fleet/a", events[0].GetUnit())
+	assert.Equal(t, "marker", events[0].GetLeaseFrom(), "which source answered the lease rides beside it")
 	assert.Equal(t, "codex", events[0].GetHost())
 	assert.Equal(t, "abc", events[0].GetSession())
 	assert.Equal(t, "/ws/a", events[0].GetWorkspace())
@@ -113,17 +123,18 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, events[3].GetKind())
 	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, events[3].GetOutcome())
 	assert.Equal(t, "magus_query", events[3].GetAction())
-	// An MCP call has no hook wrapper to name its host, so its User-Agent fills the same field
-	// and one view can group hook and MCP events together.
-	assert.Equal(t, "claude-code/1.2.3", events[3].GetHost())
+	// An MCP call records the client's own handshake name as its host, which wins over the
+	// User-Agent the wire falls back to when no host was recorded.
+	assert.Equal(t, "claude", events[3].GetHost())
+	assert.Equal(t, "mcp", events[3].GetEntryPoint())
 	require.NotNil(t, events[3].GetDuration())
 }
 
 func TestEncodeHost_RecordedHostWinsAndMCPFallsBackToUserAgent(t *testing.T) {
-	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Host: "codex"}))
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Origin: types.Origin{Host: "codex"}}))
 	assert.Equal(t, "claude-code/1.2.3", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3"}))
 	// A recorded host is what its producer observed, so it wins over the header reading.
-	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Host: "codex", UserAgent: "curl/8"}))
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Origin: types.Origin{Host: "codex"}, UserAgent: "curl/8"}))
 	// Only an MCP call's User-Agent stands in for a host; no other kind borrows one.
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindJob, UserAgent: "curl/8"}))
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindAgentCommand}))
@@ -146,7 +157,7 @@ func TestListActivityEvents_FilterAgentCommand(t *testing.T) {
 	events := list(t, dir, &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_AGENT_COMMAND}})
 	require.Len(t, events, 1)
 	assert.Equal(t, "Bash", events[0].GetAction())
-	assert.Equal(t, "session:abc", events[0].GetActor())
+	assert.Equal(t, "abc", events[0].GetSession())
 }
 
 // TestListActivityEvents_CarriesAgentSpawn proves the lease record reaches the console over the
@@ -196,18 +207,27 @@ func TestGetPayload_RoundTripAndReject(t *testing.T) {
 }
 
 func TestMatchFilter_ActorsActions(t *testing.T) {
-	dir, _ := seedTrail(t) // mcp(claude,magus_query) token(cli,connector.create) job(daemon,graph build)
+	dir, _ := seedTrail(t) // mcp(claude,magus_query) token(console-1,connector.create) job(daemon,graph build)
 
-	assert.Equal(t, []string{"connector.create"},
-		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"cli"}})))
+	assert.Equal(t, []string{"graph build"},
+		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"daemon"}})))
 	assert.Equal(t, []string{"magus_query"},
 		actions(list(t, dir, &activityv1.ActivityQuery{Actions: []string{"magus_query"}})))
 	// actors AND actions both constrain: a mismatch on either drops the event.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{
-		Actors: []string{"cli"}, Actions: []string{"magus_query"},
+		Actors: []string{"daemon"}, Actions: []string{"magus_query"},
 	}))
 	// an unmatched value yields nothing, not everything.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{"nobody"}}))
+
+	// An actor matches one origin field exactly, never the rendered label: the credential
+	// alone finds its event, and the label that event is served under finds nothing.
+	assert.Equal(t, []string{"connector.create"},
+		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"console-1"}})))
+	user := trail.LocalOrigin(t.Context()).User
+	label := types.Origin{User: user, Credential: "console-1"}.Label()
+	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{label}}),
+		"a filter never matches the label's wording")
 }
 
 func TestMatchFilter_TimeWindow(t *testing.T) {
@@ -274,7 +294,7 @@ func seedAt(t *testing.T, ts ...int64) string {
 	dir := t.TempDir()
 	for _, at := range ts {
 		trail.Append(t.Context(), dir, trail.Event{
-			Ts: at, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws" + dir,
+			Ts: at, Kind: trail.KindJob, Workspace: "/ws" + dir,
 			Action: fmt.Sprintf("job-%d", at), Outcome: trail.OutcomeOK,
 		})
 	}
@@ -433,11 +453,11 @@ func TestListActivityEvents_FiltersBeforeTruncating(t *testing.T) {
 	dir := t.TempDir()
 	// One matching event, then enough noise to bury it past any page.
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 1, Kind: trail.KindSandboxDenial, Actor: "target", Action: "the-denial", Outcome: trail.OutcomeError,
+		Ts: 1, Kind: trail.KindSandboxDenial, Action: "the-denial", Outcome: trail.OutcomeError,
 	})
 	for i := range 50 {
 		trail.Append(t.Context(), dir, trail.Event{
-			Ts: int64(i + 2), Kind: trail.KindJob, Actor: "daemon", Action: "noise", Outcome: trail.OutcomeOK,
+			Ts: int64(i + 2), Kind: trail.KindJob, Action: "noise", Outcome: trail.OutcomeOK,
 		})
 	}
 
@@ -489,7 +509,7 @@ func TestListActivityEvents_PageTokenOffsetsMatchesNotRows(t *testing.T) {
 			kind, action = trail.KindSandboxDenial, fmt.Sprintf("denial-%d", i)
 		}
 		trail.Append(t.Context(), dir, trail.Event{
-			Ts: int64(i + 1), Kind: kind, Actor: "daemon", Action: action, Outcome: trail.OutcomeOK,
+			Ts: int64(i + 1), Kind: kind, Action: action, Outcome: trail.OutcomeOK,
 		})
 	}
 	s := svc(dir)
@@ -547,13 +567,13 @@ func watchClient(t *testing.T, dir string, rows []types.Job, files chan job.Feed
 func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 	dir := t.TempDir()
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 10, Kind: trail.KindAgentCommand, Actor: "agent", Action: "edit",
-		Lease: "pwa/job-watch", Session: "s1", Host: "claude-code",
+		Ts: 10, Kind: trail.KindAgentCommand, Action: "edit",
+		Lease: "pwa/job-watch", Origin: types.Origin{Session: "s1", Host: "claude-code"},
 		Outcome: trail.OutcomeOK, Preview: "guard: deny",
 	})
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 11, Kind: trail.KindAgentCommand, Actor: "agent", Action: "edit",
-		Lease: "pwa/elsewhere", Session: "s2", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Ts: 11, Kind: trail.KindAgentCommand, Action: "edit",
+		Lease: "pwa/elsewhere", Origin: types.Origin{Session: "s2"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	rows := []types.Job{{
 		ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"},
@@ -601,8 +621,8 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	dir := t.TempDir()
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 1, Kind: trail.KindAgentCommand, Actor: "agent",
-		Action: "already-here", Session: "s1", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Ts: 1, Kind: trail.KindAgentCommand,
+		Action: "already-here", Origin: types.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	files := make(chan job.FeedEvent)
 	client := watchClient(t, dir, nil, files)
@@ -618,8 +638,8 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	assert.Equal(t, "already-here", stream.Msg().GetAction())
 
 	trail.Append(t.Context(), dir, trail.Event{
-		Ts: 2, Kind: trail.KindAgentCommand, Actor: "agent",
-		Action: "landed-while-watching", Session: "s1", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Ts: 2, Kind: trail.KindAgentCommand,
+		Action: "landed-while-watching", Origin: types.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	require.True(t, stream.Receive())
 	assert.Equal(t, "landed-while-watching", stream.Msg().GetAction())

@@ -86,10 +86,10 @@ Every job member that writes raises inside a rule.
 
 A spawn whose title (`description`) reads `<parent>/<role> <job>`, where `<job>` names
 a declared, running or exited job, attributes the new agent to that job. From then on
-every hook call carrying that agent's id is graded under the job's lease, as if its
-shell had `BAGGAGE=magus.lease=<job>`: an explicit `--lease` still wins, and the agent's
-job outranks the session's `magus job exec` binding, because a subagent shares its
-parent's session id and only its agent id tells the two apart.
+every hook call carrying that agent's id is graded under the job's lease. An explicit
+`--lease` still wins. The agent's job outranks the session's `magus job exec` binding,
+because a subagent shares its parent's session id and only its agent id tells the two
+apart, and it outranks a `BAGGAGE` claim, as every record does.
 
 When the job has not reported a base and the spawn did not ask for its own checkout,
 magus records this checkout's revision and dirty-patch digest for it, the values

@@ -115,7 +115,6 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 		trail.Append(ctx, cacheDir, trail.Event{
 			Ts:           time.Now().UnixMilli(),
 			Kind:         trail.KindGuardPolicy,
-			Actor:        "guard",
 			Workspace:    workspace,
 			Action:       action,
 			Outcome:      trail.OutcomeOK,

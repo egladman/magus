@@ -86,11 +86,17 @@ func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
 	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	assert.Equal(t, "adj/marker", job.ActingLease(cacheDir))
+	lease, from, err := job.ActingLease(cacheDir, trail.LeaseFromEnv())
+	require.NoError(t, err)
+	assert.Equal(t, "adj/marker", lease)
+	assert.Equal(t, types.LeaseSourceContested, from)
 
 	// With no marker the environment is the only answer there is, which stays true: a
 	// checkout nobody bound is the unattributed case the guard fails open on.
-	assert.Equal(t, "adj/from-env", job.ActingLease(t.TempDir()))
+	lease, from, err = job.ActingLease(t.TempDir(), trail.LeaseFromEnv())
+	require.NoError(t, err)
+	assert.Equal(t, "adj/from-env", lease)
+	assert.Equal(t, types.LeaseSourceEnv, from)
 }
 
 func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {

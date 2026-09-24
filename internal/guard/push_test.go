@@ -146,7 +146,7 @@ func TestGateMatchesEachBackendsRevision(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
 				Target: types.TargetCI, Commit: rev.full, Outcome: sessions.OutcomePass,
-			}, sessions.SessionStart{Workspace: root}))
+			}, sessions.InvocationStart{Workspace: root}))
 			assert.Equal(t, gatePassed, gateVerdictAt(root, rev.short))
 
 			runs := t.TempDir()
@@ -179,7 +179,7 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
 				Target: types.TargetCI, Commit: "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", Outcome: sessions.OutcomeFail,
-			}, sessions.SessionStart{Workspace: root}))
+			}, sessions.InvocationStart{Workspace: root}))
 			assert.Equal(t, gateUnknown, gateVerdictAt(root, id))
 		})
 	}

@@ -696,7 +696,7 @@ func pathLinker(root string) func(string) string {
 // coordination: where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
 func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string, showGenerated bool) error {
-	rev, sess, sync, err := attachDiffSession(ctx, m, content, patch, base, paths)
+	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, base, paths)
 	if err != nil {
 		return err
 	}
@@ -752,13 +752,13 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	})
 }
 
-// attachDiffSession joins the shared review, daemon first.
+// attachDiffReview joins the shared review, daemon first.
 //
 // With a daemon running its session is the ONE session: the console tab and the agent are
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the daemon's own store would have written.
-func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffSession, diffSync, error) {
+func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) {
 	asOf := changeset.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
@@ -870,7 +870,7 @@ func (diffStoreSync) close() {}
 type diffBridge struct {
 	addr    string
 	token   string
-	session *types.DiffSession
+	session *types.DiffReview
 
 	cursors chan diffSessionOp
 	marks   chan diffSessionOp
@@ -942,7 +942,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	if resp.StatusCode != http.StatusOK {
 		return nil
 	}
-	var sess types.DiffSession
+	var sess types.DiffReview
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		return nil
 	}

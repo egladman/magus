@@ -138,12 +138,17 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 	pe := &activityv1.ActivityEvent{
 		Time:          timestamppb.New(time.UnixMilli(e.Ts)),
 		Kind:          encodeKind(e.Kind),
-		Actor:         e.Actor,
+		Actor:         e.Label(),
+		User:          e.User,
+		EntryPoint:    string(e.EntryPoint),
+		Credential:    e.Credential,
+		Agent:         e.Agent,
 		Host:          encodeHost(e),
 		Session:       e.Session,
 		Workspace:     e.Workspace,
 		Action:        e.Action,
 		Unit:          e.Lease, // magus calls this a lease; the proto keeps the "unit" spelling, which is the console's wire
+		LeaseFrom:     string(e.LeaseFrom),
 		Outcome:       encodeOutcome(e.Outcome),
 		Error:         e.Error,
 		RequestRef:    e.RequestRef,
@@ -246,7 +251,9 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 }
 
 // matchFilter applies the ActivityQuery's set filters (kinds/actors/actions) and the time
-// window, all ANDed; an empty or absent field does not constrain.
+// window, all ANDed; an empty or absent field does not constrain. An actors entry matches
+// an event whose origin names it in any one field (types.Origin.Names), never the rendered
+// label.
 func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	if q == nil {
 		return true
@@ -254,7 +261,7 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	if kinds := q.GetKinds(); len(kinds) > 0 && !slices.Contains(kinds, encodeKind(e.Kind)) {
 		return false
 	}
-	if actors := q.GetActors(); len(actors) > 0 && !slices.Contains(actors, e.Actor) {
+	if actors := q.GetActors(); len(actors) > 0 && !slices.ContainsFunc(actors, e.Names) {
 		return false
 	}
 	if actions := q.GetActions(); len(actions) > 0 && !slices.Contains(actions, e.Action) {
@@ -292,10 +299,11 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 }
 
 // encodeHost answers "which agent host is behind this event" for both producers that can answer
-// it. A hook records the host its wrapper passed in; an MCP call has no such wrapper, but its
-// HTTP User-Agent names the same thing, so it fills the field here. The mapping lives at the
-// wire boundary rather than in the store because the stored event should keep saying exactly what
-// its producer observed: a User-Agent is not a host name, it is being READ as one.
+// it. A hook records the host its wrapper passed in and an MCP call the client's handshake name;
+// an MCP call recorded without one falls back to its HTTP User-Agent, which names the same thing.
+// The fallback lives at the wire boundary rather than in the store because the stored event
+// should keep saying exactly what its producer observed: a User-Agent is not a host name, it is
+// being READ as one.
 func encodeHost(e trail.Event) string {
 	if e.Host != "" {
 		return e.Host

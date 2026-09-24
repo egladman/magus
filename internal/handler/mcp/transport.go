@@ -3,8 +3,8 @@
 // Streamable HTTP so multiple MCP clients can connect concurrently.
 //
 // Every tool call stamps context.WithValue markers via origin.WithContext so
-// downstream goroutines (cache, spell) can attribute work to an agent
-// origin. A banner log line is emitted before and after each tool call so
+// downstream goroutines (cache, spell) can attribute work to the MCP client
+// that asked. A banner log line is emitted before and after each tool call so
 // the human watching magus's stderr can immediately see when an agent triggers
 // an operation.
 package mcp
@@ -46,7 +46,7 @@ func userAgentFromContext(ctx context.Context) string {
 
 // unknownOrigin is the fallback identity for a tool call whose session was never
 // seen at initialize time (e.g. a race, or a client that skipped the handshake).
-var unknownOrigin = origin.Origin{Agent: "unknown"}
+var unknownOrigin = origin.Client{Name: "unknown"}
 
 // sseHeartbeat is how often the Streamable-HTTP server pings an open GET (SSE)
 // stream. mark3labs disables heartbeats by default; enabling them keeps a
@@ -142,7 +142,7 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 // registers all tools: the server name, instructions, capabilities, recovery,
 // and tool set live in one place. The caller supplies only the transport-specific
 // hooks (agent tracking) and the originFn used at tool-call time.
-func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Origin) *mcpserver.MCPServer {
+func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Client) *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer(
 		"magus", opts.Version,
 		mcpserver.WithInstructions(serverInstructions),
@@ -179,7 +179,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 	}
 	log := opts.logger()
 
-	// sessionOrigins maps sessionID → origin.Origin (clientInfo + User-Agent),
+	// sessionOrigins maps an MCP session id to its origin.Client (clientInfo + User-Agent),
 	// populated by the BeforeInitialize hook and cleaned up on session unregister.
 	// This avoids the server-wide atomic.Value which would race across concurrent
 	// clients.
@@ -190,11 +190,11 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 		// clientInfo comes off the initialize params; the User-Agent was stashed
 		// on hCtx by the WithHTTPContextFunc below, which runs per HTTP request
 		// before the message (and thus this hook) is dispatched.
-		o := origin.Origin{Agent: agentFromRequest(req), UserAgent: userAgentFromContext(hCtx)}
+		o := origin.Client{Name: agentFromRequest(req), UserAgent: userAgentFromContext(hCtx)}
 		if session := mcpserver.ClientSessionFromContext(hCtx); session != nil {
 			sessionOrigins.Store(session.SessionID(), o)
 		}
-		attrs := []any{slog.String("agent", o.Agent)}
+		attrs := []any{slog.String("agent", o.Name)}
 		if o.UserAgent != "" { // omit an empty field so the line stays clean over headerless clients
 			attrs = append(attrs, slog.String("user_agent", o.UserAgent))
 		}
@@ -204,12 +204,12 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 		sessionOrigins.Delete(session.SessionID())
 	})
 
-	originFn := func(tCtx context.Context) origin.Origin {
+	originFn := func(tCtx context.Context) origin.Client {
 		if session := mcpserver.ClientSessionFromContext(tCtx); session != nil {
 			// Comma-ok on the assertion too: fall back to unknownOrigin rather than
-			// panic if a non-Origin value is ever stored under a session id.
+			// panic if a non-Client value is ever stored under a session id.
 			if v, ok := sessionOrigins.Load(session.SessionID()); ok {
-				if o, ok := v.(origin.Origin); ok {
+				if o, ok := v.(origin.Client); ok {
 					return o
 				}
 			}

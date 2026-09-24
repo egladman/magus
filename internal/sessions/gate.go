@@ -118,11 +118,11 @@ func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 }
 
 // RecordGate appends one gate result to the store under dir. Like the
-// attention producers it mints its own session id: the gate verdict is one
+// attention producers it mints its own invocation id: the gate verdict is one
 // short-lived fact, and joining it to the run's execution journal is not what
 // it is read for. Callers on the run path must not fail the build over an
 // error here.
-func RecordGate(dir string, g GateResult, start SessionStart) error {
+func RecordGate(dir string, g GateResult, start InvocationStart) error {
 	w, err := Open(dir, NewID(), start)
 	if err != nil {
 		return err

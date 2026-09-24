@@ -38,9 +38,9 @@
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
-//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths
-//                    into the event; the tool name is what decides whether the whole
-//                    envelope goes rather than one field selected out of it
+//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_AGENT_PATH, HOST_TRANSCRIPT_PATH
+//                    dot-paths into the event; the tool name is what decides whether the
+//                    whole envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
 //   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
@@ -65,7 +65,7 @@
 // coverage declaration states what a HOST gets. The Codex ask arm is implemented and
 // graded here anyway, so a Codex config can move to Buzz with no window in which a
 // decision renders as nothing.
-// magus-guard-template: 16
+// magus-guard-template: 17
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -257,6 +257,7 @@ fun main(args: [str]) > void {
     reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
@@ -284,6 +285,9 @@ fun main(args: [str]) > void {
         return;
     }
     final session = field(event, dotPath: sessionPath);
+    // Forwarded for the reason magus-command.buzz forwards it: a selected path carries no
+    // subagent id of its own.
+    final agent = field(event, dotPath: agentPath);
     final transcript = field(event, dotPath: transcriptPath);
 
     // Codex by name or by its event's turn_id, exactly as magus-command.buzz decides
@@ -310,7 +314,7 @@ fun main(args: [str]) > void {
     }
     final guard = Guard{ bin = bin, payload = payload, response = response };
 
-    // Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate
+    // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
     // printing usage to stdout and exiting non-zero, which leaves the host with no verdict
     // rather than an unattributed one. Try with attribution, fall back to the call this
@@ -319,7 +323,7 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript];
+    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {

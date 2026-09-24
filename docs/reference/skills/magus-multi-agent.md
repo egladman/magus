@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 38899
-skill_short_bytes: 29211
+skill_full_bytes: 38909
+skill_short_bytes: 29214
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `c7f867d055e8` |
+| `skill-content` | `596c6ff1d156` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -546,7 +546,7 @@ itself: the orchestrator, or any human, disposes it with `magus session dispose
 that raised one waits for the disposition instead of choosing for itself.
 
 `magus session` is how the root audits what a job actually RAN, as opposed
-to what it reported. Each session carries the job it was launched under -
+to what it reported. Each invocation carries the job it was launched under -
 the same `magus.lease` channel - along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
 repository identity, so a worker in its own worktree is still listed here. `magus session --since 2h -o json` is the
@@ -1214,13 +1214,13 @@ request magus could answer on its own would not have needed a person. A worker
 that raised one waits for the disposition instead of choosing for itself.
 
 `magus session` is how the root audits what a job actually RAN, as opposed
-to what it reported. Each session carries the job it was launched under -
+to what it reported. Each invocation carries the job it was launched under -
 the same `magus.lease` channel - along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
 repository identity, so a worker in its own worktree is still listed here.
 Attribution is cooperative and every one of those values is a CLAIM magus records
-rather than corroborates: an empty lease means the session claimed none, which is
-the ordinary answer for anything a person ran by hand, never an error. `magus session --since 2h -o json` is the
+rather than corroborates: an empty lease means the invocation claimed none, which
+makes it unattributed, never an error; its OS user says whose account ran it. `magus session --since 2h -o json` is the
 form that answers what the fleet has been doing.
 
 Course-correct at explicit checkpoints: after a child proposes new

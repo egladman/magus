@@ -79,7 +79,7 @@ import {
   reply,
   HttpError,
   type DiffComment,
-  type DiffSession,
+  type DiffReview,
   type DiffAnnotation,
   type DiffTouch,
   type ReviewInfo,
@@ -198,7 +198,7 @@ interface State {
   fileOf: number[];
   mode: ViewMode;
   cursor: number;
-  session: DiffSession | null;
+  session: DiffReview | null;
   // review is which pull request this branch has open and what has been said on it, or a
   // closed target carrying the reason. Null until the lookup lands - and it lands LAST, after
   // the patch and the annotations, because it is the only one that leaves the machine.
@@ -929,10 +929,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       el.dataset.author = row.comment.author;
       if (row.comment.resolved) el.dataset.resolved = "";
       const who = h("span", "console-diff-row__who");
-      // The agent's own label when it gave one, else the role. Attribution is stamped by the
-      // daemon from the transport, so this is reporting who wrote it rather than repeating a
-      // claim the writer made about itself.
-      who.textContent = row.comment.author === "agent" ? row.comment.agent_name || "agent" : "you";
+      // The agent's own label when it gave one; otherwise the OS account the daemon recorded,
+      // which says whose account wrote the remark and never claims it was a person.
+      who.textContent =
+        row.comment.author === "agent"
+          ? row.comment.agent_name || "agent"
+          : row.comment.origin?.user || "unattributed";
       // Rendered the same way a colleague's remark is: a draft that reads differently here than
       // it will on the review is a draft you cannot proofread.
       const body = h("span", "console-diff-row__comment console-diff-md");
@@ -1361,7 +1363,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     renderAgentSession(sessionBody, touch, result);
   };
 
-  const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffSession | null> => {
+  const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffReview | null> => {
     // In the showcase the store is in memory: the reader's marks, comments and answers have to
     // land somewhere or the affordances read as broken, and there is no daemon to land them in.
     if (demo) {
@@ -1389,7 +1391,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // applySession takes the daemon's copy as authoritative and re-lays the stream, because a
   // comment - the human's or an agent's - is a ROW, so it changes the scroll geometry. Only
   // repainting would leave the new remark invisible until the next unrelated rebuild.
-  const applySession = (s: DiffSession, relayout = true): boolean => {
+  const applySession = (s: DiffReview, relayout = true): boolean => {
     if (state.session?.as_of && s.as_of && state.session.as_of !== s.as_of) {
       setCollaboration("stale");
       return false;
@@ -2543,7 +2545,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the published set from the session rather than from the request, so this is the same
   // filter stated on both sides rather than a rule one side could relax.
   const drafts = (): DiffComment[] =>
-    (state.session?.comments ?? []).filter((c) => c.author === "human" && !c.published);
+    (state.session?.comments ?? []).filter((c) => c.author === "unattributed" && !c.published);
 
   // composePublish shows the batch that is about to leave and asks for the line that heads it.
   //

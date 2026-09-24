@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   project's `scip` target replays or rebuilds; when it cannot (a missing indexer, cache
   writes off), the review carries `MGS7003` in place of conformance findings, and the PR
   section fails its step instead of reading as clean.
+- **Every record says which OS account wrote it, and through which entry point.** Trail
+  events, session records and job rows carry `user`, `uid` and `entry_point` (`cli`,
+  `hook`, `mcp`, `rpc`, `daemon`), read by magus itself. `magus session` gains a USER
+  column. A job row's `registered_by` is an `Origin`.
+- **A subagent's shell and edit calls are graded under its job.** `magus shell --agent`
+  takes the host's subagent id, and the command and path glue forward it (`HOST_AGENT_PATH`,
+  default `agent_id`). Guard templates are at version 17; re-install them.
 - **Each spell's install op is named binary + capability, one per binary.**
   typescript's `pnpm-install` and `npm-ci`, go's `go-mod-download`, python's
   `uv-sync`, rust's `cargo-fetch`. A project composes the one it needs into its
@@ -205,6 +212,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `CheckOK`, `CheckFail` and `CheckAdvice`): a conformance finding is the same record. Go
   names only; JSON keys and proto messages are unchanged. `magus\diff` gains `opts.from`,
   reading a saved review, so `magus diff --impact`'s advisors share one diff.
+- **A `BAGGAGE` lease claim ranks below every record.** `magus shell --lease` no longer
+  defaults to it, so the subagent's spawn record and the checkout's `magus job exec`
+  binding answer first, for magusfile job writes and attention requests too. Verdicts,
+  activity events, target results and attention requests record `lease_from`: `flag`,
+  `agent`, `marker`, `env` or `contested`; the console's session lineage shows it.
+- **`magus agent harness apply|install|remove` is refused under a lease from any source.**
+  The commands refuse under the checkout's binding as well as a `BAGGAGE` claim, and the
+  guard refuses them for a worker attributed by its spawn or its session.
+- **BREAKING: the activity wire's `actor` is a rendered label, and `actors` filters by
+  field.** `actor` was a kind (`agent`, `operator`); it is now the origin rendered for a row
+  head. An `actors` entry matches one origin field exactly (user, host, agent, credential,
+  entry point), never the label. The review-remark telemetry label `human` is now
+  `unattributed`.
+- **The trail names the credential, not "operator", and drops `actor`.** Each event records
+  `credential` (the verified token's name: `cli`, a connector or console token's name,
+  `share`) and the MCP client as `host`; the wire's `actor` is a label rendered from them.
+  Console review comments are `unattributed`, not `human`. Tokens may not be named `cli`
+  or `share`.
+- **"Session" now means only the host's conversation; magus's per-process id is an
+  invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
+  `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is
+  counted and named as written before the rename (`legacy` in JSON), and pruning never
+  deletes a file this build cannot read.
+- **A lease binding that does not read is an error.** A marker holding anything but a lease
+  id no longer reads as unbound: the guard denies with the path, the CLI commands that
+  resolve a lease fail, and `magus job exec --vacate` clears it. The guard lets that
+  command and help through, so an agent can recover.
+- **A record with no host claim is unattributed, never "a person".** `magus shell` typed at
+  a terminal records `entry_point: cli`, no session, and no longer `actor: "agent"`; its
+  terminal window keys fire-once notices but is not recorded as a session. The OS user
+  says whose account acted.
 - **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
   `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
   package leaves the command alone.
@@ -483,6 +521,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **A leased worker can no longer slip past the harness refusal or borrow another job.**
+  A global flag's value (`magus --root . agent harness apply`) or a single-dash word with
+  an `h` (`-o=template=hi`) hid the command from the guard. A spawn title naming a job
+  outside the spawner's own lease tree is recorded as untrusted and attributes nothing.
 - **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
   built console file, including the demo graph JSON holding the whole knowledge graph and
   its notes. Other files and directory listings now return 404, on loopback and on the LAN

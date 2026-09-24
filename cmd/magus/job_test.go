@@ -298,7 +298,7 @@ func TestJobExecVacateRefusesAnInFlightJob(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), row.ID)
 			assert.Contains(t, err.Error(), string(state))
-			assert.Equal(t, row.ID, job.LeaseFromMarker(cacheDir), "a refused vacate changed nothing")
+			assert.Equal(t, row.ID, boundMarker(t, cacheDir), "a refused vacate changed nothing")
 		})
 	}
 }
@@ -323,9 +323,31 @@ func TestJobExecVacateAllowsAJobThatAlreadyExited(t *testing.T) {
 				require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
 			})
 			assert.Contains(t, out, row.ID)
-			assert.Empty(t, job.LeaseFromMarker(cacheDir), "the marker is gone")
+			assert.Empty(t, boundMarker(t, cacheDir), "the marker is gone")
 		})
 	}
+}
+
+// A marker that does not read makes every lease resolution in the checkout an error, so
+// vacating must clear it rather than fail on the same read.
+func TestJobExecVacateClearsAMarkerThatDoesNotRead(t *testing.T) {
+	root, cacheDir := execFixture(t)
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
+	})
+	assert.Contains(t, out, "cleared a lease marker that did not read")
+	assert.Empty(t, boundMarker(t, cacheDir))
+}
+
+// boundMarker reads the checkout-wide marker, failing the test on one that does not read.
+func boundMarker(t *testing.T, cacheDir string) string {
+	t.Helper()
+	id, err := job.LeaseFromMarker(cacheDir)
+	require.NoError(t, err)
+	return id
 }
 
 // TestJobExecVacateAllowsAJobTheStoreDoesNotCarry covers the UNKNOWN case: a marker
@@ -340,7 +362,7 @@ func TestJobExecVacateAllowsAJobTheStoreDoesNotCarry(t *testing.T) {
 		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
 	})
 	assert.Contains(t, out, "harness/no-such-job")
-	assert.Empty(t, job.LeaseFromMarker(cacheDir))
+	assert.Empty(t, boundMarker(t, cacheDir))
 }
 
 // TestJobExecVacateRejectsBeingCombinedWithOtherArgs: --vacate gives up whichever job

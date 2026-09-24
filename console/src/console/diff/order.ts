@@ -36,7 +36,7 @@ export function modeChange(file: DiffFile): string | null {
 import type {
   Diff,
   DiffAnnotation,
-  DiffSession,
+  DiffReview,
   DiffUncoveredReason,
   ReviewChange,
 } from "./session";
@@ -66,7 +66,7 @@ export interface OrderedChangeset {
 // A file in the patch that the review does not mention keeps its patch position at the END of
 // primary rather than being dropped. Dropping it would silently hide a real change because an
 // annotation was missing, which is the one failure mode a review must not have.
-export function order(files: readonly DiffFile[], session: DiffSession | null): OrderedChangeset {
+export function order(files: readonly DiffFile[], session: DiffReview | null): OrderedChangeset {
   const byPath = new Map<string, DiffFile>();
   for (const f of files) byPath.set(f.path, f);
 

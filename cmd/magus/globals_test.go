@@ -8,9 +8,26 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestGuardKnowsEveryGlobalFlag holds the guard's reading of a magus argv to the flags magus
+// really binds. A global flag the guard did not know would have its value read as the
+// subcommand, and a lease rule keyed on the subcommand would stop matching.
+func TestGuardKnowsEveryGlobalFlag(t *testing.T) {
+	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
+	var root, cfgPath string
+	bindGlobalFlags(fs, &root, &cfgPath)
+	bindDisplayFlags(fs)
+	fs.VisitAll(func(f *flag.Flag) {
+		takesValue, known := guard.MagusFlagTakesValue(f.Name)
+		require.True(t, known, "the guard does not know global flag -%s", f.Name)
+		b, isBool := f.Value.(interface{ IsBoolFlag() bool })
+		assert.Equal(t, !isBool || !b.IsBoolFlag(), takesValue, "-%s", f.Name)
+	})
+}
 
 func TestReorderFlagsFirst(t *testing.T) {
 	// A flag set mirroring the shapes cmdParse sees: a value flag, a bool flag.

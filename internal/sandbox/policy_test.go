@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -220,8 +221,9 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	base := t.TempDir()
 	allowed := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{
-		FS:    filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}},
-		Lease: "fleet/worker-3",
+		FS:        filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}},
+		Lease:     "fleet/worker-3",
+		LeaseFrom: types.LeaseSourceMarker,
 	}
 	ctx := trail.ContextWithBase(t.Context(), base)
 
@@ -238,6 +240,9 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	}
 	if events[0].Lease != "fleet/worker-3" {
 		t.Errorf("lease = %q, want %q", events[0].Lease, "fleet/worker-3")
+	}
+	if events[0].LeaseFrom != types.LeaseSourceMarker {
+		t.Errorf("lease_from = %q, want %q: a bound boundary must read apart from a claimed one", events[0].LeaseFrom, types.LeaseSourceMarker)
 	}
 }
 

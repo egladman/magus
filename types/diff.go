@@ -411,7 +411,8 @@ func (v DiffUncoveredReason) Sentence() string {
 	return string(v)
 }
 
-// DiffReviewed is what a reader already got through on an earlier pass over this changeset.
+// DiffReviewed is what a reader already got through on an earlier pass over this changeset:
+// a record from the past, carried on [Diff], unlike the live [DiffReview] that holds it.
 //
 // A CHANGESET-level fact rather than a per-file one, because it answers a question about the
 // reader's history rather than about any file: "where did I leave off". The per-file half is
@@ -428,22 +429,39 @@ type DiffReviewed struct {
 	Files int `json:"files,omitempty" yaml:"files,omitempty"`
 }
 
-// DiffAuthor says which kind of client produced a comment or a suggestion.
+// DiffAuthor says which door a comment or a suggestion came through.
 //
-// It is STAMPED BY THE DAEMON from the transport the write arrived on, and never read from
-// the payload. That is the whole integrity of a paired review: an agent holds an MCP session
-// and a person holds a console tab, the daemon can tell them apart, and so an agent cannot
-// post as the person. The notes store settled the same question the same way: "a
-// self-attested author is forgeable by whatever wrote the file", and this is that reasoning
-// applied to a store an agent IS allowed to write.
+// It is STAMPED BY THE DAEMON from the route the write arrived on, and never read from the
+// payload, so a writer cannot choose it. It does not say who wrote the remark: the review
+// route admits any holder of a console or cli token, which an agent in the same OS account
+// can read. The comment's [Origin] is what records whose account and which credential
+// wrote it.
 type DiffAuthor string
 
 const (
-	// DiffAuthorHuman is a write from the console or an interactive CLI.
-	DiffAuthorHuman DiffAuthor = "human"
+	// DiffAuthorUnattributed is a write through the review route (the console or the
+	// terminal review). It is a draft its reader may publish or discard.
+	DiffAuthorUnattributed DiffAuthor = "unattributed"
 	// DiffAuthorAgent is a write from the MCP surface.
 	DiffAuthorAgent DiffAuthor = "agent"
 )
+
+// UnmarshalText reads an author, including the name the review route's writes had before
+// they were called unattributed.
+//
+// compat(until: no draft file under the diff session store still carries "author":"human"):
+// review drafts persist across a daemon restart and loadDrafts restores every one, but
+// publishing, deleting and the console's draft list each take only unattributed drafts. A
+// draft restored as "human" would sit in the session unpublishable and unlisted. Observing
+// that it is safe to drop means finding none left: grep -l '"author":"human"' over the drafts.
+func (a *DiffAuthor) UnmarshalText(b []byte) error {
+	if string(b) == "human" {
+		*a = DiffAuthorUnattributed
+		return nil
+	}
+	*a = DiffAuthor(b)
+	return nil
+}
 
 // DiffCursor is where a client is looking: a file and, within it, a hunk.
 //
@@ -538,8 +556,11 @@ type DiffComment struct {
 	Path   string     `json:"path" yaml:"path"`
 	Hunk   int        `json:"hunk" yaml:"hunk"`
 	Author DiffAuthor `json:"author" yaml:"author"`
-	// AgentName is the opaque host label an MCP client passed, empty for a human. Attribution
-	// only: nothing branches on it, matching the hook's treatment of the same field.
+	// Origin is where the write came from, stamped by the daemon: the OS account, the entry
+	// point, and the credential or MCP client that carried it.
+	Origin Origin `json:"origin,omitzero" yaml:"origin,omitzero"`
+	// AgentName is the opaque host label an MCP client passed, empty on the review route.
+	// Attribution only: nothing branches on it, matching the hook's treatment of the same field.
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
 	Body      string `json:"body" yaml:"body"`
 	// Anchor is what this remark remembers about the code it was written against.
@@ -788,16 +809,18 @@ type DiffSuggestion struct {
 	Declined bool `json:"declined" yaml:"declined"`
 }
 
-// DiffSession is the shared object a console tab, an MCP agent, and the CLI all read.
+// DiffReview is the live review of one working tree's changeset: the shared object a console
+// tab, an MCP agent, and the CLI all read and write. It is not [DiffReviewed], which is one
+// fact inside its changeset: how far a reader got on an earlier pass.
 //
 // One object rather than three implementations: the daemon already multiplexes those three
 // transports over one workspace, so a review they each rebuilt privately would be three
 // diverging opinions of the same changeset. Sharing it is what makes pairing real: the agent
 // can see where the human is and be useful about it rather than narrating blindly.
-type DiffSession struct {
+type DiffReview struct {
 	ID   string `json:"id" yaml:"id"`
 	Base string `json:"base" yaml:"base"`
-	// AsOf is the digest of the patch this changeset was computed from: the session's
+	// AsOf is the digest of the patch this changeset was computed from: the review's
 	// snapshot identity.
 	//
 	// Without it a client cannot tell a current answer from a frozen one, and the party least
@@ -831,7 +854,7 @@ type DiffSession struct {
 //
 // Ids rather than a COUNT, because a count is wrong in the case that matters: a comment deleted
 // and another added nets zero, and the new one is then never reported.
-func (s DiffSession) UnseenThreads(threads []ReviewThread) []string {
+func (s DiffReview) UnseenThreads(threads []ReviewThread) []string {
 	if len(threads) == 0 {
 		return nil
 	}

@@ -20,7 +20,7 @@
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
-import type { DiffSession, ReviewInfo, SessionOp } from "./session";
+import type { DiffReview, ReviewInfo, SessionOp } from "./session";
 
 // The patch is an array of lines rather than one template literal because Go struct tags are
 // backtick-quoted: a template literal would need every one of them escaped, and an escaped
@@ -50,7 +50,7 @@ const AGENT = {
 // contract change first because it is what everything else here is a consequence of, then the
 // two consumers it broke, then the new and deleted files, then the test and the doc. The
 // generated three sort out of the reading order entirely by role.
-export function demoSession(): DiffSession {
+export function demoSession(): DiffReview {
   return {
     id: "rev-3f1c8a2e",
     base: "working",
@@ -284,7 +284,7 @@ export function demoSession(): DiffSession {
         // The new-side line the remark hangs on, which is what a host anchors an inline
         // comment to. Inside hunk 0's range (+14,14), so the batch can place it.
         line: 22,
-        author: "human",
+        author: "unattributed",
         body: "Audience is repeated on the wire. Does a token minted for two services verify at both, or is the first one authoritative?",
         resolved: false,
       },
@@ -302,7 +302,7 @@ export function demoSession(): DiffSession {
         path: "apps/dashboard/src/api/session.ts",
         hunk: 0,
         line: 41,
-        author: "human",
+        author: "unattributed",
         body: "canReach was the only reader of scope, so this is the whole web-side change.",
         resolved: true,
         // Already sent, so the showcase has both states side by side: what the reader still
@@ -404,11 +404,11 @@ export function demoReview(): ReviewInfo {
 // It marks rather than removes, because that is what publishing does - the remark is still
 // yours and still beside the code, it has simply also left. A showcase that deleted them would
 // teach the reader that sending loses their work.
-export function applyDemoPublish(session: DiffSession): DiffSession {
+export function applyDemoPublish(session: DiffReview): DiffReview {
   return {
     ...session,
     comments: (session.comments ?? []).map((c) =>
-      c.author === "human" ? { ...c, published: true } : c,
+      c.author === "unattributed" ? { ...c, published: true } : c,
     ),
   };
 }
@@ -466,7 +466,7 @@ export const DEMO_RUN_MS = 900;
 // posting a comment, resolving one and skipping a suggestion all have to WORK, or the reader
 // meets a rail whose buttons do nothing and concludes the feature is broken. Pure, so
 // demo.test.ts can pin each op without a DOM.
-export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
+export function applyDemoOp(session: DiffReview, op: SessionOp): DiffReview {
   switch (op.op) {
     case "cursor":
       return { ...session, cursor: { path: op.path, hunk: op.hunk } };
@@ -486,8 +486,8 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
       const comments = session.comments ?? [];
       return {
         ...session,
-        // Author is "human" by construction, the same way the daemon stamps it from the
-        // transport: this op arrived from the console, and nothing in the payload can say
+        // Author is "unattributed" by construction, the same way the daemon stamps it from the
+        // route: this op arrived from the console, and nothing in the payload can say
         // otherwise.
         comments: [
           ...comments,
@@ -496,7 +496,7 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
             path: op.path,
             hunk: op.hunk,
             line: op.line,
-            author: "human",
+            author: "unattributed",
             body: op.body,
             resolved: false,
           },
@@ -509,7 +509,7 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
       return {
         ...session,
         comments: (session.comments ?? []).filter(
-          (c) => !(c.id === op.id && c.author === "human" && !c.published),
+          (c) => !(c.id === op.id && c.author === "unattributed" && !c.published),
         ),
       };
     case "resolve":

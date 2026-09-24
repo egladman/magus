@@ -10,7 +10,7 @@ import {
   riskChips,
 } from "./order";
 import type { DiffFile } from "./parse";
-import type { DiffAnnotation, DiffSession, DiffSymbol } from "./session";
+import type { DiffAnnotation, DiffReview, DiffSymbol } from "./session";
 
 function file(path: string, additions = 1, deletions = 0): DiffFile {
   return {
@@ -28,7 +28,7 @@ function ann(path: string, over: Partial<DiffAnnotation> = {}): DiffAnnotation {
   return { path, role: "source", reach: 0, surface: "unknown", ...over };
 }
 
-function session(files: DiffAnnotation[]): DiffSession {
+function session(files: DiffAnnotation[]): DiffReview {
   return {
     id: "rev1",
     base: "working",
