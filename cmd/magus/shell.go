@@ -115,7 +115,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// than a set magus knows, because a magus that enumerated hosts would need a
 	// release per host. A wrapper that cannot extract a session id must still get a
 	// verdict. The one requirement is that installed glue (--transport) names its
-	// host at all; guard.Judge refuses it otherwise (MGS3022).
+	// host at all; guard.Judge refuses it otherwise (MGS3024).
 	sf := gen.BindShell(fset)
 	// --lease has no environment default: the guard reads BAGGAGE itself and ranks it below
 	// the spawn record and the marker, and a default here would pass that claim in as a

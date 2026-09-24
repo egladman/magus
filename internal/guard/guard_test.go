@@ -167,7 +167,7 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 }
 
 // TestHostUnnamedRefusesWithTheCodeAndTheRemedy pins the whole verdict: a deny, never an
-// ask or a pass, carrying MGS3022 and the command that fixes it, and naming no form so
+// ask or a pass, carrying MGS3024 and the command that fixes it, and naming no form so
 // the sh and Buzz forms of one template reply byte for byte alike.
 func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 	t.Parallel()

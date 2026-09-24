@@ -79,7 +79,7 @@ fun claude_buzz_command(script: str, flags: [str]) > str {
 // claude_named_command is a glue command that names this host: `--agent-name` and the
 // spell's own mgs_getName(), the one identity the glue acts on. Rendered here, from the
 // declaration, so the name on the command cannot drift from the harness it belongs to;
-// the glue refuses a call without it (MGS3022) rather than guessing a host.
+// the glue refuses a call without it (MGS3024) rather than guessing a host.
 fun claude_named_command(script: str, flags: [str]) > str {
     final named = mut ["--agent-name", mgs_getName()];
     foreach (flag in flags) { named.append(flag); }

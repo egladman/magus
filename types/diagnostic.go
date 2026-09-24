@@ -425,7 +425,7 @@ const (
 	// configuration `magus agent harness apply` writes passes the host explicitly, so a
 	// call without one comes from a hand-written or stale config, and it is refused
 	// rather than defaulted to one host.
-	HookHostUnnamed           DiagnosticCode = "MGS3022"
+	HookHostUnnamed           DiagnosticCode = "MGS3024"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"

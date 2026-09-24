@@ -29,7 +29,7 @@
 //
 // REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
 // checkpoint, which the configuration `magus agent harness apply` writes on the
-// command. Without it nothing is recorded and MGS3022 goes to stderr.
+// command. Without it nothing is recorded and MGS3024 goes to stderr.
 //
 // A host whose envelope spells those fields differently passes them as flags
 // instead, since `--session` and `--transcript` outrank the envelope, and a host that
@@ -136,7 +136,7 @@ fun main(args: [str]) > void {
     // No host, no record, and a coded line on stderr rather than a guess.
     final agentName = agentNameOf(args);
     if (agentName == "") {
-        warn("[MGS3022] this hook was not given --agent-name, so nothing was recorded. "
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
             + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
             + "the commands it writes name the host.");
         return;

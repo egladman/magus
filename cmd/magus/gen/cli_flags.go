@@ -1214,7 +1214,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
 	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
-	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3022)")
+	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")

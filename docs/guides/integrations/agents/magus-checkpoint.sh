@@ -22,7 +22,7 @@
 #
 # REQUIRED argument: `--agent-name <host>`, the host recorded alongside the checkpoint,
 # which the configuration `magus agent harness apply` writes on the command. Without it
-# nothing is recorded and a coded message (MGS3022) goes to stderr.
+# nothing is recorded and a coded message (MGS3024) goes to stderr.
 #
 # A host whose envelope spells those fields differently passes them as flags
 # instead - `--session` and `--transcript` outrank the envelope - and a host that
@@ -53,7 +53,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$agent_name" ]; then
-  printf '%s\n' "magus-checkpoint.sh: [MGS3022] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  printf '%s\n' "magus-checkpoint.sh: [MGS3024] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
   exit 0
 fi
 # Prefer the workspace's own ./magus over PATH, found by walking UP to the

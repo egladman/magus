@@ -238,7 +238,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 
 // agentNameOf reads the host off this script's argv, "" when the entry names none, and
 // reports every other argument. Empty is not defaulted: `magus shell` refuses installed
-// glue that names no host (MGS3022).
+// glue that names no host (MGS3024).
 //
 // An argument that arrives here means the wiring meant something by it, and reading none
 // at all accepted that in silence. Reported and then ignored, which is the same policy

@@ -346,12 +346,12 @@ stdout '"permission":"allow"'
 
 # case: command/deny
 # The same call under an entry that names no host is refused on the gating event rather
-# than allowed, and says why on both channels (MGS3022).
+# than allowed, and says why on both channels (MGS3024).
 stdin cursor-shell-pass.json
 exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"deny"'
-stdout 'MGS3022'
-stderr 'MGS3022'
+stdout 'MGS3024'
+stderr 'MGS3024'
 
 # case: command/advise
 # The gating event allows and says nothing, which is all it can do; the same call's
@@ -458,11 +458,11 @@ exec sh $WORK/parity.sh observe
 stdin observe-read.json
 exec sh $__MAGUS_TEMPLATES/magus-observe.sh
 ! stdout .
-stderr 'MGS3022'
+stderr 'MGS3024'
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz
 ! stdout .
-stderr 'MGS3022'
+stderr 'MGS3024'
 
 # --- the two lifecycle wrappers: a stop record and a post-compaction brief ----
 #
@@ -500,11 +500,11 @@ exec sh $WORK/parity.sh checkpoint
 stdin $WORK/stop-event.json
 exec sh $__MAGUS_TEMPLATES/magus-checkpoint.sh
 ! stdout .
-stderr 'MGS3022'
+stderr 'MGS3024'
 stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz
 ! stdout .
-stderr 'MGS3022'
+stderr 'MGS3024'
 
 # It reached magus rather than being silent because it resolved nothing: the checkpoints
 # both forms just recorded are in the session the wrapper named.
@@ -812,13 +812,13 @@ stdout '"permissionDecision":"ask"'
 ! stdout '"additionalContext":"pushing'
 
 # case: command/deny
-# An entry that names no host is refused with MGS3022, never defaulted to one host and never
+# An entry that names no host is refused with MGS3024, never defaulted to one host and never
 # inferred from the event. Both forms agree on the reply, so it goes through parity.sh.
 env HOST_NAME=
 stdin $WORK/push-command-turn.json
 exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
-stdout 'MGS3022'
+stdout 'MGS3024'
 stdout 'magus agent harness apply'
 ! stdout '"permissionDecision":"ask"'
 env HOST_NAME=codex

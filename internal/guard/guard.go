@@ -261,7 +261,7 @@ func hostUnnamed() Verdict {
 // Judge evaluates one request against this workspace's rules and reports the verdict.
 //
 // A request from installed glue (Form set) that names no Host is refused with
-// MGS3022 before anything is judged.
+// MGS3024 before anything is judged.
 //
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because

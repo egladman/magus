@@ -49,7 +49,7 @@ caller that cannot extract a session id must still be able to get a verdict.
 
 --transport names the form of the hook calling, such as sh or buzz, as that form
 declares it. Installed hook glue passes it, and glue that passes it without
---agent-name is refused with MGS3022: the configuration "magus agent harness
+--agent-name is refused with MGS3024: the configuration "magus agent harness
 apply" writes names the host, so a call that does not is a stale or hand-written
 config, never defaulted to one host. With --agent-name and --session it names the CALLER that the
 once-per-session notices and the full text of a repeated deny are kept for, as
@@ -109,7 +109,7 @@ not block every tool call.
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
 
 **--transport** *string*
-: The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3022)
+: The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)
 
 ## Exit status
 

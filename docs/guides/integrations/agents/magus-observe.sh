@@ -24,7 +24,7 @@
 #
 # REQUIRED argument: `--agent-name <host>`, the host recorded alongside the observation,
 # which the configuration `magus agent harness apply` writes on the command. Without it
-# nothing is recorded and a coded message (MGS3022) goes to stderr: an observation filed
+# nothing is recorded and a coded message (MGS3024) goes to stderr: an observation filed
 # under a guessed host would be wrong, and a silent gap would be invisible.
 #
 # The defaults are Claude Code's event shape, matching its two siblings. A
@@ -60,7 +60,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$agent_name" ]; then
-  printf '%s\n' "magus-observe.sh: [MGS3022] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  printf '%s\n' "magus-observe.sh: [MGS3024] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
   exit 0
 fi
 # Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and

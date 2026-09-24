@@ -32,7 +32,7 @@
 //                    apply` writes on every command. It is the ONLY place this file
 //                    learns the host: never the event's shape, never the environment,
 //                    never a default. Without it `magus shell` refuses the call
-//                    (MGS3022), so a hand-written config that omits it fails loudly
+//                    (MGS3024), so a hand-written config that omits it fails loudly
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
@@ -460,7 +460,7 @@ fun shellFlags(args: [str]) > [str] {
 }
 
 // agentNameOf is the host this entry names on its argv, or "" when it names none. Empty is
-// not defaulted: `magus shell` refuses installed glue that names no host (MGS3022).
+// not defaulted: `magus shell` refuses installed glue that names no host (MGS3024).
 fun agentNameOf(args: [str]) > str {
     final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
@@ -681,7 +681,7 @@ fun main(args: [str]) > void {
     if (!rawEvent) { pushRule = pushRuleFor(field(event, dotPath: eventPath)); }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
-    // AGENT_NAME_FLAG. An entry that names no host gets MGS3022 from magus, whatever arm
+    // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
     // is assembled here.
     final codex = agentName == "codex";
 

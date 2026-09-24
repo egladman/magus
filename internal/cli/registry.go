@@ -1351,7 +1351,7 @@ caller that cannot extract a session id must still be able to get a verdict.
 
 --transport names the form of the hook calling, such as sh or buzz, as that form
 declares it. Installed hook glue passes it, and glue that passes it without
---agent-name is refused with MGS3022: the configuration "magus agent harness
+--agent-name is refused with MGS3024: the configuration "magus agent harness
 apply" writes names the host, so a call that does not is a stale or hand-written
 config, never defaulted to one host. With --agent-name and --session it names the CALLER that the
 once-per-session notices and the full text of a repeated deny are kept for, as
@@ -1383,7 +1383,7 @@ not block every tool call.`,
 		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
 		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only); required with --transport"},
-		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3022)"},
+		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 		{Name: "agent", Kind: FlagString, Doc: "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},

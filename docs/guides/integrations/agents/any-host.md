@@ -73,7 +73,7 @@ set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`, and the two
 unavailable-response variables. Name your host on the command itself,
 `sh magus-command.sh --agent-name <your host>`: the template reads the host from that
 argument and nowhere else, and refuses a call without it
-([MGS3022](../../../reference/codes/sandbox/MGS3022.md)) rather than answering in
+([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answering in
 another host's dialect. That gets you the missing-binary and broken-binary handling
 without writing it again.
 

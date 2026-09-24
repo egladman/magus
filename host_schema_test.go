@@ -306,7 +306,7 @@ type templateArrangement struct {
 	label string
 	// host is the name the wiring passes as --agent-name, the only place a template reads
 	// one. Every arrangement names one: a template given none never assembles a reply for
-	// magus to render, because magus refuses it (MGS3022), which the transport cases pin.
+	// magus to render, because magus refuses it (MGS3024), which the transport cases pin.
 	host  string
 	env   []string
 	event string

@@ -42,7 +42,7 @@
 # REQUIRED argument: `--agent-name <host>`, the host this entry is wired into, which the
 # configuration `magus agent harness apply` writes on the command
 # (`sh magus-command.sh --agent-name codex`). It is the only place this file learns the
-# host, and without it `magus shell` refuses the call (MGS3022).
+# host, and without it `magus shell` refuses the call (MGS3024).
 #
 # The host name and the session are ATTRIBUTION to magus, not policy. magus records them
 # on its activity event so a reader can tell which host produced an observation;
@@ -98,7 +98,7 @@
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 # The host this entry is wired into, from the entry's own argv and nowhere else: never the
 # event's shape, never the environment, never a default. Without it `magus shell` refuses
-# the call (MGS3022). See --agent-name in magus-command.buzz.
+# the call (MGS3024). See --agent-name in magus-command.buzz.
 agent_name=
 while [ $# -gt 0 ]; do
   case $1 in
