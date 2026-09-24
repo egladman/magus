@@ -292,6 +292,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The `output-pipe`/`output-redirect` exemption for `magus query output` and
+  `magus refs --text` now sees past a global flag.** It anchored on the first argument
+  after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
+  the check now reads argv the same way the read-ack rule does, ignoring where a global
+  flag sits.
 - **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
   URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
   the empty URL for an existing entry: every upload reported success, nothing was stored,

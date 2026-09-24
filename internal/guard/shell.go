@@ -565,15 +565,20 @@ func mentionsMagusCommand(command string, d Dialect) bool {
 // raw grep replacement whose whole purpose is being piped or redirected). Every
 // OTHER refs invocation is a symbol lookup that renders a structured record
 // `-o` already shapes, so only the --text spelling is let through.
+//
+// Both checks go through magusInvokes rather than anchoring on Args[0]/[1]: magus
+// accepts its global flags before the verb, and a position anchor missed the exemption
+// whenever one was there (`magus --root <dir> query output <ref>`).
 func trimmableMagus(cmds []hint.Invocation) bool {
 	for _, c := range cmds {
 		if c.Name != "magus" {
 			continue
 		}
-		if len(c.Args) >= 2 && c.Args[0] == "query" && c.Args[1] == "output" {
+		one := []hint.Invocation{c}
+		if magusInvokes(one, "query", "output") {
 			continue
 		}
-		if len(c.Args) >= 1 && c.Args[0] == "refs" && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+		if magusInvokes(one, "refs") && slices.ContainsFunc(c.Args, isRefsTextFlag) {
 			continue
 		}
 		return true
