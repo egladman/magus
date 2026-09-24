@@ -1,7 +1,7 @@
 // GitHub provider for the merge queue: `mergequeue --provider github`. It carries the
 // provider contract (see the provider package): describe, list_changes, approval_at,
-// list_green, post_status, retarget, merge_change, kick_back and list_artifacts. The
-// queue decides what to validate and merge; this file only speaks GitHub's REST and
+// list_green, post_status, retarget, merge_change, kick_back, mark and list_artifacts.
+// The queue decides what to validate and merge; this file only speaks GitHub's REST and
 // GraphQL APIs.
 //
 // # Merge intent
@@ -13,6 +13,12 @@
 // queues every pull request of the stack, bottom first. Kicking a change back disables
 // its auto-merge or removes the label from its stack's top, so queuing it again is how
 // a fixed change re-enters.
+//
+// # Marks
+//
+// mark shows the queue's two states as the labels "merge-queue: queued" and
+// "merge-queue: rejected". Neither starts with "queue: ", so the listing never reads a
+// mark as merge intent.
 //
 // # Credentials
 //
@@ -60,6 +66,12 @@ final READ_REF = "GITHUB_TOKEN";
 final WRITE_REF = "MERGEQUEUE_TOKEN";
 // The label on a stack's top pull request that queues the stack, followed by a method.
 final QUEUE_LABEL = "queue: ";
+// The label each mark shows as, and what mark creates it with when the repository lacks
+// it; MARKS fixes the order label operations run in.
+final MARKS = ["queued", "rejected"];
+final MARK_LABELS = {"queued": "merge-queue: queued", "rejected": "merge-queue: rejected"};
+final MARK_DESCRIPTIONS = {"queued": "The merge queue holds this pull request", "rejected": "The merge queue kicked this back; see its newest comment"};
+final MARK_COLORS = {"queued": "1d76db", "rejected": "d93f0b"};
 // Who commits what the queue pushes to a pull request's branch: the Actions bot.
 final COMMITTER = {"name": "github-actions[bot]", "email": "41898282+github-actions[bot]@users.noreply.github.com"};
 // Roles whose label queues a stack: the ones that can enable auto-merge.
@@ -785,9 +797,45 @@ fun changesFrom(pages: [str], repo: str, base: str, stacks: {str: str}) > [any] 
     return queued;
 }
 
+// labelNames reads the names of the labels on a pull request or an issue.
+fun labelNames(item: serialize\Boxed) > [str] {
+    final names = mut [<str>];
+    foreach (l in item.q("labels").listValue()) {
+        names.append(l.q("name").stringValue());
+    }
+    return names;
+}
+
+// markIn is the mark names show: "queued", "rejected" or "".
+fun markIn(names: [str]) > str {
+    foreach (m in MARKS) {
+        if (names.indexOf(MARK_LABELS[m] ?? "") != null) {
+            return m;
+        }
+    }
+    return "";
+}
+
+// markOps is what leaves a pull request labeled names showing want's label and no other
+// mark's, in order: [{op: "add" or "remove", label}]. want "" removes both.
+fun markOps(names: [str], want: str) > [{str: str}] {
+    final ops = mut [<{str: str}>];
+    foreach (m in MARKS) {
+        final label = MARK_LABELS[m] ?? "";
+        final has = names.indexOf(label) != null;
+        if (m == want and !has) {
+            ops.append({"op": "add", "label": label});
+        } else if (m != want and has) {
+            ops.append({"op": "remove", "label": label});
+        }
+    }
+    return ops;
+}
+
 // unqueuedFrom lists every open pull request queued leaves out, drafts and forks
-// included, by id and head: a queued change carrying one of their heads waits.
-fun unqueuedFrom(pages: [str], queued: [any]) > [any] !> any {
+// included, by id and head: a queued change carrying one of their heads waits. Each
+// carries the mark its labels show, so apply can clear a queued mark left behind.
+fun unqueuedFrom(pages: [str], repo: str, queued: [any]) > [any] !> any {
     final listed = mut {<str: bool>};
     foreach (c in queued) {
         listed["{serialize\Boxed.init(c).q("id").stringValue()}"] = true;
@@ -797,7 +845,7 @@ fun unqueuedFrom(pages: [str], queued: [any]) > [any] !> any {
         foreach (pr in serialize\jsonDecode(page).listValue()) {
             final number = "{pr.q("number").integerValue()}";
             if (listed[number] == null) {
-                unqueued.append({"id": number, "head": pr.q("head").q("sha").stringValue()});
+                unqueued.append({"id": number, "repo": repo, "head": pr.q("head").q("sha").stringValue(), "mark": markIn(labelNames(pr))});
             }
         }
     }
@@ -936,7 +984,7 @@ export fun list_changes(io: {str: any}) > any !> any {
         }
     }
     final changes = changesFrom(pulls, repo: repo, base: base, stacks: stacks);
-    return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, queued: changes)};
+    return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes)};
 }
 
 // requiredFrom reads the approvals the base branch's rulesets require.
@@ -1345,16 +1393,167 @@ export fun merge_change(io: {str: any}) > any !> any {
     return {"merged": false, "reason": "the stack merge did not finish within {ASYNC_POLLS * 5} seconds"};
 }
 
-// kickBody is the kick-back comment: the report for the author, then the facts it was
-// rendered from as one JSON line a workflow can read back.
-fun kickBody(io: {str: any}) > str !> any {
+// The comment marker every kick-back ends with; kick_back minimizes the older comments
+// carrying it.
+final KICK_MARKER = "<!-- mergequeue: ";
+
+// shQuote single-quotes s for sh, so a hook line pastes as one argument with its
+// $MERGEQUEUE_* references left for the queue to expand.
+fun shQuote(s: str) > str {
+    return "'" + s.replace("'", with: "'\\''") + "'";
+}
+
+// requeueLine is how the author queues the change again: auto-merge with its merge
+// method, or, when a label queued it, that label on the stack's top pull request. A
+// fork cannot be queued, so it gets none.
+fun requeueLine(number: str, method: str, fork: bool, label: str, top: str) > str {
+    if (fork) {
+        return "";
+    }
+    if (label != "") {
+        return "Queue the stack again once fixed: `gh pr edit {top} --add-label \"{label}\"`";
+    }
+    return "Queue it again once fixed: `gh pr merge {number} --auto --{method}`";
+}
+
+// reproduction is the collapsed block that validates the change again on a person's
+// machine, exactly as the run did: the run's plan and the hook lines it ran.
+fun reproduction(number: str, run: {str: str}, repoArg: str, base: str, gate: str, regenerate: str) > [str] {
+    final dir = "mq-{number}";
+    final lines = mut [
+        "<details><summary><b>Reproduce locally</b></summary>",
+        "",
+        "```sh",
+        "gh run download {run["id"] ?? ""} -R {repoArg} -n mergequeue-plan -D {dir}",
+        "magus queue validate --only {number} --plan {dir}/plan.json --verdicts {dir}/verdicts \\",
+    ];
+    if (regenerate == "") {
+        lines.append("  --gate {shQuote(gate)}");
+    } else {
+        lines.append("  --gate {shQuote(gate)} \\");
+        lines.append("  --regenerate {shQuote(regenerate)}");
+    }
+    lines.append("```");
+    lines.append("");
+    lines.append("The queue sets `$MERGEQUEUE_ONTO` and the other `MERGEQUEUE_*` variables for each hook, so leave them quoted. "
+        + "Run it in a checkout of `{base}` whose `origin` is {repoArg}; the plan artifact is kept for a day.");
+    lines.append("");
+    lines.append("</details>");
+    return lines;
+}
+
+// kickComment renders the kick-back comment from kick_back's record: what failed, the
+// validation run, how to reproduce it, the files at issue, requeue (from requeueLine),
+// and last the facts it was rendered from as one JSON line a workflow can read back.
+// web is the provider's web root ("https://github.com").
+fun kickComment(io: {str: any}, web: str, requeue: str) > str !> any {
+    final number = "{io["id"] ?? ""}";
+    final base = "{io["base"] ?? ""}";
+    final report = "{io["report"] ?? ""}";
+    final lines = mut ["### Merge queue: kicked back", "", report.trim()];
+    final source = "{io["source"] ?? ""}";
+    if (source != "") {
+        final run = runOf(source);
+        final host = apiHost(web);
+        var repoArg = run["repo"] ?? "";
+        if (host != "github.com") {
+            repoArg = host + "/" + repoArg;
+        }
+        lines.append("");
+        lines.append("[Validation run]({web}/{run["repo"] ?? ""}/actions/runs/{run["id"] ?? ""})");
+        final repro = serialize\Boxed.init(io["reproduce"]);
+        final gate = repro.q("gate").stringValue();
+        if (gate != "") {
+            lines.append("");
+            foreach (line in reproduction(number, run: run, repoArg: repoArg, base: base, gate: gate, regenerate: repro.q("regenerate").stringValue())) {
+                lines.append(line);
+            }
+        }
+    }
+    final paths = serialize\Boxed.init(io["paths"]).listValue();
+    if (paths.len() > 0) {
+        lines.append("");
+        lines.append("<details><summary>Files ({paths.len()})</summary>");
+        lines.append("");
+        foreach (p in paths) {
+            lines.append("- `{p.stringValue()}`");
+        }
+        final commits = serialize\Boxed.init(io["with"]).listValue();
+        if (commits.len() > 0) {
+            lines.append("");
+            lines.append("Commits on `{base}` that changed them:");
+            lines.append("");
+            foreach (c in commits) {
+                lines.append("- {c.stringValue()}");
+            }
+        }
+        lines.append("");
+        lines.append("</details>");
+    }
+    if (requeue != "") {
+        lines.append("");
+        lines.append(requeue);
+    }
     final facts = serialize\jsonEncode({
         "code": "{io["code"] ?? ""}",
         "paths": io["paths"] ?? [<str>],
         "with": io["with"] ?? [<str>],
         "candidate_commit": "{io["candidate_commit"] ?? ""}",
     });
-    return "{io["report"] ?? ""}\n<!-- mergequeue: {facts} -->\n";
+    lines.append("");
+    lines.append(KICK_MARKER + facts + " -->");
+    return lines.join("\n") + "\n";
+}
+
+final COMMENTS_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { comments(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id viewerDidAuthor isMinimized body } } } } }`;
+final MINIMIZE_COMMENT = `mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }`;
+
+// staleKicks reads one page of a pull request's comments into the ids of the earlier
+// kick-backs this credential wrote and nobody minimized yet, keep aside.
+fun staleKicks(body: str, keep: str) > [str] !> any {
+    final ids = mut [<str>];
+    foreach (c in serialize\jsonDecode(body).q("data").q("repository").q("pullRequest").q("comments").q("nodes").listValue()) {
+        final cid = c.q("id").stringValue();
+        if (cid != keep and c.q("viewerDidAuthor").booleanValue() and !c.q("isMinimized").booleanValue()
+            and c.q("body").stringValue().indexOf(KICK_MARKER) != null) {
+            ids.append(cid);
+        }
+    }
+    return ids;
+}
+
+// commentsNext is the cursor of the page of comments after the one in body, "" at the
+// end.
+fun commentsNext(body: str) > str !> any {
+    final info = serialize\jsonDecode(body).q("data").q("repository").q("pullRequest").q("comments").q("pageInfo");
+    if (info.q("hasNextPage").booleanValue()) {
+        return info.q("endCursor").stringValue();
+    }
+    return "";
+}
+
+// minimizeOlder collapses the earlier kick-backs on the pull request as outdated, so
+// only the newest reads as current.
+fun minimizeOlder(repo: str, number: str, keep: str, hdrs: {str: str}) > void !> any {
+    final parts = repo.split("/");
+    var after = "";
+    while (true) {
+        final vars = mut {<str: any>};
+        vars["owner"] = parts[0];
+        vars["name"] = parts[1];
+        vars["number"] = std\parseInt(number) ?? 0;
+        if (after != "") {
+            vars["after"] = after;
+        }
+        final body = graphql(COMMENTS_QUERY, variables: vars, hdrs: hdrs);
+        foreach (cid in staleKicks(body, keep: keep)) {
+            graphql(MINIMIZE_COMMENT, variables: {"id": cid}, hdrs: hdrs);
+        }
+        after = commentsNext(body);
+        if (after == "") {
+            return;
+        }
+    }
 }
 
 final DISABLE_AUTO_MERGE = `mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }`;
@@ -1362,33 +1561,81 @@ final DISABLE_AUTO_MERGE = `mutation($id: ID!) { disablePullRequestAutoMerge(inp
 fun unlabel(repo: str, number: str, label: str, hdrs: {str: str}) > void !> any {
     final res = mergequeue\request("DELETE", url: apiBase() + "/repos/" + repo + "/issues/" + number + "/labels/" + escape(label), body: "", headers: hdrs);
     if (res["status"] != 200 and res["status"] != 404) {
-        throw "github: kick_back: remove the label '{label}' from #{number}: HTTP {res["status"]}: {res["body"]}";
+        throw "github: remove the label '{label}' from #{number}: HTTP {res["status"]}: {res["body"]}";
     }
 }
 
-// kick_back comments with the queue's report, then removes the change's merge intent
-// where it lives: its own auto-merge, its own queue label, and for a stack member the
-// label on its stack's top, which queues the whole stack. The author re-queues after a
-// fix.
+// kick_back posts a new comment with the queue's report, then removes the change's merge
+// intent where it lives: its own auto-merge, its own queue label, and for a stack member
+// the label on its stack's top, which queues the whole stack. The author re-queues after
+// a fix. Last it minimizes the earlier kick-backs on the pull request; the comment and
+// the removal already happened, so a failure there is printed to stderr (the apply
+// job's log) and the kick-back still succeeds.
 export fun kick_back(io: {str: any}) > bool !> any {
     final hdrs = writing("kick_back");
     final repo = "{io["repo"] ?? ""}";
     final number = "{io["id"] ?? ""}";
-    expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/comments", body: serialize\jsonEncode({"body": kickBody(io)}), hdrs: hdrs),
-        status: 201, what: "kick_back: comment");
     final decoded = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "kick_back: read the pull request"));
+    final own = queueLabel(decoded);
+    final sid = id(decoded.q("stack").q("id"));
+    var top = {"number": "", "label": ""};
+    if (sid != "") {
+        top = stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid);
+    }
+    var label = top["label"] ?? "";
+    var labeled = top["number"] ?? "";
+    if (label == "" and own != "") {
+        label = own;
+        labeled = number;
+    }
+    final requeue = requeueLine(number, method: "{io["method"] ?? ""}", fork: io["fork"] == true, label: label, top: labeled);
+    final posted = expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/comments",
+        body: serialize\jsonEncode({"body": kickComment(io, web: "https://" + apiHost(apiBase()), requeue: requeue)}), hdrs: hdrs),
+        status: 201, what: "kick_back: comment");
     if (decoded.q("auto_merge").q("merge_method").stringValue() != "") {
         graphql(DISABLE_AUTO_MERGE, variables: {"id": decoded.q("node_id").stringValue()}, hdrs: hdrs);
     }
-    final own = queueLabel(decoded);
     if (own != "") {
         unlabel(repo, number: number, label: own, hdrs: hdrs);
     }
-    final sid = id(decoded.q("stack").q("id"));
-    if (sid != "") {
-        final top = stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid);
-        if ((top["label"] ?? "") != "" and (top["number"] ?? "") != number) {
-            unlabel(repo, number: top["number"] ?? "", label: top["label"] ?? "", hdrs: hdrs);
+    if ((top["label"] ?? "") != "" and (top["number"] ?? "") != number) {
+        unlabel(repo, number: top["number"] ?? "", label: top["label"] ?? "", hdrs: hdrs);
+    }
+    try {
+        minimizeOlder(repo, number: number, keep: serialize\jsonDecode(posted).q("node_id").stringValue(), hdrs: hdrs);
+    } catch (e) {
+        std\print("github: kick_back: #{number} was kicked back, but its earlier kick-back comments stay expanded: {e}");
+    }
+    return true;
+}
+
+// createMarkLabel creates the label of mark m, with its description and colour; a label
+// created by adding it to a pull request has neither. One the repository already has
+// (422) is left as it is.
+fun createMarkLabel(repo: str, m: str, hdrs: {str: str}) > void !> any {
+    final body = serialize\jsonEncode({"name": MARK_LABELS[m] ?? "", "description": MARK_DESCRIPTIONS[m] ?? "", "color": MARK_COLORS[m] ?? ""});
+    final res = post(apiBase() + "/repos/" + repo + "/labels", body: body, hdrs: hdrs);
+    if (res["status"] != 201 and res["status"] != 422) {
+        throw "github: create the label '{MARK_LABELS[m] ?? ""}': HTTP {res["status"]}: {res["body"]}";
+    }
+}
+
+// mark leaves the pull request showing the label of io's mark and no other mark's, from
+// one read of its labels; a pull request already showing it takes no write.
+export fun mark(io: {str: any}) > bool !> any {
+    final hdrs = writing("mark");
+    final repo = "{io["repo"] ?? ""}";
+    final number = "{io["id"] ?? ""}";
+    final want = "{io["mark"] ?? ""}";
+    final issue = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/issues/" + number, hdrs: hdrs), status: 200, what: "mark: read #{number}"));
+    foreach (step in markOps(labelNames(issue), want: want)) {
+        final label = step["label"] ?? "";
+        if (step["op"] == "remove") {
+            unlabel(repo, number: number, label: label, hdrs: hdrs);
+        } else {
+            createMarkLabel(repo, m: want, hdrs: hdrs);
+            expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/labels", body: serialize\jsonEncode({"labels": [label]}), hdrs: hdrs),
+                status: 200, what: "mark: label #{number} '{label}'");
         }
     }
     return true;
@@ -1506,10 +1753,54 @@ test "a labeled stack top queues the stack, each member naming the one below" {
 
 test "every open pull request the listing leaves out is unqueued" {
     final queued = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"});
-    final got = unqueuedFrom([STACK], queued: queued);
+    final got = unqueuedFrom([STACK], repo: "acme/acme", queued: queued);
     assert\equal(got.len(), want: 1, message: "the draft");
-    assert\equal(serialize\Boxed.init(got[0]).q("id").stringValue(), want: "22", message: "by id");
-    assert\equal(serialize\Boxed.init(got[0]).q("head").stringValue(), want: "a22", message: "and head");
+    final one = serialize\Boxed.init(got[0]);
+    assert\equal(one.q("id").stringValue(), want: "22", message: "by id");
+    assert\equal(one.q("head").stringValue(), want: "a22", message: "and head");
+    assert\equal(one.q("repo").stringValue(), want: "acme/acme", message: "and the repository a mark is cleared in");
+    assert\equal(one.q("mark").stringValue(), want: "", message: "showing no mark");
+}
+
+final MARKED = `[
+    {"number": 30, "draft": false, "auto_merge": null, "title": "left", "user": {"login": "ann"},
+     "base": {"ref": "main"}, "labels": [{"name": "bug"}, {"name": "merge-queue: queued"}],
+     "stack": {"id": 6, "position": 1, "size": 1, "base": {"ref": "main", "sha": "b"}},
+     "head": {"sha": "a30", "ref": "l", "repo": {"full_name": "acme/acme"}}},
+    {"number": 31, "draft": false, "auto_merge": null, "title": "kicked", "user": {"login": "ann"},
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: rejected"}],
+     "head": {"sha": "a31", "ref": "k", "repo": {"full_name": "acme/acme"}}}
+]`;
+
+test "an unqueued pull request carries the mark its labels show" {
+    final got = unqueuedFrom([MARKED], repo: "acme/acme", queued: [<any>]);
+    assert\equal(serialize\Boxed.init(got[0]).q("mark").stringValue(), want: "queued", message: "a queued mark left behind");
+    assert\equal(serialize\Boxed.init(got[1]).q("mark").stringValue(), want: "rejected", message: "a kick-back's mark");
+}
+
+test "the provider never reads its own mark labels as merge intent" {
+    foreach (m in MARKS) {
+        assert\equal((MARK_LABELS[m] ?? "").startsWith(QUEUE_LABEL), want: false, message: "{m}'s label is no queue label");
+    }
+    assert\equal(stackTops([MARKED], base: "main").len(), want: 0, message: "a stack top showing a mark is not queued by it");
+    assert\equal(changesFrom([MARKED], repo: "acme/acme", base: "main", stacks: {<str: str>}).len(), want: 0, message: "nothing is queued");
+}
+
+fun opsText(ops: [{str: str}]) > str {
+    final parts = mut [<str>];
+    foreach (o in ops) {
+        parts.append("{o["op"] ?? ""} {o["label"] ?? ""}");
+    }
+    return parts.join("; ");
+}
+
+test "a mark adds its own label and removes the other mark's, and nothing already right" {
+    assert\equal(opsText(markOps([<str>], want: "queued")), want: "add merge-queue: queued", message: "queued from nothing");
+    assert\equal(opsText(markOps(["bug", "merge-queue: queued"], want: "queued")), want: "", message: "already queued takes no write");
+    assert\equal(opsText(markOps(["merge-queue: queued"], want: "rejected")), want: "remove merge-queue: queued; add merge-queue: rejected", message: "a kick-back swaps them");
+    assert\equal(opsText(markOps(["merge-queue: rejected"], want: "queued")), want: "add merge-queue: queued; remove merge-queue: rejected", message: "queued again swaps them back");
+    assert\equal(opsText(markOps(["merge-queue: queued", "merge-queue: rejected", "bug"], want: "")), want: "remove merge-queue: queued; remove merge-queue: rejected", message: "none clears both and keeps the rest");
+    assert\equal(opsText(markOps(["bug"], want: "")), want: "", message: "none on nothing takes no write");
 }
 
 test "the labeler is the last actor to apply the label" {
@@ -1724,9 +2015,94 @@ test "list_green keeps the open pull requests whose head carries the status at s
     assert\equal(greenNext(body), want: "p2", message: "and where the next page starts");
 }
 
-test "a kick-back carries its facts as one JSON line after the report" {
-    final body = kickBody({"code": "KICK_CONFLICT", "report": "conflicts", "paths": ["a.go", "b.go"], "with": [<str>], "candidate_commit": ""});
-    assert\equal(body, want: "conflicts\n<!-- mergequeue: " + serialize\jsonEncode({"code": "KICK_CONFLICT", "paths": ["a.go", "b.go"], "with": [<str>], "candidate_commit": ""}) + " -->\n", message: "report, then facts");
+fun kickFacts(code: str, paths: [str], commits: [str], candidate: str) > str {
+    return KICK_MARKER + serialize\jsonEncode({"code": code, "paths": paths, "with": commits, "candidate_commit": candidate}) + " -->";
+}
+
+test "a red gate's kick-back links the run, reproduces it locally and lists the files" {
+    final io = {
+        "id": "300", "base": "main", "method": "squash", "code": "KICK_RED", "candidate_commit": "c0ffee",
+        "report": "The merge queue built this change at `4d028a1474d1` onto `main` at `9f2e01234567`, and the gate exited 1.\n",
+        "source": "egladman/magus/runs/123",
+        "reproduce": {"gate": `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`, "regenerate": `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`},
+        "paths": ["libs/a.go"], "with": ["abc123 touch a"],
+    };
+    final got = kickComment(io, web: "https://github.com", requeue: requeueLine("300", method: "squash", fork: false, label: "", top: ""));
+    final want = [
+        "### Merge queue: kicked back",
+        "",
+        "The merge queue built this change at `4d028a1474d1` onto `main` at `9f2e01234567`, and the gate exited 1.",
+        "",
+        "[Validation run](https://github.com/egladman/magus/actions/runs/123)",
+        "",
+        "<details><summary><b>Reproduce locally</b></summary>",
+        "",
+        "```sh",
+        "gh run download 123 -R egladman/magus -n mergequeue-plan -D mq-300",
+        "magus queue validate --only 300 --plan mq-300/plan.json --verdicts mq-300/verdicts \\",
+        `  --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \`,
+        `  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'`,
+        "```",
+        "",
+        "The queue sets `$MERGEQUEUE_ONTO` and the other `MERGEQUEUE_*` variables for each hook, so leave them quoted. "
+            + "Run it in a checkout of `main` whose `origin` is egladman/magus; the plan artifact is kept for a day.",
+        "",
+        "</details>",
+        "",
+        "<details><summary>Files (1)</summary>",
+        "",
+        "- `libs/a.go`",
+        "",
+        "Commits on `main` that changed them:",
+        "",
+        "- abc123 touch a",
+        "",
+        "</details>",
+        "",
+        "Queue it again once fixed: `gh pr merge 300 --auto --squash`",
+        "",
+        kickFacts("KICK_RED", paths: ["libs/a.go"], commits: ["abc123 touch a"], candidate: "c0ffee"),
+    ];
+    assert\equal(got, want: want.join("\n") + "\n", message: "the whole comment");
+}
+
+test "a conflict planning found links the run and reproduces nothing" {
+    final io = {
+        "id": "7", "base": "main", "method": "rebase", "code": "KICK_CONFLICT", "candidate_commit": "",
+        "report": "It conflicts.\n\nMerge `main` in.\n", "source": "o/r/runs/9", "paths": [<str>], "with": [<str>],
+    };
+    final got = kickComment(io, web: "https://github.com", requeue: requeueLine("7", method: "rebase", fork: false, label: "", top: ""));
+    assert\equal(got, want: "### Merge queue: kicked back\n\nIt conflicts.\n\nMerge `main` in.\n\n[Validation run](https://github.com/o/r/actions/runs/9)\n\n"
+        + "Queue it again once fixed: `gh pr merge 7 --auto --rebase`\n\n" + kickFacts("KICK_CONFLICT", paths: [<str>], commits: [<str>], candidate: "") + "\n",
+        message: "no reproduce block, no files");
+    assert\equal(kickComment({"id": "7", "report": "r", "paths": [<str>], "with": [<str>]}, web: "https://github.com", requeue: ""),
+        want: "### Merge queue: kicked back\n\nr\n\n" + kickFacts("", paths: [<str>], commits: [<str>], candidate: "") + "\n", message: "a directory source links nothing");
+}
+
+test "a hook line's single quotes survive sh quoting" {
+    assert\equal(shQuote("echo 'hi' there"), want: `'echo '\''hi'\'' there'`, message: "each quote closes, escapes and reopens");
+    assert\equal(shQuote(`magus run x --base "$MERGEQUEUE_ONTO"`), want: `'magus run x --base "$MERGEQUEUE_ONTO"'`, message: "the variable stays literal");
+    final lines = reproduction("5", run: {"repo": "o/r", "id": "2"}, repoArg: "o/r", base: "main", gate: "test 'x' = x", regenerate: "");
+    assert\equal(lines[4], want: "magus queue validate --only 5 --plan mq-5/plan.json --verdicts mq-5/verdicts \\", message: "continued");
+    assert\equal(lines[5], want: `  --gate 'test '\''x'\'' = x'`, message: "no regeneration: the gate line ends the command");
+}
+
+test "a stack queued by its top's label re-queues through that label, and a fork not at all" {
+    assert\equal(requeueLine("11", method: "squash", fork: false, label: "queue: squash", top: "12"),
+        want: "Queue the stack again once fixed: `gh pr edit 12 --add-label \"queue: squash\"`", message: "the top's label");
+    assert\equal(requeueLine("11", method: "merge", fork: true, label: "", top: ""), want: "", message: "a fork");
+}
+
+test "only this credential's earlier kick-backs are minimized, never the new one" {
+    final body = `{"data": {"repository": {"pullRequest": {"comments": {"pageInfo": {"hasNextPage": true, "endCursor": "p2"}, "nodes": [
+        {"id": "old", "viewerDidAuthor": true, "isMinimized": false, "body": "x\n<!-- mergequeue: {} -->\n"},
+        {"id": "done", "viewerDidAuthor": true, "isMinimized": true, "body": "<!-- mergequeue: {} -->"},
+        {"id": "human", "viewerDidAuthor": false, "isMinimized": false, "body": "<!-- mergequeue: {} -->"},
+        {"id": "chat", "viewerDidAuthor": true, "isMinimized": false, "body": "a note"},
+        {"id": "new", "viewerDidAuthor": true, "isMinimized": false, "body": "<!-- mergequeue: {} -->"}
+    ]}}}}}`;
+    assert\equal(staleKicks(body, keep: "new"), want: ["old"], message: "stale");
+    assert\equal(commentsNext(body), want: "p2", message: "and where the next page starts");
 }
 
 test "a label and a branch are escaped for the URL they go in" {
