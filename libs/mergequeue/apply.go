@@ -111,6 +111,7 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		if err := r.revokeStale(ctx); err != nil {
 			return err
 		}
+		r.markStart(ctx)
 	}
 	defer func() {
 		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), a.vcs, a.clone.Root, a.scratch); err != nil {
@@ -328,7 +329,7 @@ func (r *applyRun) settle(ctx context.Context, v types.Verdict) error {
 	c := v.Change
 	switch v.Decision {
 	case types.DecisionMerged:
-		r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: c.Head, Reason: v.Reason})
+		r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: c.Head, Reason: v.Reason})
 		return nil
 	case types.DecisionKick:
 		k := kickOf(v)
@@ -703,7 +704,7 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: commit, ByProvider: res.ByProvider})
+	r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: commit, ByProvider: res.ByProvider})
 	return true, r.mergedAs(ctx, c, tip, after, commit, rd.tree, v.Method)
 }
 
@@ -1054,7 +1055,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 	}
 	for _, st := range steps[:merged] {
 		r.merged[st.v.Change.ID] = true
-		r.Events.Emit(Event{Kind: EventMerged, Change: st.v.Change.ID, Commit: st.v.Change.Head, ByProvider: res.ByProvider})
+		r.mergedEvent(ctx, st.v.Change, Event{Kind: EventMerged, Change: st.v.Change.ID, Commit: st.v.Change.Head, ByProvider: res.ByProvider})
 	}
 	if merged < len(steps) {
 		err := &partialMergeError{top: top.v.Change.ID, merged: merged, total: len(steps), cause: mergeErr}
@@ -1187,6 +1188,7 @@ func (r *applyRun) kick(ctx context.Context, c types.Change, k types.Kick) error
 	if err := r.provider.KickBack(ctx, c, c.Head, k); err != nil {
 		return fmt.Errorf("kick back %s: %w", c.Label(), err)
 	}
+	r.mark(ctx, c, types.MarkRejected)
 	return nil
 }
 
@@ -1212,6 +1214,48 @@ func (r *applyRun) revokeStale(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// markStart marks queued every change the plan admitted, and clears the queued mark from
+// each unqueued change still showing one: its intent was withdrawn, or a run stopped
+// before marking what it did to it.
+func (r *applyRun) markStart(ctx context.Context) {
+	for _, g := range r.plan.Partitions {
+		for _, c := range g {
+			r.mark(ctx, c, types.MarkQueued)
+		}
+	}
+	for _, v := range r.plan.Verdicts {
+		if v.Decision == types.DecisionWait {
+			r.mark(ctx, v.Change, types.MarkQueued)
+		}
+	}
+	for _, u := range r.plan.Unqueued {
+		if u.Mark == types.MarkQueued {
+			r.mark(ctx, types.Change{ID: u.ID, Repo: u.Repo, Head: u.Head}, types.MarkNone)
+		}
+	}
+}
+
+// mergedEvent reports c merged and clears its mark.
+func (r *applyRun) mergedEvent(ctx context.Context, c types.Change, e Event) {
+	r.Events.Emit(e)
+	r.mark(ctx, c, types.MarkNone)
+}
+
+// mark shows m on c. A failure is a notice and applying goes on: a mark is a courtesy,
+// and the status and the kick-back comment are the record.
+func (r *applyRun) mark(ctx context.Context, c types.Change, m types.Mark) {
+	if r.DryRun {
+		return
+	}
+	if err := r.provider.Mark(ctx, c, m); err != nil {
+		what := "mark #" + c.ID + " " + string(m)
+		if m == types.MarkNone {
+			what = "clear the mark on #" + c.ID
+		}
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
+	}
 }
 
 func (a *Applier) statusContext() string {

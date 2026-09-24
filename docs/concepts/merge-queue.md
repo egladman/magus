@@ -63,6 +63,8 @@ about to see that pull request merged.
 | queue a stack                 | label its top pull request `queue: squash`                  |
 | take it out                   | `gh pr merge <n> --disable-auto`, or remove the label       |
 | list what is queued           | `magus queue ls --provider github --base main`              |
+| tell one is queued            | it carries the label `merge-queue: queued`                  |
+| tell one was kicked back      | it carries the label `merge-queue: rejected`                |
 | see why one is waiting        | its `merge-queue` status, which reads `waiting: <why>`      |
 | see why one was kicked back   | the queue's newest comment on it                            |
 | land it past the queue        | `gh pr merge <n> --admin`: an admin's bypass, see below     |
@@ -249,7 +251,7 @@ a run, and `apply` says so before reading anything.
     {"id": "479", "head": "9f8e...", "commit": "3f9b...", "method": "squash"}
   ],
   "unqueued": [
-    {"id": "490", "head": "a1b2..."}
+    {"id": "490", "repo": "acme/acme", "head": "a1b2...", "mark": "queued"}
   ]
 }
 ```
@@ -595,6 +597,7 @@ functions, each taking one record:
 | `retarget`       | the change plus `{base}`                                                                    | `true` once the change targets `base`                                            |
 | `merge_change`   | the change plus `{commit, message, through}`                                                | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                            |
+| `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                              |
 | `list_artifacts` | `{source}`                                                                                  | `{complete, artifacts: [{name, url}], headers?}`                                 |
 
 All but `list_artifacts` are required, and a script missing one is refused when it
@@ -625,6 +628,11 @@ lowest first, each with the commit it must still be at. `merge_change` sets
 left out, it reads as the call's merge. `kick_back`'s `source` is the validation run
 apply followed, empty for a directory, and `reproduce`, `{gate, regenerate}`, is there
 only when validation decided the kick: the hook lines that validate the change again.
+`list_changes`' `unqueued` records carry `repo?` and `mark?`, the mark the change shows
+now. Apply marks `queued` every change the plan admitted when it starts, clears that mark
+from an unqueued change still showing it, marks `rejected` after a kick-back and clears
+the mark after a merge. A failed `mark` is a notice and applying goes on: the status and
+the comment are the record.
 
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
@@ -647,7 +655,10 @@ validation run, collapsed blocks for reproducing it (`gh run download` of the pl
 top), and one JSON line of its code and files. It then removes the intent where it
 lives: its own auto-merge, its own label, and the label on its stack's top. Last it
 minimizes as outdated its own earlier kick-back comments on the pull request; a failure
-there is printed to the apply job's log and does not fail the kick-back. Its `describe` reports the label
+there is printed to the apply job's log and does not fail the kick-back. Its `mark` manages
+two labels, `merge-queue: queued` and `merge-queue: rejected`, creating either with a
+description the first time a repository needs it; neither starts with `queue: `, so
+neither reads as merge intent. Its `describe` reports the label
 prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
 identity a workflow's token pushes as; with the queue's app, `queue-apply.yaml` passes the
@@ -686,7 +697,7 @@ command hooks.
 | `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
 | `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
 | `BuildFacts`     | a change's affected set, how paths are written, what regenerating runs  | `client.Workspace`          |
-| `Provider`       | list, describe, approve, post a status, retarget, merge, kick back      | the `provider` Buzz scripts |
+| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark | the `provider` Buzz scripts |
 | `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so

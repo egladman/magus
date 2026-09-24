@@ -35,6 +35,26 @@ type Provider interface {
 	MergeChange(ctx context.Context, c Change, m MergeOptions) (MergeResult, error)
 	// KickBack removes c's merge intent, wherever it lives, and tells its author why.
 	KickBack(ctx context.Context, c Change, commit string, k Kick) error
+	// Mark leaves c showing m and no other mark; [MarkNone] clears both. Marking a change
+	// that already shows m is success.
+	Mark(ctx context.Context, c Change, m Mark) error
+}
+
+// Mark is which of the two states the queue tracks at a service level a change shows
+// where people look (github: a label). A mark is a courtesy: the status and the
+// kick-back comment are the record, and the queue reads a mark back only to clear one
+// left on a change it no longer holds.
+type Mark string
+
+const (
+	MarkNone     Mark = ""         // neither
+	MarkQueued   Mark = "queued"   // the queue holds the change
+	MarkRejected Mark = "rejected" // the queue kicked the change back
+)
+
+// Valid reports whether m is one of the three marks.
+func (m Mark) Valid() bool {
+	return m == MarkNone || m == MarkQueued || m == MarkRejected
 }
 
 // Approval is the review state of a change at one exact commit, and what the provider

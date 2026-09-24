@@ -110,6 +110,24 @@ func TestPlanOfNoChangesSaysSo(t *testing.T) {
 	assert.Contains(t, out.String(), "no change carries merge intent against main")
 }
 
+// An applier clears the queued mark from what left the queue, reading the marks the
+// listing reported out of the plan, even one that admits nothing.
+func TestPlanCarriesTheMarkEachUnqueuedChangeShows(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	in := changes()
+	in.Unqueued = []types.UnqueuedChange{
+		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
+		{ID: "5", Repo: "acme/acme", Head: head("5"), Mark: types.MarkRejected},
+		{ID: "6", Repo: "acme/acme", Head: head("6")},
+	}
+	plan, err := planner(t, d).Run(t.Context(), in)
+	require.NoError(t, err)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1, Unqueued: in.Unqueued}, plan)
+	require.NoError(t, plan.Check())
+}
+
 // admitting is one change's way through admission as far as want says it gets.
 type admitting struct {
 	onBase    bool

@@ -103,6 +103,19 @@ func TestPlanCheckRefusesAChangeAheadOfWhatItIsStackedOnADuplicateAndAPlanningMe
 	require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Partitions: [][]Change{{change("1"), child}}}.Check())
 }
 
+// An applier clears the queued mark from an unqueued change, so the plan carries each
+// one's mark from the listing and refuses a mark outside the set.
+func TestAnUnqueuedChangeCarriesItsMarkIntoThePlan(t *testing.T) {
+	for _, m := range []Mark{MarkNone, MarkQueued, MarkRejected} {
+		u := UnqueuedChange{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: m}
+		require.NoError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{u}}.Check(), m)
+		require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{u}}.Check(), m)
+	}
+	odd := UnqueuedChange{ID: "4", Head: head("4"), Mark: "merged"}
+	require.EqualError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued[0]: #4: mark "merged", want queued, rejected or none`)
+	require.EqualError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued: #4: mark "merged", want queued, rejected or none`)
+}
+
 func TestCapabilitiesCheckRefusesAnUnknownStackMergeAndNoMethod(t *testing.T) {
 	require.ErrorContains(t, Capabilities{StackMerge: "batch", Methods: []MergeMethod{MethodSquash}}.Check(), `provider describes stack merging as "batch"`)
 	require.EqualError(t, Capabilities{StackMerge: StackMergeAtomic}.Check(), "provider allows no merge method")

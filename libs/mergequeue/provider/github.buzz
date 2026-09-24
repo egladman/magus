@@ -1,7 +1,7 @@
 // GitHub provider for the merge queue: `mergequeue --provider github`. It carries the
 // provider contract (see the provider package): describe, list_changes, approval_at,
-// list_green, post_status, retarget, merge_change, kick_back and list_artifacts. The
-// queue decides what to validate and merge; this file only speaks GitHub's REST and
+// list_green, post_status, retarget, merge_change, kick_back, mark and list_artifacts.
+// The queue decides what to validate and merge; this file only speaks GitHub's REST and
 // GraphQL APIs.
 //
 // # Merge intent
@@ -13,6 +13,12 @@
 // queues every pull request of the stack, bottom first. Kicking a change back disables
 // its auto-merge or removes the label from its stack's top, so queuing it again is how
 // a fixed change re-enters.
+//
+// # Marks
+//
+// mark shows the queue's two states as the labels "merge-queue: queued" and
+// "merge-queue: rejected". Neither starts with "queue: ", so the listing never reads a
+// mark as merge intent.
 //
 // # Credentials
 //
@@ -60,6 +66,12 @@ final READ_REF = "GITHUB_TOKEN";
 final WRITE_REF = "MERGEQUEUE_TOKEN";
 // The label on a stack's top pull request that queues the stack, followed by a method.
 final QUEUE_LABEL = "queue: ";
+// The label each mark shows as, and what mark creates it with when the repository lacks
+// it; MARKS fixes the order label operations run in.
+final MARKS = ["queued", "rejected"];
+final MARK_LABELS = {"queued": "merge-queue: queued", "rejected": "merge-queue: rejected"};
+final MARK_DESCRIPTIONS = {"queued": "The merge queue holds this pull request", "rejected": "The merge queue kicked this back; see its newest comment"};
+final MARK_COLORS = {"queued": "1d76db", "rejected": "d93f0b"};
 // Who commits what the queue pushes to a pull request's branch: the Actions bot.
 final COMMITTER = {"name": "github-actions[bot]", "email": "41898282+github-actions[bot]@users.noreply.github.com"};
 // Roles whose label queues a stack: the ones that can enable auto-merge.
@@ -785,9 +797,45 @@ fun changesFrom(pages: [str], repo: str, base: str, stacks: {str: str}) > [any] 
     return queued;
 }
 
+// labelNames reads the names of the labels on a pull request or an issue.
+fun labelNames(item: serialize\Boxed) > [str] {
+    final names = mut [<str>];
+    foreach (l in item.q("labels").listValue()) {
+        names.append(l.q("name").stringValue());
+    }
+    return names;
+}
+
+// markIn is the mark names show: "queued", "rejected" or "".
+fun markIn(names: [str]) > str {
+    foreach (m in MARKS) {
+        if (names.indexOf(MARK_LABELS[m] ?? "") != null) {
+            return m;
+        }
+    }
+    return "";
+}
+
+// markOps is what leaves a pull request labeled names showing want's label and no other
+// mark's, in order: [{op: "add" or "remove", label}]. want "" removes both.
+fun markOps(names: [str], want: str) > [{str: str}] {
+    final ops = mut [<{str: str}>];
+    foreach (m in MARKS) {
+        final label = MARK_LABELS[m] ?? "";
+        final has = names.indexOf(label) != null;
+        if (m == want and !has) {
+            ops.append({"op": "add", "label": label});
+        } else if (m != want and has) {
+            ops.append({"op": "remove", "label": label});
+        }
+    }
+    return ops;
+}
+
 // unqueuedFrom lists every open pull request queued leaves out, drafts and forks
-// included, by id and head: a queued change carrying one of their heads waits.
-fun unqueuedFrom(pages: [str], queued: [any]) > [any] !> any {
+// included, by id and head: a queued change carrying one of their heads waits. Each
+// carries the mark its labels show, so apply can clear a queued mark left behind.
+fun unqueuedFrom(pages: [str], repo: str, queued: [any]) > [any] !> any {
     final listed = mut {<str: bool>};
     foreach (c in queued) {
         listed["{serialize\Boxed.init(c).q("id").stringValue()}"] = true;
@@ -797,7 +845,7 @@ fun unqueuedFrom(pages: [str], queued: [any]) > [any] !> any {
         foreach (pr in serialize\jsonDecode(page).listValue()) {
             final number = "{pr.q("number").integerValue()}";
             if (listed[number] == null) {
-                unqueued.append({"id": number, "head": pr.q("head").q("sha").stringValue()});
+                unqueued.append({"id": number, "repo": repo, "head": pr.q("head").q("sha").stringValue(), "mark": markIn(labelNames(pr))});
             }
         }
     }
@@ -936,7 +984,7 @@ export fun list_changes(io: {str: any}) > any !> any {
         }
     }
     final changes = changesFrom(pulls, repo: repo, base: base, stacks: stacks);
-    return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, queued: changes)};
+    return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes)};
 }
 
 // requiredFrom reads the approvals the base branch's rulesets require.
@@ -1513,7 +1561,7 @@ final DISABLE_AUTO_MERGE = `mutation($id: ID!) { disablePullRequestAutoMerge(inp
 fun unlabel(repo: str, number: str, label: str, hdrs: {str: str}) > void !> any {
     final res = mergequeue\request("DELETE", url: apiBase() + "/repos/" + repo + "/issues/" + number + "/labels/" + escape(label), body: "", headers: hdrs);
     if (res["status"] != 200 and res["status"] != 404) {
-        throw "github: kick_back: remove the label '{label}' from #{number}: HTTP {res["status"]}: {res["body"]}";
+        throw "github: remove the label '{label}' from #{number}: HTTP {res["status"]}: {res["body"]}";
     }
 }
 
@@ -1557,6 +1605,38 @@ export fun kick_back(io: {str: any}) > bool !> any {
         minimizeOlder(repo, number: number, keep: serialize\jsonDecode(posted).q("node_id").stringValue(), hdrs: hdrs);
     } catch (e) {
         std\print("github: kick_back: #{number} was kicked back, but its earlier kick-back comments stay expanded: {e}");
+    }
+    return true;
+}
+
+// createMarkLabel creates the label of mark m, with its description and colour; a label
+// created by adding it to a pull request has neither. One the repository already has
+// (422) is left as it is.
+fun createMarkLabel(repo: str, m: str, hdrs: {str: str}) > void !> any {
+    final body = serialize\jsonEncode({"name": MARK_LABELS[m] ?? "", "description": MARK_DESCRIPTIONS[m] ?? "", "color": MARK_COLORS[m] ?? ""});
+    final res = post(apiBase() + "/repos/" + repo + "/labels", body: body, hdrs: hdrs);
+    if (res["status"] != 201 and res["status"] != 422) {
+        throw "github: create the label '{MARK_LABELS[m] ?? ""}': HTTP {res["status"]}: {res["body"]}";
+    }
+}
+
+// mark leaves the pull request showing the label of io's mark and no other mark's, from
+// one read of its labels; a pull request already showing it takes no write.
+export fun mark(io: {str: any}) > bool !> any {
+    final hdrs = writing("mark");
+    final repo = "{io["repo"] ?? ""}";
+    final number = "{io["id"] ?? ""}";
+    final want = "{io["mark"] ?? ""}";
+    final issue = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/issues/" + number, hdrs: hdrs), status: 200, what: "mark: read #{number}"));
+    foreach (step in markOps(labelNames(issue), want: want)) {
+        final label = step["label"] ?? "";
+        if (step["op"] == "remove") {
+            unlabel(repo, number: number, label: label, hdrs: hdrs);
+        } else {
+            createMarkLabel(repo, m: want, hdrs: hdrs);
+            expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/labels", body: serialize\jsonEncode({"labels": [label]}), hdrs: hdrs),
+                status: 200, what: "mark: label #{number} '{label}'");
+        }
     }
     return true;
 }
@@ -1673,10 +1753,54 @@ test "a labeled stack top queues the stack, each member naming the one below" {
 
 test "every open pull request the listing leaves out is unqueued" {
     final queued = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"});
-    final got = unqueuedFrom([STACK], queued: queued);
+    final got = unqueuedFrom([STACK], repo: "acme/acme", queued: queued);
     assert\equal(got.len(), want: 1, message: "the draft");
-    assert\equal(serialize\Boxed.init(got[0]).q("id").stringValue(), want: "22", message: "by id");
-    assert\equal(serialize\Boxed.init(got[0]).q("head").stringValue(), want: "a22", message: "and head");
+    final one = serialize\Boxed.init(got[0]);
+    assert\equal(one.q("id").stringValue(), want: "22", message: "by id");
+    assert\equal(one.q("head").stringValue(), want: "a22", message: "and head");
+    assert\equal(one.q("repo").stringValue(), want: "acme/acme", message: "and the repository a mark is cleared in");
+    assert\equal(one.q("mark").stringValue(), want: "", message: "showing no mark");
+}
+
+final MARKED = `[
+    {"number": 30, "draft": false, "auto_merge": null, "title": "left", "user": {"login": "ann"},
+     "base": {"ref": "main"}, "labels": [{"name": "bug"}, {"name": "merge-queue: queued"}],
+     "stack": {"id": 6, "position": 1, "size": 1, "base": {"ref": "main", "sha": "b"}},
+     "head": {"sha": "a30", "ref": "l", "repo": {"full_name": "acme/acme"}}},
+    {"number": 31, "draft": false, "auto_merge": null, "title": "kicked", "user": {"login": "ann"},
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: rejected"}],
+     "head": {"sha": "a31", "ref": "k", "repo": {"full_name": "acme/acme"}}}
+]`;
+
+test "an unqueued pull request carries the mark its labels show" {
+    final got = unqueuedFrom([MARKED], repo: "acme/acme", queued: [<any>]);
+    assert\equal(serialize\Boxed.init(got[0]).q("mark").stringValue(), want: "queued", message: "a queued mark left behind");
+    assert\equal(serialize\Boxed.init(got[1]).q("mark").stringValue(), want: "rejected", message: "a kick-back's mark");
+}
+
+test "the provider never reads its own mark labels as merge intent" {
+    foreach (m in MARKS) {
+        assert\equal((MARK_LABELS[m] ?? "").startsWith(QUEUE_LABEL), want: false, message: "{m}'s label is no queue label");
+    }
+    assert\equal(stackTops([MARKED], base: "main").len(), want: 0, message: "a stack top showing a mark is not queued by it");
+    assert\equal(changesFrom([MARKED], repo: "acme/acme", base: "main", stacks: {<str: str>}).len(), want: 0, message: "nothing is queued");
+}
+
+fun opsText(ops: [{str: str}]) > str {
+    final parts = mut [<str>];
+    foreach (o in ops) {
+        parts.append("{o["op"] ?? ""} {o["label"] ?? ""}");
+    }
+    return parts.join("; ");
+}
+
+test "a mark adds its own label and removes the other mark's, and nothing already right" {
+    assert\equal(opsText(markOps([<str>], want: "queued")), want: "add merge-queue: queued", message: "queued from nothing");
+    assert\equal(opsText(markOps(["bug", "merge-queue: queued"], want: "queued")), want: "", message: "already queued takes no write");
+    assert\equal(opsText(markOps(["merge-queue: queued"], want: "rejected")), want: "remove merge-queue: queued; add merge-queue: rejected", message: "a kick-back swaps them");
+    assert\equal(opsText(markOps(["merge-queue: rejected"], want: "queued")), want: "add merge-queue: queued; remove merge-queue: rejected", message: "queued again swaps them back");
+    assert\equal(opsText(markOps(["merge-queue: queued", "merge-queue: rejected", "bug"], want: "")), want: "remove merge-queue: queued; remove merge-queue: rejected", message: "none clears both and keeps the rest");
+    assert\equal(opsText(markOps(["bug"], want: "")), want: "", message: "none on nothing takes no write");
 }
 
 test "the labeler is the last actor to apply the label" {
