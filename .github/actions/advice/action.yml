@@ -29,12 +29,6 @@ inputs:
       command that settles them.
     required: false
     default: 'true'
-  hand-edited-generated:
-    description: >
-      Comment when the pull request changes a generated file without changing anything
-      that produces it - a hand edit the next regeneration will overwrite.
-    required: false
-    default: 'true'
   target-outputs:
     description: >
       Comment when the pull request adds a target that declares no outputs, which can

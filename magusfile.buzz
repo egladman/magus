@@ -1399,7 +1399,8 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
 // content-generate target). This root magusfile only owns the roff manpages
 // (man-generate above), which are a distribution artifact rather than site content.
 
-// Renders MAGUS.md via `magus describe graph`.
+// Renders MAGUS.md via `magus describe graph`. Unscoped, so it is the one index carrying
+// the workspace-wide routing tables; every other project's is scoped to that project.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
@@ -1411,8 +1412,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // adapter expects. Written into gen/ because they are generated, not authored: the
 // knowledge graph previously sat at docs/graph.json as a hand-run export with no
 // generating target at all, which made it stale by construction with nothing to say so.
-// Whole-workspace scope is why this lives at the root rather than in docs/ - a describe
-// from inside a project only sees that project.
+// Whole-workspace scope is why this lives at the root rather than in docs/, whose index
+// is scoped to docs alone.
 export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared although gitignored: console's build needs this target and copies the
     // pair, so the files are an output it consumes, not residue it happens to find.

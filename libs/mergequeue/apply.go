@@ -52,7 +52,10 @@ type Applier struct {
 	// candidate holds regenerated files, and only once the build tool proved it runs
 	// none of the change's code. Nil kicks every such change back to its author.
 	Regenerate types.RegenerateFunc
-	Events     *Events
+	// Source names the validation run the verdicts come from, as the provider names it,
+	// for each kick-back to point at; empty when they come from a directory.
+	Source string
+	Events *Events
 
 	vcs      types.PushVCS
 	clone    Clone
@@ -108,6 +111,7 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		if err := r.revokeStale(ctx); err != nil {
 			return err
 		}
+		r.markStart(ctx)
 	}
 	defer func() {
 		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), a.vcs, a.clone.Root, a.scratch); err != nil {
@@ -325,10 +329,14 @@ func (r *applyRun) settle(ctx context.Context, v types.Verdict) error {
 	c := v.Change
 	switch v.Decision {
 	case types.DecisionMerged:
-		r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: c.Head, Reason: v.Reason})
+		r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: c.Head, Reason: v.Reason})
 		return nil
 	case types.DecisionKick:
-		return r.kick(ctx, c, kickOf(v))
+		k := kickOf(v)
+		if v.Gate != "" {
+			k.Reproduce = &types.Reproduction{Gate: v.Gate, Regenerate: v.Regenerate}
+		}
+		return r.kick(ctx, c, k)
 	case types.DecisionWait:
 		return r.wait(ctx, c, c.Head, v.Code, v.Reason)
 	case types.DecisionMerge:
@@ -456,7 +464,7 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 		return nil, r.wait(ctx, c, c.Head, types.CodeWaitMethodChanged, "validated as "+string(v.Method)+", now "+string(a.Method)+"; validated again next run")
 	case !r.caps.Allows(a.Method):
 		return nil, r.kick(ctx, c, refusal(&types.RefusedError{Reason: "the repository does not allow the " + string(a.Method) + " merge method",
-			Remedy: "Pick a merge method it allows and queue it again."}))
+			Remedy: "Pick a merge method it allows."}))
 	}
 	cand, err := r.rebuild(ctx, v, buildOnto)
 	if err == nil {
@@ -696,7 +704,7 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: commit, ByProvider: res.ByProvider})
+	r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: commit, ByProvider: res.ByProvider})
 	return true, r.mergedAs(ctx, c, tip, after, commit, rd.tree, v.Method)
 }
 
@@ -810,7 +818,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	}
 	if len(src) > 0 {
 		return "", &types.RefusedError{Paths: src, Reason: "validated at `" + short(c.Head) + "`, but merging it the way the provider would differs from what was validated in " +
-			joinPaths(src), Remedy: "Rebase it onto `" + r.plan.Base + "` and queue it again."}
+			joinPaths(src), Remedy: "Rebase it onto `" + r.plan.Base + "`."}
 	}
 	outputs, err := r.vcs.DiffTrees(ctx, root, reviewed, rd.tree)
 	if err != nil {
@@ -854,7 +862,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 				return "", err
 			}
 			return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs its branch restacked onto it, which would replace the commits #" + above +
-				" is stacked on", Remedy: "Restack the stack onto `" + r.plan.Base + "` and queue it again."}
+				" is stacked on", Remedy: "Restack the stack onto `" + r.plan.Base + "`."}
 		}
 		parents, author = []string{rd.tip}, r.committer
 		msg = "restack #" + c.ID + " onto " + r.plan.Base + "\n\nReplaces " + c.Head + " and the commits beneath it that " +
@@ -1047,7 +1055,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 	}
 	for _, st := range steps[:merged] {
 		r.merged[st.v.Change.ID] = true
-		r.Events.Emit(Event{Kind: EventMerged, Change: st.v.Change.ID, Commit: st.v.Change.Head, ByProvider: res.ByProvider})
+		r.mergedEvent(ctx, st.v.Change, Event{Kind: EventMerged, Change: st.v.Change.ID, Commit: st.v.Change.Head, ByProvider: res.ByProvider})
 	}
 	if merged < len(steps) {
 		err := &partialMergeError{top: top.v.Change.ID, merged: merged, total: len(steps), cause: mergeErr}
@@ -1152,7 +1160,7 @@ func refusal(r *types.RefusedError) types.Kick {
 
 // mergeBaseIn is the remedy for what only the author can regenerate.
 func (r *applyRun) mergeBaseIn() string {
-	return "Merge `" + r.plan.Base + "` in, regenerate, push, and queue it again."
+	return "Merge `" + r.plan.Base + "` in, regenerate, and push."
 }
 
 // kick kicks c back for its head. A head pushed since the kick was decided gets a
@@ -1169,6 +1177,7 @@ func (r *applyRun) kick(ctx context.Context, c types.Change, k types.Kick) error
 			return r.wait(ctx, moved, a.Head, types.CodeWaitHeadMoved, "head moved to "+short(a.Head)+" since it was decided; decided again next run")
 		}
 	}
+	k.Source = r.Source
 	r.Events.Emit(Event{Kind: EventKicked, Change: c.ID, Code: k.Code, Reason: firstLine(k.Report)})
 	if r.DryRun {
 		return nil
@@ -1179,6 +1188,7 @@ func (r *applyRun) kick(ctx context.Context, c types.Change, k types.Kick) error
 	if err := r.provider.KickBack(ctx, c, c.Head, k); err != nil {
 		return fmt.Errorf("kick back %s: %w", c.Label(), err)
 	}
+	r.mark(ctx, c, types.MarkRejected)
 	return nil
 }
 
@@ -1204,6 +1214,48 @@ func (r *applyRun) revokeStale(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// markStart marks queued every change the plan admitted, and clears the queued mark from
+// each unqueued change still showing one: its intent was withdrawn, or a run stopped
+// before marking what it did to it.
+func (r *applyRun) markStart(ctx context.Context) {
+	for _, g := range r.plan.Partitions {
+		for _, c := range g {
+			r.mark(ctx, c, types.MarkQueued)
+		}
+	}
+	for _, v := range r.plan.Verdicts {
+		if v.Decision == types.DecisionWait {
+			r.mark(ctx, v.Change, types.MarkQueued)
+		}
+	}
+	for _, u := range r.plan.Unqueued {
+		if u.Mark == types.MarkQueued {
+			r.mark(ctx, types.Change{ID: u.ID, Repo: u.Repo, Head: u.Head}, types.MarkNone)
+		}
+	}
+}
+
+// mergedEvent reports c merged and clears its mark.
+func (r *applyRun) mergedEvent(ctx context.Context, c types.Change, e Event) {
+	r.Events.Emit(e)
+	r.mark(ctx, c, types.MarkNone)
+}
+
+// mark shows m on c. A failure is a notice and applying goes on: a mark is a courtesy,
+// and the status and the kick-back comment are the record.
+func (r *applyRun) mark(ctx context.Context, c types.Change, m types.Mark) {
+	if r.DryRun {
+		return
+	}
+	if err := r.provider.Mark(ctx, c, m); err != nil {
+		what := "mark #" + c.ID + " " + string(m)
+		if m == types.MarkNone {
+			what = "clear the mark on #" + c.ID
+		}
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
+	}
 }
 
 func (a *Applier) statusContext() string {
