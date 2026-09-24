@@ -60,11 +60,20 @@ func sources(ctx context.Context, f types.BuildFacts, paths []string) ([]string,
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	out, err := f.Outputs(ctx, paths)
+	writes, err := f.Classify(ctx, paths)
 	if err != nil {
-		return nil, fmt.Errorf("outputs: %w", err)
+		return nil, fmt.Errorf("classify: %w", err)
 	}
-	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return out[p] }), nil
+	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return writes[p].Output }), nil
+}
+
+// outputs returns the paths some target declares as its output, in order.
+func outputs(ctx context.Context, f types.BuildFacts, paths []string) ([]string, error) {
+	writes, err := f.Classify(ctx, paths)
+	if err != nil {
+		return nil, fmt.Errorf("classify: %w", err)
+	}
+	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return !writes[p].Output }), nil
 }
 
 // with names the commits on onto, since head forked from it, that touched paths. It is a
@@ -270,14 +279,15 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir string)
 }
 
 // regenerateIn runs regenerate on the generated files among b.touched and commits what
-// it rewrote. A rewrite of anything no target declares as its output or edits in place
-// is refused: a candidate adds only regenerated files to what was merged.
+// it rewrote. A candidate adds only declared writes to what was merged: a rewrite of
+// anything the build tool does not declare it writes is refused. A file the build tool
+// maintains is put back as the candidate holds it and left out of the commit, since the
+// build tool running here is the base's, and its rewrite would undo the change's.
 func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b built, regenerate types.RegenerateFunc, units []string) (string, error) {
-	out, err := s.facts.Outputs(ctx, b.touched)
+	regen, err := outputs(ctx, s.facts, b.touched)
 	if err != nil {
-		return "", fmt.Errorf("outputs: %w", err)
+		return "", err
 	}
-	regen := slices.DeleteFunc(slices.Clone(b.touched), func(p string) bool { return !out[p] })
 	if len(regen) == 0 {
 		return b.Commit, nil
 	}
@@ -288,21 +298,44 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 	if err != nil || len(written) == 0 {
 		return b.Commit, err
 	}
-	stray, err := sources(ctx, s.facts, written)
+	writes, err := s.facts.Classify(ctx, written)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("classify: %w", err)
 	}
-	if len(stray) > 0 {
-		edited, err := s.facts.EditedInPlace(ctx, stray)
-		if err != nil {
-			return "", fmt.Errorf("edited in place: %w", err)
+	var keep, stray []string
+	for _, p := range written {
+		switch w := writes[p]; {
+		case w.Maintained:
+			if err := restore(ctx, v, b.Candidate, p); err != nil {
+				return "", err
+			}
+		case w.Declared():
+			keep = append(keep, p)
+		default:
+			stray = append(stray, p)
 		}
-		stray = slices.DeleteFunc(stray, func(p string) bool { return edited[p] })
 	}
 	if len(stray) > 0 {
-		return "", &types.RefusedError{Reason: "regeneration wrote files no target declares as output or edits in place: " + strings.Join(stray, ", "), Paths: stray}
+		return "", &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
 	}
-	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: written})
+	if len(keep) == 0 {
+		return b.Commit, nil
+	}
+	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: keep})
+}
+
+// restore writes path in cand's checkout back to its content at cand's commit.
+func restore(ctx context.Context, v types.BuildVCS, cand types.Candidate, path string) error {
+	content, err := v.ReadFileAt(ctx, cand.Dir, cand.Commit, path)
+	if err != nil {
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	abs := filepath.Join(cand.Dir, filepath.FromSlash(path))
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(abs); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(abs, []byte(content), mode)
 }
 
 func queueMeta(msg string) magustypes.CommitMeta {

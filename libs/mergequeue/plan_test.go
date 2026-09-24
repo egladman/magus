@@ -115,7 +115,7 @@ type admitting struct {
 	onBase    bool
 	approval  *types.Approval
 	conflicts []magustypes.Conflict
-	outputs   map[string]bool
+	outputs   map[string]types.Writes
 	affected  []string
 	factsErr  error
 }
@@ -139,7 +139,7 @@ func (d doubles) admit(c types.Change, a admitting) {
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
 		Return(magustypes.TreeMergeResult{Tree: "t", Conflicts: a.conflicts}, nil)
 	if len(a.conflicts) > 0 {
-		d.facts.EXPECT().Outputs(mock.Anything, conflictPaths(a.conflicts)).Return(a.outputs, nil)
+		d.facts.EXPECT().Classify(mock.Anything, conflictPaths(a.conflicts)).Return(a.outputs, nil)
 	}
 	if len(a.conflicts) > len(a.outputs) {
 		d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, c.Head, base, mock.Anything).
@@ -167,9 +167,9 @@ func TestPlanAdmission(t *testing.T) {
 		"a head on the base has merged": {c: change("1", "a"), admit: &admitting{onBase: true}, want: types.DecisionMerged},
 		"an unapproved change waits": {c: change("1", "a"), admit: &admitting{approval: &types.Approval{Head: head("1"), Base: "main", Method: types.MethodSquash, Queued: true}},
 			want: types.DecisionWait, wantCode: types.CodeWaitNotApproved},
-		"a conflict in source is kicked back": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/x.go"}}, outputs: map[string]bool{}},
+		"a conflict in source is kicked back": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/x.go"}}, outputs: map[string]types.Writes{}},
 			want: types.DecisionKick, wantCode: types.CodeKickConflict},
-		"a conflict in a declared output is regeneration's": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/gen.go"}}, outputs: map[string]bool{"a/gen.go": true}},
+		"a conflict in a declared output is regeneration's": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/gen.go"}}, outputs: map[string]types.Writes{"a/gen.go": {Output: true}}},
 			wantSet: []string{"a"}},
 		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
 		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},

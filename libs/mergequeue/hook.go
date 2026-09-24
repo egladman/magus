@@ -306,9 +306,10 @@ func CommandRegenerate(line string, plan types.Plan, log *HookLog) types.Regener
 //	affected    stdin: the change's paths, one per line
 //	            prints {"affected": [unit], "unbounded_by": why}; a missing "affected" is unbounded
 //	outputs     stdin: paths, one per line
-//	            prints {"outputs": [path], "modified": [path]}: the ones some target
-//	            declares as its output, and the ones some target edits in place
-//	            ("modified" may be omitted)
+//	            prints {"outputs": [path], "updated": [path], "maintained": [path]}: the
+//	            ones some target writes whole, the ones a target rewrites in place, and
+//	            the ones the build tool rewrites itself on every run; a missing key
+//	            names none
 //	generation  stdin: {"outputs": [path], "changed": [path]}
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
 //
@@ -362,43 +363,31 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 	return ans.Affected, ans.UnboundedBy, nil
 }
 
-func (f commandFacts) Outputs(ctx context.Context, paths []string) (map[string]bool, error) {
-	out := map[string]bool{}
+func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
+	out := map[string]types.Writes{}
 	if len(paths) == 0 {
 		return out, nil
 	}
 	var ans struct {
-		Outputs []string `json:"outputs"`
+		Outputs    []string `json:"outputs"`
+		Updated    []string `json:"updated"`
+		Maintained []string `json:"maintained"`
 	}
 	if err := f.ask(ctx, "outputs", "outputs", nil, strings.Join(paths, "\n")+"\n", &ans); err != nil {
 		return nil, err
 	}
-	for _, p := range ans.Outputs {
-		if slices.Contains(paths, p) {
-			out[p] = true
+	mark := func(answered []string, set func(*types.Writes)) {
+		for _, p := range answered {
+			if slices.Contains(paths, p) {
+				writes := out[p]
+				set(&writes)
+				out[p] = writes
+			}
 		}
 	}
-	return out, nil
-}
-
-// EditedInPlace asks the outputs query again and reads its optional "modified" key, so a
-// hook written before the key existed answers that nothing is edited in place.
-func (f commandFacts) EditedInPlace(ctx context.Context, paths []string) (map[string]bool, error) {
-	out := map[string]bool{}
-	if len(paths) == 0 {
-		return out, nil
-	}
-	var ans struct {
-		Modified []string `json:"modified"`
-	}
-	if err := f.ask(ctx, "outputs", "outputs", nil, strings.Join(paths, "\n")+"\n", &ans); err != nil {
-		return nil, err
-	}
-	for _, p := range ans.Modified {
-		if slices.Contains(paths, p) {
-			out[p] = true
-		}
-	}
+	mark(ans.Outputs, func(w *types.Writes) { w.Output = true })
+	mark(ans.Updated, func(w *types.Writes) { w.Updated = true })
+	mark(ans.Maintained, func(w *types.Writes) { w.Maintained = true })
 	return out, nil
 }
 

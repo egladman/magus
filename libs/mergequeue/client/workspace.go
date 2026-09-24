@@ -25,6 +25,9 @@ import (
 type Workspace struct {
 	m      *magus.Magus
 	target string
+	// regenerates holds every project's regeneration target and the targets its
+	// ctx.needs closure reaches, keyed by regenerationKey.
+	regenerates map[string]bool
 	// mu serializes Plan, which the SDK does not document as safe for concurrent use;
 	// in process it is fast enough that the queue's parallel admission loses little.
 	mu sync.Mutex
@@ -32,18 +35,54 @@ type Workspace struct {
 
 var _ types.BuildFacts = (*Workspace)(nil)
 
+// WorkspaceOption configures [OpenWorkspace].
+type WorkspaceOption func(*workspaceOptions)
+
+type workspaceOptions struct {
+	regenerate string
+}
+
+// WithRegenerateTarget names the target the queue's regeneration runs. An empty name is
+// an error.
+func WithRegenerateTarget(name string) WorkspaceOption {
+	return func(o *workspaceOptions) { o.regenerate = name }
+}
+
 // OpenWorkspace opens the magus workspace at root. target is the CI target the affected
-// set is computed for, typically "ci". The caller owns Close.
-func OpenWorkspace(ctx context.Context, root, target string) (*Workspace, error) {
+// set is computed for, typically "ci". The regeneration target defaults to "generate",
+// magus's regeneration target by convention; [WithRegenerateTarget] names another. The
+// caller owns Close.
+func OpenWorkspace(ctx context.Context, root, target string, opts ...WorkspaceOption) (*Workspace, error) {
+	o := workspaceOptions{regenerate: "generate"}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if target == "" {
 		return nil, errors.New("workspace needs the target its affected sets are computed for")
+	}
+	if o.regenerate == "" {
+		return nil, errors.New("workspace needs the target the queue's regeneration runs")
 	}
 	m, err := magus.Open(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	return &Workspace{m: m, target: target}, nil
+	regenerates := map[string]bool{}
+	for _, p := range m.All() {
+		// A step the lookup cannot resolve is skipped with its closure, so the walk
+		// has no error to return.
+		_ = magustypes.WalkChain(p, o.regenerate, m.Get, func(v magustypes.ChainVisit) error {
+			regenerates[regenerationKey(v.Project.Path, v.Target)] = true
+			regenerates[regenerationKey(v.Project.Path, "")] = true
+			return nil
+		})
+	}
+	return &Workspace{m: m, target: target, regenerates: regenerates}, nil
 }
+
+// regenerationKey names a target of project; an empty target names the project, whose
+// project-wide claims every one of its targets carries.
+func regenerationKey(project, target string) string { return project + ":" + target }
 
 // Affected returns the projects paths reach through the project graph, and why that set
 // is not a proof when paths edit the declarations it was computed from or files no
@@ -66,33 +105,28 @@ func (w *Workspace) plan(ctx context.Context, paths []string) ([]string, string,
 	return plan.Affected, plan.UnboundedBy, nil
 }
 
-// Outputs reports which of paths some project declares as an output: `magus describe
-// file`'s output role. A path only a VCS attribute marks generated is not one.
-func (w *Workspace) Outputs(ctx context.Context, paths []string) (map[string]bool, error) {
+// Classify reports how magus writes each of paths, as `magus describe file` declares it:
+// a project's output, an in-place update by a target the regeneration runs, or a file
+// magus maintains itself. An update by any other target, such as a formatter's, is not
+// the regeneration's to write. A path only a VCS attribute marks generated is none of
+// them.
+func (w *Workspace) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
 	entries, err := w.m.ClassifyFiles(ctx, paths)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool, len(paths))
+	regenerated := func(c magustypes.FileClaim) bool {
+		return c.Role == "update" && w.regenerates[regenerationKey(c.Project, c.Target)]
+	}
+	out := make(map[string]types.Writes, len(paths))
 	for i, e := range entries {
-		if len(e.OutputOf) > 0 {
-			out[paths[i]] = true
+		writes := types.Writes{
+			Output:     len(e.OutputOf) > 0,
+			Updated:    slices.ContainsFunc(e.Claims, regenerated),
+			Maintained: magustypes.IsMagusMaintained(paths[i]),
 		}
-	}
-	return out, nil
-}
-
-// EditedInPlace reports which of paths some target declares through
-// ctx.modifiesExistingFiles: the "update" claims of `magus describe file`.
-func (w *Workspace) EditedInPlace(ctx context.Context, paths []string) (map[string]bool, error) {
-	entries, err := w.m.ClassifyFiles(ctx, paths)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]bool, len(paths))
-	for i, e := range entries {
-		if slices.ContainsFunc(e.Claims, func(c magustypes.FileClaim) bool { return c.Role == "update" }) {
-			out[paths[i]] = true
+		if writes.Declared() {
+			out[paths[i]] = writes
 		}
 	}
 	return out, nil

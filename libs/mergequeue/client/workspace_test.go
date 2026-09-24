@@ -59,9 +59,9 @@ func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
 
-	out, err := w.Outputs(t.Context(), []string{"api/gen/out.go", "api/main.go", "vendor/blob.go"})
+	out, err := w.Classify(t.Context(), []string{"api/gen/out.go", "api/main.go", "vendor/blob.go"})
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"api/gen/out.go": true}, out, "an undeclared file is source, whatever marks it")
+	assert.Equal(t, map[string]types.Writes{"api/gen/out.go": {Output: true}}, out, "an undeclared file is source, whatever marks it")
 
 	g, err := w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/notes.md", "web/app.go"})
 	require.NoError(t, err)
@@ -80,7 +80,52 @@ func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 	assert.Equal(t, "no project declares vendor/blob.go as its output", g.Unbounded)
 }
 
+// An in-place update is the regeneration's to write only when a target the regeneration
+// runs declares it: a formatter's claim on every Go file must not open them all to it.
+// magus rewrites the file it maintains whatever anyone declares.
+func TestWorkspaceClassifyCountsOnlyTheRegenerationsUpdates(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"magusfile.buzz": "",
+		"api/magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(stamp);
+}
+export fun stamp(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("README.md");
+}
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("**/*.go");
+}
+`,
+		"api/README.md": "# api\n", "api/main.go": "package main\n",
+	} {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+	paths := []string{"api/README.md", "api/main.go", ".gitattributes"}
+	for name, tc := range map[string]struct {
+		opts []WorkspaceOption
+		want map[string]types.Writes
+	}{
+		"generate's closure by default": {want: map[string]types.Writes{"api/README.md": {Updated: true}, ".gitattributes": {Maintained: true}}},
+		"the named regeneration target": {opts: []WorkspaceOption{WithRegenerateTarget("format")},
+			want: map[string]types.Writes{"api/main.go": {Updated: true}, ".gitattributes": {Maintained: true}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, err := OpenWorkspace(t.Context(), root, "ci", tc.opts...)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = w.Close() })
+			got, err := w.Classify(t.Context(), paths)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestOpenWorkspaceNeedsATarget(t *testing.T) {
 	_, err := OpenWorkspace(t.Context(), t.TempDir(), "")
 	require.Error(t, err)
+	_, err = OpenWorkspace(t.Context(), t.TempDir(), "ci", WithRegenerateTarget(""))
+	require.EqualError(t, err, "workspace needs the target the queue's regeneration runs")
 }

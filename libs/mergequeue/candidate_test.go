@@ -3,6 +3,9 @@ package mergequeue
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -83,13 +86,13 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 	c := change("1")
 	for name, tc := range map[string]struct {
 		conflicts []magustypes.Conflict
-		outputs   map[string]bool
+		outputs   map[string]types.Writes
 		wantErr   bool
 		settle    func(d doubles)
 	}{
 		"a content conflict in an output takes the change's side": {
 			conflicts: []magustypes.Conflict{{Path: "gen/a.go", Kind: magustypes.ConflictKindContent}},
-			outputs:   map[string]bool{"gen/a.go": true},
+			outputs:   map[string]types.Writes{"gen/a.go": {Output: true}},
 			settle: func(d doubles) {
 				d.vcs.EXPECT().KeepIncoming(mock.Anything, "/co", []string{"gen/a.go"}).Return(nil)
 				d.vcs.EXPECT().MarkResolved(mock.Anything, "/co", []string{"gen/a.go"}).Return(nil)
@@ -97,14 +100,14 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 		},
 		"an output one side deleted stays deleted": {
 			conflicts: []magustypes.Conflict{{Path: "gen/b.go", Kind: magustypes.ConflictKindDeleted}},
-			outputs:   map[string]bool{"gen/b.go": true},
+			outputs:   map[string]types.Writes{"gen/b.go": {Output: true}},
 			settle: func(d doubles) {
 				d.vcs.EXPECT().RemoveConflicts(mock.Anything, "/co", []string{"gen/b.go"}).Return(nil)
 			},
 		},
 		"a source conflict is the author's": {
 			conflicts: []magustypes.Conflict{{Path: "a.go", Kind: magustypes.ConflictKindContent}, {Path: "gen/a.go", Kind: magustypes.ConflictKindContent}},
-			outputs:   map[string]bool{"gen/a.go": true},
+			outputs:   map[string]types.Writes{"gen/a.go": {Output: true}},
 			wantErr:   true,
 			settle: func(d doubles) {
 				d.vcs.EXPECT().AbortMerge(mock.Anything, "/co").Return(nil)
@@ -116,7 +119,7 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 			d := newDoubles(t)
 			d.vcs.EXPECT().StartMerge(mock.Anything, "/co", c.Head, candidateIdentity).Return(nil)
 			d.vcs.EXPECT().Conflicts(mock.Anything, "/co").Return(tc.conflicts, nil)
-			d.facts.EXPECT().Outputs(mock.Anything, conflictPaths(tc.conflicts)).Return(tc.outputs, nil)
+			d.facts.EXPECT().Classify(mock.Anything, conflictPaths(tc.conflicts)).Return(tc.outputs, nil)
 			tc.settle(d)
 			settled, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, "/co")
 			if tc.wantErr {
@@ -131,53 +134,58 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 	}
 }
 
-// A candidate adds only regenerated files to what was merged: a regeneration writing
-// anything no target declares as output or edits in place is refused, as the change's
-// own doing.
-func TestRegenerateInCommitsOnlyDeclaredOutputs(t *testing.T) {
+// A candidate adds only declared writes to what was merged: a regeneration writing
+// anything nothing declares is refused, as the change's own doing. The build tool's
+// rewrite of a file it maintains is the base's, so the change's version is put back.
+func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 	c := change("1")
-	b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: "/co", Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}}
-	s := candidateSpec{clone: clone, onto: base, change: c}
-	regenerate := func(_ context.Context, r types.Regeneration) error {
-		assert.Equal(t, types.Regeneration{Dir: "/co", Scratch: "/scratch", Onto: base, Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
-		return nil
-	}
-	// doc.md is hand-written with a generated region: a target edits it in place.
-	edited := map[string]bool{"doc.md": true}
+	writes := map[string]types.Writes{"gen/a.go": {Output: true}, "docs/a.md": {Updated: true}, ".gitattributes": {Maintained: true}}
 	for name, tc := range map[string]struct {
-		written []string
-		// stray is what Outputs leaves of written, which EditedInPlace is asked about.
-		stray     []string
+		written   []string
+		committed []string
 		want      string
 		wantErr   string
-		wantPaths []string
 	}{
-		"nothing rewritten":             {want: head("cand")},
-		"an output rewritten":           {written: []string{"gen/a.go"}, want: head("regenerated")},
-		"an edited-in-place file":       {written: []string{"gen/a.go", "doc.md"}, stray: []string{"doc.md"}, want: head("regenerated")},
-		"a source rewritten":            {written: []string{"gen/a.go", "a.go"}, stray: []string{"a.go"}, wantErr: "regeneration wrote files no target declares as output or edits in place: a.go", wantPaths: []string{"a.go"}},
-		"a source beside an edited one": {written: []string{"doc.md", "a.go"}, stray: []string{"doc.md", "a.go"}, wantErr: "regeneration wrote files no target declares as output or edits in place: a.go", wantPaths: []string{"a.go"}},
+		"nothing rewritten":                 {want: head("cand")},
+		"an output rewritten":               {written: []string{"gen/a.go"}, committed: []string{"gen/a.go"}, want: head("regenerated")},
+		"a file a target updates rewritten": {written: []string{"docs/a.md", "gen/a.go"}, committed: []string{"docs/a.md", "gen/a.go"}, want: head("regenerated")},
+		"a maintained file rewritten":       {written: []string{".gitattributes", "gen/a.go"}, committed: []string{"gen/a.go"}, want: head("regenerated")},
+		"only a maintained file rewritten":  {written: []string{".gitattributes"}, want: head("cand")},
+		"a source rewritten":                {written: []string{"gen/a.go", "a.go"}, wantErr: "regeneration wrote files nothing declares it writes: a.go"},
 	} {
 		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
+			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}}
+			regenerate := func(_ context.Context, r types.Regeneration) error {
+				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Onto: base, Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
+				return nil
+			}
 			d := newDoubles(t)
-			s.facts = d.facts
-			d.facts.EXPECT().Outputs(mock.Anything, b.touched).Return(map[string]bool{"gen/a.go": true}, nil)
-			d.vcs.EXPECT().DirtyFiles(mock.Anything, "/co", []string(nil)).Return(tc.written, nil)
+			s := candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}
+			d.facts.EXPECT().Classify(mock.Anything, b.touched).Return(writes, nil)
+			d.vcs.EXPECT().DirtyFiles(mock.Anything, dir, []string(nil)).Return(tc.written, nil)
 			if len(tc.written) > 0 {
-				d.facts.EXPECT().Outputs(mock.Anything, tc.written).Return(map[string]bool{"gen/a.go": true}, nil)
+				d.facts.EXPECT().Classify(mock.Anything, tc.written).Return(writes, nil)
 			}
-			if len(tc.stray) > 0 {
-				d.facts.EXPECT().EditedInPlace(mock.Anything, tc.stray).Return(edited, nil)
+			restored := slices.Contains(tc.written, ".gitattributes")
+			if restored {
+				d.vcs.EXPECT().ReadFileAt(mock.Anything, dir, head("cand"), ".gitattributes").Return("the change's\n", nil)
 			}
-			if tc.want == head("regenerated") {
-				d.vcs.EXPECT().Commit(mock.Anything, "/co", magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: tc.written}).Return(tc.want, nil)
+			if tc.committed != nil {
+				d.vcs.EXPECT().Commit(mock.Anything, dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: tc.committed}).Return(tc.want, nil)
 			}
 			got, err := regenerateIn(t.Context(), d.vcs, s, b, regenerate, []string{"gen"})
+			if restored {
+				content, readErr := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+				require.NoError(t, readErr)
+				assert.Equal(t, "the change's\n", string(content))
+			}
 			if tc.wantErr != "" {
 				var refused *types.RefusedError
 				require.ErrorAs(t, err, &refused)
 				assert.Equal(t, tc.wantErr, refused.Reason)
-				assert.Equal(t, tc.wantPaths, refused.Paths)
+				assert.Equal(t, []string{"a.go"}, refused.Paths)
 				return
 			}
 			require.NoError(t, err)
@@ -195,13 +203,15 @@ func TestReviewTargetLooksThroughMergesOfTheBaseThatAddNothingUnreviewed(t *test
 	for name, tc := range map[string]struct {
 		plain    magustypes.TreeMergeResult
 		diff     []string
-		outputs  map[string]bool
+		outputs  map[string]types.Writes
 		want     string
 		wantOwed []regenerationProof
 	}{
 		"the plain merge":            {plain: magustypes.TreeMergeResult{Tree: "t"}, want: first},
-		"a merge that edited source": {plain: magustypes.TreeMergeResult{Tree: "other"}, diff: []string{"a.go"}, outputs: map[string]bool{}, want: merge},
-		"a merge that regenerated": {plain: magustypes.TreeMergeResult{Tree: "other"}, diff: []string{"gen/a.go"}, outputs: map[string]bool{"gen/a.go": true},
+		"a merge that edited source": {plain: magustypes.TreeMergeResult{Tree: "other"}, diff: []string{"a.go"}, outputs: map[string]types.Writes{}, want: merge},
+		"a merge that edited a file a target updates in place": {plain: magustypes.TreeMergeResult{Tree: "other"}, diff: []string{"docs/a.md"},
+			outputs: map[string]types.Writes{"docs/a.md": {Updated: true}}, want: merge},
+		"a merge that regenerated": {plain: magustypes.TreeMergeResult{Tree: "other"}, diff: []string{"gen/a.go"}, outputs: map[string]types.Writes{"gen/a.go": {Output: true}},
 			want: first, wantOwed: []regenerationProof{{Commit: merge, First: first, Onto: second, Paths: []string{"gen/a.go"}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -212,7 +222,7 @@ func TestReviewTargetLooksThroughMergesOfTheBaseThatAddNothingUnreviewed(t *test
 			d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: second, Theirs: first}).Return(tc.plain, nil)
 			if tc.diff != nil {
 				d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "other", "t").Return(tc.diff, nil)
-				d.facts.EXPECT().Outputs(mock.Anything, tc.diff).Return(tc.outputs, nil)
+				d.facts.EXPECT().Classify(mock.Anything, tc.diff).Return(tc.outputs, nil)
 			}
 			if tc.want == first {
 				d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, first).Return(magustypes.Commit{ID: first, Parents: []string{base}}, nil)

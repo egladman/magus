@@ -153,18 +153,26 @@ func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
 	assert.Empty(t, unboundedBy)
 }
 
-func TestCommandFactsAnswerOutputsAndGeneration(t *testing.T) {
+// A facts command that answers only "outputs" declares no update and maintains nothing.
+func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
+	writes, err := CommandFacts(`echo '{"outputs": ["gen/a"]}'`, t.TempDir(), nil).Classify(context.Background(), []string{"gen/a", ".gitattributes"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}}, writes)
+}
+
+func TestCommandFactsAnswerWritesAndGeneration(t *testing.T) {
 	ctx := context.Background()
 	line := `case "$MERGEQUEUE_QUERY" in
-	outputs) echo '{"outputs": ["gen/a", "elsewhere"]}';;
+	outputs) echo '{"outputs": ["gen/a", "elsewhere"], "updated": ["docs/b.md", "gen/a"], "maintained": [".gitattributes"]}';;
 	generation) cat > asked; echo '{"units": ["app"], "code": ["app/gen.go"], "unbounded": ""}';;
 	*) exit 9;;
 	esac`
 	dir := t.TempDir()
 	facts := CommandFacts(line, dir, nil)
-	out, err := facts.Outputs(ctx, []string{"gen/a", "src/b"})
+	writes, err := facts.Classify(ctx, []string{"gen/a", "src/b", "docs/b.md", ".gitattributes"})
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"gen/a": true}, out, "only what was asked about")
+	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true, Updated: true}, "docs/b.md": {Updated: true}, ".gitattributes": {Maintained: true}}, writes,
+		"only what was asked about")
 
 	g, err := facts.Generation(ctx, []string{"gen/a"}, []string{"app/gen.go", "docs/x.md"})
 	require.NoError(t, err)
@@ -173,19 +181,4 @@ func TestCommandFactsAnswerOutputsAndGeneration(t *testing.T) {
 	asked, err := os.ReadFile(filepath.Join(dir, "asked"))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"outputs": ["gen/a"], "changed": ["app/gen.go", "docs/x.md"]}`, string(asked))
-}
-
-// The in-place edits ride the outputs answer, so a hook that never prints "modified"
-// reports none rather than failing.
-func TestCommandFactsReadEditedInPlaceFromTheOutputsAnswer(t *testing.T) {
-	ctx := context.Background()
-	with := CommandFacts(`[ "$MERGEQUEUE_QUERY" = outputs ] && echo '{"outputs": [], "modified": ["doc.md", "elsewhere"]}'`, t.TempDir(), nil)
-	got, err := with.EditedInPlace(ctx, []string{"doc.md", "a.go"})
-	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"doc.md": true}, got, "only what was asked about")
-
-	without := CommandFacts(`echo '{"outputs": ["gen/a"]}'`, t.TempDir(), nil)
-	got, err = without.EditedInPlace(ctx, []string{"doc.md"})
-	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{}, got)
 }
