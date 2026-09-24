@@ -213,10 +213,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   entry point), never the label. The review-remark telemetry label `human` is now
   `unattributed`.
 - **The trail names the credential, not "operator", and drops `actor`.** Each event records
-  `credential` (the verified token's name: `cli`, a connector or console token's name,
-  `share`) and the MCP client as `host`; the wire's `actor` is a label rendered from them.
-  Console review comments are `unattributed`, not `human`. Tokens may not be named `cli`
-  or `share`.
+  `credential` (the verified token's class, id, name and grant, never its secret) and the
+  MCP client as `host`; the wire's `actor` is a label rendered from them. Console review
+  comments are `unattributed`, not `human`.
+- **BREAKING: a token holds a grant, and every route names what it needs.** A grant is
+  `none`, `read` or `write` per surface (`tokens`, `mcp`, `console`); a valid token below
+  a route's need gets 403 MGS9015. No door mints a token wider than its minter's grant.
+  Doctor's `mcp-tokens` check is now `tokens`.
+- **BREAKING: tokens carry their class and always expire; older ones are refused.**
+  `mgo_` is the operator, `mgs_` a stored token (now in `tokens.d`), `mgl_` a share link,
+  which the loopback daemon refuses. Stored tokens live at most 366 days and share links
+  24 hours; longer, or `never`, is MGS9018. An old operator file is MGS9016, anything in
+  `connectors.d` MGS9017.
+- **Console links carry a one-time code, never a token.** `#code=` lives a minute and
+  works once; the console trades it at `POST /api/v1/token/exchange` for a 12-hour console
+  token. The guard denies agents the commands that mint or revoke tokens
+  (`credential-verb`) and the token files (`token-state`). A non-loopback `mcp.address`
+  needs `mcp.insecure_bind: true`, and the operator token is refused off loopback.
+- **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
+  a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
+  the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
+  caller's grant. Every mint is audited, and a revoked token ends its open streams.
+- **Every Connect procedure and `/api/` route names its own need.** The daemon refuses to
+  start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
+  reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
+  `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
 - **"Session" now means only the host's conversation; magus's per-process id is an
   invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
   `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is

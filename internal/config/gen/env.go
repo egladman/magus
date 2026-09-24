@@ -248,6 +248,13 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	if v := getenv("MAGUS_MCP_ADDRESS"); v != "" {
 		cfg.MCP.Address = v
 	}
+	if v := getenv("MAGUS_MCP_INSECURE_BIND"); v != "" {
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_MCP_INSECURE_BIND: %w", err))
+		} else {
+			cfg.MCP.InsecureBind = b
+		}
+	}
 	if v := getenv("MAGUS_CONSOLE_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_ENABLED: %w", err))
