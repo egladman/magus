@@ -1,0 +1,56 @@
+# A stage that dies leaves no lock behind for the next run, whichever side died.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
+
+# The reader exits at once (a usage error, before any lock); the writer's next write
+# meets a closed pipe and kills it with SIGPIPE while it holds the project.
+! exec bash -c 'set -o pipefail; magus run emitlate . | magus run nosuch .'
+exec magus status -o json
+! stdout '"locks"'
+exec magus run quick .
+
+# The writer is SIGKILLed while the reader waits on it: the reader proceeds with what
+# arrived, and nothing is left held.
+exec bash -c 'magus run hold . | magus run consume . & for i in $(seq 200); do [ -s holder.pid ] && break; sleep 0.05; done; [ -s holder.pid ] || exit 1; sleep 0.3; kill -9 $(cat holder.pid); wait'
+exists consumed
+grep 'before-kill' consumed
+exec magus status -o json
+! stdout '"locks"'
+! stdout '"pipe_waits"'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "fs";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "emitlate": {"skip_cache": "writes stdout per invocation"},
+        "hold": {"skip_cache": "holds the project until killed"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+        "quick": {"skip_cache": "proves the project is free"},
+    },
+});
+
+export fun emitlate(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sleep", ["1"]);
+    io\stdout.write("late\n");
+    proc\exec("sleep", ["1"]);
+    io\stdout.write("later\n");
+}
+
+export fun hold(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdout.write("before-kill\n");
+    proc\exec("sh", ["-c", "echo $PPID > holder.pid; sleep 10"]);
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    fs\writeFile("consumed", io\stdin.readAll());
+}
+
+export fun quick(ctx: magus\Context, args: [str]) > void !> any {}

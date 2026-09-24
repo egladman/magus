@@ -10,7 +10,7 @@
 //
 // These bodies are written by OTHER PEOPLE and arrive over the network from the review host.
 // marked emits an `html` token's source VERBATIM by default, so a remark carrying a <script>
-// tag would run it in the console, with the daemon's bearer token in the same origin. Three
+// tag would run it in the console, with the server's bearer token in the same origin. Three
 // things are turned off here rather than trusted:
 //
 //   - raw HTML, which is escaped and read back as the text it is;
@@ -56,7 +56,7 @@ renderer.link = function (token) {
 // break to whoever typed it, and GitHub's own comment boxes read it that way. Rendering
 // paragraphs by the CommonMark rule instead would silently join lines somebody separated.
 export function renderMarkdown(body: string): string {
-  // Typed string, but it arrives from an unvalidated `as` cast over the daemon's JSON, and
+  // Typed string, but it arrives from an unvalidated `as` cast over the server's JSON, and
   // marked.parse THROWS on anything else. A throw here lands inside the row renderer, takes
   // paint() down mid-replaceChildren, and leaves the virtualized stream dead until a reload -
   // where the same input used to render as empty text.

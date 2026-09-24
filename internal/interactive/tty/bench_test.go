@@ -206,7 +206,7 @@ func BenchmarkPickerArrowNavigation(b *testing.B) {
 // with one animated cell, which is what the 150ms tick exists to advance.
 func statusFrame(spinner rune) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "daemon  %c  running   pid 4211   uptime 3h12m\n", spinner)
+	fmt.Fprintf(&b, "server  %c  running   pid 4211   uptime 3h12m\n", spinner)
 	b.WriteString("telemetry\n  enabled\ttrue\n  endpoint\tlocalhost:4317\n  protocol\tgrpc\n")
 	for i := range 12 {
 		fmt.Fprintf(&b, "  project-%02d\tbuild\tcached\t0.0s\n", i)

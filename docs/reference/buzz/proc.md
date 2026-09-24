@@ -56,9 +56,9 @@ Resolve cmd against PATH and return its absolute path. RAISES when the command i
 
 ### withSlots
 
-Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.
+Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make, a test runner) that magus can't see, so the global budget is not oversubscribed. Commands callback starts share a GNU make jobserver of n slots, so make run without -j, and cargo, stay within them.
 
-**Signature:** `proc\withSlots(n, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L501)
+**Signature:** `proc\withSlots(n, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L502)
 
 | Parameter  | Type                                                                        | Optional | Description |
 | ---------- | --------------------------------------------------------------------------- | -------- | ----------- |

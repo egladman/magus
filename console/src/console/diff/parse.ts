@@ -1,7 +1,7 @@
 // parse.ts - the wire shape of a changeset, and the mapping from it into the types the Diff
 // surface renders. Pure: JSON in, a file/hunk tree out, no DOM and no fetch.
 //
-// It does NOT parse a patch. It used to, and the daemon parsed the same bytes independently in
+// It does NOT parse a patch. It used to, and the server parsed the same bytes independently in
 // Go, and the two drifted - this side learned Mercurial's headerless dialect and POSIX's
 // tab-delimited timestamps, the Go side did not, so `magus diff` reported an empty changeset on
 // an hg tree while this surface rendered it fine.
@@ -36,7 +36,7 @@ export interface DiffLine {
   // emph is WHICH PART of this line changed, for a line paired with its counterpart across a
   // rewrite. Undefined on most lines, which have nothing to mark.
   //
-  // Computed by the daemon, like the digest above it. This surface used to work it out and the
+  // Computed by the server, like the digest above it. This surface used to work it out and the
   // terminal viewer worked out the same thing separately, agreeing only by hand-transcribed
   // test vectors - so the same changed line could read as two different changes depending on
   // where you opened it, and nothing would ever have said so.
@@ -44,13 +44,13 @@ export interface DiffLine {
 }
 
 export interface Hunk {
-  // digest is the hunk's identity, computed by the daemon over the body EXACTLY as the VCS
+  // digest is the hunk's identity, computed by the server over the body EXACTLY as the VCS
   // emitted it. It is what a read receipt is keyed by. This surface must never recompute it:
   // the rows below have had their +/-/space markers stripped, and putting them back does not
   // round-trip - a context line whose producer dropped the trailing space arrives as "" and
   // would be rebuilt as " ", yielding a different digest for the same hunk.
   readonly digest: string;
-  // index is this hunk's position in ITS FILE, as the daemon numbered it - not its position in
+  // index is this hunk's position in ITS FILE, as the server numbered it - not its position in
   // whatever array a caller is holding. Comments and threads are keyed by it, so a view that
   // renders a SUBSET of a file's hunks still looks up the right remarks; keying by array
   // position instead means a slice starting at hunk 1 reads hunk 0's remarks onto it, silently.
@@ -59,7 +59,7 @@ export interface Hunk {
   // internal/diff/parse.go. This is the browser's half of that rule.
   readonly index: number;
   readonly header: string; // the raw @@ line, including any trailing section heading
-  // declaration is the enclosing declaration git named in header, parsed by the daemon. Empty
+  // declaration is the enclosing declaration git named in header, parsed by the server. Empty
   // where git named none. It is what the heading RENDERS, because the @@ coordinates are wire
   // syntax and this surface already prints line numbers in its gutters.
   readonly declaration: string;
@@ -146,7 +146,7 @@ export interface WireFile {
   hunks: WireHunk[] | null;
 }
 
-// fromWire maps the daemon's changeset into the render tree. A missing or empty list yields []
+// fromWire maps the server's changeset into the render tree. A missing or empty list yields []
 // rather than throwing: a clean tree is a state, not a failure.
 //
 // Every array is guarded for null because Go marshals a nil slice as `null`, not `[]` - a

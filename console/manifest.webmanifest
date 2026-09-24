@@ -2,7 +2,7 @@
   "name": "magus console",
   "short_name": "console",
   "id": "./",
-  "description": "The magus native console: log viewer, graph explorer, dashboard, and activity as live lenses on the daemon.",
+  "description": "The magus native console: log viewer, graph explorer, dashboard, and activity as live lenses on the server.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

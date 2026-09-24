@@ -18,7 +18,7 @@ export function registerServiceWorker(
 ): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator))
     return Promise.resolve(null);
-  // Service workers are secure-context only. The daemon's loopback URL qualifies; a plain http:// LAN
+  // Service workers are secure-context only. The server's loopback URL qualifies; a plain http:// LAN
   // share link does not, which is also why the console is not installable from one.
   const secure = location.protocol === "https:" || location.hostname === "localhost";
   if (!secure) return Promise.resolve(null);
@@ -42,11 +42,11 @@ export function registerServiceWorker(
 
 // ---- the served build ------------------------------------------------------
 //
-// The daemon serves the console's files from disk, so a restarted daemon (or a rebuilt console) can
+// The server serves the console's files from disk, so a restarted server (or a rebuilt console) can
 // serve a newer build than the one this page is running, while the service worker keeps handing the
-// page its cached copy. The old bundle then talks to a daemon whose messages it does not fully know,
+// page its cached copy. The old bundle then talks to a server whose messages it does not fully know,
 // and a view it cannot fill reads as empty rather than out of date. So the page compares the build it
-// runs with the build the daemon serves, and asks for a reload when they differ.
+// runs with the build the server serves, and asks for a reload when they differ.
 //
 // A build is sw.js's stamped BUILD_ID (scripts/stamp-build.mjs), a digest of every precached file.
 
@@ -74,7 +74,7 @@ async function cachedBuildId(): Promise<string | null> {
   return keys.length === 1 ? keys[0].slice(CACHE_PREFIX.length) : null;
 }
 
-// watchServedBuild calls onStale once when the daemon serves a build other than the one this page
+// watchServedBuild calls onStale once when the server serves a build other than the one this page
 // runs: at boot, then every intervalMs. Returns a stop function.
 export function watchServedBuild(
   workerUrl: URL | string,
@@ -89,7 +89,7 @@ export function watchServedBuild(
     try {
       served = await servedBuildId(workerUrl);
     } catch (e) {
-      // reported: a daemon that cannot serve sw.js is unreachable, which the daemon transport and the
+      // reported: a server that cannot serve sw.js is unreachable, which the server transport and the
       // status stream report; this check only answers "which build", and retries next interval.
       console.debug("served build check", e);
       return;

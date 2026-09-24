@@ -39,7 +39,7 @@ it once here and link there for the distributed story.
   emits the result event; the target's `export fun` never executes. The saved work
   _is_ the point.
 - **It is just files.** The store is a directory of blobs, JSON manifests, and
-  captured logs under `.magus/`. There is no database and no daemon in the read
+  captured logs under `.magus/`. There is no database and no server in the read
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
   ordinary tools.
 

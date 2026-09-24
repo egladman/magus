@@ -41,7 +41,7 @@ import (
 // checkBridgeReachability probes the console endpoint (/api/v1/graph) by
 // issuing a real HTTP GET (a 401 proves the guarded route exists).
 func (r *runner) checkBridgeReachability() types.Check {
-	return probeBridgeReachability(r.runCtx(), r.opts.daemonInfo)
+	return probeBridgeReachability(r.runCtx(), r.opts.serverInfo)
 }
 
 // checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
@@ -565,7 +565,7 @@ var runtimeEnvVars = map[string]struct{}{
 	"MAGUS_SHARD":                {},
 	"MAGUS_N_SHARDS":             {},
 	"MAGUS_CACHE_SIGNING_KEY":    {},
-	"MAGUS_DAEMON_SOCKET":        {},
+	"MAGUS_PROC_SOCKET":          {},
 }
 
 func (*runner) checkEnvVars() types.Check {
@@ -594,10 +594,9 @@ func (*runner) checkEnvVars() types.Check {
 		//   MAGUS_CACHE_SIGNING_KEY  the remote-cache signing seed. It must stay
 		//                            env-only: a signing secret that could be set in a
 		//                            committed magus.yaml is not a secret.
-		//   MAGUS_DAEMON_SOCKET      the proc-server socket magus exports for its own
-		//                            forwarded children (cmd/magus/server.go); a child
-		//                            magus legitimately sees it, and it stopped being a
-		//                            config field when daemon.socket was removed.
+		//   MAGUS_PROC_SOCKET        the proc-server socket magus exports for its own
+		//                            forwarded children (proc.SocketEnv); a child
+		//                            magus legitimately sees it, and no person sets it.
 		if _, ok := runtimeEnvVars[key]; ok {
 			continue
 		}
@@ -736,7 +735,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 }
 
 // workspaceRoot is the directory a check walks. r.root is the caller's --root override,
-// empty on the ordinary CLI path and on the daemon's, so the loaded workspace is the
+// empty on the ordinary CLI path and on the server's, so the loaded workspace is the
 // answer whenever there is one. A walk from "" silently finds nothing: the same-step
 // witness ran there and reported every workspace clean.
 func (r *runner) workspaceRoot() string {
@@ -1625,13 +1624,13 @@ func (r *runner) checkStaleShadowAcks() types.Check {
 }
 
 // checkWorkspaceRegistration reports whether this workspace is currently
-// loaded in the multi-workspace daemon and how many other workspaces are
+// loaded in the multi-workspace server and how many other workspaces are
 // present. Informational only: a workspace not yet loaded is normal (it
 // loads on first use).
 func (r *runner) checkWorkspaceRegistration() types.Check {
-	d := r.opts.daemonInfo
+	d := r.opts.serverInfo
 	if d == nil || !d.Reachable || len(d.Workspaces) == 0 {
-		return types.Check{Name: "workspace-registration", Status: types.CheckOK, Message: "no loaded workspaces in daemon"}
+		return types.Check{Name: "workspace-registration", Status: types.CheckOK, Message: "no loaded workspaces in server"}
 	}
 	thisRoot := r.root
 	if r.ws != nil {
@@ -1653,27 +1652,38 @@ func (r *runner) checkWorkspaceRegistration() types.Check {
 		return types.Check{
 			Name:    "workspace-registration",
 			Status:  types.CheckOK,
-			Message: fmt.Sprintf("loaded in daemon  (%d workspace(s) total)", len(d.Workspaces)),
+			Message: fmt.Sprintf("loaded in server  (%d workspace(s) total)", len(d.Workspaces)),
 			Details: details,
 		}
 	}
 	return types.Check{
 		Name:    "workspace-registration",
 		Status:  types.CheckOK,
-		Message: fmt.Sprintf("not yet loaded in daemon  (%d other workspace(s) loaded)", len(d.Workspaces)),
+		Message: fmt.Sprintf("not yet loaded in server  (%d other workspace(s) loaded)", len(d.Workspaces)),
 		Details: details,
 	}
 }
 
 // procPoolSocketRe matches a per-process proc server's socket, which proc.Server names
-// magus-<pid>-<rand>.sock. The user's daemon is the fixed magus-daemon.sock.
+// magus-<pid>-<rand>.sock.
 var procPoolSocketRe = regexp.MustCompile(`^magus-\d+-[^/]*\.sock$`)
 
-// checkStaleSockets scans the magus socket directory. Multiple live daemons
-// fail the check; leftover dead sockets are harmless and reported only as
-// context.
+// socketState is what the sockets check found at one well-known socket.
+type socketState string
+
+const (
+	socketAbsent socketState = "not running"
+	socketLive   socketState = "live"
+	socketStale  socketState = "stale"
+)
+
+// checkStaleSockets reports the magus socket directory by role: the server, the broker,
+// and the per-process pools runs host for their children. Two live servers fail the
+// check; leftover dead sockets are harmless (each is reclaimed on the next bind) and
+// reported only as context.
 func (r *runner) checkStaleSockets() types.Check {
-	sockDir := r.opts.daemonInfo.sockDirOrDefault()
+	si := r.opts.serverInfo
+	sockDir := si.sockDirOrDefault()
 	if sockDir == "" {
 		return types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}
 	}
@@ -1687,67 +1697,90 @@ func (r *runner) checkStaleSockets() types.Check {
 	}
 
 	// This process serves a socket of its own (proc.Server names it magus-<pid>-<rand>.sock), and
-	// counting it made the check fail whenever a daemon was actually running: doctor plus the daemon
-	// is two live sockets, so the one state the check exists to bless reported "multiple daemons
-	// running". It only ever passed when nothing was serving.
+	// counting it made the check fail whenever a server was actually running: doctor plus the
+	// server is two live sockets, so the one state the check exists to bless reported a conflict.
 	self := fmt.Sprintf("magus-%d-", os.Getpid())
 
-	var stale, live []string
+	server, brk := socketAbsent, socketAbsent
+	pools := 0
+	// others are live sockets outside the well-known names and the pool pattern: a server
+	// on a configured server.address inside this directory, which competes with server.sock.
+	var stale, others []string
+	probe := func(p string) socketState {
+		if isSocketAlive(r.runCtx(), p) {
+			return socketLive
+		}
+		stale = append(stale, p)
+		return socketStale
+	}
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "magus-") || !strings.HasSuffix(e.Name(), ".sock") {
+		name := e.Name()
+		if e.IsDir() {
 			continue
 		}
-		if strings.HasPrefix(e.Name(), self) {
-			continue
+		p := filepath.Join(sockDir, name)
+		switch {
+		case name == si.ServerSocket:
+			server = probe(p)
+		case name == si.BrokerSocket:
+			brk = probe(p)
+		case strings.HasPrefix(name, "magus-") && strings.HasSuffix(name, ".sock") && !strings.HasPrefix(name, self):
+			if probe(p) == socketStale {
+				continue
+			}
+			// A live per-process pool is not a server. It is named for its pid and lasts one
+			// invocation, and a run hosts one beside the user's server, so counting it
+			// reports the ordinary state as a conflict.
+			if procPoolSocketRe.MatchString(name) {
+				pools++
+			} else {
+				others = append(others, p)
+			}
 		}
-		p := filepath.Join(sockDir, e.Name())
-		if !isSocketAlive(r.runCtx(), p) {
-			stale = append(stale, p)
-			continue
-		}
-		// A LIVE per-process pool is not a daemon. It is named for its pid, it lasts one
-		// invocation, and a top-level run hosts one alongside the user's daemon, so
-		// counting it reports the ordinary state as a conflict.
-		if procPoolSocketRe.MatchString(e.Name()) {
-			continue
-		}
-		live = append(live, p)
 	}
 
-	if len(stale) == 0 && len(live) <= 1 {
-		return types.Check{Name: "sockets", Status: types.CheckOK, Message: fmt.Sprintf("%d live socket(s)", len(live))}
+	servers := len(others)
+	if server == socketLive {
+		servers++
 	}
-
 	var details []string
 	for _, p := range stale {
 		details = append(details, "stale: "+p)
 	}
-	if len(live) > 1 {
-		for _, p := range live {
+	if servers > 1 {
+		if server == socketLive {
+			details = append(details, "live: "+filepath.Join(sockDir, si.ServerSocket))
+		}
+		for _, p := range others {
 			details = append(details, "live: "+p)
 		}
-	}
-
-	// Multiple live daemons is a real conflict; leftover dead sockets are
-	// harmless cruft, so stale-only no longer fails the check.
-	if len(live) > 1 {
 		return types.Check{
 			Name:    "sockets",
 			Status:  types.CheckFail,
-			Message: fmt.Sprintf("%d live daemon sockets: multiple daemons running", len(live)),
+			Message: fmt.Sprintf("%d live server sockets: more than one server is running", servers),
 			Details: details,
 		}
 	}
-	return types.Check{
-		Name:    "sockets",
-		Status:  types.CheckOK,
-		Message: fmt.Sprintf("%d stale socket(s)", len(stale)),
-		Details: details,
+
+	parts := make([]string, 0, 4)
+	if si.ServerSocket != "" {
+		parts = append(parts, "server "+string(server))
 	}
+	if si.BrokerSocket != "" {
+		parts = append(parts, "broker "+string(brk))
+	}
+	parts = append(parts, fmt.Sprintf("%d per-process pool(s)", pools))
+	if len(others) > 0 {
+		parts = append(parts, fmt.Sprintf("%d other live socket(s)", len(others)))
+	}
+	if len(stale) > 0 {
+		parts = append(parts, fmt.Sprintf("%d stale socket(s)", len(stale)))
+	}
+	return types.Check{Name: "sockets", Status: types.CheckOK, Message: strings.Join(parts, ", "), Details: details}
 }
 
-// sockDirOrDefault returns the daemon's socket directory, or "" when unset.
-func (d *DaemonInfo) sockDirOrDefault() string {
+// sockDirOrDefault returns the server's socket directory, or "" when unset.
+func (d *ServerInfo) sockDirOrDefault() string {
 	if d == nil {
 		return ""
 	}

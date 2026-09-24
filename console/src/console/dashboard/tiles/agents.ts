@@ -2,7 +2,7 @@
 //
 // magus is increasingly operated by agents rather than by hands: every configured harness funnels
 // its shell and file-edit calls through the same `magus session hook` guard, and every MCP call goes
-// through the daemon. All of it lands in the activity trail. Until this tile, none of it reached the
+// through the server. All of it lands in the activity trail. Until this tile, none of it reached the
 // dashboard - the board could tell you the pool was saturated but not that three agents were the
 // reason, and it could not show a guard denial at all.
 //
@@ -194,7 +194,7 @@ export function agentsTile(): Tile {
   //
   // The seats were colored by host with nothing anywhere saying which color meant which agent, so
   // the row of cubes was decorative to everyone but its author. Derived from the live view rather
-  // than hardcoded, so it lists the agents actually driving this daemon and cannot drift from the
+  // than hardcoded, so it lists the agents actually driving this server and cannot drift from the
   // palette in dashboard.css.
   function renderSeatKey(hosts: AgentHostView[]): void {
     seatKey.replaceChildren(
@@ -209,7 +209,7 @@ export function agentsTile(): Tile {
 
   function renderSeats(view: AgentActivityView, now: number): void {
     // One cell per session, colored by its host, dimmed once its last call is older than RECENT_MS.
-    // Capped so a daemon serving a swarm cannot grow the DOM without bound; the residual rides the
+    // Capped so a server serving a swarm cannot grow the DOM without bound; the residual rides the
     // header note, which never truncates.
     const cells: HTMLElement[] = [];
     for (const hostView of view.hosts) {
@@ -299,7 +299,7 @@ export function agentsTile(): Tile {
   }
 
   // Trim the host list to the slot, like every other list on the board. The tile is the shortest
-  // panel in Big Picture's bottom rail, so on a daemon serving several hosts the list is exactly
+  // panel in Big Picture's bottom rail, so on a server serving several hosts the list is exactly
   // the thing that would otherwise be silently cut off - and a truncated list of WHO is driving
   // magus is the kind of omission that reads as "only these two".
   const unfit = fitRows(recentWrap, recentList, (hidden) => "+" + String(hidden) + " more");

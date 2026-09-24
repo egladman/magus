@@ -98,6 +98,8 @@ var (
 	ServerStop          = cmd("server", "stop")
 	ServerStatus        = cmd("server", "status")
 	ServerReload        = cmd("server", "reload")
+	BrokerStatus        = cmd("broker", "status")
+	BrokerStop          = cmd("broker", "stop")
 	Status              = cmd("status")
 	Watch               = cmd("watch")
 	Affected            = cmd("affected")
@@ -196,7 +198,7 @@ func Lookup(path string) (Command, bool) {
 // routed on it.
 var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, Status, Watch, Affected,
+	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, BrokerStatus, BrokerStop, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs, Shell,
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,

@@ -1046,7 +1046,7 @@ func fiberDone(fiber vm.Value) (bool, vm.Value) {
 }
 
 // ExecError is a magusfile that failed to evaluate. It renders as it always has; it exists so
-// a caller reporting the failure elsewhere (the daemon's workspace status) can name the file
+// a caller reporting the failure elsewhere (the server's workspace status) can name the file
 // without parsing the sentence.
 type ExecError struct {
 	// Path is the magusfile's absolute path.

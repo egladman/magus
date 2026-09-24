@@ -62,13 +62,13 @@ export function pulseLabel(p: PulseView, expanded: boolean): string {
 // The full sentence, for the tooltip and the accessible name, in both states - collapsed, the visible
 // "3" is not a thing a screen reader can make sense of on its own.
 //
-// "on this daemon", NOT "in this workspace": the pool is daemon-wide and one daemon serves several
+// "on this server", NOT "in this workspace": the pool is server-wide and one server serves several
 // workspaces, so a workspace-scoped reading would attribute another workspace's runs to yours. The
 // wire carries no per-workspace run attribution to narrow it with (see the dashboard's bigPicture.ts,
 // which is why its workspace picker filters nothing either).
 export function pulseTitle(p: PulseView): string {
   const queued = p.queued > 0 ? ", " + p.queued + " queued" : "";
-  return p.running + " running on this daemon" + queued;
+  return p.running + " running on this server" + queued;
 }
 
 export interface Sidebar {
@@ -429,7 +429,7 @@ export function createSidebar(
 
   // A surface with nothing waiting carries NO badge rather than a zero: the badge answers "how much is
   // waiting", and nothing waiting is not a quantity worth a mark on the rail. An absent reading (no
-  // daemon, an older one) is indistinguishable from that here on purpose - both mean "say nothing".
+  // server, an older one) is indistinguishable from that here on purpose - both mean "say nothing".
   sc.add(
     bind(badges, (counts) => {
       for (const [pageId, el] of badgeEls) {
@@ -467,7 +467,7 @@ export function createSidebar(
   );
 
   // Two sources, one paint: the reading itself, and the state that decides how much of it fits. A
-  // null pulse HIDES the element rather than showing a zero - the daemon not answering and the pool
+  // null pulse HIDES the element rather than showing a zero - the server not answering and the pool
   // being idle are different facts, and only one of them is a number.
   const paintPulse = (): void => {
     const p = pulse.get();

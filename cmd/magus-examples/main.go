@@ -199,12 +199,12 @@ func renderExamples() (map[string]string, error) {
 
 // capture runs the magus binary with argv in the fixture dir and returns its stdout.
 // Diagnostics ([warn]/[note]) go to stderr, so stdout is the clean command output;
-// the daemon is disabled so a shared background daemon cannot influence the result.
+// the server is disabled so a running `magus server` cannot influence the result.
 //
-// XDG_STATE_HOME is redirected into the fixture for a reason MAGUS_DAEMON_ENABLED
+// XDG_STATE_HOME is redirected into the fixture for a reason MAGUS_SERVER_ENABLED
 // does not cover: `explain` ends with a Graph Explorer deep-link, and that link
-// carries the daemon auth token, which auth.Load reads from a FILE in the state dir
-// whether or not a daemon is running. Captured on a developer's machine the examples
+// carries the server auth token, which auth.Load reads from a FILE in the state dir
+// whether or not a server is running. Captured on a developer's machine the examples
 // therefore embedded a real token in committed, published documentation; captured on
 // a runner they did not, so the same command produced two different pages and the
 // drift gate failed on CI alone. An empty state dir gives a machine-independent link
@@ -240,7 +240,8 @@ func captureEnv(environ []string, dir string) []string {
 		}
 	}
 	return append(env,
-		"MAGUS_DAEMON_ENABLED=false",
+		"MAGUS_SERVER_ENABLED=false",
+		"MAGUS_BROKER=off",
 		"MAGUS_CACHE_DIR="+filepath.Join(dir, "cache", "magus"),
 		"XDG_CACHE_HOME="+filepath.Join(dir, "cache"),
 		"XDG_STATE_HOME="+filepath.Join(dir, "state"))

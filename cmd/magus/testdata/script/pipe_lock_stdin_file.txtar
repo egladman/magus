@@ -1,0 +1,27 @@
+# stdin from a file is not a pipe: nothing to wait on, and the target reads it as before.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+stdin plan.json
+exec magus run consume .
+! stderr 'waiting for pid'
+cmp consumed plan.json
+
+-- plan.json --
+{"matrix": [{"shard": "1"}]}
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "fs";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {"consume": {"skip_cache": "reads stdin per invocation"}},
+});
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    fs\writeFile("consumed", io\stdin.readAll());
+}

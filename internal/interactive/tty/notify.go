@@ -174,7 +174,7 @@ var (
 //
 // A singleton for the reason [StderrZone] is one, and more so: its three
 // consumers (magus's own run events, a term\notify call from a magusfile, and
-// a daemon background job) cannot see each other, run on different threads,
+// a server background job) cannot see each other, run on different threads,
 // and have different lifetimes. Toasts from all of them belong in ONE stack,
 // in arrival order, or the reader gets three competing bands.
 //
@@ -253,7 +253,7 @@ func (n *Notifier) Notify(text string, style SGR, ttl time.Duration) error {
 // This is the shape most things worth notifying about actually have. A toast
 // earns its place only when the reader has to act, and something a reader must
 // act on is rarely a moment; it is a state that persists until they do
-// something about it: a run stalled behind another process's lock, a daemon
+// something about it: a run stalled behind another process's lock, a server
 // that has gone away, credentials that have expired. Reporting those as
 // expiring notifications would be wrong twice over, since the message vanishes
 // while the problem does not, and it reappears on nothing when the problem

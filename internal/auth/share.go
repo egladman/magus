@@ -9,7 +9,7 @@ import (
 )
 
 // A share token (mgl_) is the secret behind a share link: it lives only in the running
-// daemon's memory, only as long as the LAN listener it guards, and only that listener's
+// server's memory, only as long as the LAN listener it guards, and only that listener's
 // verifier accepts it. [Verify], the loopback verifier, refuses the class outright, and the
 // share verifier accepts nothing else, so the operator token never crosses the LAN.
 
@@ -25,7 +25,7 @@ const (
 // ErrShareLifetime is a share requested for less than MinShareTTL or more than MaxShareTTL.
 var ErrShareLifetime = errors.New("auth: a share link lives between 1 minute and 24 hours")
 
-// ShareToken is one minted share token, held in daemon memory only: the hash of the secret,
+// ShareToken is one minted share token, held in server memory only: the hash of the secret,
 // never the secret, and its expiry. The zero value verifies nothing.
 type ShareToken struct {
 	SHA256  string

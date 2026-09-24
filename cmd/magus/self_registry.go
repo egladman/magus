@@ -19,7 +19,7 @@ import (
 // not already bitten), and `magus self update` already means apt's *upgrade*, so
 // adopting the pair would mean renaming a shipped verb into the more confusing
 // half. `sync` was the other candidate and fails on UNIX grounds: it means
-// flush-to-disk, and daemon.maintenance.sync_graph already uses it here for a local
+// flush-to-disk, and server.maintenance.sync_graph already uses it here for a local
 // operation. `refresh` cannot be misread as "replace my binary", which is the only
 // confusion that costs anyone anything.
 //

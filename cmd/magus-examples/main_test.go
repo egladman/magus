@@ -56,7 +56,8 @@ func TestCaptureEnvIsTheFixtures(t *testing.T) {
 	}, "/fixture")
 	assert.Equal(t, []string{
 		"PATH=/bin",
-		"MAGUS_DAEMON_ENABLED=false",
+		"MAGUS_SERVER_ENABLED=false",
+		"MAGUS_BROKER=off",
 		"MAGUS_CACHE_DIR=" + filepath.Join("/fixture", "cache", "magus"),
 		"XDG_CACHE_HOME=" + filepath.Join("/fixture", "cache"),
 		"XDG_STATE_HOME=" + filepath.Join("/fixture", "state"),

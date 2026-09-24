@@ -1,10 +1,10 @@
 package mcp
 
 // MCPToolDefinition is the human-readable description of what an MCP tool is.
-const MCPToolDefinition = "An MCP tool is a function the magus daemon exposes to AI " +
+const MCPToolDefinition = "An MCP tool is a function the magus server exposes to AI " +
 	"agents via the Model Context Protocol. Agents call these tools to discover, " +
 	"build, and diagnose the workspace without running shell commands. Start the " +
-	"daemon with `magus server start` to enable MCP."
+	"server with `magus server start` to enable MCP."
 
 // MCPToolEntry is the structured view of a single MCP tool.
 type MCPToolEntry struct {

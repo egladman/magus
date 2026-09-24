@@ -9,16 +9,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// defaultServiceIdle is how long the daemon keeps a shared service warm after its
+// defaultServiceIdle is how long the broker keeps a shared service warm after its
 // last dependent releases, unless the service overrides it via Service.Idle. Shorter
 // than the workspace idle TTL: a shared service is cheap to restart but costly to
 // leave running all day.
 const defaultServiceIdle = 30 * time.Minute
 
-// serviceHost adapts a service.Registry to proc.ServiceHost: the daemon's Acquire
+// serviceHost adapts a service.Registry to broker.ServiceHost: the broker's Acquire
 // returns nothing (the client only needs to know the service is up), so the Handle
 // is dropped. Release maps straight through.
 type serviceHost struct{ reg *service.Registry }
+
+func (h serviceHost) Snapshot() []types.StatusService { return serviceStatuses(h.reg) }
 
 func (h serviceHost) Acquire(ctx context.Context, key string, svc spells.Service) error {
 	_, err := h.reg.Acquire(ctx, key, svc)
@@ -28,8 +30,8 @@ func (h serviceHost) Acquire(ctx context.Context, key string, svc spells.Service
 func (h serviceHost) Release(key string) { h.reg.Release(key) }
 
 // StopAll stops every hosted service and returns how many were stopped, leaving the
-// daemon running (the registry stays usable). context.Background: the RPC handler
-// that calls this has no per-request ctx to thread through today, and unlike daemon
+// broker running (the registry stays usable). context.Background: the RPC handler
+// that calls this has no per-request ctx to thread through today, and unlike broker
 // teardown there is no already-cancelled parent ctx to work around here; Shutdown's
 // own per-victim bounds (readiness timeout, stop grace) still apply regardless.
 func (h serviceHost) StopAll() int {

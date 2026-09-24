@@ -10,7 +10,7 @@ import { fetchContext } from "./session";
 // The digest tests that were here are gone with the code they covered. hunkDigest and
 // patchDigest were TypeScript reimplementations of internal/diff's, kept in step by a golden
 // vector pasted from Go - which is the arrangement that let the two readers drift in the first
-// place. The daemon computes both now and ships them, so there is nothing here to pin.
+// place. The server computes both now and ships them, so there is nothing here to pin.
 
 test("context requests carry the reviewed patch identity", async () => {
   const realFetch = globalThis.fetch;

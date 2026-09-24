@@ -108,7 +108,7 @@ test("runningRows merges pool targets with lock holders, newest first", () => {
     NOW,
   );
   // A lock holder is a SEPARATE magus process (typically a terminal run) that the pool cannot see, so
-  // the merge is the feature: dropping either source reports an idle daemon while work is underway.
+  // the merge is the feature: dropping either source reports an idle server while work is underway.
   assert.deepEqual(ids(rows), ["inv-new", "lock:4242:svc/api", "inv-old"]);
 });
 

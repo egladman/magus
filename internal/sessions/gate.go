@@ -15,7 +15,7 @@ import (
 // file is user-global (a sibling repo's branch of the same name would read as
 // this one's), and the run journal dies with its worktree. The session store is
 // per-repository, shared by every worktree, and survives both worktree deletion
-// and daemon restarts.
+// and server restarts.
 const KindGateResult = "gate_result"
 
 // OutcomeDeferred marks a gate invocation that was REFUSED as redundant under

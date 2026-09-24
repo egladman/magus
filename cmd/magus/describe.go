@@ -112,7 +112,7 @@ func describeUsage() {
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  project      ", "directories recognized as units of work; `project <path>` details one")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  workspace    ", "the active workspace root and its config")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  module       ", "magus stdlib modules; `module <name>` lists its methods + signatures")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP daemon")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP server")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  rule         ", "the guard rules enforced here; `rule <name>` details the one a verdict named")
@@ -1395,10 +1395,10 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 }
 
 // describeWorkspacesOutput builds the "describe workspaces" view: the single
-// active workspace by default, or one entry per workspace the daemon is declared
-// to serve (daemon.workspaces / MAGUS_DAEMON_WORKSPACES) when that list is set.
+// active workspace by default, or one entry per workspace the server is declared
+// to serve (server.workspaces / MAGUS_SERVER_WORKSPACES) when that list is set.
 func describeWorkspacesOutput(ctx context.Context, root string) ([]types.WorkspaceEntry, error) {
-	declared := resolveDeclaredWorkspaces(globalCfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
+	declared := resolveDeclaredWorkspaces(globalCfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
 	if len(declared) == 0 {
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {

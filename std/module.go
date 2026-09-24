@@ -289,7 +289,7 @@ type Module struct {
 //
 // It hangs off the MODULE and names its member, rather than being a flag on
 // Method, because the two surfaces are not in bijection. An MCP tool can need
-// state a Buzz member never sees (magus_diff wants the daemon's live review
+// state a Buzz member never sees (magus_diff wants the server's live review
 // session, magus_run_target the run engine's Options), and a member can mean
 // something a tool of the same name does not (`magus\where(dir)` answers which
 // project contains a directory; magus_where filters project names). A flag on

@@ -58,8 +58,9 @@ var subcommands = []subcommand{
 
 	{Group: groupIntegrate, Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
 	{Group: groupIntegrate, Name: "events", Short: "stream workspace events as JSONL for an editor plugin or other integration"},
-	{Group: groupIntegrate, Name: "server", Short: "manage the persistent daemon (start / stop / status; MCP starts with it)"},
-	{Group: groupIntegrate, Name: "mcp", Short: "print how to reach the MCP server (served by the daemon, not a standalone command)"},
+	{Group: groupIntegrate, Name: "server", Short: "the server a person starts: MCP, the console, APIs and jobs (start / stop / status / reload)"},
+	{Group: groupIntegrate, Name: "broker", Short: "the per-user process holding this host's capacity and shared services (status / stop)"},
+	{Group: groupIntegrate, Name: "mcp", Short: "serve MCP over stdio for the agent host that launched it (no server, no token)"},
 	{Group: groupIntegrate, Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
 	{Group: groupIntegrate, Name: "buzz", Short: "run a Buzz script (Buzz stdlib + every magus host module)"},
 	{Group: groupIntegrate, Name: "spell", Short: "build, push, pull and list spells as OCI artifacts, and pin them in magus.lock (spell build|push|pull|ls|lock)"},

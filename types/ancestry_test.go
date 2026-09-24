@@ -17,7 +17,7 @@ func TestInvocationAncestryIdentity(t *testing.T) {
 		t.Error("the ancestor this invocation is nested inside must match")
 	}
 	if !HasInvocationAncestor(ctx, 100, "inv-b") {
-		t.Error("this invocation itself must match; the daemon holds locks under its own id")
+		t.Error("this invocation itself must match; the server holds locks under its own id")
 	}
 	if HasInvocationAncestor(ctx, 200, "inv-a") {
 		t.Error("same id from a DIFFERENT pid is a different invocation and must not match")
@@ -30,7 +30,7 @@ func TestInvocationAncestryIdentity(t *testing.T) {
 	}
 }
 
-// TestInvocationAncestorsDoNotAlias covers the daemon case the carrier exists for: many
+// TestInvocationAncestorsDoNotAlias covers the server case the carrier exists for: many
 // invocations derive from one context, and an append by one must not be visible to another.
 func TestInvocationAncestorsDoNotAlias(t *testing.T) {
 	parent := AppendInvocationAncestor(context.Background(), 1, "inv-root")

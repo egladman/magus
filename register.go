@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
@@ -28,15 +29,15 @@ func WithLoadedConfig(cfg config.Config) Option {
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace
-// (OTel instruments record even with telemetry export off), so the daemon can derive the
+// (OTel instruments record even with telemetry export off), so the server can derive the
 // /dashboard's metrics via [Magus.MetricsCollector]. The CLI leaves it off.
 func WithMetricsCollection() Option {
 	return workspace.WithMetricsCollection()
 }
 
 // WithProvider injects an already-constructed observability provider so several Magus
-// instances (a daemon's bridge Magus plus each per-workspace registry Magus) share ONE set
-// of OTel instruments and one metrics collector. The provider is owned by the daemon
+// instances (a server's bridge Magus plus each per-workspace registry Magus) share ONE set
+// of OTel instruments and one metrics collector. The provider is owned by the server
 // process, not any single workspace, so workspace eviction never discards accumulated
 // metrics. It supersedes [WithMetricsCollection]: Open adopts the injected provider instead
 // of constructing its own.
@@ -56,6 +57,24 @@ func WithProvider(p observability.Provider) Option {
 // check, since a caller with no version has no version to be too old.
 func WithVersion(v string) Option {
 	return workspace.WithVersion(v)
+}
+
+// WithBroker routes this workspace's host capacity claims and shared services through
+// b instead of a client Open would make for itself. Share one client across Open calls,
+// as with [WithLimiter], so a process holds one broker connection however many
+// workspaces it opens. Open never starts a broker; b dials on first use.
+//
+// It supplies the connection and never the policy: that stays the workspace's `broker`
+// setting unless [WithBrokerPolicy] overrides it. Open fails when the resolved policy is
+// off, since b would never be used, and when b is nil.
+func WithBroker(b *broker.Client) Option {
+	return func(o *workspace.Load) { o.Broker, o.BrokerGiven = b, true }
+}
+
+// WithBrokerPolicy overrides the workspace's `broker` setting (magus.yaml, MAGUS_BROKER)
+// for this Open. An invalid policy fails Open, and so does off beside [WithBroker].
+func WithBrokerPolicy(p types.BrokerPolicy) Option {
+	return func(o *workspace.Load) { o.BrokerPolicy = p }
 }
 
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace

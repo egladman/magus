@@ -49,10 +49,10 @@ var ErrNoID = errors.New("job: a lease needs an id")
 // other's:
 //
 //   - The mutex serializes writers within one process while they share a Store, which is
-//     why the daemon builds exactly one and hands it to both of its doors (the
+//     why the server builds exactly one and hands it to both of its doors (the
 //     magus_job MCP tool and the console's read route).
 //   - An OS file lock beside jobs.json serializes writers across PROCESSES. The CLI, the
-//     daemon, and an MCP client each hold their own Store on the same file, from any
+//     server, and an MCP client each hold their own Store on the same file, from any
 //     worktree or clone of the repository, and workers now register and heartbeat against
 //     it, so "one orchestrating agent writes this"
 //     (the assumption that made a cross-process race acceptable) stopped being true. Two
@@ -77,7 +77,7 @@ type Store struct {
 	err  error
 	root string
 	// actor pins who this Store writes as; nil resolves the acting party at every write
-	// from cacheDir and the environment. The daemon builds ONE Store at startup and serves
+	// from cacheDir and the environment. The server builds ONE Store at startup and serves
 	// every magus_job caller from it, so an actor frozen at construction grades all of
 	// them as whoever started the process.
 	actor    *Actor
@@ -555,7 +555,7 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 	case !info.Mode().IsRegular():
 		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
 		// somebody writes to it, and it would block holding the store's mutex: one
-		// released fifo would wedge every ledger operation in the daemon.
+		// released fifo would wedge every ledger operation in the server.
 		return types.DigestUnreadable
 	case info.Size() > maxDigestBytes:
 		return types.DigestUnreadable

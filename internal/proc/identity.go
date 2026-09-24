@@ -11,13 +11,13 @@ import (
 )
 
 // This file computes the ADOPTION IDENTITY: the version string a magus build sends over
-// the wire and the daemon compares against to decide whether to adopt a forwarded call.
-// It is distinct from the human-facing DISPLAY version (`magus --version`, the daemon's
-// StatusReply.DaemonVersion): display stays friendly, only the gate uses the fingerprint.
+// the wire and the server compares against to decide whether to adopt a forwarded call.
+// It is distinct from the human-facing DISPLAY version (`magus --version`, the server's
+// StatusReply.Version): display stays friendly, only the gate uses the fingerprint.
 //
 // The problem it solves: an unstamped dev build carries a fixed placeholder version
-// (devVersionSentinel), so the daemon gate (a plain string equality) treats EVERY dev
-// build as identical to every other. A stale dev daemon left running from an old, since-
+// (devVersionSentinel), so the server gate (a plain string equality) treats EVERY dev
+// build as identical to every other. A stale dev server left running from an old, since-
 // deleted binary would then adopt runs from an unrelated newer dev client and execute
 // them with the wrong code. Fingerprinting each dev build from its embedded VCS stamp
 // makes builds of different revisions (and every dirty build) refuse to adopt each other.
@@ -34,16 +34,16 @@ const devVersionSentinel = "unknown"
 // dirty working tree, or a build with no embedded VCS info. Every process gets a different
 // token, so two such builds never compare equal and adoption between them is always
 // refused. This is the fail-closed direction: two dirty trees at the same revision are not
-// provably the same bytes, and a since-rebuilt daemon must not be trusted to run a client's
+// provably the same bytes, and a since-rebuilt server must not be trusted to run a client's
 // code, so we decline rather than risk executing stale logic.
 var devUnverifiable = "dev-unverifiable-" + randomToken()
 
 // binaryIdentity identifies a MODIFIED-tree build by the executable file it runs from:
-// its resolved path plus size and mtime, hashed. Same file, same identity (so a daemon
+// its resolved path plus size and mtime, hashed. Same file, same identity (so a server
 // and the nested magus it forked still adopt each other in a dirty tree), while a
 // rebuilt, replaced, or borrowed binary mismatches and the caller runs locally instead.
 //
-// Captured at process start, not lazily: a daemon whose executable is rebuilt underneath
+// Captured at process start, not lazily: a server whose executable is rebuilt underneath
 // it must keep the identity of the file it actually loaded, or it would stat the NEW
 // file, match the new client, and execute the run with the old code: the exact stale
 // adoption this identity exists to refuse.
@@ -78,8 +78,8 @@ func randomToken() string {
 	return hex.EncodeToString(b)
 }
 
-// adoptionIdentity maps a build's DISPLAY version to the identity used for the daemon
-// adoption gate. Client and daemon both run it over their own build, so two builds adopt
+// adoptionIdentity maps a build's DISPLAY version to the identity used for the server
+// adoption gate. Client and server both run it over their own build, so two builds adopt
 // each other only when their identities are equal. It is total and deterministic per
 // process:
 //
@@ -87,20 +87,20 @@ func randomToken() string {
 //     is the test-injection / pre-versioning escape hatch (see service.versionAdmits).
 //   - A MODIFIED-tree build maps to binaryIdentity whatever its display version says. A
 //     stamped `git describe --dirty` string is shared by every dirty build of one commit,
-//     so trusting it let a stale daemon adopt a since-rebuilt client and execute the run
+//     so trusting it let a stale server adopt a since-rebuilt client and execute the run
 //     with old code; the executable-file identity admits only the byte-identical binary.
 //   - A stamped release version (anything but devVersionSentinel) passes through unchanged,
 //     so releases keep matching on their exact version.
 //   - The dev sentinel is replaced by a build fingerprint: "dev-<revision>" for a CLEAN
 //     build carrying VCS info (two clean builds of one commit are provably the same code
-//     and DO adopt each other, preserving the run-a-daemon-then-adopt-into-it workflow),
+//     and DO adopt each other, preserving the run-a-server-then-adopt-into-it workflow),
 //     or the per-process devUnverifiable token for a VCS-less build (never matches:
 //     adoption refused).
 //
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is
-// deliberate and load-bearing: a stale PRE-FIX daemon compares the string it receives
+// deliberate and load-bearing: a stale PRE-FIX server compares the string it receives
 // against its own stored "unknown" and correctly mismatches, refusing the call. A new wire
-// field would be silently ignored by that old daemon and fail OPEN: the very failure mode
+// field would be silently ignored by that old server and fail OPEN: the very failure mode
 // this fix exists to close.
 func adoptionIdentity(displayVersion string) string {
 	if displayVersion == "" {

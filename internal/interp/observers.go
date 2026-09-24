@@ -13,7 +13,7 @@ import (
 // This file translates the gopherbuzz instrumentation hooks (CompileObserver,
 // PoolObserver, FaultHook, WrapDirect's DirectObserver) into the observability
 // spine's magus.buzz.* Record calls. Every attachment is nil-gated on an active
-// provider: a non-daemon one-shot run reaches providerFrom == nil, no observer is
+// provider: a non-server one-shot run reaches providerFrom == nil, no observer is
 // set, and the interpreter runs byte-for-byte unobserved with no timing on the hot
 // path. The terminology (mode, host.call, phase, kind) is fixed by the spine.
 

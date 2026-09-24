@@ -237,7 +237,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 	}))
 	magus.MapSet("log", logLevels)
 	// magus.fatal(msg): log at error level, then abort with exit 1 via a typed
-	// ExitError (the CLI/daemon map it to the exit status).
+	// ExitError (the CLI/server map it to the exit status).
 	magus.MapSet("fatal", directVal(obs, "magus.fatal", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		emitMagusLog(ctx, slog.LevelError, argStr(args, 0), nil)
 		types.CaptureExit(ctx, 1)

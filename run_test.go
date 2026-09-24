@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -162,12 +162,27 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	// A pid that is alive for the whole test, so the budget does not reap the claim.
-	holderPID := os.Getppid()
-	budget := cache.NewMachineBudget(10_000, 4)
-	held := budget.Request(types.MachineClaim{
+	// A real broker, and a second client holding the whole host: the refusal crosses the
+	// wire exactly as it does between two worktrees.
+	sockDir, err := os.MkdirTemp("", "brk")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	addr := "unix://" + filepath.Join(sockDir, broker.SocketName)
+	ln, err := broker.Listen(t.Context(), addr)
+	require.NoError(t, err)
+	serveCtx, stopServe := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- broker.Serve(serveCtx, ln, broker.WithCapacity(10_000, 4)) }()
+	t.Cleanup(func() { stopServe(); <-served })
+
+	const holderPID = 4242
+	other, err := broker.Dial(t.Context(), addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = other.Close() })
+	held, err := other.Request(t.Context(), types.MachineClaim{
 		Project: ".", Target: "ci", Slots: 4, PID: holderPID, Dir: "/elsewhere/checkout",
 	})
+	require.NoError(t, err)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
 	root := t.TempDir()
@@ -175,7 +190,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
-		workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
+		WithBroker(broker.NewClient(addr)), WithBrokerPolicy(types.BrokerBestEffort))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -186,7 +201,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	require.NoError(t, sink.Close(), "flush the stream before reading it")
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	var stated interface{ ExitCode() int }
-	require.ErrorAs(t, err, &stated, "the CLI and the daemon read the exit status off the error")
+	require.ErrorAs(t, err, &stated, "the CLI and the server read the exit status off the error")
 	assert.Equal(t, cache.ExitCodeMachineBusy, stated.ExitCode())
 
 	holder := fmt.Sprintf("held by pid %d (root) ci, in /elsewhere/checkout", holderPID)

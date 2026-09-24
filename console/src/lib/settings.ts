@@ -1,6 +1,6 @@
 // settings.ts - client-side console settings, persisted via the durable-cell primitive. Pure
 // read/write with no DOM: the Settings surface edits these, and the dashboard
-// transport / boot read them. Distinct from the daemon's own resolved config (which the status API
+// transport / boot read them. Distinct from the server's own resolved config (which the status API
 // reports read-only) - these are BROWSER-side UI prefs the operator controls and never leave the
 // machine. The clamp/trim validation lives in the getters, not the storage layer.
 import { persisted } from "./persist";
@@ -31,8 +31,8 @@ export function savePollMs(ms: number): void {
   pollMs.persistOnly(ms);
 }
 
-// An explicit default daemon host (host:port) to connect to when the URL carries no explicit attach
-// (#port) and no remembered daemon - the "loopback URL override". Stored canonical (a bare port typed
+// An explicit default server host (host:port) to connect to when the URL carries no explicit attach
+// (#port) and no remembered server - the "loopback URL override". Stored canonical (a bare port typed
 // in Settings is expanded to 127.0.0.1:port before it lands here). "" means unset.
 export function getDefaultHost(): string {
   return host.get().trim();
@@ -67,9 +67,9 @@ export function subscribeDefaultHost(fn: () => void): () => void {
   return host.subscribe(() => fn());
 }
 
-// The last daemon the dashboard reached, so a reload resumes it. The dashboard writes it; every
+// The last server the dashboard reached, so a reload resumes it. The dashboard writes it; every
 // surface may read it as the fallback after the Settings address.
-const rememberedHost = persisted<string | null>("dashboard-daemon", null);
+const rememberedHost = persisted<string | null>("dashboard-server", null);
 
 export function getRememberedHost(): string | null {
   return rememberedHost.get();

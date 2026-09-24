@@ -98,7 +98,7 @@ func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
 	}
 }
 
-// The error names the daemon's workspace path, so it stays in the log.
+// The error names the server's workspace path, so it stays in the log.
 func TestDiffHandler_ErrorReturns500(t *testing.T) {
 	h := NewPatchHandler(&fakePatchSource{err: errors.New("git -C /Users/dev/repo diff: boom")}, nil)
 	w := httptest.NewRecorder()
@@ -361,7 +361,7 @@ func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
 	}
 }
 
-// A daemon with no workspace has no branch to look a review up for, and says so instead of
+// A server with no workspace has no branch to look a review up for, and says so instead of
 // panicking on a nil source.
 func TestReviewLookupWithoutAWorkspace(t *testing.T) {
 	h := NewReviewLookupHandler(nil, nil)
@@ -714,7 +714,7 @@ func TestDiffBranchesServesTheOverlapAndPassesTheCap(t *testing.T) {
 	assert.Equal(t, branchLimit, src.limit)
 }
 
-// A daemon with no workspace answers an empty ARRAY, never null: a client iterates the field, and
+// A server with no workspace answers an empty ARRAY, never null: a client iterates the field, and
 // a null would make every caller guard a state that means what empty already means.
 func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
 	rec := httptest.NewRecorder()

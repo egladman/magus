@@ -15,7 +15,7 @@ import {
   renderConnectPrompt,
   type ConnectPromptOptions,
   type ConnectPromptState,
-  type DaemonNeed,
+  type ServerNeed,
 } from "./connectPrompt";
 import { assignSigils, describeSigil, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
 import { shortName, workspaceScope } from "../lib/scope";
@@ -30,14 +30,14 @@ export interface Launchable {
   // between constantly; the launcher grid and the Applications menu ignore the flag and list
   // everything, because neither has a foot to pin them to.
   utility?: boolean;
-  // Set on a surface with nothing to show without a daemon: the shell opens its connect page in the
-  // surface's place until an address is applied (requireDaemon). Omit it for a surface that works
+  // Set on a surface with nothing to show without a server: the shell opens its connect page in the
+  // surface's place until an address is applied (requireServer). Omit it for a surface that works
   // offline, from a file or a snapshot.
-  daemon?: DaemonNeed;
+  server?: ServerNeed;
 }
 
 // The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.
-// Each entry is dry and tool-flavored (magus is a build tool; the daemon keeps the graph warm),
+// Each entry is dry and tool-flavored (magus is a build tool; the server keeps the graph warm),
 // understated to match the earthy identity.
 //
 // Two independent gates, so a line can be specific without needing its own window:
@@ -84,7 +84,7 @@ const TAGLINES: Tagline[] = [
   { text: "Good time to leave it green.", at: [17, 22] },
   { text: "Last build before you log off?", at: [17, 22] },
   { text: "Burning the midnight build.", at: [22, 5] },
-  { text: "The daemon never sleeps.", at: [22, 5] },
+  { text: "The server never sleeps.", at: [22, 5] },
   { text: "Quiet hours. The cache is listening.", at: [22, 5] },
   { text: "Late one. Keep it cached.", at: [22, 5] },
 
@@ -104,7 +104,7 @@ const TAGLINES: Tagline[] = [
   { text: "Friday. Leave it green for Monday.", at: [12, 22], on: FRIDAY },
   { text: "Last builds of the week.", at: [12, 22], on: FRIDAY },
   { text: "Weekend build. Nobody is watching.", at: ANY_HOURS, on: WEEKEND },
-  { text: "Saturday hacking. The daemon kept the lights on.", at: [8, 22], on: WEEKEND },
+  { text: "Saturday hacking. The server kept the lights on.", at: [8, 22], on: WEEKEND },
   { text: "The weekend tree is a quiet tree.", at: ANY_HOURS, on: WEEKEND },
 
   // More of the always-eligible pool, so the broad case stays as varied as the narrow ones.
@@ -253,11 +253,11 @@ export function surfaceIconSvg(pageId: string, size?: number): string {
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
-// syncLauncherPulse turns the welcome screen's first row into a LIVE reading when there is a daemon
+// syncLauncherPulse turns the welcome screen's first row into a LIVE reading when there is a server
 // answering, and hides it when there is not. Called on every pulse tick, so the screen someone lands
-// on says what the daemon is doing right now rather than the same sentence it always says.
+// on says what the server is doing right now rather than the same sentence it always says.
 //
-// The counts are DAEMON-WIDE and say so. There is one pool behind every loaded workspace, so
+// The counts are SERVER-WIDE and say so. There is one pool behind every loaded workspace, so
 // pool.running is the machine's occupancy and not the caller's - the dashboard hero carries the same
 // qualifier for the same reason, and a launcher that dropped it would be the one screen implying these
 // numbers are yours.
@@ -266,7 +266,7 @@ export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void 
   const label = root.querySelector<HTMLElement>("[data-launcher-live-label]");
   const hint = root.querySelector<HTMLElement>("[data-launcher-live-hint]");
   if (!way || !label || !hint) return;
-  // No answer is not the same as nothing running: an older daemon that does not serve the route, or a
+  // No answer is not the same as nothing running: an older server that does not serve the route, or a
   // dropped request, must not render as an idle machine. Hide rather than report a zero nobody measured.
   way.hidden = p === null;
   if (!p) return;
@@ -291,7 +291,7 @@ export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void 
   if (c && c.hits + c.misses > 0) {
     parts.push(Math.round((c.hits / (c.hits + c.misses)) * 100) + "% served from cache");
   }
-  parts.push("Counts are daemon-wide.");
+  parts.push("Counts are server-wide.");
   hint.textContent = parts.join(". ");
 
   paintSaved(root, p);
@@ -303,9 +303,9 @@ export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void 
 // Every millisecond here was MEASURED - each entry records how long the run that produced it took,
 // and a hit adds that entry's own figure. Nothing is averaged or extrapolated. It understates,
 // because an entry written before durations were recorded contributes nothing, which is why the
-// caption says "since this daemon started" rather than implying a lifetime total.
+// caption says "since this server started" rather than implying a lifetime total.
 //
-// Hidden below a minute: the number exists to be striking, and "0m" on a fresh daemon is an
+// Hidden below a minute: the number exists to be striking, and "0m" on a fresh server is an
 // argument against the cache rather than for it.
 function paintSaved(root: HTMLElement, p: PulseView): void {
   const wrap = root.querySelector<HTMLElement>("[data-launcher-saved]");
@@ -606,7 +606,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
 
   ways.append(pickWay, demoWay);
 
-  // Stands in for the ways, at every width, once the shell knows no daemon answers. The first screen
+  // Stands in for the ways, at every width, once the shell knows no server answers. The first screen
   // is where someone who has never started one lands, and it is the one place that said nothing.
   const connect = document.createElement("div");
   connect.dataset.launcherConnect = "";
@@ -637,7 +637,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   savedNote.dataset.launcherSavedNote = "";
   // The three lines read as ONE phrase downward - "22 / hours the cache saved / this session" -
   // rather than a number with two labels stuck under it. The bound still has to be there, because
-  // this is the daemon's lifetime and not the cache's.
+  // this is the server's lifetime and not the cache's.
   savedNote.textContent = "this session";
   saved.append(savedValue, savedUnit, savedNote);
 

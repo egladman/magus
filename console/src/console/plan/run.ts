@@ -8,16 +8,16 @@
 // declared it, so nothing about it can be stale in the way a written-down job can.
 //
 // The decision that shapes the rest of this file: the view FOLLOWS THE LIVE RUN. Nobody browses a
-// hypothetical target's plan, so the default read names no target at all and lets the daemon pick
+// hypothetical target's plan, so the default read names no target at all and lets the server pick
 // the anchor - the running target, else the most recent run's, else ci. `anchor` reports which of
 // those it did, and the overview line LEADS with it, so a reader never has to wonder whether the
 // picture in front of them is live. Naming a target explicitly is an override, not the entry point.
 //
-// The daemon serves GET /api/v1/plan, but an OLDER one does not, and there it 404s. That is a
+// The server serves GET /api/v1/plan, but an OLDER one does not, and there it 404s. That is a
 // FIRST-CLASS outcome here rather than an error: loadRunPlan reports "absent" so the surface can
 // name the missing route instead of drawing an empty DAG, which would read as "nothing has run".
 
-import { authHeaders } from "../../lib/daemon";
+import { authHeaders } from "../../lib/server";
 import { str } from "./jobs";
 
 // ---- states ----------------------------------------------------------------
@@ -45,8 +45,8 @@ export const RUN_STATE_MARK: Record<RunState, string> = {
   fail: "FAIL",
 };
 
-// normalizeRunState maps whatever the daemon said onto the four known states. An unrecognized value
-// (a newer daemon, a state this console predates) becomes "idle" - the least-claiming of the four,
+// normalizeRunState maps whatever the server said onto the four known states. An unrecognized value
+// (a newer server, a state this console predates) becomes "idle" - the least-claiming of the four,
 // because it asserts only that the node is in the plan. Nothing unknown may ever read as a pass or
 // a fail. The raw string is kept on the node so the detail can show what was actually served.
 export function normalizeRunState(v: unknown): RunState {
@@ -57,12 +57,12 @@ export function normalizeRunState(v: unknown): RunState {
 
 // ---- the anchor ------------------------------------------------------------
 
-// How the daemon chose the target this plan is rooted at. "explicit" is the only one a reader
-// caused; the other three are the daemon following the work.
+// How the server chose the target this plan is rooted at. "explicit" is the only one a reader
+// caused; the other three are the server following the work.
 export const PLAN_ANCHORS = ["running", "recent", "default", "explicit"] as const;
 export type PlanAnchor = (typeof PLAN_ANCHORS)[number];
 
-// An unrecognized anchor reads as "default", which claims the least: it says the daemon fell back,
+// An unrecognized anchor reads as "default", which claims the least: it says the server fell back,
 // not that anything is live. An unknown value must never read as "following the running ...".
 export function normalizeAnchor(v: unknown): PlanAnchor {
   return typeof v === "string" && (PLAN_ANCHORS as readonly string[]).includes(v)
@@ -81,7 +81,7 @@ export interface RunPlanNode {
   readonly project: string;
   readonly target: string;
   readonly state: RunState;
-  // Exactly what the daemon said, "" when it said nothing. Shown in the detail whenever it is not
+  // Exactly what the server said, "" when it said nothing. Shown in the detail whenever it is not
   // one of the four, so an unrecognized state is visible rather than quietly rendered as idle.
   readonly rawState: string;
   // The most recent captured output for this node, "" when it has never run.
@@ -111,7 +111,7 @@ export interface RunPlanModel {
 
 // parseRunPlan normalizes the response body into a model every later pass can be TOTAL over. It is
 // one function rather than the job side's build pass because a resolved DAG needs none of
-// that assembly: the daemon already did the resolving, so there is nothing here to infer.
+// that assembly: the server already did the resolving, so there is nothing here to infer.
 //
 // Anything that is not the documented shape yields an EMPTY plan, not a throw - a surface that
 // cannot read the plan says so, it does not break.
@@ -170,7 +170,7 @@ export function emptyRunPlan(): RunPlanModel {
 
 // anchorPhrase is how the view says what it is anchored to, and it leads the overview line because
 // it is the first thing a reader needs: whether they are watching work happen or reading a record
-// of work that finished. A plan whose target the daemon did not name gets no phrase rather than an
+// of work that finished. A plan whose target the server did not name gets no phrase rather than an
 // invented one.
 export function anchorPhrase(model: RunPlanModel): string {
   if (!model.target) return "";
@@ -208,7 +208,7 @@ export function runOverviewLine(model: RunPlanModel): string {
 
 // RunPlanRead is the four answers the endpoint can give, kept apart because they mean different
 // things to a reader staring at an empty screen: the plan came back, the route is not there, the
-// target named does not exist, or the daemon could not be read. Collapsing them into one "no data"
+// target named does not exist, or the server could not be read. Collapsing them into one "no data"
 // is how a missing feature comes to look like an idle one.
 export type RunPlanRead =
   | { readonly kind: "ok"; readonly plan: RunPlanModel }
@@ -217,31 +217,31 @@ export type RunPlanRead =
   | { readonly kind: "unreadable"; readonly detail: string };
 
 // runPlanUrl carries ?target= ONLY for an override. The bare URL is the default read, and it is the
-// bareness that tells the daemon to pick the anchor itself rather than being handed one.
+// bareness that tells the server to pick the anchor itself rather than being handed one.
 export function runPlanUrl(host: string, target: string): string {
   return (
     "http://" + host + "/api/v1/plan" + (target ? "?target=" + encodeURIComponent(target) : "")
   );
 }
 
-// unknownTargetDetail carries the daemon's OWN words for a 400 through to the screen. The console
+// unknownTargetDetail carries the server's OWN words for a 400 through to the screen. The console
 // does not hold the workspace's target list, so any sentence it wrote here itself would be a guess;
-// the daemon named what it could not resolve, and that is what a reader can act on. The body IS the
+// the server named what it could not resolve, and that is what a reader can act on. The body IS the
 // message: the route writes it with http.Error, so it arrives as plain text and is used verbatim.
 async function unknownTargetDetail(res: Response): Promise<string> {
   try {
     return (await res.text()).trim();
   } catch {
-    // not-a-failure: the caller already reports the refused run; this only adds the daemon's words
+    // not-a-failure: the caller already reports the refused run; this only adds the server's words
     return "";
   }
 }
 
 // loadRunPlan reads GET /api/v1/plan under the same bearer + no-store rules as the outputs feed.
-// 404 and 501 are "absent", not failures: on any daemon predating the target plan that is the
+// 404 and 501 are "absent", not failures: on any server predating the target plan that is the
 // honest answer, and the view says so by name.
 //
-// A cross-origin console (a hosted page reaching a loopback daemon over #port=) cannot always TELL
+// A cross-origin console (a hosted page reaching a loopback server over #port=) cannot always TELL
 // the two apart - a 404 that carries no CORS headers surfaces to the browser as a network error
 // with no status at all - so the unreadable copy names the missing route as a possible cause too
 // rather than blaming the connection.

@@ -126,7 +126,7 @@ type Target struct {
 	//
 	// They exist so a caller can react to a non-canonical spelling (the CLI hints
 	// the canonical form) WITHOUT the parser reaching out to print anything. A parse
-	// function that writes to stderr cannot be used by the daemon, the MCP handler,
+	// function that writes to stderr cannot be used by the server, the MCP handler,
 	// or a test without dragging that output along; returning the fact instead lets
 	// each caller decide, which is why this is on the value rather than in a wrapper.
 	Declared       string   `json:"declared,omitempty"`
