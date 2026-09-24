@@ -319,6 +319,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		runOpts = append(runOpts, magus.WithPreflight(preflight...))
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
+	runOpts = append(runOpts, processStdioOption(ctx)...)
 	if spellFilter != "" {
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
 	}
@@ -922,25 +923,18 @@ func withoutDetachFlag(args []string) []string {
 	return out
 }
 
-// detachToDaemon hands this invocation to the daemon and returns as soon as it is queued,
+// detachToDaemon hands this invocation to the server and returns as soon as it is queued,
 // so a caller can watch it instead of blocking or sleeping.
 //
-// It requires a PERSISTENT daemon (`magus server start`), and says so rather than falling
-// back. A per-process proc server (which magus starts for ordinary commands) dies when
-// this invocation exits, so submitting there would queue work that is silently dropped:
-// the caller would be told it detached, and nothing would ever run. Refusing is the only
-// honest answer, and the remedy is one command.
+// It requires the server (`magus server start`), and says so rather than falling back. It
+// dials the server's own socket, which no per-process proc server binds: one of those
+// dies when its invocation exits, so submitting there would queue work that is silently
+// dropped. Refusing is the only honest answer, and the remedy is one command.
 func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) error {
-	addr, err := resolveDaemonAddr(ctx, "")
-	if err != nil || addr == "" {
+	addr := resolveServerAddr("")
+	if _, serr := proc.QueryStatus(ctx, addr); serr != nil {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
-			"--detach hands the work to the daemon, and none is running; start one with `%s`", hint.ServerStart)
-	}
-	st, serr := proc.QueryStatus(ctx, addr)
-	if serr != nil || st == nil || st.Mode != "daemon" {
-		return types.WrapDiagnostic(types.DaemonRequired, nil,
-			"--detach needs the persistent daemon, and %s is not one: a per-process server exits with this command, so the work would be queued and silently dropped. Start it with `%s`",
-			addr, hint.ServerStart)
+			"--detach hands the work to the server, and none is running at %s; start one with `%s`", addr, hint.ServerStart)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {

@@ -1,0 +1,35 @@
+# Under -o jsonl the wait is a typed record, not a prose line.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms 2>upstream.err | magus run consume . -o jsonl'
+jsonl-records lock.pipe_wait
+! stderr 'magus: waiting for pid'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "generate": {"skip_cache": "holds the lock long enough to meet the reader"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sleep", ["1"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdin.readAll();
+}

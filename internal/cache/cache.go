@@ -47,6 +47,7 @@ type Cache struct {
 	// in Open from the two fields below, which is where the caller's logger exists.
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
+	machineRequired bool
 	// The tiers Run walks, local first, built once in Open from the option inputs below.
 	local          *localTier
 	remote         *remoteTier // nil when no backend is configured
@@ -306,7 +307,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	// After the options, so its warnings reach the logger the caller chose.
 	c.mtimes = newMtimeStore(dir, c.log)
 	if c.machineAdmitter != nil {
-		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log}
+		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log, required: c.machineRequired}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err

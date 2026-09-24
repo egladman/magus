@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -53,7 +54,7 @@ func newEntry(root string, now time.Time) *wsEntry {
 }
 
 // openWorkspace opens root the way every registry workspace is opened.
-func openWorkspace(root string, lim *cache.Limiter, budget *cache.MachineBudget, tel observability.Provider) (*magus.Magus, error) {
+func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
 	cfg, err := loadWorkspaceCfg(root)
 	if err != nil {
 		return nil, fmt.Errorf("daemon: load config %s: %w", root, err)
@@ -73,12 +74,12 @@ func openWorkspace(root string, lim *cache.Limiter, budget *cache.MachineBudget,
 		workspace.WithLimiter(lim),
 		metricsOpt,
 	}
-	// The budget is held HERE, so hand it over directly: a workspace inside the
-	// daemon that dialled the daemon's socket would be waiting on itself. Only when
-	// there IS one: a registry built without a budget (every test that does) must
-	// not hand the cache an admitter that arbitrates nothing.
-	if budget != nil {
-		opts = append(opts, workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
+	// Every workspace the server opens shares ONE broker client, so the server holds one
+	// broker connection however many workspaces it serves. Each workspace's own broker
+	// setting still decides whether it is used. A registry built without one (every test
+	// that does) leaves Open to its own.
+	if b != nil {
+		opts = append(opts, magus.WithBroker(b))
 	}
 	// context.Background(): workspace goroutines must outlive individual RPC contexts.
 	m, err := magus.Open(context.Background(), root, opts...)
@@ -91,7 +92,7 @@ func openWorkspace(root string, lim *cache.Limiter, budget *cache.MachineBudget,
 // load opens e once and publishes the outcome. A failure starts the watcher that retries it.
 func (r *wsRegistry) load(e *wsEntry) {
 	e.once.Do(func() {
-		m, err := r.open(e.root, r.lim, r.budget, r.tel)
+		m, err := r.open(e.root, r.lim, r.broker, r.tel)
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		defer r.bump()
@@ -130,13 +131,13 @@ type wsRegistry struct {
 	entries  map[string]*wsEntry
 	declared map[string]struct{} // nil/empty = legacy lazy mode (any workspace admissible)
 	lim      *cache.Limiter
-	budget   *cache.MachineBudget   // the machine's admission budget; shared with every workspace this daemon serves
-	tel      observability.Provider // shared with the bridge Magus; owned by the daemon, outlives evictions
+	broker   *broker.Client         // the server's one broker connection, shared with every workspace it serves
+	tel      observability.Provider // shared with the bridge Magus; owned by the server, outlives evictions
 	ttl      time.Duration
 	now      func() time.Time // injectable for tests
 	// open and awaitChange are seams for tests; production opens with openWorkspace and
 	// waits on a filesystem watcher.
-	open        func(root string, lim *cache.Limiter, budget *cache.MachineBudget, tel observability.Provider) (*magus.Magus, error)
+	open        func(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
 	awaitChange func(e *wsEntry) bool
 	// changed is closed and replaced whenever an entry's state moves; guarded by mu.
 	changed chan struct{}
@@ -145,14 +146,14 @@ type wsRegistry struct {
 	wg      sync.WaitGroup
 }
 
-func newWSRegistry(ctx context.Context, lim *cache.Limiter, budget *cache.MachineBudget, ttl time.Duration, tel observability.Provider) *wsRegistry {
+func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
 	if ttl <= 0 {
 		ttl = defaultIdleTTL
 	}
 	r := &wsRegistry{
 		entries: make(map[string]*wsEntry),
 		lim:     lim,
-		budget:  budget,
+		broker:  b,
 		tel:     tel,
 		ttl:     ttl,
 		now:     time.Now,
@@ -232,7 +233,7 @@ func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
 			r.mu.Unlock()
-			return nil, fmt.Errorf("%w: workspace %q is not in this daemon's declared list; add it to daemon.workspaces (magus.yaml) or MAGUS_DAEMON_WORKSPACES and restart the daemon",
+			return nil, fmt.Errorf("%w: workspace %q is not in this server's declared list; add it to daemon.workspaces (magus.yaml) or MAGUS_DAEMON_WORKSPACES and restart the server",
 				types.DiagnosticErrorf(types.SandboxPolicyMismatch, "workspace not declared"),
 				root)
 		}
@@ -463,7 +464,7 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 // disambiguated. Best-effort: an unresolvable root or an unset trail base (bridge not up) drops
 // the record. Ts is the job's start, completion minus its measured duration.
 func recordJobActivity(ctx context.Context, args []string, dur time.Duration, err error) {
-	base := daemonTrailBase
+	base := serverTrailBase
 	if base == "" {
 		return
 	}
@@ -492,10 +493,10 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	completeJobRow(ctx, args, dur, err)
 }
 
-// daemonJobStore is the daemon's ONE job store, published beside daemonTrailBase and for
+// serverJobStore is the daemon's ONE job store, published beside serverTrailBase and for
 // the same reason: this callback needs it, and a second Store over one file would hold its
 // own mutex and serialize against nothing.
-var daemonJobStore *job.Store
+var serverJobStore *job.Store
 
 // completeJobRow finishes a catalog job's row: where it now stands, what the run cost, and
 // whether it worked. The invocation id is not here to record (this callback is handed argv,
@@ -504,7 +505,7 @@ var daemonJobStore *job.Store
 // Best-effort, like the trail append above it. The store refuses a write from a checkout
 // bound to a lease, and background maintenance must not fail because a worker holds this one.
 func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobErr error) {
-	if daemonJobStore == nil {
+	if serverJobStore == nil {
 		return
 	}
 	i := slices.IndexFunc(job.All(), func(j job.CatalogEntry) bool { return slices.Equal(j.Argv, args) })
@@ -512,7 +513,7 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 		return // an adopted run rather than one of the daemon's own, so there is no row
 	}
 	catalog := job.All()[i]
-	if _, err := daemonJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
+	if _, err := serverJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
 		row.Holder = types.HolderDaemon
 		row.Criteria = catalog.Desc
 		row.State = types.StatePass

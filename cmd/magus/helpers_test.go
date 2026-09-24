@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
@@ -633,10 +635,28 @@ func TestMCPAddrFallsBackToTheDefault(t *testing.T) {
 	assert.Equal(t, uint16(9999), parsed.Port())
 }
 
-func TestDaemonDefaultAddrIsAUnixSocket(t *testing.T) {
-	addr := daemonDefaultAddr()
-	assert.True(t, strings.HasPrefix(addr, "unix://"), addr)
-	assert.True(t, strings.HasSuffix(addr, "magus-daemon.sock"), addr)
+// TestServerAndBrokerSocketsSitApart pins the two addresses: each a unix socket in the
+// private socket directory, named for what listens there, and never the same file.
+func TestServerAndBrokerSocketsSitApart(t *testing.T) {
+	server, brk := proc.ServerDefaultAddr(), broker.DefaultAddr()
+	assert.True(t, strings.HasPrefix(server, "unix://"), server)
+	assert.True(t, strings.HasSuffix(server, "/server.sock"), server)
+	assert.True(t, strings.HasPrefix(brk, "unix://"), brk)
+	assert.True(t, strings.HasSuffix(brk, "/broker.sock"), brk)
+	assert.Equal(t, filepath.Dir(server), filepath.Dir(brk))
+}
+
+// TestResolveServerAddrNeverConsultsTheAdoptionSocket pins that the server's address is
+// config or server.sock, never MAGUS_DAEMON_SOCKET: inside a run that variable names the
+// run's own per-process pool, which dies with it.
+func TestResolveServerAddrNeverConsultsTheAdoptionSocket(t *testing.T) {
+	defer snapshotGlobals()()
+	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/magus-1-abc.sock")
+	globalCfg.Daemon.Address = ""
+	assert.Equal(t, proc.ServerDefaultAddr(), resolveServerAddr(""))
+	globalCfg.Daemon.Address = "unix:///tmp/configured.sock"
+	assert.Equal(t, "unix:///tmp/configured.sock", resolveServerAddr(""))
+	assert.Equal(t, "unix:///tmp/flag.sock", resolveServerAddr("unix:///tmp/flag.sock"))
 }
 
 // TestHintCanonicalSpellingTeachesCharmOnce covers the one place a run is told it spelled

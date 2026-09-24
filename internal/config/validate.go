@@ -86,6 +86,10 @@ func Validate(cfg Config) error {
 	}
 	failures = append(failures, spellImportFailures(cfg.Spells.Imports)...)
 	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
+	if !cfg.Broker.Valid() {
+		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
+			Param: strings.Join(cfg.Broker.Values(), " "), Value: string(cfg.Broker)})
+	}
 	if len(failures) == 0 {
 		return nil
 	}

@@ -1,0 +1,59 @@
+# Three magus stages in one project serialize in pipe order: each stage takes the
+# project only once every magus stage upstream of it is done with it, and the bytes
+# arrive whole however long a stage waited.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
+
+exec bash -c 'set -o pipefail; magus run emit . | magus run relay . | magus run consume .'
+grep 'payload-from-emit' consumed
+cmp log/order want-order
+! stderr 'locked by another magus process'
+
+-- want-order --
+emit.start
+emit.end
+relay.start
+relay.end
+consume.start
+-- log/.keep --
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "fs";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "emit": {"skip_cache": "writes stdout per invocation"},
+        "relay": {"skip_cache": "reads stdin per invocation"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+fun mark(name: str) > void !> any {
+    proc\exec("sh", ["-c", "echo {name} >> log/order"]);
+}
+
+export fun emit(ctx: magus\Context, args: [str]) > void !> any {
+    mark("emit.start");
+    proc\exec("sleep", ["1"]);
+    io\stdout.write("payload-from-emit\n");
+    mark("emit.end");
+}
+
+export fun relay(ctx: magus\Context, args: [str]) > void !> any {
+    mark("relay.start");
+    final input = io\stdin.readAll();
+    proc\exec("sleep", ["1"]);
+    io\stdout.write(input);
+    mark("relay.end");
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    mark("consume.start");
+    fs\writeFile("consumed", io\stdin.readAll());
+}

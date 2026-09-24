@@ -115,7 +115,6 @@ export interface PoolView {
   capacity: number;
   running: number;
   queued: number;
-  mode: string;
 }
 export interface CacheView {
   hits: number;
@@ -274,7 +273,6 @@ export function mapStatus(st: Status): StatusView {
       capacity: pool ? pool.capacity : 0,
       running: pool ? pool.running : 0,
       queued: pool ? pool.queued : 0,
-      mode: (pool && pool.mode) || "",
     },
     cache: mapCache(pool && pool.cache),
     runningTargets: ((pool && pool.runningTargets) || []).map((c) => ({

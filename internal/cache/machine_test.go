@@ -18,23 +18,17 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// testBudget is a budget with the two readings a test cannot stage pinned: a clock it
-// controls and a liveness answer that does not depend on what pids this machine has.
-func testBudget(t *testing.T, mb, slots int) (*MachineBudget, *time.Time, map[int]bool) {
+// testBudget is a budget with a clock the test controls.
+func testBudget(t *testing.T, mb, slots int) (*MachineBudget, *time.Time) {
 	t.Helper()
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
-	alive := map[int]bool{}
 	b := NewMachineBudget(mb, slots)
 	b.now = func() time.Time { return now }
-	b.alive = func(p int) bool {
-		live, known := alive[p]
-		return !known || live
-	}
-	return b, &now, alive
+	return b, &now
 }
 
 func TestMachineBudgetAdmitsUntilFull(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 
 	first := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 8000, Slots: 4, PID: 100})
 	require.True(t, first.Granted, "an empty machine seats the first claim")
@@ -55,7 +49,7 @@ func TestMachineBudgetAdmitsUntilFull(t *testing.T) {
 }
 
 func TestMachineBudgetRefusesWhatCanNeverFit(t *testing.T) {
-	b, _, _ := testBudget(t, 4000, 8)
+	b, _ := testBudget(t, 4000, 8)
 
 	v := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 64_000, Slots: 1, PID: 100})
 	assert.False(t, v.Granted)
@@ -66,7 +60,7 @@ func TestMachineBudgetRefusesWhatCanNeverFit(t *testing.T) {
 // refused claim reserving its room would turn away a smaller claim that fits, which is a
 // spurious exit 75 for a run that nothing was in the way of.
 func TestMachineBudgetKeepsNothingForARefusedClaim(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	held := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, Slots: 1, PID: 100})
 	require.True(t, held.Granted)
 	require.False(t, b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 9000, Slots: 1, PID: 200}).Granted)
@@ -76,30 +70,28 @@ func TestMachineBudgetKeepsNothingForARefusedClaim(t *testing.T) {
 	assert.Len(t, b.Snapshot().Holders, 2, "only the granted claims are on record")
 }
 
-func TestMachineBudgetRetiresClaimsOfDeadProcesses(t *testing.T) {
-	b, _, alive := testBudget(t, 10_000, 8)
+// TestMachineBudgetAssertRecordsWhatDoesNotFit pins the re-assert a holder makes on a new
+// broker: its step is already running, so the claim is recorded whatever it does to the
+// arithmetic, and the next request sees the memory as spent.
+func TestMachineBudgetAssertRecordsWhatDoesNotFit(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}).Granted)
 
-	// The holder is killed outright, so it never releases. Nothing but liveness can
-	// retire the claim, and without that the budget stays spent forever.
-	alive[100] = false
-	v := b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 9000, PID: 200})
-	assert.True(t, v.Granted, "a claim whose process is gone stops counting")
-	assert.Empty(t, v.Holders)
-}
+	id := b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	require.NotEmpty(t, id)
+	snap := b.Snapshot()
+	assert.Equal(t, 18_000, snap.HeldMB, "an asserted claim counts even over the budget")
+	assert.Equal(t, 2, snap.HeldSlots, "and takes the one slot every step spends")
 
-func TestMachineBudgetRetiresClaimsOlderThanAnyHonestBuild(t *testing.T) {
-	b, now, _ := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}).Granted)
+	v := b.Request(types.MachineClaim{Project: "x", Target: "lint", MemoryMB: 500, PID: 300})
+	assert.False(t, v.Granted, "new work is not admitted against memory a running step holds")
 
-	// A daemon that outlived a reboot holds a pid the kernel has since reused, so
-	// liveness alone says yes forever.
-	*now = now.Add(machineClaimStaleAfter + time.Minute)
-	assert.True(t, b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 9000, PID: 200}).Granted)
+	b.Release(id)
+	assert.Equal(t, 9000, b.Snapshot().HeldMB)
 }
 
 func TestMachineBudgetExcludesAnAncestorsClaim(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	parent := b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 9000, PID: 100, Invocation: "100:aaa",
 	})
@@ -119,7 +111,7 @@ func TestMachineBudgetExcludesAnAncestorsClaim(t *testing.T) {
 // its child, so a child excused from one parent claim and kept out by the other three is
 // waiting on the very steps that are waiting on it.
 func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
-	b, _, _ := testBudget(t, 12_000, 16)
+	b, _ := testBudget(t, 12_000, 16)
 	targets := []string{"build", "test", "lint", "docs"}
 	for _, target := range targets {
 		require.True(t, b.Request(types.MachineClaim{
@@ -159,7 +151,7 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 // that needs more than the other root leaves free. Neither parent can release until its
 // child runs, so without make's free slot the machine parks forever.
 func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
-	b, now, _ := testBudget(t, 12_000, 16)
+	b, now := testBudget(t, 12_000, 16)
 
 	rootA := b.Request(types.MachineClaim{
 		Project: "a", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:aaa",
@@ -204,7 +196,7 @@ func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
 // unit-sized, so a seat per requester costs it little; a claim here is megabytes, and
 // four seats under one parent would put 28 GB of children on a 12 GB machine.
 func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
-	b, now, _ := testBudget(t, 12_000, 16)
+	b, now := testBudget(t, 12_000, 16)
 	stranger := b.Request(types.MachineClaim{
 		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100,
 	})
@@ -237,7 +229,7 @@ func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
 }
 
 func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
-	b, _, _ := testBudget(t, 4000, 8)
+	b, _ := testBudget(t, 4000, 8)
 	require.True(t, b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 1000, Slots: 1, PID: 100, Invocation: "100:aaa",
 	}).Granted)
@@ -250,7 +242,7 @@ func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
 }
 
 func TestMachineSnapshotReportsHolders(t *testing.T) {
-	b, _, alive := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, Slots: 2, PID: 100, Dir: "/tree/a",
 	}).Granted)
@@ -261,14 +253,6 @@ func TestMachineSnapshotReportsHolders(t *testing.T) {
 	assert.Equal(t, 2, snap.HeldSlots)
 	require.Len(t, snap.Holders, 1)
 	assert.Equal(t, "/tree/a", snap.Holders[0].Dir, "a holder names the tree to go and look at")
-
-	// Snapshot retires nothing, so a corpse is filtered out of the report rather than
-	// shown to a reader who would go looking for a process that has gone.
-	alive[100] = false
-	dead := b.Snapshot()
-	assert.Empty(t, dead.Holders, "a dead holder is not reported")
-	assert.Zero(t, dead.HeldMB, "and it is not billed either; the ci gate reads these totals as saturation")
-	assert.Zero(t, dead.HeldSlots)
 }
 
 // fakeAdmitter is a MachineAdmitter whose answers a test writes. It records every
@@ -306,7 +290,7 @@ func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
 }
 
 func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, adm := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
@@ -357,7 +341,7 @@ func requireWaits(t *testing.T, done <-chan error, free func()) {
 // here is another magus process, so the second queues rather than exiting 75.
 func TestMachineGateWaitsOnClaimsOfItsOwnProcess(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
 	release, err := g.acquire(t.Context(), types.MachineClaim{
@@ -380,7 +364,7 @@ func TestMachineGateWaitsOnClaimsOfItsOwnProcess(t *testing.T) {
 func TestMachineGateWaitsOnItsOwnRunsSiblings(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	const root = "100:inv-root"
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
@@ -412,7 +396,7 @@ func TestMachineGateWaitsOnItsOwnRunsSiblings(t *testing.T) {
 // caller's context, and nothing left on the budget once it ends.
 func TestMachineGateStopsWaitingWithItsContext(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
@@ -431,7 +415,7 @@ func TestMachineGateStopsWaitingWithItsContext(t *testing.T) {
 // with nothing printed after the header.
 func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	held := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
 	})
@@ -440,7 +424,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	var out bytes.Buffer
 	c, err := Open(t.Context(), t.TempDir(),
 		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
-		WithMachineAdmission(LocalAdmitter{Budget: b}))
+		WithMachineAdmission(&fakeAdmitter{budget: b}))
 	require.NoError(t, err)
 
 	var observed []error
@@ -469,7 +453,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 }
 
 func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
-	b, _, _ := testBudget(t, 4000, 8)
+	b, _ := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
@@ -489,7 +473,7 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 // fixed percentage: which reservation applied is not something this budget records, and a
 // number right for one profile is a lie for the other.
 func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
-	b, _, _ := testBudget(t, 4000, 8)
+	b, _ := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
@@ -507,7 +491,7 @@ func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
 // The other axis: a step declaring more slots than the machine has cores is refused by the
 // same path, and neither the memory fraction nor a memory check has anything to say about it.
 func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
-	b, _, _ := testBudget(t, 32_000, 8)
+	b, _ := testBudget(t, 32_000, 8)
 	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
@@ -520,7 +504,7 @@ func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
 }
 
 func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, adm := testGate(t, b)
 	adm.fail = errors.New("dial: connection refused")
 
@@ -528,6 +512,24 @@ func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
 	require.NoError(t, err, "losing the arbiter must not fail a build that was going to run")
 	require.NotNil(t, release)
 	release()
+}
+
+// TestMachineGateRequiredRefusesWhenTheArbiterIsGone is broker: required. The step does
+// not start, and the refusal exits 69 rather than 75: no arbiter is not a busy host.
+func TestMachineGateRequiredRefusesWhenTheArbiterIsGone(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	g.required = true
+	adm.fail = errors.New("dial: connection refused")
+
+	release, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.Error(t, err)
+	assert.Nil(t, release)
+	assert.ErrorIs(t, err, types.BrokerUnavailable)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
+	assert.Contains(t, err.Error(), "connection refused", "the cause stays on the error")
 }
 
 func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
@@ -547,7 +549,7 @@ func TestMachineGateRefusesANestedRunBlindToItsAncestry(t *testing.T) {
 	// environment, so a test that named only one would be judging the harness's.
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "")
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
 	held, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
@@ -614,7 +616,7 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
 
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	parent := b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 10_000, Slots: 1, PID: 3217, Invocation: "3217:inv-parent",
 	})
@@ -659,7 +661,7 @@ func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
 // socket. Without the method the refusal exits 75 alone and 1 under a daemon, which is
 // the exact split proc.ExitCode exists to close.
 func TestMachineRefusalStatesItsExitCode(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
+	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
@@ -688,13 +690,4 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	}
 	assert.NotEqual(t, ExitCodeMachineBusy, ExitCodeMachineDeclaration,
 		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
-}
-
-// TestLocalAdmitterWithoutABudgetFailsOpen covers C12: a registry built with no budget
-// (every test that does) must not panic, and must not silently grant either.
-func TestLocalAdmitterWithoutABudgetFailsOpen(t *testing.T) {
-	adm := LocalAdmitter{}
-	_, err := adm.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test"})
-	require.Error(t, err, "no budget is no arbiter, which the gate reads as fail-open")
-	assert.NotPanics(t, func() { adm.Release(t.Context(), "1.1") })
 }

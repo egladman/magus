@@ -1141,12 +1141,12 @@ func TestCheckStaleSockets(t *testing.T) {
 		}
 	})
 
-	// A daemon plus a run in flight is the ORDINARY state now that a run takes its
-	// admission from the daemon and hosts its own pool for its children. Counting the
-	// pool as a daemon reported that state as a conflict.
-	t.Run("a live per-process pool beside the daemon is not a conflict", func(t *testing.T) {
+	// A server plus a run in flight is the ORDINARY state: a run hosts its own pool for
+	// its children. Counting the pool as a server reported that state as a conflict.
+	// The server here listens on a daemon.address named inside the magus-* pattern.
+	t.Run("a live per-process pool beside the server is not a conflict", func(t *testing.T) {
 		dir := t.TempDir()
-		listenUnix(t, filepath.Join(dir, "magus-daemon.sock"))
+		listenUnix(t, filepath.Join(dir, "magus-custom.sock"))
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
 		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()

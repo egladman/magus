@@ -147,13 +147,13 @@ func printConsoleJobLine(out io.Writer, id string) {
 	}
 }
 
-// probeConsoleDaemon reports whether a PERSISTENT daemon is up, and its version. A
-// per-process proc server answers a socket too and serves no console, so only a "daemon"
-// mode counts.
+// probeConsoleDaemon reports whether the server is up, and its version. A per-process
+// proc server answers a socket too and serves no console, and never binds the server's
+// socket, so an answer there is the server.
 //
-// It probes the daemon's own address, never MAGUS_DAEMON_SOCKET: when the daemon refuses a
-// mismatched build, startup points that variable at this process's own proc server, and
-// asking it reported "nothing is serving" with the daemon up.
+// It probes the server's own address, never MAGUS_DAEMON_SOCKET: when the server refuses
+// a mismatched build, startup points that variable at this process's own proc server, and
+// asking it reported "nothing is serving" with the server up.
 //
 // It makes its OWN bounded context rather than taking the command's. The probe is a local
 // socket round trip on the way to printing one line, `magus ls jobs` reaches it through a
@@ -162,11 +162,11 @@ func printConsoleJobLine(out io.Writer, id string) {
 func probeConsoleDaemon() (serving bool, daemonVersion string) {
 	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
 	defer cancel()
-	st, err := proc.QueryStatus(ctx, admissionDaemonAddr(globalCfg))
-	if err != nil || st == nil || st.Mode != "daemon" {
+	st, err := proc.QueryStatus(ctx, resolveServerAddr(""))
+	if err != nil || st == nil || st.Server == nil {
 		return false, ""
 	}
-	return true, st.DaemonVersion
+	return true, st.Version
 }
 
 // consoleProbeTimeout bounds that probe. A daemon on the same machine answers in

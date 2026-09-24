@@ -12,14 +12,14 @@ import (
 // probe before it resolves an address, let alone dials one.
 //
 // The regression this guards is a silent one: the probe used to fall straight through to
-// resolveDaemonAddr, which never consults the setting, so an invocation that had opted
-// out of the daemon still reached whatever daemon the host happened to be running. It
+// address resolution, which never consults the setting, so an invocation that had opted
+// out of the server still reached whatever server the host happened to be running. It
 // surfaced as a testscript failure: the suite sets MAGUS_DAEMON_ENABLED=false to stay
 // hermetic, and `magus doctor` then probed the real socket and reported on a bridge the
-// test never asked about. It reproduced only where a daemon was actually up (CI), which
+// test never asked about. It reproduced only where a server was actually up (CI), which
 // is what made it hard to see.
 //
-// Daemon.Address is set deliberately: it is the one input resolveDaemonAddr honours
+// Daemon.Address is set deliberately: it is the one input resolveServerAddr honours
 // without any discovery, so asserting SockAddr stays EMPTY proves the short-circuit fires
 // ahead of address resolution. Without it the field is populated even when nothing
 // answers, which is exactly the assertion that fails if the guard is removed. Testing it

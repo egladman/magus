@@ -109,6 +109,7 @@ var commandsWithoutOutput = map[string]bool{
 	"buzz":                     true,
 	"clean":                    true,
 	"graph build":              true,
+	"mcp":                      true,
 	"notes capture":            true,
 	"notes edit":               true,
 	"notes promote":            true,

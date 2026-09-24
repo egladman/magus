@@ -651,7 +651,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     const total = hits + misses;
     return {
       health: { label: "healthy", cls: "ok" },
-      pool: { capacity: CAPACITY, running, queued, mode: "daemon" },
+      pool: { capacity: CAPACITY, running, queued },
       cache: { hits, misses, errors, hitRate: total > 0 ? hits / total : null, sizeBytes },
       runningTargets,
       runs: runs.map((r) => ({ ...r, targets: r.targets.slice() })),

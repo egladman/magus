@@ -15,9 +15,9 @@ import "google/rpc/status.proto";
 // Health is the at-a-glance rollup a dashboard shows.
 enum Health {
   HEALTH_UNSPECIFIED = 0;
-  HEALTH_HEALTHY = 1;   // daemon reachable, pool nominal
+  HEALTH_HEALTHY = 1;   // server reachable, pool nominal
   HEALTH_DEGRADED = 2;  // reachable but something is off (pool error, saturation)
-  HEALTH_DOWN = 3;      // no daemon / pool
+  HEALTH_DOWN = 3;      // no server / pool
 }
 
 // Status is the live snapshot.
@@ -25,11 +25,66 @@ message Status {
   reserved 3;                    // was string magus_version; replaced by the granular BuildInfo below
   reserved "magus_version";
   Health health = 1;
-  Pool pool = 2;                 // live concurrency; absent when no daemon/pool is running
-  repeated Run runs = 4;         // runs the daemon is executing right now (adopted dispatches)
-  repeated Service services = 5; // long-running shared services the daemon is hosting right now
-  BuildInfo build = 6;           // the running daemon's build identity
+  Pool pool = 2;                 // live concurrency; absent when no server/pool is running
+  repeated Run runs = 4;         // runs the server is executing right now (adopted dispatches)
+  repeated Service services = 5; // shared services the broker is hosting right now; the same list as broker.services
+  BuildInfo build = 6;           // the running server's build identity
   repeated Lock locks = 7;       // per-project workspace locks held right now
+  Broker broker = 8;             // the broker holding this host's capacity; absent when none is running
+  Server server = 9;             // the server itself; absent when none is running
+  string broker_policy = 10;     // required | best-effort | off: what a missing broker means
+}
+
+// Broker is the per-user process holding this host's capacity (concurrency slots and
+// declared memory) and the services every magus on it shares. It listens on a unix
+// socket only and exits once it has held nothing for its idle window.
+message Broker {
+  int32 pid = 1;
+  string version = 2;
+  int32 protocol = 3;                        // the broker wire version it speaks
+  string socket = 4;
+  string executable = 5;                     // the binary it runs from
+  google.protobuf.Timestamp start_time = 6;
+  Capacity capacity = 7;
+  int32 idle_exit_seconds = 8;               // how long it stays up once it holds nothing
+}
+
+// Capacity is the host's whole budget, what is held, and every claim holding it.
+message Capacity {
+  int32 budget_mb = 1;              // 0 = unmeasured
+  int32 held_mb = 2;
+  int32 budget_slots = 3;           // 0 = unmeasured
+  int32 held_slots = 4;
+  repeated Claim holders = 5;       // oldest first
+}
+
+// Claim is one step holding capacity, and who is running it.
+message Claim {
+  string project = 1;
+  string target = 2;
+  int32 pid = 3;
+  int32 memory_mb = 4;
+  int32 slots = 5;
+  string dir = 6;                            // where the holding run was started
+  string command = 7;                        // the holder's argv
+  google.protobuf.Timestamp start_time = 8;  // when the claim was granted
+}
+
+// Server is the person-started process serving MCP, the console, the APIs and jobs.
+message Server {
+  int32 pid = 1;
+  string version = 2;
+  string socket = 3;
+  string executable = 4;
+  google.protobuf.Timestamp start_time = 5;
+  repeated Listener listeners = 6;
+  repeated string watch = 7;                 // workspace roots whose graph and symbols it keeps current
+}
+
+// Listener is one address the server accepts connections on.
+message Listener {
+  string kind = 1;     // socket | http
+  string address = 2;
 }
 
 // Lock is one held per-project workspace lock and the process holding it.
@@ -116,9 +171,10 @@ message Service {
 
 // Pool is the live concurrency pool - the slots and the work occupying them.
 message Pool {
+  reserved 3;                  // was string mode; the server is Status.server, not a role string
+  reserved "mode";
   int32 parent_pid = 1;
-  string daemon_version = 2;
-  string mode = 3;             // "daemon" | "proc" | ""
+  string daemon_version = 2;   // the pool owner's build
   int32 capacity = 4;          // total concurrency slots (0 = unlimited)
   int32 running = 5;           // slots currently running
   int32 queued = 6;            // targets queued for a slot

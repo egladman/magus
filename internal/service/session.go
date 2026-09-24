@@ -9,11 +9,11 @@ import (
 )
 
 // Session is the per-run routing layer over service supervision. It acquires each
-// service either from a cross-invocation host (the daemon, kept warm across runs) or
+// service either from a cross-invocation host (the broker, kept warm across runs) or
 // from the in-process [Registry] (this run only), and releases everything it took
-// when the run ends. It keeps this package free of any daemon/RPC dependency by
-// taking the daemon acquire/release as plain closures, which the caller wires to the
-// proc client.
+// when the run ends. It keeps this package free of any RPC dependency by taking the
+// host's acquire/release as plain closures, which the caller wires to the broker
+// client.
 type Session struct {
 	reg *Registry // in-process host; also the fallback when no daemon is reachable
 
@@ -50,7 +50,7 @@ func NewSession(reg *Registry, daemonAcquire func(context.Context, string, spell
 func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) error {
 	if s.daemonAcquire != nil {
 		if err := s.daemonAcquire(ctx, key, svc); err != nil {
-			slog.WarnContext(ctx, "magus: daemon service acquire failed; hosting in-process for this run",
+			slog.WarnContext(ctx, "magus: the broker could not host a service; hosting it in-process for this run",
 				slog.String("key", key), slog.String("err", err.Error()))
 			_, ierr := s.reg.Acquire(ctx, key, svc)
 			return ierr

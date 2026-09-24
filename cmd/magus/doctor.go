@@ -258,10 +258,7 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 		return di
 	}
 
-	addr, err := resolveDaemonAddr(ctx, "")
-	if err != nil {
-		return di
-	}
+	addr := resolveServerAddr("")
 	di.SockAddr = addr
 
 	reply, err := proc.QueryStatus(ctx, addr)
@@ -269,12 +266,11 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 		return di
 	}
 	di.Reachable = true
-	// Mode separates the `magus server start` daemon from the per-process proc server
-	// this very invocation may have spun up. Only the former starts the MCP HTTP server,
-	// so only it makes a bridge something to expect.
-	di.Persistent = reply.Mode == "daemon"
+	// Only the server reports itself, and only it starts the MCP HTTP server, so only
+	// it makes a bridge something to expect.
+	di.Persistent = reply.Server != nil
 	di.ParentPID = reply.ParentPID
-	di.DaemonVersion = reply.DaemonVersion
+	di.DaemonVersion = reply.Version
 	di.Capacity = reply.Capacity
 	di.Running = reply.Running
 	di.Queued = reply.Queued

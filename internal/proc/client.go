@@ -11,7 +11,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -135,41 +134,6 @@ func Shutdown(ctx context.Context, addr string) error {
 	return err
 }
 
-// AcquireService asks the daemon at addr to start (or reuse) a shared service and
-// keep it warm past this invocation, returning once it is ready. addr accepts a
-// unix:// URL or a bare path.
-func AcquireService(ctx context.Context, addr, key string, svc spells.Service) error {
-	req := serviceAcquireRequest{Protocol: protocolV2, Key: key, Service: svc}
-	reply, err := roundTrip[serviceAcquireReply](ctx, addr, serviceAcquireExchange, req)
-	if err != nil {
-		return err
-	}
-	if reply.Err != "" {
-		return fmt.Errorf("proc: service.acquire: %s", reply.Err)
-	}
-	return nil
-}
-
-// ReleaseService tells the daemon at addr that this invocation no longer needs the
-// shared service for key; the daemon keeps it warm and reaps it later. addr accepts
-// a unix:// URL or a bare path.
-func ReleaseService(ctx context.Context, addr, key string) error {
-	req := serviceReleaseRequest{Protocol: protocolV2, Key: key}
-	_, err := roundTrip[serviceReleaseReply](ctx, addr, serviceReleaseExchange, req)
-	return err
-}
-
-// StopAllServices asks the daemon at addr to stop every service it hosts (leaving the
-// daemon running) and returns how many were stopped. addr accepts a unix:// URL or a
-// bare path.
-func StopAllServices(ctx context.Context, addr string) (int, error) {
-	reply, err := roundTrip[serviceStopAllReply](ctx, addr, serviceStopAllExchange, serviceStopAllRequest{Protocol: protocolV2})
-	if err != nil {
-		return 0, err
-	}
-	return reply.Count, nil
-}
-
 // RunChildSync yields the caller's concurrency slot for the duration of fn so a
 // child magus process can acquire it, keeping the total budget flat. If lim is
 // nil or no slot is held fn runs unchanged (avoids over-releasing the semaphore).
@@ -180,12 +144,12 @@ func RunChildSync(ctx context.Context, lim *cache.Limiter, fn func() error) erro
 	return lim.Yield(ctx, fn)
 }
 
-// ReloadConfig asks the daemon to drop the workspaces it holds open, so the next command
+// ReloadConfig asks the server to drop the workspaces it holds open, so the next command
 // against each reopens it and re-reads its config. It reports how many were dropped and
 // how many were left alone because a run was in flight.
 //
-// The counterpart of StopAllServices: a partial reset that leaves the daemon running,
-// for the case where editing magus.yaml would otherwise mean restarting it.
+// A partial reset that leaves the server running, for the case where editing
+// magus.yaml would otherwise mean restarting it.
 func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err error) {
 	reply, err := roundTrip[configReloadReply](ctx, addr, configReloadExchange, configReloadRequest{Protocol: protocolV2})
 	if err != nil {

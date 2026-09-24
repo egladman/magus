@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
@@ -45,7 +46,7 @@ func newTestRegistry() *wsRegistry {
 // scriptedOpens makes r.open fail until ok is closed, counting every attempt.
 func scriptedOpens(r *wsRegistry, ok <-chan struct{}) *atomic.Int32 {
 	var n atomic.Int32
-	r.open = func(root string, _ *cache.Limiter, _ *cache.MachineBudget, _ observability.Provider) (*magus.Magus, error) {
+	r.open = func(root string, _ *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 		n.Add(1)
 		select {
 		case <-ok:
@@ -326,10 +327,10 @@ func TestEvictAllOnEmptyRegistry(t *testing.T) {
 // naming the log the run produced.
 func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
-	daemonJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
-	t.Cleanup(func() { daemonJobStore = nil })
+	serverJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	t.Cleanup(func() { serverJobStore = nil })
 
-	_, err := daemonJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
+	_, err := serverJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
 		row.Holder = types.HolderDaemon
 		row.State = types.StateRunning
 		row.LastRun = &types.JobRun{Invocation: "inv-1"}
@@ -338,7 +339,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 
 	completeJobRow(t.Context(), []string{"graph", "build"}, 250*time.Millisecond, nil)
 
-	rows, err := daemonJobStore.List()
+	rows, err := serverJobStore.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]
@@ -353,7 +354,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 
 	completeJobRow(t.Context(), []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
-	rows, err = daemonJobStore.List()
+	rows, err = serverJobStore.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.StateFail, rows[0].State)
@@ -367,12 +368,12 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 // has no row of its own to complete.
 func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 	dir := t.TempDir()
-	daemonJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
-	t.Cleanup(func() { daemonJobStore = nil })
+	serverJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	t.Cleanup(func() { serverJobStore = nil })
 
 	completeJobRow(t.Context(), []string{"run", "test", "."}, time.Second, nil)
 
-	rows, err := daemonJobStore.List()
+	rows, err := serverJobStore.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }

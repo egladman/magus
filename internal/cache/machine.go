@@ -1,15 +1,12 @@
 package cache
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,7 +18,10 @@ import (
 // limiter throttles peers within a process, this decides whether the machine can seat
 // the step at all.
 //
-// It lives in the user's daemon, the one process every magus on the host can reach.
+// It lives in the user's broker, the one process every magus on the host can reach. The
+// broker hangs each claim off the connection that took it and releases it when that
+// connection closes, so the budget trusts what it is told and never polls a pid: a
+// holder killed outright is released by the kernel closing its socket.
 //
 // DECLARED, not observed, so the same command on the same host reaches the same
 // verdict whatever a browser is doing. Observed pressure stays advisory in sys/mem.
@@ -32,16 +32,9 @@ type MachineBudget struct {
 	claims      map[string]*machineEntry
 	seq         int64
 
-	// now and alive are the two readings a test cannot stage. Nil means the real one.
-	now   func() time.Time
-	alive func(int) bool
+	// now is the reading a test cannot stage. Nil means the real clock.
+	now func() time.Time
 }
-
-// machineClaimStaleAfter bounds how long a claim is believed. Liveness alone cannot
-// retire one: a daemon that outlives a reboot holds a pid the kernel has since handed to
-// something else, and pid.Alive says yes forever. Losing a long run's claim is the safer
-// failure.
-const machineClaimStaleAfter = 24 * time.Hour
 
 type machineEntry struct {
 	claim   types.MachineClaim
@@ -66,20 +59,12 @@ func (b *MachineBudget) clock() time.Time {
 	return time.Now()
 }
 
-func (b *MachineBudget) live(p int) bool {
-	if b.alive != nil {
-		return b.alive(p)
-	}
-	return pid.Alive(p)
-}
-
 // Request asks for admission once. It grants and records the claim, or answers why not
 // and records nothing, and it never blocks: whether to ask again belongs to the client,
 // which the verdict's OwnRun tells.
 func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.reap()
 
 	if c.Slots < 1 {
 		c.Slots = 1
@@ -102,33 +87,42 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 		return v
 	}
 
-	now := b.clock()
-	b.seq++
-	id := fmt.Sprintf("%d.%d", c.PID, b.seq)
-	b.claims[id] = &machineEntry{claim: c, started: now}
-	v.Granted, v.ID = true, id
+	v.Granted, v.ID = true, b.record(c)
 	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+c.Slots
 	return v
 }
 
+// Assert records a claim without asking whether it fits, and returns its id. It is for
+// a claim granted by a broker that has since died: the step is already running, so its
+// memory is spent whatever this budget thinks, and refusing to record it would admit
+// new work against memory that is in use.
+func (b *MachineBudget) Assert(c types.MachineClaim) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if c.Slots < 1 {
+		c.Slots = 1
+	}
+	return b.record(c)
+}
+
+// record stores c under a fresh id. Callers hold b.mu.
+func (b *MachineBudget) record(c types.MachineClaim) string {
+	b.seq++
+	id := fmt.Sprintf("%d.%d", c.PID, b.seq)
+	b.claims[id] = &machineEntry{claim: c, started: b.clock()}
+	return id
+}
+
 // Release returns a granted claim. An unknown id is ignored: a client that lost its
-// daemon mid-run releases into a budget that never recorded it.
+// broker mid-run releases into a budget that never recorded it.
 func (b *MachineBudget) Release(id string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.claims, id)
 }
 
-// Snapshot reports the whole budget. Read-only: it retires nothing, so a status command
-// can ask what the machine is doing without changing it. Claims whose process is gone
-// are FILTERED out of the list AND out of the totals rather than deleted, so the report
-// never shows a corpse the next Request would retire anyway.
-//
-// held carries the same liveness skip as claimants for this caller alone; Request cannot
-// tell the difference, since reap has already run by the time it asks. Filtering only
-// the list left the two halves answering different questions, and the arithmetic is
-// what the ci gate reads as saturation, so a hard-killed run refused every gate on an
-// idle machine.
+// Snapshot reports the whole budget. Read-only, so a status command can ask what the
+// machine is doing without changing it.
 func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -139,17 +133,6 @@ func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 		BudgetSlots: b.budgetSlots,
 		HeldSlots:   heldSlots,
 		Holders:     b.holders(nil),
-	}
-}
-
-// reap drops a claim the budget must stop believing: one whose process is gone, or one
-// older than any honest build.
-func (b *MachineBudget) reap() {
-	now := b.clock()
-	for id, e := range b.claims {
-		if now.Sub(e.started) > machineClaimStaleAfter || !b.live(e.claim.PID) {
-			delete(b.claims, id)
-		}
 	}
 }
 
@@ -180,7 +163,7 @@ func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 // of a full budget that nothing c's run is doing will release. When c fits beside that
 // alone, a refusal would fail the run over a wait on itself.
 //
-// The same process covers the daemon's adopted runs and a run's own concurrent steps;
+// The same process covers the server's adopted runs and a run's own concurrent steps;
 // the same run covers sibling nested magus processes under one root.
 func (b *MachineBudget) heldByOthers(c types.MachineClaim) (mb, slots int) {
 	excused := b.excusedClaims(c.Ancestors)
@@ -192,10 +175,10 @@ func (b *MachineBudget) heldByOthers(c types.MachineClaim) (mb, slots int) {
 	})
 }
 
-// sum totals every live claim skip does not exclude.
+// sum totals every claim skip does not exclude.
 func (b *MachineBudget) sum(skip func(id string, c types.MachineClaim) bool) (mb, slots int) {
 	for id, e := range b.claims {
-		if skip(id, e.claim) || !b.live(e.claim.PID) {
+		if skip(id, e.claim) {
 			continue
 		}
 		mb += e.claim.MemoryMB
@@ -239,9 +222,8 @@ func (b *MachineBudget) excusedClaims(ancestors []string) map[string]bool {
 // more than the other root leaves free. Each child has an ancestor holding a claim with
 // nothing running beneath it, so each is seated and both roots finish.
 //
-// Nothing is stored. A released or reaped claim stops counting as its ancestor's running
-// descendant, so the seat comes back through the same pid-liveness path as any other
-// claim. A claim with no ancestor holding anything gets no seat, so a stranger cannot
+// Nothing is stored. A released claim stops counting as its ancestor's running
+// descendant, so the seat comes back through the same release as any other claim. A claim with no ancestor holding anything gets no seat, so a stranger cannot
 // get past a full budget with this, and a declaration larger than the whole budget is
 // refused before Request reaches here.
 func (b *MachineBudget) freeSlot(ancestors []string) bool {
@@ -274,19 +256,19 @@ func (b *MachineBudget) fits(c types.MachineClaim, mb, slots int) bool {
 	return b.budgetSlots <= 0 || slots+c.Slots <= b.budgetSlots
 }
 
-// holders lists every live claim that counts against a claim with these ancestors,
-// oldest first, so a refusal names who is holding the budget.
+// holders lists every claim that counts against a claim with these ancestors, oldest
+// first, so a refusal names who is holding the budget.
 func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
 	excused := b.excusedClaims(ancestors)
 	out := make([]types.MachineClaimant, 0, len(b.claims))
 	for id, e := range b.claims {
-		if excused[id] || !b.live(e.claim.PID) {
+		if excused[id] {
 			continue
 		}
 		out = append(out, types.MachineClaimant{
 			Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
 			MemoryMB: e.claim.MemoryMB, Slots: e.claim.Slots,
-			Dir: e.claim.Dir, Since: e.started,
+			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started,
 		})
 	}
 	slices.SortFunc(out, func(a, b types.MachineClaimant) int {
@@ -303,29 +285,6 @@ func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
 
 func isMachineAncestor(invocation string, ancestors []string) bool {
 	return invocation != "" && slices.Contains(ancestors, invocation)
-}
-
-// LocalAdmitter reaches a budget held in THIS process. It is what the daemon's own
-// workspaces use: dialing its own socket from inside a request it is serving would
-// have it wait on itself.
-type LocalAdmitter struct{ Budget *MachineBudget }
-
-// errNoLocalBudget is what a LocalAdmitter with no budget answers. An error rather than
-// a grant: the gate reads it as "no arbiter" and fails open with a notice, where a
-// silent grant would report an arbitrated run that was never arbitrated.
-var errNoLocalBudget = errors.New("cache: this process holds no machine budget")
-
-func (l LocalAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
-	if l.Budget == nil {
-		return types.MachineVerdict{}, errNoLocalBudget
-	}
-	return l.Budget.Request(c), nil
-}
-
-func (l LocalAdmitter) Release(_ context.Context, id string) {
-	if l.Budget != nil {
-		l.Budget.Release(id)
-	}
 }
 
 // FormatMB renders a declared memory figure. Base-1024 with binary suffixes and a

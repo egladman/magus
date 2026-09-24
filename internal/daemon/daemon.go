@@ -74,7 +74,7 @@ var connectReadMax = connect.WithReadMaxBytes(handler.MaxWireBodyBytes)
 type Daemon struct {
 	opts       mcp.Options
 	runs       func() []types.StatusRun
-	services   func() []types.StatusService
+	broker     func() *types.StatusBroker
 	workspaces func() []activityhandler.Workspace
 	// unloaded is set by NewUnloaded: the workspace failed, so only the surfaces that
 	// need none are served.
@@ -94,11 +94,11 @@ func WithRuns(fn func() []types.StatusRun) Option {
 	return func(d *Daemon) { d.runs = fn }
 }
 
-// WithServices supplies the daemon's hosted-services source (the service registry's
-// Snapshot). When set, the StatusService and the status SSE frame carry the long-running
-// shared services the daemon is keeping warm alongside the pool and runs.
-func WithServices(fn func() []types.StatusService) Option {
-	return func(d *Daemon) { d.services = fn }
+// WithBroker supplies the broker's status: its capacity, the claims holding it and the
+// shared services it keeps warm. When set, the StatusService and the status SSE frame
+// carry them alongside the pool and runs. fn returns nil when no broker answers.
+func WithBroker(fn func() *types.StatusBroker) Option {
+	return func(d *Daemon) { d.broker = fn }
 }
 
 // WithActivityWorkspaces supplies the daemon's live workspace set (the same per-workspace
@@ -252,8 +252,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			if s.runs != nil {
 				svcOpts = append(svcOpts, console.WithRuns(s.runs))
 			}
-			if s.services != nil {
-				svcOpts = append(svcOpts, console.WithServices(s.services))
+			if s.broker != nil {
+				svcOpts = append(svcOpts, console.WithBroker(s.broker))
 			}
 			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version, svcOpts...)
 
@@ -760,8 +760,8 @@ func (s *Daemon) serveUnloaded(ctx context.Context) error {
 	if s.runs != nil {
 		svcOpts = append(svcOpts, console.WithRuns(s.runs))
 	}
-	if s.services != nil {
-		svcOpts = append(svcOpts, console.WithServices(s.services))
+	if s.broker != nil {
+		svcOpts = append(svcOpts, console.WithBroker(s.broker))
 	}
 	// A nil workspace is what console.Service reads the pool alone from: the pool carries
 	// this workspace's state and error, which is the thing to show.
