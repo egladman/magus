@@ -154,6 +154,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	}
 	env, withheldDaemon := childEnv(ctx, policy, opts.Env)
 	c.Env = env
+	if js := jobserverFrom(ctx); js != nil {
+		c.ExtraFiles = js.files()
+	}
 	sandbox.RecordEnvDropped(ctx, name, policy)
 	sandbox.EmitShimHint(name, policy)
 	if len(withheldDaemon) > 0 {
@@ -291,6 +294,10 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	// the daemon, where the process env belongs to nobody's invocation.
 	env = withoutEnvVars(env, []string{AncestorsEnvVar})
 	env = append(env, SelfVars(ctx)...)
+	// Ahead of the overrides, so a target that sets MAKEFLAGS itself keeps its own.
+	if js := jobserverFrom(ctx); js != nil {
+		env = append(env, js.environ(env)...)
+	}
 	env = append(env, overrides...)
 	return env, withheld
 }

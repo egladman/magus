@@ -497,7 +497,8 @@ func retryFloat(v any) (float64, bool) {
 // runner) does not oversubscribe the global budget. With no limiter on ctx (e.g. a
 // standalone run) it just invokes cb. Mirrors archive.*: the build slot already
 // held is handed back while the n are reserved, so peak in-flight stays within the
-// cap rather than cap+n.
+// cap rather than cap+n. Processes cb starts share a jobserver of n slots
+// (run.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
 func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
@@ -510,6 +511,13 @@ func OsWithSlots(ctx context.Context, n int, cb Callback) error {
 			return fmt.Errorf("os.with_slots: %w", err)
 		}
 		defer lim.ReleaseN(n)
+		// The step's own pool was sized to the slots just handed back.
+		seated, closeJobserver, err := run.SeatJobserver(ctx, n)
+		if err != nil {
+			return fmt.Errorf("os.with_slots: %w", err)
+		}
+		defer closeJobserver()
+		ctx = seated
 	}
 	_, callErr := cb.Call(ctx)
 	return callErr
