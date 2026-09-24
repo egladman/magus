@@ -147,6 +147,9 @@ apply report what would merge and call nothing on the provider.
 **--app** *slug*
 : \`slug\` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)
 
+**--base** *branch*
+: \`branch\` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
+
 **--committer** *string*
 : "Name \<email\>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
 
@@ -179,6 +182,9 @@ apply report what would merge and call nothing on the provider.
 
 **--vcs** *backend* (default: git)
 : Version control \`backend\` of the checkout at --root
+
+**--workflow** *definition*
+: \`definition\` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)
 
 ## Subcommands
 
@@ -238,13 +244,13 @@ magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected
 *Merge the green ones as they arrive*
 
 ```sh
-magus queue apply --provider github verdicts
+magus queue apply --provider github --base main verdicts
 ```
 
 *Merge from a validation run's artifacts*
 
 ```sh
-magus queue apply --provider github run:acme/widgets/runs/7
+magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7
 ```
 
 *Plan with a provider of your own*

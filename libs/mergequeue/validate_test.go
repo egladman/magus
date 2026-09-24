@@ -22,19 +22,13 @@ func planOf(groups ...[]types.Change) types.Plan {
 	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 3, Partitions: groups}
 }
 
-// validating wires a Validator to d, answering each change's fetch and squash message.
+// validating wires a Validator to d, answering each change's fetch.
 func validating(t *testing.T, d doubles, plan types.Plan) (*Validator, *VerdictDir) {
 	t.Helper()
 	d.noCheckouts()
 	for _, g := range plan.Partitions {
 		for _, c := range g {
 			d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil).Maybe()
-			from := base
-			if c.StackBase != "" {
-				from = c.StackBase
-			}
-			d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, from, c.Head, []string(nil)).
-				Return([]magustypes.Commit{{ID: c.Head, Subject: "change " + c.ID, Parents: []string{from}}}, nil).Maybe()
 		}
 	}
 	dir := &VerdictDir{Path: t.TempDir()}
@@ -143,7 +137,6 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 		assert.Equal(t, want.Onto, v.Onto, id)
 		assert.Equal(t, want.CandidateCommit, v.CandidateCommit, id)
 		assert.Equal(t, want.Depth, v.Depth, id)
-		assert.Equal(t, "* change "+id, v.Message, id)
 	}
 	assert.ElementsMatch(t, []string{"1@" + base, "2@" + c1, "3@" + c2}, g.runs, "each gate runs on what its candidate was built onto")
 }

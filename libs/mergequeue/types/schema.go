@@ -231,8 +231,7 @@ type Verdict struct {
 	// one plus this one, generated files regenerated. An applier builds it again from
 	// the change's head and the base's own regeneration, and merges only what matches.
 	CandidateCommit string      `json:"candidate_commit,omitempty"`
-	Method          MergeMethod `json:"method,omitempty"`  // the merge method it was validated under
-	Message         string      `json:"message,omitempty"` // squash body: the change's own commits
+	Method          MergeMethod `json:"method,omitempty"` // the merge method it was validated under
 	// Depth is the candidate's speculation depth when its gate started: 1 ran on
 	// validated commits alone, 2 on top of one unvalidated candidate, and so on.
 	Depth      int   `json:"depth,omitempty"`

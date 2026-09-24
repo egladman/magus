@@ -105,7 +105,11 @@ export fun mark(io: {str: any}) > bool {
 }
 
 export fun list_artifacts(io: {str: any}) > any {
-    return {"complete": io["source"] == "done", "headers": {"Authorization": "Bearer tok"},
+    final run = {"repo": "o/r", "head_repo": "o/r", "head_branch": "main", "event": "push", "branch_event": true, "definition": "q.yaml"};
+    if (io["source"] == "no run") {
+        return {"complete": true, "artifacts": [<any>]};
+    }
+    return {"run": run, "complete": io["source"] == "done", "headers": {"Authorization": "Bearer tok"},
         "artifacts": [{"name": "mergequeue-plan", "url": "https://example.invalid/1.zip"}]};
 }
 `
@@ -317,8 +321,14 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 func TestListArtifactsDecodesTheListing(t *testing.T) {
 	got, err := open(t, script).ListArtifacts(context.Background(), "done")
 	require.NoError(t, err)
-	assert.Equal(t, types.ArtifactListing{Complete: true, Headers: map[string]string{"Authorization": "Bearer tok"},
+	run := types.RunOrigin{Repo: "o/r", HeadRepo: "o/r", HeadBranch: "main", Event: "push", BranchEvent: true, Definition: "q.yaml"}
+	assert.Equal(t, types.ArtifactListing{Run: run, Complete: true, Headers: map[string]string{"Authorization": "Bearer tok"},
 		Artifacts: []types.Artifact{{Name: "mergequeue-plan", URL: "https://example.invalid/1.zip"}}}, got)
+}
+
+func TestAListingThatDoesNotSayWhatRanIsRefused(t *testing.T) {
+	_, err := open(t, script).ListArtifacts(context.Background(), "no run")
+	require.EqualError(t, err, `provider "echo": list_artifacts: field "run" is missing`)
 }
 
 func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
