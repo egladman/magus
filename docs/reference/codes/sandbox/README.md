@@ -124,7 +124,9 @@ Two layers run together:
 - [MGS3020](MGS3020.md): a --preflight target failed, so the invoked target never started.
 - [MGS3021](MGS3021.md): a --preflight target outside the invoked target's closure.
 - [MGS3023](MGS3023.md): a pipe whose writers loop back into the run reading it.
-- [MGS3026](MGS3026.md): a `run --stdin` that reads a malformed plan, or names a shard, target or count the plan does not have.
+- [MGS3027](MGS3027.md): the merge queue refused a validation run the base's own queue workflow did not start.
+- [MGS3028](MGS3028.md): the merge queue's plan disagrees with what apply reads itself.
+- [MGS3029](MGS3029.md): a `run --stdin` that reads a malformed plan, or names a shard, target or count the plan does not have.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

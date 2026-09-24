@@ -2750,9 +2750,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
     // test inputs.
     ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
-    // The setup action and the queue's apply workflow: the release trust anchor and the
-    // queue app's credential rules are asserted against them.
-    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/queue-apply.yaml");
+    // The setup action and the workflows: the release trust anchor, the queue app's
+    // credential rules and the no-cache rule for trusted jobs are asserted against them.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/*.yaml");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays

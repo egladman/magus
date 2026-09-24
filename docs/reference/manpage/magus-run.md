@@ -47,7 +47,7 @@ target positional is optional (give it to add charms, as in ci:gha) and project
 positionals are refused. --shard \<id\> runs that one shard; without it every
 shard runs here. A malformed plan, a shard id the plan does not have, a target
 other than the plan's, or an --n-shards other than its count is refused before
-anything runs (MGS3026). Under the global --dry-run nothing loads or runs: the
+anything runs (MGS3029). Under the global --dry-run nothing loads or runs: the
 plan is checked and printed, and -o json, yaml or template renders the document
 as read, so a saved plan renders more than once without being computed again.
 
@@ -142,7 +142,7 @@ as read, so a saved plan renders more than once without being computed again.
 : At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name.
 
 **2**
-: Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3026).
+: Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3029).
 
 **3**
 : A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them.

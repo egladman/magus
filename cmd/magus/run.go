@@ -567,7 +567,7 @@ func runReadsPlan(args []string, bind func(*flag.FlagSet)) bool {
 	return stdin
 }
 
-// planRefusal is an MGS3026 refusal. It exits 2, the misuse status: nothing was attempted.
+// planRefusal is an MGS3029 refusal. It exits 2, the misuse status: nothing was attempted.
 type planRefusal struct{ error }
 
 func (planRefusal) ExitCode() int { return exitUsage }

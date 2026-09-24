@@ -185,7 +185,7 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []types.Ch
 		if out.err != nil {
 			return fmt.Errorf("gate %s: %w", head.change.Label(), out.err)
 		}
-		green, err := r.verdict(ctx, head, out, true)
+		green, err := r.verdict(head, out, true)
 		if err != nil {
 			return err
 		}
@@ -302,7 +302,7 @@ func (r *validation) only(ctx context.Context) error {
 			}
 			var refused *types.RefusedError
 			if errors.As(err, &refused) {
-				_, err := r.verdict(ctx, f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
+				_, err := r.verdict(f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
 				return err
 			}
 			return r.hold(f, err)
@@ -322,13 +322,19 @@ func (r *validation) only(ctx context.Context) error {
 		if out.err != nil {
 			return fmt.Errorf("gate %s: %w", c.Label(), out.err)
 		}
-		_, err = r.verdict(ctx, f, out, f.depth == 1)
+		_, err = r.verdict(f, out, f.depth == 1)
 		return err
 	}
 	return nil
 }
 
 // candidate builds c's candidate onto onto, regenerated with v.Regenerate.
+//
+// What the regeneration rewrites is committed only when the build tool proves it runs
+// none of c's code, the same proof an Applier needs before it can reproduce those bytes
+// with the base's own regeneration. Otherwise c's committed outputs are stale on top of
+// onto and only its author can regenerate them, so the candidate is refused before its
+// gate runs on a tree that could never merge.
 func (r *validation) candidate(ctx context.Context, onto string, c types.Change) (types.Candidate, error) {
 	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
 		return types.Candidate{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
@@ -338,11 +344,34 @@ func (r *validation) candidate(ctx context.Context, onto string, c types.Change)
 	if err != nil || r.Regenerate == nil {
 		return b.Candidate, err
 	}
-	if b.Commit, err = regenerateIn(ctx, r.vcs, s, b, r.Regenerate, nil); err != nil {
+	if b.Commit, err = r.regenerate(ctx, s, b); err != nil {
 		r.discard(ctx, b.Candidate)
 		return types.Candidate{}, err
 	}
 	return b.Candidate, nil
+}
+
+func (r *validation) regenerate(ctx context.Context, s candidateSpec, b built) (string, error) {
+	regen, err := outputs(ctx, s.facts, b.touched)
+	if err != nil {
+		return "", err
+	}
+	keep, err := regenerateWrites(ctx, r.vcs, s, b, r.Regenerate, regen, nil)
+	if err != nil || len(keep) == 0 {
+		return b.Commit, err
+	}
+	g, err := generationOf(ctx, r.vcs, r.facts, r.clone.Root, r.plan.BaseCommit, s.change, regen)
+	if err != nil {
+		return "", err
+	}
+	if !regenerationProven(g) {
+		why, code := unprovenWhy(g, regen)
+		return "", &types.RefusedError{Paths: keep,
+			Reason: joinPaths(keep) + " are stale on top of " + short(s.onto) + ", and " + why + " (" + joinPaths(code) +
+				"), so the queue cannot regenerate them for it",
+			Remedy: "Merge `" + r.plan.Base + "` in, regenerate, commit what it writes, push, and queue it again."}
+	}
+	return commitRegenerated(ctx, r.vcs, b, keep)
 }
 
 func (r *validation) acquire(ctx context.Context) error {
@@ -373,7 +402,7 @@ func (r *validation) start(ctx context.Context, group int, f *flight) {
 // verdict decides a gated or refused change and reports whether it was green.
 // attributable says everything beneath the candidate is validated, so a red is the
 // change's own.
-func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attributable bool) (bool, error) {
+func (r *validation) verdict(f *flight, out outcome, attributable bool) (bool, error) {
 	v := types.Verdict{Change: f.change, After: f.after, Onto: f.onto, CandidateCommit: f.cand.Commit, Method: f.change.Method,
 		Depth: f.depth, DurationMS: out.took.Milliseconds()}
 	if !out.green {
@@ -398,33 +427,8 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
 		return false, r.decide(v)
 	}
-	msg, err := squashMessage(ctx, r.vcs, r.clone.Root, r.plan.BaseCommit, f.change)
-	if err != nil {
-		return false, fmt.Errorf("squash message of %s: %w", f.change.Label(), err)
-	}
-	v.Decision, v.Message = types.DecisionMerge, msg
+	v.Decision = types.DecisionMerge
 	return true, r.decide(v)
-}
-
-// squashMessage is the conventional squash body for c's own commits: one "* subject"
-// paragraph each, oldest first, merges left out. A stacked change's own commits start
-// at its stack base.
-func squashMessage(ctx context.Context, v types.ReadVCS, root, baseCommit string, c types.Change) (string, error) {
-	from := baseCommit
-	if c.StackBase != "" {
-		from = c.StackBase
-	}
-	commits, err := v.RangeCommits(ctx, root, from, c.Head, nil)
-	if err != nil {
-		return "", err
-	}
-	var parts []string
-	for _, cm := range slices.Backward(commits) {
-		if len(cm.Parents) <= 1 {
-			parts = append(parts, "* "+cm.Subject)
-		}
-	}
-	return strings.Join(parts, "\n\n"), nil
 }
 
 // ground stops a flight's gate, waits for it, and removes its checkout.

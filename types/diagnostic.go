@@ -430,11 +430,21 @@ const (
 	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
 	PipeCycle DiagnosticCode = "MGS3023"
+	// QueueRunUntrusted is a merge queue apply asked to follow a validation run that
+	// something other than the base branch's own queue workflow started: a pull request's
+	// event, a fork, another branch or another workflow. What such a run uploads is its
+	// author's claim, so apply reads none of it.
+	QueueRunUntrusted DiagnosticCode = "MGS3027"
+	// QueuePlanUnverified is a merge queue plan that disagrees with what apply reads
+	// itself: another base or remote, a base commit the base does not carry, or a stack
+	// base that is not the reviewed head of the change beneath. Apply stops before it
+	// merges anything that rests on it.
+	QueuePlanUnverified       DiagnosticCode = "MGS3028"
 	// SavedPlanRefused is a `magus run --stdin` plan that cannot be run as asked: the document is
 	// not a shard plan, or the invocation names a shard, target or shard count the plan
 	// does not have. Refused before anything loads, because running part of a plan, or a
 	// plan for another target, gates less than the caller asked for and still exits 0.
-	SavedPlanRefused          DiagnosticCode = "MGS3026"
+	SavedPlanRefused          DiagnosticCode = "MGS3029"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -597,7 +607,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, SavedPlanRefused,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle,
+	QueueRunUntrusted, QueuePlanUnverified, SavedPlanRefused,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
