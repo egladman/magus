@@ -81,14 +81,8 @@ jobs:
           # newer than the last release.
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
-      - name: Install codec build dependencies
+      - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
-        # Install first, update only on failure; see the note in ci.yaml for why update is the
-        # expensive half and why the image's cached index already satisfies both packages.
-        run: |
-          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
-            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
-                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
       # chance of replaying a cached (unsigned) artifact into a release.
@@ -133,14 +127,8 @@ jobs:
         with:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
-      - name: Install codec build dependencies
+      - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
-        # Install first, update only on failure; see the note in ci.yaml for why update is the
-        # expensive half and why the image's cached index already satisfies both packages.
-        run: |
-          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
-            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
-                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms --concurrency-profile aggressive
 

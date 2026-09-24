@@ -1,16 +1,16 @@
 ---
-title: "person-only: an agent stamping a read receipt or closing an attention request, which a PERSON must do"
-description: "A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which a PERSON must do, and names what to run instead."
+title: "person-only: an agent stamping a read receipt or closing an attention request, which only a person may do"
+description: "A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead."
 tags: [guard, rules, person-only, deny]
 ---
 
 # person-only
 
-A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which a PERSON must do, and names what to run instead.
+A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead.
 
 ## What it catches
 
-An agent stamping a read receipt or closing an attention request, which a PERSON must do.
+An agent stamping a read receipt or closing an attention request, which only a person may do.
 
 ## Why
 

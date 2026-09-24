@@ -1820,6 +1820,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	for i := range steps {
 		stampRevision(&steps[i])
 	}
+	// The loop above joins the revision goroutine only when there is a step, and a
+	// preflight pass can leave none.
+	<-revisionDone
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: opts.NoCache, opts: cacheOpts,

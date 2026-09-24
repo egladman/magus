@@ -315,9 +315,9 @@ magus ranked these by what they can break, consequence first.
 
 ## Conformance
 
-magus could not check this change against the workspace's conventions. Nothing below means nothing was found.
+Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.
 
-- [MGS7003] no symbol index loaded for ., so the conformance checks could not run; build it with `magus graph build`
+- not checked: `.` (no symbol indexer)
 
 ## What magus could not measure
 

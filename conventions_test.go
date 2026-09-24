@@ -2843,8 +2843,6 @@ var establishedCompoundNames = map[string]bool{
 	"jsonv2":  true, // names the GOEXPERIMENT
 	"libproc": true, // the Darwin API
 	"vmstat":  true, // the Darwin tool
-	// Keep a Changelog's word, and the CHANGELOG.md the file writes.
-	"changelog": true,
 }
 
 // grandfatheredCompoundNames are concatenations already in the tree when this check
