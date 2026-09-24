@@ -154,12 +154,12 @@ func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
 	}{
 		{
 			name: "known",
-			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true, Footprint: []types.ChangedRegion{
-				{Path: "a.go", Side: types.RegionNew, Lines: [2]int{3, 9}, Declaration: "func X() {"},
-				{Path: "a.go", Side: types.RegionNew, Lines: [2]int{12, 14}, Declaration: "func X() {"},
-				{Path: "a.go", Side: types.RegionOld, Lines: [2]int{20, 21}, Declaration: "func Y() {"},
-				{Path: "notes.txt", Side: types.RegionNew, Lines: [2]int{1, 2}},
-				{Path: "notes.txt", Side: types.RegionNew, Lines: [2]int{8, 8}},
+			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true, Footprint: []types.RegionChange{
+				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{3, 9}, Declaration: "func X() {", Driver: "golang"},
+				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{12, 14}, Declaration: "func X() {", Driver: "golang"},
+				{File: types.FileChange{Path: "a.go"}, Side: types.RegionOld, Lines: [2]int{20, 21}, Declaration: "func Y() {", Driver: "golang"},
+				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{1, 2}},
+				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{8, 8}},
 			}},
 			want: "verified plan, recorded pass\n" +
 				"footprint, reported and never graded: where its diff since the checkpoint landed\n" +

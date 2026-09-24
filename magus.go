@@ -1001,14 +1001,15 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string
 	return res.VCS.RangeDiff(ctx, m.ws.Root, base, head, paths)
 }
 
-// ChangedRegions is the workspace's footprint since base: the declaration every changed line
-// of the working tree falls in, per [types.RegionReporter]. It is the one implementation the
-// job store's overlap report and the merge queue's independence proof both read, so two
-// callers comparing footprints are comparing the same computation.
+// Regions is the workspace's footprint since base: files, as ChangedFiles reported them,
+// refined into the declaration every changed line of the working tree falls in, per
+// [types.RegionReporter]. It is the one implementation the job store's overlap report and
+// the merge queue's independence proof both read, so two callers comparing footprints are
+// comparing the same computation.
 //
 // Refused, never answered empty, for the reason RangeDiff gives: an empty footprint reads as
 // "this change touched nothing".
-func (m *Magus) ChangedRegions(ctx context.Context, base string, paths []string) ([]types.ChangedRegion, error) {
+func (m *Magus) Regions(ctx context.Context, base string, files []types.FileChange) ([]types.RegionChange, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		return nil, fmt.Errorf("resolving the version control backend: %w", err)
@@ -1019,7 +1020,7 @@ func (m *Magus) ChangedRegions(ctx context.Context, base string, paths []string)
 				"this workspace has version control disabled, so there is no diff to place"),
 			types.ErrVCSUnsupported)
 	}
-	return res.VCS.ChangedRegions(ctx, m.ws.Root, base, paths)
+	return res.VCS.Regions(ctx, m.ws.Root, base, files)
 }
 
 // RevisionCheckpoint resolves a revision expression to the checkpoint that names it.

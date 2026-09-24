@@ -95,20 +95,22 @@ func changedSince(ctx context.Context, driver types.VCSDriver, unresolved, root,
 	}
 	seen.Changed, seen.ChangedKnown = changed, true
 	if len(changed) == 0 {
-		// An empty filter is no filter to ChangedRegions, which would answer for the
-		// whole tree; nothing changed, so nothing is in the footprint.
 		seen.RegionsKnown = true
 		return seen
 	}
-	seen.Regions, seen.RegionsKnown, seen.RegionsReason = regionsSince(ctx, driver, root, revision, changed)
+	files := make([]types.FileChange, len(changed))
+	for i, p := range changed {
+		files[i] = types.FileChange{Path: p}
+	}
+	seen.Regions, seen.RegionsKnown, seen.RegionsReason = regionsSince(ctx, driver, root, revision, files)
 	return seen
 }
 
-// regionsSince is ChangedRegions with its failure turned into the reason a reader is
-// shown. A backend declining the capability is named as that, since it is the one
-// failure nobody can fix by re-running.
-func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, paths []string) ([]types.ChangedRegion, bool, string) {
-	regions, err := driver.ChangedRegions(ctx, root, revision, paths)
+// regionsSince is Regions with its failure turned into the reason a reader is shown. A
+// backend declining the capability is named as that, since it is the one failure nobody
+// can fix by re-running.
+func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) ([]types.RegionChange, bool, string) {
+	regions, err := driver.Regions(ctx, root, revision, files)
 	var declined *types.VCSUnsupportedError
 	switch {
 	case errors.As(err, &declined):
@@ -128,8 +130,8 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 // every other checkout driver knows. cacheDirOf maps a checkout root to the cache dir its
 // markers live in. A nil driver is version control that did not resolve.
 //
-// Only the working tree's side is compared. Two jobs deleting lines from one declaration
-// each leave it somewhere else, and the new side is where a later merge conflicts.
+// Both sides of each diff are compared, per [types.Collisions]: two jobs deleting lines
+// from one declaration both touch it.
 func OverlapFootprints(ctx context.Context, driver types.VCSDriver, root string, cacheDirOf func(string) (string, error), rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
 	if len(overlaps) == 0 {
 		return overlaps
@@ -154,7 +156,7 @@ func OverlapFootprints(ctx context.Context, driver types.VCSDriver, root string,
 
 // footprint is one job's regions, or why they are not known.
 type footprint struct {
-	regions []types.ChangedRegion
+	regions []types.RegionChange
 	known   bool
 	reason  string
 }
@@ -207,11 +209,11 @@ func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job
 	case dir == "":
 		return footprint{reason: fmt.Sprintf("more than one checkout is bound to %s", id)}
 	}
-	regions, known, reason := regionsSince(ctx, driver, dir, revision, nil)
-	return footprint{regions: regions, known: known, reason: reason}
+	seen := changedSince(ctx, driver, "", dir, revision)
+	return footprint{regions: seen.Regions, known: seen.RegionsKnown, reason: seen.RegionsReason}
 }
 
-// compareFootprints intersects two footprints by path and declaration.
+// compareFootprints collides two footprints' regions, both sides of each.
 func compareFootprints(idA string, a footprint, idB string, b footprint) types.JobOverlapFootprint {
 	var unknown []string
 	for _, side := range []struct {
@@ -225,33 +227,23 @@ func compareFootprints(idA string, a footprint, idB string, b footprint) types.J
 	if len(unknown) > 0 {
 		return types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: strings.Join(unknown, "; ")}
 	}
-	inA := map[string]bool{}
-	for _, r := range a.regions {
-		if r.Side == types.RegionNew {
-			inA[RegionLabel(r)] = true
-		}
-	}
-	var shared []string
-	for _, r := range b.regions {
-		if label := RegionLabel(r); r.Side == types.RegionNew && inA[label] && !slices.Contains(shared, label) {
-			shared = append(shared, label)
-		}
-	}
-	if len(shared) == 0 {
+	collisions := types.Collisions(asLocators(a.regions), asLocators(b.regions))
+	if len(collisions) == 0 {
 		return types.JobOverlapFootprint{Verdict: types.FootprintDisjoint}
 	}
-	slices.Sort(shared)
+	shared := make([]string, len(collisions))
+	for i, l := range collisions {
+		shared[i] = l.String()
+	}
 	return types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: shared}
 }
 
-// RegionLabel names the declaration a region lands in as `<path>#<declaration>`, or the
-// bare path when no declaration encloses it: without one, the file is the finest thing two
-// footprints can be compared by.
-func RegionLabel(r types.ChangedRegion) string {
-	if r.Declaration == "" {
-		return r.Path
+func asLocators(regions []types.RegionChange) []types.Locator {
+	out := make([]types.Locator, len(regions))
+	for i, r := range regions {
+		out[i] = r
 	}
-	return r.Path + "#" + r.Declaration
+	return out
 }
 
 // presentIn reports which of the paths the row's gates NAME are in the tree.

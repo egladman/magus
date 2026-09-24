@@ -505,9 +505,9 @@ type JobStatus struct {
 	// here decides Verified. FootprintKnown says the regions were computed, so an empty
 	// Footprint means "touched no declaration" rather than "nobody looked", and
 	// FootprintReason says why they were not.
-	Footprint       []ChangedRegion `json:"footprint,omitempty" yaml:"footprint,omitempty"`
-	FootprintKnown  bool            `json:"footprint_known" yaml:"footprint_known"`
-	FootprintReason string          `json:"footprint_reason,omitempty" yaml:"footprint_reason,omitempty"`
+	Footprint       []RegionChange `json:"footprint,omitempty" yaml:"footprint,omitempty"`
+	FootprintKnown  bool           `json:"footprint_known" yaml:"footprint_known"`
+	FootprintReason string         `json:"footprint_reason,omitempty" yaml:"footprint_reason,omitempty"`
 }
 
 // GateStatus reports verification of one completion gate.
@@ -1184,9 +1184,10 @@ const (
 type JobOverlapFootprint struct {
 	// Verdict is FootprintDisjoint, FootprintShared or FootprintUnknown.
 	Verdict string `json:"verdict" yaml:"verdict"`
-	// Shared are the `<path>#<declaration>` both footprints touch on the working tree's
-	// side, sorted. A changed line above a file's first declaration, or in a file with no
-	// diff driver, is the bare path.
+	// Shared is the Collisions of the two footprints, each Location as its String, on either
+	// side of either diff, sorted. A changed line above a file's first declaration, or in a
+	// file with no diff driver, locates as the whole file and so collides with every region
+	// of that file.
 	Shared []string `json:"shared,omitempty" yaml:"shared,omitempty"`
 	// Reason says why the verdict is FootprintUnknown.
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`

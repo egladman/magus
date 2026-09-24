@@ -1307,9 +1307,9 @@ func printJobFootprint(out io.Writer, s job.Status) {
 	fmt.Fprintf(out, "%s: where its diff since the checkpoint landed\n", heading)
 	var printed []string
 	for _, r := range s.Footprint {
-		line := job.RegionLabel(r)
+		line := r.Location().String()
 		if r.Declaration == "" {
-			line = fmt.Sprintf("%s:%d-%d", r.Path, r.Lines[0], r.Lines[1])
+			line = fmt.Sprintf("%s:%d-%d", r.File.Path, r.Lines[0], r.Lines[1])
 		}
 		if slices.Contains(printed, line) {
 			continue

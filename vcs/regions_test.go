@@ -3,6 +3,7 @@ package vcs
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -38,46 +39,63 @@ one
 two
 `
 
-func TestChangedRegions(t *testing.T) {
+// changedFileChanges is what a caller hands Regions: ChangedFiles for base, as FileChanges.
+func changedFileChanges(t *testing.T, dir, base string) []types.FileChange {
+	t.Helper()
+	paths, err := gitVCS{}.ChangedFiles(t.Context(), dir, base)
+	require.NoError(t, err)
+	files := make([]types.FileChange, len(paths))
+	for i, p := range paths {
+		files[i] = types.FileChange{Path: p}
+	}
+	return files
+}
+
+func region(path string, side types.RegionSide, from, to int, decl, driver string) types.RegionChange {
+	return types.RegionChange{File: types.FileChange{Path: path}, Side: side, Lines: [2]int{from, to}, Declaration: decl, Driver: driver}
+}
+
+func TestRegions(t *testing.T) {
 	const (
 		declA = "func A() int {"
 		declB = "func B() int {"
 		declC = "func C() {"
 	)
 	was, now := types.RegionOld, types.RegionNew
-	golang := func(side types.RegionSide, from, to int, decl string) types.ChangedRegion {
-		return types.ChangedRegion{Path: "a.go", Side: side, Lines: [2]int{from, to}, Declaration: decl, Driver: "golang"}
+	golang := func(side types.RegionSide, from, to int, decl string) types.RegionChange {
+		return region("a.go", side, from, to, decl, "golang")
 	}
 	cases := []struct {
 		name   string
 		config map[string]string
 		edit   func(t *testing.T, dir string)
-		paths  []string
-		want   []types.ChangedRegion
+		// files, when set, replaces ChangedFiles as the files to refine.
+		files []types.FileChange
+		want  []types.RegionChange
 	}{
 		{
 			name: "a modified body is its own function on both sides",
 			edit: func(t *testing.T, dir string) { replaceIn(t, dir, "a.go", "return 1", "return 10") },
-			want: []types.ChangedRegion{golang(was, 6, 6, declA), golang(now, 6, 6, declA)},
+			want: []types.RegionChange{golang(was, 6, 6, declA), golang(now, 6, 6, declA)},
 		},
 		{
 			name: "a new function is named as itself and its neighbours are not reported",
 			edit: func(t *testing.T, dir string) {
 				replaceIn(t, dir, "a.go", "func B", "func New() int {\n\treturn 3\n}\n\nfunc B")
 			},
-			want: []types.ChangedRegion{golang(now, 9, 12, "func New() int {")},
+			want: []types.RegionChange{golang(now, 9, 12, "func New() int {")},
 		},
 		{
 			name: "a deleted function is named on the old side only",
 			edit: func(t *testing.T, dir string) {
 				replaceIn(t, dir, "a.go", "func B() int {\n\treturn 2\n}\n\n", "")
 			},
-			want: []types.ChangedRegion{golang(was, 9, 12, declB)},
+			want: []types.RegionChange{golang(was, 9, 12, declB)},
 		},
 		{
 			name: "an edit above the first declaration has no declaration",
 			edit: func(t *testing.T, dir string) { replaceIn(t, dir, "a.go", `"fmt"`, `"os"`) },
-			want: []types.ChangedRegion{golang(was, 3, 3, ""), golang(now, 3, 3, "")},
+			want: []types.RegionChange{golang(was, 3, 3, ""), golang(now, 3, 3, "")},
 		},
 		{
 			name: "two separate edits in one file stay two regions",
@@ -85,7 +103,7 @@ func TestChangedRegions(t *testing.T) {
 				replaceIn(t, dir, "a.go", "return 1", "return 10")
 				replaceIn(t, dir, "a.go", `"c"`, `"see"`)
 			},
-			want: []types.ChangedRegion{
+			want: []types.RegionChange{
 				golang(was, 6, 6, declA), golang(was, 14, 14, declC),
 				golang(now, 6, 6, declA), golang(now, 14, 14, declC),
 			},
@@ -96,7 +114,7 @@ func TestChangedRegions(t *testing.T) {
 				replaceIn(t, dir, "a.go", "\treturn 1\n}\n\nfunc B() int {\n\treturn 2",
 					"\treturn 11\n} // A\n// between\nfunc B2() int {\n\treturn 22")
 			},
-			want: []types.ChangedRegion{
+			want: []types.RegionChange{
 				golang(was, 6, 8, declA), golang(was, 9, 10, declB),
 				golang(now, 6, 8, declA), golang(now, 9, 10, "func B2() int {"),
 			},
@@ -107,28 +125,28 @@ func TestChangedRegions(t *testing.T) {
 				replaceIn(t, dir, "doc.md", "one\n", "one\nmore\n")
 				replaceIn(t, dir, "doc.md", "two", "TWO")
 			},
-			want: []types.ChangedRegion{
-				{Path: "doc.md", Side: was, Lines: [2]int{8, 8}, Declaration: "## Two", Driver: "markdown"},
-				{Path: "doc.md", Side: now, Lines: [2]int{6, 6}, Declaration: "## One", Driver: "markdown"},
-				{Path: "doc.md", Side: now, Lines: [2]int{9, 9}, Declaration: "## Two", Driver: "markdown"},
+			want: []types.RegionChange{
+				region("doc.md", was, 8, 8, "## Two", "markdown"),
+				region("doc.md", now, 6, 6, "## One", "markdown"),
+				region("doc.md", now, 9, 9, "## Two", "markdown"),
 			},
 		},
 		{
 			// git's default funcname would name "func A() int {" here.
 			name: "a path with no driver reports its lines only",
 			edit: func(t *testing.T, dir string) { replaceIn(t, dir, "plain.txt", "return 1", "return 10") },
-			want: []types.ChangedRegion{
-				{Path: "plain.txt", Side: was, Lines: [2]int{6, 6}},
-				{Path: "plain.txt", Side: now, Lines: [2]int{6, 6}},
+			want: []types.RegionChange{
+				region("plain.txt", was, 6, 6, "", ""),
+				region("plain.txt", now, 6, 6, "", ""),
 			},
 		},
 		{
 			name:   "a driver defined in repository config is honoured",
 			config: map[string]string{"diff.spell.xfuncname": "^target ([a-z]+)"},
 			edit:   func(t *testing.T, dir string) { replaceIn(t, dir, "x.spell", "run two", "run 2") },
-			want: []types.ChangedRegion{
-				{Path: "x.spell", Side: was, Lines: [2]int{4, 4}, Declaration: "two", Driver: "spell"},
-				{Path: "x.spell", Side: now, Lines: [2]int{4, 4}, Declaration: "two", Driver: "spell"},
+			want: []types.RegionChange{
+				region("x.spell", was, 4, 4, "two", "spell"),
+				region("x.spell", now, 4, 4, "two", "spell"),
 			},
 		},
 		{
@@ -140,29 +158,29 @@ func TestChangedRegions(t *testing.T) {
 				require.NoError(t, os.Remove(filepath.Join(dir, "doc.md")))
 				writeRepoFile(t, dir, "blob.bin", "\x00\x01\x02changed")
 			},
-			want: []types.ChangedRegion{
-				{Path: "added.go", Side: now, Lines: [2]int{1, 2}, Driver: "golang"},
-				{Path: "added.go", Side: now, Lines: [2]int{3, 3}, Declaration: "func D() {}", Driver: "golang"},
-				{Path: "doc.md", Side: was, Lines: [2]int{1, 3}, Declaration: "# Title", Driver: "markdown"},
-				{Path: "doc.md", Side: was, Lines: [2]int{4, 6}, Declaration: "## One", Driver: "markdown"},
-				{Path: "doc.md", Side: was, Lines: [2]int{7, 8}, Declaration: "## Two", Driver: "markdown"},
-				{Path: "untracked.go", Side: now, Lines: [2]int{1, 2}, Driver: "golang"},
-				{Path: "untracked.go", Side: now, Lines: [2]int{3, 4}, Declaration: "func E() {", Driver: "golang"},
+			want: []types.RegionChange{
+				region("added.go", now, 1, 2, "", "golang"),
+				region("added.go", now, 3, 3, "func D() {}", "golang"),
+				region("doc.md", was, 1, 3, "# Title", "markdown"),
+				region("doc.md", was, 4, 6, "## One", "markdown"),
+				region("doc.md", was, 7, 8, "## Two", "markdown"),
+				region("untracked.go", now, 1, 2, "", "golang"),
+				region("untracked.go", now, 3, 4, "func E() {", "golang"),
 			},
 		},
 		{
-			name: "paths keep only what they name, a directory keeping what is under it",
+			name: "only the files given are refined, and an unchanged one yields nothing",
 			edit: func(t *testing.T, dir string) {
 				replaceIn(t, dir, "a.go", "return 1", "return 10")
 				replaceIn(t, dir, "sub/s.txt", "s", "S")
 				writeRepoFile(t, dir, "sub/new.txt", "n\n")
 				writeRepoFile(t, dir, "elsewhere.txt", "e\n")
 			},
-			paths: []string{"sub"},
-			want: []types.ChangedRegion{
-				{Path: "sub/new.txt", Side: now, Lines: [2]int{1, 1}},
-				{Path: "sub/s.txt", Side: was, Lines: [2]int{1, 1}},
-				{Path: "sub/s.txt", Side: now, Lines: [2]int{1, 1}},
+			files: []types.FileChange{{Path: "sub/new.txt"}, {Path: "sub/s.txt"}, {Path: "plain.txt"}},
+			want: []types.RegionChange{
+				region("sub/new.txt", now, 1, 1, "", ""),
+				region("sub/s.txt", was, 1, 1, "", ""),
+				region("sub/s.txt", now, 1, 1, "", ""),
 			},
 		},
 	}
@@ -184,29 +202,49 @@ func TestChangedRegions(t *testing.T) {
 			}
 			tc.edit(t, dir)
 
-			got, err := gitVCS{}.ChangedRegions(t.Context(), dir, "HEAD", tc.paths)
+			files := tc.files
+			if files == nil {
+				files = changedFileChanges(t, dir, "HEAD")
+			}
+			got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", files)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
 	}
 }
 
-func TestChangedRegionsRefusesABaseItCannotResolve(t *testing.T) {
+// Regions refine files, so no files is nothing to refine, never the whole tree.
+func TestRegionsOfNoFilesIsNothing(t *testing.T) {
 	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
 	writeRepoFile(t, dir, "a.txt", "b\n")
 
-	_, err := gitVCS{}.ChangedRegions(t.Context(), dir, "no-such-rev", nil)
-	require.Error(t, err)
-	_, err = gitVCS{}.ChangedRegions(t.Context(), dir, "", nil)
-	require.Error(t, err, "an empty base is refused, not read as the working tree against itself")
+	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", nil)
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
-// Regions refine ChangedFiles: every region's path is one ChangedFiles reports, even on a
-// branch behind its base, where diffing against base itself would report base's own
-// commits reversed.
-func TestChangedRegionsStayInsideChangedFiles(t *testing.T) {
+func TestRegionsRefusesABaseItCannotResolve(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	writeRepoFile(t, dir, "a.txt", "b\n")
+	files := []types.FileChange{{Path: "a.txt"}}
+
+	_, err := gitVCS{}.Regions(t.Context(), dir, "no-such-rev", files)
+	require.Error(t, err)
+	_, err = gitVCS{}.Regions(t.Context(), dir, "", files)
+	require.Error(t, err, "an empty base is refused, not read as the working tree against itself")
+	_, err = gitVCS{}.Regions(t.Context(), dir, "", nil)
+	require.Error(t, err, "an empty base is refused even with no files to refine")
+}
+
+// Every region refines a file it was given, and is measured from the merge base as
+// ChangedFiles is: on a branch behind its base, a file only base changed is handed in and
+// still yields nothing, where diffing against base itself would report base's own commit
+// reversed.
+func TestRegionsStayInsideTheFilesGiven(t *testing.T) {
 	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"mine.txt": "a\n", "theirs.txt": "a\n"})
@@ -219,21 +257,23 @@ func TestChangedRegionsStayInsideChangedFiles(t *testing.T) {
 	writeRepoFile(t, dir, "mine.txt", "b\n")
 	writeRepoFile(t, dir, "new.txt", "c\n")
 
-	files, err := gitVCS{}.ChangedFiles(t.Context(), dir, "main")
-	require.NoError(t, err)
-	regions, err := gitVCS{}.ChangedRegions(t.Context(), dir, "main", nil)
+	changed := changedFileChanges(t, dir, "main")
+	require.ElementsMatch(t, []types.FileChange{{Path: "mine.txt"}, {Path: "new.txt"}}, changed)
+	given := slices.Concat(changed, []types.FileChange{{Path: "theirs.txt"}})
+	regions, err := gitVCS{}.Regions(t.Context(), dir, "main", given)
 	require.NoError(t, err)
 
-	var paths []string
+	var files []types.FileChange
 	for _, r := range regions {
-		paths = append(paths, r.Path)
+		files = append(files, r.File)
 	}
-	require.ElementsMatch(t, []string{"mine.txt", "new.txt"}, files)
-	require.Subset(t, files, paths, "a region outside ChangedFiles")
-	require.NotContains(t, paths, "theirs.txt", "main's own commit read as this branch's change")
+	require.NotEmpty(t, files)
+	require.Subset(t, given, files, "a region outside the files given")
+	require.Subset(t, changed, files, "a region outside ChangedFiles")
+	require.NotContains(t, files, types.FileChange{Path: "theirs.txt"}, "main's own commit read as this branch's change")
 }
 
-func TestChangedRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
+func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
 	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": regionsGo})
@@ -247,13 +287,13 @@ func TestChangedRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
 	replaceIn(t, dir, "a.go", "return 1", "return 10")
 	replaceIn(t, dir, "a.go", `"c"`, `"see"`)
 
-	got, err := gitVCS{}.ChangedRegions(t.Context(), dir, "HEAD", nil)
+	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", []types.FileChange{{Path: "a.go"}})
 	require.NoError(t, err)
-	assert.Equal(t, []types.ChangedRegion{
-		{Path: "a.go", Side: types.RegionOld, Lines: [2]int{6, 6}, Declaration: "func A() int {", Driver: "golang"},
-		{Path: "a.go", Side: types.RegionOld, Lines: [2]int{14, 14}, Declaration: "func C() {", Driver: "golang"},
-		{Path: "a.go", Side: types.RegionNew, Lines: [2]int{6, 6}, Declaration: "func A() int {", Driver: "golang"},
-		{Path: "a.go", Side: types.RegionNew, Lines: [2]int{14, 14}, Declaration: "func C() {", Driver: "golang"},
+	assert.Equal(t, []types.RegionChange{
+		region("a.go", types.RegionOld, 6, 6, "func A() int {", "golang"),
+		region("a.go", types.RegionOld, 14, 14, "func C() {", "golang"),
+		region("a.go", types.RegionNew, 6, 6, "func A() int {", "golang"),
+		region("a.go", types.RegionNew, 14, 14, "func C() {", "golang"),
 	}, got)
 }
 

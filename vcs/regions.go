@@ -14,18 +14,27 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ChangedRegions implements types.RegionReporter. The line ranges come from one `git diff
-// -U0` against base; the declaration enclosing each line comes from git's own funcname
-// matching, run through gitPlaceLines on the version of the file that holds the line.
+// Regions implements types.RegionReporter. The line ranges come from one `git diff -U0`
+// against base over files; the declaration enclosing each line comes from git's own
+// funcname matching, run through gitPlaceLines on the version of the file that holds the
+// line.
 //
 // The hunk header is not the answer: git takes it from the lines BEFORE the hunk, so a hunk
 // adding a whole new function reads as the function above it.
 //
 // Untracked files count as new, as ChangedFiles counts them. Binary files and submodules
 // yield nothing: neither has lines to place.
-func (v gitVCS) ChangedRegions(ctx context.Context, root, base string, paths []string) ([]types.ChangedRegion, error) {
+func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.FileChange) ([]types.RegionChange, error) {
 	if err := checkRequiredRev(base); err != nil {
 		return nil, err
+	}
+	// No files is nothing to refine, while an empty pathspec would diff the whole tree.
+	if len(files) == 0 {
+		return nil, nil
+	}
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
 	}
 	// From the merge base, as ChangedFiles measures, so a job's paths and its regions describe
 	// one diff; against base itself a branch behind base would report base's own changes,
@@ -47,7 +56,7 @@ func (v gitVCS) ChangedRegions(ctx context.Context, root, base string, paths []s
 	if err != nil {
 		return nil, fmt.Errorf("git diff %s: %w", base, err)
 	}
-	files, err := parseZeroContextPatch(out)
+	patched, err := parseZeroContextPatch(out)
 	if err != nil {
 		return nil, fmt.Errorf("git diff %s: %w", base, err)
 	}
@@ -64,14 +73,14 @@ func (v gitVCS) ChangedRegions(ctx context.Context, root, base string, paths []s
 		}
 		if n := countLines(body); n > 0 {
 			working[p] = body
-			files = append(files, patchFile{path: p, hunks: []patchHunk{{newStart: 1, newCount: n}}})
+			patched = append(patched, patchFile{path: p, hunks: []patchHunk{{newStart: 1, newCount: n}}})
 		}
 	}
-	if len(files) == 0 {
+	if len(patched) == 0 {
 		return nil, nil
 	}
 
-	drivers, err := gitPathDrivers(ctx, root, files)
+	drivers, err := gitPathDrivers(ctx, root, patched)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +96,8 @@ func (v gitVCS) ChangedRegions(ctx context.Context, root, base string, paths []s
 	}
 	defer os.RemoveAll(tmp)
 
-	var regions []types.ChangedRegion
-	for _, f := range files {
+	var regions []types.RegionChange
+	for _, f := range patched {
 		driver := drivers[f.path]
 		place := func(side types.RegionSide) ([]string, error) {
 			if driver == "" {
@@ -125,8 +134,8 @@ func (v gitVCS) ChangedRegions(ctx context.Context, root, base string, paths []s
 			regions = appendRegions(regions, f.path, types.RegionNew, h.newStart, h.newCount, driver, newDecls)
 		}
 	}
-	slices.SortStableFunc(regions, func(a, b types.ChangedRegion) int {
-		return cmp.Or(strings.Compare(a.Path, b.Path),
+	slices.SortStableFunc(regions, func(a, b types.RegionChange) int {
+		return cmp.Or(strings.Compare(a.File.Path, b.File.Path),
 			cmp.Compare(sideOrder(a.Side), sideOrder(b.Side)),
 			cmp.Compare(a.Lines[0], b.Lines[0]))
 	})
@@ -135,7 +144,7 @@ func (v gitVCS) ChangedRegions(ctx context.Context, root, base string, paths []s
 
 // appendRegions splits count lines from start on side into one region per run of lines
 // sharing a declaration. decls is indexed by line-1 and nil when the lines were not placed.
-func appendRegions(regions []types.ChangedRegion, path string, side types.RegionSide, start, count int, driver string, decls []string) []types.ChangedRegion {
+func appendRegions(regions []types.RegionChange, path string, side types.RegionSide, start, count int, driver string, decls []string) []types.RegionChange {
 	if decls == nil {
 		driver = ""
 	}
@@ -151,8 +160,8 @@ func appendRegions(regions []types.ChangedRegion, path string, side types.Region
 		for end+1 < start+count && declAt(end+1) == decl {
 			end++
 		}
-		regions = append(regions, types.ChangedRegion{
-			Path: path, Side: side, Lines: [2]int{line, end}, Declaration: decl, Driver: driver,
+		regions = append(regions, types.RegionChange{
+			File: types.FileChange{Path: path}, Side: side, Lines: [2]int{line, end}, Declaration: decl, Driver: driver,
 		})
 		line = end + 1
 	}

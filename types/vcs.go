@@ -621,15 +621,6 @@ const (
 	ChangeRenamed  ChangeStatus = "renamed"
 )
 
-// FileChange is one path a commit touched. Path is the name AFTER the commit;
-// PrevPath is set only on a rename and carries the name before it, which is the
-// edge a reader follows to reassemble a file's lineage.
-type FileChange struct {
-	Path     string
-	PrevPath string
-	Status   ChangeStatus
-}
-
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
@@ -739,44 +730,21 @@ type RangeReporter interface {
 // as the file's diff driver names it. It is the footprint two concurrent changes are
 // compared by, finer than a path and computed from the edits themselves, never guessed.
 type RegionReporter interface {
-	// ChangedRegions compares the working tree with the merge base of base and the
-	// checkout's head, as ChangedFiles does, and returns one region per declaration each
-	// hunk touches, ordered by path, then side, then line. Deleted lines are placed through
-	// the merge base's version of the file and added or modified lines through the working
-	// tree's, so a new declaration is named as itself, never as the one above it.
+	// Regions refines files, as ChangedFiles returned them for base, into the
+	// declarations each one's changed lines land in.
 	//
-	// paths, when non-empty, keeps only those literal repository-relative paths (a
-	// directory keeps what is under it). A path with no diff driver still yields its
-	// regions, with Driver and Declaration empty: which lines changed is known even when
-	// what encloses them is not. An unresolvable base is an error, not an empty answer.
-	ChangedRegions(ctx context.Context, root, base string, paths []string) ([]ChangedRegion, error)
+	// It compares the working tree with the merge base of base and the checkout's head, as
+	// ChangedFiles does, and returns one region per declaration each hunk touches, ordered
+	// by path, then side, then line. Deleted lines are placed through the merge base's
+	// version of the file and added or modified lines through the working tree's, so a new
+	// declaration is named as itself, never as the one above it.
+	//
+	// Only files are read, so an empty files returns no regions: there is nothing to
+	// refine. A file with no diff driver still yields its regions, with Driver and
+	// Declaration empty: which lines changed is known even when what encloses them is not.
+	// An unresolvable base is an error, not an empty answer.
+	Regions(ctx context.Context, root, base string, files []FileChange) ([]RegionChange, error)
 }
-
-// ChangedRegion is the lines of one hunk that fall inside one declaration.
-type ChangedRegion struct {
-	// Path is repository-relative with forward slashes.
-	Path string `json:"path"`
-	// Side is RegionOld for lines only base's version has (a deletion) and RegionNew for
-	// lines in the working tree's.
-	Side RegionSide `json:"side"`
-	// Lines is the first and last line on Side, 1-based and inclusive.
-	Lines [2]int `json:"lines"`
-	// Declaration is the enclosing declaration's line as the diff driver matched it,
-	// trimmed (`func (m *Magus) executeStages(ctx context.Context) error {`). Empty for
-	// lines above the file's first declaration, or when the path has no driver.
-	Declaration string `json:"declaration,omitempty"`
-	// Driver is the diff driver that named Declaration (`golang`, `markdown`, `buzz`),
-	// empty when the path has none and the region says only which lines changed.
-	Driver string `json:"driver,omitempty"`
-}
-
-// RegionSide says which version of a file a ChangedRegion's lines are numbered in.
-type RegionSide string
-
-const (
-	RegionOld RegionSide = "old"
-	RegionNew RegionSide = "new"
-)
 
 // AncestryReporter is the capability to answer whether one revision is reachable from
 // another. PushStatusReporter answers it only against the upstream; this asks it of any

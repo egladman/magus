@@ -433,12 +433,12 @@ func TestFootprintsCrossJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)"}`, string(status))
 
-	status, err = json.Marshal(JobStatus{Job: "a", FootprintKnown: true, Footprint: []ChangedRegion{
-		{Path: "a.go", Side: RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
+	status, err = json.Marshal(JobStatus{Job: "a", FootprintKnown: true, Footprint: []RegionChange{
+		{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
 	}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
-		`{"path":"a.go","side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}]}`, string(status))
+		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}]}`, string(status))
 
 	overlap, err := json.Marshal(JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
 		Footprint: &JobOverlapFootprint{Verdict: FootprintShared, Shared: []string{"x/a.go#func X() {"}}})

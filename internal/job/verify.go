@@ -71,7 +71,7 @@ type Observed struct {
 	// would otherwise take the silence for an empty footprint.
 	//
 	// No gate reads them: the footprint is reported, never graded.
-	Regions       []types.ChangedRegion
+	Regions       []types.RegionChange
 	RegionsKnown  bool
 	RegionsReason string
 }

@@ -745,8 +745,14 @@ export object GateStatus {
     violations: [str] = [],
 }
 
-export object ChangedRegion {
+export object FileChange {
     path: str = "",
+    prevPath: str = "",
+    status: str = "",
+}
+
+export object RegionChange {
+    file: FileChange = FileChange{},
     side: str = "",
     lines: [int] = [],
     declaration: str = "",
@@ -761,7 +767,7 @@ export object JobStatus {
     command: str = "",
     gates: [GateStatus] = [],
     staleIndexes: [str] = [],
-    footprint: [ChangedRegion] = [],
+    footprint: [RegionChange] = [],
     footprintKnown: bool = false,
     footprintReason: str = "",
 }

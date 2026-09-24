@@ -136,7 +136,7 @@ func (declines[N]) RangeCommits(context.Context, string, string, string, []strin
 	return nil, decline[N](types.CapRangeReporter)
 }
 
-func (declines[N]) ChangedRegions(context.Context, string, string, []string) ([]types.ChangedRegion, error) {
+func (declines[N]) Regions(context.Context, string, string, []types.FileChange) ([]types.RegionChange, error) {
 	return nil, decline[N](types.CapRegionReporter)
 }
 

@@ -1171,7 +1171,9 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRangeReporter, "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
-		{types.CapRegionReporter, "ChangedRegions", func(d types.VCSDriver, dir string) error { return errOf(d.ChangedRegions(ctx, dir, "-x", nil)) }},
+		{types.CapRegionReporter, "Regions", func(d types.VCSDriver, dir string) error {
+			return errOf(d.Regions(ctx, dir, "-x", []types.FileChange{{Path: "x"}}))
+		}},
 		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
 		{types.CapConflictResolver, "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
 		{types.CapConflictResolver, "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},

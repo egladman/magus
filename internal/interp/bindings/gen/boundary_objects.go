@@ -1595,9 +1595,17 @@ func ObjectJob(v types.Job) vm.Value {
 	return out
 }
 
-func ObjectChangedRegion(v types.ChangedRegion) vm.Value {
+func ObjectFileChange(v types.FileChange) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("prevPath", vm.StrValue(v.PrevPath))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	return out
+}
+
+func ObjectRegionChange(v types.RegionChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", ObjectFileChange(v.File))
 	out.MapSet("side", vm.StrValue(string(v.Side)))
 	itemsLines := make([]vm.Value, len(v.Lines))
 	for indexLines := range v.Lines {
@@ -1726,7 +1734,7 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
 	itemsFootprint := make([]vm.Value, len(v.Footprint))
 	for indexFootprint := range v.Footprint {
-		itemsFootprint[indexFootprint] = ObjectChangedRegion(v.Footprint[indexFootprint])
+		itemsFootprint[indexFootprint] = ObjectRegionChange(v.Footprint[indexFootprint])
 	}
 	out.MapSet("footprint", vm.ListValue(itemsFootprint))
 	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))

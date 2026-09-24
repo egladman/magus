@@ -435,86 +435,6 @@ func (_c *MockVCSDriver_ChangedFiles_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
-// ChangedRegions provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) ChangedRegions(ctx context.Context, root string, base string, paths []string) ([]types.ChangedRegion, error) {
-	ret := _mock.Called(ctx, root, base, paths)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ChangedRegions")
-	}
-
-	var r0 []types.ChangedRegion
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []string) ([]types.ChangedRegion, error)); ok {
-		return returnFunc(ctx, root, base, paths)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []string) []types.ChangedRegion); ok {
-		r0 = returnFunc(ctx, root, base, paths)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.ChangedRegion)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []string) error); ok {
-		r1 = returnFunc(ctx, root, base, paths)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockVCSDriver_ChangedRegions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ChangedRegions'
-type MockVCSDriver_ChangedRegions_Call struct {
-	*mock.Call
-}
-
-// ChangedRegions is a helper method to define mock.On call
-//   - ctx context.Context
-//   - root string
-//   - base string
-//   - paths []string
-func (_e *MockVCSDriver_Expecter) ChangedRegions(ctx interface{}, root interface{}, base interface{}, paths interface{}) *MockVCSDriver_ChangedRegions_Call {
-	return &MockVCSDriver_ChangedRegions_Call{Call: _e.mock.On("ChangedRegions", ctx, root, base, paths)}
-}
-
-func (_c *MockVCSDriver_ChangedRegions_Call) Run(run func(ctx context.Context, root string, base string, paths []string)) *MockVCSDriver_ChangedRegions_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 []string
-		if args[3] != nil {
-			arg3 = args[3].([]string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-		)
-	})
-	return _c
-}
-
-func (_c *MockVCSDriver_ChangedRegions_Call) Return(changedRegions []types.ChangedRegion, err error) *MockVCSDriver_ChangedRegions_Call {
-	_c.Call.Return(changedRegions, err)
-	return _c
-}
-
-func (_c *MockVCSDriver_ChangedRegions_Call) RunAndReturn(run func(ctx context.Context, root string, base string, paths []string) ([]types.ChangedRegion, error)) *MockVCSDriver_ChangedRegions_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // ChangesByCommit provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
 	ret := _mock.Called(ctx, dir, commits, since)
@@ -3851,6 +3771,86 @@ func (_c *MockVCSDriver_ReadFileAt_Call) Return(s string, err error) *MockVCSDri
 }
 
 func (_c *MockVCSDriver_ReadFileAt_Call) RunAndReturn(run func(ctx context.Context, root string, rev string, path string) (string, error)) *MockVCSDriver_ReadFileAt_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Regions provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) Regions(ctx context.Context, root string, base string, files []types.FileChange) ([]types.RegionChange, error) {
+	ret := _mock.Called(ctx, root, base, files)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Regions")
+	}
+
+	var r0 []types.RegionChange
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []types.FileChange) ([]types.RegionChange, error)); ok {
+		return returnFunc(ctx, root, base, files)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []types.FileChange) []types.RegionChange); ok {
+		r0 = returnFunc(ctx, root, base, files)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.RegionChange)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []types.FileChange) error); ok {
+		r1 = returnFunc(ctx, root, base, files)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_Regions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Regions'
+type MockVCSDriver_Regions_Call struct {
+	*mock.Call
+}
+
+// Regions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+//   - base string
+//   - files []types.FileChange
+func (_e *MockVCSDriver_Expecter) Regions(ctx interface{}, root interface{}, base interface{}, files interface{}) *MockVCSDriver_Regions_Call {
+	return &MockVCSDriver_Regions_Call{Call: _e.mock.On("Regions", ctx, root, base, files)}
+}
+
+func (_c *MockVCSDriver_Regions_Call) Run(run func(ctx context.Context, root string, base string, files []types.FileChange)) *MockVCSDriver_Regions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 []types.FileChange
+		if args[3] != nil {
+			arg3 = args[3].([]types.FileChange)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_Regions_Call) Return(regionChanges []types.RegionChange, err error) *MockVCSDriver_Regions_Call {
+	_c.Call.Return(regionChanges, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_Regions_Call) RunAndReturn(run func(ctx context.Context, root string, base string, files []types.FileChange) ([]types.RegionChange, error)) *MockVCSDriver_Regions_Call {
 	_c.Call.Return(run)
 	return _c
 }

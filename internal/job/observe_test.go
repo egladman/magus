@@ -208,13 +208,13 @@ func TestCheckpointObserverCutsThePatchDigest(t *testing.T) {
 func TestChangedSinceReadsRegionsForTheChangedPathsOnly(t *testing.T) {
 	t.Parallel()
 
-	regions := []types.ChangedRegion{
-		{Path: "a.go", Side: types.RegionNew, Lines: [2]int{4, 9}, Declaration: "func X() {", Driver: "golang"},
-		{Path: "b.md", Side: types.RegionOld, Lines: [2]int{2, 2}},
+	regions := []types.RegionChange{
+		{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{4, 9}, Declaration: "func X() {", Driver: "golang"},
+		{File: types.FileChange{Path: "b.md"}, Side: types.RegionOld, Lines: [2]int{2, 2}},
 	}
 	driver := mocks.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go", "b.md"}, nil)
-	driver.EXPECT().ChangedRegions(mock.Anything, "/repo", "abc1234", []string{"a.go", "b.md"}).Return(regions, nil)
+	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}, {Path: "b.md"}}).Return(regions, nil)
 
 	seen := changedSince(t.Context(), driver, "", "/repo", "abc1234+deadbeef")
 
@@ -231,7 +231,7 @@ func TestChangedSinceLeavesRegionsUnknownWhenTheVCSDeclines(t *testing.T) {
 
 	driver := mocks.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go"}, nil)
-	driver.EXPECT().ChangedRegions(mock.Anything, "/repo", "abc1234", []string{"a.go"}).
+	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}}).
 		Return(nil, &types.VCSUnsupportedError{VCS: "git", Capability: types.CapRegionReporter})
 
 	seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
@@ -262,7 +262,7 @@ func TestChangedSinceSaysWhyRegionsAreUnknown(t *testing.T) {
 	t.Run("regions unreadable", func(t *testing.T) {
 		driver := mocks.NewMockVCSDriver(t)
 		driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go"}, nil)
-		driver.EXPECT().ChangedRegions(mock.Anything, "/repo", "abc1234", []string{"a.go"}).Return(nil, errors.New("exit 128"))
+		driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}}).Return(nil, errors.New("exit 128"))
 		seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
 		assert.Equal(t, Observed{
 			Changed: []string{"a.go"}, ChangedKnown: true, ChangedFrom: "abc1234",
@@ -271,8 +271,8 @@ func TestChangedSinceSaysWhyRegionsAreUnknown(t *testing.T) {
 	})
 }
 
-// An empty path filter is NO filter to ChangedRegions, so a job that changed nothing must
-// not ask: the answer would be the whole tree's footprint.
+// A job that changed nothing has an empty footprint without asking for regions, so a backend
+// declining the capability cannot turn "touched nothing" into "not known".
 func TestChangedSinceDoesNotAskForRegionsWhenNothingChanged(t *testing.T) {
 	t.Parallel()
 
@@ -288,7 +288,7 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"api"}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"}}
-	regions := []types.ChangedRegion{{Path: "api/x.go", Side: types.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
+	regions := []types.RegionChange{{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
 	withRegions := base
@@ -334,17 +334,26 @@ func newOverlapFixture(t *testing.T) overlapFixture {
 	return f
 }
 
-func region(path, decl string, side types.RegionSide) types.ChangedRegion {
-	return types.ChangedRegion{Path: path, Side: side, Lines: [2]int{1, 2}, Declaration: decl}
+// region is a region git placed in decl, or, with no decl, one no driver could place.
+func region(path, decl string, side types.RegionSide) types.RegionChange {
+	r := types.RegionChange{File: types.FileChange{Path: path}, Side: side, Lines: [2]int{1, 2}, Declaration: decl}
+	if decl != "" {
+		r.Driver = "golang"
+	}
+	return r
 }
 
 func TestOverlapFootprints(t *testing.T) {
 	t.Parallel()
 
+	// Each job's diff since its checkpoint, as ChangedFiles reports it and Regions is asked
+	// to refine.
+	changed := []string{"api/x.go", "api/y.go", "api/notes.txt"}
+	files := []types.FileChange{{Path: "api/x.go"}, {Path: "api/y.go"}, {Path: "api/notes.txt"}}
 	declined := &types.VCSUnsupportedError{VCS: "git", Capability: types.CapRegionReporter}
 	for _, tc := range []struct {
 		name       string
-		a, b       []types.ChangedRegion
+		a, b       []types.RegionChange
 		regionsErr error
 		unbindB    bool
 		listErr    error
@@ -353,19 +362,19 @@ func TestOverlapFootprints(t *testing.T) {
 	}{
 		{
 			name: "disjoint",
-			a:    []types.ChangedRegion{region("api/x.go", "func X() {", types.RegionNew)},
-			b:    []types.ChangedRegion{region("api/x.go", "func Y() {", types.RegionNew)},
+			a:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
+			b:    []types.RegionChange{region("api/x.go", "func Y() {", types.RegionNew)},
 			askA: true, askB: true,
 			want: types.JobOverlapFootprint{Verdict: types.FootprintDisjoint},
 		},
 		{
 			name: "shared",
-			a: []types.ChangedRegion{
+			a: []types.RegionChange{
 				region("api/x.go", "func X() {", types.RegionNew),
 				region("api/notes.txt", "", types.RegionNew),
 				region("api/y.go", "func Z() {", types.RegionNew),
 			},
-			b: []types.ChangedRegion{
+			b: []types.RegionChange{
 				region("api/y.go", "func Z() {", types.RegionNew),
 				region("api/x.go", "func X() {", types.RegionNew),
 				region("api/x.go", "func X() {", types.RegionNew),
@@ -375,15 +384,32 @@ func TestOverlapFootprints(t *testing.T) {
 			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/notes.txt", "api/x.go#func X() {", "api/y.go#func Z() {"}},
 		},
 		{
-			name: "deletions on both sides share nothing",
-			a:    []types.ChangedRegion{region("api/x.go", "func X() {", types.RegionOld)},
-			b:    []types.ChangedRegion{region("api/x.go", "func X() {", types.RegionOld)},
+			name: "deletions from one declaration share it",
+			a:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionOld)},
+			b:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionOld)},
 			askA: true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintDisjoint},
+			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func X() {"}},
+		},
+		{
+			name: "a deletion and an edit of one declaration share it",
+			a:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionOld)},
+			b:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
+			askA: true, askB: true,
+			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func X() {"}},
+		},
+		{
+			name: "a region no driver placed covers its whole file",
+			a:    []types.RegionChange{region("api/x.go", "", types.RegionNew)},
+			b: []types.RegionChange{
+				region("api/x.go", "func Y() {", types.RegionNew),
+				region("api/y.go", "func Z() {", types.RegionNew),
+			},
+			askA: true, askB: true,
+			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func Y() {"}},
 		},
 		{
 			name:    "checkout missing",
-			a:       []types.ChangedRegion{region("api/x.go", "func X() {", types.RegionNew)},
+			a:       []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
 			unbindB: true,
 			askA:    true,
 			want:    types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository is bound to b"},
@@ -411,10 +437,12 @@ func TestOverlapFootprints(t *testing.T) {
 			}
 			f.driver.EXPECT().OtherCheckouts(f.root).Return([]string{f.other}, tc.listErr)
 			if tc.askA {
-				f.driver.EXPECT().ChangedRegions(mock.Anything, f.root, "reva", []string(nil)).Return(tc.a, tc.regionsErr)
+				f.driver.EXPECT().ChangedFiles(mock.Anything, f.root, "reva").Return(changed, nil)
+				f.driver.EXPECT().Regions(mock.Anything, f.root, "reva", files).Return(tc.a, tc.regionsErr)
 			}
 			if tc.askB {
-				f.driver.EXPECT().ChangedRegions(mock.Anything, f.other, "revb", []string(nil)).Return(tc.b, tc.regionsErr)
+				f.driver.EXPECT().ChangedFiles(mock.Anything, f.other, "revb").Return(changed, nil)
+				f.driver.EXPECT().Regions(mock.Anything, f.other, "revb", files).Return(tc.b, tc.regionsErr)
 			}
 			overlaps := []types.JobOverlap{{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}}}
 			cacheDirOf := func(dir string) (string, error) { return filepath.Join(dir, ".magus"), nil }
