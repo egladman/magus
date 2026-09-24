@@ -41,16 +41,6 @@ magus\project({
     "targets": {
         // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
-        // index-generate renders `magus describe graph -o markdown`, so its output is a
-        // function of the WHOLE knowledge graph. Its declared inputs (the magusfiles and
-        // the sibling indexes) are the only part of that a glob can name, so any other
-        // change leaves the key unmoved: a cache hit then replays a MAGUS.md built
-        // before it and REVERTS the
-        // committed one, which the drift gate above correctly reports as drift. That is why
-        // a branch touching the graph fails this gate in CI, where the shared cache is
-        // restored, while passing on a clean checkout that has nothing to hit. The docs
-        // project carries the same opt-out for the same reason.
-        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         // Fetches over the network and re-checks upstream out every run.
         "conformance": {"skip_cache": "fetches over the network and re-checks upstream on every run"},
     },
@@ -69,20 +59,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(index_generate);
 }
 
-// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+// Renders MAGUS.md, this project's target catalog, from this magusfile.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Declared so `magus vcs resolve` can find the target that settles a conflict here:
-    // it matches per-TARGET outputs, and the project-level outputs list is not enough.
+    // Declared so `magus vcs resolve` can find the target that settles a conflict here.
     ctx.writesFiles("MAGUS.md");
-    // Every MAGUS.md embeds the same graph-derived routing tables, so a graph change
-    // anywhere can invalidate this file with nothing in this tree moving. The graph is
-    // unkeyable (see skip_cache above), but a routing change always rewrites the
-    // originating project's own index, so a sibling MAGUS.md moving in the diff is the
-    // keyable signal, and declaring them seeds this project into `magus affected`.
-    // Relative, not <alias>\file(): the cross form also unions a depends_on edge, which
-    // would put this project in EVERY owner change's affected set, not just index moves.
-    ctx.readsFiles("../../**/MAGUS.md");
-    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    // Scoped to this project; see libs/coldread for why these are its inputs.
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    final doc = magus\describe(["graph", "-o", "markdown", "libs/gopherbuzz"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 
