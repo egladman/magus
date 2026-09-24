@@ -336,12 +336,12 @@ the flag at the script. The queue runs the command directly, in a process group 
 own, in the candidate's checkout, and appends its inputs as arguments, the way `magus
 run <target> [project...]` takes projects:
 
-| Hook                    | Arguments                                                               | Stdin                          |
-| ----------------------- | ----------------------------------------------------------------------- | ------------------------------ |
-| `validate --gate`       | the change's affected projects                                          | nothing                        |
-| `validate --regenerate` | the change's affected projects                                          | the generated paths to rewrite |
-| `apply --regenerate`    | the projects that generate those paths, proven to run no change's code  | the generated paths to rewrite |
-| `--facts`               | the fact asked for: `affected`, `outputs`, `generation` or `all`        | what that fact takes           |
+| Hook                    | Arguments                                                              | Stdin                          |
+| ----------------------- | ---------------------------------------------------------------------- | ------------------------------ |
+| `validate --gate`       | the change's affected projects                                         | nothing                        |
+| `validate --regenerate` | the change's affected projects                                         | the generated paths to rewrite |
+| `apply --regenerate`    | the projects that generate those paths, proven to run no change's code | the generated paths to rewrite |
+| `--facts`               | the fact asked for: `affected`, `outputs`, `generation` or `all`       | what that fact takes           |
 
 A change whose affected set is no proof (unknown, or `unbounded_by` set) gets every
 project instead, spelled as the build tool spells it: `/` for magus, and what the facts
