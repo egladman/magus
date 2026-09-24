@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -48,7 +49,7 @@ func guardDependencies() guard.Dependencies {
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
-		HeadCommit:       headCommitForGuard,
+		Revision:         revisionForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
 	}
@@ -133,16 +134,17 @@ func guardPolicyState(rules *magus.GuardRules) guard.PolicyState {
 	}
 }
 
-// headCommitForGuard answers this checkout's revision for the push gate, or "" when it
-// cannot be read.
+// revisionForGuard answers the revision rev names in the checkout holding dir, for the
+// push gate, or "" when it cannot be read. Empty rev is the checkout's current revision;
+// empty dir is this process's working directory.
 //
 // Resolved through the VCS layer rather than by shelling out to git, because magus drives
 // four backends and the hook runs in whichever the workspace uses. Every failure answers
-// "": no VCS, an unreadable one, or a repository with no commit yet all mean the push gate
-// has nothing to match a recorded run against, and it stands down rather than refusing on
-// an absence it cannot account for.
-func headCommitForGuard(ctx context.Context) string {
-	root, err := magus.FindRoot("")
+// "": no VCS, an unreadable one, a rev that names nothing, or a repository with no commit
+// yet all mean the push gate has nothing to match a recorded run against, and it stands
+// down rather than refusing on an absence it cannot account for.
+func revisionForGuard(ctx context.Context, dir, rev string) string {
+	root, err := magus.FindRoot(dir)
 	if err != nil {
 		return ""
 	}
@@ -150,14 +152,21 @@ func headCommitForGuard(ctx context.Context) string {
 	if err != nil || res.VCS == nil {
 		return ""
 	}
-	// Metadata rather than FindCommit: it is the cheap call the brief already uses for
-	// exactly this field, and it answers the abbreviation the run log's version string
-	// carries.
-	meta, err := res.VCS.Metadata(ctx, root)
+	if rev == "" {
+		// Metadata rather than FindCommit: it is the cheap call the brief already uses for
+		// exactly this field, and it answers the abbreviation the run log's version string
+		// carries.
+		meta, err := res.VCS.Metadata(ctx, root)
+		if err != nil {
+			return ""
+		}
+		return meta.Short
+	}
+	c, err := res.VCS.FindCommit(ctx, root, rev)
 	if err != nil {
 		return ""
 	}
-	return meta.Short
+	return cmp.Or(c.Short, c.ID)
 }
 
 // checkoutBaseForGuard answers the checkout at root as `magus vcs checkpoint -o name`

@@ -104,10 +104,12 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
-	// HeadCommit is this checkout's current revision, abbreviated, or "" when there is no
-	// VCS to ask. The push gate matches it against the commit each recorded gate run was
-	// built from; with no answer that rule stands down rather than refusing on an absence.
-	HeadCommit func(ctx context.Context) string
+	// Revision is the revision rev names in the checkout holding dir, abbreviated, or ""
+	// when there is no VCS to ask or rev names nothing. Empty rev is the checkout's current
+	// revision; empty dir is the process's working directory. The push gate matches it
+	// against the commit each recorded gate run was built from; with no answer that rule
+	// stands down rather than refusing on an absence.
+	Revision func(ctx context.Context, dir, rev string) string
 	// CheckoutBase is the checkout at root as `magus vcs checkpoint -o name` prints it:
 	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
 	// base an attributed spawn records for its job, the value `magus job exec` records.
@@ -139,11 +141,11 @@ func (d Dependencies) graphStaleAdvice(ctx context.Context) string {
 	return d.GraphStaleAdvice(ctx)
 }
 
-func (d Dependencies) headCommit(ctx context.Context) string {
-	if d.HeadCommit == nil {
+func (d Dependencies) revision(ctx context.Context, dir, rev string) string {
+	if d.Revision == nil {
 		return ""
 	}
-	return d.HeadCommit(ctx)
+	return d.Revision(ctx, dir, rev)
 }
 
 func (d Dependencies) checkoutBase(ctx context.Context, root string) string {
@@ -581,11 +583,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			commit := deps.headCommit(ctx)
-			cover := gateVerdictAt(location.workspace, commit)
-			if cover == gateUnknown {
-				cover = gateCoverageAt(workspaceRunsDir(location.cacheDir), commit)
-			}
+			cover, commit := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			switch decision, reason := gradePushWithoutGate(cover, commit, actingLease); decision {
 			case "ask":
 				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
