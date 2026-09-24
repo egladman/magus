@@ -1,5 +1,5 @@
 // Package proc implements the magus "process adoption" mechanism: child
-// magus processes detect MAGUS_DAEMON_SOCKET and forward work over a
+// magus processes detect [SocketEnv] and forward work over a
 // Unix-domain socket RPC, sharing the parent's cache, logger, and concurrency budget.
 package proc
 
@@ -8,6 +8,11 @@ import (
 
 	"github.com/egladman/magus/types"
 )
+
+// SocketEnv names the variable a magus process exports to its children: the unix://
+// address of the proc server they forward to, which is either this process's own
+// per-process pool or the `magus server` it adopted. Set by magus, never by a person.
+const SocketEnv = "MAGUS_PROC_SOCKET"
 
 // protocolV2 identifies the JSONL message shape; distinct from the binary Version.
 // Servers reject an unknown non-empty protocol with ErrProtocolMismatch.
@@ -30,12 +35,12 @@ const (
 	typeJobReply = "job.reply"
 )
 
-// jobMagic guards jobRequest: a fire-and-forget submission that the daemon runs in the
+// jobMagic guards jobRequest: a fire-and-forget submission that the server runs in the
 // background is a privileged operation (it executes arbitrary magus args), so a request
 // without the magic is ignored, matching the statusRequest/shutdownRequest pattern.
 const jobMagic = "magus-job-v1"
 
-// jobRequest submits a background job: the daemon runs `magus <Args>` asynchronously and
+// jobRequest submits a background job: the server runs `magus <Args>` asynchronously and
 // replies immediately, unlike runRequest which blocks until the run completes. Used by
 // the VCS refresh hook to kick a rebuild/reindex without delaying a checkout.
 type jobRequest struct {
@@ -44,7 +49,7 @@ type jobRequest struct {
 	Version  string   `json:"version,omitempty"`
 	Cwd      string   `json:"cwd"`
 	Protocol string   `json:"protocol"`
-	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
+	Root     string   `json:"root,omitempty"` // empty → server walks up from Cwd
 }
 
 // jobReply acknowledges a submitted job. Inv is the invocation id (a Dashboard deep-link
@@ -61,15 +66,15 @@ type runRequest struct {
 	Version  string   `json:"version,omitempty"`
 	Cwd      string   `json:"cwd"`
 	Protocol string   `json:"protocol"`
-	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
-	// Ancestors is the client's invocation ancestry, oldest first. The daemon adopts it
+	Root     string   `json:"root,omitempty"` // empty → server walks up from Cwd
+	// Ancestors is the client's invocation ancestry, oldest first. The server adopts it
 	// so a run it executes on this client's behalf can recognize a project lock held by
-	// one of the client's OWN ancestors, which, under the daemon, is a lock this very
+	// one of the client's OWN ancestors, which, under the server, is a lock this very
 	// process holds. Empty from a client that predates the field: re-entry detection is
 	// then unavailable and the acquire falls back to waiting.
 	Ancestors []string `json:"ancestors,omitempty"`
 	// Lease is the lease the CLIENT was launched under, carried because the
-	// daemon executes the run in its own process and so reads its own environment, not
+	// server executes the run in its own process and so reads its own environment, not
 	// the client's; without this an adopted run records no lease at all.
 	//
 	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
@@ -96,10 +101,10 @@ type statusRequest struct {
 	Protocol string `json:"protocol"`
 }
 
-// Workspace describes one workspace the daemon holds: loading, loaded, or failed.
+// Workspace describes one workspace the server holds: loading, loaded, or failed.
 type Workspace struct {
 	Root string `json:"root"`
-	// State is empty from an older daemon, which reported only loaded workspaces.
+	// State is empty from an older server, which reported only loaded workspaces.
 	// compat: see types.StatusWorkspace.Loaded
 	State types.WorkspaceState `json:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
@@ -107,7 +112,7 @@ type Workspace struct {
 	LoadedAt   time.Time               `json:"loaded_at"`
 	LastAccess time.Time               `json:"last_access"`
 	// Live cache activity for this workspace's long-lived cache. Zero for pre-cache-aware
-	// daemons or an Inspect workspace with no cache.
+	// servers or an Inspect workspace with no cache.
 	CacheHit   int   `json:"cache_hit,omitempty"`
 	CacheMiss  int   `json:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty"`
@@ -118,7 +123,7 @@ type Workspace struct {
 	SecretProvider string `json:"secret_provider,omitempty"`
 }
 
-// Loaded reports whether w is serving: active, or from a daemon that reports no state.
+// Loaded reports whether w is serving: active, or from a server that reports no state.
 // compat: see types.StatusWorkspace.Loaded
 func (w Workspace) Loaded() bool { return types.StatusWorkspace{State: w.State}.Loaded() }
 
@@ -151,7 +156,7 @@ func (r *StatusReply) StatusOutput() *types.StatusOutput {
 		Version:   r.Version,
 		Capacity:  r.Capacity,
 		Running:   r.Running,
-		// Floored: a daemon whose capacity was clamped under load can report more running
+		// Floored: a server whose capacity was clamped under load can report more running
 		// than capacity, and "-2 available" is worse than "0".
 		Available: max(0, r.Capacity-r.Running),
 		Queued:    r.Queued,

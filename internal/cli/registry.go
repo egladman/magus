@@ -244,7 +244,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "skip", Kind: FlagCustom, Doc: "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
-		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
+		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the server and return immediately; follow it with magus status --watch"},
 		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
@@ -401,7 +401,7 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
-		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
+		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the server and return immediately; follow it with magus status --watch"},
 		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
@@ -476,7 +476,7 @@ with an id:
                      credential reads - which references the run reached for and
                      through which provider, never the value - which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
-                     by the daemon's RotateLogs job, so this answers for recent runs
+                     by the server's RotateLogs job, so this answers for recent runs
                      rather than forever.
 
 The graph is cache-backed under <cache>/knowledge and only shards whose sources
@@ -591,8 +591,8 @@ Subcommands (the first argument):
   build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            each symbol-capable project's scip op) unless --no-symbols, then
            running each adapter declared in knowledge.sessions unless
-           --no-sessions. The daemon does this automatically in the background;
-           this is the manual trigger, after a branch switch or when the daemon
+           --no-sessions. The server does this automatically in the background;
+           this is the manual trigger, after a branch switch or when the server
            is not running.
   deps     The project dependency DAG. A trailing list of project paths roots
            the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
@@ -662,7 +662,7 @@ Subcommands (the first argument):
 			{Name: "global", Kind: FlagBool, Doc: "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace"},
 			{Name: "reproducible", Kind: FlagBool, Doc: "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes"},
 			{Name: "open", Kind: FlagBool, Doc: "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine"},
-			{Name: "follow", Kind: FlagBool, Doc: "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)"},
+			{Name: "follow", Kind: FlagBool, Doc: "With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)"},
 			{Name: "targets", Kind: FlagBool, Doc: "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it"},
 			{Name: "serve", Kind: FlagBool, Doc: "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)"},
 			{Name: "print", Kind: FlagBool, Doc: "With --open: print the explorer URL to stdout instead of launching a browser"},
@@ -802,7 +802,7 @@ third-party integrations build against: an Emacs or Vim plugin, a status bar,
 a notifier.
 
 Every magus process in the workspace feeds the stream, so a run started in
-another terminal shows up here. It needs no daemon, no token, and no loadable
+another terminal shows up here. It needs no server, no token, and no loadable
 magusfile - an editor can attach to a repository whose magusfile is mid-edit.
 
 The stream is outbound only. Nothing a subscriber does can change a magus
@@ -864,7 +864,7 @@ var statusCommand = Command{
 	Name:        "status",
 	Short:       "Inspect concurrency pool and configuration",
 	Description: "Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.",
-	Tags:        []string{"cli", "magus status", "status", "concurrency", "pool", "daemon", "monitoring"},
+	Tags:        []string{"cli", "magus status", "status", "concurrency", "pool", "server", "monitoring"},
 	Long: `Show the magus configuration that affects this process - telemetry, cache
 settings - and, when a parent magus process is running, the live state of its
 concurrency pool (current slot usage, queued waiters).
@@ -879,7 +879,7 @@ snapshot on its own line for log capture.`,
 		{Name: "compact", Kind: FlagBool, Doc: "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)"},
 		{Name: "c", Kind: FlagBool, AliasOf: "compact", Doc: "Short for --compact"},
 		{Name: "symbols", Kind: FlagBool, Doc: "Include the expensive symbol-index freshness scan"},
-		{Name: "socket", Kind: FlagString, Doc: "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir"},
+		{Name: "socket", Kind: FlagString, Doc: "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one"},
 		{Name: "probe", Kind: FlagString, Doc: "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)"},
 		{Name: "workspace", Kind: FlagString, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
 	},
@@ -887,7 +887,7 @@ snapshot on its own line for log capture.`,
 		{"One-shot status snapshot", "magus status"},
 		{"Live updates every 15 seconds", "magus status --watch=15s"},
 		{"Single-line snapshot for a multiplexer sidebar", "magus status --compact --watch=15s"},
-		{"Inspect a specific running parent", "magus status --socket=unix:///run/user/1000/magus/daemon.sock"},
+		{"Inspect a specific running parent", "magus status --socket=unix:///run/user/1000/magus/server.sock"},
 	},
 }
 
@@ -1047,7 +1047,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					},
 				},
 				{Name: "print", Short: "Print the current operator token to stdout (denied to agent sessions)"},
-				{Name: "revoke", Short: "Delete the operator token (the daemon mints a fresh one on next start)"},
+				{Name: "revoke", Short: "Delete the operator token (the server mints a fresh one on next start)"},
 				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
 			},
 		},
@@ -1103,7 +1103,7 @@ It is not what holds this host's capacity: that is ` + "`magus broker`" + `, whi
 run starts on its own. The server asks the broker like any run does.
 
 The socket address is resolved in priority order:
-  --socket flag  >  MAGUS_DAEMON_ADDRESS env  >  daemon.address in magus.yaml  >
+  --socket flag  >  MAGUS_SERVER_ADDRESS env  >  server.address in magus.yaml  >
   default ($XDG_RUNTIME_DIR/magus/server.sock)
 
 A detached server logs to $XDG_STATE_HOME/magus/server.log; under
@@ -1124,7 +1124,7 @@ A detached server logs to $XDG_STATE_HOME/magus/server.log; under
 			Name:  "stop",
 			Short: "Send a graceful shutdown request to the running server",
 			Flags: []Flag{
-				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)"},
+				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 			},
 		},
 		{
@@ -1142,14 +1142,14 @@ It exits non-zero when no server is running, matching ` + "`magus server stop`" 
 so a script can chain on it.`,
 			Usage: "magus server status [--socket <addr>] [flags]",
 			Flags: []Flag{
-				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)"},
+				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 			},
 		},
 		{
 			Name:  "reload",
 			Short: "Re-read configuration without restarting: drop the server's open workspaces",
 			Flags: []Flag{
-				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)"},
+				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 			},
 		},
 	},
@@ -1159,7 +1159,7 @@ so a script can chain on it.`,
 		{"Stop the running server", "magus server stop"},
 		{"Reload configuration without restarting", "magus server reload"},
 		{"Everything running on this host", "magus status"},
-		{"Use a custom socket path", "magus --daemon-address unix:///tmp/m.sock server start"},
+		{"Use a custom socket path", "magus --server-address unix:///tmp/m.sock server start"},
 	},
 }
 
@@ -1347,28 +1347,28 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 
 var versionCommand = Command{
 	Name:        "version",
-	Short:       "Print the client and daemon versions",
-	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the daemon serving this workspace.",
-	Tags:        []string{"cli", "magus version", "version", "build info", "commit", "daemon"},
+	Short:       "Print the client and server versions",
+	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the server serving this workspace.",
+	Tags:        []string{"cli", "magus version", "version", "build info", "commit", "server"},
 	Long: `Print the magus version string, git commit hash, and build date.
 
-Two versions, because there can be two binaries: this one, and the daemon
-that has been serving the workspace since it was started. A daemon outlives
+Two versions, because there can be two binaries: this one, and the server
+that has been serving the workspace since it was started. A server outlives
 the CLI that started it, so upgrading magus leaves the older code running
 until it is restarted - which is the case this command exists to show. The
-daemon line reads "not running" when nothing answers, and --client skips the
-probe entirely for a script that wants the build stamp with no daemon I/O.
+server line reads "not running" when nothing answers, and --client skips the
+probe entirely for a script that wants the build stamp with no server I/O.
 
-In json and yaml the daemon key is present only when the probe ran: absent
+In json and yaml the server key is present only when the probe ran: absent
 means it never ran (--client, or -o name, which prints the bare version and
-renders no daemon), and an empty value means it ran and nothing answered.`,
+renders no server), and an empty value means it ran and nothing answered.`,
 	Flags: []Flag{
-		{Name: "client", Kind: FlagBool, Doc: "Print only this binary's version; skip the daemon probe entirely"},
+		{Name: "client", Kind: FlagBool, Doc: "Print only this binary's version; skip the server probe entirely"},
 	},
 	Usage: "magus version [flags]",
 	Examples: []Example{
-		{"Client and daemon", "magus version"},
-		{"Just this binary, no daemon I/O", "magus version --client"},
+		{"Client and server", "magus version"},
+		{"Just this binary, no server I/O", "magus version --client"},
 		{"The bare version, for a CI pin comparison", "magus version -o name"},
 	},
 }
@@ -1594,9 +1594,9 @@ working-copy commit it already holds. The working copy is untouched either way.
 
 Retention differs per backend. On git and Mercurial a capture is dropped at 30
 days, by two passes that cover each other's gap: every preserve prunes, which
-bounds a repository nothing schedules against, and the daemon's prune-preserved
+bounds a repository nothing schedules against, and the server's prune-preserved
 job prunes on its own, which reaches a repository preserved once and never
-again. That job is a no-op with no daemon running, so on a machine that runs
+again. That job is a no-op with no server running, so on a machine that runs
 none the standalone spelling is magus server prune-preserved.
 
 Sapling drops nothing either way: magus mints a hidden commit there, and no
@@ -1807,7 +1807,7 @@ would rather they ran.
 The store is keyed by repository identity rather than by checkout path, so
 every git worktree of one repo reads and writes the same records - what
 another worktree just finished, and what it is blocked on, is visible here
-without a daemon, a network, or a shared branch. It is append-only and never
+without a server, a network, or a shared branch. It is append-only and never
 rewritten; a line left half-written by a killed process is skipped and counted
 rather than failing the read.
 
@@ -2092,12 +2092,12 @@ either side learning a new format.`,
 var jobCommand = Command{
 	Name:        "job",
 	Short:       "Fork a job, take it, return it with its result, and verify that result",
-	Description: "The POSIX child lifecycle over delegated work: fork declares a job, exec takes the lease on it in this checkout, exit returns it with its result, wait verifies that result, and run submits one of the daemon's own jobs.",
+	Description: "The POSIX child lifecycle over delegated work: fork declares a job, exec takes the lease on it in this checkout, exit returns it with its result, wait verifies that result, and run submits one of the server's own jobs.",
 	Tags:        []string{"cli", "magus job", "job", "jobs", "lease", "agents", "delegation"},
 	Long: `Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: ` + "`magus run`" + ` executes a target with no job involved,
-while a job's check and the daemon's maintenance each cause runs.
+while a job's check and the server's maintenance each cause runs.
 
 Two channels write the job store. The magus_job MCP tool is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
@@ -2149,8 +2149,8 @@ every rule that failed; exit 2 is magus unable to answer, which is a result that
 would not decode, nothing filed and nothing piped in, or a job that would not
 write. Whether the work is GOOD stays the reading of whoever forked it.
 
-run submits one of the daemon's own jobs, the housekeeping magus does for itself,
-and returns. It is a no-op when no persistent daemon is running, so a VCS hook can
+run submits one of the server's own jobs, the housekeeping magus does for itself,
+and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
@@ -2233,12 +2233,12 @@ write paths are disjoint, so the attribution is exact and needs nothing from the
 worker; where two live jobs somehow cover one path the line says so and
 attributes it to neither, because there is nothing in a path to break the tie.
 
-It reads this checkout and needs no daemon. The same feed is served over the
+It reads this checkout and needs no server. The same feed is served over the
 console's Jobs view, which every verb that names a job prints a link to.` + "\n\n`magus describe job <job> --gates`" + ` grades what a job has finished; this
 shows what it is doing.`,
 			Usage: "magus job watch <job>",
 		},
-		{Name: "run", Short: "Submit one of the daemon's own jobs and return"},
+		{Name: "run", Short: "Submit one of the server's own jobs and return"},
 		{
 			Name:  "rm",
 			Short: "Remove one job from the plan",
@@ -2260,7 +2260,7 @@ shows what it is doing.`,
 		{"Return it with its result", "magus job exit session-load/core --stdin < result.json"},
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
-		{"Submit a daemon job", "magus job run sync-graph"},
+		{"Submit a server job", "magus job run sync-graph"},
 	},
 }
 

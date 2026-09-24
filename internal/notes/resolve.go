@@ -38,7 +38,7 @@ type Resolver interface {
 // last reviewed against. Call it only once Digest has already found a change: it is what
 // separates a body edit, which rarely invalidates prose, from drift worth re-reading for.
 //
-// Exported so the CLI and the daemon grade with one rule rather than two. They present the
+// Exported so the CLI and the server grade with one rule rather than two. They present the
 // answer differently (an Issue with a hint, an AnchorStatus with a detail), but a surface
 // whose verdict disagreed with `magus notes verify` would be a second opinion rather than a
 // second view of one answer.

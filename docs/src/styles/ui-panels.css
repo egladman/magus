@@ -8,7 +8,7 @@
    come from within this file and theme.css respectively, so this file is self-contained. */
 
 /* Settings panel: the gear button's dropdown of BROWSER-side preferences - the theme select on every
-   page (persisted by theme.js), plus the console apps' refresh rate + daemon host override (persisted
+   page (persisted by theme.js), plus the console apps' refresh rate + server host override (persisted
    by console-settings.js). Same dropdown treatment as the app launcher - a Pico-tinted card anchored
    under the nav buttons. */
 .settings-panel {

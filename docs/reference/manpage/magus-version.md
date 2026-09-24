@@ -1,13 +1,13 @@
 ---
 title: magus version
 generated_from: internal/cli/registry.go
-description: Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the daemon serving this workspace.
-tags: [cli, magus version, version, build info, commit, daemon]
+description: Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the server serving this workspace.
+tags: [cli, magus version, version, build info, commit, server]
 ---
 
 # magus-version
 
-Print the client and daemon versions
+Print the client and server versions
 
 ## Synopsis
 
@@ -17,31 +17,31 @@ Print the client and daemon versions
 
 Print the magus version string, git commit hash, and build date.
 
-Two versions, because there can be two binaries: this one, and the daemon
-that has been serving the workspace since it was started. A daemon outlives
+Two versions, because there can be two binaries: this one, and the server
+that has been serving the workspace since it was started. A server outlives
 the CLI that started it, so upgrading magus leaves the older code running
 until it is restarted - which is the case this command exists to show. The
-daemon line reads "not running" when nothing answers, and --client skips the
-probe entirely for a script that wants the build stamp with no daemon I/O.
+server line reads "not running" when nothing answers, and --client skips the
+probe entirely for a script that wants the build stamp with no server I/O.
 
-In json and yaml the daemon key is present only when the probe ran: absent
+In json and yaml the server key is present only when the probe ran: absent
 means it never ran (--client, or -o name, which prints the bare version and
-renders no daemon), and an empty value means it ran and nothing answered.
+renders no server), and an empty value means it ran and nothing answered.
 
 ## Options
 
 **--client**
-: Print only this binary's version; skip the daemon probe entirely
+: Print only this binary's version; skip the server probe entirely
 
 ## Examples
 
-*Client and daemon*
+*Client and server*
 
 ```sh
 magus version
 ```
 
-*Just this binary, no daemon I/O*
+*Just this binary, no server I/O*
 
 ```sh
 magus version --client

@@ -99,7 +99,7 @@ export function narrowToHunk(placed: PlacedThreads, keep: string): PlacedThreads
 
 // placeThreads sorts already-placed threads into the three buckets this surface renders.
 //
-// The line-to-hunk ARITHMETIC is not here: the daemon does it once (diff.PlaceThreads) and
+// The line-to-hunk ARITHMETIC is not here: the server does it once (diff.PlaceThreads) and
 // ships `hunk` on each thread, for the reason the parser and the intra-line emphasis moved
 // there. Two surfaces computing it independently is the same remark sitting against different
 // code in the terminal and the browser, and nothing would ever have reported the disagreement.

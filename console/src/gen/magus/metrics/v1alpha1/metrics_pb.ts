@@ -5,7 +5,7 @@
 // Package magus.metrics.v1alpha1 is the versioned wire contract for the DERIVED dashboard
 // metrics: magus's OTel instrument families rolled up into the numbers a developer reads
 // to judge health - operation counts, cache hit-rates, and latency percentiles - plus a
-// rolling time-series the daemon backfills so the utilization grid shows history from
+// rolling time-series the server backfills so the utilization grid shows history from
 // before the page opened. A sibling of magus.status.v1alpha1 (which carries the live pool/health
 // snapshot); the dashboard streams both. Served by MetricsService over ConnectRPC (one
 // endpoint speaks Connect, gRPC, and gRPC-Web): StreamMetrics sends one Backfill (the Sample
@@ -620,7 +620,7 @@ export const SandboxSchema: GenMessage<Sandbox> = /*@__PURE__*/
   messageDesc(file_magus_metrics_v1alpha1_metrics, 9);
 
 /**
- * Backfill is the ring-buffer history the daemon sends once, right after a dashboard
+ * Backfill is the ring-buffer history the server sends once, right after a dashboard
  * connects, so the utilization grid and cache-rate trend start populated instead of empty.
  *
  * @generated from message magus.metrics.v1alpha1.Backfill
@@ -642,7 +642,7 @@ export const BackfillSchema: GenMessage<Backfill> = /*@__PURE__*/
   messageDesc(file_magus_metrics_v1alpha1_metrics, 10);
 
 /**
- * Sample is one point in the rolling utilization/activity history. The daemon appends one
+ * Sample is one point in the rolling utilization/activity history. The server appends one
  * per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid
  * square per sample by utilization.
  *
@@ -712,7 +712,7 @@ export type Sample = Message<"magus.metrics.v1alpha1.Sample"> & {
 
   /**
    * observe_start_time identifies the GENERATION the cumulative counters above belong to:
-   * the instant the daemon began observing. The counters restart at zero when the daemon
+   * the instant the server began observing. The counters restart at zero when the server
    * does, so two samples from different generations cannot be differenced - their
    * difference is not a rate, it is the new process's total minus the old one's.
    *

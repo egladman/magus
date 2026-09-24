@@ -152,7 +152,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Manage the magus binary (update, refresh, registry, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
-: Print the client and daemon versions. See [**magus-version**(1)](magus-version.md).
+: Print the client and server versions. See [**magus-version**(1)](magus-version.md).
 
 ## Environment
 
@@ -216,8 +216,8 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_VCS_\<NAME\>_BASE_REF**
 : Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 
-**MAGUS_DAEMON_SOCKET**
-: Env-only, no magus.yaml equivalent: runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it
+**MAGUS_PROC_SOCKET**
+: Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
 
 **MAGUS_CI_MAX_SHARDS**
 : Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: **ci.max_shards**.
@@ -249,20 +249,23 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_TELEMETRY_SAMPLE_RATIO**
 : Head-based trace sampling ratio in [0,1] (default: 1.0). Equivalent magus.yaml key: **telemetry.sample_ratio**.
 
-**MAGUS_DAEMON_ADDRESS**
-: Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket. Equivalent magus.yaml key: **daemon.address**.
+**MAGUS_SERVER_ENABLED**
+: When false, no command hands itself to a running \`magus server\`; each invocation runs self-contained (default: true). Equivalent magus.yaml key: **server.enabled**.
 
-**MAGUS_DAEMON_IDLE_TTL**
-: Idle workspace eviction TTL for the multi-workspace daemon; e.g. "6h", "30m" (default: 6h). Equivalent magus.yaml key: **daemon.idle_ttl**.
+**MAGUS_SERVER_ADDRESS**
+: Socket \`magus server\` listens on, as a unix:// URL; empty is server.sock in the runtime directory. Equivalent magus.yaml key: **server.address**.
 
-**MAGUS_DAEMON_WORKSPACES**
-: Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010). Equivalent magus.yaml key: **daemon.workspaces**.
+**MAGUS_SERVER_IDLE_TTL**
+: Idle workspace eviction TTL for the multi-workspace server; e.g. "6h", "30m" (default: 6h). Equivalent magus.yaml key: **server.idle_ttl**.
+
+**MAGUS_SERVER_WORKSPACES**
+: Colon-separated list of workspace roots the server will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010). Equivalent magus.yaml key: **server.workspaces**.
 
 **MAGUS_MCP_ENABLED**
 : When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: **mcp.enabled**.
 
 **MAGUS_MCP_ADDRESS**
-: host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: **mcp.address**.
+: host:port for the MCP Streamable HTTP server \`magus server\` starts (default: 127.0.0.1:7391). Equivalent magus.yaml key: **mcp.address**.
 
 **MAGUS_MCP_INSECURE_BIND**
 : Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: **mcp.insecure_bind**.

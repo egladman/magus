@@ -24,8 +24,8 @@ Subcommands (the first argument):
 build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            each symbol-capable project's scip op) unless --no-symbols, then
            running each adapter declared in knowledge.sessions unless
-           --no-sessions. The daemon does this automatically in the background;
-           this is the manual trigger, after a branch switch or when the daemon
+           --no-sessions. The server does this automatically in the background;
+           this is the manual trigger, after a branch switch or when the server
            is not running.
   deps     The project dependency DAG. A trailing list of project paths roots
            the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
@@ -105,7 +105,7 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 : Node budget for --select (how many nodes the neighborhood may collect)
 
 **--follow**
-: With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)
+: With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)
 
 **--global**
 : Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace

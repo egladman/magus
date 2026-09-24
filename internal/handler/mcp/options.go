@@ -14,7 +14,7 @@ import (
 )
 
 // Options configures a magus MCP server, served by ServeStdio or built via HTTPHandler
-// (daemon mode, assembled by internal/daemon).
+// (server mode, assembled by internal/serverhttp).
 type Options struct {
 	// Magus is the opened workspace handle. Required. Pass the result of
 	// magus.Open; the MCP server does not open its own instance so the
@@ -30,14 +30,14 @@ type Options struct {
 	Version string
 
 	// Build is the running binary's full identity (version, commit, date), reported on
-	// the status wire so the console shows which daemon it is talking to.
+	// the status wire so the console shows which server it is talking to.
 	Build types.BuildInfo
 
 	// Config is the resolved workspace configuration. Used to check the
-	// daemon address for the magus_status tool.
+	// server address for the magus_status tool.
 	Config config.Config
 
-	// HTTPAddr is the parsed address for daemon HTTP serving. Defaults to defaultAddrPort
+	// HTTPAddr is the parsed address for server HTTP serving. Defaults to defaultAddrPort
 	// when zero. Callers parse the config string once and pass the result here
 	// so internal/mcp never re-parses a raw string.
 	HTTPAddr netip.AddrPort
@@ -56,21 +56,21 @@ type Options struct {
 	// block but still serves the live pool state.
 	StatusBase types.StatusBase
 
-	// DiffSessions is the daemon's shared diff-session store, the SAME one the console's
+	// DiffSessions is the server's shared diff-session store, the SAME one the console's
 	// /api/v1/diff and /api/v1/diff/session routes use. Sharing it is what makes pairing work:
 	// the person opens a diff in the console and the agent joins the session they started,
 	// rather than each side holding a private opinion of the changeset.
 	//
-	// Nil disables magus_diff, which is the honest state for a daemon with no workspace.
+	// Nil disables magus_diff, which is the honest state for a server with no workspace.
 	DiffSessions *changeset.Store
 
-	// Jobs is the daemon's shared job store, the SAME one JobService reads.
+	// Jobs is the server's shared job store, the SAME one JobService reads.
 	// Sharing it is what makes the Store's mutex mean
 	// anything: two Stores over one file each hold their own lock, so the in-process
 	// serialization the store documents would hold only while nothing wrote concurrently.
 	//
 	// Nil builds a private one, which is correct for a single-door server (the stdio MCP
-	// process) and wrong for the daemon, where the daemon sets it.
+	// process) and wrong for the server, where the server sets it.
 	Jobs *job.Store
 
 	// Unavailable, with a nil Magus, is why the workspace is not loaded. Every tool stays
@@ -101,6 +101,6 @@ func (o Options) httpAddr() netip.AddrPort {
 }
 
 // SiteOrigin is the scheme://host origin of the hosted Graph Explorer that
-// cmd/magus/graph.go names as defaultExploreURL; keep the two in sync. internal/daemon
+// cmd/magus/graph.go names as defaultExploreURL; keep the two in sync. internal/server
 // allows it as the bridge's CORS origin.
 const SiteOrigin = "https://eli.gladman.cc"

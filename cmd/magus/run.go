@@ -137,7 +137,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return usagef("magus run: --skip applies to the run selection, not --graph")
 	}
 	// Applied before the --detach branch below, not after it: awaitInvocation polls the
-	// daemon until the run reports a status and has no bound of its own, so `run --detach
+	// server until the run reports a status and has no bound of its own, so `run --detach
 	// --wait --timeout 30s` waited forever on a run that never finished. Its select
 	// already watches ctx.Done, which is all the bound it needs.
 	if rf.Timeout > 0 {
@@ -147,7 +147,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 
 	if rf.Detach {
-		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
+		return detachToServer(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
@@ -231,7 +231,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	defer func() { _ = closeSink() }()
 
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
-	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
+	// ctx, not the server's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCwd(ctx)
 	targets, source, err := resolveTargets(ctx, m, parsedTarget, runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd})
@@ -334,7 +334,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	liveBC, stopLive := beginLive(ctx, rf.Open)
 	defer stopLive()
-	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
+	// An adopted run (dispatched by the server) also feeds the server's live-run registry,
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable invocation facts ride the same fan-out: one fact per target result, into a
@@ -406,8 +406,8 @@ type runSelection struct {
 	skips []string
 	// cwd is the caller's working directory (the client's, for an adopted run; see
 	// clientCwd); it anchors relative project args and the cwd-scope lookup. Resolving
-	// cwd-scope against the daemon's own os.Getwd() is exactly the mix-up that let a
-	// daemon adopt a run for an unrelated workspace and pass it vacuously, so the cwd is
+	// cwd-scope against the server's own os.Getwd() is exactly the mix-up that let a
+	// server adopt a run for an unrelated workspace and pass it vacuously, so the cwd is
 	// threaded in rather than read here.
 	cwd string
 }
@@ -715,8 +715,8 @@ func cwdAnchor(root, cwd string) string {
 }
 
 // clientCwd returns the working directory that scopes this invocation. An adopted
-// run is dispatched inside the long-lived daemon, whose own os.Getwd() is unrelated
-// to (and in a stale daemon may be a deleted) directory; the daemon carries the
+// run is dispatched inside the long-lived server, whose own os.Getwd() is unrelated
+// to (and in a stale server may be a deleted) directory; the server carries the
 // client's cwd on ctx (proc.CwdFromContext), so prefer it. A plain local run has no
 // ctx cwd and falls back to os.Getwd(). Empty only when neither is available.
 func clientCwd(ctx context.Context) string {
@@ -889,7 +889,7 @@ func envDefault(fs *flag.FlagSet, name, value string) error {
 	return nil
 }
 
-// localOnlyFlags never travel to the daemon. --detach would make it detach
+// localOnlyFlags never travel to the server. --detach would make it detach
 // again, handing the work to itself forever; --wait describes what THIS process
 // does after submitting and means nothing to the run itself.
 //
@@ -902,7 +902,7 @@ var localOnlyFlags = []string{gen.FlagRunDetach, gen.FlagRunWait}
 // withoutDetachFlag drops the local-only flags from an argv, in every spelling
 // the flag package accepts: -name, --name, and either with an inline =value.
 //
-// The argv is re-submitted verbatim to the daemon, so leaving one in would be
+// The argv is re-submitted verbatim to the server, so leaving one in would be
 // acted on there.
 func withoutDetachFlag(args []string) []string {
 	out := make([]string, 0, len(args))
@@ -923,17 +923,17 @@ func withoutDetachFlag(args []string) []string {
 	return out
 }
 
-// detachToDaemon hands this invocation to the server and returns as soon as it is queued,
+// detachToServer hands this invocation to the server and returns as soon as it is queued,
 // so a caller can watch it instead of blocking or sleeping.
 //
 // It requires the server (`magus server start`), and says so rather than falling back. It
 // dials the server's own socket, which no per-process proc server binds: one of those
 // dies when its invocation exits, so submitting there would queue work that is silently
 // dropped. Refusing is the only honest answer, and the remedy is one command.
-func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) error {
+func detachToServer(ctx context.Context, root string, argv []string, wait bool) error {
 	addr := resolveServerAddr("")
 	if _, serr := proc.QueryStatus(ctx, addr); serr != nil {
-		return types.WrapDiagnostic(types.DaemonRequired, nil,
+		return types.WrapDiagnostic(types.ServerRequired, nil,
 			"--detach hands the work to the server, and none is running at %s; start one with `%s`", addr, hint.ServerStart)
 	}
 	opts, err := outputOptionsOrDefault()
@@ -961,14 +961,14 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	return awaitInvocation(ctx, root, inv, sink)
 }
 
-// awaitInvocation blocks until the daemon's run records a finished event, then
+// awaitInvocation blocks until the server's run records a finished event, then
 // reports its outcome and exits with it.
 //
 // This is what --detach --wait is FOR, and the combination is not a
-// contradiction: the daemon owns the run, so it coalesces with an identical one
+// contradiction: the server owns the run, so it coalesces with an identical one
 // already in flight and shares the pool, while the caller still gets a
 // synchronous answer and an exit status to branch on. Detach alone is for
-// firing and forgetting; this is for wanting the daemon's scheduling without
+// firing and forgetting; this is for wanting the server's scheduling without
 // giving up the shell's.
 //
 // Waiting on Status, never on FinishedMs: an interrupted run has no finished
@@ -987,7 +987,7 @@ func awaitInvocation(ctx context.Context, root, inv string, sink *magus.Sink) er
 			return ctx.Err()
 		case <-time.After(delay):
 		}
-		// A log that does not exist yet is a run the daemon has not started, not
+		// A log that does not exist yet is a run the server has not started, not
 		// an error: it is the ordinary first tick.
 		header, err := m.InvocationByID(inv)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {

@@ -67,7 +67,7 @@ const TWO_HUNKS = [
 test("a hunk carries its own index, so a sliced file does not renumber its remarks", () => {
   const file = at(patchFixture(TWO_HUNKS), 0, "file");
   const second = at(file.hunks, 1, "hunk");
-  assert.equal(second.index, 1, "the fixture has to carry the index the daemon sends");
+  assert.equal(second.index, 1, "the fixture has to carry the index the server sends");
 
   const onSecond = {
     id: "c1",
@@ -586,7 +586,7 @@ const THREAD_PATCH = [
   "",
 ].join("\n");
 
-// hunk is the daemon's answer (diff.PlaceThreads), not something this surface works out. What
+// hunk is the server's answer (diff.PlaceThreads), not something this surface works out. What
 // is left here is the grouping, which depends on what is actually on screen.
 function thread(id: string, path: string, hunk: number) {
   return { id, path, hunk, line: 11, author: "dana", body: `remark ${id}` };
@@ -600,7 +600,7 @@ test("a placed thread is grouped onto its hunk", () => {
   assert.equal(placed.elsewhere.length, 0);
 });
 
-// The line moved out from under the remark, so the daemon could not place it. It still belongs
+// The line moved out from under the remark, so the server could not place it. It still belongs
 // to this file and the reader still has to hear it - a surface that dropped it would be
 // claiming a colleague said nothing.
 test("an unplaced thread on a visible file falls back to that file", () => {
@@ -623,7 +623,7 @@ test("a thread on a file outside the changeset is kept as elsewhere", () => {
   );
 });
 
-// A thread the daemon PLACED, on a file this stream is not showing - the generated fold is the
+// A thread the server PLACED, on a file this stream is not showing - the generated fold is the
 // ordinary way that happens. It is listed rather than rendered against a hunk nobody can see.
 test("a placed thread on a hidden file is elsewhere, not a phantom row", () => {
   const placed = placeThreads([], [thread("t1", "x.ts", 0)]);

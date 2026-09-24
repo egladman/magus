@@ -152,17 +152,17 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
-	env, withheldDaemon := childEnv(ctx, policy, opts.Env)
+	env, withheld := childEnv(ctx, policy, opts.Env)
 	c.Env = env
 	if js := jobserverFrom(ctx); js != nil {
 		c.ExtraFiles = js.files()
 	}
 	sandbox.RecordEnvDropped(ctx, name, policy)
 	sandbox.EmitShimHint(name, policy)
-	if len(withheldDaemon) > 0 {
-		slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
-			"withheld magus daemon pointer(s) from op subprocess (done regardless of sandbox.enabled)"),
-			"vars", withheldDaemon)
+	if len(withheld) > 0 {
+		slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
+			"withheld magus socket pointer(s) from op subprocess (done regardless of sandbox.enabled)"),
+			"vars", withheld)
 	}
 	if opts.Stdin != "" {
 		// Wrapped so the TTY branch can recover the text and replay it through the
@@ -270,8 +270,10 @@ func classifyMissingBinary(err error, name string, started bool) error {
 	return err
 }
 
-// DaemonForwardVars never reach ordinary op subprocesses.
-var DaemonForwardVars = []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"}
+// ProcForwardVars never reach ordinary op subprocesses: the proc-server socket a magus
+// child forwards to, and the address `magus server` listens on. Both are unauthenticated
+// sockets, so only a recursive magus is handed them.
+var ProcForwardVars = []string{"MAGUS_PROC_SOCKET", "MAGUS_SERVER_ADDRESS"}
 
 // childEnv layers self-reference variables and caller overrides over the base environment.
 func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (env, withheld []string) {
@@ -283,15 +285,15 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	if root == nil {
 		root = os.Environ()
 	}
-	for _, name := range DaemonForwardVars {
+	for _, name := range ProcForwardVars {
 		if hasEnvVar(root, name) && !hasEnvVar(overrides, name) {
 			withheld = append(withheld, name)
 		}
 	}
-	env = withoutEnvVars(root, DaemonForwardVars)
+	env = withoutEnvVars(root, ProcForwardVars)
 	// The ancestry is dropped from the base first, so a value inherited from whatever
 	// started THIS process can never outlive the invocation that set it, which matters in
-	// the daemon, where the process env belongs to nobody's invocation.
+	// the server, where the process env belongs to nobody's invocation.
 	env = withoutEnvVars(env, []string{AncestorsEnvVar})
 	env = append(env, SelfVars(ctx)...)
 	// Ahead of the overrides, so a target that sets MAKEFLAGS itself keeps its own.
@@ -336,7 +338,7 @@ const AncestorsEnvVar = "MAGUS_INVOCATION_ANCESTORS"
 //
 // The first two are read from this process's environment because they describe the
 // PROCESS; the ancestry is read from ctx because it describes the INVOCATION, and the
-// daemon runs many of those in one process.
+// server runs many of those in one process.
 func SelfVars(ctx context.Context) []string {
 	out := make([]string, 0, 3)
 	if exe := magusExe(); exe != "" {
@@ -359,7 +361,7 @@ func CurrentLevel() int {
 
 // AncestorsFromEnv reads the ancestry a parent process passed down. This is the entry
 // point for a fresh magus process: the refs belong to invocations in OTHER processes (or,
-// under the daemon, to other goroutines), so the variable is the only thing that can carry
+// under the server, to other goroutines), so the variable is the only thing that can carry
 // them across the boundary.
 func AncestorsFromEnv() []string {
 	raw := strings.TrimSpace(os.Getenv(AncestorsEnvVar))

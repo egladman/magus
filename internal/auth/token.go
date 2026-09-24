@@ -1,4 +1,4 @@
-// Package auth holds the daemon's bearer credentials and decides which credential a
+// Package auth holds the server's bearer credentials and decides which credential a
 // presented token is. It authenticates; it never authorizes a route. Whether a credential may
 // use a route is its [types.Grant] against the route's [types.Need], decided in one place
 // (internal/httpx's bearer guard). It does decide what may be minted: a token never holds more
@@ -8,7 +8,7 @@
 //
 //	mgo_ operator  one retrievable file per user, every surface on loopback, never expires
 //	mgs_ stored    stored hashed in tokens.d, a grant within its minter's, always expires
-//	mgl_ share     daemon memory only, console=read, the share link's LAN listener only
+//	mgl_ share     server memory only, console=read, the share link's LAN listener only
 //	mgx_ exchange  stored hashed in tokens.d for a minute, traded once for an mgs_ token
 //
 // The files are protected by their mode and by the guard, which keeps agent sessions away
@@ -93,7 +93,7 @@ func atomicWriteSecret(path string, data []byte) error {
 }
 
 // SaveNewOperator writes token only if no operator token file exists yet. The O_EXCL create is
-// the whole decision, so a CLI `generate` racing the daemon's first start cannot clobber the
+// the whole decision, so a CLI `generate` racing the server's first start cannot clobber the
 // token the other is serving; the loser gets an error satisfying errors.Is(err, os.ErrExist).
 func SaveNewOperator(token string) (string, error) {
 	path, err := OperatorPath()
@@ -168,10 +168,10 @@ func operatorCredential(token string) types.Credential {
 }
 
 // EnsureOperator loads the operator token, minting and persisting one when none exists. The
-// daemon calls it before serving and fails closed on its error, so an old-format file stops
-// the daemon with the OperatorTokenFormat error rather than serving without an operator.
+// server calls it before serving and fails closed on its error, so an old-format file stops
+// the server with the OperatorTokenFormat error rather than serving without an operator.
 //
-// The secret is never logged: the daemon log lands in journald and nohup.out. Only the path
+// The secret is never logged: the server log lands in journald and nohup.out. Only the path
 // is.
 func EnsureOperator(ctx context.Context, log *slog.Logger) (string, error) {
 	tok, err := LoadOperator()

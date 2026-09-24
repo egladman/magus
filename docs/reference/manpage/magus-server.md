@@ -29,7 +29,7 @@ It is not what holds this host's capacity: that is \`magus broker\`, which a
 run starts on its own. The server asks the broker like any run does.
 
 The socket address is resolved in priority order:
-  --socket flag  \>  MAGUS_DAEMON_ADDRESS env  \>  daemon.address in magus.yaml  \>
+  --socket flag  \>  MAGUS_SERVER_ADDRESS env  \>  server.address in magus.yaml  \>
   default ($XDG_RUNTIME_DIR/magus/server.sock)
 
 A detached server logs to $XDG_STATE_HOME/magus/server.log; under
@@ -43,17 +43,17 @@ A detached server logs to $XDG_STATE_HOME/magus/server.log; under
 ### server stop options
 
 **--socket** *string*
-: Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)
+: Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
 ### server status options
 
 **--socket** *string*
-: Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)
+: Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
 ### server reload options
 
 **--socket** *string*
-: Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)
+: Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
 ## Subcommands
 
@@ -104,7 +104,7 @@ magus status
 *Use a custom socket path*
 
 ```sh
-magus --daemon-address unix:///tmp/m.sock server start
+magus --server-address unix:///tmp/m.sock server start
 ```
 
 ## See Also

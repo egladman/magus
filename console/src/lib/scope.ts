@@ -10,9 +10,9 @@
 // key, and a change is announced with a window event: same-tab writes do not fire `storage`, so
 // without the event a surface would never learn the shell had switched.
 //
-// The empty string means "every workspace this daemon has loaded" - the daemon-wide view, and the
+// The empty string means "every workspace this server has loaded" - the server-wide view, and the
 // default. It is a real choice rather than an absence: with one workspace loaded, scoped and unscoped
-// show the same thing, which is why this stays invisible until a daemon serves more than one.
+// show the same thing, which is why this stays invisible until a server serves more than one.
 const KEY = "magus:workspace-scope";
 const EVENT = "console:workspace-scope";
 
@@ -22,7 +22,7 @@ export function workspaceScope(): string {
   try {
     return sessionStorage.getItem(KEY) ?? ALL_WORKSPACES;
   } catch {
-    // not-a-failure: storage disabled, so everything stays daemon-wide, which is the honest fallback
+    // not-a-failure: storage disabled, so everything stays server-wide, which is the honest fallback
     return ALL_WORKSPACES;
   }
 }
@@ -37,11 +37,11 @@ export function setWorkspaceScope(root: string): void {
   window.dispatchEvent(new CustomEvent(EVENT, { detail: root }));
 }
 
-// Which workspaces the daemon has loaded, announced by whoever learned it first.
+// Which workspaces the server has loaded, announced by whoever learned it first.
 //
 // The shell polls GetStatus every 15s, but a SURFACE often knows sooner and more reliably: the
 // dashboard holds an open status stream, and in the offline demo it is the only thing that knows at
-// all, because there is no daemon to poll. So the list is published rather than owned - the shell's
+// all, because there is no server to poll. So the list is published rather than owned - the shell's
 // scope picker builds its menu from whatever arrives, from either source.
 const WORKSPACES_EVENT = "console:workspaces";
 
@@ -72,7 +72,7 @@ export function onWorkspaceScope(fn: (root: string) => void): () => void {
 }
 
 // inScope reports whether a record belonging to `root` should be shown under the current scope.
-// A record with NO workspace (a daemon-wide action - an MCP call, per activity.proto) is shown in
+// A record with NO workspace (a server-wide action - an MCP call, per activity.proto) is shown in
 // every scope: it is not attributable, so hiding it would be claiming it belongs elsewhere.
 export function inScope(recordRoot: string, scope: string = workspaceScope()): boolean {
   if (scope === ALL_WORKSPACES) return true;

@@ -27,7 +27,7 @@ type resolver interface {
 }
 
 // Service implements graphv1alpha1connect.GraphServiceHandler over the workspace knowledge
-// graph. Every RPC is read-only; the daemon mounts it behind the console read bearer.
+// graph. Every RPC is read-only; the server mounts it behind the console read bearer.
 type Service struct{ ws resolver }
 
 // NewService builds a GraphService handler reading from ws.

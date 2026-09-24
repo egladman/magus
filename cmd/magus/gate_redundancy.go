@@ -30,7 +30,7 @@ import (
 // simply re-gates.
 const gateMergeScanLimit = 200
 
-// gatePoolProbeTimeout bounds the admission-daemon probe. The daemon is an
+// gatePoolProbeTimeout bounds the admission-server probe. The server is an
 // accelerant, never a capability gate: a probe that cannot answer in time
 // reads as idle and the gate runs.
 var gatePoolProbeTimeout = 2 * time.Second

@@ -59,9 +59,9 @@ working-copy commit it already holds. The working copy is untouched either way.
 
 Retention differs per backend. On git and Mercurial a capture is dropped at 30
 days, by two passes that cover each other's gap: every preserve prunes, which
-bounds a repository nothing schedules against, and the daemon's prune-preserved
+bounds a repository nothing schedules against, and the server's prune-preserved
 job prunes on its own, which reaches a repository preserved once and never
-again. That job is a no-op with no daemon running, so on a machine that runs
+again. That job is a no-op with no server running, so on a machine that runs
 none the standalone spelling is magus server prune-preserved.
 
 Sapling drops nothing either way: magus mints a hidden commit there, and no

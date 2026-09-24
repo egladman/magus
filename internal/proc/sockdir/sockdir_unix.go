@@ -44,7 +44,7 @@ func Dir() string {
 // sticky bit only stops deleting someone else's files, not creating new
 // ones) and the name (UIDs are enumerable) are attacker-reachable: another
 // local user can pre-create the directory loosely permissioned, or as a
-// symlink, before magus ever runs, and have magus bind its daemon/MCP socket
+// symlink, before magus ever runs, and have magus bind its server/MCP socket
 // inside a directory they control.
 //
 // The ordinary case (a directory this or an earlier magus version created

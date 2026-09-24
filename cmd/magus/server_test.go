@@ -23,12 +23,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestServerStopTerminatesLiveDaemon drives the real serverStop handler against a live
+// TestServerStopTerminatesLiveServer drives the real serverStop handler against a live
 // in-process proc server, pinning the fix for the silent no-op stop: stop must resolve the
 // server, send the shutdown, and verify the socket has actually gone quiet before returning
-// success. A full `server start` daemon cannot be driven from a unit test (its auto-background
+// success. A full `server start` server cannot be driven from a unit test (its auto-background
 // path re-execs the binary), so this exercises the discovery+verify logic that stop owns.
-func TestServerStopTerminatesLiveDaemon(t *testing.T) {
+func TestServerStopTerminatesLiveServer(t *testing.T) {
 	// Let proc pick a random socket under SockDir; a t.TempDir() path can exceed the unix
 	// socket path length limit on macOS.
 	srv, err := proc.New(proc.Options{
@@ -42,9 +42,9 @@ func TestServerStopTerminatesLiveDaemon(t *testing.T) {
 
 	// The explicit --socket bypasses config/discovery so stop targets exactly this server.
 	err = serverStop(context.Background(), []string{"--socket", addr})
-	require.NoError(t, err, "stop against a live daemon must succeed")
+	require.NoError(t, err, "stop against a live server must succeed")
 
-	assert.False(t, proc.SocketLive(context.Background(), addr), "stop must actually terminate the daemon")
+	assert.False(t, proc.SocketLive(context.Background(), addr), "stop must actually terminate the server")
 	select {
 	case <-srv.Done():
 	default:
@@ -52,9 +52,9 @@ func TestServerStopTerminatesLiveDaemon(t *testing.T) {
 	}
 }
 
-// TestServerStopNoDaemonExitsNonzero pins the other half of the fix: stop against nothing must
+// TestServerStopNoServerExitsNonzero pins the other half of the fix: stop against nothing must
 // not exit 0 silently. It returns a non-zero exit (errSilent) rather than pretending success.
-func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
+func TestServerStopNoServerExitsNonzero(t *testing.T) {
 	addr := "unix://" + proc.SockDir() + "/magus-absent-test.sock"
 	err := serverStop(context.Background(), []string{"--socket", addr})
 	require.Error(t, err, "stop against a dead socket must report failure")
@@ -73,7 +73,7 @@ func privateSockDir(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("XDG_RUNTIME_DIR", dir)
-	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+	t.Setenv("MAGUS_PROC_SOCKET", "")
 }
 
 // TestEnsureBrokerAdoptsALiveOne pins the idempotent half of the auto-start: a run uses
@@ -155,8 +155,8 @@ func TestAnnounceBrokerSaysWhatItLeftBehind(t *testing.T) {
 func TestServerChildArgsDropsStart(t *testing.T) {
 	assert.Equal(t, []string{"server", "--foreground"}, serverChildArgs([]string{"server", "start"}))
 	assert.Equal(t,
-		[]string{"--daemon-address", "unix:///tmp/m.sock", "server", "--foreground", "-v"},
-		serverChildArgs([]string{"--daemon-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
+		[]string{"--server-address", "unix:///tmp/m.sock", "server", "--foreground", "-v"},
+		serverChildArgs([]string{"--server-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
 }
 
 func TestIsServerRun(t *testing.T) {
@@ -175,7 +175,7 @@ func TestIsServerRun(t *testing.T) {
 // ended hours ago and judging an unstamped run to be a nested magus that lost its
 // ancestry. The same rule submitJob already applies to a job's context.
 func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/parent.sock")
+	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/parent.sock")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_KEEP_ME", "yes")
@@ -186,7 +186,7 @@ func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
 			got[name] = value
 		}
 	}
-	assert.NotContains(t, got, "MAGUS_DAEMON_SOCKET", "a child inheriting it binds no socket of its own")
+	assert.NotContains(t, got, "MAGUS_PROC_SOCKET", "a child inheriting it binds no socket of its own")
 	assert.NotContains(t, got, "MAGUS_INVOCATION_ANCESTORS", "a background process is nobody's descendant")
 	assert.NotContains(t, got, "MAGUS_LEVEL", "nor is it nested inside the run that happened to start it")
 	assert.Equal(t, "yes", got["MAGUS_KEEP_ME"], "everything else is inherited as before")
@@ -264,18 +264,18 @@ func TestConsoleURLsDegradeToEmpty(t *testing.T) {
 
 // The message exists because "already running" answered a question nobody asked. A second
 // worktree's `server start` returns 0 having loaded nothing from that tree, and the console then
-// shows the tree the daemon was started in, which reads as success.
+// shows the tree the server was started in, which reads as success.
 func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
 	st := &proc.StatusReply{Workspaces: []proc.Workspace{
 		{Root: "/repo/worktrees/b"},
 		{Root: "/repo"},
 	}}
 
-	// Sorted, so two runs of the same daemon do not print the list two ways.
+	// Sorted, so two runs of the same server do not print the list two ways.
 	assert.Equal(t, ", serving /repo, /repo/worktrees/b", servingSuffix(st))
 
-	// A daemon that has loaded nothing yet says nothing rather than "serving " with an empty
-	// list, which would read as a daemon that is serving something unnameable.
+	// A server that has loaded nothing yet says nothing rather than "serving " with an empty
+	// list, which would read as a server that is serving something unnameable.
 	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
 }
 
@@ -391,16 +391,16 @@ func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
 }
 
 // TestDetachedChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits
-// MAGUS_DAEMON_SOCKET decides it is already adopted, binds no socket of its own, and then
+// MAGUS_PROC_SOCKET decides it is already adopted, binds no socket of its own, and then
 // reports the parent's, leaving a server `server stop` cannot find.
 func TestDetachedChildEnvDropsTheInheritedSocket(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", "/tmp/magus-parent.sock")
+	t.Setenv("MAGUS_PROC_SOCKET", "/tmp/magus-parent.sock")
 	t.Setenv("MAGUS_KEEP_ME", "1")
 
 	env := detachedChildEnv()
 
 	for _, kv := range env {
-		assert.False(t, strings.HasPrefix(kv, "MAGUS_DAEMON_SOCKET="), "child inherited %q", kv)
+		assert.False(t, strings.HasPrefix(kv, "MAGUS_PROC_SOCKET="), "child inherited %q", kv)
 	}
 	assert.Contains(t, env, "MAGUS_KEEP_ME=1", "the scrub must drop one variable, not the environment")
 }

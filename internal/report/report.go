@@ -227,7 +227,7 @@ type RunRemote = cache.RemoteTally
 // run.summary with dry set closes it.
 type RunDry struct{}
 
-// RunDetach is where an invocation handed to the daemon with --detach stands. State is
+// RunDetach is where an invocation handed to the server with --detach stands. State is
 // "coalesced" (an identical one was already running, so none was queued), "queued"
 // (handed over, not waited on), "running" (handed over and waited on), "unwatched"
 // (the wait stopped; the run continues), "passed" or "failed".

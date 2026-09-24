@@ -76,22 +76,22 @@ and a tree with no loadable magus binary cannot regenerate at all - build one
 first (see "Which magus binary" in CLAUDE.md) or regenerate from a tree that
 has one.
 
-<!-- rule: the-daemon-is-one-process-many-runs; added: 2026-08-11; origin: agent, unreviewed;
+<!-- rule: the-server-is-one-process-many-runs; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commits c5cfc0c33, bdc077d33, dce52e193, 985cb26f8;
      retire-when: package-global mutable state is gone from the run path, or a linter enforces its absence -->
 ## Package-global state outlives the run that wrote it
 
-magus began as one process per run and grew a daemon. Code written under the old
+magus began as one process per run and grew a server. Code written under the old
 assumption is still here, and it is the single most productive place to look for
 real bugs. Every one of these was live:
 
 - A readiness probe memo keyed by tool cached a `context.Canceled` FOREVER, so one
-  Ctrl-C wedged that op for the daemon's life.
+  Ctrl-C wedged that op for the server's life.
 - Adopted runs bound flags into the process-global `globalCfg`, so one client's
   `--dry-run` silently turned a later client's run into a dry run.
 - The warm knowledge graph built adjacency indices lazily on the READ path while
   being shared across concurrent requests - a concurrent map write, which is an
-  unrecoverable Go fatal that kills the daemon, not a recoverable panic.
+  unrecoverable Go fatal that kills the server, not a recoverable panic.
 - Client RPCs used ctx only for `Dial`; the blocking read ignored it entirely.
 
 When you see a package-level `var` cache, memo, or `sync.Once` on the run path,

@@ -1,4 +1,4 @@
-// live.ts - live streaming (#port=<port>&token=, or the daemon-origin/shared console). A run started
+// live.ts - live streaming (#port=<port>&token=, or the server-origin/shared console). A run started
 // with `--open` opens and streams to to an ephemeral 127.0.0.1 SSE server. The viewer connects (fetch-based
 // SSE + bearer token, mirroring the graph explorer's live client), decodes each frame as a protobuf
 // Event, appends it, re-renders on a frame tick, and auto-scrolls unless the reader pins the view with
@@ -7,7 +7,7 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { EventSchema, Kind, Status } from "@wire/viewer/v1alpha1/viewer_pb";
-import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, surfaceLink } from "../../lib/daemon";
+import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, surfaceLink } from "../../lib/server";
 import { notify, matchAuthorMarker, undeclaredSeedNotice } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
@@ -33,11 +33,11 @@ const LIVE_BUFFER_MAX = 5000;
 const liveFrame = new FrameScheduler();
 
 // The host of the current live stream, stashed so a FAIL notification can deep-link back to the failing
-// ref. A resolved daemon host (loopback, or the LAN-share same-origin host), or null before any
+// ref. A resolved server host (loopback, or the LAN-share same-origin host), or null before any
 // live connect.
 let liveNotifyHost: string | null = null;
 
-// connectLive attaches to a resolved daemon host (from daemonAttach - loopback, or the shared/daemon-
+// connectLive attaches to a resolved server host (from serverAttach - loopback, or the shared/server-
 // origin console), never a raw fragment string.
 export function connectLive(host: string, params: ViewerParams): void {
   liveNotifyHost = host;
@@ -186,7 +186,7 @@ export function setLiveStatus(linkState: string): void {
   // the log viewer reads the same as its sibling apps. A live stream is "connected" (green) with the
   // event count; a finished stream is "done" (still green - it completed cleanly); connecting/
   // disconnected map to those states. A statically loaded log never calls this, so the dot stays at
-  // its default "not connected", which is accurate (no live daemon link).
+  // its default "not connected", which is accurate (no live server link).
   let connection: "connected" | "connecting" | "disconnected" = "disconnected";
   let label = "disconnected";
   if (linkState === "streaming") {

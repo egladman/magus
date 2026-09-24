@@ -6,7 +6,7 @@
 //  1. A command whose PURPOSE is the network may fetch. `magus self refresh` is a
 //     person asking magus to go and get something.
 //  2. Every other command reads the local cache and never fetches. Not a build,
-//     not `describe tools`, not daemon start, not a console page load. Ever.
+//     not `describe tools`, not server start, not a console page load. Ever.
 //  3. Staleness is computed locally from the signed generated_at, never from when
 //     the fetch happened. Age measured from the fetch means a frozen endpoint reads
 //     as permanently fresh, and a cron that quietly stopped is the likely failure

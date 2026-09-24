@@ -59,7 +59,7 @@ green, so a CI workflow that fans shards out from the plan starts none.
 : With --graph: cap displayed depth (0 = unlimited)
 
 **--detach**
-: Hand the run to the daemon and return immediately; follow it with magus status --watch
+: Hand the run to the server and return immediately; follow it with magus status --watch
 
 **--detail**
 : With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to

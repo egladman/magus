@@ -19,7 +19,7 @@
 // selected" bulk action is a client-side loop of Delete, not a batch RPC. The cursor
 // snapshot ("where did I leave off") is a singleton, read and overwritten on its own.
 //
-// Access policy: every RPC requires the daemon bearer token, mounted on loopback behind
+// Access policy: every RPC requires the server bearer token, mounted on loopback behind
 // the same guard as the other cli-token console services, and NEVER on the LAN share
 // listener - memory is the operator's own working notes.
 

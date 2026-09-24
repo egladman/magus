@@ -5,7 +5,7 @@
 // Package magus.insight.v1alpha1 is the versioned wire contract for magus insight: where a
 // codebase's attention and risk concentrate. Five lenses ride one message - four read VCS
 // history (hotspots, affinity, ownership, trend) from a single bounded git-log scan the
-// daemon caches, and volatility reads run-outcome history instead. They travel together
+// server caches, and volatility reads run-outcome history instead. They travel together
 // because the dashboard renders them as one board; splitting them into five RPCs would cost
 // five round trips for one paint and would let the four git lenses disagree about the window
 // they were scanned over.

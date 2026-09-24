@@ -26,7 +26,7 @@ import (
 )
 
 // ProcessStdio hands a run the standard streams of the process it runs in. Only a caller
-// running the invocation in its own process should pass it: a daemon serving many
+// running the invocation in its own process should pass it: a server serving many
 // invocations has no stdin that belongs to any one of them.
 //
 // With it, a run whose stdin is a pipe written by another magus process (proven from the

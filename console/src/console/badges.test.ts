@@ -1,4 +1,4 @@
-// badges.test.ts - the cap, and how a rail count handles a daemon that will not answer. Same shape as
+// badges.test.ts - the cap, and how a rail count handles a server that will not answer. Same shape as
 // pulse.test.ts, and for the same reason: the two failure classes have opposite correct responses.
 
 import assert from "node:assert/strict";
@@ -32,9 +32,9 @@ test("zero is a reading, not an absence", async () => {
   assert.equal(await fetchDiffCount(HOST, async () => 0), 0);
 });
 
-// A daemon without the diff route cannot grow one while it runs, so asking again every 15s for the
-// life of the page is the console-spam lib/daemon.ts's readiness probe goes out of its way to avoid.
-test("a daemon with no diff route is not asked twice", async () => {
+// A server without the diff route cannot grow one while it runs, so asking again every 15s for the
+// life of the page is the console-spam lib/server.ts's readiness probe goes out of its way to avoid.
+test("a server with no diff route is not asked twice", async () => {
   let calls = 0;
   const routeless = async (): Promise<never> => {
     calls++;
@@ -45,7 +45,7 @@ test("a daemon with no diff route is not asked twice", async () => {
   assert.equal(calls, 1, "the second poll should never have left the browser");
 });
 
-// The opposite case, which must NOT latch: a daemon coming back is normal, and one dropped request
+// The opposite case, which must NOT latch: a server coming back is normal, and one dropped request
 // would otherwise blank the badge for the rest of the session.
 test("an outage keeps being retried, and recovers", async () => {
   let calls = 0;
@@ -59,7 +59,7 @@ test("an outage keeps being retried, and recovers", async () => {
   assert.equal(await fetchDiffCount(HOST, async () => 4), 4);
 });
 
-test("the latch does not spread to another daemon", async () => {
+test("the latch does not spread to another server", async () => {
   await fetchDiffCount(HOST, async () => {
     throw new RoutelessError("404");
   });

@@ -144,7 +144,7 @@ func (c *CountingReader) Read(p []byte) (int, error) {
 
 // remoteStats totals what ONE RUN did with the remote tier.
 //
-// Run-scoped and carried on the context, not held on Cache: the daemon reuses one
+// Run-scoped and carried on the context, not held on Cache: the server reuses one
 // Cache per workspace across runs and can serve two adopted runs at once, so fields on
 // Cache would report the process's history and interleave concurrent runs. Same shape
 // and nil tolerance as httpx.Recorder, so uninstrumented paths need no guard.

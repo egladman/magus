@@ -1,4 +1,4 @@
-// connectPrompt-dom.test.ts - the one prompt a surface shows while it has no daemon, and the
+// connectPrompt-dom.test.ts - the one prompt a surface shows while it has no server, and the
 // behavior around it that is easy to get wrong.
 //
 // Pinned here: every way forward is a control the reader presses, the docs link is present
@@ -10,15 +10,15 @@ import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
-  DAEMON_GUIDE_URL,
-  REQUEST_DAEMON_SETTINGS_EVENT,
+  SERVER_GUIDE_URL,
+  REQUEST_SERVER_SETTINGS_EVENT,
   renderConnectPrompt,
   renderEmptyMessage,
   type EmptyStateSlots,
 } from "./connectPrompt";
 import { buildLauncher, syncLauncherConnectPrompt } from "./home";
 import { activate as activateActivity } from "./activity/main";
-import { isUnreachable } from "../lib/daemon";
+import { isUnreachable } from "../lib/server";
 import {
   DEFAULT_HOST_EVENT,
   getDefaultHost,
@@ -51,30 +51,30 @@ describe("renderConnectPrompt", () => {
   test("with no address it offers to set one, the guide, and the demo", () => {
     const slots = newSlots();
     renderConnectPrompt(slots, { connection: "none" }, { purpose: "Purpose line." });
-    assert.equal(slots.title.textContent, "No daemon connected");
+    assert.equal(slots.title.textContent, "No server connected");
     assert.equal(slots.message.textContent, "Purpose line.");
-    assert.deepEqual(controlLabels(slots), ["Set daemon address", "Setup guide"]);
-    assert.equal(slots.actions.querySelector<HTMLAnchorElement>("a")?.href, DAEMON_GUIDE_URL);
+    assert.deepEqual(controlLabels(slots), ["Set server address", "Setup guide"]);
+    assert.equal(slots.actions.querySelector<HTMLAnchorElement>("a")?.href, SERVER_GUIDE_URL);
     assert.match(slots.actions.textContent ?? "", /Try the demo/);
   });
 
-  test("Set daemon address asks the shell to open the field", () => {
+  test("Set server address asks the shell to open the field", () => {
     const slots = newSlots();
     renderConnectPrompt(slots, { connection: "none" });
     let requests = 0;
     const onRequest = (): void => {
       requests++;
     };
-    document.addEventListener(REQUEST_DAEMON_SETTINGS_EVENT, onRequest);
+    document.addEventListener(REQUEST_SERVER_SETTINGS_EVENT, onRequest);
     try {
       slots.actions.querySelector<HTMLElement>(".pf-m-primary")?.click();
     } finally {
-      document.removeEventListener(REQUEST_DAEMON_SETTINGS_EVENT, onRequest);
+      document.removeEventListener(REQUEST_SERVER_SETTINGS_EVENT, onRequest);
     }
     assert.equal(requests, 1);
   });
 
-  test("a disconnected daemon names the address and retries only when pressed", () => {
+  test("a disconnected server names the address and retries only when pressed", () => {
     const slots = newSlots();
     let retries = 0;
     renderConnectPrompt(
@@ -82,7 +82,7 @@ describe("renderConnectPrompt", () => {
       { connection: "disconnected", host: HOST, reason: "refused" },
       { onRetry: () => retries++ },
     );
-    assert.equal(slots.title.textContent, "Could not reach the daemon");
+    assert.equal(slots.title.textContent, "Could not reach the server");
     assert.equal(slots.message.textContent, "The console could not reach " + HOST + " (refused).");
     assert.deepEqual(controlLabels(slots), ["Retry", "Change address", "Setup guide"]);
     assert.equal(retries, 0);
@@ -118,13 +118,13 @@ describe("renderConnectPrompt", () => {
     assert.equal(slots.title.textContent, "No activity yet");
     assert.equal(slots.actions.childElementCount, 0);
     renderConnectPrompt(slots, { connection: "none" });
-    assert.equal(slots.title.textContent, "No daemon connected");
+    assert.equal(slots.title.textContent, "No server connected");
     assert.notEqual(slots.actions.childElementCount, 0);
   });
 });
 
 describe("isUnreachable", () => {
-  test("separates no response from an error the daemon sent", () => {
+  test("separates no response from an error the server sent", () => {
     assert.equal(isUnreachable(new TypeError("Failed to fetch")), true);
     assert.equal(isUnreachable(ConnectError.from(new TypeError("Failed to fetch"))), true);
     assert.equal(isUnreachable(new ConnectError("deadline", Code.DeadlineExceeded)), true);
@@ -157,7 +157,7 @@ describe("the default host", () => {
 });
 
 describe("syncLauncherConnectPrompt", () => {
-  test("replaces the ways while no daemon answers, and gives them back when one does", () => {
+  test("replaces the ways while no server answers, and gives them back when one does", () => {
     const root = buildLauncher([], () => {});
     const connect = root.querySelector<HTMLElement>("[data-launcher-connect]");
     const ways = root.querySelector<HTMLElement>("[data-launcher-ways]");
@@ -167,7 +167,7 @@ describe("syncLauncherConnectPrompt", () => {
     syncLauncherConnectPrompt(root, { connection: "none" });
     assert.equal(connect.hidden, false);
     assert.equal(ways.hidden, true);
-    assert.match(connect.textContent ?? "", /No daemon connected/);
+    assert.match(connect.textContent ?? "", /No server connected/);
 
     syncLauncherConnectPrompt(root, null);
     assert.equal(connect.hidden, true);
@@ -200,18 +200,18 @@ describe("Activity", () => {
     (host.querySelector(".pf-v6-c-empty-state__title-text")?.textContent ?? "").trim();
 
   // Activity once read only the host the dashboard remembered, so an address set in Settings left
-  // it saying "No daemon connected" until the dashboard had been opened.
+  // it saying "No server connected" until the dashboard had been opened.
   test("reads the Settings address, and follows it when it changes", async () => {
     globalThis.fetch = (() => Promise.reject(new TypeError("refused"))) as typeof fetch;
     setDefaultHost(HOST);
     const host = mount();
     await settle();
-    assert.equal(title(host), "Could not reach the daemon");
+    assert.equal(title(host), "Could not reach the server");
     assert.ok((host.textContent ?? "").includes(HOST));
 
     setDefaultHost("");
     await settle();
-    assert.equal(title(host), "No daemon connected");
+    assert.equal(title(host), "No server connected");
   });
 
   // The slow address answering last must not repaint the page for an address nobody is on any more.

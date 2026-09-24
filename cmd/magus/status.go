@@ -190,14 +190,14 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) types
 		Build: types.BuildStatus{
 			SelfUpdate: selfUpdateCompiled,
 		},
-		// Held locks are read from the workspace cache, not the daemon: a lock is taken by
+		// Held locks are read from the workspace cache, not the server: a lock is taken by
 		// whichever process is mutating a project, which is usually a plain `magus run`
-		// with no daemon involved at all. Populated before any proc-socket early return
+		// with no server involved at all. Populated before any proc-socket early return
 		// for the same reason.
 		Locks:     loadHeldLocks(ctx),
 		PipeWaits: loadPipeWaits(ctx),
 		// MCP endpoint health is probed independently of the proc socket below: the
-		// endpoint an agent host connects to can be down while the proc daemon is up, or
+		// endpoint an agent host connects to can be down while the proc server is up, or
 		// vice versa, so it is set before any early return on a proc-socket error.
 		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
 	}
@@ -279,8 +279,8 @@ func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 }
 
 // loadHeldLocks reads the workspace's held locks. Like the symbol-index probe above
-// it is workspace-local and daemon-independent: a lock is taken by whichever process
-// mutates a project, which is usually a plain `magus run` with no daemon at all.
+// it is workspace-local and server-independent: a lock is taken by whichever process
+// mutates a project, which is usually a plain `magus run` with no server at all.
 func loadHeldLocks(ctx context.Context) []types.StatusLock {
 	// No Close here, for the same reason as the probe above: nothing closes the
 	// singleton.
@@ -620,8 +620,8 @@ func printPoolServers(w io.Writer, pools []types.StatusOutput) {
 
 // printMCPEndpointStatus renders the runtime health of the MCP endpoint agent hosts
 // connect to. This is the answer to "are my magus tools actually reachable", separate
-// from the daemon/pool block above (which reports the proc socket). Omitted only when
-// the snapshot carries no MCP section (e.g. a daemon's own snapshot).
+// from the pool block above (which reports the proc socket). Omitted only when
+// the snapshot carries no MCP section (e.g. a server's own snapshot).
 func printMCPEndpointStatus(w io.Writer, m *types.MCPEndpointStatus) {
 	if m == nil {
 		return
@@ -744,30 +744,29 @@ const compactRunningBudget = 32
 // static), oldest running targets first so the long-running work stays visible.
 // now is the reference time for per-target durations (parameterised for tests).
 func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
-	parts := []string{"broker " + compactProcess(r.Broker != nil)}
-	parts = append(parts, "server "+compactProcess(r.Server != nil))
+	parts := []string{compactBrokerToken(r.Broker, r.BrokerPolicy), compactServerToken(r.Server)}
 	if r.Pool == nil {
 		fmt.Fprintln(w, strings.Join(parts, " · "))
 		return
 	}
 	p := r.Pool
-	parts = append(parts, "pool")
-
+	pool := "pool idle"
 	if p.Capacity > 0 || p.Running > 0 {
 		state := "running"
 		if p.Running == 0 && len(p.RunningTargets) == 0 {
 			state = "idle"
 		}
-		parts = append(parts, fmt.Sprintf("%d/%d %s", p.Running, p.Capacity, state))
+		pool = fmt.Sprintf("pool %d/%d %s", p.Running, p.Capacity, state)
 	}
 	if p.Queued > 0 {
-		parts = append(parts, fmt.Sprintf("+%d queued", p.Queued))
+		pool += fmt.Sprintf(" +%d queued", p.Queued)
 	}
+	parts = append(parts, pool)
 
 	parts = append(parts, compactRunningParts(p.RunningTargets, now)...)
 
 	if n := len(p.Workspaces); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d ws", n))
+		parts = append(parts, fmt.Sprintf("%d workspace%s", n, pluralSuffix(n, "", "s")))
 	}
 	if tok := compactMCPToken(r.MCPEndpoint); tok != "" {
 		parts = append(parts, tok)
@@ -780,11 +779,27 @@ func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
 	fmt.Fprintln(w, strings.Join(parts, " · "))
 }
 
-func compactProcess(up bool) string {
-	if up {
-		return "up"
+// compactBrokerToken says what a missing broker means rather than one word for every
+// absence: "broker off" is the policy, "no broker" is a broker a run would start. A
+// running one shows the slots it has seated when it measured the host.
+func compactBrokerToken(b *types.StatusBroker, policy types.BrokerPolicy) string {
+	switch {
+	case b == nil && policy.Resolved() == types.BrokerOff:
+		return "broker off"
+	case b == nil:
+		return "no broker"
+	case b.Capacity.BudgetSlots > 0:
+		return fmt.Sprintf("broker %d/%d slots", b.Capacity.HeldSlots, b.Capacity.BudgetSlots)
+	default:
+		return "broker up"
 	}
-	return "off"
+}
+
+func compactServerToken(s *types.StatusServer) string {
+	if s == nil {
+		return "no server"
+	}
+	return "server up"
 }
 
 func compactServiceToken(services []types.StatusService) string {
@@ -875,13 +890,6 @@ func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now ti
 	return truncate(label, compactRunningBudget)
 }
 
-func resolveStatusSocket(ctx context.Context, explicit string) (string, error) {
-	if addr := pinnedStatusSocket(explicit); addr != "" {
-		return addr, nil
-	}
-	return proc.DiscoverSocket(ctx)
-}
-
 // resolveStatusSockets resolves every proc server status reports on. A pinned socket
 // narrows to that one; otherwise every live server is reported, because each is a separate
 // pool and "which one did you mean" is not an answer to "how many slots are free".
@@ -898,7 +906,7 @@ func pinnedStatusSocket(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	return os.Getenv("MAGUS_DAEMON_SOCKET")
+	return os.Getenv(proc.SocketEnv)
 }
 
 type leafEntry struct {

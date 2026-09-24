@@ -66,7 +66,7 @@ func as(grant types.Grant) context.Context {
 	return trail.ContextWithCredential(context.Background(), types.Credential{Class: types.ClassStored, ID: "0badf00d", Grant: grant})
 }
 
-// operator is the context the daemon's guard gives the operator token.
+// operator is the context the server's guard gives the operator token.
 func operator() context.Context { return as(types.GrantOperator) }
 
 func store(t *testing.T) *auth.Store {
@@ -317,7 +317,7 @@ func TestCreateTokenRefusesAnExpiryItCannotHonor(t *testing.T) {
 	assert.WithinDuration(t, asked, resp.Msg.GetToken().GetExpireTime().AsTime(), time.Second)
 }
 
-// A disk that refuses the write is the daemon's fault, not the caller's: Internal, never
+// A disk that refuses the write is the server's fault, not the caller's: Internal, never
 // InvalidArgument.
 func TestCreateTokenDiskFailureIsInternal(t *testing.T) {
 	s := newIsolatedService(t, nil)
@@ -347,7 +347,7 @@ func TestCreateTokenMintsTheGrantItNames(t *testing.T) {
 	}
 }
 
-// Mounted behind the daemon's own guard (auth.Verify, tokens=write), a connector, console or
+// Mounted behind the server's own guard (auth.Verify, tokens=write), a connector, console or
 // viewer token is refused with 403 on every RPC and the operator is admitted.
 func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	s := newIsolatedService(t, nil)

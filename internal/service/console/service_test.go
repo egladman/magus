@@ -87,11 +87,11 @@ func TestServiceStatusSnapshotSeam(t *testing.T) {
 	assert.Equal(t, want, svc.StatusSnapshot(context.Background()))
 }
 
-// TestServiceStatusSnapshotPoolError checks a failed daemon query surfaces as PoolError while
+// TestServiceStatusSnapshotPoolError checks a failed server query surfaces as PoolError while
 // the static base fields still ride through.
 func TestServiceStatusSnapshotPoolError(t *testing.T) {
 	base := types.StatusBase{Cache: types.CacheStatus{SizeMB: 42}}
-	svc := NewService(nil, config.Config{}, base, "1.2.3", WithDaemonSocket("127.0.0.1:1"))
+	svc := NewService(nil, config.Config{}, base, "1.2.3", WithServerSocket("127.0.0.1:1"))
 	got := svc.StatusSnapshot(context.Background())
 	assert.Nil(t, got.Pool)
 	assert.NotEmpty(t, got.PoolError)
@@ -105,17 +105,17 @@ func TestServiceVersion(t *testing.T) {
 }
 
 // TestResolveStatusAddr checks the address precedence: config address first, then the injected
-// daemon socket seam.
+// server socket seam.
 func TestResolveStatusAddr(t *testing.T) {
 	// Config address wins outright.
-	svc := NewService(nil, config.Config{Daemon: config.Daemon{Address: "unix:///cfg.sock"}},
-		types.StatusBase{}, "1.0.0", WithDaemonSocket("unix:///seam.sock"))
+	svc := NewService(nil, config.Config{Server: config.Server{Address: "unix:///cfg.sock"}},
+		types.StatusBase{}, "1.0.0", WithServerSocket("unix:///seam.sock"))
 	addr, err := svc.resolveStatusAddr(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "unix:///cfg.sock", addr)
 
-	// No config address: fall back to the injected daemon socket.
-	svc = NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0", WithDaemonSocket("unix:///seam.sock"))
+	// No config address: fall back to the injected server socket.
+	svc = NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0", WithServerSocket("unix:///seam.sock"))
 	addr, err = svc.resolveStatusAddr(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "unix:///seam.sock", addr)

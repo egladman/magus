@@ -1,5 +1,5 @@
 // transport.ts - the two live feeds, mapped into the store. Nothing here touches the
-// DOM: it owns the daemon connections and writes view-model into the store; tiles
+// DOM: it owns the server connections and writes view-model into the store; tiles
 // subscribe. Two feeds ride alongside each other, both locked to the validated
 // loopback host and both bearing the shared token:
 //
@@ -23,11 +23,11 @@ import { InsightService } from "@wire/insight/v1alpha1/insight_pb";
 import { ToolService, Verdict } from "@wire/tool/v1alpha1/tool_pb";
 import {
   authHeaders,
-  createDaemonTransport,
+  createServerTransport,
   fetchSSE,
   getLiveToken,
   type SSEHeaders,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { getPollMs } from "../../lib/settings";
 import type { Store } from "../../lib/store";
 import {
@@ -48,7 +48,7 @@ const RECONNECT_MS = 3000;
 // The activity poll's cadence, and how many events a page asks for. Independent of the operator's
 // refresh-rate setting: the agent tile reports a five-minute window, so a slower poll only delays
 // when a new call shows up, and a faster one buys nothing. The page has to be deep enough to cover
-// that window on a busy daemon - an agent mid-task easily produces a few hundred tool calls.
+// that window on a busy server - an agent mid-task easily produces a few hundred tool calls.
 const ACTIVITY_POLL_MS = 4000;
 const ACTIVITY_PAGE = 500;
 // Insight is an on-demand unary read (magus.insight.v1alpha1.InsightService.GetInsight), server-side
@@ -100,7 +100,7 @@ export class DashboardTransport {
 
   // stopped is a permanent give-up latch. Once set (by stop()), no feed reschedules:
   // the status reconnect, the metrics retry, and the insight poll all bail while it is
-  // true, so a never-connected resume that gives up stops hammering an absent daemon
+  // true, so a never-connected resume that gives up stops hammering an absent server
   // entirely. connect() clears it before starting a fresh set of feeds.
   private stopped = false;
   // A hidden dashboard retains its latest state but does not retain a live connection or poll
@@ -145,7 +145,7 @@ export class DashboardTransport {
   // stop is the permanent give-up: it tears down all three feeds (status SSE, metrics
   // stream, and the insight poll, each with its retry timer) and latches `stopped` so
   // nothing reschedules. Used when a never-connected resume abandons the host, so NO
-  // request loop runs against a daemon that isn't there. connect() clears the latch.
+  // request loop runs against a server that isn't there. connect() clears the latch.
   stop(): void {
     this.stopped = true;
     this.host = null;
@@ -216,7 +216,7 @@ export class DashboardTransport {
       // Backfill's OTel counter; tag it so cacheRate skips the crossover diff.
       cacheSrc: "status",
       // The streamed frame does not carry observing-since - it rides the one-shot envelope -
-      // so reuse the value fetched at connect. A daemon restart drops this stream, and the
+      // so reuse the value fetched at connect. A server restart drops this stream, and the
       // reconnect re-fetches, so the value cannot outlive the process it identifies.
       generation: this.observingSinceMs,
     });
@@ -226,7 +226,7 @@ export class DashboardTransport {
   // ---- metrics stream (ConnectRPC) -----------------------------------------
 
   private makeMetricsClient(host: string): Client<typeof MetricsService> {
-    return createClient(MetricsService, createDaemonTransport(host, getLiveToken()));
+    return createClient(MetricsService, createServerTransport(host, getLiveToken()));
   }
 
   private startMetrics(host: string): void {
@@ -255,7 +255,7 @@ export class DashboardTransport {
       }
       if (!signal.aborted) this.scheduleMetricsRetry(host); // stream ended cleanly: reconnect
     } catch {
-      // reported: by the daemon transport's failure interceptor
+      // reported: by the server transport's failure interceptor
       if (!signal.aborted) this.scheduleMetricsRetry(host);
     }
   }
@@ -301,10 +301,10 @@ export class DashboardTransport {
     const host = this.activityHost;
     if (!host) return;
     try {
-      const client = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
+      const client = createClient(ActivityService, createServerTransport(host, getLiveToken()));
       const resp = await client.listActivityEvents({
         pageSize: ACTIVITY_PAGE,
-        // Only the two kinds the tile reads. Filtering server-side keeps a busy daemon's job and
+        // Only the two kinds the tile reads. Filtering server-side keeps a busy server's job and
         // memory events from crowding the page and pushing agent events off the end of it.
         filter: { kinds: [Kind.AGENT_COMMAND, Kind.MCP_TOOL_CALL] },
       });
@@ -319,14 +319,14 @@ export class DashboardTransport {
       }));
       this.store.set({ agents: mapAgentActivity(events, Date.now()) });
     } catch {
-      // reported: by the daemon transport. Keep what is on screen; the next poll retries.
+      // reported: by the server transport. Keep what is on screen; the next poll retries.
     }
   }
 
   // ---- toolchain (on-demand ConnectRPC poll) -------------------------------
   //
   // Polled on the same modest cadence as insight, and for a stronger reason: behind this
-  // RPC the daemon FORKS a version probe per declared tool, cached there behind a TTL. A
+  // RPC the server FORKS a version probe per declared tool, cached there behind a TTL. A
   // fast poll would turn a left-open dashboard into a fork loop, so the tile shows the
   // probe's age instead of pretending the reading is live.
 
@@ -346,7 +346,7 @@ export class DashboardTransport {
   }
 
   // refreshTools forces an out-of-band refetch (the section's refresh button). It does not
-  // bypass the daemon's probe TTL, so pressing it repeatedly costs nothing.
+  // bypass the server's probe TTL, so pressing it repeatedly costs nothing.
   refreshTools(): void {
     if (this.toolsHost) void this.fetchTools();
   }
@@ -356,7 +356,7 @@ export class DashboardTransport {
     const host = this.toolsHost;
     if (!host) return;
     try {
-      const client = createClient(ToolService, createDaemonTransport(host, getLiveToken()));
+      const client = createClient(ToolService, createServerTransport(host, getLiveToken()));
       const resp = await client.listTools({});
       const rows: ToolRowView[] = [];
       for (const proj of resp.projects) {
@@ -380,14 +380,14 @@ export class DashboardTransport {
       const violations = rows.filter((r) => r.code !== "").length;
       this.store.set({ tools: { rows, violations } });
     } catch {
-      // reported: by the daemon transport. Leave the prior view in place.
+      // reported: by the server transport. Leave the prior view in place.
     }
   }
 
   private startInsight(host: string): void {
     this.stopInsight();
     this.insightHost = host;
-    // Said HERE, not at construction: before a daemon is attached nothing is reading anything, and
+    // Said HERE, not at construction: before a server is attached nothing is reading anything, and
     // seeding this in the initial state made six tiles claim a read was in progress on a dashboard
     // that had never connected.
     this.store.set({ insightNote: "Reading history..." });
@@ -430,7 +430,7 @@ export class DashboardTransport {
     const ctrl = new AbortController();
     this.insightAbort = ctrl;
     try {
-      const client = createClient(InsightService, createDaemonTransport(host, getLiveToken()));
+      const client = createClient(InsightService, createServerTransport(host, getLiveToken()));
       const resp = await client.getInsight({}, { signal: ctrl.signal });
       // The SUCCESS path needs the same guard as the catch. A superseded poll can still resolve if
       // its body was already buffered when the next tick aborted it, and writing here would both
@@ -442,7 +442,7 @@ export class DashboardTransport {
         insightUpdatedAt: Date.now(),
       });
     } catch (e) {
-      // A network blip or a daemon with no workspace (CodeUnavailable): leave the prior insight in
+      // A network blip or a server with no workspace (CodeUnavailable): leave the prior insight in
       // place; the poll retries. But RECORD it, because on the first connect there is no prior
       // insight to leave and the tiles would otherwise report an empty window as a measured result.
       //
@@ -451,7 +451,7 @@ export class DashboardTransport {
       // shape for it (a fetch abort and a Connect Canceled do not look alike).
       if (ctrl.signal.aborted) return;
       const msg = e instanceof Error ? e.message : String(e);
-      this.store.set({ insightNote: "The daemon did not answer (" + msg + ")." });
+      this.store.set({ insightNote: "The server did not answer (" + msg + ")." });
     } finally {
       // Releases the in-flight latch above. Guarded on identity so a poll that stopInsight already
       // superseded cannot clear a NEWER poll's controller on its way out.
@@ -459,7 +459,7 @@ export class DashboardTransport {
     }
   }
 
-  // One-shot fetch of the daemon's observing-since (when it began collecting the counters) and its
+  // One-shot fetch of the server's observing-since (when it began collecting the counters) and its
   // resolved config, read via the typed StatusService.GetStatus RPC. Both ride the one-shot response
   // envelope (not the streamed Status frame) because they are static per session. This replaced the
   // deprecated JSON GET /api/v1/status route. Best-effort: a failure just means no since-caption / config;
@@ -469,7 +469,7 @@ export class DashboardTransport {
 
   private async fetchObservingSince(host: string): Promise<void> {
     try {
-      const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+      const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
       const resp = await client.getStatus({});
       const ts = resp.observeStartTime;
       if (ts) {
@@ -486,7 +486,7 @@ export class DashboardTransport {
         });
       }
     } catch {
-      // reported: by the daemon transport. observingSince stays null; nothing depends on it.
+      // reported: by the server transport. observingSince stays null; nothing depends on it.
     }
   }
 

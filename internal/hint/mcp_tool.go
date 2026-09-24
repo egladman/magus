@@ -13,7 +13,7 @@ package hint
 // bytes are the agent's measured context cost (see magus.mcp.tool.output.size).
 
 // ToolName is a canonical MCP tool name, the "magus_"-prefixed identifier the
-// daemon registers. Declaring each once here makes a tool rename a compile error
+// server registers. Declaring each once here makes a tool rename a compile error
 // at every cross-link site rather than silent drift: the MCP Registry entries
 // (internal/handler/mcp) bind their Name to these constants, the hint maps below
 // build their keys and the tool names embedded in hint text from them, and

@@ -114,12 +114,12 @@ func adapt(t spells.Driver) handlerFn {
 }
 
 // ToolNeed is what every MCP tool requires of the caller's credential, over either transport.
-// The daemon holds its /mcp route to the same Need, so a credential the route admits is never
+// The server holds its /mcp route to the same Need, so a credential the route admits is never
 // refused by a tool behind it.
 var ToolNeed = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
 
 // authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
-// The credential is the one on ctx: the daemon's bearer guard stamps the bearer it verified,
+// The credential is the one on ctx: the server's bearer guard stamps the bearer it verified,
 // and ServeStdio stamps types.CredentialStdio. A ctx carrying neither holds the zero
 // credential, which grants nothing.
 func authorize(fn handlerFn) handlerFn {
@@ -164,14 +164,14 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 	return mcplib.NewTool(d.Name, opts...)
 }
 
-// allToolDrivers constructs every MCP tool the daemon exposes. Each tool is a
+// allToolDrivers constructs every MCP tool the server exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
 func allToolDrivers(opts Options) []spells.Driver {
 	wsCfg := types.WorkspaceConfig{
 		CacheDir:    opts.Config.Cache.Dir,
 		Concurrency: opts.Config.Concurrency,
 	}
-	// A private job store only when the caller supplied none. The daemon supplies one
+	// A private job store only when the caller supplied none. The server supplies one
 	// so its two doors (this tool and the console's read route) share a mutex.
 	jobStore := opts.Jobs
 	if jobStore == nil {

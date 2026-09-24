@@ -1,9 +1,9 @@
-// Package maintenance is the daemon's built-in background maintenance scheduler: a low-key,
+// Package maintenance is the server's built-in background maintenance scheduler: a low-key,
 // idle-gated loop that runs the rotation and sync JOBS on their configured intervals when the
-// daemon is quiet. It submits through the same coalescing proc mechanism a manual trigger uses,
+// server is quiet. It submits through the same coalescing proc mechanism a manual trigger uses,
 // so a scheduled run and a manual one never double-run; and it reads "last run" from the activity
 // trail, so a manual trigger through any path (CLI or RPC) resets the countdown and the schedule
-// survives a daemon restart. The daemon (cmd/magus) owns the wiring and passes the runtime
+// survives a server restart. The server (cmd/magus) owns the wiring and passes the runtime
 // handles in via Options; the scheduling logic lives here.
 package maintenance
 
@@ -22,26 +22,26 @@ import (
 // checkInterval is how often the scheduler wakes to look for a due job. It is deliberately coarse
 // and unrelated to the per-job intervals (hours to days): the tick only decides WHEN to look, and
 // a job runs at most once per its configured interval regardless. Keeping it coarse is what makes
-// the scheduler low-key: a quiet daemon does a cheap idle check four times an hour, not a poll.
+// the scheduler low-key: a quiet server does a cheap idle check four times an hour, not a poll.
 const checkInterval = 15 * time.Minute
 
 // unusable bounds runDue's "this scheduler will never run anything" warning to one line per
-// process. Package-level because one daemon runs one scheduler.
+// process. Package-level because one server runs one scheduler.
 var unusable sync.Once
 
-// Options are the runtime handles the scheduler needs from the daemon wiring. Socket and Trail are
-// funcs because both are set during daemon startup and may not be ready when Start is called; the
+// Options are the runtime handles the scheduler needs from the server wiring. Socket and Trail are
+// funcs because both are set during server startup and may not be ready when Start is called; the
 // scheduler reads them at each tick.
 type Options struct {
 	Schedule config.Maintenance // per-job intervals; the only config the scheduler reads
-	Socket   func() string      // daemon proc socket address to submit to and query
+	Socket   func() string      // server proc socket address to submit to and query
 	Trail    func() string      // activity-trail base dir (where KIND_JOB runs are recorded)
 	Version  string             // adoption identity for submitted jobs
 }
 
-// scheduledJob is one job the daemon runs on its own: the worker argv to submit, the minimum
+// scheduledJob is one job the server runs on its own: the worker argv to submit, the minimum
 // interval since its last run, and the trail action string that identifies its runs (the
-// space-joined argv, matching how the daemon records a KIND_JOB event).
+// space-joined argv, matching how the server records a KIND_JOB event).
 type scheduledJob struct {
 	argv     []string
 	interval time.Duration
@@ -90,20 +90,20 @@ func buildSchedule(m config.Maintenance) []scheduledJob {
 	return out
 }
 
-// runDue submits every job whose interval has elapsed since its last run, but only when the daemon
-// is idle. It stays low-key: a busy or unreachable daemon does nothing and waits for the next
+// runDue submits every job whose interval has elapsed since its last run, but only when the server
+// is idle. It stays low-key: a busy or unreachable server does nothing and waits for the next
 // tick. Submits are best-effort (a job's own success is observed via the trail / Dashboard);
 // coalescing means a job already running or freshly submitted is never duplicated.
 func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	base, addr := opts.Trail(), opts.Socket()
 	if base == "" || addr == "" {
 		// Not "not up yet". Both are published during startup, so a tick that still finds
-		// one empty is a scheduler that will never run a job for the daemon's whole life,
+		// one empty is a scheduler that will never run a job for the server's whole life,
 		// and it used to reach that state in silence, which is how mcp.enabled: false came
 		// to disable every scheduled job with nothing said. Once, because the condition
 		// does not change and a line every quarter hour is a line people filter.
 		unusable.Do(func() {
-			slog.WarnContext(ctx, "maintenance: scheduler idle for the life of this daemon; no job will run",
+			slog.WarnContext(ctx, "maintenance: scheduler idle for the life of this server; no job will run",
 				slog.String("trail_base", base), slog.String("socket", addr))
 		})
 		return
@@ -122,7 +122,7 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 
 // isDue reports whether j should run now: true if it has never run within the retained trail, or
 // if at least its interval has elapsed since its last run (finish time = recorded start plus
-// duration). Pure over (base, now) so the schedule decision is testable without a live daemon.
+// duration). Pure over (base, now) so the schedule decision is testable without a live server.
 func isDue(base string, j scheduledJob, now time.Time) bool {
 	ev, ok := trail.LastRun(base, j.action)
 	if !ok {

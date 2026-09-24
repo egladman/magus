@@ -135,7 +135,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return usagef("magus affected: --preflight runs targets first; it does not apply to --graph, --stdin or ls")
 	}
 	if af.Detach {
-		return detachToDaemon(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
+		return detachToServer(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
 	}
 
 	if af.Step && af.Stdin {
@@ -363,12 +363,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if target == "ci" {
 		trigger = journal.TriggerCI
 	}
-	// The client's cwd (carried on ctx for an adopted affected run), not the daemon's
+	// The client's cwd (carried on ctx for an adopted affected run), not the server's
 	// process cwd, so the invocation's journal records where the user actually ran.
 	cwd := clientCwd(ctx)
 	liveBC, stopLive := beginLive(ctx, af.Open)
 	defer stopLive()
-	// An adopted affected run (dispatched by the daemon) also feeds the daemon's live-run
+	// An adopted affected run (dispatched by the server) also feeds the server's live-run
 	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable session facts ride the same fan-out here as on the run path: one fact per
@@ -910,7 +910,7 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 //
 // The message names the SEED PROJECTS and nothing per-changeset, which is what makes
 // it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
-// every request and churn a long-lived daemon's hint set instead of teaching once. The
+// every request and churn a long-lived server's hint set instead of teaching once. The
 // files are already on screen where this is emitted (--impact and --explain both mark
 // each one), and `magus describe file` explains any of them in full.
 func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
@@ -931,7 +931,7 @@ func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 // invocation. Nothing is skipped; the run proceeds exactly as it would have.
 //
 // The file list makes the text vary per changeset, so an adopted run in a long-lived
-// daemon dedupes fewer of these than the project-only twin above. That is the trade for
+// server dedupes fewer of these than the project-only twin above. That is the trade for
 // naming files the reader cannot see anywhere else, and interactive.maxEmittedDedupe
 // bounds what it can cost.
 func noteUndeclaredSeedCost(ctx context.Context, sink *magus.Sink, undeclaredOnly map[string][]string) {
@@ -1223,7 +1223,7 @@ func printImpactText(out *types.ImpactResult) error {
 	// Complementary deep-link into the live Graph Explorer, focused on a single
 	// representative seed with a blast view (what depends on it: the closure the
 	// change ripples out to). The query grammar ANDs its terms with no OR, so the
-	// full affected set cannot be selected in one query. Always printed; the daemon
+	// full affected set cannot be selected in one query. Always printed; the server
 	// may not be up when the browser opens it, hence the hint.
 	if len(out.SeedProjects) > 0 {
 		seed := out.SeedProjects[0]
@@ -1234,7 +1234,7 @@ func printImpactText(out *types.ImpactResult) error {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: types.KindProject + ":" + seed})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
 		fmt.Printf("%s\n", authHint(link))
-		fmt.Printf("(start the magus daemon if the graph does not load)\n")
+		fmt.Printf("(start the magus server if the graph does not load)\n")
 	}
 
 	fmt.Printf("\nRun the full pipeline over this set with: %s\n", hint.Affected.With("ci"))

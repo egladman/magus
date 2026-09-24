@@ -19,7 +19,7 @@ It is not what holds this host's capacity: that is `magus broker`, which a
 run starts on its own. The server asks the broker like any run does.
 .PP
 The socket address is resolved in priority order:
-  \-\-socket flag  >  MAGUS_DAEMON_ADDRESS env  >  daemon.address in magus.yaml  >
+  \-\-socket flag  >  MAGUS_SERVER_ADDRESS env  >  server.address in magus.yaml  >
   default ($XDG_RUNTIME_DIR/magus/server.sock)
 .PP
 A detached server logs to $XDG_STATE_HOME/magus/server.log; under
@@ -34,19 +34,19 @@ Run in the foreground and block, instead of auto\-backgrounding
 .RS
 .TP
 \fB\-\-socket\fR \fIstring\fR
-Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)
+Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 .RE
 .SS server status options
 .RS
 .TP
 \fB\-\-socket\fR \fIstring\fR
-Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)
+Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 .RE
 .SS server reload options
 .RS
 .TP
 \fB\-\-socket\fR \fIstring\fR
-Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)
+Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -97,7 +97,7 @@ magus status
 \fIUse a custom socket path\fR
 .PP
 .EX
-magus --daemon-address unix:///tmp/m.sock server start
+magus --server-address unix:///tmp/m.sock server start
 .EE
 .PP
 .SH SEE ALSO

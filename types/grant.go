@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Surface is one part of the daemon a credential may be granted: token management, the MCP
+// Surface is one part of the server a credential may be granted: token management, the MCP
 // endpoint, or the console.
 type Surface string
 
@@ -146,7 +146,7 @@ func (g Grant) String() string {
 	return strings.Join(parts, ",")
 }
 
-// Need is what a daemon route requires of the credential presented to it. Each mount declares
+// Need is what a server route requires of the credential presented to it. Each mount declares
 // one.
 type Need struct {
 	Surface Surface
@@ -181,7 +181,7 @@ const (
 	ClassOperator CredentialClass = "operator"
 	// ClassStored is a stored, hashed, expiring token (mgs_): a connector, console or viewer.
 	ClassStored CredentialClass = "stored"
-	// ClassShare is a share link's token (mgl_), held in daemon memory only.
+	// ClassShare is a share link's token (mgl_), held in server memory only.
 	ClassShare CredentialClass = "share"
 	// ClassExchange is a one-time code (mgx_) a console link carries in place of a token. It is
 	// never a bearer: the console trades it once, within a minute, for the stored token it
@@ -199,8 +199,9 @@ const (
 // process serves one caller.
 var CredentialStdio = Credential{Class: ClassStdio, Grant: GrantConnector}
 
-// Credential is what a request was admitted as, a bearer the daemon verified or
-// [CredentialStdio]: what it is, which one, what its owner called it, and what it may do. The Grant is copied at verification, so a record stays
+// Credential is what a request was admitted as, a bearer the server verified or
+// [CredentialStdio]: what it is, which one, what its owner called it, and what it may do.
+// The Grant is copied at verification, so a record stays
 // self-contained after the token is revoked. It never holds a secret or a full hash.
 type Credential struct {
 	Class CredentialClass `json:"class,omitempty" yaml:"class,omitempty"`

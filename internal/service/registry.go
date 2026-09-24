@@ -9,7 +9,7 @@
 // testable without spawning anything.
 //
 // This is the in-process core. Hosting a service ACROSS separate `magus run`
-// invocations puts a Registry inside the daemon and drives it over RPC; that
+// invocations puts a Registry inside the broker and drives it over RPC; that
 // integration, and the cross-restart orphan reaper, layer on top of this policy.
 package service
 
@@ -45,7 +45,7 @@ type Handle any
 type Registry struct {
 	runner      Runner
 	defaultIdle time.Duration
-	journal     *Journal // nil for the in-process registry; set on the daemon for crash reaping
+	journal     *Journal // nil for the in-process registry; set on the broker for crash reaping
 
 	mu      sync.Mutex
 	entries map[string]*entry
@@ -55,7 +55,7 @@ type Registry struct {
 type Option func(*Registry)
 
 // WithJournal makes the registry persist each hosted service's stop command via j so
-// a later daemon can reap orphans it left on a crash. Daemon-only; the in-process
+// a later broker can reap orphans it left on a crash. Broker-only; the in-process
 // registry passes no journal.
 func WithJournal(j *Journal) Option { return func(r *Registry) { r.journal = j } }
 
@@ -124,7 +124,7 @@ func (r *Registry) Acquire(ctx context.Context, key string, s spells.Service) (H
 		r.mu.Unlock()
 		return nil, e.startErr
 	}
-	// Record how to stop it so a later daemon can reap it if this one crashes.
+	// Record how to stop it so a later broker can reap it if this one crashes.
 	r.journal.record(key, s.Stop)
 	return e.handle, nil
 }
@@ -188,7 +188,7 @@ func (r *Registry) stop(ctx context.Context, e *entry) {
 	}
 }
 
-// Shutdown reaps every service regardless of ref-count or idle window, for daemon
+// Shutdown reaps every service regardless of ref-count or idle window, for broker
 // teardown. It waits for any in-flight Start so no just-started process is orphaned,
 // bounded by ctx (see stop). Victims are torn down concurrently rather than one at a
 // time: run serially, N services could cost up to N * (ReadyTimeout + stop grace) of

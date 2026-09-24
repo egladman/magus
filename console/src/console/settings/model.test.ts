@@ -241,7 +241,7 @@ test("computePendingChanges: host uses the display label (empty renders as loopb
   const draft: Settings = { ...base, host: "" };
   const changes = computePendingChanges(base, draft, diffCtx);
   assert.deepEqual(changes, [
-    { key: "host", label: "Daemon host", before: "127.0.0.1:7391", after: "loopback" },
+    { key: "host", label: "Server host", before: "127.0.0.1:7391", after: "loopback" },
   ]);
 });
 

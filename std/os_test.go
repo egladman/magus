@@ -670,7 +670,7 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 
 // TestOsWithEnv: the overrides ride the context so subprocesses started inside the
 // callback inherit them. The process's own environment is never touched, which is
-// what keeps a daemon serving other workspaces unaffected.
+// what keeps a server serving other workspaces unaffected.
 func TestOsWithEnv(t *testing.T) {
 	var inner []string
 	var nested []string
@@ -740,7 +740,7 @@ func TestOsExit(t *testing.T) {
 	assert.Equal(t, 1, exitErr.Code)
 }
 
-// TestOsExitClampsToAProcessStatus pins the clamp at the source, so the CLI, the daemon
+// TestOsExitClampsToAProcessStatus pins the clamp at the source, so the CLI, the server
 // reply and the out-of-band capture cannot disagree. Unclamped, os.exit(256) truncated
 // to 0 in os.Exit and a failing run reported success.
 func TestOsExitClampsToAProcessStatus(t *testing.T) {

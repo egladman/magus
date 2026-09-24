@@ -29,7 +29,7 @@ import (
 // when the dying one gets no cycles at all.
 //
 // ONE FILE PER PID, not one shared file. Several magus processes share a cache dir
-// routinely (a recursive magus\run, the daemon serving two dispatches, an agent beside a
+// routinely (a recursive magus\run, the server serving two dispatches, an agent beside a
 // human), and a shared file means each rewrite erases the others, which would delete
 // exactly the record a peer is about to need. Per-pid also makes every write single-writer,
 // so a reader never sees a torn set.

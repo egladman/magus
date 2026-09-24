@@ -200,7 +200,7 @@ type InstallSpec struct {
 // dependency it is supervised in the background (see internal/service). Readiness and
 // Stop are optional: Readiness is a probe polled until it exits 0 (how the supervisor
 // learns the process is up and gates dependents on it), and Stop is a graceful-shutdown
-// command run instead of signaling the process (also replayed by the daemon's crash
+// command run instead of signaling the process (also replayed by the broker's crash
 // reaper).
 // Like [Command] each is static data: inspectable, cache-keyable, charm-patchable. It
 // is a distinct return type (vs [Command]) so an op's kind is inferred from what it
@@ -217,8 +217,8 @@ type Service struct {
 	// service with no remaining near-duplicate is a stale suppression).
 	Distinct string `json:"distinct,omitempty"`
 	// Idle overrides the per-service idle timeout (a duration like "30m") after which
-	// the daemon reaps this shared service once its last dependent releases. Empty
-	// uses the daemon's global default. Consumed by the service supervisor.
+	// the broker reaps this shared service once its last dependent releases. Empty
+	// uses the broker's global default. Consumed by the service supervisor.
 	Idle string `json:"idle,omitempty"`
 }
 

@@ -34,16 +34,16 @@ describe("the launcher's live reading", () => {
     assert.equal(row().hidden, true, "nothing has answered yet");
   });
 
-  // The failure this guards: an old daemon that does not serve the route, or one dropped request,
+  // The failure this guards: an old server that does not serve the route, or one dropped request,
   // rendering as a quiet idle machine. "No answer" and "nothing running" are different facts.
   test("no answer hides the row rather than reporting zero", () => {
     syncLauncherPulse(root, { running: 3, queued: 0, workspaces: [], cache: null });
     assert.equal(row().hidden, false);
     syncLauncherPulse(root, null);
-    assert.equal(row().hidden, true, "a lost answer must not read as an idle daemon");
+    assert.equal(row().hidden, true, "a lost answer must not read as an idle server");
   });
 
-  test("a busy daemon says what it is doing", () => {
+  test("a busy server says what it is doing", () => {
     syncLauncherPulse(root, { running: 5, queued: 2, workspaces: ["/a", "/b"], cache: null });
     assert.equal(row().hidden, false);
     assert.match(text(), /5 targets running/);
@@ -58,9 +58,9 @@ describe("the launcher's live reading", () => {
     assert.match(text(), /1 workspace loaded/);
   });
 
-  // Idle is a real measurement and a connected daemon saying "nothing running" is informative - it is
+  // Idle is a real measurement and a connected server saying "nothing running" is informative - it is
   // the ABSENT reading above that has to stay silent, not this one.
-  test("an idle daemon still reports", () => {
+  test("an idle server still reports", () => {
     syncLauncherPulse(root, { running: 0, queued: 0, workspaces: ["/a"], cache: null });
     assert.equal(row().hidden, false);
     assert.match(text(), /Nothing running/);
@@ -71,7 +71,7 @@ describe("the launcher's live reading", () => {
   // dropping it would most look like a personal number.
   test("the counts name whose they are", () => {
     syncLauncherPulse(root, { running: 4, queued: 0, workspaces: ["/a", "/b"], cache: null });
-    assert.match(text(), /daemon-wide/);
+    assert.match(text(), /server-wide/);
   });
 
   test("the reading offers a way in", () => {

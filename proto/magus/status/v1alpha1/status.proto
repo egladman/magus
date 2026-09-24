@@ -108,7 +108,7 @@ message Lock {
 
 // BuildInfo identifies the running magus binary: the version tag, the commit it was built
 // from, the build date, and the full human fingerprint (what `magus --version` prints).
-// Reported so a dashboard shows exactly which daemon it is talking to. All fields are
+// Reported so a dashboard shows exactly which server it is talking to. All fields are
 // "unknown" for an unstamped dev build.
 message BuildInfo {
   string version = 1;     // git describe, e.g. "v0.1.0-3-gabc1234"
@@ -117,7 +117,7 @@ message BuildInfo {
   string fingerprint = 4; // full identity: "magus <version> (<commit>) built <date>"
 }
 
-// Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
+// Run is one in-flight invocation the server has adopted - a `magus run`/`affected`
 // dispatch, keyed by its invocation id. It carries the per-target execution state a
 // dashboard renders as a live run row, so the SAME status stream that shows the pool
 // also shows what each run's targets are doing.
@@ -156,7 +156,7 @@ message TargetRun {
   int64 duration_ms = 7;                      // wall-clock duration in ms, once finished
 }
 
-// Service is one long-running shared service the daemon is hosting right now, kept warm
+// Service is one long-running shared service the server is hosting right now, kept warm
 // across invocations. It carries the derived identity (id/label/command/ports), the live
 // state a dashboard renders, and how many targets currently depend on it.
 message Service {
@@ -171,11 +171,11 @@ message Service {
 
 // Pool is the live concurrency pool - the slots and the work occupying them.
 message Pool {
-  reserved 3;                  // was string mode; the server is Status.server, not a role string
-  reserved "mode";
+  reserved 2, 3;               // 2 was daemon_version, now owner_version; 3 was mode, now Status.server
+  reserved "daemon_version", "mode";
   int32 parent_pid = 1;
-  string daemon_version = 2;   // the pool owner's build
-  int32 capacity = 4;          // total concurrency slots (0 = unlimited)
+  string owner_version = 11;   // the build of the process that owns the pool
+  int32 capacity = 4;         // total concurrency slots (0 = unlimited)
   int32 running = 5;           // slots currently running
   int32 queued = 6;            // targets queued for a slot
   repeated RunningTarget running_targets = 7; // what is running right now
@@ -193,9 +193,9 @@ message RunningTarget {
   string invocation = 5;                     // the invocation id (inv...) this running target belongs to; deep-links to its live log
 }
 
-// Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
+// Workspace is one workspace the server holds: loading, loaded, or failed to load.
 message Workspace {
-  // State is where the daemon's copy of this workspace sits. Output only; values may be added.
+  // State is where the server's copy of this workspace sits. Output only; values may be added.
   enum State {
     STATE_UNSPECIFIED = 0;
     STATE_LOADING = 1; // evaluating magusfiles; resolves on its own
@@ -236,7 +236,7 @@ message Cache {
   //
   // It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded
   // counts toward hits and adds nothing here, so a reader must not present this as the cache's
-  // lifetime saving - it is what this daemon has saved since it started.
+  // lifetime saving - it is what this server has saved since it started.
   int64 saved_ms = 6;
 }
 
@@ -253,15 +253,15 @@ message GetStatusRequest {}
 message GetStatusResponse {
   Status status = 1;
   // observe_start_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
-  // are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
+  // are static per server session (Status stays "what is happening right now"), so a dashboard reads them
   // once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
   // the deprecated JSON /api/v1/status route used to carry.
-  google.protobuf.Timestamp observe_start_time = 2; // when this daemon began observing (its start)
-  Config config = 3;                             // the daemon's resolved, read-only configuration
+  google.protobuf.Timestamp observe_start_time = 2; // when this server began observing (its start)
+  Config config = 3;                             // the server's resolved, read-only configuration
 }
 
-// Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
-// the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
+// Config is the server's resolved, read-only configuration a dashboard shows so an operator can see what
+// the server is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
 // (the one-shot), never the live Status frame.
 message Config {
   repeated string default_charms = 1; // the charms applied to every run by default

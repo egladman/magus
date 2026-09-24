@@ -11,10 +11,10 @@
 // browser. That is what makes "which workspace am I in" a question with one answer per window
 // instead of a per-surface setting people have to keep in step by hand.
 //
-// HIDDEN until a daemon serves more than one workspace. With one loaded, scoped and unscoped show
+// HIDDEN until a server serves more than one workspace. With one loaded, scoped and unscoped show
 // the same thing and the control is a decision nobody has to make - the same rule the dashboard's
 // own picker used before this replaced it.
-import { parseHash, wantsDemo } from "../lib/daemon";
+import { parseHash, wantsDemo } from "../lib/server";
 import {
   ALL_WORKSPACES,
   onWorkspaceScope,
@@ -24,7 +24,7 @@ import {
 } from "../lib/scope";
 
 export interface WorkspacePickerOptions {
-  // Enter or leave the daemon-free demo. This is the ONLY way in now - the seven per-surface
+  // Enter or leave the server-free demo. This is the ONLY way in now - the seven per-surface
   // "See the demo" buttons are gone - so an unwired picker leaves the demo reachable only by typing
   // #demo into the address bar.
   onDemo(enter: boolean): void;
@@ -36,7 +36,7 @@ export interface WorkspacePickerOptions {
 }
 
 export interface WorkspacePicker {
-  // The daemon told us which workspaces it has loaded; rebuild the menu around them.
+  // The server told us which workspaces it has loaded; rebuild the menu around them.
   setWorkspaces(roots: readonly string[]): void;
   // Releases the document listeners and the scope subscription, and removes the control. The two
   // listeners live on `document`, not on the control, so dropping the reference alone would leak them
@@ -107,7 +107,7 @@ export function initWorkspacePicker(
     const scope = workspaceScope();
     // ALWAYS shown now. It used to hide below two workspaces, on the grounds that scope is not a
     // question with one possible answer - true when this control only chose a scope. It is also the
-    // way into the demo now, and a console with no daemon has exactly zero workspaces, so the old
+    // way into the demo now, and a console with no server has exactly zero workspaces, so the old
     // rule would have hidden the one control that offers anything at all on a first visit.
     wrap.hidden = false;
     const demo = inDemo();
@@ -151,7 +151,7 @@ export function initWorkspacePicker(
       if (root) b.title = root;
       main.append(t);
       // In the demo these roots are SYNTHETIC. They are spelled like real checkouts (~/Repos/acme),
-      // so without a mark the menu presents fabricated workspaces as though the daemon had loaded
+      // so without a mark the menu presents fabricated workspaces as though the server had loaded
       // them - the same class of untruth as a screen claiming a credential it never checked.
       if (root && inDemo()) {
         const tag = document.createElement("span");
@@ -171,13 +171,13 @@ export function initWorkspacePicker(
       return li;
     };
     list.replaceChildren(
-      // Daemon-wide first: it is the default, and it is the only scope under which the machine
+      // Server-wide first: it is the default, and it is the only scope under which the machine
       // readings (pool, cache, latency) describe exactly what they measure.
       row(ALL_WORKSPACES, "All workspaces"),
       ...roots.map((r) => row(r, shortName(r))),
       // Offered only when you are NOT in the demo. "Leave demo" was a verb that existed in one state
       // and read as clutter in a menu whose every other row answers "which workspace" - and the way
-      // out is already there: the status bar says "demo" and clicking it opens the daemon address.
+      // out is already there: the status bar says "demo" and clicking it opens the server address.
       ...(inDemo() ? [] : [demoRow()]),
     );
   };
@@ -200,7 +200,7 @@ export function initWorkspacePicker(
     b.setAttribute("role", "menuitem");
     b.title =
       opts.demoRoot +
-      " - a fabricated workspace. Explore a populated console with no daemon running.";
+      " - a fabricated workspace. Explore a populated console with no server running.";
     const main = document.createElement("span");
     main.className = "pf-v6-c-menu__item-main";
     const t = document.createElement("span");

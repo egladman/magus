@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc"
@@ -60,11 +62,9 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 
 	ws, wsErr := inspectWorkspace(ctx, root)
 
-	// Query daemon status for the daemon-related checks. Non-fatal on failure.
-	daemonInfo := buildDaemonInfo(ctx)
-
+	// Query the server for the server-related checks. Non-fatal on failure.
 	dopts := []doctor.Option{
-		doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo), doctor.WithSkillCatalog(agentSkills),
+		doctor.WithConfig(globalCfg), doctor.WithServerInfo(buildServerInfo(ctx)), doctor.WithSkillCatalog(agentSkills),
 		doctor.WithGraphNodes(func(ctx context.Context) ([]types.KnowledgeNode, error) {
 			// Domain-only: the graph `graph export` renders into the docs site.
 			g, err := loadKnowledgeGraph(ctx, root, false, false, false)
@@ -236,12 +236,25 @@ func statusGlyph(status types.CheckStatus, color bool) string {
 	return label
 }
 
-// buildDaemonInfo queries the running daemon (if any) and returns a
-// DaemonInfo for the doctor checks. If no daemon is reachable, returns an
-// empty DaemonInfo so checks render a sensible "no daemon" message.
-func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
+// serverSocketIn is the file name the server listens on inside sockDir: the configured
+// server.address when it names a socket there, server.sock otherwise. A configured
+// address elsewhere leaves the default, which is the one a second server would take.
+func serverSocketIn(sockDir string) string {
+	if path := strings.TrimPrefix(resolveServerAddr(""), "unix://"); filepath.Dir(path) == sockDir {
+		return filepath.Base(path)
+	}
+	return proc.ServerSocketName()
+}
+
+// buildServerInfo queries the running server (if any) and returns a
+// ServerInfo for the doctor checks. If no server is reachable, returns an
+// empty ServerInfo so checks render a sensible "no server" message.
+func buildServerInfo(ctx context.Context) doctor.ServerInfo {
 	sockDir := proc.SockDir()
-	di := doctor.DaemonInfo{SockDir: sockDir, ClientVersion: version}
+	di := doctor.ServerInfo{
+		SockDir: sockDir, ClientVersion: version,
+		ServerSocket: serverSocketIn(sockDir), BrokerSocket: broker.SocketName,
+	}
 
 	// Populate bridge fields from resolved config. BridgeEnabled is true unless
 	// explicitly set to false (mirrors how MCP.Enabled works).
@@ -249,12 +262,12 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
 	di.MCPEnabled = globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
 
-	// daemon.enabled=false means this invocation is self-contained, so there is nothing
-	// to ask. Without this check the probe still discovers and dials whatever daemon the
-	// host happens to be running: doctor then reports on a process the caller opted out
-	// of, and the testscript suite (which sets MAGUS_DAEMON_ENABLED=false precisely to
-	// stay hermetic) reaches the real socket and fails wherever a daemon is up.
-	if !globalCfg.Daemon.Enabled {
+	// server.enabled=false means this invocation is self-contained, so there is nothing
+	// to ask. Without this check the probe still dials whatever server the host happens
+	// to be running: doctor then reports on a process the caller opted out of, and the
+	// testscript suite (which sets MAGUS_SERVER_ENABLED=false precisely to stay
+	// hermetic) reaches the real socket and fails wherever a server is up.
+	if !globalCfg.Server.Enabled {
 		return di
 	}
 
@@ -270,7 +283,7 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	// it makes a bridge something to expect.
 	di.Persistent = reply.Server != nil
 	di.ParentPID = reply.ParentPID
-	di.DaemonVersion = reply.Version
+	di.ServerVersion = reply.Version
 	di.Capacity = reply.Capacity
 	di.Running = reply.Running
 	di.Queued = reply.Queued

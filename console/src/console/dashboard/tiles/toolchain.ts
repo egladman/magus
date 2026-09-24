@@ -7,7 +7,7 @@
 // discards provenance before the message is built. A table has the room the error string
 // does not.
 //
-// "Probed" shows the reading's age rather than implying live, because the daemon caches
+// "Probed" shows the reading's age rather than implying live, because the server caches
 // probes behind a TTL and a page has no build to piggyback on.
 //
 // There is deliberately no "enforced" column. Whether a window can actually fail a build

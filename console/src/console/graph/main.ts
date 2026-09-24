@@ -38,21 +38,21 @@ import { select } from "d3-selection";
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
 // graph explorer only uses these four primitives.)
 import {
-  daemonAttach,
+  serverAttach,
   consumeLiveToken,
   getLiveToken,
-  adoptDaemonOrigin,
+  adoptServerOrigin,
   fetchSSE,
   authHeaders,
   isRemembered,
   setRemembered,
   mayLoadBundledDemo,
   wantsDemo,
-  createDaemonTransport,
+  createServerTransport,
   parseHash,
   reportFetchFailure,
   reportHttpStatus,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { GraphService } from "@wire/graph/v1alpha1/graph_pb";
@@ -104,7 +104,7 @@ import { isServing } from "../../lib/workspace";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../view";
 import { publishStatus } from "../status";
-import { DAEMON_GUIDE_URL } from "../connectPrompt";
+import { SERVER_GUIDE_URL } from "../connectPrompt";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // refreshAffectedFromServer writes for the view code to read, and the PWA File Handling API
@@ -478,7 +478,7 @@ async function decodeFragment(b64url: string): Promise<GraphPayload> {
   return JSON.parse(text);
 }
 
-// hashParams is lib/daemon's parseHash. It used to be a second implementation here, and the
+// hashParams is lib/server's parseHash. It used to be a second implementation here, and the
 // two had drifted on the case that matters: parseHash guards decodeURIComponent, this copy
 // called it bare, so a truncated shared link (a malformed percent-escape) threw a URIError out
 // of the graph explorer's boot path instead of degrading to the raw text. Aliased rather than
@@ -527,7 +527,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
   // deferring the graph.json download until the visitor asks. Loading via a reload into boot
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
-  // The daemon refuses to serve these files too; this keeps an attached surface from asking.
+  // The server refuses to serve these files too; this keeps an attached surface from asking.
   if (mayLoadBundledDemo(params) && (wantsDemo(params) || params.view || params.q || params.node)) {
     try {
       // Two demos ship, both generated from THIS workspace by the root graph-generate
@@ -2822,7 +2822,7 @@ function termMatches(node: GNode, term: QueryTerm) {
   return term.negated ? !hit : hit;
 }
 
-// serverScores is the rank the daemon gave each id for the CURRENT query, when a daemon
+// serverScores is the rank the server gave each id for the CURRENT query, when a server
 // answered. Null offline, before the first answer, and whenever the query moves on - so the
 // list falls back to degree rather than ranking by a previous question's scores.
 let serverScores: Map<string, number> | null = null;
@@ -2834,18 +2834,18 @@ let serverScores: Map<string, number> | null = null;
 let viewGeneration = 0;
 
 // graphClient is the typed GraphService client, or null when there is nothing to ask. Every verb
-// below is live-only and knowledge-only: a snapshot or the demo is not the daemon's graph even
-// when a daemon happens to be running, and GraphService answers about the knowledge graph rather
+// below is live-only and knowledge-only: a snapshot or the demo is not the server's graph even
+// when a server happens to be running, and GraphService answers about the knowledge graph rather
 // than the target graph - refining either against it would filter the canvas by a query run over
 // a different graph entirely.
 function graphClient() {
   if (!liveHost || !liveToken || graphFlavor === "targets") return null;
-  return createClient(GraphService, createDaemonTransport(liveHost, liveToken));
+  return createClient(GraphService, createServerTransport(liveHost, liveToken));
 }
 
 // rpcOptions carries the surface's lifecycle signal into every RPC, so a request is CANCELLED
 // rather than merely ignored. The generation counters below discard a stale ANSWER; without this
-// the request itself still runs to completion on the daemon - one full graph query per keystroke,
+// the request itself still runs to completion on the server - one full graph query per keystroke,
 // computed for a result nobody reads - and lands on a surface deactivate() has torn down.
 function rpcOptions() {
   return lifecycleAbort ? { signal: lifecycleAbort.signal } : undefined;
@@ -2870,7 +2870,7 @@ function answerStillWanted(gen: number, epoch: number): boolean {
 // refresh), so an in-flight answer about the previous graph cannot be applied to this one.
 let graphEpoch = 0;
 
-// refineBlastFromServer replaces the rebuild set with the daemon's, over the whole graph.
+// refineBlastFromServer replaces the rebuild set with the server's, over the whole graph.
 //
 // It asks FindDependents, NOT ExplainNode. NodeContext.blast_radius is a different question
 // wearing a similar name - it counts everything reaching a node by ANY relation - so subtracting
@@ -2885,7 +2885,7 @@ let graphEpoch = 0;
 let affectedFallback = "";
 
 // Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not the
-// graph. A failure gets the daemon transport's toast and no banner: the view is supplementary.
+// graph. A failure gets the server transport's toast and no banner: the view is supplementary.
 async function refreshAffectedFromServer() {
   const client = graphClient();
   if (!client) return;
@@ -2894,7 +2894,7 @@ async function refreshAffectedFromServer() {
     const res = await client.findAffected({}, rpcOptions());
     if (epoch !== graphEpoch) return;
     affectedFallback = res.fallback;
-    // The daemon answers about the workspace; a projection may have collapsed some of it away.
+    // The server answers about the workspace; a projection may have collapsed some of it away.
     const present = res.ids.filter((id) => graph.byId.has(id));
     window._liveAffectedIds = present.length ? new Set(present) : undefined;
     syncAffectedView();
@@ -2902,7 +2902,7 @@ async function refreshAffectedFromServer() {
     // refuses the view while no set exists - so neither took effect the first time.
     if (activeView === "affected" || hashParams().view === "affected") activateView("affected");
   } catch {
-    // reported: by the daemon transport; the chip keeps whatever it had
+    // reported: by the server transport; the chip keeps whatever it had
   }
 }
 
@@ -2930,12 +2930,12 @@ async function refineBlastFromServer(nodeId: string, gen: number) {
     syncOverview();
     draw();
   } catch {
-    // reported: by the daemon transport; the local answer on screen stands
+    // reported: by the server transport; the local answer on screen stands
   }
 }
-// refineTraceFromServer replaces the traced path with the daemon's.
+// refineTraceFromServer replaces the traced path with the server's.
 //
-// The local walk follows depends_on only, over the loaded payload; the daemon walks every
+// The local walk follows depends_on only, over the loaded payload; the server walks every
 // relation over the whole graph, so it finds chains the browser cannot and reports the relation
 // per hop. The server's answer is only USABLE here when every node on it is loaded - the canvas
 // cannot light up what it was never sent - so a path through an absent node is reported rather
@@ -2974,11 +2974,11 @@ async function refineTraceFromServer(from: string, to: string, gen: number) {
     syncOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
-    // reported: by the daemon transport; the local answer stands
+    // reported: by the server transport; the local answer stands
   }
 }
 
-// suggestNodes fills the query box's completion list from the daemon's ranked candidates. It runs
+// suggestNodes fills the query box's completion list from the server's ranked candidates. It runs
 // on the SAME debounce as the query itself and shares its generation, so a stale answer cannot
 // repopulate the list under a newer prefix.
 //
@@ -3000,12 +3000,12 @@ async function suggestNodes(prefix: string, gen: number) {
       .map((m) => '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.label) + "</option>")
       .join("");
   } catch {
-    // reported: by the daemon transport; no suggestions is the honest list
+    // reported: by the server transport; no suggestions is the honest list
     list.innerHTML = "";
   }
 }
 
-// refineQueryFromServer replaces the locally-computed match set with the daemon's, which is the
+// refineQueryFromServer replaces the locally-computed match set with the server's, which is the
 // actual magus query grammar rather than the partial reimplementation matchSetFor carries.
 //
 // The local pass still runs FIRST and is what the operator sees while typing: a round trip per
@@ -3020,7 +3020,7 @@ async function refineQueryFromServer(q: string, gen: number) {
     // Also require that a VIEW has not taken over the canvas since. answerStillWanted covers the
     // counter and the graph; this covers "the operator asked a different KIND of question".
     if (!answerStillWanted(gen, epoch) || activeView || focusId) return;
-    // The daemon searches the WHOLE graph; the canvas holds what it was sent. Symbols in
+    // The server searches the WHOLE graph; the canvas holds what it was sent. Symbols in
     // particular are excluded from the browser's payload, so a symbol query can match on the
     // server and have nothing to light up here. Intersect, then say what was left out - a
     // silently smaller match count is the same lie the old local-only filter told.
@@ -3043,7 +3043,7 @@ async function refineQueryFromServer(q: string, gen: number) {
     syncOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
-    // reported: by the daemon transport. The local answer on screen stands, as it does offline.
+    // reported: by the server transport. The local answer on screen stands, as it does offline.
   }
 }
 
@@ -3051,7 +3051,7 @@ async function refineQueryFromServer(q: string, gen: number) {
 // is empty. null means NO FILTER, which is not the same as a filter that matched nothing.
 //
 // This is a REIMPLEMENTATION of the magus query grammar, and a partial one. It stays because
-// the explorer runs with no daemon on every static path - the demo, a #data= snapshot, the
+// the explorer runs with no server on every static path - the demo, a #data= snapshot, the
 // docs site - where there is nothing to ask. refineQueryFromServer supersedes it in live mode.
 function matchSetFor(q: string): Set<string> | null {
   const terms = q ? parseQuery(q) : [];
@@ -3198,7 +3198,7 @@ function renderList() {
   if (metric) {
     pool.sort((a, b) => metric.sort(b) - metric.sort(a) || a.label.localeCompare(b.label));
   } else if (scores) {
-    // The daemon's own relevance ranking, which is what `magus query` orders by. Degree below
+    // The server's own relevance ranking, which is what `magus query` orders by. Degree below
     // is the offline stand-in: it ranks the best-connected node first whether or not it has
     // anything to do with what was typed.
     pool.sort(
@@ -3786,7 +3786,7 @@ const GRAPHKIND_LIVE_HINT =
 
 // syncGraphKindToggle updates the graph-source toggle group's selected state and
 // each button's disabled/title to match graphFlavor and live-mode availability.
-// Switching graphs only works against a live daemon (which serves both flavors);
+// Switching graphs only works against a live server (which serves both flavors);
 // in a static snapshot both buttons are disabled with a hint, but the selected
 // one still shows which graph is currently loaded. Called after every graph
 // load (renderLoadedGraph/replaceGraph/liveApplyGraphUpdate) and once at boot.
@@ -4416,7 +4416,7 @@ function askQuestion(view: string) {
   }
   if (view === "affected") {
     // Two different reasons to have no set, and the message says which: a VCS that could not
-    // produce a definitive diff is not the same problem as having no daemon.
+    // produce a definitive diff is not the same problem as having no server.
     const aff = window._liveAffectedIds;
     if (!aff || !aff.size) {
       setStatus(
@@ -4907,7 +4907,7 @@ const PRESET_RESULT_LINES: Record<string, string> = {
 
 // ---- live mode -------------------------------------------------------------
 
-// daemonAttach, consumeLiveToken, getLiveToken, and fetchSSE now live in ./lib/daemon
+// serverAttach, consumeLiveToken, getLiveToken, and fetchSSE now live in ./lib/server
 // (imported at the top of this file) - the ONE audited copy of host resolution, the
 // loopback lock, the shared bearer token, and the fetch-based SSE reader.
 
@@ -5182,7 +5182,7 @@ function liveConnect() {
     },
     () => {
       // Stream ended or errored: flip to disconnected and say so. No reconnect is scheduled; the
-      // notice carries a Reconnect control, so nothing keeps asking a daemon that stopped answering.
+      // notice carries a Reconnect control, so nothing keeps asking a server that stopped answering.
       liveConnected = false;
       publishLiveStatus();
       showStaleNotice();
@@ -5224,7 +5224,7 @@ function showStaleNotice() {
   const now = new Date();
   const hhmm =
     now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-  staleNotice = "Showing this workspace as of " + hhmm + "; the daemon stopped answering.";
+  staleNotice = "Showing this workspace as of " + hhmm + "; the server stopped answering.";
   setStatus(staleNotice, false, { label: "Reconnect", run: liveConnect });
 }
 
@@ -5246,7 +5246,7 @@ function publishLiveStatus() {
     // Connection state only: the bar answers one question, and the workspace identity is already
     // beside it. A snapshot or demo graph has no link of its OWN, so it reports no connection and
     // the shell's poller answers - claiming the dot to say "not connected" had this surface
-    // reporting on a daemon it never asked about.
+    // reporting on a server it never asked about.
     const nodes = graph?.nodes.length ?? 0;
     const count = nodes ? nodes + " nodes" : undefined;
     publishStatus(
@@ -5264,7 +5264,7 @@ function publishLiveStatus() {
 // updateSnapshotBadge shows "snapshot: <provenance>" for the private,
 // non-live sources (a #data= fragment or a --serve loopback fetch) - the
 // counterpart to the live badge for the common case of a one-shot `magus
-// graph open` without a running daemon. Hidden for "demo" and "remote", and
+// graph open` without a running server. Hidden for "demo" and "remote", and
 // always hidden once live mode is active (bootLive never calls this).
 function updateSnapshotBadge(source: string | null) {
   const badge = el("snapshot-badge");
@@ -5281,7 +5281,7 @@ function updateSnapshotBadge(source: string | null) {
 async function fetchLiveStatus() {
   if (!liveHost || !liveToken) return;
   try {
-    const client = createClient(StatusService, createDaemonTransport(liveHost, liveToken));
+    const client = createClient(StatusService, createServerTransport(liveHost, liveToken));
     const res = await client.getStatus({});
     const status = res.status;
     if (!status) return;
@@ -5289,13 +5289,13 @@ async function fetchLiveStatus() {
     if (loaded) {
       liveWorkspaceName = loaded.root;
     }
-    // No pool strip here: how many targets the daemon is running is session state the dashboard
+    // No pool strip here: how many targets the server is running is session state the dashboard
     // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire
     // type but `magus status` never opens a workspace, so it has no VCS context to fill it.
     // GraphService.FindAffected answers instead (refreshAffectedFromServer).
     publishLiveStatus();
   } catch {
-    // reported: by the daemon transport; the badge stays
+    // reported: by the server transport; the badge stays
   }
 }
 
@@ -5526,8 +5526,8 @@ export async function activate() {
     });
   }
 
-  // Attempt a live-mode connection on an explicit daemon attach (#port, or the
-  // daemon-origin/shared console). Returns true if handled; false falls through.
+  // Attempt a live-mode connection on an explicit server attach (#port, or the
+  // server-origin/shared console). Returns true if handled; false falls through.
   if (await bootLive()) return;
 
   // Show the load spinner while loadGraph() is in flight (it fetches the ~1.4MB demo graph.json on a
@@ -6001,20 +6001,20 @@ function bootWireEvents() {
 async function bootLive() {
   const params = hashParams();
   // A static graph was explicitly requested (#data/#src): never take over the live path, so those
-  // offline links keep working even when a default daemon is configured.
+  // offline links keep working even when a default server is configured.
   if (params.data || params.src) return false;
 
-  // The graph is a SEPARATE bundle from the shell, so the shell's adoptDaemonOrigin() does not
-  // set THIS bundle's own-origin flag. Run it here too so a daemon-origin link from `magus graph export --open
-  // --follow` (which carries a #token but no #port) is recognized as own-origin and daemonAttach adopts
+  // The graph is a SEPARATE bundle from the shell, so the shell's adoptServerOrigin() does not
+  // set THIS bundle's own-origin flag. Run it here too so a server-origin link from `magus graph export --open
+  // --follow` (which carries a #token but no #port) is recognized as own-origin and serverAttach adopts
   // location.host. It is a no-op for a #port attach (which needs no origin adoption) and for a cold,
   // token-less visit. The shell may have already stripped the #token from the URL; getLiveToken() reads
   // the stashed copy, so adoption still fires.
-  adoptDaemonOrigin();
+  adoptServerOrigin();
 
-  // Explicit-attach only: a #port link, or the daemon-origin/shared console. A mere configured default
+  // Explicit-attach only: a #port link, or the server-origin/shared console. A mere configured default
   // must not force the explorer into live mode - a cold visit shows the static empty state instead.
-  const host = daemonAttach(params);
+  const host = serverAttach(params);
   if (!host) return false;
 
   liveHost = host;
@@ -6115,7 +6115,7 @@ async function bootLive() {
     bootWireEvents();
     return true;
   } catch (e) {
-    // Same words and the same guide as the connect prompt every daemon surface shows. No Retry:
+    // Same words and the same guide as the connect prompt every server surface shows. No Retry:
     // live mode here is entered from the link magus printed, so reopening that link is the retry.
     setStatus(
       "The console could not reach " +
@@ -6124,7 +6124,7 @@ async function bootLive() {
         errMessage(e) +
         "). Start it with magus server start, then reopen the link magus printed.",
       true,
-      { label: "Setup guide", run: () => window.open(DAEMON_GUIDE_URL, "_blank", "noopener") },
+      { label: "Setup guide", run: () => window.open(SERVER_GUIDE_URL, "_blank", "noopener") },
     );
     liveHost = null;
     liveToken = null;

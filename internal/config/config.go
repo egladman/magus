@@ -18,7 +18,7 @@ type Config struct {
 	Volatility Volatility `json:"volatility" yaml:"volatility"`
 	Watch      Watch      `json:"watch" yaml:"watch"`
 	Telemetry  Telemetry  `json:"telemetry" yaml:"telemetry"`
-	Daemon     Daemon     `json:"daemon" yaml:"daemon"`
+	Server     Server     `json:"server" yaml:"server"`
 	VCS        VCS        `json:"vcs" yaml:"vcs"`
 	MCP        MCP        `json:"mcp" yaml:"mcp"`
 	Console    Console    `json:"console" yaml:"console"`
@@ -430,46 +430,46 @@ type MCP struct {
 	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
 	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
-	// plaintext HTTP, so without it the daemon refuses to start rather than warn.
+	// plaintext HTTP, so without it the server refuses to start rather than warn.
 	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
 }
 
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
 // HTTP server (/api/v1/graph, /api/v1/events) plus the typed StatusService, so a browser running
 // the hosted Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1alpha1 JobService
-// for triggering maintenance jobs (the daemon's one mutating surface). Loopback only; bearer auth.
+// for triggering maintenance jobs (the server's one mutating surface). Loopback only; bearer auth.
 type Console struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
 }
 
-// Daemon controls the proc server's listen address and multi-workspace behavior.
-type Daemon struct {
-	// Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.
-	// The shared daemon is the one from `magus server start`; with Enabled false an
-	// invocation never discovers or adopts it and hosts its own per-process pool.
-	// Recursive magus calls still forward over a per-process socket to share the
-	// concurrency budget; only the SHARED daemon is opted out of.
+// Server configures `magus server`: where it listens, which workspaces it serves, and its
+// maintenance schedule.
+type Server struct {
+	// Enabled lets a command hand itself to a running `magus server`; false runs each invocation self-contained. Default true.
+	// With Enabled false an invocation never discovers or adopts the server and hosts its
+	// own per-process pool. Recursive magus calls still forward over a per-process socket
+	// to share the concurrency budget; only the server is opted out of.
 	Enabled bool `json:"enabled" yaml:"enabled"`
-	// Address is the unix:// socket the parent listens on; empty auto-generates one.
+	// Address is the unix:// socket `magus server` listens on; empty means server.sock in the runtime dir.
 	Address string `json:"address" yaml:"address" validate:"omitempty,magus_endpoint"`
-	// IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.
+	// IdleTTL controls workspace eviction in the multi-workspace server; 0 = default 6h.
 	IdleTTL time.Duration `json:"idle_ttl" yaml:"idle_ttl"`
 	// Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox
 	// policies and rejects out-of-list workspaces (MGS2010).
 	Workspaces []string `json:"workspaces" yaml:"workspaces"`
-	// Maintenance configures the daemon's built-in background maintenance scheduler.
+	// Maintenance configures the server's built-in background maintenance scheduler.
 	Maintenance Maintenance `json:"maintenance" yaml:"maintenance"`
 }
 
-// Maintenance sets how often the daemon runs each low-key background maintenance job on its own.
-// Each field is the MINIMUM interval since that job last ran before the daemon runs it again;
+// Maintenance sets how often the server runs each low-key background maintenance job on its own.
+// Each field is the MINIMUM interval since that job last ran before the server runs it again;
 // the run is idle-gated (only when the pool is quiet) and submitted through the same coalescing
 // path as a manual run, so the two never double-run. "Last run" is read from the activity trail,
 // so a manual trigger through any path (CLI or RPC) resets the countdown, and the schedule
-// survives a daemon restart. A zero (or negative) interval disables that job's scheduling.
+// survives a server restart. A zero (or negative) interval disables that job's scheduling.
 // clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
 type Maintenance struct {
-	// RotateActivities is only how often the daemon CHECKS whether the activity trail is due
+	// RotateActivities is only how often the server CHECKS whether the activity trail is due
 	// for a trim; it is not a retention age. The trail rotates on event count instead (10000
 	// events, with a per-kind floor that keeps a rare kind's newest entries no matter how loud
 	// its neighbors are; see maxEvents and perKindFloor in internal/trail), so there is no age
@@ -477,17 +477,17 @@ type Maintenance struct {
 	// per-kind floor wins when the two disagree, and that policy does not exist. It runs
 	// hourly because a rotate on an already-small trail costs one stat.
 	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // poll cadence only; retention is trail.maxEvents (10000), not this
-	// RotateLogs is both how often the daemon checks the run-log journals AND, since the
+	// RotateLogs is both how often the server checks the run-log journals AND, since the
 	// check doubles as the enforcement, the maximum age a kept journal may reach: a journal
 	// older than this is dropped even when the workspace is well under the count (500) and
 	// size (2GB) caps those also enforce, and the tightest of the three wins. Weekly by
 	// default, because run-logs otherwise have no age bound at all.
 	RotateLogs time.Duration `json:"rotate_logs" yaml:"rotate_logs"` // trim run-log journals older than this; default 7d
-	// PrunePreserved is only how often the daemon checks for expired `vcs checkpoint
+	// PrunePreserved is only how often the server checks for expired `vcs checkpoint
 	// --preserve` captures; it is not the retention window. That window is fixed at 30 days
 	// (vcs.preserveRetention) and stays out of this field on purpose: the days a preserved
 	// capture survives is a promise the `--preserve` flag itself advertises, and letting a
-	// per-daemon poll knob also change what gets deleted would make that promise mean
+	// per-server poll knob also change what gets deleted would make that promise mean
 	// whatever this config happened to say (see the rationale on vcs.PrunePreserved).
 	// Preserve prunes on its own call too, but only a repository preserved a SECOND time
 	// ever reaches that pass, so this scheduled job is what makes the promise hold for a
@@ -552,9 +552,9 @@ type Knowledge struct {
 	// bounded and cached against HEAD, so it runs at build time on a commit change,
 	// never per query.
 	VCS KnowledgeVCSConfig `json:"vcs" yaml:"vcs"`
-	// SymbolIndexing configures the daemon's background auto-indexing: it runs each
+	// SymbolIndexing configures the server's background auto-indexing: it runs each
 	// symbol-capable project's `scip` op for you when its sources change, so symbols
-	// stay fresh with no manual `magus run ::scip`. ON by default in the daemon (a
+	// stay fresh with no manual `magus run ::scip`. ON by default in the server (a
 	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
 	// your own work. Set disabled to opt out.
 	SymbolIndexing SymbolIndexingConfig `json:"symbol_indexing" yaml:"symbol_indexing"`
@@ -564,7 +564,7 @@ type Knowledge struct {
 	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
 	// the layer that answers which code agents actually touch. `magus graph build` runs
-	// each declared adapter before assembling, so the daemon's sync-graph job keeps it
+	// each declared adapter before assembling, so the server's sync-graph job keeps it
 	// current without a second schedule.
 	//
 	// Nothing is derived: an adapter reads a transcript store outside the workspace,
@@ -664,11 +664,11 @@ func (c DuplicationConfig) Options() types.DuplicationOptions {
 	}
 }
 
-// SymbolIndexingConfig tunes daemon background symbol auto-indexing (see
+// SymbolIndexingConfig tunes server background symbol auto-indexing (see
 // Knowledge.SymbolIndexing). Zero value = enabled with built-in timings.
 type SymbolIndexingConfig struct {
 	// Disabled opts out of background auto-indexing. Auto-indexing is on by default
-	// in the daemon, so this is the switch to turn it off (e.g. the indexers are not
+	// in the server, so this is the switch to turn it off (e.g. the indexers are not
 	// installed and you index in CI instead).
 	Disabled bool `json:"disabled" yaml:"disabled"`
 	// QuietSeconds is how long a project's sources must be quiet after the last change
@@ -789,7 +789,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
 		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
-		{"MAGUS_DAEMON_SOCKET", "", "", "Env-only, no magus.yaml equivalent: runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it"},
+		{"MAGUS_PROC_SOCKET", "", "", "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
 		{"MAGUS_CI_MAX_SHARDS", "ci.max_shards", "8", "Maximum number of parallel CI shards; -1 means unlimited"},
 		{"MAGUS_CI_RUNNER_POOL_BUDGET", "ci.runner_pool_budget", "0", "Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited"},
 		{"MAGUS_SHARD", "", "", "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
@@ -800,11 +800,12 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_TELEMETRY_INSECURE", "telemetry.insecure", "false", "Disable TLS for the OTLP exporter (plaintext local-collector setups)"},
 		{"MAGUS_TELEMETRY_SERVICE_NAME", "telemetry.service_name", "magus", "Value of the resource attribute service.name on emitted spans/metrics"},
 		{"MAGUS_TELEMETRY_SAMPLE_RATIO", "telemetry.sample_ratio", "1.0", "Head-based trace sampling ratio in [0,1]"},
-		{"MAGUS_DAEMON_ADDRESS", "daemon.address", "", "Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket"},
-		{"MAGUS_DAEMON_IDLE_TTL", "daemon.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace daemon; e.g. \"6h\", \"30m\""},
-		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
+		{"MAGUS_SERVER_ENABLED", "server.enabled", "true", "When false, no command hands itself to a running `magus server`; each invocation runs self-contained"},
+		{"MAGUS_SERVER_ADDRESS", "server.address", "", "Socket `magus server` listens on, as a unix:// URL; empty is server.sock in the runtime directory"},
+		{"MAGUS_SERVER_IDLE_TTL", "server.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace server; e.g. \"6h\", \"30m\""},
+		{"MAGUS_SERVER_WORKSPACES", "server.workspaces", "", "Colon-separated list of workspace roots the server will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
-		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
+		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server `magus server` starts"},
 		{"MAGUS_MCP_INSECURE_BIND", "mcp.insecure_bind", "false", "Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
 		{"MAGUS_VOLATILITY_ENABLED", "volatility.enabled", "true", "Master switch for volatility detection and auto-retry; false disables all retry logic"},
@@ -823,7 +824,7 @@ func EnvVarDocs() []EnvVarDoc {
 func Defaults() Config {
 	return Config{
 		CI: CI{MaxShards: 8, RecordRuns: true},
-		Daemon: Daemon{
+		Server: Server{
 			Enabled: true,
 			Maintenance: Maintenance{
 				RotateActivities: time.Hour,          // poll cadence; cheap to check often (one stat when small)

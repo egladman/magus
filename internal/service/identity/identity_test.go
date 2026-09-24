@@ -137,7 +137,7 @@ func TestClusterKey(t *testing.T) {
 }
 
 // TestInstanceKeyScopesToWorkspace pins the boundary that keeps one workspace's
-// services out of another's. The daemon hosts services for every workspace on the
+// services out of another's. The broker hosts services for every workspace on the
 // machine, so keying a running instance on the bare fingerprint would hand two
 // checkouts declaring the same postgres the SAME container.
 func TestInstanceKeyScopesToWorkspace(t *testing.T) {

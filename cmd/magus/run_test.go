@@ -66,7 +66,7 @@ func (w *resolveWS) ExpandPath(t types.Target) ([]types.Target, error) {
 }
 
 // ExpandCwd must never be reached by resolveTargets anymore: resolution keys on the
-// explicit cwd via Where, not on the daemon's os.Getwd. Panic to prove the fix holds.
+// explicit cwd via Where, not on the server's os.Getwd. Panic to prove the fix holds.
 func (w *resolveWS) ExpandCwd(types.Target) ([]types.Target, bool, error) {
 	panic("resolveTargets must not call ExpandCwd (it reads os.Getwd); use the explicit cwd")
 }
@@ -127,9 +127,9 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 	})
 
 	t.Run("cwd outside every project fans out to all", func(t *testing.T) {
-		// A daemon's own cwd (unrelated to workspace B) must not scope B's run: it
+		// A server's own cwd (unrelated to workspace B) must not scope B's run: it
 		// falls through to the full fan-out, not a mis-scoped or empty result.
-		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/tmp/daemon-cwd"})
+		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/tmp/server-cwd"})
 		require.NoError(t, err)
 		assert.Empty(t, source)
 		assert.Len(t, targets, 2)
@@ -295,7 +295,7 @@ func TestSkipFlag(t *testing.T) {
 }
 
 // TestClientCwd proves the client's cwd carried on ctx wins over the process os.Getwd,
-// so an adopted run scopes and journals against where the client ran, not the daemon.
+// so an adopted run scopes and journals against where the client ran, not the server.
 func TestClientCwd(t *testing.T) {
 	t.Run("ctx cwd wins", func(t *testing.T) {
 		ctx := proc.WithCwd(context.Background(), "/client/here")
@@ -468,7 +468,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // TestWithoutDetachFlagStripsEverySpelling pins the loop guard on --detach. The argv is
-// re-submitted to the daemon verbatim, so a --detach left in it would make the daemon
+// re-submitted to the server verbatim, so a --detach left in it would make the server
 // detach again, handing the work to itself indefinitely.
 func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 	got := withoutDetachFlag([]string{"ci", "-detach", "docs", "--detach", "--detach=true", "--detach-me"})
@@ -482,13 +482,13 @@ func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
 }
 
-// TestLocalOnlyFlagsNeverReachTheDaemon guards the argv that is re-submitted.
+// TestLocalOnlyFlagsNeverReachTheServer guards the argv that is re-submitted.
 //
-// --detach left in would make the daemon detach again, handing the work to
+// --detach left in would make the server detach again, handing the work to
 // itself forever. --wait left in would be acted on by a run that is not
 // detaching, where it is a usage error, so a valid local invocation would
-// arrive at the daemon as an invalid one.
-func TestLocalOnlyFlagsNeverReachTheDaemon(t *testing.T) {
+// arrive at the server as an invalid one.
+func TestLocalOnlyFlagsNeverReachTheServer(t *testing.T) {
 	got := withoutDetachFlag([]string{
 		"ci", "-detach", "docs", "--detach", "--detach=true", "--wait", "--wait=true", "--detach-me", "--waiting",
 	})
@@ -500,13 +500,13 @@ func TestLocalOnlyFlagsNeverReachTheDaemon(t *testing.T) {
 		"past the separator the tokens belong to the forwarded tool")
 }
 
-// --detach --wait hands the run to the daemon and then polls awaitInvocation until a
+// --detach --wait hands the run to the server and then polls awaitInvocation until a
 // status appears. That loop's only bound is ctx.Done, and --timeout was applied AFTER
 // the detach branch returned, so it never reached the loop: `magus run --detach --wait
 // --timeout 30s` waited forever on a run that never finished.
 //
 // Read out of the source rather than exercised: reaching the detach branch at runtime
-// needs a loaded workspace and a live daemon, which is far more than checking that one
+// needs a loaded workspace and a live server, which is far more than checking that one
 // statement precedes another.
 func TestRunAppliesTheTimeoutBeforeDetaching(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)

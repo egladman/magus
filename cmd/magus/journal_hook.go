@@ -21,20 +21,20 @@ import (
 // matter which command produced it. Two copies of the wiring would drift, and the
 // drift would read as a gap in the history rather than as a bug.
 //
-// It also covers the DAEMON, without a second wiring site: the daemon executes an
+// It also covers the SERVER, without a second wiring site: the server executes an
 // adopted run by calling runTarget/affected itself (main.go's dispatchAdopted), so a
-// forwarded run reaches this function in the daemon process. ctx is what tells the two
+// forwarded run reaches this function in the server process. ctx is what tells the two
 // cases apart; see below.
 func withInvocationJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
 	// The environment is read ONCE, here, and every fact this invocation writes carries that
 	// copy. Reading it per fact would let a mid-run environment change split one
 	// invocation's facts across two leases, which is a history no producer could have meant.
 	//
-	// On an ADOPTED run the environment belongs to the DAEMON, not to whoever asked for the
+	// On an ADOPTED run the environment belongs to the SERVER, not to whoever asked for the
 	// run, so the environment channel alone leaves every forwarded run unattributed. proc
 	// carries the client's lease on the request and lands it on ctx, and that is the claim
 	// here. The trace context does not cross that socket, so a forwarded run records the
-	// client's lease and no ancestry rather than borrowing the daemon's. A plain CLI run
+	// client's lease and no ancestry rather than borrowing the server's. A plain CLI run
 	// carries none on ctx and reads its own environment.
 	spawn := trail.SpawnFromEnv()
 	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {

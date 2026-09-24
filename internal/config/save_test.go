@@ -13,16 +13,25 @@ import (
 
 // Save validates what it writes with validateAfterMerge, which layers the file
 // with yaml.Unmarshal, where a written `false` DOES land. Load merges with
-// mergeConfig instead, and the two disagreed: `magus config set daemon.enabled
+// mergeConfig instead, and the two disagreed: `magus config set server.enabled
 // false` accepted the value, wrote it, and then loaded back as enabled. The round
 // trip through both code paths is the only thing that catches that divergence.
 func TestSave_PlainBoolFalseSurvivesTheRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "magus.yaml")
-	require.NoError(t, Save(path, "daemon.enabled", "false"))
+	require.NoError(t, Save(path, "server.enabled", "false"))
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
-	assert.False(t, cfg.Daemon.Enabled, "config set daemon.enabled false must load back disabled")
+	assert.False(t, cfg.Server.Enabled, "config set server.enabled false must load back disabled")
+}
+
+// A retired key is refused by name, with the key that replaced it, and nothing is written:
+// a set that landed under the old key would be a setting magus silently ignores.
+func TestSave_RetiredKeyNamesItsReplacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "magus.yaml")
+	err := Save(path, "daemon.maintenance.sync_graph", "1h")
+	require.EqualError(t, err, `config key "daemon.maintenance.sync_graph" was renamed to "server.maintenance.sync_graph"`)
+	assert.NoFileExists(t, path)
 }
 
 // TestSave_AllValueTypes exercises config set across every value kind: a *bool,
@@ -33,7 +42,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	for _, c := range []struct{ key, value string }{
 		{"hints.enabled", "false"},                              // *bool
 		{"volatility.threshold", "0.25"},                        // float64
-		{"daemon.idle_ttl", "30m"},                              // time.Duration
+		{"server.idle_ttl", "30m"},                              // time.Duration
 		{"telemetry.headers", "{Authorization: Bearer xyz}"},    // map[string]string
 		{"sandbox.allow.homebin.path", "/home/user/.local/bin"}, // slice-of-struct (by name)
 		{"sandbox.allow.homebin.mode", "ro"},
@@ -46,7 +55,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	require.NotNil(t, cfg.Hints.Enabled)
 	assert.False(t, *cfg.Hints.Enabled, "hints.enabled should be false")
 	assert.Equal(t, 0.25, cfg.Volatility.Threshold)
-	assert.Equal(t, 30*time.Minute, cfg.Daemon.IdleTTL)
+	assert.Equal(t, 30*time.Minute, cfg.Server.IdleTTL)
 	assert.Equal(t, "Bearer xyz", cfg.Telemetry.Headers["Authorization"])
 
 	var got *SandboxAllowPath
@@ -182,7 +191,7 @@ func TestLoad_RejectsInvalidShardCount(t *testing.T) {
 	assert.Contains(t, err.Error(), "ci.max_shards")
 }
 
-func TestLoad_DaemonAddressValidation(t *testing.T) {
+func TestLoad_ServerAddressValidation(t *testing.T) {
 	check := func(t *testing.T, yamlContent string, wantErr bool) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "magus.yaml")
@@ -196,19 +205,19 @@ func TestLoad_DaemonAddressValidation(t *testing.T) {
 	}
 
 	t.Run("unix valid", func(t *testing.T) {
-		check(t, "daemon:\n  address: unix:///tmp/magus.sock\n", false)
+		check(t, "server:\n  address: unix:///tmp/magus.sock\n", false)
 	})
 	t.Run("empty address", func(t *testing.T) {
-		check(t, "daemon:\n  address: \"\"\n", false)
+		check(t, "server:\n  address: \"\"\n", false)
 	})
 	t.Run("bare path rejected", func(t *testing.T) {
-		check(t, "daemon:\n  address: /tmp/magus.sock\n", true)
+		check(t, "server:\n  address: /tmp/magus.sock\n", true)
 	})
 	t.Run("tcp scheme rejected", func(t *testing.T) {
-		check(t, "daemon:\n  address: tcp://localhost:9000\n", true)
+		check(t, "server:\n  address: tcp://localhost:9000\n", true)
 	})
 	t.Run("unix empty path rejected", func(t *testing.T) {
-		check(t, "daemon:\n  address: unix://\n", true)
+		check(t, "server:\n  address: unix://\n", true)
 	})
 }
 

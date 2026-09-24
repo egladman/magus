@@ -7,8 +7,8 @@ import (
 
 // graph_link.go holds the shared seam for the "view this in the Graph Explorer"
 // deep-links a few read-only commands print beneath their output (magus affected
-// --impact, magus explain). The link is always emitted; the daemon may not be up
-// when the browser opens it, so the call sites follow it with a start-the-daemon
+// --impact, magus explain). The link is always emitted; the server may not be up
+// when the browser opens it, so the call sites follow it with a start-the-server
 // hint rather than probing and omitting the line.
 
 // authHint is the second line every call site prints under the link. The link is
@@ -18,9 +18,9 @@ func authHint(link string) string {
 	return "open it signed in: " + console.OpenCommand(link)
 }
 
-// liveExplorerLink formats a daemon-origin Graph Explorer deep-link (served by the
-// running daemon from http://<host>/console/graph/) with the caller's directives
-// applied. It does not probe the daemon, and it NEVER embeds the bearer token.
+// liveExplorerLink formats a server-origin Graph Explorer deep-link (served by the
+// running server from http://<host>/console/graph/) with the caller's directives
+// applied. It does not probe the server, and it NEVER embeds the bearer token.
 //
 // It used to call auth.Load() and put the live token in the fragment. The fragment
 // is not transmitted in an HTTP request, which is why that read as safe, but it is
@@ -39,7 +39,7 @@ func liveExplorerLink(directives url.GraphLinkOpts) string {
 
 // buildGraphLink fills Host/Code on the caller's directives and formats the URL,
 // returning "" only when GraphLink has no host to link to. It is split out with the
-// inputs injected so tests can assert the URL without a daemon.
+// inputs injected so tests can assert the URL without a server.
 func buildGraphLink(host, code string, directives url.GraphLinkOpts) string {
 	directives.Host = host
 	directives.Code = code

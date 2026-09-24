@@ -7,15 +7,15 @@ aliases: [console, browser-bridge]
 
 # Console API
 
-The console is a small set of loopback JSON routes that the magus daemon
+The console is a small set of loopback JSON routes that the magus server
 exposes so the hosted [console](https://eli.gladman.cc/magus/console/) (the
 Graph Explorer and the surfaces beside it) can display your current workspace.
 
 The console holds no privileged access: it is one client of the same contract
 anyone can code against. The full schema - every service, method, message, and
-enum, generated from the `.proto` files - is the [daemon API reference](api/index.md).
+enum, generated from the `.proto` files - is the [server API reference](api/index.md).
 
-**Most of these routes cannot change your workspace.** They read what the daemon
+**Most of these routes cannot change your workspace.** They read what the server
 already knows: they cannot edit a file or change configuration. Most of the
 table below answers GET only and rejects any other method with a 405, with two
 named exceptions. `POST /api/v1/diff/session` records a person's own review
@@ -65,11 +65,11 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `POST /api/v1/attention`           | Dispose one request (`{"id","reason"}`). Nothing else closes one                                                                   |
 
 One more route sits under `/api/v1/` without belonging to this read surface:
-`POST /api/v1/share`, described below. The daemon's typed Connect
+`POST /api/v1/share`, described below. The server's typed Connect
 services - status, activity, metrics, insight, viewer, memory, notes, tool, and
 [job control](#job-control) - are mounted at their own
 `magus.<service>.v1alpha1.<Service>/` prefixes rather than here, and the
-[daemon API reference](api/index.md) is their schema. The console mounts at
+[server API reference](api/index.md) is their schema. The console mounts at
 `/api/v1/` on the same port as the MCP server (`127.0.0.1:7391` by default).
 
 There is no `GET /api/v1/status` any more. The typed
@@ -89,7 +89,7 @@ agent cannot reach the human route, so it cannot post as the person.
 on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
 watch a run from a phone. It serves only the plain-JSON `events` and `insight`
 routes, plus the metrics, activity, status, insight, and viewer Connect
-services (`internal/daemon/daemon.go`'s `shareGuarded` map is the exact list).
+services (`internal/serverhttp/server.go`'s `shareGuarded` map is the exact list).
 The viewer service is the typed twin of the run browser - a past run's journal
 holds the captured output plus the command that produced it, which a
 `magus query output --open` link has always carried in its fragment; the
@@ -123,7 +123,7 @@ serialization). This is a known limitation; memoization per variant is deferred.
 
 ## Job control
 
-Separate from the read routes above, the daemon hosts a **mutating** Connect
+Separate from the read routes above, the server hosts a **mutating** Connect
 service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
 background maintenance without an open action endpoint. It is the only surface
 that changes anything magus computed - the others record a person's own review
@@ -151,13 +151,13 @@ current size of what it maintains. The service is mounted behind the same loopba
 bind and bearer token as everything else here; it is never served unauthenticated.
 
 Two doors reach it. In the console, the **Jobs** view lists them, because a job
-is one kind of thing however it was created: the daemon's own maintenance jobs
+is one kind of thing however it was created: the server's own maintenance jobs
 and the ones a session was handed appear in one list, separated by a holder
-column reading `daemon` or `session`. A maintenance row carries its running
+column reading `server` or `session`. A maintenance row carries its running
 state, last run and target size (`ListJobs`) and runs that job (`RunJob`). From
 a terminal, `magus server job <name>` submits the same jobs down the same path,
 and `magus ls jobs` prints the same two sets. The view exists because the
-console is where the prompt to run one already fires: the daemon-storage
+console is where the prompt to run one already fires: the server-storage
 notification watches the cache figure from inside the console, and used to end
 by naming a shell command, so the surface that noticed the problem could not act
 on it.
@@ -185,7 +185,7 @@ Only its hash is stored, and it is never logged. A console token is refused at
 `Origin`. Loopback hosts are always accepted. For the `/api/` bridge and the
 Connect services the hosted console reaches, the accept-list also includes the
 hosted site host (`eli.gladman.cc`), so a page at `https://eli.gladman.cc` can
-talk to the local daemon. `/mcp` stays loopback-only: a site Origin there is
+talk to the local server. `/mcp` stays loopback-only: a site Origin there is
 still 403. A non-loopback `Host` that is not otherwise allow-listed is rejected
 with 403 before the bearer token is examined.
 
@@ -230,7 +230,7 @@ The console serves your workspace graph over loopback. It does not:
 
 - Send data to any external service
 - Log request payloads
-- Store anything beyond what the daemon already caches on disk, plus the review
+- Store anything beyond what the server already caches on disk, plus the review
   state a person records through `POST /api/v1/diff/session`
 - Accept a write into your working tree, or edit a file or change
   configuration. It CAN run a target - `POST /api/v1/diff/run` - but only one
@@ -244,36 +244,36 @@ log in the address bar).
 
 ## `magus doctor` check
 
-`magus doctor` reports console reachability when the daemon is running:
+`magus doctor` reports console reachability when the server is running:
 
 ```text
 [pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
     console token: magus config console token create
 ```
 
-When the daemon is not running, the check is skipped (not a failure).
+When the server is not running, the check is skipped (not a failure).
 When `console.enabled: false` is set, the check reports that the console is
 disabled.
 
 ## Live mode pairing
 
-`magus graph export --open --follow` opens the explorer connected to the running daemon.
+`magus graph export --open --follow` opens the explorer connected to the running server.
 
 ### How to pair
 
-1. Start the daemon: `magus server start`
+1. Start the server: `magus server start`
 2. Run `magus graph export --open --follow` (or `--follow --print` to copy the URL)
 3. The explorer shows a `live: <workspace>` badge and updates within seconds of file changes
 
-The link is served from the daemon's own loopback origin, e.g.
-`http://127.0.0.1:7391/console/graph/#token=<bearer>` (the origin names which daemon;
+The link is served from the server's own loopback origin, e.g.
+`http://127.0.0.1:7391/console/graph/#token=<bearer>` (the origin names which server;
 the token rides the fragment). The page:
 
 - Confirms its own origin is literally `127.0.0.1` or `[::1]` before making any fetch
 - Consumes the token and strips it from the URL via `history.replaceState`
 - Stores the token in sessionStorage (tab lifetime) unless you tick "Remember this workspace", which moves it to localStorage
 
-Zero-arg default: a plain `magus graph export --open` with no flags checks if the daemon is running. If it is, it automatically picks `--follow`. Otherwise it falls back to the `#data=` fragment.
+Zero-arg default: a plain `magus graph export --open` with no flags checks if the server is running. If it is, it automatically picks `--follow`. Otherwise it falls back to the `#data=` fragment.
 
 ### Two-state model
 
@@ -282,7 +282,7 @@ The explorer has exactly two source states:
 | State    | Badge                    | What it means                                             |
 | -------- | ------------------------ | --------------------------------------------------------- |
 | snapshot | `snapshot: <provenance>` | Data from fragment/file/demo/--serve; frozen at load time |
-| live     | `live: <workspace>`      | Data from the daemon; refreshes on file changes           |
+| live     | `live: <workspace>`      | Data from the server; refreshes on file changes           |
 
 "Connected but stale" is impossible: when the SSE stream disconnects, a banner appears ("disconnected - showing workspace as of HH:MM, reconnecting...") and auto-reconnect runs with exponential backoff (1s to 30s). The data stays visible while reconnecting.
 
@@ -297,7 +297,7 @@ Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed con
 
 ### Affected view
 
-When the daemon has computed an affected set (from `magus affected` in a CI context), the pool in the `magus.status.v1alpha1.StatusService/GetStatus` response carries an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
+When the server has computed an affected set (from `magus affected` in a CI context), the pool in the `magus.status.v1alpha1.StatusService/GetStatus` response carries an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
 
 ## Verify our claims - don't take our word for it
 
@@ -365,7 +365,7 @@ that's the HTTP standard, not our promise.
    appears in none of them.
 4. Type `method:POST` into the Network filter box: zero results for the
    snapshot flow these steps describe. In live mode there is one exception, and
-   it goes to your own machine: the typed daemon services (status, activity,
+   it goes to your own machine: the typed server services (status, activity,
    metrics) are Connect RPCs, and Connect sends a read as a POST. Those requests
    are addressed to `127.0.0.1` and carry a request message, never your graph -
    the same `connect-src` policy above is what confines them to loopback.
@@ -387,7 +387,7 @@ The strongest proof: data cannot leave a machine that has no connection.
 ### Claim: we store nothing without asking
 
 DevTools -> **Application** tab -> **Cookies**: none. **Local storage** /
-**Session storage**: empty, unless you used live mode - the daemon token is
+**Session storage**: empty, unless you used live mode - the server token is
 kept in session storage under the `magus-live-token` key for the tab's
 lifetime, or promoted to local storage only after you tick "Remember this
 workspace" (see "Live mode pairing" above). Ticking it also sets a second
@@ -443,10 +443,10 @@ functions that ingest a graph (the `#data=`/`#src=`/demo fallback chain, and
 drag-drop/file-input/`launchQueue` respectively), and there is no function
 that sends it out.
 
-A locally built console is not limited to the hosted site's copy: the daemon's
+A locally built console is not limited to the hosted site's copy: the server's
 LAN share listener (`POST /api/v1/share`) and its own `/console/` mount both
 resolve which built console to serve via `resolveConsoleDir`
-(`internal/daemon/share.go`), which honors `MAGUS_CONSOLE_DIR` as an override
+(`internal/serverhttp/share.go`), which honors `MAGUS_CONSOLE_DIR` as an override
 before falling back to `<workspace root>/console/gen`. Point it at a console
 you built and audited yourself to serve that copy instead of trusting any
 prebuilt one.
@@ -480,4 +480,4 @@ If your threat model excludes our hosting altogether: clone the repo, run
 network. Every page here is origin-agnostic and works identically. (magus
 ships no general-purpose static file server for hosting this site; the only
 servers it binds are the ephemeral loopback `--serve` graph server and the
-loopback daemon console documented above.)
+loopback server console documented above.)

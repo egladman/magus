@@ -36,7 +36,7 @@ func TestJournalSweepRunsStopCommands(t *testing.T) {
 
 	sentinel := filepath.Join(t.TempDir(), "stopped")
 	// A record whose stop command has an observable effect, as if left by a crashed
-	// daemon; and one with no stop command (unreapable).
+	// broker; and one with no stop command (unreapable).
 	j.record("svc1", spells.Command{Bin: "sh", Args: []string{"-c", "touch " + sentinel}})
 	j.record("svc2", spells.Command{})
 

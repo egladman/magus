@@ -22,7 +22,7 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	ctx := ContextWithEntryPoint(t.Context(), types.EntryPointCLI)
 
 	Append(ctx, dir, Event{Kind: KindJob, Action: "a", Origin: types.Origin{User: "forged", UID: "4242"}})
-	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: types.Origin{EntryPoint: types.EntryPointDaemon}})
+	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: types.Origin{EntryPoint: types.EntryPointServer}})
 
 	events, err := ReadRecent(dir, 2)
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	}
 	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointCLI}, byAction["a"],
 		"the account is the OS's answer, never the producer's, and the entry point comes from ctx")
-	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointDaemon}, byAction["b"],
+	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointServer}, byAction["b"],
 		"a producer that names its entry point keeps it")
 }
 
@@ -78,6 +78,6 @@ func TestAccountOfNeverReadsTheEnvironment(t *testing.T) {
 func TestEntryPointFromContextIsEmptyUntilRecorded(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, EntryPointFromContext(context.Background()))
-	ctx := ContextWithEntryPoint(context.Background(), types.EntryPointDaemon)
+	ctx := ContextWithEntryPoint(context.Background(), types.EntryPointServer)
 	assert.Equal(t, types.EntryPointRPC, EntryPointFromContext(ContextWithEntryPoint(ctx, types.EntryPointRPC)), "the innermost entry point wins")
 }
