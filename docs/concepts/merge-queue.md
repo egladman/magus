@@ -15,9 +15,10 @@ by name), and each change's affected set and the workspace's declared outputs th
 magus's Go SDK, with the workspace loaded once. Another build tool answers through
 `--facts <command>`.
 
-A pull request joins the queue when someone enables GitHub's auto-merge on it, or, for a
-stack of pull requests, when a `queue: <method>` label is on the top one. From there the
-queue:
+A change joins the queue when its provider reports merge intent on it. With the built-in
+GitHub provider that is auto-merge enabled on a pull request, or, for a stack, a label
+on its top made of the prefix `describe` reports and a merge method (`queue: squash`).
+From there the queue:
 
 - builds a candidate per change, main plus every change ahead of it in its partition,
   then gates up to `--depth` of them at once, each running only what its own change adds;
@@ -32,7 +33,7 @@ queue:
   author picked, as soon as every change beneath it in its partition has merged;
 - checks after each merge that main carries exactly the tree it predicted, in the shape
   the merge method gives, and stops if it does not;
-- refuses pull requests from forks.
+- refuses changes from forks, whose branches it cannot push to.
 
 It kicks an author back only for what their own change did: a real conflict, a red gate
 on a candidate whose every change beneath is validated, a regeneration their code broke,
@@ -104,6 +105,7 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 
 | Subcommand | Reads                                          | Writes                                              | Rights                       |
 | ---------- | ---------------------------------------------- | --------------------------------------------------- | ---------------------------- |
+| `describe` | the provider                                   | a `mergequeue.capabilities/v1` document             | read                         |
 | `ls`       | the provider                                   | a `mergequeue.changes/v1` document                  | read                         |
 | `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                         | read                         |
 | `validate` | the plan                                       | the plan and one `mergequeue.verdict/v1` per change | read; runs the changes' code |
@@ -153,8 +155,11 @@ read as one; a one-letter scheme is a Windows drive, so `C:\queue` is a director
 `apply` follows its source until the source is complete: a directory once `.done`
 appears in it, a run once it has completed. `--once` applies what the source holds now
 and stops, leaving the rest queued; `--interval` sets how often a follow reads the source
-and is refused with `--once`. `--committer "Name <email>"` makes each update commit the
-queue pushes, as its author and committer; empty is the queue's own identity.
+and is refused with `--once`. Each update commit the queue pushes is committed by the
+committer the provider's `describe` names; `--committer "Name <email>"` overrides it,
+for example `--committer "Release Bot <release-bot@example.com>"`. magus has no default:
+with neither, a change that needs an update commit waits with `WAIT_NO_COMMITTER` and
+apply stops with an error.
 
 A run source asks the provider's `list_artifacts` for the run's `mergequeue-plan`
 artifact, then for each `mergequeue-verdict-<id>` artifact as the run uploads it, and
@@ -359,15 +364,16 @@ a change the plan did not admit is dropped.
 | `WAIT_METHOD_CHANGED`   | its merge method changed since validation                            |
 | `WAIT_WITHDRAWN`        | its merge intent was withdrawn since it was listed                   |
 | `WAIT_UNQUEUED_BELOW`   | it carries the commits of an open change nobody queued               |
+| `WAIT_NO_COMMITTER`     | it needs an update commit, and nothing names who commits it          |
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated        |
 | `KICK_RED`              | the gate was red on its candidate                                    |
 | `KICK_REFUSED`          | something the author has to fix that is neither                      |
 
 ## Applying as each candidate goes green
 
-Validation runs pull-request code with a read-only token; apply holds the write token
-and runs none of it. They are two workflows, and verdicts pass between them one change at
-a time:
+Validation runs the changes' code with a read-only token; apply holds the write token
+and runs none of it. In this repository they are two GitHub Actions workflows, and
+verdicts pass between them one change at a time:
 
 1. `queue.yaml` (read-only) plans, then fans the plan out as a job matrix, one
    `validate --only <id>` job per change up to the depth of each partition. Each job
@@ -413,11 +419,12 @@ change without either one holding the other's rights.
 When the provider's own merge of a head would not give the rebuilt tree, apply pushes an
 update commit onto the change's branch with a lease on the validated head, so a branch
 that moved or was deleted is left alone, and a branch that refuses the push kicks that
-change back without stopping the run. The update commit is the queue's own, authored and
-committed by `--committer`. It may differ from the provider's merge only in generated
+change back without stopping the run. An update commit that merges the base in or
+regenerates keeps the author of the change's head and is committed by the committer; one
+that restacks a branch is the committer's own. It may differ from the provider's merge only in generated
 files main's regeneration wrote, or, for a change stacked on a squashed one, in exactly
 what that change merged. Anything else is kicked back, and so is an update commit for a
-branch another open pull request also merges from. After the merge, apply checks that
+branch another open change also merges from. After the merge, apply checks that
 main carries the predicted tree in the shape the merge method gives (one new commit for a
 squash, a merge commit whose second parent is what it handed over, a line of commits for
 a rebase), and stops otherwise.
@@ -429,7 +436,7 @@ functions, each taking one record:
 
 | Function         | Receives                                                                | Returns                                                                          |
 | ---------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `describe`       | `{base, remote_url}`                                                    | `{stack_merge, linear_stacks, methods}`                                          |
+| `describe`       | `{base, remote_url}`                                                    | `{stack_merge, linear_stacks, methods, queue_label?, committer?}`                |
 | `list_changes`   | `{base, remote_url}`                                                    | `{changes, merged, unqueued}`                                                    |
 | `approval_at`    | the change plus `{commit}`                                              | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}` |
 | `post_status`    | the change plus `{commit, context, state, description}`                 | `true` when recorded                                                             |
@@ -443,7 +450,12 @@ opens; `list_artifacts` is required of a provider `apply` follows through a run.
 returned key without a `?` is required: a missing one is an error, never a zero value,
 since a missing `fork` or `queued` read as false would admit what the provider meant to
 refuse. `stack_merge` is `sequential` or `atomic`, `methods` the merge methods the
-repository allows, and a change with any other method is refused. `approval_at` must
+repository allows, and a change with any other method is refused. `queue_label` is the
+prefix of the label that queues a change, followed by its method, for a provider whose
+merge intent is a label; `magus queue describe` prints it for tools such as the pull
+request advisor. `committer` is `{name, email}`, the identity the provider's automation
+pushes as, which commits every update commit unless `--committer` overrides it.
+`approval_at` must
 name the change's current head, base and merge method, whether it still carries merge
 intent (`queued`), and the other open changes whose head branch is its branch
 (`shared_with`); `approved_commit` names an older commit its approvals stand at, which
@@ -467,7 +479,10 @@ from the pull request's timeline; a timeline too long to read, or a labeler whos
 permission cannot be looked up, leaves that stack unqueued and nothing else. Kicking a
 change back comments with the report and one JSON line of its code and files, then
 removes the intent where it lives: its own auto-merge, its own label, and the label on
-its stack's top. Queuing it again re-queues the change.
+its stack's top. Queuing it again re-queues the change. Its `describe` reports the label
+prefix `"queue: "` and the committer
+`github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
+identity a workflow's token pushes as.
 
 On GitHub the queue's credential merges past its own pending status as a bypass actor of
 a ruleset. A ruleset's bypass list bypasses every rule in that ruleset, not one rule:

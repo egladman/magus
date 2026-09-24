@@ -11,7 +11,7 @@ Merge approved changes through a speculative, partitioned merge queue
 
 ## Synopsis
 
-**magus** queue \<ls|plan|validate|apply\> [flags]
+**magus** queue \<describe|ls|plan|validate|apply\> [flags]
 
 ## Description
 
@@ -38,8 +38,22 @@ validation run as the provider names it (github: \<owner\>/\<name\>/runs/\<id\>)
 The checkout is the one at the global --root (default: the current directory),
 and every relative path resolves against it. The provider is a built-in name
 (github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
-on stdout; ls prints the changes document instead. The global --dry-run makes
+on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.
+
+### queue describe options
+
+**--base** *branch*
+: \`branch\` the queue merges into
+
+**--provider** *provider*
+: \`provider\`: a built-in name (github) or a .buzz file
+
+**--remote** *remote* (default: origin)
+: Name of the configured \`remote\` changes and the base are fetched from
+
+**--vcs** *backend* (default: git)
+: Version control \`backend\` of the checkout at --root
 
 ### queue ls options
 
@@ -119,7 +133,7 @@ apply report what would merge and call nothing on the provider.
 ### queue apply options
 
 **--committer** *string*
-: "Name \<email\>" making each update commit; empty is the queue's own
+: "Name \<email\>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
 
 **--facts** *command*
 : \`command\` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
@@ -150,6 +164,9 @@ apply report what would merge and call nothing on the provider.
 
 ## Subcommands
 
+**describe**
+: Ask the provider what it supports on a base: its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document
+
 **ls**
 : Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document
 
@@ -163,6 +180,12 @@ apply report what would merge and call nothing on the provider.
 : Rebuild and merge the green verdicts \<source\> holds as they arrive (holds the write credential; runs no change's code)
 
 ## Examples
+
+*See the merge methods and the queue label*
+
+```sh
+magus queue describe --provider github --base main
+```
 
 *List what carries merge intent*
 

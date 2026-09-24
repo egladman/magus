@@ -61,6 +61,12 @@ type capabilitiesDoc struct {
 	LinearStacks bool                `json:"linear_stacks"`
 	Methods      []types.MergeMethod `json:"methods"`
 	QueueLabel   string              `json:"queue_label,omitempty"`
+	Committer    *personDoc          `json:"committer,omitempty"`
+}
+
+type personDoc struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 // WriteCapabilities checks c and encodes what the provider supports on base, on one
@@ -69,8 +75,12 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 	if err := c.Check(); err != nil {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
 	}
-	return json.NewEncoder(w).Encode(capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
-		LinearStacks: c.LinearStacks, Methods: c.Methods, QueueLabel: c.QueueLabel})
+	doc := capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
+		LinearStacks: c.LinearStacks, Methods: c.Methods, QueueLabel: c.QueueLabel}
+	if c.Committer.Name != "" {
+		doc.Committer = &personDoc{Name: c.Committer.Name, Email: c.Committer.Email}
+	}
+	return json.NewEncoder(w).Encode(doc)
 }
 
 // WritePlan checks p and encodes it, stamping its schema.

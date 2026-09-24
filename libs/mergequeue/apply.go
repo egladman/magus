@@ -819,7 +819,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 				return "", err
 			}
 			return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs its branch restacked onto it, which would replace the commits #" + above +
-				" is stacked on", Remedy: "Restack the stack (gh stack rebase, gt restack or av sync) and queue it again."}
+				" is stacked on", Remedy: "Restack the stack onto `" + r.plan.Base + "` and queue it again."}
 		}
 		parents, author = []string{rd.tip}, r.committer
 		msg = "restack #" + c.ID + " onto " + r.plan.Base + "\n\nReplaces " + c.Head + " and the commits beneath it that " +

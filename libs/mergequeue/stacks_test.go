@@ -65,7 +65,7 @@ func TestStackDetection(t *testing.T) {
 		},
 		"a declared parent it is not built on waits for a restack": {
 			in:       stackInput{changes: []types.Change{parent, withParent(child, "1")}, own: []map[string]bool{set(parent.Head), set(child.Head)}, tops: []string{parent.Head, child.Head}},
-			wantCode: types.CodeWaitRestack, wantWhy: "not built on #1's head; restack it (gh stack rebase, gt restack or av sync)",
+			wantCode: types.CodeWaitRestack, wantWhy: "not built on #1's head; restack it onto that head",
 		},
 		"a stack that mixes merge methods is refused": {
 			in:       stackInput{changes: []types.Change{parent, withMethod(child, types.MethodMerge)}, own: []map[string]bool{set(parent.Head), set(parent.Head, child.Head)}, tops: []string{parent.Head, child.Head}},

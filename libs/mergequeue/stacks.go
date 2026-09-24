@@ -99,7 +99,7 @@ func (in stackInput) stack(i int) *types.Verdict {
 		if !slices.ContainsFunc(nodes, func(n stackNode) bool { return n.id == c.Parent }) {
 			return decided(*c, types.DecisionWait, types.CodeWaitBelow, "stacked on #"+c.Parent+", which is not queued", "")
 		}
-		return decided(*c, types.DecisionWait, types.CodeWaitRestack, "not built on #"+c.Parent+"'s head; restack it (gh stack rebase, gt restack or av sync)", "")
+		return decided(*c, types.DecisionWait, types.CodeWaitRestack, "not built on #"+c.Parent+"'s head; restack it onto that head", "")
 	}
 	if len(below) == 0 {
 		return declared()

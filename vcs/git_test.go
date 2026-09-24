@@ -100,6 +100,16 @@ func gitRun(t *testing.T, dir string, args ...string) {
 var gitFixtureConfig = []string{"maintenance.auto=false", "gc.auto=0",
 	"user.name=magus test", "user.email=test@example.com", "user.useConfigOnly=true"}
 
+// gitConfigureFixture sets gitFixtureConfig on dir, a repository a fixture made some
+// other way than gitInitRepo or gitCloneShallow.
+func gitConfigureFixture(t *testing.T, dir string) {
+	t.Helper()
+	for _, kv := range gitFixtureConfig {
+		k, v, _ := strings.Cut(kv, "=")
+		gitRun(t, dir, "config", k, v)
+	}
+}
+
 // gitInitRepo makes a throwaway repo at dir with files committed. Skips if git is absent.
 func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
@@ -108,10 +118,7 @@ func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	}
 	run := func(args ...string) { gitRun(t, dir, args...) }
 	run("init", "-q")
-	for _, kv := range gitFixtureConfig {
-		k, v, _ := strings.Cut(kv, "=")
-		run("config", k, v)
-	}
+	gitConfigureFixture(t, dir)
 	for name, content := range files {
 		p := filepath.Join(dir, filepath.FromSlash(name))
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -2103,6 +2110,7 @@ func newRemoteFixture(t *testing.T) remoteFixture {
 	isolateGitConfig(t)
 	remote := t.TempDir()
 	gitRun(t, remote, "init", "-q", "--bare", "-b", "main")
+	gitConfigureFixture(t, remote)
 	seed := t.TempDir()
 	gitInitRepo(t, seed, map[string]string{"base.txt": "base\n"})
 	gitRun(t, seed, "branch", "-M", "main")
@@ -2112,8 +2120,7 @@ func newRemoteFixture(t *testing.T) remoteFixture {
 
 	clone := t.TempDir()
 	gitRun(t, clone, "clone", "-q", "--no-tags", "file://"+remote, ".")
-	gitRun(t, clone, "config", "maintenance.auto", "false")
-	gitRun(t, clone, "config", "gc.auto", "0")
+	gitConfigureFixture(t, clone)
 	return remoteFixture{remote: remote, clone: clone}
 }
 
@@ -2123,6 +2130,7 @@ func (f remoteFixture) advance(t *testing.T, branch, name string) string {
 	t.Helper()
 	work := t.TempDir()
 	gitRun(t, work, "clone", "-q", "file://"+f.remote, ".")
+	gitConfigureFixture(t, work)
 	start := "origin/main"
 	if strings.Contains(gitTestOutput(t, work, "branch", "-r"), "origin/"+branch) {
 		start = "origin/" + branch
@@ -2234,6 +2242,7 @@ func TestFetchAndPushRefuseARemoteNobodyConfigured(t *testing.T) {
 	f := newRemoteFixture(t)
 	evil := filepath.Join(f.clone, "evil")
 	gitRun(t, f.clone, "clone", "-q", "--bare", "file://"+f.remote, evil)
+	gitConfigureFixture(t, evil)
 	id := gitTestOutput(t, f.clone, "rev-parse", "HEAD")
 	g := gitVCS{}
 
@@ -2624,6 +2633,7 @@ func TestBundleCarriesCommitsWithoutRefs(t *testing.T) {
 
 	other := t.TempDir()
 	gitRun(t, other, "clone", "-q", "file://"+f.remote, ".")
+	gitConfigureFixture(t, other)
 	before := refsOf(t, other)
 	require.NoError(t, g.Unbundle(ctx, other, file))
 	gitRun(t, other, "cat-file", "-e", carried+"^{commit}")
@@ -2633,6 +2643,7 @@ func TestBundleCarriesCommitsWithoutRefs(t *testing.T) {
 	require.NoError(t, g.Bundle(ctx, f.clone, whole, types.BundleRange{Head: carried}), "an empty Base bundles the whole history")
 	empty := t.TempDir()
 	gitRun(t, empty, "init", "-q")
+	gitConfigureFixture(t, empty)
 	require.NoError(t, g.Unbundle(ctx, empty, whole))
 	gitRun(t, empty, "cat-file", "-e", carried+"^{commit}")
 }

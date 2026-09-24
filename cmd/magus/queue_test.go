@@ -32,7 +32,10 @@ func queueHead(id string) string { return strings.Repeat("0", 39) + id }
 // queueProvider approves every change at the commit asked about, lists CHANGES, merges
 // nothing, and lists RUN as every validation run's artifacts.
 const queueProvider = `
-export fun describe(io: {str: any}) > any { return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"]}; }
+export fun describe(io: {str: any}) > any {
+    return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"], "queue_label": "merge: ",
+        "committer": {"name": "bot", "email": "bot@example.invalid"}};
+}
 export fun list_changes(io: {str: any}) > any {
     return {"changes": CHANGES, "merged": [<any>], "unqueued": [<any>]};
 }
@@ -162,7 +165,7 @@ func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	out, err := f.run(t, "", "--help")
 	require.NoError(t, err)
-	for _, verb := range []string{"ls", "plan", "validate", "apply"} {
+	for _, verb := range []string{"describe", "ls", "plan", "validate", "apply"} {
 		assert.Contains(t, string(out), "  "+verb+" ")
 	}
 	var stderr bytes.Buffer
@@ -185,6 +188,20 @@ func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
 	require.Len(t, got.Changes, 1)
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.Changes[0].Repo, "the provider names the repository from the remote's URL")
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.RemoteURL)
+}
+
+// describe prints what the provider reports, so a tool reads the queue label and the
+// merge methods from the provider rather than knowing them.
+func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
+	f := newQueueFixture(t, "", "")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
+	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"sequential","linear_stacks":false,`+
+		`"methods":["squash"],"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
+
+	_, err = f.run(t, "", "describe", "--provider", "local.buzz")
+	require.ErrorContains(t, err, "--base")
 }
 
 // The three steps as a workflow drives them, over nothing to merge: every path the

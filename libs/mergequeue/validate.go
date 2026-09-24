@@ -401,7 +401,7 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 	return true, r.decide(v)
 }
 
-// squashMessage is GitHub's default squash body for c's own commits: one "* subject"
+// squashMessage is the conventional squash body for c's own commits: one "* subject"
 // paragraph each, oldest first, merges left out. A stacked change's own commits start
 // at its stack base.
 func squashMessage(ctx context.Context, v types.ReadVCS, root, baseCommit string, c types.Change) (string, error) {

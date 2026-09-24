@@ -24,7 +24,7 @@ function __magus_subcommands
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
         job        'declare and act on jobs (fork, exec, exit, wait, run)' \
         notes      'human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)' \
-        queue      'merge approved changes through a speculative, partitioned merge queue (ls, plan, validate, apply)' \
+        queue      'merge approved changes through a speculative, partitioned merge queue (describe, ls, plan, validate, apply)' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \
         server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \

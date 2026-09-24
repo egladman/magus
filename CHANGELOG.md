@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   read access only; apply rebuilds each candidate and merges it with the change's own
   method. The code is `libs/mergequeue`, its contract and mocks in its `types` package;
   `--facts` serves other build tools.
+- **`magus queue describe` prints what the provider supports.** That includes its queue
+  label and who commits the queue's update commits. The new `merge-queue` pull request
+  advisor, off by default, reads it to name the label that queues an approved pull
+  request.
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
