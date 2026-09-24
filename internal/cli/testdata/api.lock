@@ -1,3 +1,4 @@
+config broker
 config cache.dir
 config cache.include.arch.enabled
 config cache.include.os.enabled
@@ -224,6 +225,7 @@ flag where/literal
 flag where/regex
 subcommand affected
 subcommand agent
+subcommand broker
 subcommand buzz
 subcommand clean
 subcommand completion

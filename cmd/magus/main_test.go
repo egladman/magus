@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -518,7 +519,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "server",
 			print: serverUsage,
-			want:  []string{"magus server", "start", "stop", "status", "reload", "MAGUS_DAEMON_ADDRESS", daemonDefaultAddr()},
+			want:  []string{"magus server", "start", "stop", "status", "reload", "MAGUS_DAEMON_ADDRESS", proc.ServerDefaultAddr()},
 		},
 		{
 			name:  "job run",
@@ -723,6 +724,8 @@ func TestScripts(t *testing.T) {
 		Dir: "testdata/script",
 		Setup: func(e *testscript.Env) error {
 			e.Setenv("MAGUS_DAEMON_ENABLED", "false")
+			// A run starts a broker otherwise, and a script must leave nothing running.
+			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
 			// The shipped guard templates, by ABSOLUTE PATH to the real files.
 			// A script that copied them into its own archive would be testing a

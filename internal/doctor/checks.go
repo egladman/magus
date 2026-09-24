@@ -1666,7 +1666,8 @@ func (r *runner) checkWorkspaceRegistration() types.Check {
 }
 
 // procPoolSocketRe matches a per-process proc server's socket, which proc.Server names
-// magus-<pid>-<rand>.sock. The user's daemon is the fixed magus-daemon.sock.
+// magus-<pid>-<rand>.sock. The server and the broker use the fixed server.sock and
+// broker.sock, outside the magus-* pattern this check scans.
 var procPoolSocketRe = regexp.MustCompile(`^magus-\d+-[^/]*\.sock$`)
 
 // checkStaleSockets scans the magus socket directory. Multiple live daemons

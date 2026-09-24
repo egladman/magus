@@ -5,12 +5,12 @@ magus\-mcp \- Print how to reach the MCP server
 .B magus
 .RI "mcp"
 .SH DESCRIPTION
-MCP is not a standalone process: it is served by the daemon, alongside
-everything else magus server start hosts. This command prints what a client
+MCP is not a standalone process: it is served by magus server, alongside
+everything else it hosts. This command prints what a client
 needs to reach it \- the endpoint, the auth token command, and a liveness
 probe \- and exits non\-zero, since it starts nothing itself.
 .PP
-magus server start                    start the daemon (MCP comes up with it)
+magus server start                    start the server (MCP comes up with it)
   magus config mcp connector create     mint a bearer token for one client
   magus status \-\-probe=liveness,mcp     confirm the endpoint is serving
 .PP
@@ -51,6 +51,7 @@ Always: mcp prints reach\-it instructions and starts nothing, so the invocation 
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-broker\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

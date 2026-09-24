@@ -40,7 +40,7 @@ function request(openedMs: number): AttentionRequest {
 function statusWith(targets: { label: string; state: string; ref?: string }[]): StatusView {
   return {
     health: { label: "healthy", cls: "ok" },
-    pool: { capacity: 8, running: 1, queued: 0, mode: "" },
+    pool: { capacity: 8, running: 1, queued: 0 },
     cache: { hits: 0, misses: 0, errors: 0, hitRate: null, sizeBytes: 0 },
     runningTargets: [],
     runs: [

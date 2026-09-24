@@ -174,7 +174,7 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.Check {
 			Message: fmt.Sprintf("bridge endpoint not reachable at %s", url),
 			Details: []string{
 				err.Error(),
-				"start the daemon: " + hint.ServerStart.String(),
+				"start the server: " + hint.ServerStart.String(),
 				"mint a console token: " + hint.ConfigConsoleTokenCreate.String(),
 			},
 		}

@@ -43,10 +43,9 @@ type Service struct {
 	// StatusSnapshot.Runs empty.
 	runsFn func() []types.StatusRun
 
-	// servicesFn returns the daemon's hosted shared services, folded onto the status
-	// report. Nil when this service is not backed by a daemon service registry, leaving
-	// StatusSnapshot.Services empty.
-	servicesFn func() []types.StatusService
+	// brokerFn returns the broker's status, folded onto the report as its broker section.
+	// Nil when this service fronts no server, leaving StatusSnapshot.Broker nil.
+	brokerFn func() *types.StatusBroker
 
 	// Insight cache: an assembled InsightView reused for insightTTL so repeated dashboard
 	// polls collapse onto one git-log scan. The mutex also serializes cold-cache assembly.
@@ -114,12 +113,11 @@ func WithRuns(fn func() []types.StatusRun) Option {
 	return func(s *Service) { s.runsFn = fn }
 }
 
-// WithServices supplies the daemon's hosted-services source (service.Registry.Snapshot).
-// The status report then carries the long-running shared services the daemon is keeping
-// warm, on both the GET and the SSE frame. Only the daemon sets this; a plain CLI status
-// query omits it.
-func WithServices(fn func() []types.StatusService) Option {
-	return func(s *Service) { s.servicesFn = fn }
+// WithBroker supplies the broker's status: capacity, the claims holding it and the shared
+// services it keeps warm. The status report then carries them, on both the GET and the
+// SSE frame. fn returns nil when no broker answers.
+func WithBroker(fn func() *types.StatusBroker) Option {
+	return func(s *Service) { s.brokerFn = fn }
 }
 
 // NewService builds a Service from the opened workspace (m), its resolved config, the
@@ -149,10 +147,10 @@ func (s *Service) StatusSnapshot(ctx context.Context) types.StatusSnapshot {
 	if s.runsFn != nil {
 		out.Runs = s.runsFn()
 	}
-	// Hosted shared services come from this daemon's in-process service registry (not the
-	// pool query), folded on the same way live runs are.
-	if s.servicesFn != nil {
-		out.Services = s.servicesFn()
+	// The broker is its own process, asked separately from the pool, and folded on the
+	// same way live runs are.
+	if s.brokerFn != nil {
+		out.Broker = s.brokerFn()
 	}
 	// Per-project SCIP index freshness, computed from this daemon's opened workspace so
 	// the dashboard shows the same "up to date / out of date" the CLI status does.
@@ -177,6 +175,7 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 		Cache:          s.statusBase.Cache,
 		Build:          s.statusBase.Build,
 		ObservingSince: s.startedAt,
+		BrokerPolicy:   s.config.Broker.Resolved(),
 		Config: types.StatusConfig{
 			DefaultCharms: s.config.DefaultCharms,
 			Concurrency: types.StatusConcurrency{
@@ -200,6 +199,7 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 	// Affected stays unset; the Graph Explorer's live "affected" view is kept disabled
 	// client-side for that reason (see proc.StatusReply.StatusOutput).
 	out.Pool = reply.StatusOutput()
+	out.Server = reply.Server
 	return out
 }
 

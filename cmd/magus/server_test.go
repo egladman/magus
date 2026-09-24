@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/proc"
@@ -64,98 +64,136 @@ func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
 	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
 }
 
-// TestEnsureAdmissionDaemonAdoptsALiveOne pins the idempotent half of the auto-start: a
-// run must adopt the daemon that is already arbitrating this machine, never spawn a
-// second one. Two daemons would be two budgets, which is the exact failure the feature
-// exists to remove, and `magus doctor` reports the pair as a fault.
+// privateSockDir points the socket directory at a fresh one, so a test never adopts or
+// stops the developer's own broker or server. Short: a t.TempDir() path can exceed the
+// unix socket length limit on macOS.
+func privateSockDir(t *testing.T) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "mgbrk")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+}
+
+// TestEnsureBrokerAdoptsALiveOne pins the idempotent half of the auto-start: a run uses
+// the broker already holding this host's capacity and never starts a second, which
+// would lose the bind anyway.
 //
 // It asserts on the SPAWN, through the seam, because spawning is the whole observable
 // effect. Checking that the incumbent is still alive passes just as well with the early
-// return deleted, and leaks a real detached daemon while doing it.
-func TestEnsureAdmissionDaemonAdoptsALiveOne(t *testing.T) {
-	// A private socket dir, so this never adopts the developer's own daemon. Short: a
-	// t.TempDir() path can exceed the unix socket length limit on macOS.
-	dir, err := os.MkdirTemp("", "mgadmit")
-	require.NoError(t, err)
-	defer func() { _ = os.RemoveAll(dir) }()
-	t.Setenv("XDG_RUNTIME_DIR", dir)
-	t.Setenv("MAGUS_DAEMON_SOCKET", "")
-	spawned := trapAdmissionSpawn(t)
+// return deleted, and leaks a real detached broker while doing it.
+func TestEnsureBrokerAdoptsALiveOne(t *testing.T) {
+	privateSockDir(t)
+	spawned := trapBrokerSpawn(t)
 
-	addr := daemonDefaultAddr()
-	srv, err := proc.New(proc.Options{
-		Handler: func(context.Context, []string) error { return nil },
-		Address: addr,
-	})
+	ln, err := broker.Listen(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
+	ctx, cancel := context.WithCancel(t.Context())
+	served := make(chan error, 1)
+	go func() { served <- broker.Serve(ctx, ln) }()
+	t.Cleanup(func() { cancel(); <-served })
 
-	got := ensureAdmissionDaemon(context.Background(), addr)
-	assert.Equal(t, addr, got, "the run arbitrates against the daemon that is already up")
-	assert.Zero(t, *spawned, "a second daemon was started over the live one")
+	assert.Zero(t, ensureBroker(t.Context()), "no broker was started, so none is announced")
+	assert.Zero(t, *spawned, "a second broker was started over the live one")
 }
 
-// TestEnsureAdmissionDaemonStartsOneWhenAbsent is the other half: with nothing serving,
-// a run does start the arbiter. Together with the test above, the pair pins that the
-// early return is a decision rather than an accident.
-func TestEnsureAdmissionDaemonStartsOneWhenAbsent(t *testing.T) {
-	dir, err := os.MkdirTemp("", "mgadmit")
-	require.NoError(t, err)
-	defer func() { _ = os.RemoveAll(dir) }()
-	t.Setenv("XDG_RUNTIME_DIR", dir)
-	t.Setenv("MAGUS_DAEMON_SOCKET", "")
-	spawned := trapAdmissionSpawn(t)
+// TestEnsureBrokerStartsOneWhenAbsent is the other half: with nothing serving, a run does
+// start the broker. Together with the test above, the pair pins that the early return is
+// a decision rather than an accident.
+func TestEnsureBrokerStartsOneWhenAbsent(t *testing.T) {
+	privateSockDir(t)
+	spawned := trapBrokerSpawn(t)
 
-	// The spawn is trapped, so nothing comes up and the readiness wait fails. What is
-	// under test is that a start was ATTEMPTED, and that a run whose daemon never
-	// arrives is told there is no arbiter rather than being blocked.
-	got := ensureAdmissionDaemon(context.Background(), daemonDefaultAddr())
-	assert.Equal(t, 1, *spawned, "with nothing serving, a run starts the arbiter")
-	assert.Empty(t, got, "and a daemon that never came up is reported as no arbiter, not as one")
+	// The spawn is trapped, so nothing comes up. What is under test is that a start was
+	// ATTEMPTED, and that a run whose broker never arrives is not blocked by it.
+	assert.Zero(t, ensureBroker(t.Context()), "a broker that never came up is not announced")
+	assert.Equal(t, 1, *spawned, "with nothing serving, a run starts the broker")
 }
 
-// trapAdmissionSpawn replaces the spawn seam for one test and counts the calls. No
-// process is ever started: a unit test that re-execs the binary leaves a detached
-// daemon behind on every failure path.
-func trapAdmissionSpawn(t *testing.T) *int {
+// trapBrokerSpawn replaces the spawn seam for one test and counts the calls. No process
+// is ever started: a unit test that re-execs the binary leaves a detached broker behind
+// on every failure path.
+func trapBrokerSpawn(t *testing.T) *int {
 	t.Helper()
 	calls := 0
-	old := spawnAdmissionDaemon
-	spawnAdmissionDaemon = func() (int, string, error) {
+	old := spawnBroker
+	spawnBroker = func() (int, string, error) {
 		calls++
 		return 0, "", errors.New("spawn trapped by the test")
 	}
-	t.Cleanup(func() { spawnAdmissionDaemon = old })
+	t.Cleanup(func() { spawnBroker = old })
 	return &calls
 }
 
-// TestDaemonChildEnvDropsInheritedInvocationState pins that THE DAEMON DESCENDS FROM
-// NOBODY. A run is what starts it, so without the scrub the daemon's process
-// environment permanently records that one run's ancestry, and every workspace it
-// serves would then read those refs as its own, excusing claims from an invocation that
+// TestAnnounceBrokerSaysWhatItLeftBehind pins the one line a run prints when it starts
+// the broker: the pid, that it opens no network listener, and when it goes away; nothing
+// under -q or -s, and a record rather than prose under a structured -o.
+func TestAnnounceBrokerSaysWhatItLeftBehind(t *testing.T) {
+	var text strings.Builder
+	announceBroker(&text, 4242, "", false)
+	assert.Contains(t, text.String(), "started a broker (pid 4242)")
+	assert.Contains(t, text.String(), "no network listener")
+	assert.Contains(t, text.String(), "10 minutes")
+
+	var quiet strings.Builder
+	announceBroker(&quiet, 4242, "", true)
+	assert.Empty(t, quiet.String(), "-q and -s drop it")
+
+	var none strings.Builder
+	announceBroker(&none, 0, "", false)
+	assert.Empty(t, none.String(), "a broker this run did not start is not announced")
+
+	var record strings.Builder
+	announceBroker(&record, 4242, "jsonl", false)
+	assert.True(t, strings.HasPrefix(record.String(), "{"), "a structured -o gets a record: %s", record.String())
+	assert.Contains(t, record.String(), `"pid":4242`)
+}
+
+// TestServerChildArgsDropsStart pins the detached server's argv: its role, with no
+// `start` in ps, and every flag the person passed so it binds where the parent waits.
+func TestServerChildArgsDropsStart(t *testing.T) {
+	assert.Equal(t, []string{"server", "--foreground"}, serverChildArgs([]string{"server", "start"}))
+	assert.Equal(t,
+		[]string{"--daemon-address", "unix:///tmp/m.sock", "server", "--foreground", "-v"},
+		serverChildArgs([]string{"--daemon-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
+}
+
+func TestIsServerRun(t *testing.T) {
+	assert.True(t, isServerRun([]string{"start"}))
+	assert.True(t, isServerRun([]string{"start", "--foreground"}))
+	assert.True(t, isServerRun([]string{"--foreground"}), "the detached child runs the server")
+	assert.False(t, isServerRun([]string{"start", "-h"}), "help prints usage and builds nothing")
+	assert.False(t, isServerRun([]string{"stop"}))
+	assert.False(t, isServerRun(nil))
+}
+
+// TestDetachedChildEnvDropsInheritedInvocationState pins that A BACKGROUND PROCESS
+// DESCENDS FROM NOBODY. A run is what starts the broker, so without the scrub its
+// environment permanently records that one run's ancestry, and a server started from
+// inside a run would read those refs as its own, excusing claims from an invocation that
 // ended hours ago and judging an unstamped run to be a nested magus that lost its
 // ancestry. The same rule submitJob already applies to a job's context.
-func TestDaemonChildEnvDropsInheritedInvocationState(t *testing.T) {
+func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/parent.sock")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_KEEP_ME", "yes")
 
 	got := map[string]string{}
-	for _, kv := range daemonChildEnv() {
+	for _, kv := range detachedChildEnv() {
 		if name, value, ok := strings.Cut(kv, "="); ok {
 			got[name] = value
 		}
 	}
 	assert.NotContains(t, got, "MAGUS_DAEMON_SOCKET", "a child inheriting it binds no socket of its own")
-	assert.NotContains(t, got, "MAGUS_INVOCATION_ANCESTORS", "the daemon is nobody's descendant")
+	assert.NotContains(t, got, "MAGUS_INVOCATION_ANCESTORS", "a background process is nobody's descendant")
 	assert.NotContains(t, got, "MAGUS_LEVEL", "nor is it nested inside the run that happened to start it")
 	assert.Equal(t, "yes", got["MAGUS_KEEP_ME"], "everything else is inherited as before")
 }
 
-// TestDaemonCmdReExecsTheGivenPathWithoutResolvingIt pins the fix for the v0.4.1 windows
-// release, where auto-starting the admission daemon failed with
+// TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt pins the fix for the v0.4.1 windows
+// release, where auto-starting a background process failed with
 //
 //	exec: "C:\hostedtoolcache\windows\magus\bin\magus": executable file not found in %PATH%
 //
@@ -167,51 +205,34 @@ func TestDaemonChildEnvDropsInheritedInvocationState(t *testing.T) {
 // The assertion is contract-shaped rather than reproducing the failure, which needs a
 // Windows runtime. exec.Command sets Err on exactly this input there and nowhere else, so
 // the case is stated on every platform and enforced where it bites.
-func TestDaemonCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
+func TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
 	for _, tc := range []struct{ name, exe string }{
 		{"extensionless, as setup-magus installs it", filepath.Join(t.TempDir(), "magus")},
 		{"with the windows extension", filepath.Join(t.TempDir(), "magus.exe")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := daemonCmd(tc.exe, []string{"server", "start", "--foreground"})
+			cmd := detachedCmd(tc.exe, []string{"broker"})
 
 			require.NoError(t, cmd.Err, "re-execing a known absolute path performs no lookup that could fail")
 			assert.Equal(t, tc.exe, cmd.Path, "the path is used verbatim, never a PATHEXT sibling")
-			assert.Equal(t, []string{tc.exe, "server", "start", "--foreground"}, cmd.Args,
+			assert.Equal(t, []string{tc.exe, "broker"}, cmd.Args,
 				"argv[0] is the executable, with the caller's arguments after it")
 		})
 	}
 }
 
-// TestDaemonCmdIgnoresPATH proves the resolution is absent rather than merely succeeding: a
-// name that also exists on PATH must not be picked up in place of the path given.
-func TestDaemonCmdIgnoresPATH(t *testing.T) {
+// TestDetachedCmdIgnoresPATH proves the resolution is absent rather than merely succeeding:
+// a name that also exists on PATH must not be picked up in place of the path given.
+func TestDetachedCmdIgnoresPATH(t *testing.T) {
 	decoy := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(decoy, "magus"), []byte("#!/bin/sh\n"), 0o755))
 	t.Setenv("PATH", decoy)
 
 	want := filepath.Join(t.TempDir(), "magus")
-	cmd := daemonCmd(want, nil)
+	cmd := detachedCmd(want, nil)
 
 	assert.Equal(t, want, cmd.Path, "the decoy on PATH is not consulted")
 	assert.NotEqual(t, filepath.Join(decoy, "magus"), cmd.Path)
-}
-
-// TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon pins the bound the doctrine amendment
-// promises, and its limit: a daemon a person started stays up until they stop it.
-func TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon(t *testing.T) {
-	srv, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	t.Setenv(admissionDaemonEnv, "")
-	watchAdmissionIdle(t.Context(), srv)
-	select {
-	case <-srv.Done():
-		t.Fatal("a daemon somebody started deliberately must not time itself out")
-	case <-time.After(50 * time.Millisecond):
-	}
 }
 
 func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
@@ -258,10 +279,10 @@ func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
 	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
 }
 
-// TestEnsureConsoleDaemonReturnsWithoutSpawning pins the early return: a console that is
-// already serving must not start a second daemon. Nothing else in the test suite reaches
-// ensureConsoleDaemon, and the spawn path it guards is the one that leaves a process behind.
-func TestEnsureConsoleDaemonReturnsWithoutSpawning(t *testing.T) {
+// TestEnsureConsoleServerReturnsWithoutSpawning pins the early return: a console that is
+// already serving must not start a second server. Nothing else in the test suite reaches
+// ensureConsoleServer, and the spawn path it guards is the one that leaves a process behind.
+func TestEnsureConsoleServerReturnsWithoutSpawning(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 
@@ -272,7 +293,7 @@ func TestEnsureConsoleDaemonReturnsWithoutSpawning(t *testing.T) {
 	addr := strings.TrimPrefix(srv.URL, "http://")
 	globalCfg.MCP.Address = addr
 
-	require.NoError(t, ensureConsoleDaemon(t.Context(), addr, t.TempDir()))
+	require.NoError(t, ensureConsoleServer(t.Context(), addr, t.TempDir()))
 }
 
 // checkReviewWorkspace opens a throwaway workspace and wires a review provider whose
@@ -369,14 +390,14 @@ func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
 		"a count taken from an unreachable host is a number nobody can act on")
 }
 
-// TestDaemonChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits
+// TestDetachedChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits
 // MAGUS_DAEMON_SOCKET decides it is already adopted, binds no socket of its own, and then
-// reports the parent's, leaving a daemon `server stop` cannot find.
-func TestDaemonChildEnvDropsTheInheritedSocket(t *testing.T) {
+// reports the parent's, leaving a server `server stop` cannot find.
+func TestDetachedChildEnvDropsTheInheritedSocket(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "/tmp/magus-parent.sock")
 	t.Setenv("MAGUS_KEEP_ME", "1")
 
-	env := daemonChildEnv()
+	env := detachedChildEnv()
 
 	for _, kv := range env {
 		assert.False(t, strings.HasPrefix(kv, "MAGUS_DAEMON_SOCKET="), "child inherited %q", kv)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,24 +27,19 @@ func TestDaemonLine(t *testing.T) {
 		client string
 		want   string
 	}{
-		{"no daemon answered", daemonProbe{}, "v1.2.3", "daemon: not running"},
-		{"same build on both ends", daemonProbe{version: "v1.2.3"}, "v1.2.3", "daemon: v1.2.3"},
+		{"no server answered", daemonProbe{}, "v1.2.3", "server: not running"},
+		{"same build on both ends", daemonProbe{version: "v1.2.3"}, "v1.2.3", "server: v1.2.3"},
 		{
-			"a daemon left running across an upgrade",
+			"a server left running across an upgrade",
 			daemonProbe{version: "v1.2.0"}, "v1.2.3",
-			"daemon: v1.2.0 (differs from this client)",
+			"server: v1.2.0 (differs from this client)",
 		},
 		{
 			// The case a plain comparison got wrong: an unstamped client reports the same
-			// sentinel, so "daemon: unknown" read as two matching builds.
-			"a daemon that did not report a version, against an unstamped client",
+			// sentinel, so "server: unknown" read as two matching builds.
+			"a server that did not report a version, against an unstamped client",
 			daemonProbe{version: unknownVersion}, unknownVersion,
-			"daemon: running, version not reported",
-		},
-		{
-			"several servers is not none",
-			daemonProbe{several: true}, "v1.2.3",
-			"daemon: several proc servers are running; set MAGUS_DAEMON_SOCKET to pick one",
+			"server: running, version not reported",
 		},
 	}
 	for _, c := range cases {
@@ -74,6 +70,7 @@ func TestProbeDaemonVersionReportsALiveDaemon(t *testing.T) {
 	srv, err := proc.New(proc.Options{
 		Version: "v9.9.9",
 		Handler: func(context.Context, []string) error { return nil },
+		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
 	})
 	require.NoError(t, err)
 	defer srv.Close()

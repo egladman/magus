@@ -58,19 +58,37 @@ func TestEvaluateHealth(t *testing.T) {
 	assertHealth("readiness/root-missing", makeReply(1, "/other"), nil, probeReadiness, "/repo", false, "/repo")
 	assertHealth("readiness/root-given-no-workspaces", makeReply(1), nil, probeReadiness, "/repo", false, "/repo")
 	assertHealth("readiness/root-trailing-slash-normalised", makeReply(1, "/repo"), nil, probeReadiness, "/repo/", true, "/repo")
-	assertHealth("readiness/daemon-mode-with-workspace",
-		&proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{{Root: "/ws"}}},
-		nil, probeReadiness, "", true, "1 workspace")
-	failed := &proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{
+	failed := &proc.StatusReply{ParentPID: 1, Workspaces: []proc.Workspace{
 		{Root: "/repo", State: types.WorkspaceFailed}, {Root: "/loading", State: types.WorkspaceLoading},
 	}}
 	assertHealth("readiness/failed-root-names-the-code", failed, nil, probeReadiness, "/repo", false, "MGS3016")
 	assertHealth("readiness/loading-root-not-ready", failed, nil, probeReadiness, "/loading", false, "is loading")
 	assertHealth("readiness/only-unloaded-workspaces", failed, nil, probeReadiness, "", false, "no workspaces loaded")
-	assertHealth("readiness/proc-mode-rejected",
-		&proc.StatusReply{ParentPID: 1, Mode: "proc"}, nil, probeReadiness, "", false, "per-process mode")
-	assertHealth("liveness/proc-mode-still-alive",
-		&proc.StatusReply{ParentPID: 7, Mode: "proc"}, nil, probeLiveness, "", true, "7")
+	assertHealth("readiness/per-process-pool-rejected", nil, errNotServer, probeReadiness, "", false, "not the server")
+}
+
+// TestDaemonStatusRefusesAPerProcessPool pins what replaced the "proc" mode string: only
+// a reply that carries the server's own report is the server, so a per-process pool
+// answering the probed socket reads as no server rather than as one with nothing loaded.
+func TestDaemonStatusRefusesAPerProcessPool(t *testing.T) {
+	srv, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	_, err = daemonStatus(srv.Addr())(t.Context())
+	require.ErrorIs(t, err, errNotServer)
+
+	server, err := proc.New(proc.Options{
+		Handler: func(context.Context, []string) error { return nil },
+		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
+	})
+	require.NoError(t, err)
+	defer server.Close()
+	require.NoError(t, server.Start())
+	out, err := daemonStatus(server.Addr())(t.Context())
+	require.NoError(t, err)
+	assert.NotNil(t, out)
 }
 
 func TestHealthHTTPHandler(t *testing.T) {
@@ -191,14 +209,13 @@ func TestWorkspacesComponent(t *testing.T) {
 		snapshot *types.StatusOutput
 		want     types.ReadinessComponent
 	}{
-		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon unreachable"}},
-		{"proc-mode", &types.StatusOutput{Mode: "proc"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon is in per-process mode"}},
-		{"no-workspaces", &types.StatusOutput{Mode: "daemon"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
+		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "server unreachable"}},
+		{"no-workspaces", &types.StatusOutput{}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
 		// Two workspaces with recognizable roots: the count is wanted in Detail, but the
 		// roots themselves must NOT leak into it on this unguarded surface.
-		{"two-workspaces", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
-		{"one-failed", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
-		{"all-failed", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
+		{"two-workspaces", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
+		{"one-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
+		{"all-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

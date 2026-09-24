@@ -16,6 +16,7 @@
 package workspace
 
 import (
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
@@ -28,12 +29,12 @@ type Load struct {
 	Preloaded  *config.Config
 	Limiter    *cache.Limiter
 	Registry   *WorkspaceRegistry
-	// MachineAdmitter injects the machine budget directly, for the ONE process that
-	// holds it. Every other process finds the daemon over its socket; the daemon
-	// cannot, because dialing its own socket from inside a request it is serving would
-	// wait on itself.
-	MachineAdmitter cache.MachineAdmitter
-	MetricsCollect  bool // build an always-on local metrics collector (daemon dashboard feed)
+	// Broker is a broker client the caller shares across Open calls; nil lets Open make
+	// its own. It is ignored when the resolved policy is off.
+	Broker *broker.Client
+	// BrokerPolicy overrides the config's broker setting; empty keeps the config's.
+	BrokerPolicy   types.BrokerPolicy
+	MetricsCollect bool // build an always-on local metrics collector (server dashboard feed)
 	// Provider injects an already-constructed observability provider so several Magus
 	// instances share one set of OTel instruments and one metrics collector. When set it
 	// takes precedence over MetricsCollect (Open skips otlp.New and adopts it).
@@ -59,13 +60,6 @@ func WithLoadedConfig(cfg config.Config) Option {
 // WithLimiter injects a pre-built concurrency limiter (e.g. shared across daemon workspaces).
 func WithLimiter(lim *cache.Limiter) Option {
 	return func(o *Load) { o.Limiter = lim }
-}
-
-// WithMachineAdmitter injects the machine-wide admission budget the daemon holds, so
-// the workspaces it serves arbitrate against the same one every other magus on the
-// host reaches over the socket.
-func WithMachineAdmitter(a cache.MachineAdmitter) Option {
-	return func(o *Load) { o.MachineAdmitter = a }
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace so

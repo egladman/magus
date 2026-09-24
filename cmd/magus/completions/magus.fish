@@ -27,8 +27,9 @@ function __magus_subcommands
         queue      'merge approved changes through a speculative, partitioned merge queue (describe, ls, plan, validate, apply)' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \
-        server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
-        mcp        'print how to reach the MCP server (served by the daemon, not a standalone command)' \
+        server     'the server a person starts: MCP, the console, APIs and jobs (start / stop / status / reload)' \
+        broker     'the per-user process holding this host\'s capacity and shared services (status / stop)' \
+        mcp        'print how to reach the MCP server (served by `magus server`, not a standalone command)' \
         status     'inspect the concurrency pool of a running parent magus' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
         spell      'build, push, pull and list spells as OCI artifacts, and pin them in magus.lock (spell build|push|pull|ls|lock)' \

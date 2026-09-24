@@ -420,7 +420,12 @@ const (
 	// PreflightOutsideClosure is a --preflight target the invoked target never reaches
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
-	PreflightOutsideClosure   DiagnosticCode = "MGS3021"
+	PreflightOutsideClosure DiagnosticCode = "MGS3021"
+	// BrokerUnavailable is a step magus did not start under `broker: required` because no
+	// broker answered: nothing could arbitrate this host's capacity. Exits 69
+	// (EX_UNAVAILABLE), apart from MGS3009's 75, so a wrapper can tell "no arbiter" from
+	// "the host is busy".
+	BrokerUnavailable         DiagnosticCode = "MGS3022"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -583,7 +588,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

@@ -69,11 +69,11 @@ func (p slotPressure) nudge() string {
 // Magus's targets queued for slots while cores the aggressive profile would use sat
 // idle, and "" otherwise. The caller decides whether and how often to print it.
 //
-// Silent when concurrency was set explicitly, when the profile is already aggressive,
-// and in the daemon, whose limiter spans every client's runs.
+// Silent when concurrency was set explicitly and when the profile is already
+// aggressive. A caller whose limiter spans other invocations' runs (the server's) does
+// not ask: a wait there is not this invocation's profile.
 func (m *Magus) ConcurrencyNudge() string {
-	// Only the daemon hands its workspaces a machine admitter.
-	if m.cache == nil || m.machineAdmitter != nil {
+	if m.cache == nil {
 		return ""
 	}
 	aggressiveWidth, _ := cache.ClampConcurrency(cache.ProfileConcurrency(types.ProfileAggressive))
