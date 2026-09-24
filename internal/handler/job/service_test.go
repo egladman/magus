@@ -15,9 +15,12 @@ import (
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // fakeWS is a workspace whose trail lives at dir and whose cache reports a fixed size.
 type fakeWS struct {

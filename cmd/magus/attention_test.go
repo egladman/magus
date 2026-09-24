@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ import (
 // (TestAttentionDisposeRefusesWithoutATerminal) overrides this back.
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	// A developer running with a lease in BAGGAGE would otherwise have it stamped on every request
 	// these tests raise. A test that wants one sets it after this call.
 	t.Setenv(trail.EnvBaggage, "")
@@ -369,7 +370,7 @@ func TestRecordAttentionOpenRefusesAnEventWithNoSourceID(t *testing.T) {
 }
 
 func TestRecordAttentionOpenSkipsWhenThereIsNoRepository(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	// An empty root with no discoverable workspace: notify still notifies, and the
 	// request has nowhere durable to live rather than landing in a store keyed on "".
 	t.Chdir(t.TempDir())

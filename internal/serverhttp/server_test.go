@@ -19,6 +19,7 @@ import (
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -69,7 +70,7 @@ func waitReady(t *testing.T, url string) {
 // unauthenticated requests get 401, while both the retrievable operator token and a
 // non-expired named connector token pass the guard.
 func TestServeBearerGuardTwoTier(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -173,7 +174,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 // reflected back; an origin that is not on the list gets no CORS header at all (an allow-list
 // reflect, never "*").
 func TestServeHealthRoutesCORS(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -251,7 +252,7 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 // (https://eli.gladman.cc) can clear rebind and get a CORS preflight answer on
 // /api/, while /mcp stays loopback-only on Origin and never reflects that site.
 func TestServeConsoleHostedOriginCORS(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -356,7 +357,7 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 // health probes and the console's app shell. A route mounted without a guard fails this test
 // without anyone having to remember to add it.
 func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
 	// A built console holding the hosted demo's data beside the shell, as the real build does.
@@ -527,7 +528,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 // served, and every workspace call answers the failure in its route's own protocol behind
 // the same guard, so an anonymous caller learns nothing about the tree.
 func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -631,7 +632,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 // excepted, since it needs none), then asserts an unloaded server refuses each one with the
 // load error rather than a bare 404, so the two servers cannot drift apart in what they mount.
 func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

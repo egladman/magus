@@ -8,9 +8,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestOpenVCSNeedsARootABackendAndARemote(t *testing.T) {
 	for _, args := range [][3]string{{"", "hg", "origin"}, {"/r", "", "origin"}, {"/r", "hg", ""}} {

@@ -9,10 +9,13 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestBumpString(t *testing.T) {
 	assert.Equal(t, []string{"patch", "minor", "major", "Bump(7)"},
@@ -107,7 +110,7 @@ func TestJudge(t *testing.T) {
 // working tree has moved on and loads cleanly, so every finding must come from the
 // archived revision, and both broken projects and the broken spell must be reported.
 func TestCheckCompat_LoadsTheTaggedTree(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	repo := t.TempDir()
 	broken := "magus.project({});\n"
 	write(t, repo, "magus.yaml", "")

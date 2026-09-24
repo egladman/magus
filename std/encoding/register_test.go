@@ -4,9 +4,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestModulesMatchDirectories guards leafSets against drift from the actual
 // std/encoding/* directories, the same shape of guard TestModulesMatchStd

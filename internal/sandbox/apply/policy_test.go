@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -151,11 +152,11 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	t.Helper()
 	root = filesystem.ResolveRulePath(t.TempDir())
 	cacheDir = t.TempDir()
-	t.Setenv("TMPDIR", cacheDir)
 	// The job store lives in the per-repository state dir, and NarrowToLease resolves it
 	// through the environment, so without this the fixture's rows land in the
 	// developer's own store and the store under test is the real one.
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
+	t.Setenv("TMPDIR", cacheDir)
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
 	}

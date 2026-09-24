@@ -9,10 +9,13 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // writeHistory saves h to a temp file and returns its path.
 func writeHistory(t *testing.T, h forecast.History) string {

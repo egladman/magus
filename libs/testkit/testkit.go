@@ -1,5 +1,7 @@
 // Package testkit builds the fixtures a magus test needs: a throwaway workspace on
-// disk, and the domain values a test asserts against.
+// disk, the domain values a test asserts against, and an environment built from an
+// allowlist (Environ, Isolate, Main), so a variable nobody listed never reaches a test.
+// A package whose tests need more names states them as Main's keep list.
 //
 // It is public because the audience is not only magus's own tests. A program that
 // embeds magus as a library (see the magus SDK) has the same problem magus does:
@@ -14,7 +16,8 @@
 // Every constructor takes a testing.TB and fails the test on error rather than
 // returning one. A fixture that cannot be built is not a condition a test handles; it
 // is the test being unable to start, and threading an error through every call site
-// buys nothing but noise.
+// buys nothing but noise. Environ is the exception: a generator outside any test calls
+// it, so it returns its error.
 package testkit
 
 import (
