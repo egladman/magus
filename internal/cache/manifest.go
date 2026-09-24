@@ -61,14 +61,25 @@ type OutputRecord struct {
 }
 
 func (c *Cache) manifestPath(projectPath, hash string) string {
-	return filepath.Join(c.dir, "manifests", flattenPath(projectPath), hash+".json")
+	return manifestPathIn(c.dir, projectPath, hash)
 }
 
-func (c *Cache) blobPath(blob string) string {
+func (c *Cache) blobPath(blob string) string { return blobPathIn(c.dir, blob) }
+
+// The store layout, relative to a cache root: the local store's or a staging one's.
+func manifestPathIn(root, projectPath, hash string) string {
+	return filepath.Join(root, "manifests", flattenPath(projectPath), hash+".json")
+}
+
+func blobPathIn(root, blob string) string {
 	if len(blob) < 2 {
-		return filepath.Join(c.dir, "cas", "00", blob)
+		return filepath.Join(root, "cas", "00", blob)
 	}
-	return filepath.Join(c.dir, "cas", blob[:2], blob)
+	return filepath.Join(root, "cas", blob[:2], blob)
+}
+
+func logPathIn(root, projectPath, hash string) string {
+	return filepath.Join(root, "logs", flattenPath(projectPath), hash+".log")
 }
 
 // pathFlattener replaces path separators with __. A *strings.Replacer is built
@@ -93,31 +104,30 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+	return c.parseManifest(data, projectPath, hash)
+}
+
+// parseManifest decodes a manifest and refuses one that cannot be replayed as the entry
+// for (projectPath, hash) on this platform. The single validator for every manifest a
+// tier returns, local or imported.
+func (c *Cache) parseManifest(data []byte, projectPath, hash string) (*Manifest, error) {
 	var m Manifest
 	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("magus/cache: manifest %s: %w", shortHash(hash), err)
 	}
-	// Detect manifests copied/renamed onto the wrong key; treat as miss on mismatch.
-	if m.Hash != "" && m.Hash != hash {
-		return nil, fmt.Errorf("magus/cache: manifest %s key mismatch (stored %q); treating as miss", hash, m.Hash)
+	// Identity is required, not merely matched when present: a signed output bundle's
+	// metadata unmarshals to an all-zero Manifest, and one with no outputs would replay
+	// as a successful entry, so a published FAILING run would become a cached pass.
+	if m.ProjectPath != projectPath || m.Hash != hash {
+		return nil, fmt.Errorf("magus/cache: manifest names %q/%s but was read for %q/%s",
+			m.ProjectPath, shortHash(m.Hash), projectPath, shortHash(hash))
 	}
-	if m.ProjectPath != "" && m.ProjectPath != projectPath {
-		return nil, fmt.Errorf("magus/cache: manifest %s project mismatch (stored %q, want %q); treating as miss", hash, m.ProjectPath, projectPath)
-	}
-	// Same permissive-on-absence convention as the two checks above: an empty
-	// Platform means "written before this field existed" and is treated as a
-	// match rather than a refusal. The alternative (empty never matches) would
-	// invalidate every entry already on disk the moment this field ships: every
-	// local manifest in existence today has no Platform recorded. A local
-	// manifest empty or not was necessarily built BY this machine (it is only
-	// ever written by snapshot, never copied in except through importArtifact,
-	// which carries its own platform gate below), so treating empty as a match
-	// costs nothing for local entries; it only leaves a narrow hole for a
-	// pre-this-change entry that reached the local cache via remote import
-	// before the import-side gate existed, and that hole closes as those entries
-	// are evicted or rebuilt.
+	// Empty Platform means "written before this field existed" and matches, so every
+	// entry predating the field stays valid. src: lines are content hashes, so two
+	// platforms compute the SAME key for one commit, and this is the only gate stopping
+	// one platform's pass from replaying as a pass for code the other never compiled.
 	if m.Platform != "" && m.Platform != c.platform {
-		return nil, fmt.Errorf("magus/cache: manifest %s platform mismatch (stored %q, running %q); treating as miss", hash, m.Platform, c.platform)
+		return nil, fmt.Errorf("magus/cache: manifest %s platform mismatch (stored %q, running %q)", shortHash(hash), m.Platform, c.platform)
 	}
 	if err := checkOutputRecords(&m, hash); err != nil {
 		return nil, err

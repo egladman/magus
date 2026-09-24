@@ -74,9 +74,9 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	// Redact the plain text, not the marshaled JSON: a secret containing a character
+	// Masked as plain text, not as the marshaled JSON: a secret containing a character
 	// json escapes would not match its escaped form, and would land on disk raw.
-	data, err := json.Marshal(RedactKeyInputs(ctx, DigestEnvValues(inputs)))
+	data, err := json.Marshal(MaskKeyInputs(ctx, inputs))
 	if err != nil {
 		return err
 	}
@@ -88,6 +88,14 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	// Not fsync'd, for the reason Persist's records are not: losing this sidecar only
 	// leaves --identity with nothing to explain.
 	return file.ReplaceFile(path, data, 0o644)
+}
+
+// MaskKeyInputs is the one pipeline raw key inputs pass through before they are stored,
+// shown or compared: env values digested ([DigestEnvValues]), then every registered
+// secret redacted ([RedactKeyInputs]), in that order. Every site uses this rather than
+// the pair, so a stored line and its live twin can never be masked differently.
+func MaskKeyInputs(ctx context.Context, lines []string) []string {
+	return RedactKeyInputs(ctx, DigestEnvValues(lines))
 }
 
 // RedactKeyInputs replaces every value the run's secret resolver has registered with its

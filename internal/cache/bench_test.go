@@ -18,7 +18,7 @@ var discardLogger = slog.New(slog.DiscardHandler)
 // output is not polluted with log lines.
 func openBenchCache(b *testing.B, dir string, mutable bool) *Cache {
 	b.Helper()
-	c, err := Open(b.Context(), dir, WithMutable(mutable), WithLogger(discardLogger))
+	c, err := Open(b.Context(), dir, WithLocalWrite(mutable), WithLogger(discardLogger))
 	if err != nil {
 		b.Fatalf("cache.Open: %v", err)
 	}

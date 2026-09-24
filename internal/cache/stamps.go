@@ -1,12 +1,6 @@
 package cache
 
-import (
-	"errors"
-	"path/filepath"
-)
-
-// errStampMoved turns a hit whose stamps no longer read as recorded into a miss.
-var errStampMoved = errors.New("a completion stamp changed since the entry was recorded")
+import "path/filepath"
 
 // stampAbsent is the digest of a stamp that does not exist, so a deleted stamp and an
 // unreadable one both differ from any recorded content digest.

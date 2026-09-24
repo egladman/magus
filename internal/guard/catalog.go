@@ -77,6 +77,13 @@ var denyRuleDocs = []RuleDoc{
 			"It is also the second half of a duplicate, since a gate already run locally is the same command on the same tree, and waiting for CI to agree pays twice for one answer. " +
 			"`gh pr list --state open --json number,mergeable,statusCheckRollup` answers every open pull request in one call. " +
 			"Iterating on a run that is already RED is the case worth following, and polling that command serves it too."},
+	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
+		Catches: "a trailing `echo $?`, which repeats an exit status the harness already reports",
+		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +
+			"It also misreports: the echo exits 0, so the line as a whole passes whatever `cmd` did. " +
+			"It fires only on the LAST statement, joined by `;` or a newline, printing nothing but `$?` and literal text. " +
+			"`rc=$?`, `exit $?`, `[ $? -ne 0 ]`, an echo mid-script, one after `&&` or `||`, and one redirected to a file all keep the status for later logic and are untouched. " +
+			"Chain with `&&`, or make separate calls, when a failure must not be masked."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
 		Catches: "an inline interpreter rewriting a file this tree already carries",
 		Why: "A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it back is an edit nobody reviewed: it lands before a diff exists, and the script that produced it is gone the moment the line ends. " +
@@ -129,10 +136,11 @@ var denyRuleDocs = []RuleDoc{
 			"One build is exempt, in a checkout of magus itself: `go build -o magus ./cmd/magus`, alone on its line, into a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
 			"Once the binary exists the deny applies again and names `./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
-	{Name: string(denyRuleReadAck), Decision: "deny",
-		Catches: "an agent stamping a read receipt, which records that a PERSON read a change",
-		Why: "This is not a permission an agent is missing: there is no spelling of it an agent may use, because an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it. " +
-			"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on."},
+	{Name: string(denyRulePersonOnly), Decision: "deny",
+		Catches: "an agent stamping a read receipt or closing an attention request, each of which records that a PERSON did it",
+		Why: "This is not a permission an agent is missing: there is no spelling of either an agent may use, because an agent stamping the changeset or closing its own block would make the measure mean nothing for everybody, including the human relying on it. " +
+			"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on. " +
+			"Waiting on a request instead: say you are waiting on its id and hand it back; `magus session dispose <id>` is a person's to run."},
 	{Name: string(denyRuleScriptedRewrite), Decision: "deny",
 		Catches: "a scripted substitute-and-write, which cannot tell your symbol from a dependency's",
 		Why: "A regex cannot tell YOUR symbol from a dependency's symbol of the same name. " +
@@ -156,9 +164,9 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A binary links the spell sources of the tree it was built from, so a verdict it reaches about a DIFFERENT checkout describes a tree that exists nowhere, and anything it regenerates lands there unmarked. " +
 			"Run magus from the workspace it belongs to and name the project as an argument; a different workspace is `--root <path>`."},
 	{Name: string(denyRuleStageAll), Decision: "deny",
-		Catches: "`git add -A`, which sweeps regenerated output into a commit about something else",
+		Catches: "a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output",
 		Why: "A magus target writes its declared outputs as it runs, so the tree here is routinely dirty with files you did not edit. " +
-			"`-A` sweeps those and any build residue into a commit about something else, with no signal that it happened. " +
+			"`-A` sweeps those and any build residue into a commit about something else, with no signal that it happened, and `-u` reaches the same outputs: it stages every TRACKED change across the whole tree, which is the same sweep minus files that are merely untracked, and a target's declared outputs are ordinarily tracked already. " +
 			"Measured: one such call put 69 files, a whole regenerated docs site plus five untouched source files, into a commit about four collection methods. " +
 			"`magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it."},
 	{Name: string(denyRuleSymbolSearch), Decision: "deny",
@@ -222,6 +230,11 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryScopeDrift), Decision: "advise", Catches: "a write into a project this session has no dependency edge to"},
 	{Name: string(advisorySkillSource), Decision: "advise", Catches: "a write to an installed skill copy rather than to its source"},
 	{Name: string(advisorySourceRead), Decision: "advise", Catches: "an unbounded source read the symbol index has already answered"},
+	{Name: string(advisorySplitRun), Decision: "advise",
+		Catches: "the same target run again on a different project set, on one line or as a separate call",
+		Why: "`magus run` and `magus affected` take one target and many projects, so the same target run twice on two project sets is usually one call typed as two: `magus run lint . docs` covers what `magus run lint .` and `magus run lint docs` would otherwise cost as two workspace loads. " +
+			"It fires on TWO shapes. On one line (`magus run lint . && magus run lint docs`), it narrows the chained-run text to the combined form; a chain of genuinely different targets stays chained-run's text and domain. Across two separate calls, it compares the session's last magus run/affected invocation against this one: same target, same charms, a different project set, inside a ten-minute window. " +
+			"Charms count as part of the target identity, so `lint` and `lint:rw` are never combined into one call. Held to one firing per session for the cross-call shape; the one-line shape speaks every time, like chained-run beside it."},
 	{Name: string(advisoryStageClassify), Decision: "advise", Catches: "staging without classifying, when generated and source differ"},
 	{Name: string(advisoryStaleBinary), Decision: "advise",
 		Catches: "a verdict from a binary older than the rules in the tree around it",
@@ -272,7 +285,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryRegenSource, advisoryGraphStale, advisoryGateRepeat, advisoryFocus,
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
-	advisoryScopeDrift, advisoryNewSourceDir,
+	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the

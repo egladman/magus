@@ -254,8 +254,6 @@ fun eslint(target: Target) > Command {
         "gha": after(args, "eslint", ["--format=unix"]),
     }};
 }
-// preflight is a no-op marker op (no command).
-fun preflight(target: Target) > Command { return Command{}; }
 fun prettier(target: Target) > Command {
     final args = ["exec", "prettier", "--check", "."];
     return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
@@ -288,7 +286,7 @@ fun devServer(target: Target) > Service {
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.
 export fun mgs_listTargets() > any {
     return {"biome-check": biomeCheck, "biome-format": biomeFormat,
-            "eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
+            "eslint": eslint, "prettier": prettier, "tsc": tsc,
             "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
             "dev-server": devServer};
 }

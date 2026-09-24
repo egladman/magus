@@ -46,7 +46,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 		return os.WriteFile(abs, []byte("binary"), 0o755)
 	}
 
-	c, err := Open(t.Context(), cdir, WithMutable(true), WithLogger(discardLogger))
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 	_, err = c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
@@ -102,13 +102,13 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 	assert.NotEqual(t, changes[0].Recorded, changes[0].Live, "both content hashes are shown")
 }
 
-// TestLastRecordedRun_KeyComesFromTheFilename: readManifest accepts an empty Hash as
-// valid (the permissive-on-absence convention that keeps pre-field entries usable), so
-// the body cannot be trusted for the key. The filename IS the key, and a RecordedRun that
-// took the body's word for it reports Key "" and compares against nothing.
+// TestLastRecordedRun_KeyComesFromTheFilename: the body cannot be trusted for the key, since
+// an entry may record none. The filename IS the key, and a RecordedRun that took the body's
+// word for it reports Key "" and compares against nothing. Such an entry no longer
+// replays: every tier's manifests pass one validator, which requires the identity.
 func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir, WithMutable(true), WithLogger(discardLogger))
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 
 	const key = "abc123abc123abc123abc123"
@@ -121,7 +121,7 @@ func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 	rec, err := c.LastRecordedRun("svc", "build")
 	require.NoError(t, err)
 	assert.Equal(t, key, rec.Key, "an entry whose body records no hash still keys by its filename")
-	assert.True(t, rec.WouldReplay(key))
+	assert.False(t, rec.WouldReplay(key), "an entry that does not name its key is refused like an imported one")
 }
 
 // TestLastRecordedRun_WouldReplayAnOlderKey: an edit and a revert leave the NEWEST entry
@@ -173,7 +173,7 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
 	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644))
 
-	c, err := Open(t.Context(), cdir, WithMutable(true), WithLogger(discardLogger))
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 
 	buildStep := Step{

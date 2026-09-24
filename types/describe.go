@@ -368,6 +368,16 @@ func (c Chain) Needs(refs ...string) Chain {
 	return c
 }
 
+// String renders the chain the way `magus describe target` prints it: each step's Ref,
+// joined by " -> ", in invocation order. Empty for a target that composes nothing.
+func (c Chain) String() string {
+	refs := make([]string, len(c))
+	for i, s := range c {
+		refs[i] = s.Ref()
+	}
+	return strings.Join(refs, " -> ")
+}
+
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape
 // that carries the owning project for both a same-project glob and a cross-project file,
 // maximally explicit: a local input's project is simply itself. Project is the owning

@@ -565,7 +565,7 @@ func BenchmarkHashFilesBatch(b *testing.B) {
 
 			c, err := Open(b.Context(),
 				b.TempDir(),
-				WithMutable(true),
+				WithLocalWrite(true),
 				WithLogger(slog.New(slog.DiscardHandler)),
 			)
 			if err != nil {
@@ -597,7 +597,7 @@ func BenchmarkHashFilesBatch(b *testing.B) {
 func BenchmarkHashStep(b *testing.B) {
 	c, err := Open(b.Context(),
 		b.TempDir(),
-		WithMutable(true),
+		WithLocalWrite(true),
 		WithLogger(slog.New(slog.DiscardHandler)),
 	)
 	if err != nil {

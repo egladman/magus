@@ -1,0 +1,158 @@
+# --preflight runs the named targets first, across every selected project, as a pass of
+# its own. A failure there stops the run before the invoked target starts anywhere; a
+# green pass lets it proceed with those targets already done, so nothing runs twice.
+#
+# Asserted on the EFFECT: every target appends a line to log/<project>.<target>, so a
+# file's line count is how many times that target's body actually ran.
+
+# A name outside the invoked target's ctx.needs closure is refused before anything runs.
+! exec magus run ci a --preflight unrelated
+stderr 'MGS3021'
+stderr '--preflight unrelated is not in what ci runs'
+stderr 'a:ci chain: lint'
+! exists log/a.unrelated
+! exists log/a.ci
+
+# A charm-qualified preflight is a usage error: it runs under the invocation's charms.
+! exec magus run ci a --preflight generate:rw
+stderr 'name the target alone'
+
+# b's generate fails, so nothing of ci starts in either project.
+! exec magus run ci a b --preflight generate
+stderr '\[MGS3020\] preflight generate failed in b; reproduce with `magus run generate b`'
+! exists log/a.lint
+! exists log/a.ci
+! exists log/b.lint
+! exists log/b.ci
+
+# Green: generate runs once, in the preflight pass. lint's ctx.needs(generate) finds it
+# done rather than running it again.
+rm b/broken
+exec magus run ci a b --preflight generate
+cmp log/a.generate once
+cmp log/a.lint once
+cmp log/a.ci once
+cmp log/b.generate once
+cmp log/b.ci once
+
+# The same run without the flag replays the entries the flagged run wrote: the flag
+# moved no key.
+exec magus run ci a b
+cmp log/a.ci once
+cmp log/b.ci once
+cmp log/a.generate once
+
+# And again with the flag: the preflight steps are cache hits now, not repeated work.
+exec magus run ci a b --preflight generate
+cmp log/a.generate once
+cmp log/b.generate once
+cmp log/a.ci once
+
+# affected takes the same flag. With no VCS it falls back to every project.
+exec magus affected ci --preflight generate
+cmp log/a.generate once
+cmp log/a.ci once
+! exec magus affected ci --preflight unrelated
+stderr 'MGS3021'
+! exec magus affected ci --stdin --preflight generate
+stderr 'does not apply to --graph, --stdin or ls'
+
+# --plan gates the plan itself: the pass runs first, then the plan prints on stdout
+# alone, where a workflow reads it.
+exec magus affected ci --plan --preflight generate --no-default-charms
+stdout '"matrix"'
+! stdout 'pass'
+cmp log/a.generate once
+! exec magus affected ci --plan --no-default-charms
+stderr 'applies to the --preflight pass'
+! exec magus affected ci --plan --stdin --preflight generate
+stderr 'does not apply to --stdin'
+
+# A red pass prints no plan, so nothing downstream can fan shards out from it.
+mkdir c
+cp c.magusfile c/magusfile.buzz
+! exec magus affected ci --plan --preflight generate
+stderr '\[MGS3020\] preflight generate failed in c'
+! stdout .
+! exists log/c.ci
+
+-- once --
+ran
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- log/.keep --
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "preflight-root"});
+-- a/magusfile.buzz --
+import "magus";
+import "fs";
+
+fun bump(name: str) > void !> any {
+    final path = "../log/a." + name;
+    var seen = "";
+    if (fs\exists(path)) {
+        seen = fs\readFile(path);
+    }
+    fs\writeFile(path, seen + "ran\n");
+}
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    bump("generate");
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+    bump("lint");
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(lint);
+    bump("ci");
+}
+
+export fun unrelated(ctx: magus\Context, args: [str]) > void !> any {
+    bump("unrelated");
+}
+-- c.magusfile --
+import "magus";
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    throw "generate: output drifted";
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}
+-- b/broken --
+-- b/magusfile.buzz --
+import "magus";
+import "fs";
+
+fun bump(name: str) > void !> any {
+    final path = "../log/b." + name;
+    var seen = "";
+    if (fs\exists(path)) {
+        seen = fs\readFile(path);
+    }
+    fs\writeFile(path, seen + "ran\n");
+}
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    if (fs\exists("broken")) {
+        throw "generate: output drifted";
+    }
+    bump("generate");
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+    bump("lint");
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(lint);
+    bump("ci");
+}

@@ -42,14 +42,11 @@ magus\project({
 // declare their dependencies through it (ctx.needs); generate/index_generate keep the
 // old global-magus form (per-target policy and fs/vcs side effects).
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
-
 // Regenerates MAGUS.md. Use the rw charm to keep the result; without it the engine's drift
 // gate compares what regeneration produced against what is committed. The gate is not
 // written here: index_generate declares MAGUS.md as its output, which is the whole
 // declaration magus needs to check it.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/diagnostics");
     ctx.needs(index_generate);
 }

@@ -18,21 +18,21 @@ import (
 
 	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
-// snapshot records the project's declared outputs into the cache and writes the manifest.
-// A project with no declared outputs records an empty manifest (correct cache hit on rerun).
-func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Duration) ([]string, error) {
+// snapshot records the project's declared outputs into the local store's blobs and
+// returns the manifest describing them, for each tier to store. A project with no
+// declared outputs yields an empty manifest (a correct cache hit on rerun).
+func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Duration) (*Manifest, []string, error) {
 	root := s.WorkspaceRoot
 	matches, err := expandOutputGlobs(s.Outputs, root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Only a target's OWN declaration makes an empty result an error; see Step.OutputsDeclared.
 	if len(matches) == 0 && len(s.Outputs) > 0 && s.OutputsDeclared {
-		return nil, fmt.Errorf("snapshot: target %q in project %q declared outputs but produced none: %v",
+		return nil, nil, fmt.Errorf("snapshot: target %q in project %q declared outputs but produced none: %v",
 			s.Target, s.ProjectPath, s.Outputs)
 	}
 	// Each required glob is checked on its own, not folded into the all-or-nothing test
@@ -41,10 +41,10 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	for _, g := range s.RequiredOutputs {
 		found, err := expandOutputGlobs([]string{g}, root)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(found) == 0 {
-			return nil, types.DiagnosticErrorf(types.CrossOutputNotProduced,
+			return nil, nil, types.DiagnosticErrorf(types.CrossOutputNotProduced,
 				"target %q declared an output into another project (%q) but produced no file matching it; check the path the target actually writes",
 				s.Target, g)
 		}
@@ -70,19 +70,12 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	for _, m := range matches {
 		rec, err := c.snapshotOne(m.abs, m.rel)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		manifest.Outputs = append(manifest.Outputs, rec)
 		written = append(written, m.abs)
 	}
-	data, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	if err := writeAtomic(c.manifestPath(s.ProjectPath, hash), data); err != nil {
-		return nil, err
-	}
-	return written, nil
+	return manifest, written, nil
 }
 
 func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
@@ -214,8 +207,14 @@ func expandOutputGlobs(globs []string, root string) ([]relAbs, error) {
 	return out, nil
 }
 
-// replay restores a manifest's outputs: reflink → hard link → byte copy.
+// replay restores a manifest's outputs from the local store.
 func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string, error) {
+	return c.replayFrom(ctx, m, root, c.dir)
+}
+
+// replayFrom restores a manifest's outputs into root from the blobs under store (the
+// local store, or a remote hit's staging root): reflink, else byte copy.
+func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string) ([]string, error) {
 	var paths []string
 	for _, rec := range m.Outputs {
 		if err := ctx.Err(); err != nil {
@@ -249,7 +248,7 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 			paths = append(paths, dst)
 			continue
 		}
-		blob := c.blobPath(rec.Blob)
+		blob := blobPathIn(store, rec.Blob)
 		if err := replayBlob(blob, dst); err != nil {
 			return nil, fmt.Errorf("replay %s: %w", rec.Path, err)
 		}

@@ -24,7 +24,7 @@ func gitInit(t *testing.T, dir string) {
 	}
 }
 
-func TestGitFilter_AllowsTrackedRejectsUntracked(t *testing.T) {
+func TestTrackedFilter_AllowsTrackedRejectsUntracked(t *testing.T) {
 	root := t.TempDir()
 	gitInit(t, root)
 
@@ -35,16 +35,16 @@ func TestGitFilter_AllowsTrackedRejectsUntracked(t *testing.T) {
 	untracked := filepath.Join(root, "untracked.txt")
 	require.NoError(t, os.WriteFile(untracked, []byte("y"), 0o644))
 
-	f := newGitFilter(root)
+	f := newTrackedFilter(t.Context(), root)
 	require.True(t, f.Allow(tracked), "staged file is tracked")
 	require.False(t, f.Allow(untracked), "unstaged file is untracked")
 	require.False(t, f.Allow(filepath.Join(root, "ghost.txt")), "nonexistent file is untracked")
 }
 
-func TestGitFilter_NonRepoAllowsNothing(t *testing.T) {
+func TestTrackedFilter_NonRepoAllowsNothing(t *testing.T) {
 	root := t.TempDir()
-	// No git init: build() fails and the tracked set stays empty.
-	f := newGitFilter(root)
+	// No git init: the listing fails and the tracked set stays empty.
+	f := newTrackedFilter(t.Context(), root)
 	existing := filepath.Join(root, "file.txt")
 	require.NoError(t, os.WriteFile(existing, []byte("x"), 0o644))
 	require.False(t, f.Allow(existing))

@@ -20,8 +20,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Filename is the canonical config file name magus searches for.
-const Filename = "magus.yaml"
+// Filename is the canonical config file name magus searches for; DottedFilename is
+// the hidden spelling it accepts in its place.
+const (
+	Filename       = "magus.yaml"
+	DottedFilename = ".magus.yaml"
+)
 
 // DefaultHistoryPath returns $XDG_STATE_HOME/magus/history/v1.json (or ~/.local/state equivalent).
 // The path is outside .magus/ so it is never swept into a build-cache GHA step.
@@ -202,8 +206,8 @@ func LoadWorkspaceOnly(root string) (Config, error) {
 // merges it on top of cfg. Returns cfg unchanged when neither file exists.
 // Returns an error when both files exist in the same directory.
 func loadDirInto(cfg Config, dir string) (Config, error) {
-	plain := filepath.Join(dir, "magus.yaml")
-	dotted := filepath.Join(dir, ".magus.yaml")
+	plain := filepath.Join(dir, Filename)
+	dotted := filepath.Join(dir, DottedFilename)
 
 	_, plainErr := os.Stat(plain)
 	_, dottedErr := os.Stat(dotted)
@@ -448,21 +452,6 @@ func yamlKey(f reflect.StructField) string {
 		return strings.ToLower(f.Name)
 	}
 	return name
-}
-
-// parseBoolEnv parses a boolean environment variable value using a
-// case-insensitive comparison. "true", "1", "yes" → true; "false", "0", "no"
-// → false. Any unrecognized value returns fallback unchanged.
-//
-//nolint:unused // canonical reference implementation that cmd/magus-utils config codegen mirrors into generated config loaders.
-func parseBoolEnv(v string, fallback bool) bool {
-	switch strings.ToLower(v) {
-	case "true", "1", "yes":
-		return true
-	case "false", "0", "no":
-		return false
-	}
-	return fallback
 }
 
 // LoadFile parses the config file at path on top of Defaults() and returns the

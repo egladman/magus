@@ -101,15 +101,11 @@ func PrunePreserved(ctx context.Context, dir string, res types.VCSResolution) ([
 // the half a reader can still act on. A missing digest reads as "not measured", the same
 // as an empty PatchDigest.
 func untrackedDigest(ctx context.Context, dir string, res types.VCSResolution) string {
-	reporter, ok := res.VCS.(types.TrackedFileReporter)
-	if !ok {
-		return ""
-	}
 	changed, err := res.VCS.DirtyFiles(ctx, dir, nil)
 	if err != nil || len(changed) == 0 {
 		return ""
 	}
-	tracked, err := reporter.TrackedFiles(ctx, dir, changed)
+	tracked, err := res.VCS.TrackedFiles(ctx, dir, changed)
 	if err != nil {
 		return ""
 	}

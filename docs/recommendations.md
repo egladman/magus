@@ -328,7 +328,7 @@ reachable, the way Go's `%w` does.
 ## Where this page stops
 
 The canonical target names are worth adopting: `build`, `test`, `lint`, `format`,
-`generate`, `preflight` and `clean` mean the same thing in every toolchain, which is
+`generate` and `clean` mean the same thing in every toolchain, which is
 the test they had to pass to get in. `ci` you get either way, since magus reserves it.
 
 Releasing is different, and this page does not recommend a shape for it. magus's own
