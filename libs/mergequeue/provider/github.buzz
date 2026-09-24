@@ -243,18 +243,23 @@ fun pages(url: str, what: str, hdrs: {str: str}) > [str] !> any {
 // allowed_merge_methods intersects the settings, and a "required_linear_history" rule
 // rules out "merge". GitHub merges a stack in one call and needs each stacked branch
 // linear on the one below.
+//
+// GitHub sends the allow_* settings only to a token with push access, so a read-only
+// token's describe starts from every method and needs a ruleset to name the allowed ones.
 fun describeFrom(body: str, rules: str, setup: any) > any !> any {
     final r = serialize\jsonDecode(body);
+    final settingsKnown = r.q("allow_squash_merge").boolean() != null;
     var methods = mut [<str>];
-    if (r.q("allow_merge_commit").booleanValue()) {
+    if (!settingsKnown or r.q("allow_merge_commit").booleanValue()) {
         methods.append("merge");
     }
-    if (r.q("allow_squash_merge").booleanValue()) {
+    if (!settingsKnown or r.q("allow_squash_merge").booleanValue()) {
         methods.append("squash");
     }
-    if (r.q("allow_rebase_merge").booleanValue()) {
+    if (!settingsKnown or r.q("allow_rebase_merge").booleanValue()) {
         methods.append("rebase");
     }
+    var named = false;
     var linear = false;
     foreach (rule in serialize\jsonDecode(rules).listValue()) {
         final kind = rule.q("type").stringValue();
@@ -263,6 +268,7 @@ fun describeFrom(body: str, rules: str, setup: any) > any !> any {
         } else if (kind == "pull_request") {
             final allowed = rule.q("parameters").q("allowed_merge_methods").listValue();
             if (allowed.len() > 0) {
+                named = true;
                 final names = mut [<str>];
                 foreach (m in allowed) {
                     names.append(m.stringValue().lower());
@@ -285,6 +291,9 @@ fun describeFrom(body: str, rules: str, setup: any) > any !> any {
             }
         }
         methods = kept;
+    }
+    if (!settingsKnown and !named) {
+        throw "github: describe: the token cannot read the repository's merge settings (they need push access), and no ruleset on the base branch names the allowed merge methods";
     }
     if (methods.len() == 0) {
         throw "github: describe: the repository settings and its rulesets on the base branch allow no merge method in common";
@@ -1630,6 +1639,22 @@ test "a required_linear_history rule drops merge even when settings and rulesets
 test "no rule targeting the base leaves the settings untouched" {
     final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": false, "allow_rebase_merge": false}`, rules: `[]`, setup: null);
     assert\equal(got["methods"], want: ["merge"], message: "a ruleset on another branch never reaches this call, since the rules are read for the base branch alone");
+}
+
+test "a read-only token takes the methods its ruleset names" {
+    final got = describeFrom(`{"full_name": "o/r"}`,
+        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`, setup: null);
+    assert\equal(got["methods"], want: ["squash", "rebase"], message: "absent settings are unknown, not off");
+}
+
+test "a read-only token with no ruleset naming methods is an error naming why" {
+    var reason = "";
+    try {
+        final _ = describeFrom(`{"full_name": "o/r"}`, rules: `[]`, setup: null);
+    } catch (e) {
+        reason = "{e}";
+    }
+    assert\contains(reason, item: "push access", message: "the error names the missing permission");
 }
 
 test "an empty intersection is an error naming why" {
