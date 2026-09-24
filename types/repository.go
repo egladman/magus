@@ -78,7 +78,7 @@ type Inspector interface {
 	TargetGraph(ctx context.Context) (TargetGraphOutput, error)
 	// Workspace returns the single-entry view of this workspace: a *Magus is
 	// always exactly one workspace. The CLI's `describe workspaces` merges these
-	// across the daemon's declared roots when daemon.workspaces is set.
+	// across the server's declared roots when server.workspaces is set.
 	Workspace(ctx context.Context, cfg WorkspaceConfig) (WorkspaceEntry, error)
 }
 

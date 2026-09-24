@@ -5,7 +5,7 @@
 // one, see demo.ts), a rolling <pre> preview streams captured lines beneath the list so the
 // board looks alive.
 //
-// Live-stream limitation: the daemon feed the dashboard holds (/api/v1/events) carries
+// Live-stream limitation: the server feed the dashboard holds (/api/v1/events) carries
 // STATUS frames - pool, health, running targets - not a raw-output journal. The log viewer
 // tails that journal from a DIFFERENT per-run endpoint. So in live mode this tile shows the
 // running targets and their current step as the activity preview and links out to the log
@@ -22,7 +22,7 @@ import {
 } from "../../../lib/scope";
 import { fmtArgs, relTime } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
-import { logsLink } from "../../../lib/daemon";
+import { logsLink } from "../../../lib/server";
 import { renderLine } from "../../render/sections";
 import { Card, h, type Tile } from "./card";
 
@@ -223,7 +223,7 @@ export function activityTile(): Tile {
   // rather than used, that jump is the most visually noticeable thing on the screen, and it carries
   // no information - it is the one moment where something ENDING deserves to be legible.
   //
-  // WHEN A ROW IS DISMISSED: the instant the daemon stops reporting the target as running. That is
+  // WHEN A ROW IS DISMISSED: the instant the server stops reporting the target as running. That is
   // the only honest trigger available - the status frame carries what is running now, with no
   // "finished" event to hang a longer-lived "just completed" state on. So the row leaves as the work
   // leaves, and the exit animation is what gives the eye time to register it. It is deliberately not
@@ -356,7 +356,7 @@ export function activityTile(): Tile {
     }
   }
 
-  // Repaint when the browser tab's workspace scope changes, not only when the daemon pushes: the
+  // Repaint when the browser tab's workspace scope changes, not only when the server pushes: the
   // scope decides which of these running targets belong to you, and it can change with no new frame.
   let latest: DashboardState | null = null;
   const repaint = (): void => {
@@ -367,7 +367,7 @@ export function activityTile(): Tile {
     const scope = workspaceScope();
     const mine = all.filter((t) => inScope(t.workspace, scope));
     // "Where is my stuff" is the failure a scope invites, and this is the moment someone asks it: a
-    // scoped tile that is empty while the daemon is busy looks identical to an idle daemon. Saying
+    // scoped tile that is empty while the server is busy looks identical to an idle server. Saying
     // how much is running ELSEWHERE turns a dead end into a signpost - it is the sentence AWS's
     // region picker never says, and the reason people think they have lost data rather than moved.
     const elsewhere = all.length - mine.length;

@@ -18,7 +18,7 @@ type invocationAncestorsKey struct{}
 // identical to flock, and treating the first as the second is what made a nested
 // `magus run` hang forever instead of failing.
 //
-// It is a context value rather than package state because the daemon runs many
+// It is a context value rather than package state because the server runs many
 // invocations concurrently in ONE process: a global would report the union of every
 // in-flight run's ancestry and refuse work that is merely concurrent.
 func WithInvocationAncestors(ctx context.Context, refs []string) context.Context {
@@ -29,7 +29,7 @@ func WithInvocationAncestors(ctx context.Context, refs []string) context.Context
 // oldest first, or nil when none was set. A library caller that never stamps it reads nil,
 // which disables re-entry detection and restores the plain waiting behavior.
 //
-// The result is a copy: the daemon derives many contexts from one parent, and handing out
+// The result is a copy: the server derives many contexts from one parent, and handing out
 // the stored slice would let an append by one invocation land in another's.
 func InvocationAncestorsFromContext(ctx context.Context) []string {
 	refs, _ := ctx.Value(invocationAncestorsKey{}).([]string)
@@ -74,7 +74,7 @@ func HasInvocationAncestor(ctx context.Context, pid int, id string) bool {
 // their first id in the same millisecond mint the same string. On the id alone, a CI
 // fan-out that starts several runs at once would have one refuse another as its own
 // ancestor. A pid is unique among live processes, so the pair is unique among live
-// invocations, which is all this comparison spans. Under the daemon the pid is shared by
+// invocations, which is all this comparison spans. Under the server the pid is shared by
 // holder and waiter and the ids differ, which is the case the ids alone handle.
 func invocationRef(pid int, id string) string {
 	return strconv.Itoa(pid) + ":" + id

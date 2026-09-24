@@ -20,9 +20,9 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 export function jobsTile(): Tile {
   const card = new Card("jobs", "Jobs", {
-    note: "waiting for the daemon",
+    note: "waiting for the server",
     why:
-      "Every job this daemon knows about, its own maintenance and the work sessions hold, with" +
+      "Every job this server knows about, its own maintenance and the work sessions hold, with" +
       " anything that needs intervention first. The letter mark on each row: D declared, R" +
       " running, OK pass, FAIL fail, NR no-return (nothing was ever reported back, unlike fail," +
       " the one state that needs a human, since no one is coming to tell you about it).",
@@ -52,7 +52,7 @@ export function jobsTile(): Tile {
   const render = (read: JobsRead): void => {
     if (read.kind === "denied") {
       card.setNote("jobs not served");
-      summary.textContent = "This daemon does not serve jobs.";
+      summary.textContent = "This server does not serve jobs.";
       list.replaceChildren();
       note.textContent = "";
       return;
@@ -90,7 +90,7 @@ export function jobsTile(): Tile {
           h("span", "console-dashboard-jobs__mark", STATE_MARK[node.state]),
           h("code", "console-dashboard-jobs__id", node.id),
           // Which kind of job this is, beside its state: the board is where the two are most
-          // easily confused, since a daemon job and a session's job read the same at a glance.
+          // easily confused, since a server job and a session's job read the same at a glance.
           h(
             "span",
             "console-dashboard-jobs__state",

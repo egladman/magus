@@ -1,9 +1,9 @@
-// main.ts - the console's Activity surface: the daemon's audit trail (magus.activity.v1alpha1) painted with
+// main.ts - the console's Activity surface: the server's audit trail (magus.activity.v1alpha1) painted with
 // the SAME foldable, status-accented sections as the log viewer (buildSection over the shared render
 // model), so a run's output and the trail read as one design. Unlike logs/graph/dashboard it has NO
 // standalone page - it is built fresh into a console host. It lists a page of events via
-// ActivityService.ListActivityEvents when a daemon is reachable (a #port link, the daemon-origin/shared
-// console, or the last daemon the dashboard connected to), resolves an event's payload refs on demand
+// ActivityService.ListActivityEvents when a server is reachable (a #port link, the server-origin/shared
+// console, or the last server the dashboard connected to), resolves an event's payload refs on demand
 // through ActivityService.GetPayload, and shows a synthesized demo trail on the
 // shared #demo fragment so the
 // design is inspectable offline. What a job DID lands here; the Jobs view is where one is read and
@@ -36,12 +36,12 @@ import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "
 import {
   parseHash,
   wantsDemo,
-  resolveDaemonHostOrRemembered,
+  resolveServerHostOrRemembered,
   isUnreachable,
-  adoptDaemonOrigin,
+  adoptServerOrigin,
   consumeLiveToken,
-  createDaemonTransport,
-} from "../../lib/daemon";
+  createServerTransport,
+} from "../../lib/server";
 import { errMessage } from "../../lib/guards";
 import { persisted } from "../../lib/persist";
 import { subscribeDefaultHost } from "../../lib/settings";
@@ -56,7 +56,7 @@ import type { SurfaceInstance } from "../standalone";
 import { demoEvents } from "./demo";
 
 const PAGE_SIZE = 100;
-const PURPOSE = "Activity records what the daemon did: MCP calls, jobs, config changes.";
+const PURPOSE = "Activity records what the server did: MCP calls, jobs, config changes.";
 
 interface Refs {
   scroll: HTMLElement;
@@ -441,7 +441,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   let loadMore: (() => void) | null = null;
   let loading = false;
   // The client the live load built, kept past that load so expanding a payload reaches the same
-  // daemon the events came from. Null on the demo trail, and that is what gates the expand control:
+  // server the events came from. Null on the demo trail, and that is what gates the expand control:
   // a synthesized event's refs name blobs no store holds, so the offer could only fail.
   let payloadClient: Client<typeof ActivityService> | null = null;
   // The event index: the collapsible left panel shared with the log viewer's run browser. Its refresh
@@ -525,7 +525,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // expandPayload resolves one ref and replaces its control with the body it names. A NotFound is a
   // normal end state rather than a fault - the trail rotates blobs out from under events that still
   // name them - so it reads as a fact on the line, with no retry offered for something that will
-  // never come back. Any other failure keeps the control, so a daemon blip is retryable.
+  // never come back. Any other failure keeps the control, so a server blip is retryable.
   async function expandPayload(
     client: Client<typeof ActivityService>,
     ctl: PayloadControl,
@@ -576,7 +576,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const has = events.length > 0;
     refs.empty.hidden = has;
     const n = events.length;
-    // "N events" is the count LOADED, not the count the daemon holds - the trail pages. Saying so
+    // "N events" is the count LOADED, not the count the server holds - the trail pages. Saying so
     // costs one character and stops the number reading as a total, which it only is on the last page.
     conn.textContent = n + (n === 1 ? " event" : " events") + (nextPageToken ? "+" : "");
     // The badge stays a bare number - a corner overlay has no room for a sentence, and unlike conn
@@ -649,7 +649,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // it pages through.
   let loadGeneration = 0;
 
-  async function loadLive(daemonHost: string, pageToken = ""): Promise<void> {
+  async function loadLive(serverHost: string, pageToken = ""): Promise<void> {
     if (pageToken && loading) return;
     const generation = pageToken ? loadGeneration : ++loadGeneration;
     const superseded = (): boolean => stale || generation !== loadGeneration;
@@ -665,23 +665,23 @@ export function activate(host: HTMLElement): SurfaceInstance {
       conn.textContent = "connecting...";
       // keepIndex so the refresh control stays reachable while the request is in flight.
       if (cold) {
-        showConnectPrompt({ connection: "connecting", host: daemonHost }, "connecting...", true);
+        showConnectPrompt({ connection: "connecting", host: serverHost }, "connecting...", true);
       }
     }
     try {
-      const client = createClient(ActivityService, createDaemonTransport(daemonHost));
+      const client = createClient(ActivityService, createServerTransport(serverHost));
       payloadClient = client;
       const resp = await client.listActivityEvents({ pageSize: PAGE_SIZE, pageToken });
       if (superseded()) return;
       loadedEvents = loadedEvents.concat(resp.events);
       nextPageToken = resp.nextPageToken;
-      loadMore = nextPageToken ? () => void loadLive(daemonHost, nextPageToken) : null;
+      loadMore = nextPageToken ? () => void loadLive(serverHost, nextPageToken) : null;
       render(loadedEvents);
       notifyDenials(resp.events);
       if (loadedEvents.length === 0) {
         showEmpty(
           "No activity yet",
-          "The daemon is connected but has not recorded any actions in this session.",
+          "The server is connected but has not recorded any actions in this session.",
           "0 events",
         );
       }
@@ -699,14 +699,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (!isUnreachable(e)) {
         showEmpty(
           "Could not read the activity trail",
-          "The daemon at " + daemonHost + " answered with an error (" + msg + ").",
+          "The server at " + serverHost + " answered with an error (" + msg + ").",
           "error",
           true,
         );
         return;
       }
       showConnectPrompt(
-        { connection: "disconnected", host: daemonHost, reason: msg },
+        { connection: "disconnected", host: serverHost, reason: msg },
         "not connected",
         true,
       );
@@ -715,26 +715,26 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  // load resolves which source to read: an explicit #demo, then resolveDaemonHostOrRemembered (a
-  // #port link, the daemon-origin/shared console, the Settings address, or the last daemon the
+  // load resolves which source to read: an explicit #demo, then resolveServerHostOrRemembered (a
+  // #port link, the server-origin/shared console, the Settings address, or the last server the
   // dashboard reached); otherwise the cold empty state.
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
-    // adoptDaemonOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
-    // lib/daemon's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
-    // does not make it true in here, and daemonAttach then returns null on a console served by
-    // that very daemon. Without this the surface works only after the dashboard has persisted a
+    // adoptServerOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
+    // lib/server's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
+    // does not make it true in here, and serverAttach then returns null on a console served by
+    // that very server. Without this the surface works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
-    adoptDaemonOrigin();
+    adoptServerOrigin();
     if (wantsDemo(params)) {
       payloadClient = null;
       render(demoEvents(Date.now()));
       return;
     }
-    const daemonHost = resolveDaemonHostOrRemembered(params);
-    if (daemonHost) {
-      void loadLive(daemonHost);
+    const serverHost = resolveServerHostOrRemembered(params);
+    if (serverHost) {
+      void loadLive(serverHost);
       return;
     }
     loadGeneration++; // any load still out belongs to an address that no longer resolves
@@ -743,7 +743,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   load();
   // A new address is followed only while no trail is on screen: a trail the reader is reading keeps
-  // the daemon it came from until they refresh.
+  // the server it came from until they refresh.
   const unsubscribeHost = subscribeDefaultHost(() => {
     if (loadedEvents.length === 0) load();
   });

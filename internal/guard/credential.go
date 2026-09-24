@@ -171,7 +171,7 @@ func lineWords(command string, d Dialect) []string {
 // tokenStateDenial is the one text both surfaces refuse with.
 func tokenStateDenial(what string) string {
 	return "magus guard denied access to " + what + ", which holds magus's token secrets: the operator token or the token store.\n\n" +
-		"Those files are the credentials the daemon checks, so a session that reads one holds a grant nobody handed it, and one that writes one mints itself a token. " +
+		"Those files are the credentials the server checks, so a session that reads one holds a grant nobody handed it, and one that writes one mints itself a token. " +
 		"Use the token you were given. A person mints another with `" + hint.ConfigMCPConnectorCreate.String() + "` or `" + hint.ConfigConsoleTokenCreate.String() + "`, and `" +
 		hint.ConfigMCPConnectorLs.String() + "` lists what exists without a secret."
 }

@@ -14,8 +14,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// MachineAdmitter is the budget as a client reaches it: the daemon over the proc
-// socket, or a MachineBudget directly when this process IS the daemon.
+// MachineAdmitter is the budget as a client reaches it: the broker, over the one
+// connection this process holds to it.
 type MachineAdmitter interface {
 	Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
@@ -23,7 +23,7 @@ type MachineAdmitter interface {
 
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
 // that still holds this step's local limiter slot, so it must never outlast a sick
-// daemon.
+// broker.
 //
 // A var, not a const, for the same reason as elsewhere in this package: a timing a test
 // cannot shorten is a timing that either costs real wall-clock or goes uncovered.
@@ -35,7 +35,7 @@ const machinePollEvery = 100 * time.Millisecond
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
-// error is built here and has to state its own code: the daemon runs an adopted step
+// error is built here and has to state its own code: the server runs an adopted step
 // in its own process and reads the code off the error, having lost the Go type.
 //
 // The workspace lock's own contention error picks the same number for the same reason
@@ -49,12 +49,20 @@ const ExitCodeMachineBusy = 75
 // are configuration answers rather than timing ones.
 const ExitCodeMachineDeclaration = 78
 
+// ExitCodeBrokerUnavailable is what a step refused under `broker: required` asks for:
+// 69, EX_UNAVAILABLE. Apart from 75 so a wrapper retrying a busy host does not also
+// retry a host with no arbiter at all.
+const ExitCodeBrokerUnavailable = 69
+
 // machineGate is the client half of admission: it asks the budget, and either proceeds,
 // waits on its own run, or refuses.
 type machineGate struct {
 	admit MachineAdmitter
 	log   *slog.Logger
 	lost  sync.Once
+	// required refuses a step the admitter could not answer for, where the default
+	// admits it unarbitrated.
+	required bool
 }
 
 // acquire claims the machine budget for one step and returns the function that frees
@@ -65,8 +73,8 @@ type machineGate struct {
 // them, until ctx ends; one kept out by any other magus invocation is refused at once
 // (exit 75), since magus never waits on another magus invocation.
 //
-// Fails OPEN. A daemon that dies, or a transport that breaks, admits the step and says
-// so once: losing the arbiter must not stop a build that was going to run.
+// A broker that dies, or a transport that breaks, admits the step and says so once
+// under best-effort; under required it refuses with MGS3022 (exit 69).
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
 	if g == nil || g.admit == nil {
 		return func() {}, nil
@@ -74,6 +82,9 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	for {
 		v, err := g.admit.Request(ctx, c)
 		if err != nil {
+			if g.required {
+				return nil, brokerUnavailableError(c, err)
+			}
 			return g.admitOpen(ctx, err), nil
 		}
 		switch {
@@ -92,7 +103,7 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 		}
 		// The holders are this run's own steps, whose progress feeds the stall watchdog,
 		// or another invocation of this process, whose progress does not; beat for the
-		// latter, or a run queued in the daemon trips MGS3012.
+		// latter, or a run queued in the server trips MGS3012.
 		ProgressFromContext(ctx).Beat()
 		select {
 		case <-ctx.Done():
@@ -118,7 +129,7 @@ func blindToOwnAncestry(ctx context.Context) bool {
 // own is cancelled by the time a failing run tears down, and a release that skipped
 // would leave the machine paying for work that has stopped. Bounded because this runs
 // inside the defer that still holds the local limiter slot: an unbounded release
-// against a wedged daemon would pin that slot for as long as the daemon stays wedged,
+// against a wedged broker would pin that slot for as long as the broker stays wedged,
 // turning one sick process into a stalled run.
 func (g *machineGate) releaser(id string) func() {
 	return func() {
@@ -128,15 +139,23 @@ func (g *machineGate) releaser(id string) func() {
 	}
 }
 
-// admitOpen is the fail-open path: the arbiter is unreachable, so this run proceeds
+// admitOpen is the best-effort path: the broker is unreachable, so this run proceeds
 // unarbitrated. Said once, because a run whose every step repeats it teaches the
 // reader to scroll past the line.
 func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 	g.lost.Do(func() {
-		g.log.WarnContext(ctx, "magus: machine-wide admission is OFF for this run: the daemon holding the budget is unreachable",
+		g.log.WarnContext(ctx, "magus: host capacity is not arbitrated for this run: no broker answered (broker: best-effort)",
 			slog.String("error", err.Error()))
 	})
 	return func() {}
+}
+
+// brokerUnavailableError is the refusal under `broker: required`: nothing answered for
+// the host's capacity, and the setting says a step must not start unarbitrated.
+func brokerUnavailableError(c types.MachineClaim, err error) error {
+	return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.BrokerUnavailable, err,
+		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus broker status` says whether one is up and where it logs",
+		displayProject(c.Project), c.Target, err)}
 }
 
 // ancestorInvocations is the invocations this one runs underneath, this one excluded.
@@ -145,7 +164,7 @@ func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 // nothing leaves its PARENT's ref last, and dropping that would put the parent back in
 // the competing set.
 //
-// The CLI and the daemon stamp ancestry onto ctx at their own entry points; a LIBRARY
+// The CLI and the server stamp ancestry onto ctx at their own entry points; a LIBRARY
 // caller does not, and admission is the THIRD entry point to need this: the project
 // lock hit it first and fixed it the same way (see acquireLocks). Without the fallback
 // a Go test driving magus in-process reads an empty ancestry however deep inside a
@@ -188,7 +207,7 @@ func workingDir() string {
 	return dir
 }
 
-// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the daemon
+// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the server
 // side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
@@ -229,7 +248,7 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 // has nothing to check.
 //
 // This no longer names a fixed percentage: mem.BudgetMB reserves a share of memory that
-// depends on the profile the daemon started under (a quarter, under balanced or
+// depends on the profile the broker started under (a quarter, under balanced or
 // conservative; a small fixed floor, under aggressive), and the budget here carries no
 // record of which one applied. Naming one number would be right for one profile and a
 // lie for the other.

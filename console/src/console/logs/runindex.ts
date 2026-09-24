@@ -1,11 +1,11 @@
-// runindex.ts - the pure half of the run browser: the row types the daemon's two feeds decode
+// runindex.ts - the pure half of the run browser: the row types the server's two feeds decode
 // into, the filter grammar the panel's box parses, and the tree spec the DOM builder paints.
 // It carries NO DOM dependency (`import type` is erased at build), so the grouping and the
 // filter are unit-tested in node - the same split query.ts made out of filter.ts, and for the
 // same reason: the interesting logic here is which rows survive a query and how they nest,
 // neither of which needs an element to be true.
 
-// RunSummary is one row of the daemon's /api/v1/outputs feed (a cache.OutputDescriptor projected
+// RunSummary is one row of the server's /api/v1/outputs feed (a cache.OutputDescriptor projected
 // to the wire): one TARGET's stored output. Times are unix milliseconds. target is the REPRO
 // target (a charm suffix like "build:rw" is preserved); the tree groups by the bare name.
 export interface RunSummary {
@@ -19,7 +19,7 @@ export interface RunSummary {
   duration_ms: number;
 }
 
-// RunLog is one row of the daemon's /api/v1/runs feed: one INVOCATION - a whole magus command,
+// RunLog is one row of the server's /api/v1/runs feed: one INVOCATION - a whole magus command,
 // launch to exit. It is the unit a person remembers a run by ("the affected ci I ran before
 // lunch"), which is why it, not the output ref, is the browser's default top level. status is
 // empty on a run that was interrupted before it wrote a finished event.
@@ -45,7 +45,7 @@ export type Selection =
   | { kind: "invocation"; inv: string; label: string }
   | { kind: "output"; run: RunSummary; focus: string };
 
-// NodeSpec is one row of the tree, ready to paint: PF chrome and nesting, no daemon vocabulary.
+// NodeSpec is one row of the tree, ready to paint: PF chrome and nesting, no server vocabulary.
 export interface NodeSpec {
   label: string;
   // When label is a RELATIVE time, the instant it was computed from. It rides along so a slow ticker

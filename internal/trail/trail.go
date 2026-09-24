@@ -1,5 +1,5 @@
 // Package trail is the magus activity trail: a durable, append-only record of consequential
-// actions taken against the daemon (who did what, and did it succeed) kept next to the
+// actions taken against the server (who did what, and did it succeed) kept next to the
 // execution journal under a base directory. It is the store behind the magus.activity.v1alpha1
 // "activity view"; producers (the MCP handler, agent hooks, and background jobs today; config
 // and token lifecycle later) append events and store payload blobs, and the console's
@@ -48,7 +48,7 @@ const (
 const refHexLen = 16
 
 // maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
-// blobs no kept event references. Rotate runs at daemon start and thereafter on the daemon's
+// blobs no kept event references. Rotate runs at server start and thereafter on the server's
 // rotate-activities schedule, never per append, because the trail is stateless and lock-free by
 // design (append is a bare POSIX append; there is no long-lived handle to hang a count on), so a
 // write-triggered rotate would have to re-scan the whole file per write.
@@ -68,7 +68,7 @@ type Kind string
 
 const (
 	KindMCPToolCall    Kind = "mcp_tool_call"
-	KindJob            Kind = "job"             // a daemon background job (SCIP reindex, graph build, VCS refresh)
+	KindJob            Kind = "job"             // a server background job (SCIP reindex, graph build, VCS refresh)
 	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
 	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
 	KindSandboxDenial  Kind = "sandbox_denial"  // magus's own read/write/exec policy check refused an access (see sandbox.Policy); a kernel-landlock denial reports nothing back and cannot appear here
@@ -110,7 +110,7 @@ const (
 	//
 	// It is the governance half of a fact the execution journal already records. The
 	// journal answers "what did this build do" and is queried per invocation; the trail
-	// answers "who did what against this daemon", so when an AGENT triggers a run that
+	// answers "who did what against this server", so when an AGENT triggers a run that
 	// makes a credential spendable, this is the event that connects the two. Without it
 	// the activity log shows the tool call and not its consequence.
 	//
@@ -147,7 +147,7 @@ type Event struct {
 	Kind         Kind   `json:"kind"`                 // one of the Kind* constants
 	UserAgent    string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
 	types.Origin `json:",inline"`
-	Workspace    string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
+	Workspace    string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for server-wide (an MCP call is not bound to one workspace)
 	Action       string `json:"action"`              // the specific action: a tool name, a job command, "connector.create"
 	// Lease is the lease this action belongs to, when the producer could
 	// correlate one (a marker line, or the BAGGAGE channel); ""
@@ -183,7 +183,7 @@ type Event struct {
 //
 //	grep -l '"dur_ms"' <base>/activity/events.jsonl
 //
-// Dropping it early is silent rather than loud: the daemon's scheduler reads a job's last
+// Dropping it early is silent rather than loud: the server's scheduler reads a job's last
 // finish as start plus duration, so every pre-rename row reads as having finished the instant
 // it started, and a job whose interval has not elapsed is rerun anyway.
 func (e *Event) UnmarshalJSON(b []byte) error {
@@ -462,7 +462,7 @@ const (
 // to fail the lease it observes.
 //
 // NOTE ON GROWTH: this producer runs in the short-lived hook process, which has no append counter
-// to drive RotateOnCount, so nothing it writes triggers a rotate; only the daemon's boot-time
+// to drive RotateOnCount, so nothing it writes triggers a rotate; only the server's boot-time
 // Rotate bounds the trail. That was already true of AppendAgentCommand; it bites harder here
 // because a spawn blob is a whole lease prompt rather than one command line.
 func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
@@ -774,7 +774,7 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 // acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
 //
 // It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the
-// daemon's maintenance schedule be the single owner of rotation. A second, write-triggered path
+// server's maintenance schedule be the single owner of rotation. A second, write-triggered path
 // (a rotate driven off a producer's own append counter) can only cover that one producer: an agent
 // hook is a short-lived process with nowhere to keep a counter, so a hook-fed trail would be
 // write-bounded by nothing at all. One trigger that every producer shares beats two that disagree

@@ -130,6 +130,9 @@ func KnownKeys() []string {
 func Save(path, key, value string) error {
 	fs, entryName, ok := matchSchema(key)
 	if !ok {
+		if err := retiredKeyError(key); err != nil {
+			return err
+		}
 		return fmt.Errorf("unknown config key %q (run `magus config view -o name` for valid keys)", key)
 	}
 

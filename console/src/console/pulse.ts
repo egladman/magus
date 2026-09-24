@@ -1,11 +1,11 @@
-// pulse.ts - the shell's live reading of the daemon pool, for the navigation rail.
+// pulse.ts - the shell's live reading of the server pool, for the navigation rail.
 //
 // A unary read on the shell's existing 15s readiness interval, not a second SSE subscription: the
 // dashboard already owns /api/v1/events and drives the connection dot from it, and the rail has to
 // survive with no tab open, so it cannot use the dashboard's store.
 import { createClient, Code, ConnectError } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
-import { createDaemonTransport, getLiveToken } from "../lib/daemon";
+import { createServerTransport, getLiveToken } from "../lib/server";
 import { isServing } from "../lib/workspace";
 
 export interface PulseView {
@@ -14,13 +14,13 @@ export interface PulseView {
   // Also feeds the shell's scope selector - the only place it learns more than one workspace exists.
   workspaces: string[];
   // savedMs is measured, not modeled: each cache entry records how long its run took and a hit sums
-  // that figure. It covers this daemon's lifetime only, and understates - an entry written before
+  // that figure. It covers this server's lifetime only, and understates - an entry written before
   // the field existed adds nothing. Never label it as the cache's all-time saving.
   cache: { hits: number; misses: number; savedMs: number } | null;
 }
 
-// Hosts whose daemon has no GetStatus route. Without the latch, a console pointed at a v0.2.0 daemon
-// retries a 404 every 15s for the life of the page. Keyed by host, so a different daemon probes
+// Hosts whose server has no GetStatus route. Without the latch, a console pointed at a v0.2.0 server
+// retries a 404 every 15s for the life of the page. Keyed by host, so a different server probes
 // again; one upgraded in place stays latched until reload.
 const routelessHosts = new Set<string>();
 
@@ -35,7 +35,7 @@ function isRouteless(e: unknown): boolean {
 }
 
 async function getPool(host: string): Promise<PulseView | null> {
-  const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+  const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
   const resp = await client.getStatus({}, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   const pool = resp.status?.pool;
   if (!pool) return null;
@@ -53,7 +53,7 @@ async function getPool(host: string): Promise<PulseView | null> {
   };
 }
 
-// Null means "no answer" - no daemon, an old one, a blip, a token that will not spend. Every failure
+// Null means "no answer" - no server, an old one, a blip, a token that will not spend. Every failure
 // has to look the same, because the rail hides the reading rather than reporting a zero it did not
 // measure. `call` is injected only so tests can drive the failure classes.
 export async function fetchPulse(

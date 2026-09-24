@@ -100,7 +100,7 @@ func graphUsage() {
 // (runs each symbol-capable project's scip op to refresh its cached SCIP index) and
 // then forces a full knowledge-graph rebuild, re-ingesting those indexes. It exists
 // because building is otherwise implicit (cache-first, on read), which leaves no obvious
-// way to say "refresh everything now", especially the symbol indexes, which the daemon
+// way to say "refresh everything now", especially the symbol indexes, which the server
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
 func graphBuild(ctx context.Context, root string, args []string) error {
@@ -114,9 +114,9 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Rebuild the knowledge graph now. By default it first reindexes code symbols")
 			fmt.Fprintln(os.Stderr, "by running each symbol-capable project's `scip` op, then runs each adapter")
 			fmt.Fprintln(os.Stderr, "declared in knowledge.sessions to fold this machine's agent transcripts into")
-			fmt.Fprintln(os.Stderr, "the @session overlay, then rebuilds and re-ingests. The daemon does this")
+			fmt.Fprintln(os.Stderr, "the @session overlay, then rebuilds and re-ingests. The server does this")
 			fmt.Fprintln(os.Stderr, "automatically in the background; this is the manual trigger (after a branch")
-			fmt.Fprintln(os.Stderr, "switch, or when the daemon is not running).")
+			fmt.Fprintln(os.Stderr, "switch, or when the server is not running).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -249,8 +249,8 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
 			fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
 			fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
-			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running daemon (%s);\n", hint.ServerStart)
-			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable daemon it is chosen automatically.")
+			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
+			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
 			fmt.Fprintln(os.Stderr, "the engine behind `"+hint.Query.String()+"`. -o dot and -o mermaid render only with")
@@ -709,11 +709,11 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 
 	// Zero-arg default for the interactive open: when no explicit delivery mode is
 	// chosen and no --targets, probe the ACTUAL console first (not just the proc
-	// socket: a proc daemon can be up with no bridge running). If it is reachable,
+	// socket: a proc server can be up with no bridge running). If it is reachable,
 	// use --follow for an always-fresh view; otherwise fall through to fragment mode.
 	// Skip the auto-probe under --print: that flag exists for scriptable, copyable
 	// output, so its URL must be deterministic (the static data fragment) rather than
-	// flipping to a live+token URL whenever a daemon happens to be listening. Explicit
+	// flipping to a live+token URL whenever a server happens to be listening. Explicit
 	// --follow --print still prints the follow URL.
 	if !follow && !serve && !printOnly {
 		if liveBridgeReachable(ctx) {
@@ -971,9 +971,9 @@ const probeLiveBridgeTimeout = 2 * time.Second
 // probeLiveBridge issues a real HTTP GET to the console's guarded
 // /api/v1/graph route to confirm it is actually up, mirroring the doctor
 // bridge check (internal/doctor/checks_mcp.go probeBridgeReachability). A
-// daemon-status probe alone is not enough: daemonStatus("") accepts ANY
-// reachable proc socket (Mode=="proc"), which is a different transport than
-// the console this URL targets: a proc-mode daemon with no bridge running
+// server-status probe alone is not enough: serverSnapshot accepts ANY
+// reachable proc socket, which is a different transport than
+// the console this URL targets: a proc-mode server with no bridge running
 // would otherwise let a token be printed for an address nothing is listening
 // on. A 401/403 response proves the guarded route exists (auth runs before
 // the handler); connection refused/timeout means the bridge is down.
@@ -1005,11 +1005,11 @@ func liveBridgeReachable(ctx context.Context) bool {
 	return probeLiveBridge(pctx, mcpAddrString()) == nil
 }
 
-// graphOpenLive opens the Graph Explorer served BY the running daemon from its own
-// loopback origin (http://<host>/console/graph/). Under the daemon-origin grammar the origin
-// names which daemon; the page loads both itself and its graph data from that one loopback
+// graphOpenLive opens the Graph Explorer served BY the running server from its own
+// loopback origin (http://<host>/console/graph/). Under the server-origin grammar the origin
+// names which server; the page loads both itself and its graph data from that one loopback
 // origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical:
-// the daemon serves the shell for it and the console's boot router opens the graph surface.
+// the server serves the shell for it and the console's boot router opens the graph surface.
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
@@ -1020,9 +1020,9 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	hostPort := mcpAddrString()
 
 	// The ACTUAL console is probed (not just the proc socket) so we never emit a URL and
-	// token for a transport nothing is listening on. When nothing serves it, the daemon is
+	// token for a transport nothing is listening on. When nothing serves it, the server is
 	// started rather than refused: --follow is a request for the console, and the console
-	// is the daemon's own surface.
+	// is the server's own surface.
 	//
 	// --print is exempt. It is the scriptable "just give me the URL" form, and a command
 	// that only prints must not leave a background process behind as a side effect.
@@ -1034,9 +1034,9 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 			fmt.Fprintf(os.Stderr, "start it: %s\n", hint.ServerStart)
 			return errSilent{exitCode: 1}
 		}
-	} else if err := ensureConsoleDaemon(ctx, hostPort, root); err != nil {
+	} else if err := ensureConsoleServer(ctx, hostPort, root); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: %v\n", err)
-		fmt.Fprintf(os.Stderr, "start it yourself to see the daemon's own output: %s\n", hint.ServerStart)
+		fmt.Fprintf(os.Stderr, "start it yourself to see the server's own output: %s\n", hint.ServerStart)
 		return errSilent{exitCode: 1}
 	}
 
@@ -1057,8 +1057,8 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "opening the graph explorer in live mode (daemon at %s).\n", hostPort)
-	fmt.Fprintln(os.Stderr, "the explorer connects directly to your local daemon; your graph never leaves your machine.")
+	fmt.Fprintf(os.Stderr, "opening the graph explorer in live mode (server at %s).\n", hostPort)
+	fmt.Fprintln(os.Stderr, "the explorer connects directly to your local server; your graph never leaves your machine.")
 	if err := openBrowser(openURL); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph export --open: could not open a browser (%v).\n", err)
 		fmt.Fprintln(os.Stderr, "Re-run with --print to get the URL, or open it yourself.")

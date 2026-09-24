@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 // Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
-// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// surface over the server's stored tokens and its live share link. It is a second door onto
 // the same token store the CLI writes (tokens.d) and the same share manager the share
 // endpoint drives, never a second store.
 //
@@ -45,7 +45,7 @@ enum Level {
   LEVEL_WRITE = 2;
 }
 
-// Grant is what a token may do: one level per surface, as the daemon enforces it.
+// Grant is what a token may do: one level per surface, as the server enforces it.
 message Grant {
   Level tokens = 1;
   Level mcp = 2;
@@ -90,7 +90,7 @@ message CreateTokenRequest {
   reserved "scope";
 
   // A human label, unique among stored tokens, that does not look like an id. Empty asks the
-  // daemon to derive one.
+  // server to derive one.
   string name = 1;
   // Required: when the token dies, in the future and at most 366 days out.
   optional google.protobuf.Timestamp expire_time = 3;

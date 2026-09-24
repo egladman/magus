@@ -71,7 +71,7 @@ func (s *TokenSuite) TestLoadRejectsInsecurePerms() {
 
 // An operator file written before the class prefix, or edited into anything else, is refused
 // with MGS9016 naming the command that re-issues it, from LoadOperator and from
-// EnsureOperator: the daemon does not start on it and no command runs on it.
+// EnsureOperator: the server does not start on it and no command runs on it.
 func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 	t := s.T()
 	for _, old := range []string{
@@ -89,7 +89,7 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 		assert.Contains(t, err.Error(), "config token generate --force")
 
 		_, err = EnsureOperator(t.Context(), slog.New(slog.DiscardHandler))
-		require.ErrorIs(t, err, types.OperatorTokenFormat, "the daemon must not start on %q", old)
+		require.ErrorIs(t, err, types.OperatorTokenFormat, "the server must not start on %q", old)
 	}
 	// A valid store token copied into the operator file is refused too: its class is wrong.
 	stored, err := mintSecret(types.ClassStored)

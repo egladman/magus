@@ -104,7 +104,7 @@ const (
 // put. A subject two workers both asked about counts twice.
 //
 // An empty list is reported with a [ConsultGap] saying which silence it is. A consultation made
-// over MCP is never recorded: it reaches a daemon serving many callers, which stamps no lease for
+// over MCP is never recorded: it reaches a server serving many callers, which stamps no lease for
 // the same reason it records no ancestry (see internal/handler/mcp).
 //
 // Best-effort throughout, like [Replay]: a missing trail, an unreadable blob, or an agent whose

@@ -78,7 +78,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
 	fmt.Fprintln(os.Stderr, "A job is not a run: `magus run` executes a target with no job involved, while a job's")
-	fmt.Fprintln(os.Stderr, "check and the daemon's maintenance each cause runs.")
+	fmt.Fprintln(os.Stderr, "check and the server's maintenance each cause runs.")
 	fmt.Fprintln(os.Stderr, "Kept per repository, so every worktree and clone reads one set of jobs.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
@@ -88,7 +88,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
 	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
-	fmt.Fprintln(os.Stderr, "  run   submit one of the daemon's own jobs and return")
+	fmt.Fprintln(os.Stderr, "  run   submit one of the server's own jobs and return")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
@@ -104,7 +104,7 @@ func jobUsage() {
 //
 // An empty id asks for the Jobs view itself, which is what a listing wants.
 //
-// With no daemon serving there is no origin to build a link against, so the line says how to
+// With no server running there is no origin to build a link against, so the line says how to
 // start one instead. Printing the URL anyway would hand a person a page that never loads,
 // and a browser error page cannot tell them that nothing is listening rather than that the
 // console is broken.
@@ -112,7 +112,7 @@ func consoleJobLine(id string) string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	serving, daemonVersion := probeConsoleDaemon()
+	serving, serverVersion := probeConsoleServer()
 	if !serving {
 		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
 	}
@@ -122,21 +122,21 @@ func consoleJobLine(id string) string {
 		link = console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
 	}
 	line := "console: " + link + "\n  " + authHint(link)
-	if skew := consoleSkew(daemonVersion, version); skew != "" {
+	if skew := consoleSkew(serverVersion, version); skew != "" {
 		line += "\n  " + skew
 	}
 	return line
 }
 
-// consoleSkew names a daemon serving a different build from this binary, or "" when they
-// match or either side is unstamped. The console that daemon serves is its own build, so
+// consoleSkew names a server running a different build from this binary, or "" when they
+// match or either side is unstamped. The console that server serves is its own build, so
 // what the link opens may not know what this binary just wrote.
-func consoleSkew(daemonVersion, cliVersion string) string {
-	if daemonVersion == "" || cliVersion == "" || daemonVersion == cliVersion {
+func consoleSkew(serverVersion, cliVersion string) string {
+	if serverVersion == "" || cliVersion == "" || serverVersion == cliVersion {
 		return ""
 	}
-	return fmt.Sprintf("that console is daemon %s, this binary is %s; `%s && %s` serves this build",
-		daemonVersion, cliVersion, hint.ServerStop, hint.ServerStart)
+	return fmt.Sprintf("that console is from server %s, this binary is %s; `%s && %s` serves this build",
+		serverVersion, cliVersion, hint.ServerStop, hint.ServerStart)
 }
 
 // printConsoleJobLine writes that line, and nothing at all when the console is off: a
@@ -147,29 +147,29 @@ func printConsoleJobLine(out io.Writer, id string) {
 	}
 }
 
-// probeConsoleDaemon reports whether a PERSISTENT daemon is up, and its version. A
-// per-process proc server answers a socket too and serves no console, so only a "daemon"
-// mode counts.
+// probeConsoleServer reports whether the server is up, and its version. A per-process
+// proc server answers a socket too and serves no console, and never binds the server's
+// socket, so an answer there is the server.
 //
-// It probes the daemon's own address, never MAGUS_DAEMON_SOCKET: when the daemon refuses a
-// mismatched build, startup points that variable at this process's own proc server, and
-// asking it reported "nothing is serving" with the daemon up.
+// It probes the server's own address, never MAGUS_PROC_SOCKET: when the server refuses
+// a mismatched build, startup points that variable at this process's own proc server, and
+// asking it reported "nothing is serving" with the server up.
 //
 // It makes its OWN bounded context rather than taking the command's. The probe is a local
 // socket round trip on the way to printing one line, `magus ls jobs` reaches it through a
 // caller that has no context to pass, and a link nobody can build is not worth widening four
 // signatures for.
-func probeConsoleDaemon() (serving bool, daemonVersion string) {
+func probeConsoleServer() (serving bool, serverVersion string) {
 	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
 	defer cancel()
-	st, err := proc.QueryStatus(ctx, admissionDaemonAddr(globalCfg))
-	if err != nil || st == nil || st.Mode != "daemon" {
+	st, err := proc.QueryStatus(ctx, resolveServerAddr(""))
+	if err != nil || st == nil || st.Server == nil {
 		return false, ""
 	}
-	return true, st.DaemonVersion
+	return true, st.Version
 }
 
-// consoleProbeTimeout bounds that probe. A daemon on the same machine answers in
+// consoleProbeTimeout bounds that probe. A server on the same machine answers in
 // milliseconds; anything slower is one that cannot serve a console page either.
 const consoleProbeTimeout = 2 * time.Second
 
@@ -686,7 +686,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "agent host reports to its hooks, or the binding is the whole checkout's.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--vacate gives that binding up instead of taking one, so the checkout can exec a")
-			fmt.Fprintln(os.Stderr, "different job (or the daemon's next assignment). Refused while the job is still")
+			fmt.Fprintln(os.Stderr, "different job (or the server's next assignment). Refused while the job is still")
 			fmt.Fprintln(os.Stderr, "declared or running: walking away from those two would leave the checkout's next")
 			fmt.Fprintln(os.Stderr, "write ungraded. A job this checkout already exited, one the store no longer")
 			fmt.Fprintln(os.Stderr, "carries, or no binding at all, all vacate cleanly.")
@@ -1032,10 +1032,10 @@ func jobWait(ctx context.Context, root string, args []string) error {
 // of them needs the worker to cooperate or even to notice. Messaging a worker to ask how it
 // is going costs it the turn it was in the middle of.
 //
-// It reads LOCALLY rather than through the daemon's WatchActivityEvents, over the same
+// It reads LOCALLY rather than through the server's WatchActivityEvents, over the same
 // internal/job cursors that RPC follows with, so the two cannot disagree about what has
 // happened since you last looked. Local because this verb has to work in a checkout with no
-// daemon running, which is the same tree the holder is working in: requiring a server to
+// server running, which is the same tree the holder is working in: requiring a server to
 // answer "what is that worker doing" would put the question out of reach exactly when
 // somebody is at a terminal wondering.
 func jobWatch(ctx context.Context, root string, args []string) error {

@@ -1,6 +1,6 @@
 ---
 title: Tokens and grants
-description: How the magus daemon decides who may use which route. Four token classes told apart by prefix, a grant of none, read or write per surface, a need declared by every procedure, one rule for minting, the trust model, and what the activity trail records about each.
+description: How the magus server decides who may use which route. Four token classes told apart by prefix, a grant of none, read or write per surface, a need declared by every procedure, one rule for minting, the trust model, and what the activity trail records about each.
 tags:
   [
     tokens,
@@ -18,7 +18,7 @@ tags:
 
 # Tokens and grants
 
-Every daemon route except the health probes and the console's app shell needs a
+Every server route except the health probes and the console's app shell needs a
 bearer token. This page is the model behind that: what a token may do, how a
 route says what it needs, and why no token can mint a wider one.
 
@@ -46,10 +46,10 @@ A grant renders as `mcp=write` or `console=read`; the one below holds everything
 ## Needs
 
 Every Connect procedure and every `/api/` route declares the level it needs on
-one surface, and the daemon's bearer guard compares that with the presented
+one surface, and the server's bearer guard compares that with the presented
 token's grant. It is the only place magus decides whether a token may use a
-route. The daemon refuses to start if a procedure has no need, or a need is
-none or names a level its surface lacks, and a daemon whose workspace failed to
+route. The server refuses to start if a procedure has no need, or a need is
+none or names a level its surface lacks, and a server whose workspace failed to
 load holds every route to the same needs.
 
 | Route                                                                                                        | Needs           |
@@ -85,25 +85,25 @@ not stop within a few seconds.
 
 ## Classes
 
-A token's class is its prefix, so the daemon knows which store can hold it
+A token's class is its prefix, so the server knows which store can hold it
 before it hashes anything:
 
 | Prefix | Class    | Lives                                                          | Expires                                                     |
 | ------ | -------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
 | `mgo_` | operator | `$XDG_STATE_HOME/magus/mcp_token`, 0600                        | never; rotate it with `magus config token generate --force` |
 | `mgs_` | stored   | `$XDG_STATE_HOME/magus/tokens.d/<name>.json`, only its SHA-256 | 90 days by default, at most 366                             |
-| `mgl_` | share    | the daemon's memory                                            | 15 minutes by default, at most 24 hours                     |
+| `mgl_` | share    | the server's memory                                            | 15 minutes by default, at most 24 hours                     |
 | `mgx_` | exchange | `tokens.d`, only its SHA-256                                   | one minute, and spent on first use                          |
 
 Every class has one layout: the prefix, 43 base62 characters of randomness, and
 a 6-character CRC32 of those, so a typo fails before any lookup. A secret
 scanner finds all four with `mg[oslx]_[0-9A-Za-z]{49}`.
 
-The loopback daemon checks an `mgo_` token against the operator file alone and
+The loopback server checks an `mgo_` token against the operator file alone and
 an `mgs_` token against the store alone, and refuses `mgl_` and `mgx_` outright:
 an exchange code is never a bearer anywhere. A share link's listener accepts its
 own `mgl_` token and nothing else. The operator token is refused from any peer
-that is not loopback, judged by the TCP peer address, so even a daemon bound past
+that is not loopback, judged by the TCP peer address, so even a server bound past
 loopback with `mcp.insecure_bind` serves only stored tokens to the network.
 
 The store holds every record to the rules a mint follows, at load: a record that
@@ -179,7 +179,7 @@ elsewhere nothing does, and `magus doctor` says so.
 
 ## What the trail records
 
-Every record made under a daemon request carries the credential that request
+Every record made under a server request carries the credential that request
 presented: its class, its id (the first 8 hex of its SHA-256), the name it was
 minted under, and its grant at the time. Never the secret. A `magus mcp` tool
 call carries class `stdio` with its grant, and no id or name. The id is the

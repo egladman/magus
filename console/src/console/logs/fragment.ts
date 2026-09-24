@@ -35,7 +35,7 @@ export async function encodeFragmentBytes(bytes: Uint8Array): Promise<string> {
 }
 
 // viewerParams reads the deep-link parameters from the URL fragment (after #). EVERYTHING -
-// the ref id, the encoded log (data), the daemon port and bearer token - rides the fragment,
+// the ref id, the encoded log (data), the server port and bearer token - rides the fragment,
 // which the browser never transmits to any server, so nothing about the run ever leaves the
 // machine. That absolute guarantee is why no parameter uses the query string.
 export function viewerParams(): ViewerParams {

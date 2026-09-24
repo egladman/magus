@@ -176,7 +176,7 @@ func newTestManager(t *testing.T, parent context.Context, opts ...option) *Manag
 	return m
 }
 
-// statusRoutes is one read route at /api/v1/status held to console=read, as the daemon holds
+// statusRoutes is one read route at /api/v1/status held to console=read, as the server holds
 // its share routes.
 func statusRoutes(h http.Handler) map[string]Route {
 	return map[string]Route{"/api/v1/status": {
@@ -345,9 +345,9 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	if code := get(t, base+"/api/v1/share", token); code != http.StatusNotFound {
 		t.Fatalf("GET /api/v1/share on share listener = %d, want 404", code)
 	}
-	// The unguarded health/probe routes are a loopback-daemon concept and must NOT
+	// The unguarded health/probe routes are a loopback-server concept and must NOT
 	// exist on the remote LAN listener: it is off-machine, so an UP/DOWN probe there
-	// would both leak the daemon's existence and answer to anyone on the network. The
+	// would both leak the server's existence and answer to anyone on the network. The
 	// share mux mounts only the console and the per-session token-guarded read routes.
 	for _, route := range []string{"/livez", "/readyz", "/healthz"} {
 		if code := get(t, base+route, token); code != http.StatusNotFound {

@@ -24,7 +24,7 @@ let asked: string[] = [];
 // There is no beforeEach on purpose. The DOM suite runs with --experimental-test-isolation=none, so
 // a hook declared at file scope fires for every *-dom test in the process, siblings included - and
 // the setup these tests need is a #port attach, which would put a sibling's surface into live mode
-// against a daemon that is not there. mount() does it per test instead. The teardown below is only
+// against a server that is not there. mount() does it per test instead. The teardown below is only
 // the undo (a null check away from a no-op elsewhere), which is what the sibling files do too.
 afterEach(() => {
   mounted?.deactivate();
@@ -41,7 +41,7 @@ async function settle(turns = 12): Promise<void> {
 }
 
 // The wire shape, in protobuf JSON: a Timestamp is RFC3339, an int64 a string, and an enum its
-// declared name. Written as the daemon actually serializes it so a fixture cannot pass while the
+// declared name. Written as the server actually serializes it so a fixture cannot pass while the
 // real feed would not parse.
 function mcpEvent(): unknown {
   return {
@@ -137,7 +137,7 @@ function serve(
 }
 
 // mount attaches the surface to a fresh host. The hash is the surface's source selector: "#port="
-// is what puts it in live mode against a loopback daemon (the stub), "#demo" the synthesized trail.
+// is what puts it in live mode against a loopback server (the stub), "#demo" the synthesized trail.
 async function mount(hash = "#port=7391"): Promise<HTMLElement> {
   location.hash = hash;
   const host = document.createElement("div");
@@ -199,10 +199,10 @@ test("a rotated-away payload says so instead of failing", async () => {
   assert.equal(controls(host).length, 0);
 });
 
-// A daemon blip is the opposite case: the body still exists, so the control has to survive for the
+// A server blip is the opposite case: the body still exists, so the control has to survive for the
 // reader to press again.
 test("a transient failure keeps the control and names the reason", async () => {
-  serve([mcpEvent()], { status: 503, code: "unavailable", message: "daemon went away" });
+  serve([mcpEvent()], { status: 503, code: "unavailable", message: "server went away" });
   const host = await mount();
 
   controls(host)[0].click();
@@ -212,7 +212,7 @@ test("a transient failure keeps the control and names the reason", async () => {
   assert.equal(btns.length, 1);
   assert.equal(btns[0].disabled, false, "still pressable");
   assert.equal(btns[0].textContent, "show response (2.0 KB)", "the label is restored");
-  assert.match(sectionText(host), /could not read the response: .*daemon went away/);
+  assert.match(sectionText(host), /could not read the response: .*server went away/);
 });
 
 function modeButton(host: HTMLElement, mode: string): HTMLButtonElement {

@@ -8,7 +8,7 @@ import {
   ViewerService,
   type Output,
 } from "@wire/viewer/v1alpha1/viewer_pb";
-import { createDaemonTransport } from "../../lib/daemon";
+import { createServerTransport } from "../../lib/server";
 import { must } from "../../lib/guards";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer
 // that lists prior runs so a reader can find one WITHOUT a ref somebody printed on a terminal.
@@ -16,18 +16,18 @@ import { must } from "../../lib/guards";
 // target (the command you actually typed, newest first) and "Projects" nests project -> target ->
 // run. A filter box narrows both.
 //
-// It reads two read-only daemon feeds - /api/v1/outputs (the retained per-target outputs) and
+// It reads two read-only server feeds - /api/v1/outputs (the retained per-target outputs) and
 // /api/v1/runs (the retained invocation journals) - and joins them on each output's invocation id.
 // On selection it hands the choice to the viewer, which loads that run's journal from
 // /api/v1/run and renders it structurally, falling back to the verbatim blob at /api/v1/output
-// when the journal has rotated away. The whole browser is a no-op with no reachable daemon (the
+// when the journal has rotated away. The whole browser is a no-op with no reachable server (the
 // tree stays empty and says so), so the offline #data/#src paths are unaffected. PF owns the tree
 // chrome (pf-v6-c-tree-view); only the panel frame, the filter row, and the status dot are ours.
 //
 // This file is the DOM half. The grouping, the filter grammar, and the row shapes are in
 // runindex.ts, which has no DOM dependency and carries the unit tests.
 
-import { authHeaders, fetchSSE } from "../../lib/daemon";
+import { authHeaders, fetchSSE } from "../../lib/server";
 import { REFRESH } from "../../ui/glyph";
 import { persisted } from "../../lib/persist";
 import { scenarioInvocations, scenarioRuns } from "../demo-scenario";
@@ -47,7 +47,7 @@ export { relTime };
 export type { RunLog, RunSummary, Selection };
 
 // RunBrowserDeps: what initRunBrowser needs from the log viewer. scroll is the viewer's scroll box
-// (the tree docks to its left, sharing the panel below the toolbar). host/token address the daemon
+// (the tree docks to its left, sharing the panel below the toolbar). host/token address the server
 // (empty host => demo/offline: the demo runs render, selection loads a synthetic sample). onSelect
 // hands the chosen row to the viewer to load.
 //
@@ -63,8 +63,8 @@ export interface RunBrowserDeps {
   onSelect: (sel: Selection) => void;
 }
 
-// fetchRuns reads the daemon's run list. Resolves to [] on any failure (no daemon, auth, an old
-// daemon without the route) so the browser degrades to empty rather than throwing - the viewer's
+// fetchRuns reads the server's run list. Resolves to [] on any failure (no server, auth, an old
+// server without the route) so the browser degrades to empty rather than throwing - the viewer's
 // other load paths never depend on it.
 // The wire carries a Timestamp and a Duration; this viewer works in unix millis, which is the unit
 // the store records. Absent reads as 0, never NaN - a NaN reaching a comparator leaves the whole
@@ -79,7 +79,7 @@ function durMillis(d: Duration | undefined): number {
 
 export async function fetchRuns(host: string, token: string | null): Promise<RunSummary[]> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const client = createClient(ViewerService, createServerTransport(host, token));
     const resp = await client.listOutputs({}, { signal: AbortSignal.timeout(4000) });
     return resp.outputs.map((o) => ({
       ref: o.ref,
@@ -92,7 +92,7 @@ export async function fetchRuns(host: string, token: string | null): Promise<Run
       duration_ms: durMillis(o.duration),
     }));
   } catch {
-    // reported: by the daemon transport
+    // reported: by the server transport
     return [];
   }
 }
@@ -105,23 +105,23 @@ export async function fetchRunOutput(
   ref: string,
 ): Promise<string | null> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const client = createClient(ViewerService, createServerTransport(host, token));
     const resp = await client.getOutput({ name: ref }, { signal: AbortSignal.timeout(8000) });
     // bytes, not string: a captured log is whatever the tool wrote, which is not guaranteed to be
     // valid UTF-8. Decoded here because this viewer renders text.
     return new TextDecoder().decode(resp.body);
   } catch {
-    // reported: by the daemon transport
+    // reported: by the server transport
     return null;
   }
 }
 
-// fetchRunLogs reads the daemon's INVOCATION feed - the retained run journals, newest first. Same
-// degradation as fetchRuns: [] on any failure, including a daemon too old to serve the route, so a
+// fetchRunLogs reads the server's INVOCATION feed - the retained run journals, newest first. Same
+// degradation as fetchRuns: [] on any failure, including a server too old to serve the route, so a
 // mixed-version pair falls back to the project ordering rather than showing an error.
 export async function fetchRunLogs(host: string, token: string | null): Promise<RunLog[]> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const client = createClient(ViewerService, createServerTransport(host, token));
     const resp = await client.listInvocations({}, { signal: AbortSignal.timeout(4000) });
     return resp.invocations.map((i) => ({
       inv: i.id,
@@ -134,7 +134,7 @@ export async function fetchRunLogs(host: string, token: string | null): Promise<
       size_bytes: Number(i.sizeBytes),
     }));
   } catch {
-    // reported: by the daemon transport
+    // reported: by the server transport
     return [];
   }
 }
@@ -142,7 +142,7 @@ export async function fetchRunLogs(host: string, token: string | null): Promise<
 // fetchRunJournal reads one past run back as a magus.viewer.v1alpha1 Journal (binary protobuf) -
 // the SAME message a `#data=` link carries, which is what lets a browsed run render structurally
 // instead of through the text heuristic. Addressed by invocation id, or by an output ref (the
-// daemon resolves it to the run that produced it). null on any failure, including the 404 a run
+// server resolves it to the run that produced it). null on any failure, including the 404 a run
 // whose journal has rotated away returns - the caller then falls back to the verbatim blob.
 export async function fetchRunJournal(
   host: string,
@@ -150,37 +150,37 @@ export async function fetchRunJournal(
   q: { inv?: string; ref?: string },
 ): Promise<Uint8Array | null> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const client = createClient(ViewerService, createServerTransport(host, token));
     const journal = await client.getJournal(
       { name: q.inv ?? q.ref ?? "" },
       { signal: AbortSignal.timeout(8000) },
     );
     return toBinary(JournalSchema, journal);
   } catch {
-    // reported: by the daemon transport
+    // reported: by the server transport
     return null;
   }
 }
 
 // watchRuns keeps a run browser current without anyone pressing Refresh: it subscribes to the
-// daemon's SSE stream and calls onChange whenever the store may have moved.
+// server's SSE stream and calls onChange whenever the store may have moved.
 //
 // It listens for `event: status` - the POOL's state, pushed on connect and on every change. That is
-// the closest thing the daemon has to "a run finished": a target starting or ending moves the pool,
+// the closest thing the server has to "a run finished": a target starting or ending moves the pool,
 // and by the time the count drops its output has been persisted. There is no run-completed event to
 // subscribe to instead, and inventing one to serve a sidebar would be a wire change for a want a
 // change-notification already covers. The payload is ignored entirely - only the FACT that something
 // moved matters here, which is also why this needs no protobuf decode.
 //
 // Both browsers call it, so "when does the list update" has one answer and one implementation.
-// Returns a disposer. A caller with no daemon (the demo, an offline page) gets a no-op.
+// Returns a disposer. A caller with no server (the demo, an offline page) gets a no-op.
 export function watchRuns(host: string, token: string | null, onChange: () => void): () => void {
   if (!host) return () => {};
   const abort = new AbortController();
   let settle: ReturnType<typeof setTimeout> | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let backoffMs = 1000;
-  // The first connect's status frame is the daemon saying hello, not news - the caller has just
+  // The first connect's status frame is the server saying hello, not news - the caller has just
   // loaded. Every LATER connect is a reconnect, where a refresh is exactly right: the stream was
   // down and whatever happened while it was is what this catches up on.
   let greeted = false;
@@ -205,7 +205,7 @@ export function watchRuns(host: string, token: string | null, onChange: () => vo
         schedule();
       },
       () => {
-        // Reconnect with backoff. A daemon that went away is the common case (a restart between
+        // Reconnect with backoff. A server that went away is the common case (a restart between
         // gates), and a browser tab that retried it in a tight loop would be the thing everyone
         // remembers about this page.
         if (abort.signal.aborted) return;
@@ -250,8 +250,8 @@ export function tickRelativeTimes(root: HTMLElement, everyMs = 15_000): () => vo
 }
 
 // demoRuns projects the shared scenario's run history (demo-scenario.ts) into the tree's row shape
-// for the daemon-free showcase (the shared #demo path), so the browser reads as populated without a
-// daemon AND tells the SAME story as the activity trail, the waterfall, and the dashboard - the refs
+// for the server-free showcase (the shared #demo path), so the browser reads as populated without a
+// server AND tells the SAME story as the activity trail, the waterfall, and the dashboard - the refs
 // here are the ones a reader meets on those surfaces. Newest first; timestamps relative to `now`.
 export function demoRuns(now: number): RunSummary[] {
   return scenarioRuns(now).map((r) => ({
@@ -506,7 +506,7 @@ interface TreeCtx {
 }
 
 // renderRunTree (re)builds the tree into container from an already-grouped spec. emptyNote lets the
-// caller explain WHY the panel is empty - no daemon, no stored runs, or a filter that matched
+// caller explain WHY the panel is empty - no server, no stored runs, or a filter that matched
 // nothing are three different states and only the caller can tell them apart.
 export function renderRunTree(
   container: HTMLElement,
@@ -804,7 +804,7 @@ function mountBrowserControls(
 // initRunBrowser docks the run browser to the left of the viewer's scroll box and populates it: it
 // fetches both feeds (or, in #demo, the synthetic set), groups them into the chosen ordering, and
 // renders the tree; selecting a row calls deps.onSelect. Demo rows surface ONLY in explicit demo
-// mode - with no daemon and no demo it fetches nothing (a fresh install must not show fabricated
+// mode - with no server and no demo it fetches nothing (a fresh install must not show fabricated
 // runs as if real) and the reopen rail opens to an honest note. Returns a refresh handle the viewer
 // can call (e.g. after a live run finishes), and a setBodyTitle handle for naming what is loaded.
 export function initRunBrowser(deps: RunBrowserDeps): {
@@ -850,7 +850,7 @@ export function initRunBrowser(deps: RunBrowserDeps): {
   // the version that reads as data loss.
   function emptyNote(unfiltered: boolean): string {
     if (!deps.host && !deps.demo) {
-      return "No daemon connected. Set a daemon address in Settings, or pick acme from the Workspace menu for demo data.";
+      return "No server connected. Set a server address in Settings, or pick acme from the Workspace menu for demo data.";
     }
     if (!loaded) return "Loading runs...";
     if (!unfiltered) return "No runs match this filter.";

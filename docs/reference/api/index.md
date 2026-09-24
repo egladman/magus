@@ -1,19 +1,19 @@
 ---
-title: Daemon API
+title: Server API
 generated_from: proto/magus/**/*.proto
-description: "The magus daemon's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract."
-tags: [api, proto, protobuf, connect, grpc, daemon, reference]
+description: "The magus server's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract."
+tags: [api, proto, protobuf, connect, grpc, server, reference]
 ---
 
-# Daemon API
+# Server API
 
-The daemon serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.
+The server serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.
 
-This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract. Every service, method, message, and enum heading below links to the exact line in the `.proto` source that defines it.
+This reference is generated from the `.proto` contract, so it cannot drift from what the server serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract. Every service, method, message, and enum heading below links to the exact line in the `.proto` source that defines it.
 
 ## Before you call anything
 
-Start the daemon with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.
+Start the server with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.
 
 ## Services
 

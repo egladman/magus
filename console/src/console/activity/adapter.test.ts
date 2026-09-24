@@ -148,7 +148,7 @@ test("payload sizes, refs, preview lines, and workspace populate the body", () =
 });
 
 test("a job event with no payload is just its head", () => {
-  const sec = eventSection(ev({ kind: Kind.JOB, action: "scip-reindex", actor: "daemon" }));
+  const sec = eventSection(ev({ kind: Kind.JOB, action: "scip-reindex", actor: "server" }));
   assert.equal(sec.meta?.label, "job");
   assert.deepEqual(sec.lines, [sec.title]);
 });

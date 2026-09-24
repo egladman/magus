@@ -15,18 +15,18 @@ import (
 // wedged stop cannot stall the whole reap.
 const sweepStopTimeout = 15 * time.Second
 
-// Journal persists which services a daemon has started so a NEW daemon can reap
+// Journal persists which services a broker has started so a NEW broker can reap
 // orphans left by a previous one that died without a graceful shutdown (SIGKILL,
 // power loss: the case ordinary teardown misses). Each hosted service is one file
-// recording its stop command; [Journal.Sweep], run at daemon startup, replays those
+// recording its stop command; [Journal.Sweep], run at broker startup, replays those
 // stop commands to shut down any survivors.
 //
 // It is deliberately stop-command-based rather than PID-based: a `docker run` client
 // PID is not the container, and a raw PID may have been reused by an unrelated
-// process by the time a new daemon starts, so killing it is unsafe. A service's own
+// process by the time a new broker starts, so killing it is unsafe. A service's own
 // stop command (e.g. `docker stop <name>`) is tool-aware and idempotent. Services
 // with no stop command cannot be reaped safely and are only counted, not killed.
-// Daemon-only: the in-process (per-run) Registry has no Journal.
+// Broker-only: the in-process (per-run) Registry has no Journal.
 type Journal struct {
 	dir string
 }
@@ -73,9 +73,9 @@ type SweepResult struct {
 	Unreapable int // records with no stop command (left running; cannot reap safely)
 }
 
-// Sweep reaps orphaned services recorded by a previous daemon: it runs each recorded
-// stop command, then clears every record (they all belong to the dead daemon). Call
-// once at daemon startup, before hosting anything. A nil Journal returns a zero
+// Sweep reaps orphaned services recorded by a previous broker: it runs each recorded
+// stop command, then clears every record (they all belong to the dead broker). Call
+// once at broker startup, before hosting anything. A nil Journal returns a zero
 // result.
 func (j *Journal) Sweep(ctx context.Context) SweepResult {
 	var res SweepResult

@@ -251,8 +251,8 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 	}
 }
 
-// The daemon builds one Store at startup and serves every MCP caller from it, so an actor
-// frozen at construction grades a worker that bound its checkout afterwards as the daemon.
+// The server builds one Store at startup and serves every MCP caller from it, so an actor
+// frozen at construction grades a worker that bound its checkout afterwards as the server.
 func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 

@@ -2,7 +2,7 @@
 // a spawning session to the sessions its spawn handed a lease to. The trail records one flat
 // time-ordered list, so the fan-out an orchestrator produced reads as interleaved rows from
 // unrelated agents; this recovers the shape from fields already on the wire (host, session, unit),
-// with no proto or daemon change. Pure: it takes decoded events and returns data, so the view
+// with no proto or server change. Pure: it takes decoded events and returns data, so the view
 // builds the tree DOM.
 
 import { Kind, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";

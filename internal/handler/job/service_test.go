@@ -28,7 +28,7 @@ type fakeWS struct {
 func (f fakeWS) CacheDir() string      { return f.dir }
 func (f fakeWS) CacheDiskBytes() int64 { return f.cacheBytes }
 
-// newTestService builds a Service with injected proc seams so no live daemon is needed.
+// newTestService builds a Service with injected proc seams so no live server is needed.
 func newTestService(ws workspace, submit func(context.Context, string, []string, string) (string, error), status func(context.Context, string) (*proc.StatusReply, error)) *Service {
 	return &Service{
 		ws:       ws,
@@ -57,7 +57,7 @@ func TestSubmit_NewJobIsSubmitted(t *testing.T) {
 func TestSubmit_CoalescedReportsRunningInvocation(t *testing.T) {
 	ws := fakeWS{dir: t.TempDir()}
 	submit := func(context.Context, string, []string, string) (string, error) { return "", nil } // coalesced
-	// The daemon reports an identical rotate-activities job already in flight.
+	// The server reports an identical rotate-activities job already in flight.
 	status := func(context.Context, string) (*proc.StatusReply, error) {
 		return &proc.StatusReply{Calls: []proc.Call{{Args: []string{"server", "rotate-activities"}, Inv: "inv-running"}}}, nil
 	}
@@ -94,7 +94,7 @@ func TestSubmit_NoSocketIsUnavailable(t *testing.T) {
 	s := newTestService(fakeWS{dir: t.TempDir()},
 		func(context.Context, string, []string, string) (string, error) { return "x", nil },
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
-	s.socket = func() string { return "" } // no daemon socket
+	s.socket = func() string { return "" } // no server socket
 
 	_, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/sync-graph"}))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
@@ -145,7 +145,7 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 }
 
 // TestListJobs_ReturnsCatalogAndDelegatedJobs is the listing the merge exists for: the
-// daemon's own catalog beside the jobs a session holds, in one response with one state
+// server's own catalog beside the jobs a session holds, in one response with one state
 // vocabulary, so a reader never asks which door to knock on for which kind.
 func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	dir := t.TempDir()
@@ -169,8 +169,8 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	}
 
 	catalog := byID["sync-graph"]
-	require.NotNil(t, catalog, "the daemon's own job is missing from the listing")
-	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_DAEMON, catalog.Holder)
+	require.NotNil(t, catalog, "the server's own job is missing from the listing")
+	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_SERVER, catalog.Holder)
 	require.Equal(t, string(types.StateDeclared), catalog.State, "a catalog job nobody has run yet is declared")
 
 	delegated := byID["wave3/merge"]

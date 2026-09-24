@@ -5,22 +5,22 @@
 //
 // Tiles own their own DOM and only ever see mapped view-model (state.ts); the
 // security-critical loopback lock, token handling, and stream clients live in
-// lib/daemon.ts, shared with the graph explorer and log viewer.
+// lib/server.ts, shared with the graph explorer and log viewer.
 
 import {
   parseHash,
-  daemonAttach,
-  resolveDaemonHostOrRemembered,
-  adoptDaemonOrigin,
+  serverAttach,
+  resolveServerHostOrRemembered,
+  adoptServerOrigin,
   wantsDemo,
   logsLink,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { createStore } from "../../lib/store";
 import { notify } from "../../lib/notifications";
 import { showCountdownToast, showRefreshToast } from "../../lib/refresh-toast";
 import { registerServiceWorker } from "../../lib/sw";
 import { bind } from "../view";
-import { initialState, type DashboardState, type ConnView } from "./state";
+import { initialState, processSummary, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
 import { helpGlyph, type Tile } from "./tiles/card";
@@ -41,6 +41,8 @@ import { jobsTile } from "./tiles/jobs";
 import { openSurface } from "../surface-navigation";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
+import { brokerTile } from "./tiles/broker";
+import { serverTile } from "./tiles/server";
 import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
@@ -184,8 +186,8 @@ export function setVisible(visible: boolean): void {
 function renderStatusBar(s: DashboardState): void {
   lastState = s;
 
-  // Drive both every render so the tiles and the "No daemon connected" front door stay mutually exclusive
-  // (the old latch only ever revealed, leaving stale tiles up when the daemon dropped). Show tiles only
+  // Drive both every render so the tiles and the "No server connected" front door stay mutually exclusive
+  // (the old latch only ever revealed, leaving stale tiles up when the server dropped). Show tiles only
   // with a status frame in hand AND a live link (connected/demo) or a brief reconnect blip; else the door.
   const reconnecting = s.conn.state === "disconnected" && s.conn.detail === "reconnecting";
   const showPanels =
@@ -198,7 +200,7 @@ function renderStatusBar(s: DashboardState): void {
 
   const demoing = s.conn.state === "demo";
 
-  // The status bar distinguishes a live daemon from the synthesized demo feed.
+  // The status bar distinguishes a live server from the synthesized demo feed.
   let connection: "none" | "connecting" | "connected" | "disconnected" | "demo" = "none";
   let connectionLabel = "not connected";
   let health: string | undefined;
@@ -224,8 +226,8 @@ function renderStatusBar(s: DashboardState): void {
     }
   }
 
-  // Observing-since: a brief note of when the daemon began collecting these counters, so it is
-  // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.
+  // Observing-since: a brief note of when the server began collecting these counters, so it is
+  // clear the numbers are cumulative from then and are NOT persisted across server restarts.
   let observing: { text: string; title: string } | undefined;
   if (s.observingSince) {
     const t = new Date(s.observingSince).toLocaleTimeString([], {
@@ -235,22 +237,24 @@ function renderStatusBar(s: DashboardState): void {
     observing = {
       text: "observing since " + t,
       title:
-        "The telemetry and cache counters are cumulative since the daemon started observing (" +
+        "The telemetry and cache counters are cumulative since the server started observing (" +
         t +
-        "). They are not persisted across daemon restarts.",
+        "). They are not persisted across server restarts.",
     };
   }
   publishStatus({
     connection,
     label: connectionLabel,
     health,
-    hint: demoing ? "Demo data is synthetic. Click to change the daemon address." : "",
+    hint: demoing ? "Demo data is synthetic. Click to change the server address." : "",
+    // The two processes behind the board in one line, the tokens `magus status --compact` prints.
+    count: s.status ? processSummary(s.status) : undefined,
     observing,
   });
 }
 
 // ---- notification admission ------------------------------------------------
-// The dashboard's status frames are where the console already learns two bell-tier facts: the daemon's
+// The dashboard's status frames are where the console already learns two bell-tier facts: the server's
 // health dropping, and a target turning FAILED. wireNotifications watches for those TRANSITIONS and
 // pushes an error-tier notification (notifications.ts). It notifies ONLY on the transition - a key per
 // health-state and per failing ref means the same event does not re-fire on every ~1s status frame, or
@@ -268,14 +272,14 @@ function wireNotifications(): void {
           source: "Dashboard",
           kind: "error",
           key: "dash:health:warn",
-          message: "Daemon health degraded. Some components are not fully ready.",
+          message: "Server health degraded. Some components are not fully ready.",
         });
       else if (cls === "fail")
         notify({
           source: "Dashboard",
           kind: "error",
           key: "dash:health:down",
-          message: "Daemon health is down. It is not serving requests.",
+          message: "Server health is down. It is not serving requests.",
         });
       lastHealth = cls;
     }
@@ -386,6 +390,8 @@ function mountTiles(): void {
   const workspaces = workspacesTile(activeWorkspace);
   const services = servicesTile();
   const locks = locksTile();
+  const broker = brokerTile();
+  const server = serverTile();
   const config = configTile();
   const latency = latencyTile();
   const buzz = buzzTile();
@@ -414,6 +420,8 @@ function mountTiles(): void {
     { tile: pool, section: "runtime", bigPicture: "always" },
     { tile: cacheStats, section: "runtime", bigPicture: "always" },
     { tile: locks, section: "runtime", bigPicture: "always" },
+    { tile: broker, section: "runtime", bigPicture: "rotate" },
+    { tile: server, section: "runtime", bigPicture: "board" },
     { tile: workspaces, section: "runtime", bigPicture: "always" },
     { tile: remote, section: "runtime", bigPicture: "rotate" },
     { tile: cacheRate, section: "runtime", bigPicture: "rotate" },
@@ -508,7 +516,7 @@ function mountTiles(): void {
 }
 
 // ---- demo mode -------------------------------------------------------------
-// The daemon-free showcase: synthesize a live-looking DashboardState (demo.ts) and
+// The server-free showcase: synthesize a live-looking DashboardState (demo.ts) and
 // push it into the store, so the whole board can be shown off with nothing running.
 // No socket is opened; the connection pill reads "demo data".
 let demo: DemoHandle | null = null;
@@ -517,7 +525,7 @@ function beginDemo(): void {
   demo?.stop();
   setConn({ state: "demo" });
   // Synthesize an observing-since ~92 minutes back so the demo shows the same since-caption a live
-  // daemon would (the real value comes from the JSON status endpoint on connect).
+  // server would (the real value comes from the JSON status endpoint on connect).
   store.set({ observingSince: Date.now() - 92 * 60 * 1000 });
   store.set({ config: { defaultCharms: ["rw"], concurrency: 8, sandbox: true } });
   demo = startDemo(store);
@@ -544,7 +552,7 @@ function onLiveOpen(host: string): void {
 // blip (DISCONNECT_GRACE consecutive failures) with its last data on screen; a first connection
 // gets no retries at all. Either way, once it gives up it stops every feed and shows the prompt,
 // whose Retry is the only thing that reconnects: nothing keeps trying behind a screen that says
-// the daemon could not be reached.
+// the server could not be reached.
 function onLiveError(host: string): void {
   failCount++;
   if (everConnected && failCount < DISCONNECT_GRACE) {
@@ -568,7 +576,7 @@ function emptySlots(): EmptyStateSlots {
 
 function showConnectPrompt(state: ConnectPromptState): void {
   renderConnectPrompt(emptySlots(), state, {
-    purpose: "The dashboard streams a running daemon's pool, cache, and health.",
+    purpose: "The dashboard streams a running server's pool, cache, and health.",
     onRetry: retryLive,
   });
 }
@@ -605,7 +613,7 @@ const UPDATE_POLL_MS = 15 * 60 * 1000;
 function pollForNewVersion(reg: ServiceWorkerRegistration): void {
   const check = () => {
     reg.update().catch((e: unknown) => {
-      // not-a-failure: an update check that misses (offline, daemon restarting) retries next interval
+      // not-a-failure: an update check that misses (offline, server restarting) retries next interval
       console.debug("sw update check", e);
     });
   };
@@ -717,7 +725,7 @@ export function activate(): void {
   lifecycleAbort?.abort();
   lifecycleAbort = new AbortController();
   // Connection state is per opening, not per page: a reopened dashboard has reached nothing yet, and
-  // treating it as connected would skip the prompt and leave a blank door when the daemon is down.
+  // treating it as connected would skip the prompt and leave a blank door when the server is down.
   everConnected = false;
   failCount = 0;
   attemptHost = null;
@@ -764,27 +772,27 @@ export function activate(): void {
   window.addEventListener("offline", updateOffline, { signal: sig });
 
   const params = parseHash();
-  // adoptDaemonOrigin, not only consumeLiveToken: lib/daemon's adopted-origin flag is per-bundle, so
-  // the shell setting it leaves it false here. With no #port and no Settings address, daemonAttach
-  // then returned null on the console served BY the daemon, and on localhost the remembered-host
-  // fallback rejects the name too, so the dashboard sat on "No daemon connected".
-  adoptDaemonOrigin();
+  // adoptServerOrigin, not only consumeLiveToken: lib/server's adopted-origin flag is per-bundle, so
+  // the shell setting it leaves it false here. With no #port and no Settings address, serverAttach
+  // then returned null on the console served BY the server, and on localhost the remembered-host
+  // fallback rejects the name too, so the dashboard sat on "No server connected".
+  adoptServerOrigin();
 
   // A `#big-picture` fragment enters the presentation mode with NO user gesture, which is the whole
   // reason it exists: the Fullscreen API requires one, so a TV, an HDMI stick, or a kiosk browser
   // pointed at a link could never reach the mode through the button. Applied here, before any
   // connection path is chosen, so it composes with all of them - `#port=7391&big-picture` for a live
-  // daemon and `#demo&big-picture` for an offline showcase both land in the mode.
+  // server and `#demo&big-picture` for an offline showcase both land in the mode.
   if (params["big-picture"] !== undefined) enterBigPictureRoute();
 
-  // A #demo fragment enters the daemon-free showcase and wins over any saved daemon.
+  // A #demo fragment enters the server-free showcase and wins over any saved server.
   if (wantsDemo(params)) {
     beginDemo();
     return;
   }
 
-  // An explicit attach (a #port link magus printed, or the daemon-origin/shared console) always wins.
-  const attach = daemonAttach(params);
+  // An explicit attach (a #port link magus printed, or the server-origin/shared console) always wins.
+  const attach = serverAttach(params);
   if (attach) {
     connectLive(attach);
     return;
@@ -800,11 +808,11 @@ export function activate(): void {
     return;
   }
 
-  // A new address only redirects a dashboard that has not reached a daemon yet: a live one keeps its
+  // A new address only redirects a dashboard that has not reached a server yet: a live one keeps its
   // stream until reload rather than dropping every tile mid-read.
   const unsubscribeHost = subscribeDefaultHost(() => {
     if (everConnected) return;
-    const next = resolveDaemonHostOrRemembered(params);
+    const next = resolveServerHostOrRemembered(params);
     if (next) {
       failCount = 0;
       connectLive(next);
@@ -818,8 +826,8 @@ export function activate(): void {
   lifecycleAbort.signal.addEventListener("abort", unsubscribeHost, { once: true });
 
   // The explicit-attach branch above already returned, so this is the Settings address, then the
-  // last daemon this dashboard reached.
-  const host = resolveDaemonHostOrRemembered(params);
+  // last server this dashboard reached.
+  const host = resolveServerHostOrRemembered(params);
   if (host) {
     connectLive(host);
     return;

@@ -145,7 +145,7 @@ used by (11)  op:go:go-build, op:go:go-clean, op:go:go-generate,
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago
 open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&code=$(magus config console token create --code --expires 12h)"
-(start the magus daemon if the graph does not load)
+(start the magus server if the graph does not load)
 
 next:
   magus path tool:go op:go:go-build
@@ -172,7 +172,7 @@ part of     project:.
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest
 open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest&code=$(magus config console token create --code --expires 12h)"
-(start the magus daemon if the graph does not load)
+(start the magus server if the graph does not load)
 
 next:
   magus path target:.:test op:go:go-test
@@ -436,13 +436,13 @@ source tree: magus hands the indexer the destination through a `MAGUS_SYMBOL_IND
 environment variable it injects for the `scip` op, and reads that same path back at
 query time. The next graph query folds the symbols in.
 
-**The daemon keeps it fresh for you.** While the daemon runs, background auto-indexing
+**The server keeps it fresh for you.** While the server runs, background auto-indexing
 re-runs each symbol-capable project's `scip` op when its sources change, so symbols stay
 current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
 into one run (a quiet window), a project re-indexes at most once per interval, a run
 starts only when nothing else is running, and it cancels itself the moment your own work
 needs a slot. Each run goes through the normal path, so it shows up as an ordinary
-journaled job, not hidden work. It is on by default in the daemon; a one-shot CLI never
+journaled job, not hidden work. It is on by default in the server; a one-shot CLI never
 auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
 run just fails and backs off - run `magus run <project>::scip` yourself, or index in CI.
@@ -847,7 +847,7 @@ and [MGS7002](../reference/codes/knowledge/MGS7002.md) (a doc citing an unregist
 
 ## For agents
 
-The MCP daemon exposes the verbs as tools: `magus_query`, `magus_explain`,
+The MCP server exposes the verbs as tools: `magus_query`, `magus_explain`,
 `magus_path`, `magus_stats`, and `magus_refs` (plus `magus_output`, which retrieves a
 target's captured output by ref). See [MCP](../guides/integrations/mcp.md) for wiring. Prefer
 these over grep to find and relate magus-domain entities; start from the `MAGUS.md`

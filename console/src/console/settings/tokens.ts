@@ -1,4 +1,4 @@
-// tokens.ts - the Settings "Access tokens" section: a LIST + REVOKE view over the daemon's
+// tokens.ts - the Settings "Access tokens" section: a LIST + REVOKE view over the server's
 // stored tokens and the active share link, spoken to over magus.token.v1alpha1.TokenService.
 //
 // It has no mint control. The service needs tokens=write, which only the operator token holds,
@@ -17,7 +17,7 @@ import {
   type Grant,
   type TokenInfo,
 } from "@wire/token/v1alpha1/token_pb";
-import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
+import { createServerTransport, getLiveToken, isCapabilityDenied } from "../../lib/server";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
@@ -53,7 +53,7 @@ function grantLabel(g: Grant | undefined): string {
   return parts.join(",") || "nothing";
 }
 
-// expiryLabel renders a token's expiry as a local date-time. Every token the daemon lists
+// expiryLabel renders a token's expiry as a local date-time. Every token the server lists
 // expires; "Never expires" is only what an unset timestamp would mean.
 function expiryLabel(t: TokenInfo): string {
   const ts = t.expireTime;
@@ -62,10 +62,10 @@ function expiryLabel(t: TokenInfo): string {
   return new Date(ms).toLocaleString();
 }
 
-// buildTokensSection builds the section body and drives it live against the daemon at host.
-// A null host (no daemon resolved) short-circuits to a clear "connect first" empty state.
+// buildTokensSection builds the section body and drives it live against the server at host.
+// A null host (no server resolved) short-circuits to a clear "connect first" empty state.
 // Returns the body element and a destroy() the surface calls on teardown so a late RPC never
-// renders into a detached node. opts.onDenied fires when the daemon declines the token service to
+// renders into a detached node. opts.onDenied fires when the server declines the token service to
 // this client (a phone-share session): the caller hides the whole section, so the SERVER, not a
 // client-side mode guess, decides whether token management is offered.
 export function buildTokensSection(
@@ -78,8 +78,8 @@ export function buildTokensSection(
   if (!host) {
     body.append(
       buildEmpty(
-        "Not connected to a daemon",
-        "Connect the console to a running daemon to list and revoke its access tokens. Open the console from a magus link, or set the daemon host on the General tab.",
+        "Not connected to a server",
+        "Connect the console to a running server to list and revoke its access tokens. Open the console from a magus link, or set the server host on the General tab.",
       ),
     );
     return {
@@ -92,11 +92,11 @@ export function buildTokensSection(
 
   const client: Client<typeof TokenService> = createClient(
     TokenService,
-    createDaemonTransport(host, getLiveToken()),
+    createServerTransport(host, getLiveToken()),
   );
 
   // renderList repaints the whole body from a fresh ListTokens. It is called on mount and after
-  // every successful revoke, so the list always reflects the daemon's current tokens.
+  // every successful revoke, so the list always reflects the server's current tokens.
   async function renderList(): Promise<void> {
     try {
       const resp = await client.listTokens({});
@@ -107,7 +107,7 @@ export function buildTokensSection(
         body.append(
           buildEmpty(
             "No connector or share tokens",
-            "The daemon has no connector tokens and no active share. Mint a connector token from the CLI with: magus config mcp connector. The built-in operator token is managed by the CLI and is never shown here.",
+            "The server has no connector tokens and no active share. Mint a connector token from the CLI with: magus config mcp connector. The built-in operator token is managed by the CLI and is never shown here.",
           ),
         );
         return;
@@ -115,7 +115,7 @@ export function buildTokensSection(
       body.append(buildTable(tokens));
     } catch (e) {
       if (stale) return;
-      // The daemon declined the service to this client (a read-only phone share): hide the section
+      // The server declined the service to this client (a read-only phone share): hide the section
       // entirely rather than show a failure - the server has decided token management is not offered.
       if (isCapabilityDenied(e)) {
         opts.onDenied?.();
@@ -125,7 +125,7 @@ export function buildTokensSection(
       body.replaceChildren(
         buildEmpty(
           "Could not load tokens",
-          "The daemon at " +
+          "The server at " +
             host +
             " did not answer the token service (" +
             msg +

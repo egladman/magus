@@ -10,7 +10,7 @@ import (
 )
 
 // ErrNoWorkspace is what a service built without a *magus.Magus answers for anything that
-// reads the workspace (the matching seams unset too). The daemon builds one to serve status
+// reads the workspace (the matching seams unset too). The server builds one to serve status
 // while its workspace fails to load; a route that reads it answers 503, since "no workspace
 // yet" is a state the console renders rather than a fault it reports.
 var ErrNoWorkspace = errors.New("console: no workspace available")

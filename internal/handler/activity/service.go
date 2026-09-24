@@ -1,11 +1,11 @@
 // Package activity is the console-facing ActivityService handler: it lists recent activity
 // events (newest first, filtered) and serves a payload blob by ref for the /dashboard and log
-// viewer. The view is DAEMON-WIDE: it merges the trail of every workspace the daemon has
-// loaded, because the panel exists to answer "what is touching this daemon" and a per-workspace
+// viewer. The view is SERVER-WIDE: it merges the trail of every workspace the server has
+// loaded, because the panel exists to answer "what is touching this server" and a per-workspace
 // view would silently under-report every other workspace. It is READ-only and maps the on-disk
 // trail.Event (internal/trail) to the magus.activity.v1alpha1 wire type at the boundary: the store
 // owns the format, this owns the wire.
-// Mounted on the console's human-facing API surface by the daemon, never under /mcp.
+// Mounted on the console's human-facing API surface by the server, never under /mcp.
 package activity
 
 import (
@@ -40,9 +40,9 @@ const (
 )
 
 // Workspace names one workspace whose trail the view merges: its root (the identity a reader
-// groups rows by) and the cache dir holding the trail. The daemon serves many workspaces, and a
-// producer outside the daemon process (the agent hook, which runs as a short-lived client and
-// resolves the LOCAL cache dir) writes to its own workspace's trail, so the daemon-wide view is
+// groups rows by) and the cache dir holding the trail. The server serves many workspaces, and a
+// producer outside the server process (the agent hook, which runs as a short-lived client and
+// resolves the LOCAL cache dir) writes to its own workspace's trail, so the server-wide view is
 // the union of them.
 type Workspace struct {
 	Root     string
@@ -50,11 +50,11 @@ type Workspace struct {
 }
 
 // Service implements activityv1alpha1connect.ActivityServiceHandler over the activity trails of every
-// workspace the daemon has loaded. Read-only: producers (the MCP handler, agent hooks, and later
+// workspace the server has loaded. Read-only: producers (the MCP handler, agent hooks, and later
 // jobs/config/token) write the trails; this reads them.
 type Service struct {
-	// workspaces is a FUNCTION, not a captured slice, because the daemon's workspace set is
-	// live: an adopted run loads a workspace and the idle janitor evicts one while the daemon
+	// workspaces is a FUNCTION, not a captured slice, because the server's workspace set is
+	// live: an adopted run loads a workspace and the idle janitor evicts one while the server
 	// runs, so a slice taken at mount time would go stale within one session.
 	workspaces func() []Workspace
 	// The two sources WatchActivityEvents merges with the trail, both optional: see
@@ -95,7 +95,7 @@ var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 // ListActivityEvents returns recent events, newest first, narrowed by the request filter.
 //
 // The filter runs BEFORE the page is cut, so page_size counts MATCHING events. Truncating first
-// was the bug this replaced: on a busy daemon the newest page_size events could all be filtered
+// was the bug this replaced: on a busy server the newest page_size events could all be filtered
 // out, and the caller read the empty response as "there are none", a false absence the review
 // bells and the dashboard Agents tile all assert on.
 //
@@ -199,7 +199,7 @@ func pageBounds(total, offset, limit int) (from, to int, next string) {
 // readMerged returns the limit most recent events across every workspace's trail, newest first.
 //
 // The cap applies to the MERGED set, not per trail: reading limit from each and concatenating
-// would neither be the limit most recent daemon-wide nor in time order. Each trail is read for
+// would neither be the limit most recent server-wide nor in time order. Each trail is read for
 // up to limit events (any one of them could supply the whole window), then the union is sorted and
 // truncated. A trail that cannot be read (a pruned workspace, a permissions error, a workspace
 // that has recorded nothing yet) is SKIPPED: one unreadable workspace must not blank the panel
@@ -215,14 +215,14 @@ func readMerged(workspaces []Workspace, limit int) []trail.Event {
 			continue
 		}
 		// Events are merged AS RECORDED. Event.Workspace means "the root this action pertained
-		// to", and it is deliberately empty for a daemon-wide action; trail.go says so, and an
+		// to", and it is deliberately empty for a server-wide action; trail.go says so, and an
 		// MCP call genuinely is not bound to one workspace.
 		//
 		// An earlier revision filled those blanks from the trail's owning root, on the theory that
 		// a merged view should have no unattributable rows. That was wrong twice over: it made the
 		// field mean "the workspace whose trail recorded this" for some events and "the workspace
 		// this pertained to" for others, so nothing downstream could rely on either reading; and it
-		// made a daemon-wide MCP call claim to belong to whichever workspace's trail happened to
+		// made a server-wide MCP call claim to belong to whichever workspace's trail happened to
 		// catch it, which is simply false. Having to flip an existing assert.Empty assertion to
 		// land it was the signal that a real invariant was being overwritten.
 		//

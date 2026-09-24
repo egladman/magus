@@ -27,7 +27,7 @@ func (b BuildInfo) Fingerprint() string {
 }
 
 // StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.
-// The daemon serves the same data to the console over the typed StatusService (its live
+// The server serves the same data to the console over the typed StatusService (its live
 // fields are projected onto magus.status.v1alpha1.Status) so both consumers share one definition.
 // Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
 type StatusSnapshot struct {
@@ -45,21 +45,17 @@ type StatusSnapshot struct {
 	// box must still report the capacity and in-use numbers, never an error demanding
 	// --socket.
 	Pools []StatusOutput `json:"pools,omitempty" yaml:"pools,omitempty"`
-	// Runs are the invocations the daemon is executing right now (adopted
+	// Runs are the invocations the server is executing right now (adopted
 	// dispatches), each with its per-target execution state. Empty when nothing is
-	// running or when reported by a process that is not the daemon.
+	// running or when reported by a process that is not the server.
 	Runs []StatusRun `json:"runs,omitempty" yaml:"runs,omitempty"`
-	// Services are the long-running shared services the daemon is hosting right now,
-	// kept warm across invocations. Empty when none are held or when reported by a
-	// process that is not the daemon.
-	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
-	// ObservingSince is when this daemon began observing (its start). The telemetry and
+	// ObservingSince is when this server began observing (its start). The telemetry and
 	// cache counters above are cumulative from this instant and are NOT persisted across
 	// restarts, so a dashboard can be transparent that the numbers are "since <this>", not
-	// all-time. Zero (omitted) when reported by a non-daemon `magus status`.
+	// all-time. Zero (omitted) when `magus status` reported it without a server.
 	ObservingSince time.Time `json:"observing_since,omitempty" yaml:"observing_since,omitempty"`
-	// Config surfaces the daemon's RESOLVED configuration (read-only) so a dashboard can show what
-	// the daemon is set to do (the default charms it applies, the concurrency cap) without a
+	// Config surfaces the server's RESOLVED configuration (read-only) so a dashboard can show what
+	// the server is set to do (the default charms it applies, the concurrency cap) without a
 	// round-trip to the terminal. Additive JSON, not on the proto event wire.
 	Config StatusConfig `json:"config,omitempty" yaml:"config,omitempty"`
 	// SymbolIndexes reports each symbol-capable project's SCIP index freshness (up to
@@ -78,32 +74,33 @@ type StatusSnapshot struct {
 	// holds one indefinitely, and every other run simply waits. Surfacing who holds
 	// what turns that from a hang into a fact.
 	Locks []StatusLock `json:"locks,omitempty" yaml:"locks,omitempty"`
+	// BrokerPolicy is the broker setting this report was made under. It is reported even
+	// when Broker is nil, because it decides what a missing broker means: a refused step
+	// under required, an unarbitrated one under best-effort, nothing at all under off.
+	BrokerPolicy BrokerPolicy `json:"broker_policy,omitempty" yaml:"broker_policy,omitempty"`
+	// Broker is the process holding this host's capacity and shared services; nil when
+	// none is running.
+	Broker *StatusBroker `json:"broker,omitempty" yaml:"broker,omitempty"`
+	// Server is the process serving MCP, the console and background jobs; nil when none
+	// is running.
+	Server *StatusServer `json:"server,omitempty" yaml:"server,omitempty"`
 	// PipeWaits are runs that have not taken their locks yet because a magus upstream of
 	// them in a shell pipe still holds, or may still take, a project they need. Without
 	// it such a run shows nowhere: it holds no lock and runs no target. Additive JSON,
 	// not on the proto event wire.
 	PipeWaits []StatusPipeWait `json:"pipe_waits,omitempty" yaml:"pipe_waits,omitempty"`
-	// Machine is the host-wide admission budget the daemon arbitrates: what every magus
-	// on this machine holds and who is queued for it. Nil when no daemon is running, or
-	// when the one that answered is a per-process proc server, which arbitrates nothing
-	// beyond itself.
-	//
-	// It belongs beside Locks for the same reason: held is the normal state, and what
-	// makes it worth reporting is WHO. A run queued for the machine is otherwise a run
-	// with nothing to show for itself in another terminal.
-	Machine *MachineSnapshot `json:"machine,omitempty" yaml:"machine,omitempty"`
 	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket
-	// the daemon dispatches jobs on. The two listeners share a process in normal
-	// operation but can diverge (the MCP server failing to bind while the proc daemon is
-	// fine), so a "daemon is up" reading does not by itself prove the tools are reachable.
-	// Nil when reported by a process that does not probe it (e.g. the daemon's own report).
+	// the server dispatches jobs on. The two listeners share a process in normal
+	// operation but can diverge (the MCP server failing to bind while the proc server is
+	// fine), so a "server is up" reading does not by itself prove the tools are reachable.
+	// Nil when reported by a process that does not probe it (e.g. the server's own report).
 	MCPEndpoint *MCPEndpointStatus `json:"mcp_endpoint,omitempty" yaml:"mcp_endpoint,omitempty"`
-	// Console is where a person opens the console this daemon serves, in the same shape
+	// Console is where a person opens the console this server serves, in the same shape
 	// as MCPEndpoint because it answers the same question about a different listener.
 	//
-	// It is reported because the address existed only in the daemon's log, on a line
+	// It is reported because the address existed only in the server's log, on a line
 	// nobody reads ("static console mounted"), so the one surface built for a person to
 	// look at was the one surface nothing told them how to reach.
 	Console *ConsoleStatus `json:"console,omitempty" yaml:"console,omitempty"`
@@ -127,7 +124,7 @@ type ConsoleStatus struct {
 // ReadinessReport is the JSON body of GET /readyz: Ready mirrors the pass/fail gate a
 // kubelet's status-code check already enforces (200 iff Ready), and Components adds
 // component-level detail an orchestrator ignores but a browser client (the console PWA)
-// can render as per-subsystem daemon health. Adding this body does not change the gate;
+// can render as per-subsystem server health. Adding this body does not change the gate;
 // it is purely additive alongside the existing 200/503 status code.
 type ReadinessReport struct {
 	Ready      bool                 `json:"ready"`
@@ -186,7 +183,7 @@ type MCPEndpointStatus struct {
 	Note      string `json:"note,omitempty" yaml:"note,omitempty"`
 }
 
-// StatusConfig is the read-only slice of the daemon's resolved config surfaced on the status wire.
+// StatusConfig is the read-only slice of the server's resolved config surfaced on the status wire.
 type StatusConfig struct {
 	// DefaultCharms are the execution charms applied to every run (e.g. rw, cd, gha).
 	DefaultCharms []string `json:"default_charms,omitempty" yaml:"default_charms,omitempty"`
@@ -225,7 +222,7 @@ const (
 	ServiceFailed   ServiceState = "failed"
 )
 
-// StatusService is one long-running shared service the daemon is hosting, surfaced on
+// StatusService is one long-running shared service the server is hosting, surfaced on
 // the status wire so a dashboard can show what is running and how many targets depend
 // on it. It mirrors service.ServiceStatus (the registry's introspection view).
 type StatusService struct {
@@ -236,6 +233,59 @@ type StatusService struct {
 	State      ServiceState `json:"state,omitempty" yaml:"state,omitempty"`
 	Dependents int          `json:"dependents,omitempty" yaml:"dependents,omitempty"`
 	StartedAt  time.Time    `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+}
+
+// StatusBroker is the broker's own report: the per-user process that holds this host's
+// capacity (slots and declared memory) and the services every magus on it shares.
+type StatusBroker struct {
+	PID     int    `json:"pid" yaml:"pid"`
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+	// Protocol is the broker wire version it speaks.
+	Protocol int    `json:"protocol" yaml:"protocol"`
+	Socket   string `json:"socket" yaml:"socket"`
+	// Executable is the binary the broker runs from. A broker started by a worktree's
+	// ./magus keeps running after that worktree is gone, and this is where to look.
+	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`
+	StartTime  time.Time `json:"start_time" yaml:"start_time"`
+	// Capacity is the whole budget, what is held, and every claim holding it.
+	Capacity MachineSnapshot `json:"capacity" yaml:"capacity"`
+	// Services are the shared services it hosts right now.
+	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
+	// IdleExitSeconds is how long the broker stays up once it holds nothing: no claim,
+	// no service with a dependent.
+	IdleExitSeconds int `json:"idle_exit_seconds,omitzero" yaml:"idle_exit_seconds,omitempty"`
+}
+
+// StatusServer is the server's own report: the person-started process serving MCP, the
+// console, the APIs and background jobs.
+type StatusServer struct {
+	PID        int       `json:"pid" yaml:"pid"`
+	Version    string    `json:"version,omitempty" yaml:"version,omitempty"`
+	Socket     string    `json:"socket" yaml:"socket"`
+	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`
+	StartTime  time.Time `json:"start_time" yaml:"start_time"`
+	// Listeners is every address the server accepts connections on. An HTTP entry is
+	// absent when nothing is served over HTTP.
+	Listeners []StatusListener `json:"listeners,omitempty" yaml:"listeners,omitempty"`
+	// Watch is the workspace roots whose knowledge graph and symbol indexes the server
+	// keeps current.
+	Watch []string `json:"watch,omitempty" yaml:"watch,omitempty"`
+}
+
+// ListenerKind is the transport a [StatusListener] accepts on.
+type ListenerKind string
+
+const (
+	// ListenerSocket is a local unix socket, reachable only from this host.
+	ListenerSocket ListenerKind = "socket"
+	// ListenerHTTP is the MCP endpoint and console.
+	ListenerHTTP ListenerKind = "http"
+)
+
+// StatusListener is one address a server accepts connections on.
+type StatusListener struct {
+	Kind    ListenerKind `json:"kind" yaml:"kind"`
+	Address string       `json:"address" yaml:"address"`
 }
 
 // StatusLock is one held per-project workspace lock and the process holding it.
@@ -287,7 +337,7 @@ const (
 	TargetRunCached  TargetRunState = "cached"
 )
 
-// StatusRun is one in-flight invocation the daemon has adopted, keyed by its invocation id,
+// StatusRun is one in-flight invocation the server has adopted, keyed by its invocation id,
 // carrying the per-target execution state a dashboard renders as a live run.
 type StatusRun struct {
 	Inv       string            `json:"inv" yaml:"inv"`
@@ -334,9 +384,8 @@ type CacheStatus struct {
 
 // StatusOutput is the public shape of the live concurrency pool reported by `magus status`.
 type StatusOutput struct {
-	ParentPID     int    `json:"parent_pid" yaml:"parent_pid"`
-	DaemonVersion string `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
-	Mode          string `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
+	ParentPID int    `json:"parent_pid" yaml:"parent_pid"`
+	Version   string `json:"version,omitempty" yaml:"version,omitempty"`
 	// Socket is the proc-server address this snapshot was read from, so a reader running
 	// more than one server can tell the entries apart and narrow with --socket.
 	Socket   string `json:"socket,omitempty" yaml:"socket,omitempty"`
@@ -361,7 +410,7 @@ type StatusRunningTarget struct {
 	Inv       string    `json:"inv,omitempty" yaml:"inv,omitempty"` // invocation id; deep-links to this running target's live log
 }
 
-// WorkspaceState is where the daemon's copy of a workspace sits.
+// WorkspaceState is where the server's copy of a workspace sits.
 type WorkspaceState string
 
 const (
@@ -396,17 +445,17 @@ type SourceDiagnostic struct {
 	Message string `json:"message" yaml:"message"`
 }
 
-// StatusWorkspace describes one workspace the daemon holds: loading, loaded, or failed.
+// StatusWorkspace describes one workspace the server holds: loading, loaded, or failed.
 type StatusWorkspace struct {
 	Root string `json:"root" yaml:"root"`
-	// State is empty from a daemon that reports only loaded workspaces, which Loaded and
+	// State is empty from a server that reports only loaded workspaces, which Loaded and
 	// every proto conversion treat as active; see Loaded's compat note.
 	State WorkspaceState `json:"state,omitempty" yaml:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
 	Error      *WorkspaceFailure `json:"error,omitempty" yaml:"error,omitempty"`
 	LoadedAt   time.Time         `json:"loaded_at" yaml:"loaded_at"`
 	LastAccess time.Time         `json:"last_access" yaml:"last_access"`
-	// Live cache activity for this workspace (daemon mode; zero otherwise).
+	// Live cache activity for this workspace (server mode; zero otherwise).
 	CacheHit   int   `json:"cache_hit,omitempty" yaml:"cache_hit,omitempty"`
 	CacheMiss  int   `json:"cache_miss,omitempty" yaml:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty" yaml:"cache_error,omitempty"`
@@ -418,9 +467,9 @@ type StatusWorkspace struct {
 	SecretProvider string `json:"secret_provider,omitempty" yaml:"secret_provider,omitempty"`
 }
 
-// Loaded reports whether w is serving: active, or from a daemon that reports no state.
+// Loaded reports whether w is serving: active, or from a server that reports no state.
 //
-// compat(until: no daemon that predates Workspace.State is still reachable): an empty
-// State came only from a daemon built before this field existed, so it is treated as
+// compat(until: no server that predates Workspace.State is still reachable): an empty
+// State came only from a server built before this field existed, so it is treated as
 // WorkspaceActive rather than as an unrecognized state.
 func (w StatusWorkspace) Loaded() bool { return w.State == "" || w.State == WorkspaceActive }

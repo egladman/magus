@@ -22,7 +22,7 @@ test("a single newline is a line break", () => {
 });
 
 // The bodies here are written by other people and arrive over the network. marked emits an html
-// token verbatim by default, and the console shares an origin with the daemon's bearer token.
+// token verbatim by default, and the console shares an origin with the server's bearer token.
 test("raw HTML is read back as text rather than run", () => {
   const html = renderMarkdown("<script>alert(1)</script>");
   assert.ok(!html.includes("<script>"), `a script tag must not survive, got ${html}`);
@@ -66,7 +66,7 @@ test("an ordinary link keeps working", () => {
   );
 });
 
-// The body is typed string but arrives from an unvalidated cast over the daemon's JSON, and
+// The body is typed string but arrives from an unvalidated cast over the server's JSON, and
 // marked.parse THROWS on anything else - inside the row renderer, which takes the paint loop down
 // and leaves the stream dead until a reload.
 test("a body that is not a string renders nothing rather than throwing", () => {

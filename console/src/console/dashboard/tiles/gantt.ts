@@ -9,7 +9,7 @@
 
 import type { DashboardState, RunView, TargetRunView } from "../state";
 import { Card, h, type Tile } from "./card";
-import { logsLink } from "../../../lib/daemon";
+import { logsLink } from "../../../lib/server";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 

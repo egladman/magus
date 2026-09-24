@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -162,6 +163,35 @@ func TestOsWithSlotsGivesBackHeldSlot(t *testing.T) {
 	require.NoError(t, err)
 	// The held slot is reacquired on return.
 	assert.Equal(t, 1, lim.Snapshot().Running, "Running after with_slots (held slot reacquired)")
+}
+
+// The step's own pool was sized to the slots with_slots hands back, so the callback's
+// processes get a pool of n, or none at all when n is one.
+func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no pipe jobserver: exec.Cmd cannot hand a child extra descriptors there")
+	}
+	lim := cache.NewLimiter(4)
+	require.NoError(t, lim.AcquireN(context.Background(), 4))
+	stepCtx, closeStep, err := run.SeatJobserver(cache.ContextWithLimiter(context.Background(), lim), 4)
+	require.NoError(t, err)
+	defer closeStep()
+	stepCtx = cache.WithSlotsHeld(stepCtx, 4)
+
+	// Reads one token only when the pool should hold one: a read on a pool with none
+	// blocks for as long as the test runs.
+	probe := func(n int, script string) string {
+		var got string
+		err := OsWithSlots(stepCtx, n, cbFunc(func(ctx context.Context) error {
+			res, err := run.Exec(ctx, "sh", []string{"-c", script}, run.ExecOptions{Capture: true, Quiet: true})
+			got = res.Stdout
+			return err
+		}))
+		require.NoError(t, err)
+		return got
+	}
+	assert.Equal(t, "-j --jobserver-fds=3,4 --jobserver-auth=3,4|+", probe(2, `printf '%s|' "$CARGO_MAKEFLAGS"; head -c 1 <&3`))
+	assert.Equal(t, os.Getenv("CARGO_MAKEFLAGS")+"|", probe(1, `printf '%s|' "$CARGO_MAKEFLAGS"`))
 }
 
 func TestOsWithSlotsNoLimiter(t *testing.T) {
@@ -640,7 +670,7 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 
 // TestOsWithEnv: the overrides ride the context so subprocesses started inside the
 // callback inherit them. The process's own environment is never touched, which is
-// what keeps a daemon serving other workspaces unaffected.
+// what keeps a server serving other workspaces unaffected.
 func TestOsWithEnv(t *testing.T) {
 	var inner []string
 	var nested []string
@@ -710,7 +740,7 @@ func TestOsExit(t *testing.T) {
 	assert.Equal(t, 1, exitErr.Code)
 }
 
-// TestOsExitClampsToAProcessStatus pins the clamp at the source, so the CLI, the daemon
+// TestOsExitClampsToAProcessStatus pins the clamp at the source, so the CLI, the server
 // reply and the out-of-band capture cannot disagree. Unclamped, os.exit(256) truncated
 // to 0 in os.Exit and a failing run reported success.
 func TestOsExitClampsToAProcessStatus(t *testing.T) {
