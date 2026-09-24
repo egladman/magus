@@ -85,6 +85,9 @@ Check a command against this workspace's conventions before running it. See \fBm
 \fBvcs\fR
 Staging and conflict resolution that knows what is generated. See \fBmagus\-vcs\fR(1).
 .TP
+\fBqueue\fR
+Merge approved changes through a speculative, partitioned merge queue. See \fBmagus\-queue\fR(1).
+.TP
 \fBdoctor\fR
 Validate the workspace. See \fBmagus\-doctor\fR(1).
 .TP
@@ -144,6 +147,9 @@ Override the default cache location (.magus/ in the workspace root). Equivalent 
 .TP
 \fBMAGUS_CACHE_WRITE_ENABLED\fR
 When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: \fBcache.write.enabled\fR.
+.TP
+\fBMAGUS_CACHE_REMOTE_WRITE_ENABLED\fR
+When false (or 0), write the local cache tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required: an error without a signing key or with cache.write.enabled false, and a failed remote write fails the step (default: cache.write.enabled). Equivalent magus.yaml key: \fBcache.remote.write.enabled\fR.
 .TP
 \fBMAGUS_CACHE_INCLUDE_OS_ENABLED\fR
 When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross\-platform replay (default: false). Equivalent magus.yaml key: \fBcache.include.os.enabled\fR.
@@ -299,6 +305,7 @@ MAGUS_CACHE_DIR.
 \fBmagus\-clean\fR(1),
 \fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
+\fBmagus\-queue\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),
