@@ -51,6 +51,7 @@ magus\project({
     // lib never fills, and an empty snapshot was an error. It no longer is for a glob the
     // target did not name itself; see cache.Step.OutputsDeclared.
     "targets": {
+        "preflight": {"skip_cache": "installs node_modules, which no cache entry records; a replay restores nothing"},
         // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
         // index-generate renders `magus describe graph -o markdown`, so its output is a

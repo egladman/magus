@@ -85,6 +85,7 @@ func Validate(cfg Config) error {
 		failures = fieldFailures(fe)
 	}
 	failures = append(failures, spellImportFailures(cfg.Spells.Imports)...)
+	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
 	if len(failures) == 0 {
 		return nil
 	}
@@ -153,6 +154,15 @@ func spellImportFailures(imports map[string]SpellImport) []FieldFailure {
 	return out
 }
 
+// cacheWriteFailures refuses writing the remote tier with the local tier off: a
+// remote-tier entry is exported from the local-tier one, so it could never take effect.
+func cacheWriteFailures(c Cache) []FieldFailure {
+	if c.Remote.Write.Enabled == nil || !*c.Remote.Write.Enabled || c.WriteEnabled() {
+		return nil
+	}
+	return []FieldFailure{{Field: "cache.remote.write.enabled", Tag: "cache_write_required", Value: "true"}}
+}
+
 // ValidationError is the structured error type returned by Validate
 // when one or more fields fail their validate tags.
 type ValidationError struct {
@@ -219,6 +229,8 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be a registry tag, [A-Za-z0-9_][A-Za-z0-9._-]{0,127} (got %q)", f.Value)
 	case "spell_override_path":
 		return fmt.Sprintf("must be a directory inside the workspace, relative to magus.yaml (got %q)", f.Value)
+	case "cache_write_required":
+		return "cannot be true while cache.write.enabled is false: the remote cache tier is written from the local tier, so there would be nothing to write; enable cache.write.enabled or set this false"
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:

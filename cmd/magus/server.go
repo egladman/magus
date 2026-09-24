@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -966,15 +967,14 @@ func installRefreshHooks(ctx context.Context) {
 	if err != nil || res.VCS == nil {
 		return
 	}
-	installer, ok := res.VCS.(types.RefreshHookInstaller)
-	if !ok {
-		return // this VCS has no hook support
-	}
 	root, err := res.VCS.Root(ctx, cwd)
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
+	installed, err := res.VCS.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return // this VCS has no hook support
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
 		return
@@ -998,15 +998,14 @@ func installDriftHooks(ctx context.Context) {
 	if err != nil || res.VCS == nil {
 		return
 	}
-	installer, ok := res.VCS.(types.DriftHookInstaller)
-	if !ok {
-		return // this VCS has no hook support
-	}
 	root, err := res.VCS.Root(ctx, cwd)
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+	installed, err := res.VCS.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return // this VCS has no hook support
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS drift-notice hook", slog.String("error", err.Error()))
 		return

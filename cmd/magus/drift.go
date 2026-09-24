@@ -143,19 +143,18 @@ func checkDriftForCommit(
 	}
 
 	kase := driftPushed
-	if pr, isReporter := driver.(types.PushStatusReporter); isReporter {
-		if pushed, known, perr := pr.CommitPushed(ctx, root, commitID); perr == nil && known && !pushed {
-			after, merr := driver.Metadata(ctx, root)
-			stillHead := merr == nil && after.ID == commitID
-			if stillHead {
-				kase = driftUnpushedHead
-			} else {
-				kase = driftUnpushedNotHead
-			}
+	if pushed, known, perr := driver.CommitPushed(ctx, root, commitID); perr == nil && known && !pushed {
+		after, merr := driver.Metadata(ctx, root)
+		stillHead := merr == nil && after.ID == commitID
+		if stillHead {
+			kase = driftUnpushedHead
+		} else {
+			kase = driftUnpushedNotHead
 		}
-		// perr != nil, or known == false: the reporter could not tell. kase stays
-		// driftPushed, the safe assumption types.PushStatusReporter documents.
 	}
+	// perr != nil (an unsupported backend included), or known == false: the reporter
+	// could not tell. kase stays driftPushed, the safe assumption types.PushStatusReporter
+	// documents.
 
 	return buildDriftNotice(commitID, finding, kase), true, nil
 }

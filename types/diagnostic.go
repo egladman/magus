@@ -402,6 +402,11 @@ const (
 	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
 	WorkspaceStillLoading DiagnosticCode = "MGS3017"
+	// QueueCredentialMismatch is a merge queue whose base requires the queue's commit
+	// status from one integration while apply holds another's credential. The provider
+	// counts none of the statuses the queue posts, so every change would wait forever;
+	// apply refuses at its start instead.
+	QueueCredentialMismatch DiagnosticCode = "MGS3019"
 	// PreflightFailed is a --preflight pass that failed in at least one project, so
 	// nothing of the invoked target started. Exits 3, apart from 1, so a CI script can
 	// tell "the cheap check failed" from "the fan-out failed".
@@ -546,7 +551,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
-	WorkspaceLoadFailed, WorkspaceStillLoading, PreflightFailed, PreflightOutsideClosure,
+	WorkspaceLoadFailed, WorkspaceStillLoading, QueueCredentialMismatch, PreflightFailed, PreflightOutsideClosure,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

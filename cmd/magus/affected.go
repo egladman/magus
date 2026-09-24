@@ -457,6 +457,12 @@ type planOutput struct {
 	MaxParallel int         `json:"max_parallel"`
 	Source      string      `json:"source"`
 	Matrix      []planShard `json:"matrix"`
+	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
+	// why it is not a proof when it is not. Together they are the answer a merge queue's
+	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
+	// Affected stays the closure even when an inherited verdict empties the matrix.
+	Affected    []string `json:"affected"`
+	UnboundedBy string   `json:"unbounded_by,omitempty"`
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
@@ -790,6 +796,8 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		MaxParallel: plan.MaxParallel,
 		Source:      plan.Source,
 		Matrix:      make([]planShard, len(plan.Shards)),
+		Affected:    plan.Affected,
+		UnboundedBy: plan.UnboundedBy,
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{
@@ -993,10 +1001,6 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 	if err != nil || res.VCS == nil {
 		return nil
 	}
-	reporter, ok := res.VCS.(types.TrackedFileReporter)
-	if !ok {
-		return nil
-	}
 	// One pathspec for every seed's files: TrackedFiles is a subprocess per call, and a
 	// changeset spanning a dozen projects would otherwise fork a dozen times to answer
 	// one hint.
@@ -1005,7 +1009,7 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 		ask = append(ask, files...)
 	}
 	slices.Sort(ask)
-	known, err := reporter.TrackedFiles(ctx, root, slices.Compact(ask))
+	known, err := res.VCS.TrackedFiles(ctx, root, slices.Compact(ask))
 	if err != nil {
 		return nil
 	}

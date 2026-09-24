@@ -774,7 +774,7 @@ func TestResolveSecretEnvCollisionErrors(t *testing.T) {
 // engine-side substitution of the arg token does.
 func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 	ctx := context.Background()
-	c, err := cache.Open(ctx, t.TempDir(), cache.WithMutable(true))
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
 	require.NoError(t, err)
 	ctx = cache.NewContext(ctx, c)
 
@@ -818,7 +818,7 @@ func symbolIndexerSpec(cmd spells.Command) spells.Descriptor {
 // reported it reindexed.
 func TestDispatchOpRejectsAnIndexerThatWroteNothing(t *testing.T) {
 	ctx := context.Background()
-	c, err := cache.Open(ctx, t.TempDir(), cache.WithMutable(true))
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
 	require.NoError(t, err)
 	ctx = cache.NewContext(ctx, c)
 

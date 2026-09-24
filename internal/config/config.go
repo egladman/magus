@@ -33,7 +33,7 @@ type Config struct {
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
-	// ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores, 8), the default) or aggressive (every core).
+	// ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores, 8), the default) or aggressive (every core). Unset is balanced everywhere; magus reads no environment variable to change this, so CI asks for aggressive explicitly.
 	ConcurrencyProfile types.ConcurrencyProfile `json:"concurrency_profile" yaml:"concurrency_profile"`
 
 	// MaxFailures bounds how many projects may fail before a run stops starting
@@ -298,14 +298,21 @@ type Cache struct {
 	Remote  CacheRemote  `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
 }
 
-// CacheWrite gates writing entries: the local snapshot and the remote push alike.
+// CacheWrite gates writing the local cache tier. Off, the remote tier gets nothing
+// either, because a remote-tier entry is exported from the local-tier one.
 //
-// One flag covers both because they are one decision today: a run either produces
-// entries or it does not. Restoring is deliberately NOT gated: a read-only run still
-// populates its local cache from a remote hit, so a pull request replays the shared
-// cache at full speed while publishing nothing to it.
+// Restoring is deliberately NOT gated: a read-only run still populates its local tier
+// from a remote-tier hit.
 type CacheWrite struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default true
+}
+
+// CacheRemoteWrite gates writing the remote cache tier. Separate from CacheWrite so a
+// pull request writes its local tier for its next push and never the remote tier, by
+// setting rather than by a missing signing key. Declared true, remote writes are
+// required (see cache.WithRemoteWrite).
+type CacheRemoteWrite struct {
+	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = written when the local tier is and a signing key is held
 }
 
 // CacheInclude selects which facts about the host enter every cache key.
@@ -329,8 +336,18 @@ type CacheIncludeFlag struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default false
 }
 
-// WriteEnabled reports whether this run may produce cache entries.
+// WriteEnabled reports whether this run may write the local cache tier.
 func (c Cache) WriteEnabled() bool { return c.Write.Enabled == nil || *c.Write.Enabled }
+
+// RemoteWriteEnabled reports whether config allows writing the remote cache tier. The
+// cache also needs a signing key when a trust set is declared, which config cannot see.
+// It is never true while WriteEnabled is false; [Validate] refuses an explicit true there.
+func (c Cache) RemoteWriteEnabled() bool {
+	if !c.WriteEnabled() {
+		return false
+	}
+	return c.Remote.Write.Enabled == nil || *c.Remote.Write.Enabled
+}
 
 // IncludeOS reports whether the host OS keys every entry.
 func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled != nil && *c.Include.OS.Enabled }
@@ -353,7 +370,8 @@ type CacheRemote struct {
 	// rule SkipCacheReason and DriftReason carry: switching off the check that says
 	// whether an artifact came from who it claims is a claim about this cache. This
 	// file is committed, so the next machine to trust the cache reads the answer here.
-	InsecureReason string `json:"insecure_reason,omitempty" yaml:"insecure_reason,omitempty"`
+	InsecureReason string           `json:"insecure_reason,omitempty" yaml:"insecure_reason,omitempty"`
+	Write          CacheRemoteWrite `json:"write" yaml:"write"`
 }
 
 // CI controls CI fan-out behavior.
@@ -747,6 +765,7 @@ func EnvVarDocs() []EnvVarDoc {
 	return []EnvVarDoc{
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
+		{"MAGUS_CACHE_REMOTE_WRITE_ENABLED", "cache.remote.write.enabled", "cache.write.enabled", "When false (or 0), write the local cache tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required: an error without a signing key or with cache.write.enabled false, and a failed remote write fails the step"},
 		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "false", "When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
@@ -754,7 +773,8 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CACHE_REMOTE_INSECURE_REASON", "cache.remote.insecure_reason", "", "Why this cache runs unverified; required whenever cache.remote.insecure is true"},
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},
 		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
-		{"MAGUS_CONCURRENCY", "concurrency", "min(NumCPU,8)", "Maximum number of concurrently running per-project build steps"},
+		{"MAGUS_CONCURRENCY", "concurrency", "concurrency_profile decides", "Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive"},
+		{"MAGUS_CONCURRENCY_PROFILE", "concurrency_profile", "balanced", "Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly"},
 		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect"},
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
 		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},

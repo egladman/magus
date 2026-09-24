@@ -11,7 +11,6 @@ import (
 	"time"
 
 	runPkg "github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
 
@@ -224,19 +223,19 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 		FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
 }
 
-// machineBudgetPercent is mem.UsableFraction as a whole number, so a refusal can name the
-// share instead of restating it as prose that drifts the day the constant moves. A reader
-// who does not know about the fraction reads the budget as a miscount of their own RAM.
-var machineBudgetPercent = int(mem.UsableFraction * 100)
-
 // describeMachineOversize says what to change, which is not the same sentence for the two
 // axes. A memory figure is a declaration magus has already measured against, so the reader
 // is sent to that check rather than to a guess; a slot count is bounded by the cores and
 // has nothing to check.
+//
+// This no longer names a fixed percentage: mem.BudgetMB reserves a share of memory that
+// depends on the profile the daemon started under (a quarter, under balanced or
+// conservative; a small fixed floor, under aggressive), and the budget here carries no
+// record of which one applied. Naming one number would be right for one profile and a
+// lie for the other.
 func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
-		return fmt.Sprintf("that budget is %d%% of the memory available here; the rest runs the OS and everything else. Run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
-			machineBudgetPercent)
+		return "that budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine."
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))

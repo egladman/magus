@@ -464,11 +464,7 @@ func dropVCSIgnored(root string, files []string) []string {
 	if err != nil || res.VCS == nil {
 		return files
 	}
-	reporter, ok := res.VCS.(types.IgnoredFileReporter)
-	if !ok {
-		return files
-	}
-	ignored, err := reporter.IgnoredFiles(context.Background(), root, files)
+	ignored, err := res.VCS.IgnoredFiles(context.Background(), root, files)
 	if err != nil || len(ignored) == 0 {
 		return files
 	}

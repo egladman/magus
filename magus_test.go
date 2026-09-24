@@ -1434,6 +1434,21 @@ func TestApplyEnvToConfig(t *testing.T) {
 	assert.True(t, cfg.DryRun, "DryRun should be true")
 }
 
+// An unrecognized boolean is refused for both bool kinds, and the field keeps its value.
+func TestApplyEnv_UnrecognizedBooleanIsAnError(t *testing.T) {
+	env := map[string]string{
+		"MAGUS_SANDBOX_ENABLED":            "ture",
+		"MAGUS_CACHE_REMOTE_WRITE_ENABLED": "off",
+	}
+	cfg := config.Defaults()
+	err := configgen.ApplyEnv(&cfg, func(k string) string { return env[k] })
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `MAGUS_SANDBOX_ENABLED: "ture" is not a boolean`)
+	assert.ErrorContains(t, err, `MAGUS_CACHE_REMOTE_WRITE_ENABLED: "off" is not a boolean`)
+	assert.False(t, cfg.Sandbox.Enabled)
+	assert.Nil(t, cfg.Cache.Remote.Write.Enabled)
+}
+
 func TestApplyEnv_SandboxEnabled(t *testing.T) {
 	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
 	cfg := config.Defaults()

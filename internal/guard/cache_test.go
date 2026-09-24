@@ -135,6 +135,22 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		"head -n 5 .magus/lease",
 		"jq . .magus/advisories/anon.served-next",
 
+		// A flag's VALUE, not a write target: rsync has no dedicated case, and nothing
+		// says --exclude's argument is a path rather than a pattern to skip. Measured
+		// as a real false positive: three denials fired here with no write anywhere on
+		// the line, one of them exactly this shape.
+		"rsync -av --exclude .magus src/ dest/",
+		"rsync -av --exclude=.magus src/ dest/",
+
+		// An interpreter's quoted literal that is DATA the script writes, not a path it
+		// writes TO: the surrounding whitespace is what marks it as prose, the same
+		// signal the plain branch already uses for `echo "rm -rf .magus"`. Measured as
+		// the other two real false positives: a heredoc writing an unrelated file whose
+		// own text happened to mention the cache dir, and this audit's own script doing
+		// the same.
+		`python3 -c "print('candidates live under .magus/ during the run')"`,
+		"python3 - <<'PY'\nwith open('/tmp/scratchpad/fp.go', 'w') as f:\n    f.write(\"package main // lives under .magus/ once a run starts\")\nPY",
+
 		// A pure print: awk's range/comparison operators share a character with its
 		// redirect operator, but neither follows a print/printf statement here, so
 		// this is a read like any other.

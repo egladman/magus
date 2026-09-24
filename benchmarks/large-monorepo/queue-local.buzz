@@ -1,0 +1,28 @@
+// mergequeue provider for queue.sh: every change is approved at the commit asked about,
+// and a merge squashes the validated head onto the QUEUE_BASE branch of the QUEUE_REPO
+// checkout with git plumbing, the way a forge's merge button would. queue.sh writes the
+// changes document itself, so list_changes is never called.
+import "os";
+
+final MERGE = `set -e
+exec 1>&2
+repo=$1 base=$2 sha=$3 title=$4
+tree=$(git -C "$repo" merge-tree --write-tree "refs/heads/$base" "$sha")
+commit=$(git -C "$repo" commit-tree "$tree" -p "refs/heads/$base" -m "$title")
+git -C "$repo" update-ref "refs/heads/$base" "$commit"
+`;
+
+fun getenv(name: str) > str {
+    final v = os\env(name);
+    return v ?? "";
+}
+
+export fun list_changes(io: {str: any}) > [any] !> any { throw "queue.sh writes its own changes document"; }
+export fun approval_at(io: {str: any}) > any { return {"approved": true, "head": io["commit"]}; }
+export fun post_status(io: {str: any}) > bool { return true; }
+export fun kick_back(io: {str: any}) > bool { return true; }
+
+export fun merge_change(io: {str: any}) > any {
+    final code = os\execute(["sh", "-c", MERGE, "sh", getenv("QUEUE_REPO"), getenv("QUEUE_BASE"), "{io["commit"]}", "{io["title"]} (#{io["id"]})"]);
+    return {"merged": code == 0, "reason": "merge exited {code}"};
+}

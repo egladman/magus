@@ -152,9 +152,9 @@ func newCache(t *testing.T) (root string, c *cache.Cache) {
 	// Mutable EXPLICITLY, never inherited: MAGUS_CACHE_WRITE_ENABLED is ambient in CI
 	// (ci.yaml sets it false on every pull_request event), and a write-disabled cache writes no
 	// entry, so a test that runs a step twice and asserts the second is a hit fails on
-	// a PR run while passing everywhere else. WithMutable is how internal/cache's own
+	// a PR run while passing everywhere else. WithLocalWrite is how internal/cache's own
 	// newMutableCache fixture pins this.
-	c, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
+	c, err := cache.Open(t.Context(), cdir, cache.WithLocalWrite(true))
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }

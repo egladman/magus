@@ -48,14 +48,10 @@ func Scan(ctx context.Context, w *types.Workspace, dir string, commits int, sinc
 	if err != nil {
 		return nil, err
 	}
-	if res.Source == types.VCSSourceDisabled {
+	if res.Source == types.VCSSourceDisabled || res.VCS == nil {
 		return nil, fmt.Errorf("%w: vcs disabled", types.ErrVCSUnsupported)
 	}
-	reporter, ok := res.VCS.(types.ChurnReporter)
-	if !ok {
-		return nil, fmt.Errorf("%w: %s cannot report per-commit files", types.ErrVCSUnsupported, res.Name)
-	}
-	changes, err := reporter.ChangesByCommit(ctx, dir, commits, sinceRef)
+	changes, err := res.VCS.ChangesByCommit(ctx, dir, commits, sinceRef)
 	if err != nil {
 		return nil, err
 	}

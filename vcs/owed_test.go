@@ -104,7 +104,7 @@ func TestInstallRegenHookCoexists(t *testing.T) {
 
 func gitDirOf(t *testing.T, dir string) string {
 	t.Helper()
-	out, err := gitExec(t.Context(), "-C", dir, "rev-parse", "--absolute-git-dir").Output()
+	out, err := gitOutput(t.Context(), dir, gitOpts{}, "rev-parse", "--absolute-git-dir")
 	require.NoError(t, err)
-	return string(out[:len(out)-1])
+	return out
 }

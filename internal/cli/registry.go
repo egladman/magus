@@ -22,6 +22,7 @@ var All = []Command{
 	cleanCommand,
 	shellCommand,
 	vcsCommand,
+	queueCommand,
 	doctorCommand,
 	configCommand,
 	sessionCommand,
@@ -1579,6 +1580,136 @@ base in yourself on the others, then run resolve.`,
 		{"Record what a lease was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 		{"Capture the uncommitted work too, before something risky", "magus vcs checkpoint --preserve"},
+	},
+}
+
+// queueCheckout are the flags naming the checkout every queue verb works in, beside
+// the global --root.
+var queueCheckout = []Flag{
+	{Name: "remote", Kind: FlagString, Default: "origin", Doc: "Name of the configured `remote` changes and the base are fetched from"},
+	{Name: "vcs", Kind: FlagString, Default: "git", Doc: "Version control `backend` of the checkout at --root"},
+}
+
+// queueFacts are the flags choosing who answers what a change affects and which files
+// are generated.
+var queueFacts = []Flag{
+	{Name: "facts", Kind: FlagString, Doc: "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers"},
+	{Name: "target", Kind: FlagString, Default: "ci", Doc: "magus `target` the affected set is computed for; not with --facts"},
+}
+
+var queueCommand = Command{
+	Name:        "queue",
+	Short:       "Merge approved changes through a speculative, partitioned merge queue",
+	Description: "List the changes carrying merge intent, plan them into partitions of independent changes, validate speculative candidates, and merge the green ones through the provider.",
+	Tags:        []string{"cli", "magus queue", "merge queue", "stacked changes", "pull requests", "ci"},
+	Long: `A speculative, partitioned merge queue. A queue run has three steps, each with
+the rights it needs and no more.
+
+plan reads the changes carrying merge intent (a mergequeue.changes/v1 document on
+stdin or --changes, as ls prints it), checks each one's approval at its head,
+finds which changes are stacked on which, drops what conflicts with the base on
+its own, and splits the rest into partitions whose affected sets are disjoint.
+It writes a mergequeue.plan/v1 document.
+
+validate runs the changes' code and needs read access only. Per partition it
+builds candidates base+A, base+A+B and so on onto each other, regenerates
+generated files on each, runs --gate on them, and writes a mergequeue.verdict/v1
+per change to --verdicts the moment that change is decided.
+
+apply holds the write credential and runs no change's code. It rebuilds each
+green change's candidate itself and merges it through the provider, with the
+change's own merge method, as soon as everything beneath it has merged. Its
+<source> is the directory validate wrote, or run:<run>, the artifacts of a
+validation run as the provider names it (github: <owner>/<name>/runs/<id>).
+
+The checkout is the one at the global --root (default: the current directory),
+and every relative path resolves against it. The provider is a built-in name
+(github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
+on stdout; ls and describe print their document instead. The global --dry-run makes
+apply report what would merge and call nothing on the provider.`,
+	Usage: "magus queue <describe|ls|plan|validate|apply> [flags]",
+	Children: []Command{
+		{
+			Name:  "describe",
+			Short: "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json",
+			Long: `Ask the provider what it supports on a base, its merge methods and how a change
+is queued, and read how the queue is wired there: the status the base requires
+and which integration it is pinned to, the repository settings the queue depends
+on, and the required checks a queue push would leave unreported. It prints the
+commands that finish the wiring; magus never runs them, a person does.
+
+--app names the app whose credential apply will write with (github: a GitHub
+App's slug), and the steps become that app's: install it, store its credential,
+and pin the status to its id. Every read goes to the provider over the network,
+with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
+
+-o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
+			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
+			Flags: append([]Flag{
+				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
+				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential"},
+			}, queueCheckout...),
+		},
+		{
+			Name:  "ls",
+			Short: "Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document",
+			Usage: "magus queue ls --provider <provider> --base <branch> [flags]",
+			Flags: append([]Flag{
+				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
+			}, queueCheckout...),
+		},
+		{
+			Name:  "plan",
+			Short: "Check approval, find stacks, drop what conflicts with the base, and partition by affected set",
+			Usage: "magus queue plan --provider <provider> --out <file> [flags]",
+			Flags: append(append([]Flag{
+				{Name: "changes", Kind: FlagString, Default: "-", Doc: "The mergequeue.changes/v1 `document`, or - for stdin"},
+				{Name: "provider", Kind: FlagString, Doc: "`provider` approval at each head is checked with"},
+				{Name: "out", Kind: FlagString, Doc: "`file` the mergequeue.plan/v1 document is written to"},
+				{Name: "depth", Kind: FlagInt, Default: 3, Doc: "Candidates of one partition that validate at once"},
+				{Name: "parallel", Kind: FlagInt, Doc: "Changes admitted at once; 0 is one per CPU"},
+			}, queueFacts...), queueCheckout...),
+		},
+		{
+			Name:  "validate",
+			Short: "Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)",
+			Usage: "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]",
+			Flags: append(append([]Flag{
+				{Name: "plan", Kind: FlagString, Doc: "The mergequeue.plan/v1 `file`"},
+				{Name: "gate", Kind: FlagString, Doc: "`command` run in each candidate's checkout; exit 0 is green"},
+				{Name: "regenerate", Kind: FlagString, Doc: "`command` run in a candidate with the generated files to rewrite listed on stdin"},
+				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
+				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
+				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
+			}, queueFacts...), queueCheckout...),
+		},
+		{
+			Name:  "apply",
+			Short: "Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)",
+			Usage: "magus queue apply --provider <provider> [flags] <source>",
+			Flags: append(append([]Flag{
+				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts; branch protection requires it"},
+				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
+				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
+				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
+				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it"},
+			}, queueFacts...), queueCheckout...),
+		},
+	},
+	Examples: []Example{
+		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
+		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
+		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
+		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
+		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'"},
+		{"Merge the green ones as they arrive", "magus queue apply --provider github verdicts"},
+		{"Merge from a validation run's artifacts", "magus queue apply --provider github run:acme/widgets/runs/7"},
+		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},
 	},
 }
 

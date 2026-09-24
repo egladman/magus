@@ -744,12 +744,9 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if kerr != nil {
 			return kerr
 		}
-		// Digest AND redact before comparing or showing, in that order and both: the store
-		// applies the same pair at write, so anything skipped here reads as a difference
-		// on every run rather than as drift. Digesting hides env values, which must not
-		// print merely because this machine holds them; redaction is what covers a
-		// registered credential riding a non-env class.
-		lines = cache.RedactKeyInputs(ctx, cache.DigestEnvValues(lines))
+		// Masked as the store masks at write, so anything skipped here would read as a
+		// difference on every run rather than as drift.
+		lines = cache.MaskKeyInputs(ctx, lines)
 		r := targetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,
