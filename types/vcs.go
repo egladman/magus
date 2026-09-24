@@ -739,10 +739,11 @@ type RangeReporter interface {
 // as the file's diff driver names it. It is the footprint two concurrent changes are
 // compared by, finer than a path and computed from the edits themselves, never guessed.
 type RegionReporter interface {
-	// ChangedRegions compares the working tree with base and returns one region per
-	// declaration each hunk touches, ordered by path, then side, then line. Deleted lines
-	// are placed through base's version of the file and added or modified lines through the
-	// working tree's, so a new declaration is named as itself, never as the one above it.
+	// ChangedRegions compares the working tree with the merge base of base and the
+	// checkout's head, as ChangedFiles does, and returns one region per declaration each
+	// hunk touches, ordered by path, then side, then line. Deleted lines are placed through
+	// the merge base's version of the file and added or modified lines through the working
+	// tree's, so a new declaration is named as itself, never as the one above it.
 	//
 	// paths, when non-empty, keeps only those literal repository-relative paths (a
 	// directory keeps what is under it). A path with no diff driver still yields its
