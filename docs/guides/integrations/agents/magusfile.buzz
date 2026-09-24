@@ -58,6 +58,7 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json"],
     "targets": {
+        "preflight": {"skip_cache": "installs node_modules, which no cache entry records; a replay restores nothing"},
     },
 });
 

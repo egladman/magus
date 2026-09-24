@@ -139,8 +139,8 @@ magus\project({
     // non-input only makes an unrelated edit invalidate a cache. Four groups:
     //
     //   - Nothing reads them: .gitignore, NOTICE, .github/actions/*/action.yml (GitHub
-    //     reads those, no target does), and the nested internal/spell/gen/.gitattributes,
-    //     which only git reads.
+    //     reads those; `test` declares setup-magus's, which its suite reads), and the nested
+    //     internal/spell/gen/.gitattributes, which only git reads.
     //   - LICENSE, read only by release-build, which is skip_cache: declaring it would
     //     invalidate build/test/lint to key nothing.
     //   - The benchmark corpora under benchmarks/ (fixtures, task meta.json, manifests,
@@ -2747,6 +2747,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
     // test inputs.
     ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
+    // The setup action and the queue's apply workflow: the release trust anchor and the
+    // queue app's credential rules are asserted against them.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/queue-apply.yaml");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays

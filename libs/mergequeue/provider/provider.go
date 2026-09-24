@@ -3,19 +3,24 @@
 //
 // A provider script exports these functions, each taking one record and returning one:
 //
-//	describe({base, remote_url})                   > {stack_merge, linear_stacks, methods}
+//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}
 //	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [unqueued]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
+//	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
-//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, reason?}
+//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
 //	kick_back(change + {commit, code, report, paths, with, candidate_commit}) > bool
 //	list_artifacts({source})                       > {complete, artifacts: [{name, url}], headers?}
 //
 // Every op but list_artifacts is required; list_artifacts is required of a provider
 // apply follows a validation run through. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
-// unqueued record those of [types.UnqueuedChange]. Every key the contract lists
+// unqueued record those of [types.UnqueuedChange]. describe's setup, asked for with a
+// status_context, carries [types.Setup] as status_context, credential {id, name?},
+// required_checks [{context, integration?, events?}], settings [{name, value, want}],
+// app? {slug, id, client_id?, registration_url?, install_url?, environment?, variable?,
+// secret?} and steps [{title, command? or url?}]. Every key the contract lists
 // without a "?" is required: a missing one is an error, never a zero value, since a
 // missing "fork" or "queued" read as false would admit what the provider meant to
 // refuse. Other keys a record carries are ignored. The reads run in planning and apply;
@@ -56,6 +61,7 @@ const (
 	opDescribe      = "describe"
 	opListChanges   = "list_changes"
 	opApprovalAt    = "approval_at"
+	opListGreen     = "list_green"
 	opPostStatus    = "post_status"
 	opRetarget      = "retarget"
 	opMergeChange   = "merge_change"
@@ -66,7 +72,7 @@ const (
 // Every op but list_artifacts is required: branch protection requires the queue's status
 // once it is wired, so a provider that can list changes but not merge them would hold
 // every change forever.
-var ops = []string{opDescribe, opListChanges, opApprovalAt, opPostStatus, opRetarget, opMergeChange, opKickBack}
+var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack}
 
 // Script is a [types.Provider] backed by a Buzz script, and a
 // [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
@@ -196,7 +202,9 @@ func changeParams(c types.Change) map[string]any {
 
 // Describe calls describe. The queue checks what it reports before relying on it.
 func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabilities, error) {
-	r, err := p.callRecord(ctx, opDescribe, map[string]any{"base": q.Base, "remote_url": q.RemoteURL})
+	r, err := p.callRecord(ctx, opDescribe, map[string]any{
+		"base": q.Base, "remote_url": q.RemoteURL, "status_context": q.StatusContext, "app": q.App, "setup_steps": q.SetupSteps,
+	})
 	if err != nil {
 		return types.Capabilities{}, err
 	}
@@ -204,9 +212,17 @@ func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabil
 	var sm string
 	var methods []string
 	var committer map[string]string
+	var setup *record
 	if err := r.decode(required("stack_merge", &sm), required("linear_stacks", &c.LinearStacks), required("methods", &methods),
-		optional("queue_label", &c.QueueLabel), optional("committer", &committer)); err != nil {
+		optional("queue_label", &c.QueueLabel), optional("committer", &committer), optional("setup", &setup)); err != nil {
 		return types.Capabilities{}, err
+	}
+	if setup != nil {
+		s, err := decodeSetup(*setup)
+		if err != nil {
+			return types.Capabilities{}, err
+		}
+		c.Setup = &s
 	}
 	if committer != nil {
 		c.Committer.Name, c.Committer.Email = committer["name"], committer["email"]
@@ -219,6 +235,54 @@ func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabil
 		c.Methods = append(c.Methods, types.MergeMethod(s))
 	}
 	return c, nil
+}
+
+// decodeSetup reads describe's setup record; every list in it is optional.
+func decodeSetup(r record) (types.Setup, error) {
+	var s types.Setup
+	var credential, app *record
+	var checks, settings, steps []record
+	if err := r.decode(required("status_context", &s.StatusContext), required("credential", &credential),
+		optional("required_checks", &checks), optional("settings", &settings), optional("app", &app), optional("steps", &steps)); err != nil {
+		return types.Setup{}, err
+	}
+	if err := credential.decode(required("id", &s.Credential.ID), optional("name", &s.Credential.Name)); err != nil {
+		return types.Setup{}, err
+	}
+	for _, row := range checks {
+		var rc types.RequiredCheck
+		if err := row.decode(required("context", &rc.Context), optional("integration", &rc.Integration), optional("events", &rc.Events)); err != nil {
+			return types.Setup{}, err
+		}
+		s.RequiredChecks = append(s.RequiredChecks, rc)
+	}
+	for _, row := range settings {
+		var st types.Setting
+		if err := row.decode(required("name", &st.Name), required("value", &st.Value), required("want", &st.Want)); err != nil {
+			return types.Setup{}, err
+		}
+		s.Settings = append(s.Settings, st)
+	}
+	if app != nil {
+		var a types.App
+		if err := app.decode(required("slug", &a.Slug), required("id", &a.ID), optional("client_id", &a.ClientID),
+			optional("registration_url", &a.RegistrationURL), optional("install_url", &a.InstallURL),
+			optional("environment", &a.Environment), optional("variable", &a.Variable), optional("secret", &a.Secret)); err != nil {
+			return types.Setup{}, err
+		}
+		s.App = &a
+	}
+	for _, row := range steps {
+		var st types.SetupStep
+		if err := row.decode(required("title", &st.Title), optional("command", &st.Command), optional("url", &st.URL)); err != nil {
+			return types.Setup{}, err
+		}
+		s.Steps = append(s.Steps, st)
+	}
+	if err := s.Check(); err != nil {
+		return types.Setup{}, fmt.Errorf("%s: setup: %w", r.where, err)
+	}
+	return s, nil
 }
 
 // ListChanges calls list_changes and checks every record it returns.
@@ -309,6 +373,34 @@ func (p *Script) ApprovalAt(ctx context.Context, c types.Change, commit string) 
 	return a, nil
 }
 
+// ListGreen calls list_green. A record whose id or head git could read as something else
+// is an error, since the queue posts a status on that head.
+func (p *Script) ListGreen(ctx context.Context, q types.ListQuery, statusContext string) ([]types.GreenChange, error) {
+	r, err := p.callRecord(ctx, opListGreen, map[string]any{"base": q.Base, "remote_url": q.RemoteURL, "context": statusContext})
+	if err != nil {
+		return nil, err
+	}
+	var rows []record
+	if err := r.decode(required("changes", &rows)); err != nil {
+		return nil, err
+	}
+	out := make([]types.GreenChange, 0, len(rows))
+	for _, row := range rows {
+		var g types.GreenChange
+		if err := row.decode(required("id", &g.ID), required("repo", &g.Repo), required("head", &g.Head)); err != nil {
+			return nil, err
+		}
+		if err := types.CheckID(g.ID); err != nil {
+			return nil, fmt.Errorf("%s: %w", row.where, err)
+		}
+		if !types.IsObjectID(g.Head) {
+			return nil, fmt.Errorf("%s: head %q is not a full commit id", row.where, g.Head)
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
 // PostStatus calls post_status.
 func (p *Script) PostStatus(ctx context.Context, c types.Change, commit string, s types.CommitStatus) error {
 	params := changeParams(c)
@@ -326,8 +418,9 @@ func (p *Script) Retarget(ctx context.Context, c types.Change, base string) erro
 	return p.acknowledged(ctx, opRetarget, params)
 }
 
-// MergeChange calls merge_change.
-func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.MergeOptions) error {
+// MergeChange calls merge_change. A script that omits by_provider says the queue's call
+// merged the change.
+func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.MergeOptions) (types.MergeResult, error) {
 	params := changeParams(c)
 	params["commit"] = opts.Commit
 	params["message"] = opts.Message
@@ -338,20 +431,21 @@ func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.Mer
 	params["through"] = through
 	r, err := p.callRecord(ctx, opMergeChange, params)
 	if err != nil {
-		return err
+		return types.MergeResult{}, err
 	}
 	var merged bool
 	var reason string
-	if err := r.decode(required("merged", &merged), optional("reason", &reason)); err != nil {
-		return err
+	var res types.MergeResult
+	if err := r.decode(required("merged", &merged), optional("by_provider", &res.ByProvider), optional("reason", &reason)); err != nil {
+		return types.MergeResult{}, err
 	}
 	if !merged {
 		if reason == "" {
 			reason = "no reason given"
 		}
-		return fmt.Errorf("%s: not merged: %s", r.where, reason)
+		return types.MergeResult{}, fmt.Errorf("%s: not merged: %s", r.where, reason)
 	}
-	return nil
+	return res, nil
 }
 
 // KickBack calls kick_back.
@@ -413,7 +507,7 @@ type record struct {
 // field is one key of a record and where its value goes.
 type field struct {
 	key      string
-	dst      any // *string, *bool, *[]string, *[]record or *map[string]string
+	dst      any // *string, *bool, *[]string, *[]record, **record or *map[string]string
 	required bool
 }
 
@@ -480,6 +574,12 @@ func (r record) set(f field, v any) error {
 			out[i] = record{m: m, where: fmt.Sprintf("%s: %s[%d]", r.where, f.key, i)}
 		}
 		*dst = out
+	case **record:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return wrong("a record")
+		}
+		*dst = &record{m: m, where: r.where + ": " + f.key}
 	case *map[string]string:
 		m, ok := v.(map[string]any)
 		if !ok {

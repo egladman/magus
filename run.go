@@ -1345,7 +1345,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Run-scoped remote-cache counters. Installed here rather than held on Cache
 	// because the daemon reuses one Cache per workspace across runs and can serve two
 	// adopted runs at once; RemoteSummary below reads them back off ctx.
-	ctx = cache.WithRemoteStats(ctx)
+	ctx = cache.ContextWithRemoteStats(ctx)
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})

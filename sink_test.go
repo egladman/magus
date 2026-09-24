@@ -212,7 +212,8 @@ func TestTextSinkProse(t *testing.T) {
 		{report.RunSummary{Dry: true, Planned: 3, DurationMs: 2}, "summary: dry run, 3 targets would run (2ms)\n"},
 		{report.RunSummary{Dry: true, Planned: 1, DurationMs: 1}, "summary: dry run, 1 target would run (1ms)\n"},
 		// The zero case is the point: a configured remote that did nothing says so.
-		{report.RunRemote{}, "remote: 0 restored, 0 published, 0 failed (0 B down, 0 B up)\n"},
+		{report.RunRemote{}, "remote: 0 restored, 0 missed, 0 stored, 0 failed (0 B down, 0 B up)\n"},
+		{report.RunRemote{Hits: 1, Misses: 2, Stored: 3, DownBytes: 2048}, "remote: 1 restored, 2 missed, 3 stored, 0 failed (2.0 KiB down, 0 B up)\n"},
 		{report.RunDetach{Invocation: "inv1", State: string(DetachQueued)}, "magus: detached as inv1\n  read it with: magus query invocation inv1\n"},
 		{report.RunDetach{State: string(DetachCoalesced)}, "magus: the daemon is already running this exact command; not queued twice\n"},
 		// Debug detail stays out of a default run.

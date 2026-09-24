@@ -6,6 +6,7 @@
 //	QUEUE_STEP=plan      magus buzz tools/gha-queue.buzz   plan the queue; write the validation matrix (DEPTH)
 //	QUEUE_STEP=validate  magus buzz tools/gha-queue.buzz   validate one change of the plan (CHANGE)
 //	QUEUE_STEP=apply     magus buzz tools/gha-queue.buzz   merge what validation run RUN uploads onto MAIN
+//	                                                       (DISPATCH; COMMITTER and APP with the queue app)
 //
 // The step is an environment variable because `magus buzz` passes a script no
 // arguments; every input is one too. The decisions (which changes the matrix holds,
@@ -25,8 +26,8 @@ import "std";
 
 import "assert";
 
-// main's workflows the apply step starts after a merge, since a merge made with the
-// job's Actions token starts none.
+// main's workflows the apply step starts after a merge the queue made with the job's
+// Actions token, which starts none. A merge GitHub's auto-merge made starts them itself.
 final DISPATCH = ["ci.yaml", "cd.yaml", "queue.yaml"];
 
 fun env(name: str) > str { return os\env(name) ?? ""; }
@@ -94,22 +95,54 @@ export fun validateArgs(dir: str, change: str) > [str] {
 // which GitHub limits to 1,000 an hour per repository. The regeneration is main's own,
 // run in magus's sandbox on exactly the projects that generate the files a merge needs
 // regenerated; the queue runs it only once the workspace proves the change touches none
-// of their code. The provider names who commits each update commit the queue pushes.
-export fun applyArgs(run: str, repo: str) > [str] {
-    return ["queue", "apply", "--provider", "github", "--status-context", "magus/queue", "--interval", "15s",
-        "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`), "run:{repo}/runs/{run}"];
+// of their code. committer and app are the queue app's, from the workflow; empty, the
+// provider names who commits each update commit and the credential is the job's token.
+export fun applyArgs(run: str, repo: str, committer: str, app: str) > [str] {
+    final args = mut ["queue", "apply", "--provider", "github", "--status-context", "merge-queue", "--interval", "15s",
+        "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`)];
+    if (committer != "") {
+        args.append("--committer");
+        args.append(committer);
+    }
+    if (app != "") {
+        args.append("--app");
+        args.append(app);
+    }
+    args.append("run:{repo}/runs/{run}");
+    return args;
 }
 
-// tip reads the commit off `git ls-remote <remote> <ref>`; empty when the ref is absent.
-export fun tip(lsRemote: str) > str {
-    final line = lsRemote.trim().split("\n")[0];
-    return line.split("\t")[0];
+// dispatchFlag reads DISPATCH, which the workflow sets from whether it holds the queue
+// app's token. Anything but true or false is a workflow bug, never a default.
+export fun dispatchFlag(value: str) > bool !> any {
+    if (value == "true") {
+        return true;
+    }
+    if (value == "false") {
+        return false;
+    }
+    throw "queue: DISPATCH must be true or false; got \"" + value + "\"";
 }
 
-// dispatches names the workflows to start on main: all of them when its tip moved,
-// none when nothing merged.
-export fun dispatches(before: str, after: str) > [str] {
-    if (before == after) {
+// queueMerged reports whether apply's JSONL events record a merge the queue made itself,
+// one not marked by_provider.
+export fun queueMerged(events: str) > bool !> any {
+    foreach (line in events.split("\n")) {
+        if (!line.trim().startsWith("\{")) {
+            continue;
+        }
+        final e = serialize\jsonDecode(line);
+        if (e.q("kind").stringValue() == "merged" and !e.q("by_provider").booleanValue()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// dispatches names the workflows to start on main: all of them when the queue merged
+// something itself with a token whose merges start none (dispatch), none otherwise.
+export fun dispatches(queueMerged: bool, dispatch: bool) > [str] {
+    if (!queueMerged or !dispatch) {
         return [<str>];
     }
     return DISPATCH;
@@ -143,18 +176,14 @@ fun validate() > void !> any {
     proc\exec("magus", args: validateArgs(queueDir(), change: need("CHANGE")), opts: {});
 }
 
-fun mainTip(branch: str) > str !> any {
-    return tip(capture("git", args: ["ls-remote", "origin", "refs/heads/" + branch]));
-}
-
 fun apply() > void !> any {
     final branch = need("MAIN");
     final repo = need("GITHUB_REPOSITORY");
-    final args = applyArgs(need("RUN"), repo: repo);
-    final before = mainTip(branch);
+    final dispatch = dispatchFlag(env("DISPATCH"));
+    final args = applyArgs(need("RUN"), repo: repo, committer: env("COMMITTER"), app: env("APP"));
     final applied = proc\exec("magus", args: args, opts: {"allow_failure": true});
     // A failed apply still dispatches main's runs for whatever merged before it stopped.
-    foreach (workflow in dispatches(before, after: mainTip(branch))) {
+    foreach (workflow in dispatches(queueMerged(applied.stdout), dispatch: dispatch)) {
         proc\exec("gh", args: ["workflow", "run", workflow, "--repo", repo, "--ref", branch], opts: {});
     }
     if (!applied.ok) {
@@ -216,9 +245,31 @@ test "validation hooks see MERGEQUEUE_ONTO unexpanded and keep their caches priv
 }
 
 test "apply follows the validation run as its source and regenerates in the sandbox" {
-    assert\equal(applyArgs("99", repo: "o/r"), want: ["queue", "apply", "--provider", "github", "--status-context", "magus/queue",
+    assert\equal(applyArgs("99", repo: "o/r", committer: "", app: ""), want: ["queue", "apply", "--provider", "github", "--status-context", "merge-queue",
         "--interval", "15s",
         "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`), "run:o/r/runs/99"], message: "argv");
+}
+
+test "with the queue app, apply commits as its bot and checks the status is pinned to it" {
+    final args = applyArgs("99", repo: "o/r", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q");
+    assert\equal(args.len(), want: 15, message: "two flags more");
+    assert\equal(args[10], want: "--committer", message: "the committer flag");
+    assert\equal(args[11], want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "one argument, spaces and all");
+    assert\equal(args[12], want: "--app", message: "the app flag");
+    assert\equal(args[13], want: "q", message: "the app's slug");
+    assert\equal(args[14], want: "run:o/r/runs/99", message: "the source stays last");
+}
+
+test "DISPATCH is true or false and nothing else" {
+    assert\equal(dispatchFlag("true"), want: true, message: "the Actions token");
+    assert\equal(dispatchFlag("false"), want: false, message: "the queue app");
+    var refused = false;
+    try {
+        dispatchFlag("");
+    } catch (e) {
+        refused = true;
+    }
+    assert\equal(refused, want: true, message: "unset is a workflow bug, not a default");
 }
 
 test "plan args carry the depth and leave the affected sets to the workspace" {
@@ -229,12 +280,14 @@ test "plan args carry the depth and leave the affected sets to the workspace" {
     assert\equal(args.len(), want: 10, message: "argv length");
 }
 
-test "tip reads the commit off ls-remote" {
-    assert\equal(tip("abc123\trefs/heads/main\n"), want: "abc123", message: "one ref");
-    assert\equal(tip(""), want: "", message: "absent ref");
-}
-
-test "main's runs are dispatched only when its tip moved" {
-    assert\equal(dispatches("a", after: "a").len(), want: 0, message: "nothing merged");
-    assert\equal(dispatches("a", after: "b"), want: ["ci.yaml", "cd.yaml", "queue.yaml"], message: "something merged");
+test "main's runs are dispatched only when the queue merged something itself" {
+    final github = `{"schema":"mergequeue.event/v1","kind":"merged","change":"4","commit":"abc","by_provider":true}`;
+    final queue = `{"schema":"mergequeue.event/v1","kind":"merged","change":"5","commit":"def"}`;
+    final waiting = `{"schema":"mergequeue.event/v1","kind":"waiting","change":"6","reason":"r"}`;
+    assert\equal(queueMerged(waiting + "\n"), want: false, message: "nothing merged");
+    assert\equal(queueMerged(github + "\n" + waiting + "\n"), want: false, message: "GitHub's auto-merge started main's runs itself");
+    assert\equal(queueMerged(github + "\n" + queue + "\n"), want: true, message: "the queue's own merge started none");
+    assert\equal(dispatches(false, dispatch: true).len(), want: 0, message: "no dispatch");
+    assert\equal(dispatches(true, dispatch: true), want: ["ci.yaml", "cd.yaml", "queue.yaml"], message: "every workflow of main");
+    assert\equal(dispatches(true, dispatch: false).len(), want: 0, message: "the app's merges started them themselves");
 }
