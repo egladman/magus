@@ -163,17 +163,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **The GitHub-hosted 4-core hard-code is removed.** `runtime.NumCPU()` reports the
-  standard runner's real 4 vCPUs accurately, so nothing was gained by overriding it,
-  and a larger runner now gets its real core count instead of being clamped to 4.
-  magus reads no environment variable to guess it is running in CI, or anywhere else:
-  the same command behaves the same everywhere, and `concurrency_profile` stays
-  `balanced` (`min(cores, 8)`) unless something explicitly asks otherwise.
-- **`aggressive` now claims memory, not just cores.** The machine budget's memory
-  reservation follows `concurrency_profile` the same way its width does: `balanced`
-  and `conservative` still reserve a quarter of memory for the OS and everything else
-  sharing the machine, but `aggressive` takes every usable megabyte down to a fixed
-  512 MiB floor for the kernel and its page cache, no percentage held back.
+- **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
+  count. magus reads no environment variable to guess it runs in CI, so the same command
+  behaves the same everywhere, and `concurrency_profile` stays `balanced`
+  (`min(cores, 8)`) unless something asks otherwise.
+- **`aggressive` now claims memory, not just cores.** `balanced` and `conservative`
+  still reserve a quarter of memory for everything else on the machine; `aggressive`
+  takes every usable megabyte down to a fixed 512 MiB floor for the kernel.
 - **CI asks for the whole machine explicitly.** Every `magus` invocation in this
   repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
   target now passes `--concurrency-profile aggressive` on the command line, the same
