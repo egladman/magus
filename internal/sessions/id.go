@@ -10,12 +10,12 @@ import (
 	"github.com/egladman/magus/internal/journal"
 )
 
-// NewID mints a session id for a producer that has no invocation id to reuse.
+// NewID mints an invocation id for a producer that has no journal invocation id to reuse.
 //
-// A producer that HAS one must not call this. The invocation id is what joins a session
-// fact back to the execution journal that produced it, so [FactHandler] uses the id off
-// the event, and only the attention producers (each its own short-lived process, with
-// no run to join to) mint here.
+// A producer that HAS one must not call this. The journal's id is what joins a fact back
+// to the execution journal that produced it, so [FactHandler] uses the id off the event,
+// and only the attention producers (each its own short-lived process, with no run to
+// join to) mint here.
 //
 // It is [journal.NewInvocationID] plus a per-process suffix, and the suffix is the whole
 // reason this function exists. That id is a millisecond stamp and a counter that resets
@@ -23,11 +23,11 @@ import (
 // the same first id. Attention producers hit exactly that case: `magus session notify` fires
 // from an agent hook, several hosts can fire at once, and each writes with its counter
 // at 1. A collision is not a lost write ([Writer.resume] continues the numbering
-// already in the file), but the two invocations then share one session, and the store
-// says one command did what two did.
+// already in the file), but the two processes then share one invocation id, and the
+// store says one command did what two did.
 //
-// The result satisfies the session-id rule [Open] enforces (alphanumeric with `-` and `_`),
-// because it names the session file.
+// The result satisfies the rule [ValidID] enforces (alphanumeric with `-` and `_`),
+// because it names the invocation's file.
 func NewID() string {
 	return journal.NewInvocationID() + "-" + processSuffix()
 }

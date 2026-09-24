@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-var rejectAll = func(string) bool { return false }
+var rejectAll = func(string) (string, bool) { return "", false }
 
 // wireStatus is the AIP-193 HTTP/1.1+JSON body, decoded the way a client would.
 type wireStatus struct {

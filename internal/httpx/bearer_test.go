@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 func TestBearerGuard(t *testing.T) {
@@ -121,12 +123,29 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 // returns false denies access regardless of the presented token.
 func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 	t.Parallel()
-	reject := func(string) bool { return false }
+	reject := func(string) (string, bool) { return "", false }
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
 	BearerGuard(rpcerr.FormatJSON, reject, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+// The guard puts the credential it verified and the rpc entry point on the context once, so
+// every record made under the request is stamped from there and no handler copies either.
+func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
+	t.Parallel()
+	named := func(presented string) (string, bool) { return "console-1", presented == "good" }
+	var seen types.Origin
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = trail.StampOrigin(r.Context(), types.Origin{})
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
+	req.Header.Set("Authorization", "Bearer good")
+	BearerGuard(rpcerr.FormatJSON, named, next).ServeHTTP(httptest.NewRecorder(), req)
+	assert.Equal(t, "console-1", seen.Credential)
+	assert.Equal(t, types.EntryPointRPC, seen.EntryPoint)
+	assert.Empty(t, trail.CredentialFromContext(t.Context()), "no guard, no credential")
 }
 
 func TestBearerToken(t *testing.T) {

@@ -313,7 +313,7 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	path, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	// A fixed verifier standing in for auth.VerifyMCPBearer: accept exactly "good".
-	guarded := httpx.BearerGuard(rpcerr.FormatConnect, func(presented string) bool { return presented == "good" }, h)
+	guarded := httpx.BearerGuard(rpcerr.FormatConnect, func(presented string) (string, bool) { return "test", presented == "good" }, h)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
 
@@ -358,9 +358,11 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	connSecret, _, err := store.Create("mcp-client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	// Sanity: the connector token IS a valid data-surface credential...
-	require.True(t, auth.VerifyMCPBearer(connSecret))
+	_, ok := auth.VerifyMCPBearer(connSecret)
+	require.True(t, ok)
 	// ...but never an operator credential.
-	require.False(t, auth.VerifyCLIBearer(connSecret))
+	_, ok = auth.VerifyCLIBearer(connSecret)
+	require.False(t, ok)
 
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	srv := httptest.NewServer(httpx.BearerGuard(rpcerr.FormatConnect, auth.VerifyCLIBearer, h))
@@ -453,9 +455,12 @@ func TestCreateTokenMintsAConsoleTokenThatCannotReachMCP(t *testing.T) {
 	assert.NotContains(t, resp.Msg.GetToken().GetIdentifier(), secret,
 		"the wire handle is a fingerprint, never the secret")
 
-	assert.True(t, auth.VerifyConsoleBearer(secret), "a console token must open the console")
-	assert.False(t, auth.VerifyMCPBearer(secret), "a console token must be refused at /mcp")
+	assert.True(t, accepted(auth.VerifyConsoleBearer(secret)), "a console token must open the console")
+	assert.False(t, accepted(auth.VerifyMCPBearer(secret)), "a console token must be refused at /mcp")
 }
+
+// accepted drops a verifier's credential name, for an assertion about admission alone.
+func accepted(_ string, ok bool) bool { return ok }
 
 // TestCreateTokenRequiresAndClampsExpiry pins the two halves of the TTL rule a
 // browser-minted token must obey: a nil, zero, or past expire_time is refused (it would
@@ -509,7 +514,7 @@ func TestCreateTokenMintsAViewerThatCannotWrite(t *testing.T) {
 	require.NoError(t, err)
 	secret := resp.Msg.GetSecret()
 
-	assert.True(t, auth.VerifyConsoleReadBearer(secret), "a viewer must open the console read surface")
-	assert.False(t, auth.VerifyConsoleBearer(secret), "a viewer must be refused by the write guard")
-	assert.False(t, auth.VerifyMCPBearer(secret), "a viewer must be refused at /mcp")
+	assert.True(t, accepted(auth.VerifyConsoleReadBearer(secret)), "a viewer must open the console read surface")
+	assert.False(t, accepted(auth.VerifyConsoleBearer(secret)), "a viewer must be refused by the write guard")
+	assert.False(t, accepted(auth.VerifyMCPBearer(secret)), "a viewer must be refused at /mcp")
 }

@@ -49,7 +49,7 @@
 // carries no verdict on no surface. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 16
+// magus-guard-template: 17
 
 // EVERY call that can fail is caught, matching the templates beside it and the
 // missing `set -e` in the sh copy. A hook that can fail is a hook that can break the

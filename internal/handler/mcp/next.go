@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // nextFilter grades a result's breadcrumbs for the acting role and journals what
@@ -36,7 +37,11 @@ func (f nextFilter) served(next []hint.Next) []hint.Next {
 
 // role reads the acting job's row off this checkout's job store.
 func (f nextFilter) role() (hint.Role, []string) {
-	id := job.ActingLease(f.cacheDir)
+	// A binding that cannot be read serves the worker's narrower set.
+	id, _, err := job.ActingLease(f.cacheDir, trail.LeaseFromEnv())
+	if err != nil {
+		return hint.RoleWorker, nil
+	}
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

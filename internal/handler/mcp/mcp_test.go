@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +49,7 @@ func callRequest(name string, args map[string]any) mcplib.CallToolRequest {
 func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Parallel()
 
-	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} }
+	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
@@ -105,8 +106,8 @@ func TestWrapCapturesExchange(t *testing.T) {
 	dir := t.TempDir()
 
 	// The session User-Agent comes off originFn and is recorded on the event.
-	originFn := func(context.Context) origin.Origin {
-		return origin.Origin{Agent: "test-agent", UserAgent: "claude-code/1.2.3"}
+	originFn := func(context.Context) origin.Client {
+		return origin.Client{Name: "test-agent", UserAgent: "claude-code/1.2.3"}
 	}
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
@@ -123,7 +124,8 @@ func TestWrapCapturesExchange(t *testing.T) {
 	ev := events[0]
 
 	assert.Equal(t, trail.KindMCPToolCall, ev.Kind)
-	assert.Equal(t, "test-agent", ev.Actor)
+	assert.Equal(t, "test-agent", ev.Host, "the MCP client's own name is its host label")
+	assert.Equal(t, types.EntryPointMCP, ev.EntryPoint)
 	assert.Equal(t, "claude-code/1.2.3", ev.UserAgent, "the session User-Agent is recorded on the event")
 	assert.Equal(t, "magus_query", ev.Action)
 	assert.Equal(t, trail.OutcomeOK, ev.Outcome)
@@ -148,7 +150,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	// metric) must record it as error, not ok: the regression the review caught.
 	dir := t.TempDir()
 	tel := &fakeTel{}
-	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "a"} }
+	originFn := func(context.Context) origin.Client { return origin.Client{Name: "a"} }
 	h := wrap(quietLogger(), originFn, dir, noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
@@ -171,7 +173,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	failure := errors.New("[MGS3016] workspace /repo failed to load")
 	opts := Options{Unavailable: func() error { return failure }}
 	require.NoError(t, opts.validate(), "Unavailable stands in for Magus")
-	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Origin { return origin.Origin{} }, "")
+	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Client { return origin.Client{} }, "")
 
 	tools := srv.ListTools()
 	require.Len(t, tools, len(Registry))
@@ -430,7 +432,7 @@ func noSecrets(ctx context.Context) context.Context { return ctx }
 // wrapWithResolver builds a handler whose trail writes redact against res.
 func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn handlerFn) server.ToolHandlerFunc {
 	t.Helper()
-	return wrap(quietLogger(), func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} },
+	return wrap(quietLogger(), func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} },
 		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
 		nil, fn)
 }

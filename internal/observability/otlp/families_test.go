@@ -100,7 +100,7 @@ func TestAgentFamiliesCollect(t *testing.T) {
 	p.RecordLeaseRegistration(ctx, "diverged")
 	p.RecordAttentionDisposition(ctx, 42, "warning")
 	p.RecordReviewRemark(ctx, "agent")
-	p.RecordReviewRemark(ctx, "human")
+	p.RecordReviewRemark(ctx, "unattributed")
 	p.RecordReviewPublish(ctx, "comment", true)
 
 	rm, err := coll.Collect(ctx)

@@ -191,7 +191,8 @@ func attentionDispose(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.SessionStart{
+	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.InvocationStart{
+		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Version:   version,
 	})
@@ -210,11 +211,11 @@ func attentionDispose(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, req)
 	}
-	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from session %s\n",
+	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from invocation %s\n",
 		req.ID,
 		orDash(formatDur(time.Since(time.UnixMilli(req.OpenedMs)))),
 		orDash(req.Source),
-		req.Session)
+		req.Invocation)
 	fmt.Fprintf(os.Stdout, "  %s\n", attentionOneLine(req.Message))
 	if reason != "" {
 		fmt.Fprintf(os.Stdout, "  reason: %s\n", reason)
@@ -276,18 +277,24 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		return err
 	}
 
-	open := sessions.AttentionOpen{
-		Outcome:  string(ev.Outcome),
-		Severity: string(ev.Severity),
-		Source:   sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
-		Where:    attentionWhere(ev.Where),
-		// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so
-		// the queue can say WHOSE work is blocked without the row's identity moving when a
-		// fleet re-partitions.
-		Lease:   trail.LeaseFromEnv(),
-		Message: ev.Message,
+	// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so the
+	// queue can say WHOSE work is blocked without the row's identity moving when a fleet
+	// re-partitions.
+	lease, leaseFrom, err := checkoutLease(root, trail.LeaseFromEnv())
+	if err != nil {
+		return err
 	}
-	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.SessionStart{
+	open := sessions.AttentionOpen{
+		Outcome:   string(ev.Outcome),
+		Severity:  string(ev.Severity),
+		Source:    sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
+		Where:     attentionWhere(ev.Where),
+		Lease:     lease,
+		LeaseFrom: leaseFrom,
+		Message:   ev.Message,
+	}
+	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
+		Origin:    localOrigin(types.EntryPointHook),
 		Workspace: root,
 		Version:   version,
 	})

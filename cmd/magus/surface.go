@@ -50,7 +50,7 @@ var subcommands = []subcommand{
 
 	{Group: groupChanges, Name: "diff", Short: "read uncommitted changes in the order they deserve attention, generated folded"},
 	{Group: groupChanges, Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)"},
-	{Group: groupChanges, Name: "session", Short: "what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)"},
+	{Group: groupChanges, Name: "session", Short: "what magus invocations did and what agents are blocked on: humans read (ls, attention) and dispose; hosts write (notify)"},
 	{Group: groupChanges, Name: "memory", Short: "durable cross-session project memory (ls, get, put, delete, verify)"},
 	{Group: groupChanges, Name: "job", Short: "declare and act on jobs (fork, exec, exit, wait, run)"},
 	{Group: groupChanges, Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)"},

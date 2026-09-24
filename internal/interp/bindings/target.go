@@ -284,17 +284,15 @@ func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action stri
 	if base == "" {
 		return
 	}
-	// "magusfile" when no agent triggered this run: the declaration is still worth
-	// recording, and attributing it to a person or an agent magus cannot identify would
-	// be worse than naming the file that actually declared it.
-	actor, userAgent := "magusfile", ""
-	if o, ok := origin.FromContext(ctx); ok && o.Agent != "" {
-		actor, userAgent = o.Agent, o.UserAgent
+	// Append stamps the origin from ctx: an MCP client that triggered this run is its Host;
+	// any other run is recorded with the entry point and OS account alone.
+	var userAgent string
+	if o, ok := origin.FromContext(ctx); ok {
+		userAgent = o.UserAgent
 	}
 	trail.Append(ctx, base, trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindCredentialGrant,
-		Actor:     actor,
 		UserAgent: userAgent,
 		Action:    action,
 		Outcome:   trail.OutcomeOK,

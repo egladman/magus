@@ -213,7 +213,7 @@ Each target's result line mints an output reference id (`out1a2b3c`).
    `magus query output out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
    target to see the error again.{{else}} Never re-run just to see the error again.{{end}}
 2. With no ref in hand, the ref is in the run that minted it: every `magus run`
-   prints one per target, and `magus session` lists recent sessions with the
+   prints one per target, and `magus session` lists recent invocations with the
    targets they ran{{if .Full}}. There is no tool that fetches "the latest log for a
    project", because a second door onto the same bytes only makes an agent holding a
    ref pick between two{{end}}.

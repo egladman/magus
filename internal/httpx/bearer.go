@@ -9,14 +9,16 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
-// verifier decides whether a presented bearer token is accepted. It is the one
-// knob that varies across loopback endpoints: the daemon passes auth.VerifyMCPBearer
-// (cli token or a non-expired named connector token), while the ephemeral live
-// and blob servers pass SingleTokenVerifier over their per-run token.
-type verifier func(presented string) bool
+// verifier decides whether a presented bearer token is accepted and, when it is, names
+// the credential it matched. It is the one knob that varies across loopback endpoints:
+// the daemon passes auth.VerifyMCPBearer (cli token or a non-expired named connector
+// token), while the ephemeral live and blob servers pass SingleTokenVerifier over their
+// per-run token.
+type verifier func(presented string) (credential string, ok bool)
 
 // BearerGuard rejects any request whose token fails verify. The token is read
 // ONLY from the `Authorization: Bearer <token>` header. This is the default and
@@ -30,7 +32,11 @@ type verifier func(presented string) bool
 // verify is called on every request, so a rotate, create, or revoke takes effect
 // without restarting the server; it must fail closed (return false) on any error.
 // A refusal is a 401 in format: MGS9011 when no token was presented, MGS9001 when
-// one was, which never says whether it was wrong, expired, or revoked.
+// one was, which never says whether it was wrong, expired, or revoked. An accepted
+// request reaches next with the credential's name and the rpc entry point on its
+// context (trail.CredentialFromContext, trail.EntryPointFromContext), which every record
+// made under it is stamped from. A mount that is not the RPC surface restamps its own
+// entry point inside.
 func BearerGuard(format rpcerr.Format, verify verifier, next http.Handler) http.Handler {
 	return guard(format, verify, headerToken, next)
 }
@@ -54,11 +60,13 @@ func guard(format rpcerr.Format, verify verifier, extract func(*http.Request) (s
 			format.Write(w, r, bearerMissing)
 			return
 		}
-		if !verify(presented) {
+		credential, ok := verify(presented)
+		if !ok {
 			format.Write(w, r, bearerRejected)
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -84,18 +92,18 @@ var (
 // so the comparison reveals neither the secret's bytes nor its length. (Hashing
 // an attacker-controlled input is itself length-dependent, but that timing
 // channel is independent of the secret.) A load error from expected fails closed.
-// The ephemeral live and blob servers use this with their per-run token; the
-// daemon uses a richer, per-surface verifier (auth.VerifyMCPBearer or
+// The ephemeral live and blob servers use this with their per-run token, which has
+// no name; the daemon uses a richer, per-surface verifier (auth.VerifyMCPBearer or
 // auth.VerifyConsoleBearer) instead.
 func SingleTokenVerifier(expected func() (string, error)) verifier {
-	return func(presented string) bool {
+	return func(presented string) (string, bool) {
 		want, err := expected()
 		if err != nil {
-			return false
+			return "", false
 		}
 		got := sha256.Sum256([]byte(presented))
 		wantSum := sha256.Sum256([]byte(want))
-		return subtle.ConstantTimeCompare(got[:], wantSum[:]) == 1
+		return "", subtle.ConstantTimeCompare(got[:], wantSum[:]) == 1
 	}
 }
 

@@ -284,19 +284,19 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			diffRoot := opts.Magus.Root()
 			diffH := diffhandler.NewHandler(svc, diffSessions, diffRoot, log)
-			diffOpts := diffhandler.SessionOptions{
+			diffOpts := diffhandler.ReviewOptions{
 				Sessions:  diffSessions,
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
 				Telemetry: opts.Magus.Telemetry(),
 			}
-			diffSessionH := diffhandler.NewSessionHandler(diffOpts, log)
-			diffReviewH := diffhandler.NewReviewHandler(svc, log)
-			// The session store lets the review response say which threads the reader has not
+			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
+			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
+			// The review store lets the lookup response say which threads the reader has not
 			// seen before; without it the conversation still serves, just unmarked.
-			diffReviewH.Sessions = diffSessions
-			diffReviewH.Root = opts.Magus.Root()
+			diffLookupH.Sessions = diffSessions
+			diffLookupH.Root = opts.Magus.Root()
 			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
 			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
@@ -329,14 +329,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
 			// from /api/v1/diff/patch because it is far more expensive; see Handler.
 			bridgeMux.Handle("/api/v1/diff", f.cors(diffH))
-			// The human's half of a paired review. Reachable only from the console and the
-			// CLI, which is what lets it stamp every write as human without trusting the
-			// payload: an agent reaches the session through MCP, never through here.
-			bridgeMux.Handle("/api/v1/diff/session", f.cors(diffSessionH))
+			// The review route's half of a paired review. Reachable only from the console and the
+			// CLI, which is what lets it stamp every write as unattributed without trusting the
+			// payload: an agent reaches the review through MCP, never through here.
+			bridgeMux.Handle("/api/v1/diff/session", f.cors(diffReviewH))
 			// Which review this branch has open, and what colleagues have already said on it.
 			// Its own route because it crosses the network to a forge: a reader must never wait
 			// on somebody else's outage to see their own diff.
-			bridgeMux.Handle("/api/v1/diff/review", f.cors(diffReviewH))
+			bridgeMux.Handle("/api/v1/diff/review", f.cors(diffLookupH))
 			// The other branches changing these files. Its own route because it forks per branch:
 			// a reader must not wait on it to see their own diff, and it reads only what has
 			// already been fetched rather than going to the network for more.
@@ -577,11 +577,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// The audit interceptor classifies every RPC on this service by its leading verb
 			// (internal/handler/trailrpc) and records the mutating ones (CreateToken and
 			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
-			// audited. The actor is stamped "operator" from the mount tier (this surface is
-			// cli-guarded), never read from a caller-supplied field. Reads (ListTokens) are not
-			// recorded. See internal/handler/trailrpc for the pattern and the arch-test ratchet
-			// that keeps it honest.
-			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
+			// audited. The record names the credential the bearer guard verified, never a
+			// caller-supplied field. Reads (ListTokens) are not recorded. See
+			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it
+			// honest.
+			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
 			f.server.Handle(tokenPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyCLIBearer, tokenHandler))
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
@@ -597,9 +597,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// trusted HTML.
 			// Audit every memory RPC to the trail, READS included (WithAuditReads): unlike the token
 			// service, inspecting the agent's own working notes is itself worth recording, so List/Get
-			// are audited alongside the edits. The actor is stamped "operator" from the mount tier, never
-			// caller-supplied. The agent/MCP door onto the same files is audited separately.
-			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindMemory, trailrpc.WithAuditReads()))
+			// are audited alongside the edits, each naming the credential that made it. The agent/MCP
+			// door onto the same files is audited separately.
+			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindMemory, trailrpc.WithAuditReads()))
 			memoryPath, memoryHandler := memoryv1alpha1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit, connectReadMax)
 			f.server.Handle(memoryPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleBearer, memoryHandler))
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
@@ -617,7 +617,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// listener behind the standard bearer guard like the memory service beside it.
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
-			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindNotes, trailrpc.WithAuditReads()))
+			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
 			f.server.Handle(notesPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, notesHandler))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
@@ -705,7 +705,7 @@ type frame struct {
 // siteGuarded is the chain every console data route mounts behind. CORS sits between
 // rebind and bearer so a tokenless OPTIONS preflight is answered, while a hosted-PWA
 // Origin still clears rebind first. format is the mounted handler's own protocol.
-func (f frame) siteGuarded(format rpcerr.Format, verify func(string) bool, h http.Handler) http.Handler {
+func (f frame) siteGuarded(format rpcerr.Format, verify func(string) (string, bool), h http.Handler) http.Handler {
 	return httpx.GuardRebind(format, f.siteAllowed, f.cors(httpx.BearerGuard(format, verify, h)))
 }
 

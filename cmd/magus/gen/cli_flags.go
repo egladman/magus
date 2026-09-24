@@ -561,6 +561,8 @@ const (
 	FlagSessionLimit = "limit"
 	// session: --since
 	FlagSessionSince = "since"
+	// shell: --agent
+	FlagShellAgent = "agent"
 	// shell: --agent-name
 	FlagShellAgentName = "agent-name"
 	// shell: --event
@@ -1192,6 +1194,7 @@ type ShellFlags struct {
 	AgentName          string // --agent-name
 	Transport          string // --transport
 	Session            string // --session
+	Agent              string // --agent
 	Transcript         string // --transcript
 	Event              string // --event
 	ObservesSkillLoads bool   // --observes-skill-loads
@@ -1203,10 +1206,11 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	var f ShellFlags
 	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
+	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
 	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down")
@@ -1538,8 +1542,8 @@ type SessionFlags struct {
 func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
 	fs.BoolVar(&f.Brief, FlagSessionBrief, false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
-	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many sessions (0 for all)")
-	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many invocations (0 for all)")
+	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f
 }
 

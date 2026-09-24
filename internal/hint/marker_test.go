@@ -187,10 +187,10 @@ func TestAdvisoryGateRaceCostsBytesNotVerdicts(t *testing.T) {
 	assert.LessOrEqual(t, fulls, workers, "the race can duplicate the full text, which is the safe direction")
 }
 
-// TestSessionFromTerminalPrefersTheWindow pins what a person's session IS. They pass no
-// --session, and keying them on a clock made an advisory go quiet on a second deliberate
-// look and come back unbidden the next morning. A terminal window is what they mean.
-func TestSessionFromTerminalPrefersTheWindow(t *testing.T) {
+// TestWindowFromTerminalPrefersTheWindow pins what a terminal caller's key IS. It passes no
+// --session, and keying it on a clock made an advisory go quiet on a second deliberate
+// look and come back unbidden the next morning. A terminal window is what it means.
+func TestWindowFromTerminalPrefersTheWindow(t *testing.T) {
 	t.Parallel()
 
 	env := func(vals map[string]string) func(string) string {
@@ -199,28 +199,28 @@ func TestSessionFromTerminalPrefersTheWindow(t *testing.T) {
 
 	// The window outlives a shell restart inside it, so it beats the pid.
 	assert.Equal(t, "tty:abc-123",
-		SessionFromTerminal(env(map[string]string{"TERM_SESSION_ID": "abc-123"}), 4242, true))
+		WindowFromTerminal(env(map[string]string{"TERM_SESSION_ID": "abc-123"}), 4242, true))
 	assert.Equal(t, "tty:0x1400003",
-		SessionFromTerminal(env(map[string]string{"WINDOWID": "0x1400003"}), 4242, true))
+		WindowFromTerminal(env(map[string]string{"WINDOWID": "0x1400003"}), 4242, true))
 
 	// No window variable: the invoking shell is the next best thing.
-	assert.Equal(t, "ppid:4242", SessionFromTerminal(env(nil), 4242, true))
+	assert.Equal(t, "ppid:4242", WindowFromTerminal(env(nil), 4242, true))
 
 	// Whitespace is an unset variable spelled differently.
 	assert.Equal(t, "ppid:4242",
-		SessionFromTerminal(env(map[string]string{"TERM_SESSION_ID": "  "}), 4242, true))
+		WindowFromTerminal(env(map[string]string{"TERM_SESSION_ID": "  "}), 4242, true))
 }
 
-// TestSessionFromTerminalAbstainsWithoutATerminal keeps the derivation off the pipeline
-// and CI path. There the caller is not a person, nothing distinguishes one run from the
-// next, and anonWindow is the honest fallback rather than a pid that changes every run.
-func TestSessionFromTerminalAbstainsWithoutATerminal(t *testing.T) {
+// TestWindowFromTerminalAbstainsWithoutATerminal keeps the derivation off the pipeline
+// and CI path. There nothing distinguishes one run from the next, and anonWindow is the
+// honest fallback rather than a pid that changes every run.
+func TestWindowFromTerminalAbstainsWithoutATerminal(t *testing.T) {
 	t.Parallel()
 	env := func(string) string { return "session-from-env" }
 
-	assert.Empty(t, SessionFromTerminal(env, 4242, false), "no terminal, no derived session")
+	assert.Empty(t, WindowFromTerminal(env, 4242, false), "no terminal, no window")
 	// A reparented process (ppid 1) names nothing a later run would share.
-	assert.Empty(t, SessionFromTerminal(func(string) string { return "" }, 1, true))
+	assert.Empty(t, WindowFromTerminal(func(string) string { return "" }, 1, true))
 }
 
 // TestDerivedSessionsDoNotCollide is the property the whole change rests on: two terminal

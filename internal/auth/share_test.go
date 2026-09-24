@@ -82,7 +82,7 @@ func TestVerifyMCPBearerRejectsShareToken(t *testing.T) {
 	if _, err := Save(cli); err != nil {
 		t.Fatalf("Save cli token: %v", err)
 	}
-	if !VerifyMCPBearer(cli) {
+	if !accepted(VerifyMCPBearer(cli)) {
 		t.Fatalf("VerifyMCPBearer rejected the cli token")
 	}
 
@@ -90,7 +90,7 @@ func TestVerifyMCPBearerRejectsShareToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintShareToken: %v", err)
 	}
-	if VerifyMCPBearer(shareSecret) {
+	if accepted(VerifyMCPBearer(shareSecret)) {
 		t.Fatalf("VerifyMCPBearer accepted a share token; the read scope must never reach /mcp or a mutating route")
 	}
 }

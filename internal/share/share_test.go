@@ -458,11 +458,11 @@ func waitClosed(t *testing.T, url string) {
 	t.Fatalf("listener at %s did not close", url)
 }
 
-// serveGuarded drives a sessionGuard.admit-wrapped handler with a synthetic
+// serveGuarded drives a linkGuard.admit-wrapped handler with a synthetic
 // RemoteAddr, returning the response status and body. It bypasses the real listener so
 // a test can present arbitrary remote hosts (impossible over a single loopback IP)
 // and thereby exercise the device-binding reject path end to end.
-func serveGuarded(g *sessionGuard, remoteAddr string) (int, string) {
+func serveGuarded(g *linkGuard, remoteAddr string) (int, string) {
 	h := g.admit(rpcerr.FormatJSON, okHandler)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
 	r.RemoteAddr = remoteAddr
@@ -481,7 +481,7 @@ func serveGuarded(g *sessionGuard, remoteAddr string) (int, string) {
 // a fresh guard (what a supersede builds) starts unbound so a new first device binds.
 func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 	m := NewManager(context.Background(), time.Minute, nil)
-	g := newSessionGuard(m)
+	g := newLinkGuard(m)
 
 	// First device (host A, varying ephemeral port) binds and is served.
 	if code, _ := serveGuarded(g, "10.0.0.5:51000"); code != http.StatusOK {
@@ -521,7 +521,7 @@ func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 
 	// Supersede builds a fresh guard: it starts unbound, so a brand-new first device
 	// (even the one previously rejected) binds and is served.
-	g2 := newSessionGuard(m)
+	g2 := newLinkGuard(m)
 	if code, _ := serveGuarded(g2, "10.0.0.9:40001"); code != http.StatusOK {
 		t.Fatalf("new share, new first device: got %d, want 200", code)
 	}
@@ -537,7 +537,7 @@ func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 // boundHost mutation is what the lock protects.
 func TestBindDeviceRaceSingleWinner(t *testing.T) {
 	m := NewManager(context.Background(), time.Minute, nil)
-	g := newSessionGuard(m)
+	g := newLinkGuard(m)
 
 	const n = 64
 	var start sync.WaitGroup

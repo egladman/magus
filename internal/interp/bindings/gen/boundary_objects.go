@@ -1343,10 +1343,15 @@ func ObjectJobUnattributedWrite(v types.JobUnattributedWrite) vm.Value {
 	return out
 }
 
-func ObjectJobActor(v types.JobActor) vm.Value {
+func ObjectOrigin(v types.Origin) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("user", vm.StrValue(v.User))
+	out.MapSet("uid", vm.StrValue(v.UID))
+	out.MapSet("entryPoint", vm.StrValue(string(v.EntryPoint)))
 	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("agent", vm.StrValue(v.Agent))
+	out.MapSet("credential", vm.StrValue(v.Credential))
 	return out
 }
 
@@ -1515,7 +1520,7 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("writeProof", vm.StrValue(string(v.WriteProof)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
-	out.MapSet("registeredBy", ObjectJobActor(v.RegisteredBy))
+	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))

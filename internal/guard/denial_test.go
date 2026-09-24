@@ -30,7 +30,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	judge := func(host, transport, input string) string {
-		v := Judge(ctx, testDependencies(), Request{Input: input, Host: host, Transport: transport})
+		v := Judge(ctx, testDependencies(), Request{Input: input, Host: host, Form: transport})
 		require.Equal(t, "deny", v.Decision, "%s/%s", host, transport)
 		return v.Reason
 	}
@@ -66,36 +66,36 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 	spawn := head + `"tool_name":"Task","tool_input":{"description":"Audit the store","prompt":"Audit internal/job",` +
 		`"subagent_type":"general-purpose"},"tool_use_id":"toolu_02"}`
 	judge := func(transport, event string) Verdict {
-		return Judge(ctx, testDependencies(), Request{Input: event, Host: "claude-code", Transport: transport, ObservesSkillLoads: true})
+		return Judge(ctx, testDependencies(), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
 	}
 
 	require.Equal(t, "deny", judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")
 	require.Equal(t, "pass", judge("buzz", skill).Decision)
 	assert.NotEqual(t, "deny", judge("sh", spawn).Decision, "the load reported by the Buzz form clears the sh form's spawn")
 
-	codex := hookAttribution{Host: "codex", Transport: "sh", Session: session}
-	assert.NotEqual(t, hookAttribution{Host: "claude-code", Session: session}.sessionKey(), codex.sessionKey(),
+	codex := hookAttribution{Host: "codex", Form: "sh", Session: session}
+	assert.NotEqual(t, hookAttribution{Host: "claude-code", Session: session}.factsKey(), codex.factsKey(),
 		"facts stay per host: another host presenting the same id has not read the brief")
-	assert.Equal(t, "codex/"+session, codex.sessionKey())
+	assert.Equal(t, "codex/"+session, codex.factsKey())
 }
 
 // TestCallerKeyEscapesTheDelimiter pins that the key cannot be forged by a part that
 // carries the delimiter: without escaping, host "a/b" in transport "c" and host "a" in
 // transport "b/c" would name the same caller.
 func TestCallerKeyEscapesTheDelimiter(t *testing.T) {
-	assert.Equal(t, "claude-code/sh/s1", hookAttribution{Host: "claude-code", Transport: "sh", Session: "s1"}.callerKey())
+	assert.Equal(t, "claude-code/sh/s1", hookAttribution{Host: "claude-code", Form: "sh", Session: "s1"}.callerKey())
 	assert.Equal(t, "claude-code//s1", hookAttribution{Host: "claude-code", Session: " s1 "}.callerKey(),
 		"a form that declares no transport is still keyed on host and session")
-	assert.Empty(t, hookAttribution{Host: "claude-code", Transport: "sh"}.callerKey(),
+	assert.Empty(t, hookAttribution{Host: "claude-code", Form: "sh"}.callerKey(),
 		"no session keys nothing, so the gate falls back to its anonymous window")
 
-	forged := hookAttribution{Host: "a/b", Transport: "c", Session: "s"}.callerKey()
-	honest := hookAttribution{Host: "a", Transport: "b/c", Session: "s"}.callerKey()
+	forged := hookAttribution{Host: "a/b", Form: "c", Session: "s"}.callerKey()
+	honest := hookAttribution{Host: "a", Form: "b/c", Session: "s"}.callerKey()
 	assert.NotEqual(t, forged, honest)
 	assert.Equal(t, "a%2Fb/c/s", forged)
-	assert.Equal(t, "a%2Fb/s", hookAttribution{Host: "a/b", Transport: "c", Session: "s"}.sessionKey())
+	assert.Equal(t, "a%2Fb/s", hookAttribution{Host: "a/b", Form: "c", Session: "s"}.factsKey())
 	assert.NotEqual(t,
-		hookAttribution{Host: "a%2Fb", Transport: "c", Session: "s"}.callerKey(), forged,
+		hookAttribution{Host: "a%2Fb", Form: "c", Session: "s"}.callerKey(), forged,
 		"an already escaped part does not collide with the raw delimiter")
 }
 

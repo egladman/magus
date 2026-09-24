@@ -51,7 +51,7 @@ func TestRecordCheckpointRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := hostCheckpoint()
 
-	stored, ok, err := RecordCheckpoint(dir, want, SessionStart{Workspace: "/repo"})
+	stored, ok, err := RecordCheckpoint(dir, want, InvocationStart{Workspace: "/repo"})
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, want, stored)
@@ -66,10 +66,10 @@ func TestLatestCheckpointsSeparateAPersonsBranches(t *testing.T) {
 	monday := personCheckpoint("/repo", "cache-dynamic-needs", "waiting on the review")
 	tuesday := personCheckpoint("/repo", "release-index", "half a manifest written")
 
-	_, ok, err := RecordCheckpoint(dir, monday, SessionStart{})
+	_, ok, err := RecordCheckpoint(dir, monday, InvocationStart{})
 	require.NoError(t, err)
 	require.True(t, ok)
-	_, ok, err = RecordCheckpoint(dir, tuesday, SessionStart{})
+	_, ok, err = RecordCheckpoint(dir, tuesday, InvocationStart{})
 	require.NoError(t, err)
 	require.True(t, ok, "a second branch is not a refile of the first")
 
@@ -84,9 +84,9 @@ func TestLatestCheckpointsSeparateWorktreesOnOneBranch(t *testing.T) {
 	here := personCheckpoint("/repo", "main", "mid-refactor")
 	there := personCheckpoint("/repo-review", "main", "reviewing a pull request")
 
-	_, _, err := RecordCheckpoint(dir, here, SessionStart{})
+	_, _, err := RecordCheckpoint(dir, here, InvocationStart{})
 	require.NoError(t, err)
-	_, ok, err := RecordCheckpoint(dir, there, SessionStart{})
+	_, ok, err := RecordCheckpoint(dir, there, InvocationStart{})
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -99,11 +99,11 @@ func TestRecordCheckpointSkipsAnUnchangedRefile(t *testing.T) {
 	dir := t.TempDir()
 	c := hostCheckpoint()
 
-	_, ok, err := RecordCheckpoint(dir, c, SessionStart{})
+	_, ok, err := RecordCheckpoint(dir, c, InvocationStart{})
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	_, ok, err = RecordCheckpoint(dir, c, SessionStart{})
+	_, ok, err = RecordCheckpoint(dir, c, InvocationStart{})
 	require.NoError(t, err)
 	assert.False(t, ok, "nothing about the work moved")
 	assert.Len(t, recorded(t, dir), 1)
@@ -117,9 +117,9 @@ func TestRecordCheckpointSupersedesRatherThanRewrites(t *testing.T) {
 	second.Tree.Revision = "cc76e76ef1e2d3c4b5a6978869574635241302ff"
 	second.Note = "test design skill committed"
 
-	_, _, err := RecordCheckpoint(dir, first, SessionStart{})
+	_, _, err := RecordCheckpoint(dir, first, InvocationStart{})
 	require.NoError(t, err)
-	_, ok, err := RecordCheckpoint(dir, second, SessionStart{})
+	_, ok, err := RecordCheckpoint(dir, second, InvocationStart{})
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, []Checkpoint{second}, recorded(t, dir), "one line of work, at its newest")
@@ -144,14 +144,14 @@ func TestRecordCheckpointAppendsToOneSessionFile(t *testing.T) {
 
 	for i, rev := range []string{"aaaa111122223333", "bbbb444455556666", "cccc777788889999"} {
 		c.Tree.Revision = rev
-		_, ok, err := RecordCheckpoint(dir, c, SessionStart{})
+		_, ok, err := RecordCheckpoint(dir, c, InvocationStart{})
 		require.NoError(t, err)
 		require.True(t, ok, "revision %d moved", i)
 	}
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
-	assert.Equal(t, 1, fold.Sessions, "three checkpoints, one session")
+	assert.Equal(t, 1, fold.Invocations, "three checkpoints, one file")
 	assert.Len(t, Summarize(fold), 1)
 }
 
@@ -161,9 +161,9 @@ func TestLatestCheckpointsReportOneThreadPerHostSession(t *testing.T) {
 	codex := hostCheckpoint()
 	claude := Checkpoint{Host: "claude", HostSession: "54023016-5d8b", Workspace: "/repo", Tree: types.VCSCheckpoint{Revision: "62660968c", Branch: "main"}}
 
-	_, _, err := RecordCheckpoint(dir, codex, SessionStart{})
+	_, _, err := RecordCheckpoint(dir, codex, InvocationStart{})
 	require.NoError(t, err)
-	_, _, err = RecordCheckpoint(dir, claude, SessionStart{})
+	_, _, err = RecordCheckpoint(dir, claude, InvocationStart{})
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, []Checkpoint{codex, claude}, recorded(t, dir))
@@ -177,7 +177,7 @@ func TestRecordCheckpointClampsANoteAndReportsTheStoredOne(t *testing.T) {
 	dir := t.TempDir()
 	c := personCheckpoint("/repo", "main", strings.Repeat("e", MaxMessageBytes+512))
 
-	stored, _, err := RecordCheckpoint(dir, c, SessionStart{})
+	stored, _, err := RecordCheckpoint(dir, c, InvocationStart{})
 	require.NoError(t, err)
 
 	want := strings.Repeat("e", MaxMessageBytes) + messageTruncated
@@ -189,7 +189,7 @@ func TestLatestCheckpointsIsEmptyWithoutAny(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{Command: "run build"})
+	w, err := Open(dir, "sess1", InvocationStart{Command: "run build"})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 

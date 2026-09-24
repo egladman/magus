@@ -107,7 +107,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : View or update magus configuration. See [**magus-config**(1)](magus-config.md).
 
 **session**
-: What sessions did and what they are blocked on: humans read and dispose, hosts write. See [**magus-session**(1)](magus-session.md).
+: What magus invocations did and what agents are blocked on: humans read and dispose, hosts write. See [**magus-session**(1)](magus-session.md).
 
 **memory**
 : Durable cross-session project memory. See [**magus-memory**(1)](magus-memory.md).

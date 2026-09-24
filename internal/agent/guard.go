@@ -155,7 +155,13 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the glue moved together: a config written for this version wires no HOST_EVENT_RAW, and
 // a copy that predates it then selects `null` on every MCP call, spawn and skill load, so
 // those surfaces stop being judged with nothing anywhere saying so.
-const GuardTemplateVersion = 16
+//
+// 17: the command and path glue forward the host's subagent id (HOST_AGENT_PATH, default
+// agent_id) as `magus shell --agent`. Both select one field out of the envelope, so the id
+// never reached magus: a subagent's shell command or edit was graded as its parent's, under
+// the parent's lease rather than the job it was spawned for. A copy that predates this keeps
+// grading every subagent call that way, and nothing in a verdict says whose lease it used.
+const GuardTemplateVersion = 17
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

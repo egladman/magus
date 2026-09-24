@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -167,19 +169,43 @@ func TestRecordAttentionOpenKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
 	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
 }
 
-// The store carries the lease, not just the rendering: the console reads these records too.
+// The store carries the lease and the source that answered it, not just the rendering: the
+// console reads these records too. The checkout's binding outranks the BAGGAGE claim, as it
+// does for every lease magus resolves.
 func TestRecordAttentionOpenStoresTheLease(t *testing.T) {
-	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	type answer struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	for name, tc := range map[string]struct {
+		claim, bound string
+		want         answer
+	}{
+		"the claim alone":                    {claim: "fleet/f3", want: answer{"fleet/f3", types.LeaseSourceEnv}},
+		"the binding alone":                  {bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceMarker}},
+		"the binding over a different claim": {claim: "fleet/f3", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := attentionTestRoot(t)
+			if tc.bound != "" {
+				cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+				require.NoError(t, err)
+				require.NoError(t, job.BindLease(cacheDir, tc.bound))
+			}
+			if tc.claim != "" {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			}
+			require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
-	open := sessions.AttentionQueue(fold)
-	require.Len(t, open, 1)
-	assert.Equal(t, "fleet/f3", open[0].Lease)
+			dir, err := sessions.Dir(root)
+			require.NoError(t, err)
+			fold, err := sessions.ReadAll(dir)
+			require.NoError(t, err)
+			open := sessions.AttentionQueue(fold)
+			require.Len(t, open, 1)
+			assert.Equal(t, tc.want, answer{open[0].Lease, open[0].LeaseFrom})
+		})
+	}
 }
 
 // An id that fails the rule attributes nothing rather than smuggling free text into a field the
