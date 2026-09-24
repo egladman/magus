@@ -26,7 +26,7 @@ func ReadEnd(pid, fd int) (Pipe, error) {
 // Writers returns every process this user can inspect that holds p's write end open.
 // Processes that hold only the read end are not writers.
 func (p Pipe) Writers() ([]int, error) {
-	entries, err := os.ReadDir("/proc")
+	entries, err := os.ReadDir(procRoot)
 	if err != nil {
 		return nil, fmt.Errorf("pipepeer: read /proc: %w", err)
 	}
@@ -46,7 +46,7 @@ func (p Pipe) Writers() ([]int, error) {
 // WrittenBy reports whether pid holds p's write end open right now. A process that has
 // exited, or that this user may not inspect, is not a writer.
 func (p Pipe) WrittenBy(pid int) bool {
-	dir := filepath.Join("/proc", strconv.Itoa(pid), "fd")
+	dir := procPath(pid, "fd")
 	fds, err := os.ReadDir(dir)
 	if err != nil {
 		return false
@@ -65,7 +65,7 @@ func (p Pipe) WrittenBy(pid int) bool {
 
 // Args returns pid's argument vector, argv[0] first.
 func Args(pid int) ([]string, error) {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
+	raw, err := os.ReadFile(procPath(pid, "cmdline"))
 	if err != nil {
 		return nil, fmt.Errorf("pipepeer: read cmdline of %d: %w", pid, err)
 	}
@@ -78,7 +78,7 @@ func Args(pid int) ([]string, error) {
 
 // Parent returns pid's parent process id.
 func Parent(pid int) (int, error) {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	raw, err := os.ReadFile(procPath(pid, "stat"))
 	if err != nil {
 		return 0, fmt.Errorf("pipepeer: read stat of %d: %w", pid, err)
 	}
@@ -98,11 +98,18 @@ func Parent(pid int) (int, error) {
 // executable stats the file pid is running. /proc/<pid>/exe resolves to the inode even
 // after the file is replaced or unlinked, which a path comparison would not survive.
 func executable(pid int) (os.FileInfo, error) {
-	return os.Stat(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
+	return os.Stat(procPath(pid, "exe"))
 }
 
+// procPath is /proc/<pid>/<elem...>.
+func procPath(pid int, elem ...string) string {
+	return procRoot + "/" + strconv.Itoa(pid) + "/" + strings.Join(elem, "/")
+}
+
+const procRoot = "/proc"
+
 func fdPath(pid, fd int) string {
-	return filepath.Join("/proc", strconv.Itoa(pid), "fd", strconv.Itoa(fd))
+	return procPath(pid, "fd", strconv.Itoa(fd))
 }
 
 func pipeInode(link string) (uint64, bool) {
@@ -124,7 +131,7 @@ func pipeInode(link string) (uint64, bool) {
 // writable reads the descriptor's open flags from fdinfo. A FIFO opened O_RDWR is a
 // writer too, since it can write.
 func writable(pid int, fd string) bool {
-	f, err := os.Open(filepath.Join("/proc", strconv.Itoa(pid), "fdinfo", fd))
+	f, err := os.Open(procPath(pid, "fdinfo", fd))
 	if err != nil {
 		return false
 	}
