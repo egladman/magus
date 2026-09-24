@@ -229,6 +229,10 @@ magus\project({
         // one here, lint, build, test and security each ran 15m52s in one gate waiting on
         // it, against 14s for security alone. docs/decisions/0001 deleted the flag.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
+        // Composes generate under two different CLI-level invocations (see the target),
+        // reads nothing of its own, and its declared outputs are generate's - skip_cache
+        // for the same reason ci is: a hit would skip the very check being run.
+        "generate-ci": {"skip_cache": "composes generate's own gate and replay; a hit would skip the check it exists to make"},
         // Both render the WHOLE graph, but only the magusfiles are keyable inputs, so any
         // other change leaves the key unmoved and a hit reverts the committed file.
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
@@ -1591,6 +1595,36 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
             + "already written in this tree; review and commit them. Drift in another "
             + "project needs `magus affected generate:rw` first" + detail + drift\secondCause;
     }
+}
+
+// The generate job's one step: the drift check ci.yaml's plan job used to run inline,
+// then its determinism replay, in the one invocation that used to be two `run:` lines.
+//
+// NOT named *_generate (like deploy-generate above): `generate` globs that suffix for
+// its own fan-out, and this target needs(generate) - a name ending in it would make
+// generate depend on itself through this one, "buzzpool: dispatch: stack contains
+// \"generate\" (cycle detected)", measured.
+//
+// Both checks are `generate` itself; only the CLI-level charm/flag combo the CALLER
+// passes differs, and that combo cannot be split mid-process - charms and --race are
+// read once per invocation, not per ctx.needs edge, and ctx.needs(generate) called a
+// second time in the same run is TargetMemo-deduped rather than re-executed (measured).
+// So this stays a single ctx.needs(generate) edge, and the two behaviors ride the ONE
+// outer invocation the job makes: `magus run generate-ci --no-default-charms --race=replay`.
+//
+// --no-default-charms keeps generate's own compare-to-HEAD active (skip_cache, no rw:
+// see generate above) for the first pass - the fail-fast half. On success, --race=replay
+// then re-invokes THIS target's handler a second time (run.go's runReplay, entirely
+// in-process - no nested `magus run`, which would deadlock on this project's own lock
+// per MGS3007) and content-hashes generate's declared outputs across both passes,
+// reporting MGS4003 on a mismatch. generate's own compare fires again on that second
+// pass too (still no rw), but runReplay only warns on a handler error there; the
+// determinism verdict comes from the hash diff, not that throw, so it still names the
+// right cause. rw is what audit.yaml and the old two-step form used instead, to suppress
+// that second-pass throw outright - unreachable here since one process cannot hold two
+// charm states, and unnecessary, since the warn does not change the outcome.
+export fun generate_ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
 }
 
 // Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real
