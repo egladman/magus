@@ -139,6 +139,47 @@ There is no priority to set. A sibling worktree is a different tree and still re
 ancestors is still refused as [MGS3007](../reference/codes/sandbox/MGS3007.md). A holder
 that does not answer within thirty seconds is refused exactly like any other contention.
 
+### Piping one magus into another
+
+A shell pipe between two magus runs is supported, including when both need the same
+project:
+
+```sh
+magus affected ci --plan --preflight generate | magus run ci-shard:gha
+```
+
+The two stages start together, so without help one of them reaches the lock first and
+the other is refused. Instead, a run whose standard input is written by another magus
+process takes no lock while that upstream stage holds, or has yet to take, a project it
+needs. It drains the pipe while it waits, so the upstream never blocks writing, and
+its targets read the same bytes afterwards. When the wait is for a real conflict,
+the run says so:
+
+```text
+magus: waiting for pid 40118 (magus affected ci --plan --preflight generate), upstream
+of this run in a pipe, to finish with the projects this run needs before taking their locks.
+```
+
+`magus status` lists such a run under "waiting on a pipe upstream".
+
+Stages on different projects run at once and stream. A downstream run waits only until
+the upstream has taken its locks, then starts as soon as it sees they do not overlap
+with its own. A read-only upstream, like `magus ls` or `magus status --watch`, never
+holds a reader back. Three or more magus stages work the same way: each stage
+considers every magus stage upstream of it.
+
+The upstream is proven from the kernel, never taken on trust: the run follows its stdin
+back to the processes writing it, and counts one as a magus stage only when it runs the
+same magus executable. Tools in between, like `magus ... | jq ... | magus ...` or
+`| tee log |`, are followed through the same way: the run reads which pipes they hold,
+never their arguments. Input that no magus feeds, like `echo x | cat | magus run ...`,
+proves nothing, so a lock held elsewhere is refused as above. Two different magus
+binaries also meet as strangers, and so does everything on Windows, where no kernel
+interface proves who writes an anonymous pipe. A run nested in
+another never waits on its own ancestor, which is still
+[MGS3007](../reference/codes/sandbox/MGS3007.md). A pipe that loops back into the run
+reading it is refused with [MGS3023](../reference/codes/sandbox/MGS3023.md).
+
 ## Across the whole machine: the budget
 
 The lock protects a project's outputs. Nothing in it protects the machine: two runs

@@ -1,0 +1,44 @@
+# An upstream that fails prints nothing; the reader still gets the project once the
+# writer is gone, and fails on its own terms: no plan on stdin, never a lock refusal.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
+
+! exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms | magus run consume .'
+stderr 'MGS3020'
+stderr 'consume: no plan on stdin'
+! stderr 'locked by another magus process'
+
+exec magus status -o json
+! stdout '"locks"'
+! stdout '"pipe_waits"'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "generate": {"skip_cache": "fails on purpose"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sleep", ["1"]);
+    throw "generate: output drifted";
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    if (io\stdin.readAll() == "") {
+        throw "consume: no plan on stdin";
+    }
+}

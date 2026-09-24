@@ -1,18 +1,29 @@
 .TH MAGUS-MCP 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-mcp \- Print how to reach the MCP server
+magus\-mcp \- Serve MCP over stdio for the agent host that launched it
 .SH SYNOPSIS
 .B magus
 .RI "mcp"
 .SH DESCRIPTION
-MCP is not a standalone process: it is served by magus server, alongside
-everything else it hosts. This command prints what a client
-needs to reach it \- the endpoint, the auth token command, and a liveness
-probe \- and exits non\-zero, since it starts nothing itself.
+Serve MCP over stdin and stdout, one JSON\-RPC message per line, for the
+agent host that launched this process. It opens the workspace it is launched
+in and needs no server and no bearer token: the caller is the local process
+the host started, admitted with mcp=write, and every tool call is recorded on
+the activity trail with the stdio credential and the client's name.
 .PP
-magus server start                    start the server (MCP comes up with it)
-  magus config mcp connector create     mint a bearer token for one client
-  magus status \-\-probe=liveness,mcp     confirm the endpoint is serving
+Stdout is the protocol wire and carries nothing else; logs and one line
+saying what is being served go to stderr. It stops when the host closes
+stdin, or on Ctrl+C.
+.PP
+Register it with an MCP client as a stdio server:
+.PP
+command  magus
+  args     ["mcp"]
+.PP
+magus server start serves the same tools over Streamable HTTP for one
+long\-lived server shared by several clients; that endpoint takes a
+connector token (magus config mcp connector create). A target this process
+runs asks the broker for host capacity like any other run.
 .PP
 Per\-client configuration lives in docs/guides/integrations/mcp.md, not in
 this binary: naming a client here would make a change to its config format a
@@ -20,8 +31,14 @@ magus release.
 .SH EXIT STATUS
 .RS
 .TP
+\fB0\fR
+The host closed stdin.
+.TP
+\fB1\fR
+The workspace did not load, or reading stdin or writing stdout failed.
+.TP
 \fB2\fR
-Always: mcp prints reach\-it instructions and starts nothing, so the invocation is treated like any other command that named a retired verb.
+An argument was given; mcp takes none.
 .RE
 .SH SEE ALSO
 \fBmagus\fR(1),

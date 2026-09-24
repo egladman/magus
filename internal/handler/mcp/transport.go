@@ -1,6 +1,7 @@
-// Package mcp implements the MCP (Model Context Protocol) server for magus.
-// It is started alongside the daemon (`magus server start`) and serves over
-// Streamable HTTP so multiple MCP clients can connect concurrently.
+// Package mcp implements the MCP (Model Context Protocol) server for magus. It
+// serves over stdio for the one host that launched `magus mcp` (ServeStdio), and
+// over Streamable HTTP in the daemon (HTTPHandler) so several clients can share
+// one long-lived server.
 //
 // Every tool call stamps context.WithValue markers via origin.WithContext so
 // downstream goroutines (cache, spell) can attribute work to the MCP client
@@ -12,11 +13,13 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -25,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // uaCtxKey keys the client's HTTP User-Agent in a request context. It is set by
@@ -164,6 +168,45 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 	trail.Rotate(cacheDir)
 	registerTools(srv, opts, log, originFn, cacheDir)
 	return srv
+}
+
+// ServeStdio serves MCP on in and out, one JSON-RPC message per line, until in reaches EOF
+// or ctx ends; either is a clean stop and returns nil. out carries protocol frames only, so
+// the caller must keep every other write off it.
+//
+// Every call is admitted as types.CredentialStdio: the caller is the process that launched
+// this one, so there is no bearer to verify, and authorize still holds each tool to ToolNeed.
+func ServeStdio(ctx context.Context, opts Options, in io.Reader, out io.Writer) error {
+	if err := opts.validate(); err != nil {
+		return err
+	}
+	log := opts.logger()
+
+	// One stdio process serves one client, so its name is a single value rather than a
+	// per-session map.
+	var client atomic.Pointer[origin.Client]
+	hooks := &mcpserver.Hooks{}
+	hooks.AddBeforeInitialize(func(hCtx context.Context, _ any, req *mcp.InitializeRequest) {
+		o := origin.Client{Name: agentFromRequest(req)}
+		client.Store(&o)
+		log.InfoContext(hCtx, "[AGENT] client connected", slog.String("agent", o.Name))
+	})
+	originFn := func(context.Context) origin.Client {
+		if o := client.Load(); o != nil {
+			return *o
+		}
+		return unknownOrigin
+	}
+
+	stdio := mcpserver.NewStdioServer(buildServer(opts, log, hooks, originFn))
+	stdio.SetErrorLogger(slog.NewLogLogger(log.Handler(), slog.LevelError))
+	stdio.SetContextFunc(func(ctx context.Context) context.Context {
+		return trail.ContextWithCredential(ctx, types.CredentialStdio)
+	})
+	if err := stdio.Listen(ctx, in, out); err != nil && ctx.Err() == nil {
+		return fmt.Errorf("mcp: serve stdio: %w", err)
+	}
+	return nil
 }
 
 // HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it

@@ -425,7 +425,11 @@ const (
 	// broker answered: nothing could arbitrate this host's capacity. Exits 69
 	// (EX_UNAVAILABLE), apart from MGS3009's 75, so a wrapper can tell "no arbiter" from
 	// "the host is busy".
-	BrokerUnavailable         DiagnosticCode = "MGS3022"
+	BrokerUnavailable DiagnosticCode = "MGS3022"
+	// PipeCycle is a run whose standard input is written, through a chain of processes
+	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
+	// so none ever would; the run is refused before it takes any lock.
+	PipeCycle                 DiagnosticCode = "MGS3023"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -588,7 +592,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

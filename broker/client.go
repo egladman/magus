@@ -45,6 +45,14 @@ func WithIdentity(argv []string, version string) ClientOption {
 	return func(c *Client) { c.hello.Argv, c.hello.Version = argv, version }
 }
 
+// WithStart sets how a client brings up a broker when none answers a Request or an
+// AcquireService: start runs once per such call and reports whether one should now
+// answer, and the call dials again only then. Status, Release and Shutdown never start
+// one. Without it, those calls fail with ErrUnavailable.
+func WithStart(start func(context.Context) bool) ClientOption {
+	return func(c *Client) { c.start = start }
+}
+
 // Client is one process's connection to a broker. It dials on first use and holds that
 // one connection for its life, so every claim and service reference it takes is
 // released when the process exits, however it exits. Safe for concurrent use; call
@@ -55,6 +63,7 @@ func WithIdentity(argv []string, version string) ClientOption {
 type Client struct {
 	addr  string
 	hello hello
+	start func(context.Context) bool
 
 	connectMu sync.Mutex
 
@@ -122,7 +131,7 @@ func (c *Client) Addr() string { return c.addr }
 // If ctx ends after the broker granted but before the answer arrived, the grant is
 // handed straight back.
 func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
-	cn, err := c.connect(ctx)
+	cn, err := c.open(ctx)
 	if err != nil {
 		return types.MachineVerdict{}, err
 	}
@@ -164,7 +173,7 @@ func (c *Client) Release(ctx context.Context, id string) {
 // does the connection closing. An *Error with CodeNoServices means the broker hosts
 // none and the caller runs the service itself.
 func (c *Client) AcquireService(ctx context.Context, key string, svc spells.Service) error {
-	cn, err := c.connect(ctx)
+	cn, err := c.open(ctx)
 	if err != nil {
 		return err
 	}
@@ -242,6 +251,23 @@ func (c *Client) next() uint64 { return c.nextID.Add(1) }
 // connect returns the live connection, dialing one when there is none. A fresh
 // connection re-asserts every claim this client still holds before any other request
 // uses it, so a new broker learns about running steps before it seats anything else.
+// open is connect for a call that takes something from the broker, which is the only
+// kind that may start one. The redial loop uses connect, so a broker that will not
+// start is not respawned every tick.
+func (c *Client) open(ctx context.Context) (*conn, error) {
+	cn, err := c.connect(ctx)
+	if err == nil || c.start == nil || !errors.Is(err, ErrUnavailable) {
+		return cn, err
+	}
+	c.mu.Lock()
+	closed := c.closed
+	c.mu.Unlock()
+	if closed || !c.start(ctx) {
+		return nil, err
+	}
+	return c.connect(ctx)
+}
+
 func (c *Client) connect(ctx context.Context) (*conn, error) {
 	if cn := c.live(); cn != nil {
 		return cn, nil

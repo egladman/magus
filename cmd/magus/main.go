@@ -373,6 +373,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// The broker loads no workspace and forwards to nothing. The config tier is only
 		// for concurrency_profile, which sizes its memory reservation.
 		return dispatchProfile{needsConfig: true}
+	case "mcp":
+		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
+		// that adopted the call would serve its own. The preload opens the workspace the
+		// host launched it in and hosts the proc server the tools' runs share.
+		return dispatchProfile{needsConfig: true, needsWorkspace: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -937,7 +942,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "broker":
 		return brokerCmd(ctx, subArgs)
 	case "mcp":
-		return mcpCmd(ctx, subArgs)
+		return mcpCmd(ctx, root, subArgs)
 	case "completion":
 		return completion(subArgs)
 	case "man":

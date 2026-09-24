@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/broker"
@@ -283,4 +284,32 @@ func announceBroker(w io.Writer, pid int, output string, quiet bool) {
 		return
 	}
 	fmt.Fprintf(w, "magus: %s\n", msg)
+}
+
+// newBrokerClient is the broker client a CLI process opens its workspaces with. It
+// starts a broker when a step or a service finds none, which is how a long-lived
+// process (`magus mcp`, the server) gets one back after the last idled out. announce
+// false keeps a detached server's notice out of its log.
+func newBrokerClient(announce bool) *broker.Client {
+	return broker.NewClient(broker.DefaultAddr(),
+		broker.WithIdentity(os.Args, version),
+		broker.WithStart(func(ctx context.Context) bool {
+			pid := ensureBroker(ctx)
+			if announce {
+				announceBroker(os.Stderr, pid, global.output, global.quiet || global.silent)
+			}
+			return broker.Live(ctx, broker.DefaultAddr())
+		}))
+}
+
+var (
+	processBrokerOnce sync.Once
+	processBroker     *broker.Client
+)
+
+// processBrokerClient is this process's one broker client: one connection per process
+// is what lets the broker release everything the process held when it exits.
+func processBrokerClient() *broker.Client {
+	processBrokerOnce.Do(func() { processBroker = newBrokerClient(true) })
+	return processBroker
 }

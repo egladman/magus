@@ -133,6 +133,9 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
+		if globalCfg.Broker.Resolved() != types.BrokerOff {
+			opts = append(opts, magus.WithBroker(processBrokerClient()))
+		}
 		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
 		magusLoaded.Store(true)

@@ -345,6 +345,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		runOpts = append(runOpts, magus.WithPreflight(preflight...))
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
+	runOpts = append(runOpts, processStdioOption(ctx)...)
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
@@ -862,7 +863,7 @@ func planPreflight(ctx context.Context, m *magus.Magus, target string, shards []
 	if target == types.TargetCI {
 		charms = magus.CharmsForCI(charms)
 	}
-	opts := []magus.RunOption{magus.WithPreflight(names...)}
+	opts := append([]magus.RunOption{magus.WithPreflight(names...)}, processStdioOption(ctx)...)
 	if len(charms) > 0 {
 		opts = append(opts, magus.WithCharms(charms...))
 	}

@@ -62,6 +62,7 @@ type run struct {
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	Preflight         []string // targets run first as a separate pass; see WithPreflight
 	preflight         []stage  // Preflight resolved against the selection by runResolved
+	stdio             *ProcessStdio
 }
 
 // out is the sink the run reports through.
@@ -1515,7 +1516,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// no lock and starts before one is taken.
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.report)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.report, opts.stdio)
 	if err != nil {
 		return err
 	}
@@ -1820,6 +1821,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	for i := range steps {
 		stampRevision(&steps[i])
 	}
+	// The loop above joins the revision goroutine only when there is a step, and a
+	// preflight pass can leave none.
+	<-revisionDone
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: opts.NoCache, opts: cacheOpts,

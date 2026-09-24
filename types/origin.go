@@ -39,8 +39,9 @@ type Origin struct {
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Agent is the host's subagent id within Session, empty for the main conversation.
 	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
-	// Credential is the bearer a daemon request presented, as the daemon verified it. It
-	// proves possession of that credential, not who holds it.
+	// Credential is the bearer a daemon request presented, as the daemon verified it, or
+	// [CredentialStdio] for a `magus mcp` tool call. A bearer proves possession of that
+	// credential, not who holds it.
 	Credential Credential `json:"credential,omitzero" yaml:"credential,omitempty"`
 }
 

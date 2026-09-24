@@ -128,7 +128,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : The per-user process holding this host's capacity and shared services. See [**magus-broker**(1)](magus-broker.md).
 
 **mcp**
-: Print how to reach the MCP server. See [**magus-mcp**(1)](magus-mcp.md).
+: Serve MCP over stdio for the agent host that launched it. See [**magus-mcp**(1)](magus-mcp.md).
 
 **buzz**
 : Run a Buzz script. See [**magus-buzz**(1)](magus-buzz.md).

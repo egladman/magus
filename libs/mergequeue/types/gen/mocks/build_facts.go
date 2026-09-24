@@ -118,6 +118,74 @@ func (_c *MockBuildFacts_Affected_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// Classify provides a mock function for the type MockBuildFacts
+func (_mock *MockBuildFacts) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
+	ret := _mock.Called(ctx, paths)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Classify")
+	}
+
+	var r0 map[string]types.Writes
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) (map[string]types.Writes, error)); ok {
+		return returnFunc(ctx, paths)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) map[string]types.Writes); ok {
+		r0 = returnFunc(ctx, paths)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]types.Writes)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []string) error); ok {
+		r1 = returnFunc(ctx, paths)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBuildFacts_Classify_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Classify'
+type MockBuildFacts_Classify_Call struct {
+	*mock.Call
+}
+
+// Classify is a helper method to define mock.On call
+//   - ctx context.Context
+//   - paths []string
+func (_e *MockBuildFacts_Expecter) Classify(ctx interface{}, paths interface{}) *MockBuildFacts_Classify_Call {
+	return &MockBuildFacts_Classify_Call{Call: _e.mock.On("Classify", ctx, paths)}
+}
+
+func (_c *MockBuildFacts_Classify_Call) Run(run func(ctx context.Context, paths []string)) *MockBuildFacts_Classify_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []string
+		if args[1] != nil {
+			arg1 = args[1].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildFacts_Classify_Call) Return(stringToWrites map[string]types.Writes, err error) *MockBuildFacts_Classify_Call {
+	_c.Call.Return(stringToWrites, err)
+	return _c
+}
+
+func (_c *MockBuildFacts_Classify_Call) RunAndReturn(run func(ctx context.Context, paths []string) (map[string]types.Writes, error)) *MockBuildFacts_Classify_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Generation provides a mock function for the type MockBuildFacts
 func (_mock *MockBuildFacts) Generation(ctx context.Context, outputs []string, changed []string) (types.Generation, error) {
 	ret := _mock.Called(ctx, outputs, changed)
@@ -186,74 +254,6 @@ func (_c *MockBuildFacts_Generation_Call) Return(generation types.Generation, er
 }
 
 func (_c *MockBuildFacts_Generation_Call) RunAndReturn(run func(ctx context.Context, outputs []string, changed []string) (types.Generation, error)) *MockBuildFacts_Generation_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Outputs provides a mock function for the type MockBuildFacts
-func (_mock *MockBuildFacts) Outputs(ctx context.Context, paths []string) (map[string]bool, error) {
-	ret := _mock.Called(ctx, paths)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Outputs")
-	}
-
-	var r0 map[string]bool
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) (map[string]bool, error)); ok {
-		return returnFunc(ctx, paths)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) map[string]bool); ok {
-		r0 = returnFunc(ctx, paths)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]bool)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, []string) error); ok {
-		r1 = returnFunc(ctx, paths)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockBuildFacts_Outputs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Outputs'
-type MockBuildFacts_Outputs_Call struct {
-	*mock.Call
-}
-
-// Outputs is a helper method to define mock.On call
-//   - ctx context.Context
-//   - paths []string
-func (_e *MockBuildFacts_Expecter) Outputs(ctx interface{}, paths interface{}) *MockBuildFacts_Outputs_Call {
-	return &MockBuildFacts_Outputs_Call{Call: _e.mock.On("Outputs", ctx, paths)}
-}
-
-func (_c *MockBuildFacts_Outputs_Call) Run(run func(ctx context.Context, paths []string)) *MockBuildFacts_Outputs_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 []string
-		if args[1] != nil {
-			arg1 = args[1].([]string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockBuildFacts_Outputs_Call) Return(stringToBool map[string]bool, err error) *MockBuildFacts_Outputs_Call {
-	_c.Call.Return(stringToBool, err)
-	return _c
-}
-
-func (_c *MockBuildFacts_Outputs_Call) RunAndReturn(run func(ctx context.Context, paths []string) (map[string]bool, error)) *MockBuildFacts_Outputs_Call {
 	_c.Call.Return(run)
 	return _c
 }

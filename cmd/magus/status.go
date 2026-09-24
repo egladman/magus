@@ -194,7 +194,8 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) types
 		// whichever process is mutating a project, which is usually a plain `magus run`
 		// with no daemon involved at all. Populated before any proc-socket early return
 		// for the same reason.
-		Locks: loadHeldLocks(ctx),
+		Locks:     loadHeldLocks(ctx),
+		PipeWaits: loadPipeWaits(ctx),
 		// MCP endpoint health is probed independently of the proc socket below: the
 		// endpoint an agent host connects to can be down while the proc daemon is up, or
 		// vice versa, so it is set before any early return on a proc-socket error.
@@ -288,6 +289,16 @@ func loadHeldLocks(ctx context.Context) []types.StatusLock {
 		return nil
 	}
 	return m.HeldLocks()
+}
+
+// loadPipeWaits reads the runs waiting on a magus upstream of them in a pipe, from the
+// same workspace lock directory as loadHeldLocks.
+func loadPipeWaits(ctx context.Context) []types.StatusPipeWait {
+	m, err := loadMagus(ctx, "")
+	if err != nil {
+		return nil
+	}
+	return m.PipeWaits()
 }
 
 func buildTelemetryStatus(t config.Telemetry) types.TelemetryStatus {
@@ -443,6 +454,27 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 	printConsoleStatus(w, r.Console)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
 	printLockStatus(w, r.Locks)
+	printPipeWaitStatus(w, r.PipeWaits)
+}
+
+// printPipeWaitStatus renders the runs holding no lock yet because a magus upstream of
+// them in a pipe still needs their projects.
+func printPipeWaitStatus(w io.Writer, waits []types.StatusPipeWait) {
+	if len(waits) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nwaiting on a pipe upstream:")
+	for _, pw := range waits {
+		line := fmt.Sprintf("  pid %d", pw.PID)
+		if !pw.WaitTime.IsZero() {
+			line += "  " + formatDur(time.Since(pw.WaitTime))
+		}
+		if pw.Command != "" {
+			line += "  " + pw.Command
+		}
+		fmt.Fprintln(w, line)
+		fmt.Fprintf(w, "    on pid %d  %s\n", pw.UpstreamPID, pw.UpstreamCommand)
+	}
 }
 
 // printBrokerRows renders the broker one fact per row, record type first and pid second,

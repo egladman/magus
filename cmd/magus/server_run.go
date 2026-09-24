@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
@@ -134,7 +133,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	// backs the dashboard's active-runs view via the console service.
 	serverRuns = console.NewRunRegistry()
 
-	brokerClient := broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(os.Args, version))
+	brokerClient := newBrokerClient(false)
 	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
 	reg := newWSRegistry(ctx, lim, brokerClient, ttl, sharedTel)
 	reg.setDeclared(declared)
@@ -159,12 +158,6 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 					return fmt.Errorf("proc: cannot locate workspace root from %s: %w", cwd, rerr)
 				}
 				root = r
-			}
-			// An adopted run takes claims like any run, and a run is what starts the
-			// broker, so the server starts one on the same terms; quietly, since the
-			// person reading this is not watching the server's log.
-			if globalCfg.Broker.Resolved() != types.BrokerOff {
-				ensureBroker(hctx)
 			}
 			// Fold this adopted run's journal into the live-run registry so the dashboard
 			// sees its per-target execution state. BeginInvocation (in run/affected) reads

@@ -26,22 +26,22 @@ route says what it needs, and why no token can mint a wider one.
 
 A **grant** is one level per surface. Levels are ordered: `none < read < write`.
 
-| Surface   | Levels             | Reaches                                   |
-| --------- | ------------------ | ----------------------------------------- |
-| `tokens`  | none, write        | token management (the TokenService)       |
-| `mcp`     | none, write        | the `/mcp` endpoint                       |
-| `console` | none, read, write  | the console's read routes, and its writes |
+| Surface   | Levels            | Reaches                                   |
+| --------- | ----------------- | ----------------------------------------- |
+| `tokens`  | none, write       | token management (the TokenService)       |
+| `mcp`     | none, write       | the `/mcp` endpoint                       |
+| `console` | none, read, write | the console's read routes, and its writes |
 
 `tokens=read` and `mcp=read` mean nothing, so a grant naming either is refused.
 A grant renders as `mcp=write` or `console=read`; the one below holds everything.
 
-| Preset    | Grant                                       | Held by                         |
-| --------- | ------------------------------------------- | ------------------------------- |
-| operator  | `tokens=write,mcp=write,console=write`      | the operator token              |
-| connector | `mcp=write`                                 | an MCP client                   |
-| console   | `console=write`                             | a browser tab, a console link   |
-| viewer    | `console=read`                              | a second screen that only looks |
-| share     | `console=read`                              | a share link, on its own listener |
+| Preset    | Grant                                  | Held by                           |
+| --------- | -------------------------------------- | --------------------------------- |
+| operator  | `tokens=write,mcp=write,console=write` | the operator token                |
+| connector | `mcp=write`                            | an MCP client                     |
+| console   | `console=write`                        | a browser tab, a console link     |
+| viewer    | `console=read`                         | a second screen that only looks   |
+| share     | `console=read`                         | a share link, on its own listener |
 
 ## Needs
 
@@ -52,14 +52,14 @@ route. The daemon refuses to start if a procedure has no need, or a need is
 none or names a level its surface lacks, and a daemon whose workspace failed to
 load holds every route to the same needs.
 
-| Route                                                                        | Needs           |
-| ---------------------------------------------------------------------------- | --------------- |
-| `/mcp`                                                                       | `mcp=write`     |
-| TokenService, every procedure                                                | `tokens=write`  |
-| JobService `RunJob`, every MemoryService procedure                           | `console=write` |
-| `/api/v1/diff` and its sub-routes, `/api/v1/plan`, `/api/v1/attention`, `POST /api/v1/share` | `console=write` |
-| every other procedure: Activity, Graph, Insight, Status, Tool, Notes, Metrics, Viewer, JobService `ListJobs` | `console=read` |
-| `/api/v1/events`, `/api/v1/insight`, `/api/v1/graph`                         | `console=read`  |
+| Route                                                                                                        | Needs           |
+| ------------------------------------------------------------------------------------------------------------ | --------------- |
+| `/mcp`                                                                                                       | `mcp=write`     |
+| TokenService, every procedure                                                                                | `tokens=write`  |
+| JobService `RunJob`, every MemoryService procedure                                                           | `console=write` |
+| `/api/v1/diff` and its sub-routes, `/api/v1/plan`, `/api/v1/attention`, `POST /api/v1/share`                 | `console=write` |
+| every other procedure: Activity, Graph, Insight, Status, Tool, Notes, Metrics, Viewer, JobService `ListJobs` | `console=read`  |
+| `/api/v1/events`, `/api/v1/insight`, `/api/v1/graph`                                                         | `console=read`  |
 
 Memory reads need `console=write` because the notes are the operator's own and
 reading them is audited like an edit. The diff, plan and attention routes need it
@@ -70,6 +70,12 @@ A token that is wrong, expired, revoked, or of a class this listener does not
 accept gets `401` [MGS9001](../reference/codes/auth/MGS9001.md), which never says
 which. A valid token whose grant is below the route's need gets `403`
 [MGS9015](../reference/codes/auth/MGS9015.md), naming the need.
+
+Each MCP tool call is held to `mcp=write` again, on either transport, and a call
+below it answers MGS9015 as a tool error. Over HTTP that is the credential the
+guard admitted to `/mcp`. `magus mcp` serves over stdio with no token: the caller
+is the process the host launched as you, so every call carries the `stdio`
+credential, which holds `mcp=write` and nothing past it.
 
 A need is checked for the whole life of a request, not only at its start. While a
 stream is open the guard checks its token again every few seconds, and a token
@@ -82,12 +88,12 @@ not stop within a few seconds.
 A token's class is its prefix, so the daemon knows which store can hold it
 before it hashes anything:
 
-| Prefix | Class    | Lives                                  | Expires                 |
-| ------ | -------- | -------------------------------------- | ----------------------- |
-| `mgo_` | operator | `$XDG_STATE_HOME/magus/mcp_token`, 0600 | never; rotate it with `magus config token generate --force` |
-| `mgs_` | stored   | `$XDG_STATE_HOME/magus/tokens.d/<name>.json`, only its SHA-256 | 90 days by default, at most 366 |
-| `mgl_` | share    | the daemon's memory                    | 15 minutes by default, at most 24 hours |
-| `mgx_` | exchange | `tokens.d`, only its SHA-256           | one minute, and spent on first use |
+| Prefix | Class    | Lives                                                          | Expires                                                     |
+| ------ | -------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
+| `mgo_` | operator | `$XDG_STATE_HOME/magus/mcp_token`, 0600                        | never; rotate it with `magus config token generate --force` |
+| `mgs_` | stored   | `$XDG_STATE_HOME/magus/tokens.d/<name>.json`, only its SHA-256 | 90 days by default, at most 366                             |
+| `mgl_` | share    | the daemon's memory                                            | 15 minutes by default, at most 24 hours                     |
+| `mgx_` | exchange | `tokens.d`, only its SHA-256                                   | one minute, and spent on first use                          |
 
 Every class has one layout: the prefix, 43 base62 characters of randomness, and
 a 6-character CRC32 of those, so a typo fails before any lookup. A secret
@@ -175,7 +181,8 @@ elsewhere nothing does, and `magus doctor` says so.
 
 Every record made under a daemon request carries the credential that request
 presented: its class, its id (the first 8 hex of its SHA-256), the name it was
-minted under, and its grant at the time. Never the secret. The id is the
+minted under, and its grant at the time. Never the secret. A `magus mcp` tool
+call carries class `stdio` with its grant, and no id or name. The id is the
 identity: revoke `laptop` and mint a new `laptop`, and records made under each
 name a different id. An activity filter matches the class, the id or the name.
 

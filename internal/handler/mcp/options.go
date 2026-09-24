@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Options configures a magus MCP server built via HTTPHandler
+// Options configures a magus MCP server, served by ServeStdio or built via HTTPHandler
 // (daemon mode, assembled by internal/daemon).
 type Options struct {
 	// Magus is the opened workspace handle. Required. Pass the result of

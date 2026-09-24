@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -46,38 +48,77 @@ func mcpAddrString() string {
 	return mcpAddress(globalCfg.MCP)
 }
 
-// mcpCmd prints instructions for using the MCP server.
-// MCP is no longer a standalone command — it is served by `magus server start`.
-func mcpCmd(_ context.Context, _ []string) error {
+// mcpCmd serves MCP over stdin and stdout for the agent host that launched it, against the
+// workspace it was launched in. It serves whoever runs it, a person at a terminal included:
+// the stderr line serveMCPStdio prints is what tells that person what they started.
+func mcpCmd(ctx context.Context, root string, args []string) error {
+	rest, err := cmdParse("mcp", args, func(fs *flag.FlagSet) {
+		fs.Usage = mcpUsage
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return usagef("magus mcp: takes no arguments (got %q)", rest[0])
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	return serveMCPStdio(ctx, m, os.Stdin, os.Stdout, os.Stderr)
+}
+
+// mcpUsage is `magus mcp --help`: the stdio registration a host needs, then the server's
+// HTTP endpoint for a client that wants one long-lived server. It names no host: each
+// client's config dialect belongs in docs/guides/integrations/mcp.md, where a change to one
+// is not a magus release.
+func mcpUsage() {
+	w := os.Stderr
+	fmt.Fprintln(w, "Usage: magus mcp")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Serve MCP over stdin and stdout for the agent host that launched this process,")
+	fmt.Fprintln(w, "against the workspace it was launched in. No server and no token: the caller")
+	fmt.Fprintln(w, "is the local process the host started, holding mcp=write. It stops when the")
+	fmt.Fprintln(w, "host closes stdin.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Register it with an MCP client as a stdio server:")
+	fmt.Fprintln(w, "  command  magus")
+	fmt.Fprintln(w, `  args     ["mcp"]`)
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "magus server start also serves MCP over Streamable HTTP, for one")
+	fmt.Fprintln(w, "long-lived server shared by several clients:")
+	fmt.Fprintf(w, "  url        http://%s/mcp\n", mcpAddrString())
+	fmt.Fprintln(w, "  auth       Authorization: Bearer <token>, minted with")
+	fmt.Fprintln(w, "             magus config mcp connector create --name <client> --expires 366d")
+	fmt.Fprintln(w, "  check      magus status --probe=liveness,mcp")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Per-client configuration: docs/guides/integrations/mcp.md")
+}
+
+// serveMCPStdio serves MCP for m with wire as the protocol's output. For as long as it
+// serves, os.Stdout points at diag, so a stray print or a child process handed os.Stdout
+// lands on stderr rather than between two frames a host is parsing.
+func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Writer, diag *os.File) error {
 	addr, err := mcpAddrPort()
 	if err != nil {
 		return fmt.Errorf("invalid mcp.address: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "MCP is served by the magus server, not as a standalone command.\n\n")
-	fmt.Fprintf(os.Stderr, "Start the server:\n  magus server start\n\n")
-	fmt.Fprintf(os.Stderr, "MCP endpoint (Streamable HTTP):\n  http://%s/mcp\n\n", addr)
-	fmt.Fprintf(os.Stderr, "The endpoint requires a bearer token holding mcp=write. Mint one per client:\n  magus config mcp connector create --name <client> --expires 366d\n\n")
-	// Everything above is what EVERY client needs: transport, URL, credential.
-	// What each client does with them (a TOML table, a JSON object, an env var
-	// read at launch) is that client's dialect, and it belongs in documentation
-	// the reader owns, not in this binary. Naming clients here would make a
-	// change to any one of them a magus release. See docs/guides/integrations/mcp.md.
-	fmt.Fprintf(os.Stderr, "Point your MCP client at that endpoint. Most take three settings:\n")
-	fmt.Fprintf(os.Stderr, "  transport  streamable-http\n")
-	fmt.Fprintf(os.Stderr, "  url        http://%s/mcp\n", addr)
-	fmt.Fprintf(os.Stderr, "  auth       Authorization: Bearer <token>, or a token env var\n\n")
-	fmt.Fprintf(os.Stderr, "Many clients read a token from the environment at launch; store the minted\n")
-	fmt.Fprintf(os.Stderr, "secret where that client reads it, since it is shown once.\n")
-	fmt.Fprintf(os.Stderr, "`magus doctor` warns 14 days before a token expires.\n\n")
-	fmt.Fprintf(os.Stderr, "Then confirm the endpoint is actually serving:\n")
-	fmt.Fprintf(os.Stderr, "  magus status --probe=liveness,mcp\n\n")
-	fmt.Fprintf(os.Stderr, "Per-client configuration, and what to re-register when mcp.address\n")
-	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/integrations/mcp.md\n")
-	// mcp is a retired verb: everything useful it could do is printed above, and
-	// nothing was run, so it exits like any other misuse (errUsage's 2) rather
-	// than 0: a script that still invokes `magus mcp` expecting a server should
-	// see a failure, not a silent no-op success.
-	return errSilent{exitCode: exitUsage}
+	stdout := os.Stdout
+	os.Stdout = diag
+	defer func() { os.Stdout = stdout }()
+
+	fmt.Fprintf(diag, "magus: serving MCP over stdio for %s; close stdin or press Ctrl+C to stop (magus mcp --help shows how to register it)\n", m.Root())
+	return internalmcp.ServeStdio(ctx, internalmcp.Options{
+		Magus:    m,
+		Logger:   slog.Default(),
+		Version:  version,
+		Build:    types.BuildInfo{Version: version, Commit: commit, Date: buildDate},
+		Config:   globalCfg,
+		HTTPAddr: addr,
+		// The store the server and `magus diff` use, so an agent joins the session a person
+		// already has open.
+		DiffSessions: changeset.NewStore(m.CacheDir()),
+	}, in, wire)
 }
 
 // publishDaemonTrailBase resolves the daemon-wide activity-trail base and publishes it, so

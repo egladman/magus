@@ -47,7 +47,7 @@ var sinkEvents = []any{
 var recordedOutsideTheSink = []any{
 	report.TargetResult{}, report.GraphBuild{}, report.GraphQuery{}, report.GraphError{},
 	report.VolatilityCall{}, report.RaceDetected{},
-	report.LockSuperseded{}, report.LockSupersedeRefused{},
+	report.LockSuperseded{}, report.LockSupersedeRefused{}, report.LockPipeWait{},
 }
 
 // Every event type is either rendered by every format or recorded outside the sink, so

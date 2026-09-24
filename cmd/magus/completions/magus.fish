@@ -29,7 +29,7 @@ function __magus_subcommands
         events     'stream workspace events as JSONL for an editor plugin or other integration' \
         server     'the server a person starts: MCP, the console, APIs and jobs (start / stop / status / reload)' \
         broker     'the per-user process holding this host\'s capacity and shared services (status / stop)' \
-        mcp        'print how to reach the MCP server (served by `magus server`, not a standalone command)' \
+        mcp        'serve MCP over stdio for the agent host that launched it (no server, no token)' \
         status     'inspect the concurrency pool of a running parent magus' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
         spell      'build, push, pull and list spells as OCI artifacts, and pin them in magus.lock (spell build|push|pull|ls|lock)' \
