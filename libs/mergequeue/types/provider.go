@@ -10,7 +10,7 @@ import (
 )
 
 // Provider is where changes are reviewed and merged, GitHub and the like. Planning
-// calls Describe and ApprovalAt; the rest write, and only applying calls them.
+// calls Describe and ApprovalAt; applying also calls ListGreen and the rest, which write.
 type Provider interface {
 	// Describe reports what the provider supports.
 	Describe(ctx context.Context, q ListQuery) (Capabilities, error)
@@ -20,14 +20,19 @@ type Provider interface {
 	ListChanges(ctx context.Context, q ListQuery) (Changes, error)
 	// ApprovalAt reports c's review state at commit exactly.
 	ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error)
+	// ListGreen returns every open change whose head carries the commit status
+	// statusContext at success, whatever branch it targets, since a stacked change is
+	// pointed at the base once the change beneath it merges.
+	ListGreen(ctx context.Context, q ListQuery, statusContext string) ([]GreenChange, error)
 	// PostStatus sets s on commit.
 	PostStatus(ctx context.Context, c Change, commit string, s CommitStatus) error
 	// Retarget points c at base. Already targeting it is success.
 	Retarget(ctx context.Context, c Change, base string) error
-	// MergeChange merges c with its own merge method. It errors when the provider
-	// refused, including when c's head is no longer m.Commit or a change in m.Through is
-	// no longer at its pinned head.
-	MergeChange(ctx context.Context, c Change, m MergeOptions) error
+	// MergeChange sees c merged with its own merge method, by the provider on its own or
+	// on this call, and says which. It errors when the provider refused, including when
+	// c's head is no longer m.Commit or a change in m.Through is no longer at its pinned
+	// head.
+	MergeChange(ctx context.Context, c Change, m MergeOptions) (MergeResult, error)
 	// KickBack removes c's merge intent, wherever it lives, and tells its author why.
 	KickBack(ctx context.Context, c Change, commit string, k Kick) error
 }
@@ -53,6 +58,14 @@ type Approval struct {
 	// BranchSharedWith lists the other open changes whose head branch is this change's
 	// branch. The queue pushes no update commit to a shared branch.
 	BranchSharedWith []string
+}
+
+// GreenChange is an open change whose head carries the queue's status at success. It
+// holds what [Provider.PostStatus] needs to set that status again.
+type GreenChange struct {
+	ID   string
+	Repo string
+	Head string
 }
 
 // CommitState is a commit status's state.
@@ -133,6 +146,14 @@ type MergeOptions struct {
 	// the same call ([StackMergeAtomic]), lowest first, each pinned to the head it must
 	// still be at.
 	Through []PinnedChange
+}
+
+// MergeResult is what a [Provider.MergeChange] that merged reports.
+type MergeResult struct {
+	// ByProvider says the provider merged the change on its own, as GitHub's auto-merge
+	// does on behalf of whoever enabled it, rather than on the queue's call. What a merge
+	// starts on the provider's side, a CI run on the base say, can differ between the two.
+	ByProvider bool
 }
 
 // PinnedChange is a change and the head it must still be at.

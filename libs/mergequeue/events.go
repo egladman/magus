@@ -39,6 +39,9 @@ type Event struct {
 	Commit     string         `json:"commit,omitempty"`
 	Depth      int            `json:"depth,omitempty"`
 	DurationMS int64          `json:"duration_ms,omitempty"`
+	// ByProvider marks an [EventMerged] the provider merged on its own rather than on the
+	// queue's call, so whatever the provider starts on a merge has started.
+	ByProvider bool `json:"by_provider,omitempty"`
 }
 
 // Events writes [Event] records as JSONL. A nil *Events discards. Safe for concurrent

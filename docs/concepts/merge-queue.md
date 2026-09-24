@@ -384,9 +384,11 @@ verdicts pass between them one change at a time:
    source merges each change whose predecessors have merged, and stops once the
    validation run completes.
 
-The apply token is the job's own, so no long-lived secret exists. A merge made with
-the Actions token starts no workflow, so once anything merges the job dispatches main's
-CI, CD and the queue's next run itself.
+The apply token is the job's own, so no long-lived secret exists. Most merges are made
+by GitHub's auto-merge on behalf of whoever enabled it, and start main's CI, CD and the
+queue's next run like any merge. A merge the queue makes itself with the Actions token
+starts no workflow, so after one the job dispatches those runs itself; `apply` marks
+each `merged` event GitHub made with `by_provider`, and the job reads that to decide.
 
 Before each merge, apply re-reads the change's approval, merge intent, base and merge
 method from the provider, rebuilds its candidate, and predicts the tree main will carry:
@@ -401,13 +403,32 @@ the next run. Right before asking for the merge, apply reads intent, base and he
 more. A kick-back is carried out only on the head it was decided for; a head pushed since
 waits for a decision of its own.
 
-The queue's status reads `pending` while it asks for a merge and `success` only once the
-change has merged. A required status that went green first would let anyone merge the
-change onto whatever main had become, so the queue's credential has to merge while its
-own status is still pending, which means bypassing it. See [Providers](#providers) for
-what that bypass grants on GitHub.
+The queue's status, `merge-queue`, is main's only required check. It reads `pending`
+while a change waits and `success` only on the commit apply is about to see merged: right
+before it goes green, apply reads main again and confirms it is still the tip the merge
+was predicted onto, and a change whose main moved waits for the next run instead. Then the
+provider merges it (on GitHub, auto-merge does, as soon as the required check passes), or,
+if the provider does not merge it on its own in time, apply asks it to. No credential
+bypasses the status. A success apply cannot follow through, because the provider refused
+the merge or applying stopped, goes back to `pending` before apply returns, and every run
+starts by setting back to `pending` any success an earlier run left on an open change.
 
-Why not have validation post a `magus/queue` status per candidate and trigger apply on
+The queue validates the merge result, not the branch, so GitHub's "Require branches to
+be up to date before merging" stays off: it would force every head onto main's tip, which
+the queue's candidates already account for, and the queue cannot push an update to a
+fork's branch. What that leaves is a push to main from outside the queue (an admin's
+bypass) between apply's read of main and the merge. The merge then lands on a main nobody
+validated; apply's check after the merge finds main does not carry the predicted tree and
+stops, and the next run plans from the new tip.
+
+Setting it up on GitHub is one edit of the ruleset that protects main, made only once
+this behavior is on main (before it, the queue posts `pending` right up to the merge and
+a required `merge-queue` would refuse every merge): under "Require status checks to
+pass", remove `ci gate`, add `merge-queue` with GitHub Actions as its source, and leave
+"Require branches to be up to date before merging" unticked. Leave every other rule and
+the bypass list as they are.
+
+Why not have validation post a `merge-queue` status per candidate and trigger apply on
 the status event? Posting a status needs `statuses: write` in the job that runs
 pull-request code, and branch protection requires exactly that status, so a pull
 request could mark itself green. Statuses posted with the Actions token do not start
@@ -439,9 +460,10 @@ functions, each taking one record:
 | `describe`       | `{base, remote_url}`                                                    | `{stack_merge, linear_stacks, methods, queue_label?, committer?}`                |
 | `list_changes`   | `{base, remote_url}`                                                    | `{changes, merged, unqueued}`                                                    |
 | `approval_at`    | the change plus `{commit}`                                              | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}` |
+| `list_green`     | `{base, remote_url, context}`                                           | `{changes: [{id, repo, head}]}`                                                  |
 | `post_status`    | the change plus `{commit, context, state, description}`                 | `true` when recorded                                                             |
 | `retarget`       | the change plus `{base}`                                                | `true` once the change targets `base`                                            |
-| `merge_change`   | the change plus `{commit, message, through}`                            | `{merged, reason?}`                                                              |
+| `merge_change`   | the change plus `{commit, message, through}`                            | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit}` | `true` when both the comment and the removal happened                            |
 | `list_artifacts` | `{source}`                                                              | `{complete, artifacts: [{name, url}], headers?}`                                 |
 
@@ -459,9 +481,12 @@ pushes as, which commits every update commit unless `--committer` overrides it.
 name the change's current head, base and merge method, whether it still carries merge
 intent (`queued`), and the other open changes whose head branch is its branch
 (`shared_with`); `approved_commit` names an older commit its approvals stand at, which
-the queue carries over only across a rebase that changed nothing. `through` lists the
-changes beneath a stack's top that merge in the same call, lowest first, each with the
-commit it must still be at.
+the queue carries over only across a rebase that changed nothing. `list_green` names
+every open change, whatever it targets, whose head carries the status `context` at
+success. `through` lists the changes beneath a stack's top that merge in the same call,
+lowest first, each with the commit it must still be at. `merge_change` sets
+`by_provider` when the provider merged the change on its own rather than on this call;
+left out, it reads as the call's merge.
 
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
@@ -484,11 +509,11 @@ prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
 identity a workflow's token pushes as.
 
-On GitHub the queue's credential merges past its own pending status as a bypass actor of
-a ruleset. A ruleset's bypass list bypasses every rule in that ruleset, not one rule:
-required reviews, signed commits, code scanning and all. Put the queue's required status
-in a ruleset of its own whose only rule it is, with the queue's actor as its only bypass
-actor, so the other rulesets still apply to every merge the queue makes.
+On GitHub, `merge_change` for a pull request with auto-merge on waits up to a minute for
+GitHub to merge it once the queue's status went green, then merges it itself through the
+API, pinned to the head. A merge GitHub made in the meantime reads as GitHub's unless
+the Actions bot made it. A stack, queued by label, has no auto-merge, so the queue always
+merges it itself. No merge needs a bypass actor.
 
 ## The library
 
