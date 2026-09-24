@@ -12,6 +12,7 @@
 //   ci-watch (deny): a gh invocation that blocks until CI or the merge queue finishes.
 //   ci-batch-poll (advise once per session): one pull request's CI read piecemeal.
 //   queue-poll (advise once per session): the merge queue's state read through GitHub.
+//   admin-merge (deny): `gh pr merge --admin`, which lands a pull request past the queue.
 //   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
@@ -47,7 +48,13 @@ final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole 
 final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
 
-final gateDenial = "The gate runs once per branch, by the orchestrator or by a worker spawned as "
+final adminMergeDenial = "`--admin` merges past the merge queue: nothing validates the pull request "
+    + "on main, and nothing orders it against the others. Queue it instead:\n"
+    + "  gh pr merge <number> --auto --squash\n"
+    + "(or --rebase). The queue validates it on main's tip and merges it; `magus queue ls` shows "
+    + "where it stands. Bypassing the queue is the human's call, made from their own terminal.";
+
+final gateDenial ="The gate runs once per branch, by the orchestrator or by a worker spawned as "
     + "`<parent>/integrate <job>`, never by a worker mid-change. Finish with the narrow validation "
     + "your brief names and report; the gate runs once your branch is integrated. "
     + "`magus affected ci --plan` stays open to you: it runs nothing.";
@@ -498,6 +505,9 @@ export fun decide(programs: [Program], caller: Caller, checkout: Checkout?, once
         if (blocksOnCI(call)) {
             return magus\guard.deny(ciWatchDenial);
         }
+        if (runs(call, first: "pr", second: "merge") and hasFlag(call.args, long: "--admin")) {
+            return magus\guard.deny(adminMergeDenial);
+        }
     }
     foreach (call in calls) {
         if (pollsQueue(call)) {
@@ -893,6 +903,29 @@ test "the board itself, an unrelated gh run list, and other programs stay silent
         ["gh", "pr", "view", "183", "--json", "labels"],
         ["watch", "-n", "5", "free", "-m"],
         ["git", "status"],
+    ]) {
+        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "an admin merge is denied, naming the queue's entry" {
+    foreach (argv in [
+        ["gh", "pr", "merge", "12", "--admin", "--squash"],
+        ["gh", "pr", "merge", "--squash", "--admin", "12"],
+        ["gh", "-R", "egladman/magus", "pr", "merge", "12", "--admin=true", "--rebase"],
+    ]) {
+        final v = ask(argv);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("--auto --squash") != null, message: "names the entry");
+    }
+}
+
+test "queuing a pull request and other gh calls stay silent" {
+    foreach (argv in [
+        ["gh", "pr", "merge", "12", "--auto", "--squash"],
+        ["gh", "pr", "merge", "12", "--disable-auto"],
+        ["gh", "pr", "view", "12", "--json", "autoMergeRequest"],
+        ["gh", "api", "repos/egladman/magus/collaborators/egladman/permission", "--jq", ".permission == \"admin\""],
     ]) {
         std\assert(ask(argv).decision == "allow", message: argv.join(" "));
     }

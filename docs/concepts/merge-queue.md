@@ -42,6 +42,38 @@ signal, an OOM kill included, is that change's red. Only what the queue can prov
 machine's (a hook that could not start, the queue's own cancellation) stops a partition
 and leaves the change queued.
 
+## Using it
+
+On GitHub, queuing a pull request is enabling auto-merge on it, with the merge method
+you want it to land with:
+
+```sh
+gh pr merge 482 --auto --squash
+```
+
+or "Enable auto-merge" on the pull request's page. Nothing else changes for the author:
+push fixes as usual, and a push to a queued pull request has it validated again. Once
+the queue's `merge-queue` status is main's required check, auto-merge cannot fire on its
+own: GitHub waits for that status, and the queue sets it to `success` only when it is
+about to see that pull request merged.
+
+| To                            | Do                                                          |
+| ----------------------------- | ----------------------------------------------------------- |
+| queue a pull request          | `gh pr merge <n> --auto --squash` (or `--rebase`)           |
+| queue a stack                 | label its top pull request `queue: squash`                  |
+| take it out                   | `gh pr merge <n> --disable-auto`, or remove the label       |
+| list what is queued           | `magus queue ls --provider github --base main`              |
+| see why one is waiting        | its `merge-queue` status, which reads `waiting: <why>`      |
+| land it past the queue        | `gh pr merge <n> --admin`: an admin's bypass, see below     |
+
+A pull request the queue kicks back gets a comment naming what to fix, and its
+auto-merge or label is removed; fix it and queue it again. One that waits (for a review,
+for the change beneath it, for main to settle) stays queued and needs nothing.
+
+An admin merge skips validation and ordering both. The queue notices on its next run
+that main moved without it and plans again from the new tip, so nothing breaks, but
+nothing checked the combination either. Keep it for when the queue itself is down.
+
 ## Trust model
 
 Bytes produced by running a change's code are as untrusted as code its author typed.
@@ -69,7 +101,12 @@ generated file, a candidate tree or a review proof from a verdict.
 - **Generated means declared.** A file is generated when some target declares it as its
   output (`magus describe file` says `output`), read from main's declarations. A
   `linguist-generated` attribute alone makes nothing generated: a vendored tree so marked
-  is source, and a reviewer has to see it.
+  is source, and a reviewer has to see it. A file that `generate`, or a target it
+  needs, rewrites in place (`magus describe file` says `declared: update`) stays
+  source: regeneration may write it, but its conflicts are the author's and a review
+  sees it. Another target's in-place update, such as a formatter's, does not count. A file magus maintains itself
+  (`maintained`, such as `.gitattributes`) is rewritten by main's magus whenever a hook
+  runs it, so the queue puts the change's version back and never commits main's.
 - **A review is proven in apply.** Whether a review of an older commit covers a merge of
   main into the change is a version control question apply answers itself, and a merge
   differing only in generated files is covered only when main's regeneration, run on the
@@ -296,9 +333,11 @@ only what the top change adds. Each candidate is a checkout of its own (a git wo
 with a scratch directory of its own; keep every cache there.
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
-the generated paths on stdin; without a hook, a file either side deleted stays deleted. A
-regeneration that fails, or writes anything no target declares as output, kicks that
-change back and the run goes on.
+the generated paths on stdin; without a hook, a file either side deleted stays deleted.
+The regeneration's writes to outputs and to files `generate`'s targets update in place
+are committed; a file magus maintains is restored to the candidate's version and left out. A
+regeneration that fails, or writes anything nothing declares it writes, kicks that change
+back and the run goes on.
 
 ## What a review covers
 
@@ -384,7 +423,13 @@ verdicts pass between them one change at a time:
    main's definition with a write-scoped Actions token, and downloads each verdict
    artifact as it appears, while validation is still running: `apply` with the run as its
    source merges each change whose predecessors have merged, and stops once the
-   validation run completes.
+   validation run completes. A first job waits only to see whether validation's plan job
+   runs at all; on a pull request event with no merge intent it is skipped, and so is
+   apply.
+
+The apply job runs in the `magus-queue` environment, which holds the app's key when
+there is one, so every apply run is listed under the repository's Deployments as a
+deployment to `magus-queue`. That list is the queue's run history, not a release.
 
 The apply token is the job's own unless the repository adds the queue's own GitHub App
 (see [Setting it up on GitHub](#setting-it-up-on-github)), so by default no long-lived
@@ -621,14 +666,18 @@ command hooks.
 | `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)    | magus's `types.VCSDriver`   |
 | `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
 | `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
-| `BuildFacts`     | a change's affected set, declared outputs, what regenerating them runs  | `client.Workspace`          |
+| `BuildFacts`     | a change's affected set, how paths are written, what regenerating runs  | `client.Workspace`          |
 | `Provider`       | list, describe, approve, post a status, retarget, merge, kick back      | the `provider` Buzz scripts |
 | `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so
 which merge base a prediction takes, which conflicts are the author's and which
 differences a review need not see are decided once, whatever the version control.
-`CommandFacts` is the `BuildFacts` behind `--facts`.
+`CommandFacts` is the `BuildFacts` behind `--facts`. Asked for `outputs`, with the paths
+on stdin, the command prints `{"outputs": [path], "updated": [path], "maintained":
+[path]}`: the paths a target writes whole, the ones a target rewrites in place, and the
+ones the build tool rewrites itself on every run. A missing key names none, so a command
+that prints only `outputs` declares no update and maintains nothing.
 
 Where Go ends and Buzz begins is a rule, not a taste. Go holds what the invariants are
 proven over and what needs the machine: admission, partitioning, candidate order, the

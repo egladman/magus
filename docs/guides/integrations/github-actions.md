@@ -393,22 +393,25 @@ jobs:
           queue-app-client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
         env:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
-      - run: magus buzz tools/gha-queue.buzz
+      - run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
         env:
-          QUEUE_STEP: apply
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
-          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
+          RUN: ${{ github.event.workflow_run.id }}
+          MAIN: ${{ github.event.repository.default_branch }}
           APP: ${{ steps.magus.outputs.queue-app-slug }}
-          DISPATCH: ${{ steps.magus.outputs.queue-token == '' }}
+          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
 ```
 
 With neither the variable nor the secret, `setup-magus` mints nothing, its outputs are
 empty, and the job runs on its own token. With one and not the other it fails the job,
 since a queue that quietly fell back would post a status its ruleset does not count. The
 token is an output, never an environment variable, because `setup-magus` also runs in
-jobs that execute pull-request code. The mode reaches the queue as explicit flags
-(`--committer`, `--app`) and `DISPATCH`; nothing reads the runner's environment to guess.
+jobs that execute pull-request code. The mode reaches the queue as explicit flags: with
+`--app` and `--committer` set, apply writes as the app and dispatches nothing, since the
+app's merges start main's workflows themselves; with the two empty, it runs on the job's
+token and dispatches after a merge of its own. Nothing reads the runner's environment to
+guess.
 
 ## Permissions
 

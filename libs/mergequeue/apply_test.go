@@ -278,7 +278,7 @@ func TestAnUpdateCommitIsTheValidatedTreeOnTheHeadAndTheTip(t *testing.T) {
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "plain"}, nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"gen/x.go"}, nil).Twice()
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
 	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"a/x.go"}).Return(types.Generation{Units: []string{"gen"}}, nil)
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
@@ -319,7 +319,7 @@ func (d doubles) updating(c types.Change, v types.Verdict) {
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "plain"}, nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"gen/x.go"}, nil)
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
 	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"a/x.go"}).Return(types.Generation{Units: []string{"gen"}}, nil)
 }
@@ -422,7 +422,7 @@ func TestACandidateTheRebuildDoesNotReproduceIsValidatedAgain(t *testing.T) {
 	d.bases(base)
 	d.rechecks(c, approvedAs(c))
 	d.rebuilds(c, base, head("rebuilt"), "a/x.go")
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"a/x.go"}).Return(map[string]bool{}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(map[string]types.Writes{}, nil)
 	d.waits(c, c.Head, "rebuilding its candidate gave "+head("rebuilt")[:12]+", not the validated "+v.CandidateCommit[:12])
 	a := applierFor(t, d, planOf([]types.Change{c}), v)
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
@@ -439,7 +439,7 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 	d.bases(base)
 	d.rechecks(c, approvedAs(c))
 	d.rebuilds(c, base, head("rebuilt"), "gen/gen.go", "gen/x.go")
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/gen.go", "gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/gen.go", "gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
 	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).Return(types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}}, nil)
 	d.kicks(c, types.CodeKickRefused, "it changes code their regeneration runs (gen/gen.go), so only its author can regenerate them")
@@ -469,7 +469,7 @@ func TestTheBasesOwnRegenerationRebuildsTheCandidate(t *testing.T) {
 			d.caps()
 			d.rechecks(c, approvedAs(c))
 			d.rebuilds(c, base, head("rebuilt"), "gen/x.go")
-			d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+			d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 			d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
 			d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"a/x.go"}).Return(types.Generation{Units: []string{"gen"}}, nil)
 			regenerated := v.CandidateCommit
@@ -477,7 +477,7 @@ func TestTheBasesOwnRegenerationRebuildsTheCandidate(t *testing.T) {
 				regenerated = tc.regenerated
 			}
 			d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return([]string{"gen/x.go"}, nil)
-			d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+			d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 			d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: []string{"gen/x.go"}}).Return(regenerated, nil)
 			var units []string
 			if tc.kick != "" {
@@ -942,7 +942,7 @@ func (d doubles) restacking(c types.Change, m types.MergedChange, v types.Verdic
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "plain"}, nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"lib/x.txt"}, nil)
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"lib/x.txt"}).Return(map[string]bool{}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"lib/x.txt"}).Return(map[string]types.Writes{}, nil)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Base: m.Head, Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "validated", "validated").Return(nil, nil)
 }
@@ -1056,7 +1056,7 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 			d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, c.Head).Return("merged tree", nil)
 			d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: onBase, Theirs: first}).Return(magustypes.TreeMergeResult{Tree: "plain"}, nil)
 			d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "merged tree").Return([]string{"gen/x.go"}, nil)
-			d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+			d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 			d.plain(first)
 			d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, first).Return(approvedAs(c), nil)
 			d.rebuilds(c, base, v.CandidateCommit, "a/x.go")

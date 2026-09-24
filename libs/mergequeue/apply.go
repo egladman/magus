@@ -503,11 +503,10 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 	if b.Commit == v.CandidateCommit && len(b.settled) == 0 {
 		return b.Commit, nil
 	}
-	out, err := r.facts.Outputs(ctx, b.touched)
+	regen, err := outputs(ctx, r.facts, b.touched)
 	if err != nil {
-		return "", fmt.Errorf("outputs: %w", err)
+		return "", err
 	}
-	regen := slices.DeleteFunc(slices.Clone(b.touched), func(p string) bool { return !out[p] })
 	if len(regen) == 0 {
 		return "", &waitError{code: types.CodeWaitRevalidate, reason: "rebuilding its candidate gave " + short(b.Commit) + ", not the validated " + short(v.CandidateCommit) + "; validated again next run"}
 	}
