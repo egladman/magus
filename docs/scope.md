@@ -41,7 +41,7 @@ not already forced to learn.
 
 The design produces a long list, and the list is the first thing you notice.
 magus runs your builds. It also caches them, tracks which projects a change
-reaches, keeps a queryable graph of the repo, ships a daemon, serves a browser
+reaches, keeps a queryable graph of the repo, ships a server, serves a browser
 console, exposes an MCP server, resolves secrets, sandboxes subprocesses, gates
 dependency advisories, and checks the version of the toolchain a build ran on.
 
@@ -143,7 +143,7 @@ what ran against what you declared. An install, switch, or resolve verb under
 `tools:` is the creep, and it will arrive with a good argument attached.
 
 magus will not require a second toolchain to build your projects. No container
-runtime, no language runtime to provision, no separate binary. The daemon carries
+runtime, no language runtime to provision, no separate binary. The server carries
 an asterisk; see below.
 
 magus will not be recommended for install through a package manager belonging to
@@ -189,7 +189,7 @@ what makes the runtime dependency seem cheap.
 orchestrator is the thing you reach for before anything else works. If it needs
 a container runtime, it cannot be used to install or check that runtime; it is
 unavailable on a locked-down laptop, a rootless runner, or an air-gapped
-builder; and when the daemon is not up, the failure arrives oblique, far from
+builder; and when the server is not up, the failure arrives oblique, far from
 the cause, with nowhere sensible to attach an error explaining it. That is the
 same shape as the rule about package managers above - a tool that arrives
 through the thing it is meant to orchestrate has put itself downstream of it.
@@ -331,25 +331,25 @@ once, hand-edited from there, never regenerated and never compared against
 anything, so nothing about a build depends on magus having produced it - which
 is the whole distinction, and it rests on the word generated.
 
-**The daemon runs long, and two surfaces do not work without it.** It ships
+**The server runs long, and two surfaces do not work without it.** It ships
 inside the binary, so you install nothing extra, and no build needs it. The
 sharpest version of this entry has since been retired: `magus doctor` used to
-probe bridge reachability and FAIL when no daemon was running, which made doctor
+probe bridge reachability and FAIL when no server was running, which made doctor
 red on every machine in its ordinary state. It reports the bridge as skipped
-now, with the daemon check immediately above it already saying the daemon is
+now, with the server check immediately above it already saying the server is
 down. What remains is real - the console and the MCP server both need one
 running. "No second toolchain" holds for installation and holds less firmly at
 runtime.
 
 It got one degree less firm on 2026-09-02. `magus run` and `magus affected` now
-START a daemon if none is up, because it owns the machine-wide build budget and
+START a broker if none is up, because it owns the machine-wide build budget and
 nothing else can arbitrate it, so a run is the first command that spawns a
 long-lived process without being asked to. Two things keep this inside the
-promise rather than outside it: no capability is lost when the daemon cannot
-start (the run proceeds unarbitrated and says so once), and a daemon started this
+promise rather than outside it: no capability is lost when the broker cannot
+start (the run proceeds unarbitrated and says so once), and a broker started this
 way exits by itself after ten minutes of nobody needing it. Still nothing extra
 to install; one more thing that runs. The reasoning, and the doctrine it amends,
-are in [the daemon decision](guides/integrations/editor/design.md).
+are in [the server decision](guides/integrations/editor/design.md).
 
 **The upgrade path runs on a server we operate.** `magus self update` fetches
 `https://eli.gladman.cc/magus/public/release/index.json`. We sign the releases
@@ -396,7 +396,7 @@ Those diverge more often than you expect, and only the second can fail your buil
 with a message naming the cause. magus already held the answer.
 
 The repo artifacts and the update endpoint are rules stated harder than the code
-earns, so we narrowed the rules. The daemon and the console toolchain are
+earns, so we narrowed the rules. The server and the console toolchain are
 deliberate trades worth re-examining. The codec gate was simply a bug, fixed
 separately once someone looked.
 

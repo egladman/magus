@@ -18,7 +18,7 @@ import (
 )
 
 func TestConnectGetStatusReportsLiveSnapshot(t *testing.T) {
-	src := fakeSource{report: types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
+	src := fakeSource{report: types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 1}}}
 	svc := NewConnectService(src, types.BuildInfo{Version: "v1.2.3", Commit: "abc1234"}, nil)
 
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
@@ -54,7 +54,7 @@ func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 	assert.True(t, cfg.GetSandbox())
 }
 
-// A non-daemon report leaves observing_since zero, so GetStatus must omit it (not stamp epoch).
+// A non-server report leaves observing_since zero, so GetStatus must omit it (not stamp epoch).
 func TestConnectGetStatusOmitsZeroObservingSince(t *testing.T) {
 	svc := NewConnectService(fakeSource{}, types.BuildInfo{}, nil)
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
@@ -86,7 +86,7 @@ func (m *mutableSource) set(r types.StatusSnapshot) {
 // connect-time snapshot and then a fresh frame after the underlying report changes.
 func TestConnectStreamStatusPushesInitialThenOnChange(t *testing.T) {
 	src := &mutableSource{}
-	src.set(types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Running: 0}})
+	src.set(types.StatusSnapshot{Pool: &types.StatusOutput{Running: 0}})
 	svc := NewConnectService(src, types.BuildInfo{Version: "v1"}, nil)
 	svc.interval = 10 * time.Millisecond // tighten the poll so the test does not wait on the 2s default
 
@@ -108,7 +108,7 @@ func TestConnectStreamStatusPushesInitialThenOnChange(t *testing.T) {
 	assert.Equal(t, int32(0), stream.Msg().GetStatus().GetPool().GetRunning())
 
 	// Flip the snapshot so the next tick observes a change and pushes a second frame.
-	src.set(types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Running: 2}})
+	src.set(types.StatusSnapshot{Pool: &types.StatusOutput{Running: 2}})
 	require.True(t, stream.Receive())
 	assert.Equal(t, int32(2), stream.Msg().GetStatus().GetPool().GetRunning())
 	require.NoError(t, stream.Close())

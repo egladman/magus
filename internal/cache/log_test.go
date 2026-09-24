@@ -982,7 +982,7 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 // TestPrettyHandlerResetsPerRunStateAcrossRuns is the long-lived-process
 // property: this handler is per-PROCESS, but everything it shows is per-RUN.
 //
-// Anything that outlives a single run (a TUI left open, the daemon) drives
+// Anything that outlives a single run (a TUI left open, the server) drives
 // more than one through the same handler, and without the split the second run
 // reports the first one's failures and a clock that started before it did.
 func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {

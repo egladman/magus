@@ -89,7 +89,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	for _, p := range projects {
 		paths = append(paths, p.Path)
 	}
-	// The CLI and the daemon stamp invocation ancestry at their own entry points; a
+	// The CLI and the server stamp invocation ancestry at their own entry points; a
 	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantErr
 	// could never fire for it and a re-entrant acquire hung instead of reporting
 	// MGS3007. The env var is already in this process; read it here so the third
@@ -179,7 +179,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 	stopped := make(chan struct{})
 	var once sync.Once
 	// Joins the goroutine. Closing done alone only narrows the race: a goroutine already past the inner select still reaches
-	// release(), and in the daemon (one long-lived process running many invocations),
+	// release(), and in the server (one long-lived process running many invocations),
 	// that late release lands on whatever the NEXT run holds.
 	stop := func() {
 		once.Do(func() { close(done) })
@@ -333,7 +333,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 // The deadlock a plain wait cannot survive: a target running magus against a project its
 // own invocation already locked produces a holder waiting for the waiter. Neither flock
 // nor a timeout can tell that from ordinary contention; ancestry can, and it is the only
-// signal that also covers the daemon, where holder and waiter are threads of one process.
+// signal that also covers the server, where holder and waiter are threads of one process.
 //
 // Best-effort by design: no sidecar, or an ancestry that never reached this process,
 // yields nil and the contention is judged like any other. Over-detecting would refuse a
@@ -376,7 +376,7 @@ type lockContendedError struct {
 // a broken build, so a harness has to retry genuine failures or never retry at all.
 const lockContendedExit = 75
 
-// ExitCode is read by the local exit-code seam and by the daemon, which forwards an
+// ExitCode is read by the local exit-code seam and by the server, which forwards an
 // adopted run's status by asking the error rather than naming a type it cannot import.
 func (e *lockContendedError) ExitCode() int { return lockContendedExit }
 
@@ -507,7 +507,7 @@ func (l *projectLocker) sameRun(ctx context.Context, projectPath string) bool {
 
 // processLocks arbitrates project locks among the invocations of THIS process. flock
 // conflicts per open file description, so without it two invocations of one process
-// (the daemon's adopted runs, its symbol indexer) refuse each other as strangers. Only
+// (the server's adopted runs, its symbol indexer) refuse each other as strangers. Only
 // the invocation holding a lock's slot touches that lock's flock.
 //
 // Package state on purpose: the contention it arbitrates spans every Magus the process
@@ -538,7 +538,7 @@ func (ls *localLocks) join(path string) *localLock {
 	return e
 }
 
-// leave drops the caller's count, and the slot with the last one, so a daemon serving
+// leave drops the caller's count, and the slot with the last one, so a server serving
 // many worktrees keeps no slot for a lock nobody is using.
 func (ls *localLocks) leave(path string, e *localLock) {
 	ls.mu.Lock()
@@ -642,7 +642,7 @@ type processRecord struct {
 	Dir     string    `record:"dir"`
 	Started time.Time `record:"started,omitempty"`
 	// Inv is the invocation that took the lock. It is what makes a holder identifiable to
-	// a DESCENDANT of it: a pid cannot, since under the daemon the holder and the waiter
+	// a DESCENDANT of it: a pid cannot, since under the server the holder and the waiter
 	// share one. Empty for a subcommand with no invocation record (clean), and for a
 	// sidecar written by an older magus; an acquirer then has nothing to match.
 	Inv string `record:"invocation,omitempty"`
@@ -821,7 +821,7 @@ func (l *projectLocker) pendingYield(projectPath string) (processRecord, bool) {
 // signal carries no identity, so the aborted run could not name who superseded it, and
 // nothing could tell this from the Ctrl-C or the supervisor SIGTERM the CLI already
 // handles as an interrupt; SIGTERM is not deliverable on Windows at all; and under the
-// daemon the holder and the waiter can be threads of one process, where signalling the
+// server the holder and the waiter can be threads of one process, where signalling the
 // pid means signalling yourself. The marker carries the successor's pid, command and
 // start time, which is the whole of MGS3014's message.
 func (l *projectLocker) askHolderToYield(ctx context.Context, projectPath string) func() {

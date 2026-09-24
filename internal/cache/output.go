@@ -44,7 +44,7 @@ const RunsDir = "runs"
 const runExt = ".jsonl"
 
 // DefaultMaxRuns bounds how many invocation journals the runs dir retains, so a long-lived
-// daemon's run-log dir stays bounded. Coarser than the per-key output cap (defaultOutputKeepLast):
+// server's run-log dir stays bounded. Coarser than the per-key output cap (defaultOutputKeepLast):
 // one file per invocation, kept newest-first by modtime. The RotateLogs job trims to this.
 const DefaultMaxRuns = 500
 
@@ -949,7 +949,7 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 //
 // inv must be a FULL invocation id: unlike an output ref there is no prefix resolution,
 // because a run log is addressed by exact filename. An id failing [LooksLikeInvocationID] is
-// refused before it is joined onto the runs dir: this is reachable from the daemon's Connect
+// refused before it is joined onto the runs dir: this is reachable from the server's Connect
 // API, where an unvalidated id reads any .jsonl on the machine. Returns fs.ErrNotExist when
 // the log has aged out under the RotateLogs cap.
 func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error) {

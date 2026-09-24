@@ -1,7 +1,7 @@
-// services.ts - the long-running shared services the daemon is hosting right now: containers or
-// processes kept warm across runs and deduped daemon-wide, each with its published ports, run state,
-// and the count of targets currently depending on it. This belongs to the DAEMON scope (services are
-// daemon-global, not per-workspace). The card hides itself when nothing is hosted, since most
+// services.ts - the long-running shared services the broker is hosting right now: containers or
+// processes kept warm across runs and deduped machine-wide, each with its published ports, run state,
+// and the count of targets currently depending on it. This belongs to the machine scope (services are
+// broker-global, not per-workspace). The card hides itself when nothing is hosted, since most
 // workspaces run no services. Heading deep-links the Service glossary term.
 
 import type { DashboardState, ServiceView } from "../state";

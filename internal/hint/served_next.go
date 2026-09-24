@@ -43,7 +43,7 @@ const (
 )
 
 // servedNextMu serializes this process's writers. The OS lock below serializes
-// processes and the daemon serves several tools at once, so both are needed.
+// processes and the server serves several tools at once, so both are needed.
 var servedNextMu sync.Mutex
 
 // ServedNextEntry is one journal line: when a breadcrumb was served, which id, and

@@ -272,6 +272,10 @@ func decodeFile(path string) ([]byte, Config, error) {
 // capturing the line, the key, and the Go type it was decoding into.
 var unknownFieldIssue = regexp.MustCompile(`^line (\d+): field (.+) not found in type (\S+)$`)
 
+// configTypeName is how yaml.v3 names [Config] in a rejection, so a top-level key can be
+// told apart from a same-named key nested deeper.
+var configTypeName = reflect.TypeOf(Config{}).String()
+
 // unknownKeyError re-renders yaml.v3's rejection as magus's own message: the file
 // and line, the key, and the nearest known key at that level. It returns nil when
 // err is not a rejection this can restate, leaving the caller's wrap in place.
@@ -320,7 +324,9 @@ func unknownKeyError(path string, data []byte, err error) error {
 		}
 		line, key, goType := m[1], m[2], m[3]
 		msg := fmt.Sprintf("%s:%s: unknown key %q", workspaceRelPath(path), line, key)
-		if sug := hint.Nearest(key, knownKeysIn(goType)); sug != "" {
+		if renamed, ok := retiredKeys[key]; ok && goType == configTypeName {
+			msg += fmt.Sprintf("; it was renamed to %q", renamed)
+		} else if sug := hint.Nearest(key, knownKeysIn(goType)); sug != "" {
 			msg += fmt.Sprintf("; did you mean %q?", sug)
 		} else {
 			msg += staleBinaryNote(data)
@@ -382,14 +388,14 @@ func workspaceRelPath(path string) string {
 }
 
 // mergeConfig returns dst with every non-zero field from src applied on top,
-// recursing into nested structs so a partial overlay (e.g. only daemon.idle_ttl)
+// recursing into nested structs so a partial overlay (e.g. only server.idle_ttl)
 // merges field-by-field over the defaults. The rule is "non-zero wins": a field
 // left at its zero value means "inherit", never "force zero", so an absent YAML
 // key (which decodes to a zero value) cannot clobber an upstream tier. Pointer
 // fields (tri-state *bool) override only when non-nil; slices and maps when
 // non-empty. Driving this by reflection keeps it exhaustive — it can never drift
 // from the Config struct, which the previous hand-written merge repeatedly did
-// (it silently dropped daemon.idle_ttl, vcs.*, mcp.*, health.*, strict, …).
+// (it silently dropped server.idle_ttl, vcs.*, mcp.*, health.*, strict, …).
 func mergeConfig(dst, src Config) Config {
 	mergeStruct(reflect.ValueOf(&dst).Elem(), reflect.ValueOf(src), nil)
 	return dst
@@ -398,7 +404,7 @@ func mergeConfig(dst, src Config) Config {
 // mergeOverlay is mergeConfig for an overlay decoded from the YAML in data,
 // settling the one thing non-zero-wins cannot express: a plain bool written as
 // `false`. Absent and false both decode to false, so without the document's own
-// key set every bool defaulting true (daemon.enabled, ci.record_runs,
+// key set every bool defaulting true (server.enabled, ci.record_runs,
 // volatility.enabled, volatility.annotate_gha) is impossible to turn off from
 // magus.yaml, however plainly it is written there. Only bools consult the key
 // set; every other kind keeps non-zero-wins, which is what lets a partial

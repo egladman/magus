@@ -77,7 +77,7 @@ test("ageLabel climbs from seconds to days", () => {
   assert.equal(ageLabel(now - 2 * 86_400_000, now), "2d");
 });
 
-// An unstamped row is a fact about a daemon that sent no timestamp. Rendering "0s" would be a
+// An unstamped row is a fact about a server that sent no timestamp. Rendering "0s" would be a
 // confident claim about a time nobody recorded.
 test("ageLabel says nothing about a row carrying no timestamp", () => {
   assert.equal(ageLabel(0, 1_000), "");

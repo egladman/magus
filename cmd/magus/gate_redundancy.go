@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/proc"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -30,7 +30,7 @@ import (
 // simply re-gates.
 const gateMergeScanLimit = 200
 
-// gatePoolProbeTimeout bounds the admission-daemon probe. The daemon is an
+// gatePoolProbeTimeout bounds the admission-server probe. The server is an
 // accelerant, never a capability gate: a probe that cannot answer in time
 // reads as idle and the gate runs.
 var gatePoolProbeTimeout = 2 * time.Second
@@ -404,29 +404,21 @@ func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFin
 }
 
 // gatePoolProbe is swappable so a test can decide saturation without a
-// daemon.
+// broker.
 var gatePoolProbe = gatePoolSaturated
 
-// gatePoolSaturated asks the admission daemon whether a new run would be refused,
-// and always says what it saw, so the finding can print the pool state behind
-// either answer. Every failure (no socket, no answer, a server that
-// arbitrates no budget) reads as idle: the daemon is an accelerant, never a
-// capability gate.
+// gatePoolSaturated asks the broker whether a new run would be refused, and always says
+// what it saw, so the finding can print the capacity behind either answer. Every
+// failure (no socket, no answer) reads as idle: the broker is an arbiter, never a
+// capability gate for this advice.
 func gatePoolSaturated(ctx context.Context) (bool, string) {
 	ctx, cancel := context.WithTimeout(ctx, gatePoolProbeTimeout)
 	defer cancel()
-	addr, ok := proc.LookupStableSocket(ctx)
-	if !ok {
-		return false, "no admission daemon reachable; treated as idle"
-	}
-	reply, err := proc.QueryStatus(ctx, addr)
+	st, err := broker.QueryStatus(ctx, broker.DefaultAddr())
 	if err != nil {
-		return false, "the admission daemon did not answer; treated as idle"
+		return false, "no broker answered; treated as idle"
 	}
-	if reply.Machine == nil {
-		return false, "the reachable server arbitrates no machine budget; treated as idle"
-	}
-	m := reply.Machine
+	m := &st.Capacity
 	desc := strconv.Itoa(m.HeldSlots) + " of " + strconv.Itoa(m.BudgetSlots) + " slots held"
 	if !internalci.PoolSaturated(m) {
 		return false, "idle: " + desc

@@ -21,7 +21,7 @@ type MintRecord struct {
 // MintRecord and whose preview reads "token 3fa9c1d2 (laptop) console=write until 2026-12-22".
 // action names the door ("cli.mint", "cli.generate", "share.mint", "link.code",
 // "link.redeem"). Best-effort,
-// like every Append; the minting credential of a daemon request is also stamped on the event's
+// like every Append; the minting credential of a server request is also stamped on the event's
 // origin from ctx.
 func AppendMint(ctx context.Context, base, action string, rec MintRecord) {
 	if base == "" {

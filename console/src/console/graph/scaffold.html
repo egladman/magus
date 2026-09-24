@@ -47,7 +47,7 @@
         <dt><button type="button" class="console-graph-help__example" data-q="kind:target -id:generate">Combine terms</button></dt>
         <dd>All terms must match: <code>kind:target -id:generate</code> lists targets whose id lacks "generate".</dd>
         <dt data-conditional><button type="button" class="console-graph-help__example" data-q="kind:symbol" data-conditional>Show code symbols</button></dt>
-        <dd data-conditional><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>). Shown only when the loaded graph carries them - the live daemon graph excludes the @symbols shards.</dd>
+        <dd data-conditional><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>). Shown only when the loaded graph carries them - the live server graph excludes the @symbols shards.</dd>
       </dl>
       <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
       <p><b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
@@ -153,7 +153,7 @@
             <div class="pf-v6-c-toggle-group__item" data-conditional data-preset-item="duration"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="duration" title="Shade by how long a node took to run: hot is slow. Shown once the graph carries timing (run a build first)."><span class="pf-v6-c-toggle-group__text">Duration</span></button></div>
           </div>
           </div>
-          <!-- SOURCE: which graph is loaded. Switchable only against a live daemon that serves
+          <!-- SOURCE: which graph is loaded. Switchable only against a live server that serves
                both flavors - in a snapshot, a dropped file or the demo both buttons are disabled,
                which is most sessions, so it shares a row rather than taking one. Loading a
                different graph entirely is the stage toolbar's Open file. main.ts drives selection
@@ -324,7 +324,7 @@
         <dt><code>#src=&lt;url&gt;</code></dt>
         <dd>A URL-encoded address the page fetches the JSON from: a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
         <dt><code>#port=7391&amp;token=&lt;bearer&gt;</code></dt>
-        <dd>Connect to a running daemon for a live workspace view. Loopback-implied: the port expands to literal <code>127.0.0.1</code> (never <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph export --open --follow</code> to build this link. Not available in Safari (see console docs).</dd>
+        <dd>Connect to a running server for a live workspace view. Loopback-implied: the port expands to literal <code>127.0.0.1</code> (never <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph export --open --follow</code> to build this link. Not available in Safari (see console docs).</dd>
         <dt><code>#node=&lt;id&gt;</code></dt>
         <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
         <dt><code>#q=&lt;query&gt;</code></dt>

@@ -103,7 +103,7 @@ func renderMCPTools(tools []std.MCPTool) ([]byte, error) {
 	b.WriteString("\tParams      []ParamDescriptor `json:\"params,omitempty\"      yaml:\"params,omitempty\"`\n")
 	b.WriteString("}\n\n")
 
-	b.WriteString("// Registry is the canonical list of MCP tools the magus daemon exposes.\n")
+	b.WriteString("// Registry is the canonical list of MCP tools the magus server exposes.\n")
 	b.WriteString("var Registry = []ToolDescriptor{\n")
 	for _, t := range tools {
 		b.WriteString("\t{\n")

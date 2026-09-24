@@ -1,11 +1,11 @@
-// workspace.ts - reading a daemon's workspace list.
+// workspace.ts - reading a server's workspace list.
 
 import { Workspace_State, type Workspace } from "@wire/status/v1alpha1/status_pb";
 
 /**
- * Whether the daemon is serving w. The pool lists FAILED and LOADING workspaces too, so their
+ * Whether the server is serving w. The pool lists FAILED and LOADING workspaces too, so their
  * state can be shown; they are not loaded and must not be counted or offered as if they were.
- * An older daemon sends no state and lists only loaded workspaces.
+ * An older server sends no state and lists only loaded workspaces.
  */
 export function isServing(w: Workspace): boolean {
   return w.state !== Workspace_State.FAILED && w.state !== Workspace_State.LOADING;

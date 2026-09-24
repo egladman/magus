@@ -6,7 +6,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Verify authenticates presented on the daemon's LOOPBACK listener and returns the credential
+// Verify authenticates presented on the server's LOOPBACK listener and returns the credential
 // it is, grant included. It routes by class, so each store is consulted only for its own
 // class: mgo_ against the operator file, mgs_ against the token store, and mgl_ and mgx_
 // refused outright, because a share token authenticates only on its own listener and an

@@ -273,7 +273,7 @@
 }
 .console-settings-presets__custom[hidden] { display: none; }
 
-/* --- Access tokens: the list + revoke view over the daemon's connector/share tokens ---------------
+/* --- Access tokens: the list + revoke view over the server's connector/share tokens ---------------
  * No PF Table sheet is bundled, so the list is a lightweight CSS grid with role=table semantics. Five
  * columns (type, name, fingerprint, expiry, action); the fingerprint sits in mono as a literal handle. */
 .console-settings-tokens { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); }

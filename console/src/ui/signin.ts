@@ -17,7 +17,7 @@
 // The workspace is PRESELECTED, never auto-applied. A remembered pick fills the answer in so the
 // common case is one click, but the click still happens - an inherited scope you never chose is
 // exactly the "where did my work go" failure this screen exists to prevent.
-import { getLiveToken, resolveDaemonHost } from "../lib/daemon";
+import { getLiveToken, resolveServerHost } from "../lib/server";
 import { ALL_WORKSPACES, setWorkspaceScope, shortName, workspaceScope } from "../lib/scope";
 
 const ASKED_KEY = "magus:workspace-asked";
@@ -61,19 +61,19 @@ function rememberPick(root: string): void {
 // apart, never enough to read over a shoulder or lift from a screenshot.
 //
 // THERE IS NO TOKENLESS MODE, which two earlier versions of this line both got wrong. Every console
-// route is wrapped in BearerGuard (internal/daemon/daemon.go): the API bridge, StatusService,
+// route is wrapped in BearerGuard (internal/server/server.go): the API bridge, StatusService,
 // activity, tools, insight, jobs, memory, notes. httpx.guard 401s when no token is presented at all,
 // and every verifier in internal/auth fails closed. Only /livez and /readyz are unguarded, on purpose
 // so an orchestrator can probe them, and they carry no workspace paths. RequireLoopbackPeer appears
 // once, on /api/v1/share, where it ADDS a restriction on top of the bearer token rather than waiving
 // one.
 //
-// So "this daemon is open on loopback" was false about the product, and so was its replacement, "the
-// daemon answered without asking for one" - it never does. Reaching this screen means an
+// So "this server is open on loopback" was false about the product, and so was its replacement, "the
+// server answered without asking for one" - it never does. Reaching this screen means an
 // authenticated call returned two or more workspaces. No stored token therefore means the list did
-// NOT come from a daemon, which is an anomaly and has to read like one.
+// NOT come from a server, which is an anomaly and has to read like one.
 function tokenEvidence(token: string | null): string {
-  if (!token) return "None. Nothing here came from an authenticated daemon.";
+  if (!token) return "None. Nothing here came from an authenticated server.";
   const tail = token.length > 4 ? token.slice(-4) : token;
   return (
     "From your link, ending " + tail + (token.startsWith("mgo_") ? " (the operator token)" : "")
@@ -119,19 +119,19 @@ function ask(roots: readonly string[]): void {
   connWrap.className = "console-shell-signin__section";
   const connLabel = document.createElement("span");
   connLabel.className = "console-shell-signin__label";
-  connLabel.textContent = "Daemon";
+  connLabel.textContent = "Server";
   const connHost = document.createElement("code");
   connHost.className = "console-shell-signin__value";
   // "not configured" read as a calm, ordinary state. It is not one: this screen only opens once a
-  // daemon has answered with two or more workspaces, so an address must have resolved to get here.
-  // If it did not, the console has lost track of which daemon answered - worth saying so rather than
+  // server has answered with two or more workspaces, so an address must have resolved to get here.
+  // If it did not, the console has lost track of which server answered - worth saying so rather than
   // reporting it in the same voice as a host that is present.
-  const daemonHost = resolveDaemonHost();
-  connHost.textContent = daemonHost ?? "not resolved";
-  if (!daemonHost) {
+  const serverHost = resolveServerHost();
+  connHost.textContent = serverHost ?? "not resolved";
+  if (!serverHost) {
     connHost.dataset.anomaly = "";
     connHost.title =
-      "This workspace list came from a daemon, so an address should have resolved here.";
+      "This workspace list came from a server, so an address should have resolved here.";
   }
   const credLabel = document.createElement("span");
   credLabel.className = "console-shell-signin__label";
@@ -157,9 +157,9 @@ function ask(roots: readonly string[]): void {
   const lede = document.createElement("p");
   lede.className = "console-shell-signin__lede";
   lede.textContent =
-    "This daemon is serving " +
+    "This server is serving " +
     roots.length +
-    " workspaces. Pick the one this window follows: runs and activity are filtered to it. Pool, cache and latency stay daemon-wide.";
+    " workspaces. Pick the one this window follows: runs and activity are filtered to it. Pool, cache and latency stay server-wide.";
   // Menu rows, not a stack of outlined buttons. Two choices rendered as two bordered cards read as two
   // things to STUDY rather than two things to pick, and at four or five they became a wall. Same PF
   // menu vocabulary as the title bar's own workspace control, so the place you first choose a
@@ -242,7 +242,7 @@ function ask(roots: readonly string[]): void {
 
   const suggested = lastPick();
   list.append(
-    // Daemon-wide FIRST, matching the title bar's own menu, and offered as a row rather than a link
+    // Server-wide FIRST, matching the title bar's own menu, and offered as a row rather than a link
     // below: watching every workspace is a legitimate way to work, and burying it would push people
     // into picking one they did not want just to get past the question.
     row(ALL_WORKSPACES, "All workspaces", ""),
@@ -287,7 +287,7 @@ function ask(roots: readonly string[]): void {
     asking = false;
     document.removeEventListener("keydown", onKey);
   }
-  // Escape lands on the daemon-wide view rather than leaving the question open: dismissing has to go
+  // Escape lands on the server-wide view rather than leaving the question open: dismissing has to go
   // somewhere, and the honest destination is the scope that hides nothing.
   function onKey(e: KeyboardEvent): void {
     if (e.key === "Escape") {

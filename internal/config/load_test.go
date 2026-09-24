@@ -174,14 +174,14 @@ func TestExtractFlag(t *testing.T) {
 func TestLoadDirIntoBoolFalseTurnsOffADefaultOnKey(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	content := "daemon:\n  enabled: false\nci:\n  record_runs: false\nvolatility:\n  enabled: false\n  annotate_gha: false\n"
+	content := "server:\n  enabled: false\nci:\n  record_runs: false\nvolatility:\n  enabled: false\n  annotate_gha: false\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(content), 0o644))
 
-	require.True(t, Defaults().Daemon.Enabled, "precondition: daemon.enabled defaults true")
+	require.True(t, Defaults().Server.Enabled, "precondition: server.enabled defaults true")
 
 	cfg, err := loadDirInto(Defaults(), dir)
 	require.NoError(t, err)
-	assert.False(t, cfg.Daemon.Enabled, "daemon.enabled: false should disable the shared daemon")
+	assert.False(t, cfg.Server.Enabled, "server.enabled: false should stop commands handing themselves to the server")
 	assert.False(t, cfg.CI.RecordRuns, "ci.record_runs: false should stop recording runs")
 	assert.False(t, cfg.Volatility.Enabled, "volatility.enabled: false should disable volatility detection")
 	assert.False(t, cfg.Volatility.AnnotateGHA, "volatility.annotate_gha: false should stop GHA annotations")
@@ -197,7 +197,7 @@ func TestLoadDirIntoAbsentBoolInherits(t *testing.T) {
 	cfg, err := loadDirInto(Defaults(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, 3, cfg.Concurrency)
-	assert.True(t, cfg.Daemon.Enabled, "daemon.enabled was never written; it must keep the default")
+	assert.True(t, cfg.Server.Enabled, "server.enabled was never written; it must keep the default")
 	assert.True(t, cfg.CI.RecordRuns, "ci.record_runs was never written; it must keep the default")
 	assert.True(t, cfg.Volatility.Enabled, "volatility.enabled was never written; it must keep the default")
 }
@@ -281,7 +281,7 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 
 			strictCfg, err := LoadFile(path, true)
 			require.NoError(t, err, "a strict load must accept an empty magus.yaml")
-			assert.True(t, strictCfg.Daemon.Enabled, "an empty document leaves every default in place")
+			assert.True(t, strictCfg.Server.Enabled, "an empty document leaves every default in place")
 		})
 	}
 }
@@ -317,6 +317,12 @@ func TestUnknownKeyMessage(t *testing.T) {
 			doc: "concurrencyy: 4\nsandbox:\n  enabledd: true\n",
 			want: "magus.yaml:1: unknown key \"concurrencyy\"; did you mean \"concurrency\"?\n" +
 				"magus.yaml:3: unknown key \"enabledd\"; did you mean \"enabled\"?",
+		},
+		// A retired key is misconfiguration, and the error names the key that took its
+		// settings rather than guessing at a typo or blaming the binary.
+		"retired key": {
+			doc:  "daemon:\n  idle_ttl: 1h\n",
+			want: `magus.yaml:1: unknown key "daemon"; it was renamed to "server"`,
 		},
 	}
 	for name, tc := range cases {

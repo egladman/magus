@@ -22,7 +22,7 @@ const sessionTurnCap = 60
 type Option func(*Service)
 
 // WithSessionRoot lets GetSessionActivity read the loaded session store for the repository
-// at root. Without it the RPC answers FailedPrecondition, because a daemon that cannot
+// at root. Without it the RPC answers FailedPrecondition, because a server that cannot
 // locate the store must not report every session as having done nothing.
 func WithSessionRoot(root string) Option {
 	return func(s *Service) { s.sessionRoot = root }
@@ -59,7 +59,7 @@ func (s *Service) loadSessionActivity(peer, session, path string) (*viewerv1.Ses
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("viewer: a session id and a path are required"))
 	}
 	if s.sessionRoot == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("viewer: this daemon does not serve session activity"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("viewer: this server does not serve session activity"))
 	}
 	dir, err := sessions.Dir(s.sessionRoot)
 	if err != nil {

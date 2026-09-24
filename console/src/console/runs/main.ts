@@ -10,7 +10,7 @@
 // refs); "Open output" hands off to the Log Viewer through the #inv=/#ref= links it already
 // understands. Neither surface re-hosts the other's rendering, so they cannot drift.
 //
-// Data comes from the same two read-only daemon feeds the side panel reads (/api/v1/outputs and
+// Data comes from the same two read-only server feeds the side panel reads (/api/v1/outputs and
 // /api/v1/runs), joined on each output's invocation id, and the grouping/filtering/faceting is the
 // shared pure module (logs/runindex.ts) both browsers consume.
 
@@ -36,13 +36,13 @@ import {
   watchRuns,
 } from "../logs/runtree";
 import {
-  adoptDaemonOrigin,
+  adoptServerOrigin,
   getLiveToken,
   parseHash,
-  probeDaemon,
-  resolveDaemonHost,
+  probeServer,
+  resolveServerHost,
   wantsDemo,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { subscribeDefaultHost } from "../../lib/settings";
 import {
   renderConnectPrompt,
@@ -72,9 +72,9 @@ interface Refs {
 // activate builds the surface into host and returns the console's teardown handle. Everything below
 // is per-activation, so reopening the tab is a clean slate.
 export function activate(host: HTMLElement): SurfaceInstance {
-  adoptDaemonOrigin();
+  adoptServerOrigin();
   const demo = wantsDemo(parseHash());
-  let host_ = resolveDaemonHost(parseHash()) ?? "";
+  let host_ = resolveServerHost(parseHash()) ?? "";
   // Set when both run feeds came back empty and nothing answered at the address either: fetchRuns
   // reads a refused connection as an empty list, and "nothing kept yet" would send the reader to run
   // a target.
@@ -166,7 +166,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         fetchRunLogs(host_, token),
       ]);
       if (nextRuns.length === 0 && nextLogs.length === 0) {
-        nextUnreachable = !(await probeDaemon(host_)).ok;
+        nextUnreachable = !(await probeServer(host_)).ok;
       }
     }
     // The tab closed, or a newer load (another address, a Retry) owns the page now.
@@ -211,12 +211,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // offline page need this even though they never open a stream.
   let untick: (() => void) | null = tickRelativeTimes(host);
   // A new address is followed only while no runs are on screen: a list the reader is reading keeps
-  // the daemon it came from until they refresh.
+  // the server it came from until they refresh.
   const unsubscribeHost = subscribeDefaultHost(() => {
     if (runs.length > 0 || logs.length > 0) return;
     unwatch?.();
     unwatch = null;
-    host_ = resolveDaemonHost(parseHash()) ?? "";
+    host_ = resolveServerHost(parseHash()) ?? "";
     unreachable = false;
     loaded = false;
     paint();
@@ -520,7 +520,7 @@ function renderEmpty(
   const card = h("div", "console-runs__empty");
   if (s.connection) {
     renderConnectPrompt(s.promptSlots, s.connection, {
-      purpose: "This page reads the runs your local daemon has kept.",
+      purpose: "This page reads the runs your local server has kept.",
       onRetry: s.onRetry,
     });
     card.append(s.promptSlots.title, s.promptSlots.message, s.promptSlots.actions);
@@ -559,9 +559,9 @@ function openLink(text: string, href: string): HTMLElement {
 }
 
 // viewerHref builds the Log Viewer deep link for one run: relative, so it works wherever the console
-// is served (a daemon origin, the docs site under a base path, a dev port). The demo showcase
+// is served (a server origin, the docs site under a base path, a dev port). The demo showcase
 // carries its fragment through so a demo selection opens a demo run rather than reaching for a
-// daemon that is not there.
+// server that is not there.
 //
 // "logs/", NOT "../logs/". Every surface page ships with `<base href="../">` (see
 // scripts/surface-stubs.mjs) so the shell's own relative assets resolve from /console/ - which means

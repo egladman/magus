@@ -11,11 +11,11 @@
 //   - internal/journal is the EXECUTION JOURNAL, scoped to a run: every line one
 //     invocation emitted (exec, output, result), discarded with that invocation.
 //   - internal/trail is the ACTIVITY TRAIL, scoped to a machine: consequential
-//     actions taken against the daemon.
+//     actions taken against the server.
 //   - this package holds INVOCATIONS, scoped to a repository: the durable facts of
 //     each, folded across worktrees. It answers "what has been happening in this
 //     repo lately", which neither of the others can, because one is per-run and the
-//     other is per-daemon.
+//     other is per-server.
 //
 // The name is NOT internal/journal, which the design called for: that import path
 // is taken by the execution journal above, and that package documents itself as a
@@ -35,7 +35,7 @@
 //
 // A file, however, is not grow-only: [Prune] deletes whole invocation files whose
 // newest fact has aged out, and [Open] runs it opportunistically so the store bounds
-// itself without a daemon. Two rules keep that from destroying history a reader is
+// itself without a server. Two rules keep that from destroying history a reader is
 // still using (a still-open attention request pins every file naming it, and a
 // request's records are deleted as a unit), and [Prune] documents why each is
 // necessary. Because another process can prune while this one is folding, every
@@ -229,7 +229,7 @@ type Writer struct {
 // only ever says it began.
 //
 // Opening also prunes the store at [DefaultRetention], which is what keeps a
-// grow-only store bounded without a daemon or a cron: every producer opens, so
+// grow-only store bounded without a server or a cron: every producer opens, so
 // every producer pays a little of the housekeeping. It is best-effort and cannot
 // fail the open; see [Prune]. It runs at most once per [pruneInterval], since reading
 // a store of ten thousand sessions cost every run 17ms to delete nothing.
@@ -253,7 +253,7 @@ func Open(dir, invocation string, start InvocationStart) (*Writer, error) {
 
 // resume continues the numbering an earlier writer left in the file.
 //
-// Two processes reach one file whenever an id is reused: a retried command, a daemon and
+// Two processes reach one file whenever an id is reused: a retried command, a server and
 // a CLI sharing an invocation id. Starting every writer at seq 1 makes
 // (Invocation, Seq) stop identifying one record: the second process stamps numbers the
 // first already used, and the fold's tie-break then interleaves two runs' facts
@@ -694,9 +694,9 @@ func LoadEvents(dir string, events []LoadEvent, start InvocationStart) (LoadResu
 	// a snapshot.
 	//
 	// That was a narrow window while a person ran `magus session load` by hand. It became
-	// routine when `graph build` started running adapters and the daemon started running
+	// routine when `graph build` started running adapters and the server started running
 	// graph build every six hours: the store is keyed by repository IDENTITY, so every
-	// worktree and every clone on the machine shares one, and each of their daemons ticks
+	// worktree and every clone on the machine shares one, and each of their servers ticks
 	// on its own schedule.
 	unlock, err := lockStore(dir)
 	if err != nil {

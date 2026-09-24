@@ -146,7 +146,7 @@ check_tools() {
 
 # ── daemon helpers ────────────────────────────────────────────────────────────
 
-# _stable_sock: path of the magus stable daemon socket (may not exist).
+# _stable_sock: path of the magus server socket (may not exist).
 _stable_sock() {
     local dir
     if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
@@ -154,16 +154,16 @@ _stable_sock() {
     else
         dir="${TMPDIR:-/tmp}/magus-$(id -u)"
     fi
-    echo "$dir/magus-daemon.sock"
+    echo "$dir/server.sock"
 }
 
-# _ensure_no_magus_daemon: stop any running magus stable daemon and wait for
+# _ensure_no_magus_daemon: stop any running magus server and wait for
 # the socket to disappear. `magus server stop` connects directly to the
 # daemon socket via adopt.Shutdown (it is not forwarded through adopt.Forward).
 _ensure_no_magus_daemon() {
     live || return 0
     local sock; sock=$(_stable_sock)
-    unset MAGUS_DAEMON_SOCKET
+    unset MAGUS_PROC_SOCKET
     if [[ -S "$sock" ]]; then
         "$MAGUS" server stop >/dev/null 2>&1 || true
         local i=0
@@ -177,7 +177,7 @@ _ensure_no_magus_daemon() {
 
 DAEMON_STARTED=0
 
-# start_magus_daemon: start a fresh magus stable daemon and wait for socket.
+# start_magus_daemon: start a fresh magus server and wait for socket.
 start_magus_daemon() {
     live || return 0
     _ensure_no_magus_daemon
@@ -191,7 +191,7 @@ start_magus_daemon() {
     if [[ ! -S "$sock" ]]; then
         yellow "warn: magus daemon did not start within 5s"
     fi
-    export MAGUS_DAEMON_SOCKET="unix://$sock"
+    export MAGUS_PROC_SOCKET="unix://$sock"
     DAEMON_STARTED=1
 }
 
@@ -201,7 +201,7 @@ stop_magus_daemon() {
         _ensure_no_magus_daemon
         DAEMON_STARTED=0
     fi
-    unset MAGUS_DAEMON_SOCKET 2>/dev/null || true
+    unset MAGUS_PROC_SOCKET 2>/dev/null || true
 }
 
 # ── per-tool command table ────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 // [Magus.RunCI] (the configured CI pipeline), and [Magus.RunAffected]
 // (only projects touched since a baseline). Behavior is tuned with [Option]
 // values passed to [Open]/[Inspect] (e.g. [WithLimiter]). [Limiter] caps
-// concurrent spell executions and can be shared across daemon workspaces.
+// concurrent spell executions and can be shared across server workspaces.
 //
 // Boundary: the library links the engine-agnostic interp surface and the Buzz VM,
 // but deliberately not the host bindings (interp/bindings) or the Buzz engine

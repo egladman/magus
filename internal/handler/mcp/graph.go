@@ -13,8 +13,8 @@ import (
 
 // The knowledge-graph retrieval tools (query/explain/path/stats) mirror the CLI
 // verbs and sit on the same cache-first substrate. Each resolves the graph then
-// answers. In the daemon, where a watcher keeps a warm graph invalidated on source
-// changes (see Magus.WatchKnowledgeGraph, started in startMCPWithDaemon), this
+// answers. In the server, where a watcher keeps a warm graph invalidated on source
+// changes (see Magus.WatchKnowledgeGraph, started in startMCPWithServer), this
 // answers from memory without re-parsing magusfiles; otherwise it rebuilds
 // cache-first. Either way it is fresh.
 

@@ -1,7 +1,7 @@
-// config.ts - the daemon's resolved read-only configuration: the default charms it applies to every
+// config.ts - the server's resolved read-only configuration: the default charms it applies to every
 // run (as effect-colored pills), the concurrency cap, and whether the sandbox is on. Read once from
 // the JSON status endpoint (not the proto event stream), so the card hides until that arrives. Lets
-// an operator see what the daemon is set to do without dropping to the terminal.
+// an operator see what the server is set to do without dropping to the terminal.
 
 import type { DashboardState, ConfigView } from "../state";
 import { Card, h, helpGlyph, type Tile } from "./card";
@@ -40,7 +40,7 @@ export function configTile(): Tile {
     return r;
   }
 
-  function render(c: ConfigView, version: string, daemonVersion: string): void {
+  function render(c: ConfigView, version: string, ownerVersion: string): void {
     card.el.hidden = false;
     const pills = h("span", "console-dashboard-config__charms");
     if (c.defaultCharms.length) {
@@ -70,7 +70,7 @@ export function configTile(): Tile {
           "console-dashboard-config__value",
           c.concurrency ? String(c.concurrency) : "auto",
         ),
-        "The most targets this daemon runs at once. auto sizes to the machine's CPU count.",
+        "The most targets this server runs at once. auto sizes to the machine's CPU count.",
       ),
       row(
         "Sandbox",
@@ -79,12 +79,12 @@ export function configTile(): Tile {
           " network access beyond a target's own declared workspace.",
       ),
     ];
-    // The daemon's magus version lives here with the rest of the config, not as a stray number card.
-    // Show the daemon version too only when it differs from the reported magus version.
+    // The server's magus version lives here with the rest of the config, not as a stray number card.
+    // Show the pool owner's build too only when it differs from the reported one.
     if (version) {
       const v =
-        daemonVersion && daemonVersion !== version
-          ? version + " (daemon " + daemonVersion + ")"
+        ownerVersion && ownerVersion !== version
+          ? version + " (pool " + ownerVersion + ")"
           : version;
       rows.push(row("magus version", h("span", "console-dashboard-config__value", v)));
     }
@@ -94,7 +94,7 @@ export function configTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (s.config) render(s.config, s.status?.magusVersion ?? "", s.status?.daemonVersion ?? "");
+      if (s.config) render(s.config, s.status?.magusVersion ?? "", s.status?.ownerVersion ?? "");
       else card.el.hidden = true;
     },
     destroy() {},

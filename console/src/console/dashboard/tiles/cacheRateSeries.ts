@@ -9,7 +9,7 @@
 //   - a baseline crossover (cacheSrc): the metrics backfill reads the global OTel counter,
 //     the live synthesis the warm-workspace sum. Different totals, so their difference is
 //     not a rate.
-//   - a generation change: the daemon restarted and the counters went back to zero.
+//   - a generation change: the server restarted and the counters went back to zero.
 //   - an unmeasured endpoint: a rate needs two real readings.
 //
 // A gap is the honest output for all three. The temptation in each case is to clamp the

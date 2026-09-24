@@ -25,6 +25,8 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/testenv"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -33,18 +35,18 @@ import (
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
 // `run -h` / `affected -h` / bare `affected` bug: a usage-only invocation of an
-// adoptable subcommand must NOT forward to the daemon (which would print usage on the
-// daemon's stderr and hand the caller a bare non-zero exit). It runs locally with
+// adoptable subcommand must NOT forward to the server (which would print usage on the
+// server's stderr and hand the caller a bare non-zero exit). It runs locally with
 // only config loaded, so the per-subcommand usage reaches the caller's stderr.
 func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	usageOnly := dispatchProfile{needsConfig: true}
 	// spawnsWork is what makes a run pay for machine-wide admission (and start the
-	// daemon that owns it), so it belongs to exactly the invocations that run targets:
+	// server that owns it), so it belongs to exactly the invocations that run targets:
 	// every usage-only, --detach and forensic case below must NOT carry it.
-	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true, spawnsWork: true}
+	full := dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true, spawnsWork: true}
 	// server subcommands never forward and never host their own proc server: doing so let a
 	// version-mismatched `server stop` shut down its own throwaway server instead of the real
-	// daemon (a silent no-op). Config-only, like a usage-only invocation.
+	// server (a silent no-op). Config-only, like a usage-only invocation.
 	serverProfile := dispatchProfile{needsConfig: true}
 
 	cases := []struct {
@@ -59,8 +61,8 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"run help", "run", []string{"help"}, usageOnly},
 		{"run target still forwards", "run", []string{"build"}, full},
 		{"run flag-then-target still forwards", "run", []string{"-v", "build"}, full},
-		// --detach SUBMITS to the daemon and reports the job id, so it is the client's
-		// job for the same reason usage is. Forwarding it had the daemon submit to
+		// --detach SUBMITS to the server and reports the job id, so it is the client's
+		// job for the same reason usage is. Forwarding it had the server submit to
 		// itself and print the id onto its own log, leaving the caller silent at exit 0.
 		{"run --detach stays local", "run", []string{"build", "--detach"}, usageOnly},
 		{"run -detach stays local", "run", []string{"-detach", "build"}, usageOnly},
@@ -73,10 +75,10 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected --help", "affected", []string{"--help"}, usageOnly},
 		{"affected target still forwards", "affected", []string{"ci"}, full},
 		// A forensic mode runs nothing, so a forward buys no pool and costs the report:
-		// the daemon prints it on its own stdout and the client exits 0 with an empty one.
+		// the server prints it on its own stdout and the client exits 0 with an empty one.
 		// That is what made magus\affectedImpact (which forks `affected --impact -o json`
 		// and decodes the child's stdout) fail with "decode report:" and an empty stderr
-		// whenever the caller had a daemon to forward to.
+		// whenever the caller had a server to forward to.
 		{"affected --impact stays local", "affected", []string{"--impact"}, usageOnly},
 		{"affected --impact with a base stays local", "affected", []string{"--impact", "--base", "origin/main", "-o", "json"}, usageOnly},
 		{"affected --explain stays local", "affected", []string{"--explain", "docs"}, usageOnly},
@@ -234,12 +236,12 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 		}
 	})
 
-	t.Run("extractDaemonEnabledFlag", func(t *testing.T) {
-		if val, set := extractDaemonEnabledFlag([]string{"run", "build", "--", "-daemon-enabled"}); val || set {
-			t.Fatalf("extractDaemonEnabledFlag = (%v, %v), want (false, false)", val, set)
+	t.Run("extractServerEnabledFlag", func(t *testing.T) {
+		if val, set := extractServerEnabledFlag([]string{"run", "build", "--", "-server-enabled"}); val || set {
+			t.Fatalf("extractServerEnabledFlag = (%v, %v), want (false, false)", val, set)
 		}
-		if val, set := extractDaemonEnabledFlag([]string{"-daemon-enabled", "run", "build"}); !val || !set {
-			t.Fatalf("extractDaemonEnabledFlag = (%v, %v), want (true, true)", val, set)
+		if val, set := extractServerEnabledFlag([]string{"-server-enabled", "run", "build"}); !val || !set {
+			t.Fatalf("extractServerEnabledFlag = (%v, %v), want (true, true)", val, set)
 		}
 	})
 
@@ -253,7 +255,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 	})
 }
 
-// TestSnapshotGlobalsRestoresDryRun pins the fix for the daemon flag-bleed bug:
+// TestSnapshotGlobalsRestoresDryRun pins the fix for the server flag-bleed bug:
 // dispatchAdopted defers snapshotGlobals()() so one adopted client's flags (e.g.
 // --dry-run) cannot survive into the next dispatch on the same process. gen.BindFlags
 // binds each generated flag with the CURRENT struct field as its default, so an unset
@@ -518,7 +520,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "server",
 			print: serverUsage,
-			want:  []string{"magus server", "start", "stop", "status", "reload", "MAGUS_DAEMON_ADDRESS", daemonDefaultAddr()},
+			want:  []string{"magus server", "start", "stop", "status", "reload", "MAGUS_SERVER_ADDRESS", proc.ServerDefaultAddr()},
 		},
 		{
 			name:  "job run",
@@ -719,21 +721,28 @@ func TestMain(m *testing.M) {
 				panic(err)
 			}
 		}
+		// A spawned broker is this test binary re-run as `broker`, which testscript.Main
+		// does not dispatch, so it would run the whole suite again, detached.
+		spawnBroker = func() (int, string, error) {
+			return 0, "", errors.New("a unit test never starts a real broker")
+		}
 	}
-	testscript.Main(m, map[string]func(){
+	testscript.Main(testenv.Wrap(m), map[string]func(){
 		"magus": func() { os.Exit(runCLI()) },
 	})
 }
 
 // TestScripts replays every testdata/script/*.txtar as a black-box CLI behavior
 // test: readable command-plus-expected-output scenarios that catch any observable
-// change to the CLI. Each script runs in its own temp dir with the daemon off, so
+// change to the CLI. Each script runs in its own temp dir with the server off, so
 // tests are hermetic and never touch a real workspace or socket.
 func TestScripts(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: "testdata/script",
 		Setup: func(e *testscript.Env) error {
-			e.Setenv("MAGUS_DAEMON_ENABLED", "false")
+			e.Setenv("MAGUS_SERVER_ENABLED", "false")
+			// A run starts a broker otherwise, and a script must leave nothing running.
+			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
 			// The shipped guard templates, by ABSOLUTE PATH to the real files.
 			// A script that copied them into its own archive would be testing a
@@ -933,7 +942,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 // iteration. For those, see the spawn-based ground-truth measurement in
 // hack/bench_startup.sh — it builds a fresh release binary and times
 // real cold starts. The in-process benchmarks below still pick up the
-// per-call cost of FindRoot, config decode, daemon-socket lookup, flag
+// per-call cost of FindRoot, config decode, server-socket lookup, flag
 // parse, and (when applicable) magus.Open.
 //
 // Caveat on singletons: cmd/magus uses sync.Once-backed singletons
@@ -988,12 +997,12 @@ func setupBenchWorkspace(b *testing.B) string {
 }
 
 // quarantineBenchEnv suppresses host state that would otherwise leak into
-// startup(): a real daemon socket on the developer machine, an inherited
+// startup(): a real server socket on the developer machine, an inherited
 // trace log level that would print the startup table, etc. Restored by
 // t.Setenv at bench end.
 func quarantineBenchEnv(b *testing.B) {
 	b.Helper()
-	b.Setenv("MAGUS_DAEMON_SOCKET", "")
+	b.Setenv(proc.SocketEnv, "")
 	b.Setenv("MAGUS_LOG_LEVEL", "")
 	// startup() calls log.Print on errors; silence it during benches.
 	prevOut := log.Writer()
@@ -1064,7 +1073,7 @@ func TestIsDeclaredRunRejectsEverythingButThreeBareTokens(t *testing.T) {
 		"a spell op form is not a target": {"run", "go::go-test", "."},
 		"an empty argv is not a run":      {},
 		// The workspace is what says a target exists, so a context carrying none can only
-		// refuse. A daemon with no loaded workspace admits no run at all rather than guessing.
+		// refuse. A server with no loaded workspace admits no run at all rather than guessing.
 		"no workspace declares anything": {"run", "sh", "."},
 	}
 	for name, argv := range cases {

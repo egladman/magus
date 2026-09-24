@@ -5,7 +5,7 @@
 // source: magus/activity/v1alpha1/activity.proto
 
 // Package magus.activity.v1alpha1 is the versioned wire contract for the magus activity trail: a
-// time-ordered record of consequential actions taken against a workspace or its daemon, for
+// time-ordered record of consequential actions taken against a workspace or its server, for
 // accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1alpha1,
 // magus.status.v1alpha1). It is deliberately NOT the execution journal (magus.viewer.v1alpha1, what a
 // build ran) nor metrics (magus.metrics.v1alpha1, aggregate counters): activity answers "who did
@@ -43,11 +43,11 @@ type Kind int32
 
 const (
 	Kind_KIND_UNSPECIFIED   Kind = 0
-	Kind_KIND_MCP_TOOL_CALL Kind = 1 // an agent invoked an MCP tool over the daemon (emitted)
+	Kind_KIND_MCP_TOOL_CALL Kind = 1 // an agent invoked an MCP tool over the server (emitted)
 	// The remaining sources share this envelope; each is emitted once its producer records into
 	// the trail, with no schema change. A reader/dashboard selects the kinds it wants (see
 	// ActivityQuery.kinds), so one stream serves the agent view, a jobs view, and a full log.
-	Kind_KIND_JOB             Kind = 2 // a daemon background job: SCIP reindex, graph build, VCS refresh (emitted)
+	Kind_KIND_JOB             Kind = 2 // a server background job: SCIP reindex, graph build, VCS refresh (emitted)
 	Kind_KIND_CONFIG_CHANGE   Kind = 3 // reserved: magus.yaml changed on reload, or a `magus config set` mutation
 	Kind_KIND_TOKEN_LIFECYCLE Kind = 4 // reserved: a connector token was minted or revoked
 	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // magus's own read/write/exec check refused an access; not a kernel-landlock denial, which reports nothing back (emitted)
@@ -74,14 +74,14 @@ const (
 	// under this kind is a READ, audited because this is the only door that can serve the PRIVATE
 	// note store, which lives outside any repository and which nothing else attributes.
 	Kind_KIND_NOTES Kind = 10
-	// A path under a job's declared write paths changed, as the daemon's file watcher saw it.
+	// A path under a job's declared write paths changed, as the server's file watcher saw it.
 	// action is the repo-relative path and unit is the job whose write paths cover it. The producer
 	// is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from
 	// the worker being watched, which is the whole reason a person can see what a worker is
 	// doing without asking it. An empty unit means no live job covered the path.
 	Kind_KIND_FILE_CHANGE Kind = 11
 	// A run magus recorded against a job: its check, one of its completion gates, or the
-	// daemon's own last run of a catalog job. action is the rendered command and preview
+	// server's own last run of a catalog job. action is the rendered command and preview
 	// names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
 	// kind here where the outcome is a fact about the work rather than about the recording.
 	Kind_KIND_RUN Kind = 12
@@ -216,7 +216,7 @@ type ActivityEvent struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Time     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"` // when the action occurred
 	Kind     Kind                   `protobuf:"varint,2,opt,name=kind,proto3,enum=magus.activity.v1alpha1.Kind" json:"kind,omitempty"`
-	Actor    string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`   // the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
+	Actor    string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`   // the origin fields below as one label: "eli via claude-code", "server", "unattributed"
 	Action   string                 `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"` // the specific action: a tool name, "connector.create"
 	Outcome  Outcome                `protobuf:"varint,5,opt,name=outcome,proto3,enum=magus.activity.v1alpha1.Outcome" json:"outcome,omitempty"`
 	Error    string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`       // error text when outcome is OUTCOME_ERROR
@@ -228,8 +228,8 @@ type ActivityEvent struct {
 	Preview       string `protobuf:"bytes,10,opt,name=preview,proto3" json:"preview,omitempty"` // opening characters of the response, for list views
 	RequestBytes  int64  `protobuf:"varint,11,opt,name=request_bytes,json=requestBytes,proto3" json:"request_bytes,omitempty"`
 	ResponseBytes int64  `protobuf:"varint,12,opt,name=response_bytes,json=responseBytes,proto3" json:"response_bytes,omitempty"`
-	// The workspace root the action pertained to; empty for a daemon-wide action not bound to one
-	// workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a
+	// The workspace root the action pertained to; empty for a server-wide action not bound to one
+	// workspace (an MCP call). The trail is a single server-wide stream, so this disambiguates a
 	// job by its workspace rather than fragmenting the record across per-workspace directories.
 	Workspace string `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	// The agent host behind the action and that host's own session id, empty when the producer
@@ -264,8 +264,8 @@ type ActivityEvent struct {
 	Contested []string `protobuf:"bytes,17,rep,name=contested,proto3" json:"contested,omitempty"`
 	// Where the action came from, one field per channel, so a reader never guesses which kind of
 	// value a single string holds. user is the OS account the recording process ran as, read from
-	// the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
-	// credential is the bearer a daemon request presented, as the daemon verified it. agent is the
+	// the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, server).
+	// credential is the bearer a server request presented, as the server verified it. agent is the
 	// host's subagent id within session. actor above is these rendered as one label for a row
 	// head.
 	User       string      `protobuf:"bytes,18,opt,name=user,proto3" json:"user,omitempty"`

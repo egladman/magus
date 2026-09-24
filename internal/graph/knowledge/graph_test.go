@@ -54,7 +54,7 @@ func TestUnionIntoDistinctWorkspaces(t *testing.T) {
 
 // buildConcurrencyFixture returns a Graph with several hundred edges and none of
 // its lazy indices (out/in/projPaths) populated yet, the state right after a
-// daemon rebuild, before any query has touched the graph.
+// server rebuild, before any query has touched the graph.
 func buildConcurrencyFixture() *Graph {
 	g := NewGraph()
 	const projects = 10
@@ -94,14 +94,14 @@ func buildConcurrencyFixture() *Graph {
 	return g
 }
 
-// TestConcurrentQueriesDoNotRaceOnLazyIndices reproduces the daemon's warm-graph
+// TestConcurrentQueriesDoNotRaceOnLazyIndices reproduces the server's warm-graph
 // scenario: one *Graph, published with no lazy indices built yet, handed to many
 // concurrent readers at once (concurrent HTTP/MCP requests hitting the SAME graph
 // right after a rebuild). ensureAdj (out/in) and projectPaths (projPaths) used to
 // build those indices behind a bare nil check, so two goroutines racing the first
 // query after a rebuild could write g.out/g.in/g.projPaths at the same time, a
 // concurrent map write, which is an unrecoverable Go runtime fatal (crashes the
-// whole daemon process), not a recoverable panic. Run with -race: before the fix
+// whole server process), not a recoverable panic. Run with -race: before the fix
 // this trips the race detector; after, it is clean.
 func TestConcurrentQueriesDoNotRaceOnLazyIndices(t *testing.T) {
 	g := buildConcurrencyFixture()

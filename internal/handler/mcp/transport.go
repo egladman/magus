@@ -1,6 +1,6 @@
 // Package mcp implements the MCP (Model Context Protocol) server for magus. It
 // serves over stdio for the one host that launched `magus mcp` (ServeStdio), and
-// over Streamable HTTP in the daemon (HTTPHandler) so several clients can share
+// over Streamable HTTP in `magus server` (HTTPHandler) so several clients can share
 // one long-lived server.
 //
 // Every tool call stamps context.WithValue markers via origin.WithContext so
@@ -156,7 +156,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 	)
 	// The activity trail is an append-only JSONL sidecar under the cache dir (next to the
 	// journal run logs). Writes are stateless (open/append/close per event). Rotate here trims
-	// it once at construction; keeping it bounded thereafter belongs to the daemon's
+	// it once at construction; keeping it bounded thereafter belongs to the server's
 	// rotate-activities maintenance job, which is the ONLY trigger: a second one driven off
 	// this wrapper's own append counter would bound MCP traffic while leaving every other
 	// producer (agent hooks especially) unbounded. An empty cacheDir makes every trail call a
@@ -209,12 +209,12 @@ func ServeStdio(ctx context.Context, opts Options, in io.Reader, out io.Writer) 
 	return nil
 }
 
-// HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it
+// HTTPHandler builds the MCP Streamable-HTTP handler for server mode: it
 // validates opts, wires per-session origin tracking, and returns the bare MCP
-// handler. It mounts no routes and opens no listener: the daemon package owns
+// handler. It mounts no routes and opens no listener: the server package owns
 // the HTTP server assembly (guards, health routes, console) so this package
 // need not depend on the httpx server core, the dashboard bridge, or the file
-// watcher. The returned handler is a path-agnostic http.Handler; the daemon
+// watcher. The returned handler is a path-agnostic http.Handler; the server
 // mounts it at /mcp, matching the path StreamableHTTPServer's own Start() would use.
 func HTTPHandler(opts Options) (http.Handler, error) {
 	if err := opts.validate(); err != nil {

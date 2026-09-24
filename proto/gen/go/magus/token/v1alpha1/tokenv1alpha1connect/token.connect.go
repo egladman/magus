@@ -3,7 +3,7 @@
 // Source: magus/token/v1alpha1/token.proto
 
 // Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
-// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// surface over the server's stored tokens and its live share link. It is a second door onto
 // the same token store the CLI writes (tokens.d) and the same share manager the share
 // endpoint drives, never a second store.
 //

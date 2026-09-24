@@ -7,11 +7,11 @@ import {
   exchangeOperatorToken,
   redeemLinkCode,
 } from "./token-exchange";
-import { getLiveToken } from "./daemon";
+import { getLiveToken } from "./server";
 
 // withStorage stubs the two Web Storage objects the exchange reads and writes, seeded with
 // an existing bearer. Async because the exchange is, unlike the sync harness in
-// daemon.test.ts.
+// server.test.ts.
 async function withStorage(seed: Record<string, string>, fn: () => Promise<void>): Promise<void> {
   const g = globalThis as unknown as Record<string, unknown>;
   const saved = { sessionStorage: g.sessionStorage, localStorage: g.localStorage };
@@ -68,7 +68,7 @@ test("a page holding no token has nothing to exchange", async () => {
       return "mgs_new";
     });
     assert.equal(out, "no-token");
-    assert.equal(called, false, "an absent token must not reach the daemon");
+    assert.equal(called, false, "an absent token must not reach the server");
   });
 });
 
@@ -122,7 +122,7 @@ test("an empty secret is treated as a failure, not stored", async () => {
   });
 });
 
-// Pinned on the wire: the request carries a console=write grant and an expiry at the daemon's
+// Pinned on the wire: the request carries a console=write grant and an expiry at the server's
 // ceiling, and the minted secret replaces the operator token.
 test("the real exchange asks for an expiring console=write grant", async () => {
   await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
@@ -146,7 +146,7 @@ test("the real exchange asks for an expiring console=write grant", async () => {
   });
 });
 
-// A link's code goes to the daemon that served the page, in the body and nowhere else, and the
+// A link's code goes to the server that served the page, in the body and nowhere else, and the
 // token it is traded for is what the page stores.
 test("a link code is redeemed once, in the body, for the token it stands for", async () => {
   await withStorage({}, async () => {
@@ -168,7 +168,7 @@ test("a link code is redeemed once, in the body, for the token it stands for", a
   });
 });
 
-test("a used or expired code, or a daemon that is down, stores nothing", async () => {
+test("a used or expired code, or a server that is down, stores nothing", async () => {
   for (const respond of [
     () => new Response('{"error":{"code":401}}', { status: 401 }),
     () => new Response("not json", { status: 200 }),

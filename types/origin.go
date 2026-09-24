@@ -11,10 +11,10 @@ const (
 	EntryPointHook EntryPoint = "hook"
 	// EntryPointMCP is a tool call on the MCP surface.
 	EntryPointMCP EntryPoint = "mcp"
-	// EntryPointRPC is an authenticated call on the daemon's HTTP API.
+	// EntryPointRPC is an authenticated call on the server's HTTP API.
 	EntryPointRPC EntryPoint = "rpc"
-	// EntryPointDaemon is the daemon acting on its own schedule.
-	EntryPointDaemon EntryPoint = "daemon"
+	// EntryPointServer is `magus server` acting on its own schedule.
+	EntryPointServer EntryPoint = "server"
 )
 
 // Origin is where a record came from, as far as magus could see. Each field is bound to
@@ -39,19 +39,19 @@ type Origin struct {
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Agent is the host's subagent id within Session, empty for the main conversation.
 	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
-	// Credential is the bearer a daemon request presented, as the daemon verified it, or
+	// Credential is the bearer a server request presented, as the server verified it, or
 	// [CredentialStdio] for a `magus mcp` tool call. A bearer proves possession of that
 	// credential, not who holds it.
 	Credential Credential `json:"credential,omitzero" yaml:"credential,omitempty"`
 }
 
 // Label renders the origin as one phrase for a row head: "eli", "eli via <host>",
-// "eli via <host> via agent a1b2", "eli via token laptop (3fa9c1d2)", "daemon". It is
+// "eli via <host> via agent a1b2", "eli via token laptop (3fa9c1d2)", "server". It is
 // "unattributed" when no channel named anything. A reader that needs one field, a filter
 // included, reads that field, never this.
 func (o Origin) Label() string {
-	if o.EntryPoint == EntryPointDaemon {
-		return string(EntryPointDaemon)
+	if o.EntryPoint == EntryPointServer {
+		return string(EntryPointServer)
 	}
 	label := o.User
 	for _, via := range []string{o.Host, phrase("agent", o.Agent), o.Credential.Phrase()} {

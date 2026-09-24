@@ -7,7 +7,7 @@ tags:
     service op,
     shared services,
     readiness,
-    daemon,
+    broker,
     keep-warm,
     MGS5001,
     MGS5002,
@@ -41,7 +41,7 @@ A service behaves differently depending on how it is reached:
 - **Reached as a dependency** (some target's `magus\needs` pulls it in) it is
   **supervised in the background**: magus starts it, waits for its readiness probe to
   pass, then lets the dependent run against it. It does not block. The service stops
-  when the run ends (or stays warm on the daemon, below).
+  when the run ends (or stays warm on the broker, below).
 
 ## Caching
 
@@ -64,10 +64,10 @@ same service get **one** instance, even across different projects that each decl
 their own copy, as long as the configuration matches. This is what stops N projects
 from each spinning up their own Postgres when they meant to share one.
 
-When a [daemon](../guides/integrations/daemon.md) is running it hosts shared services and keeps them **warm
+When a [broker](../guides/integrations/server.md) is running it hosts shared services and keeps them **warm
 across invocations**: `magus run test:a` starts Postgres, and a later `magus run
-test:b` reuses the same warm instance instead of restarting it. Without a daemon the
-service is hosted in-process for the single run. A service the daemon cannot reach
+test:b` reuses the same warm instance instead of restarting it. Without a broker the
+service is hosted in-process for the single run. A service the broker cannot reach
 falls back to in-process rather than failing the run.
 
 ### Readiness
@@ -79,16 +79,16 @@ process never exits, the probe does.
 
 ### Idle and teardown
 
-Once a shared service's last dependent releases it, the daemon keeps it warm for an
+Once a shared service's last dependent releases it, the broker keeps it warm for an
 **idle window** (30 minutes by default; override per service with `idle = "45m"`) and
 then reaps it. Teardown has three layers:
 
 - **automatic**: the idle timeout above, plus a crash reaper (below);
-- **all services**: `magus server stop --services` stops every hosted service (to
-  drop stale state or free held ports) without shutting the daemon down;
-- **whole daemon**: `magus server stop` tears the daemon and its services down.
+- **all services**: `magus broker stop --services` stops every hosted service (to
+  drop stale state or free held ports) without shutting the broker down;
+- **whole broker**: `magus broker stop` tears the broker and its services down.
 
-If the daemon is killed uncleanly, a new daemon replays each hosted service's `stop`
+If the broker is killed uncleanly, a new broker replays each hosted service's `stop`
 command on startup to **reap orphans** the dead one left behind. Give a container
 service a `stop` command (e.g. `docker stop <name>`) so it can be reaped this way.
 

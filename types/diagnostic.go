@@ -295,7 +295,7 @@ const (
 	SandboxUnsupported        DiagnosticCode = "MGS2005"
 	PathShimSuspected         DiagnosticCode = "MGS2006"
 	ExecDenied                DiagnosticCode = "MGS2007"
-	DaemonSocketWithheld      DiagnosticCode = "MGS2008"
+	ProcSocketWithheld        DiagnosticCode = "MGS2008"
 	SandboxPolicyMismatch     DiagnosticCode = "MGS2010"
 	SecretTooShortToMask      DiagnosticCode = "MGS2011"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
@@ -342,7 +342,7 @@ const (
 	// is fine, what already happened on this machine is what changes the answer.
 	//
 	// Machine load used to be required too, and that made this unreachable where
-	// it mattered: the load reading comes from the daemon, ordinary commands run
+	// it mattered: the load reading comes from the server, ordinary commands run
 	// without a persistent one, so an idle machine always advised and ran the
 	// duplicate anyway. Redundancy alone defers now; a nested run still only
 	// advises, because it counts its own ancestors' claims as load.
@@ -395,11 +395,11 @@ const (
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
 	GateSuperseded DiagnosticCode = "MGS3014"
-	// WorkspaceLoadFailed is a daemon call against a workspace whose magusfiles failed to
+	// WorkspaceLoadFailed is a server call against a workspace whose magusfiles failed to
 	// load. The proximate cause of the refusal; the BZZ or MGS code the load stopped on
 	// rides beside it as the underlying one. Retrying cannot help until a source changes.
 	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
-	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
+	// WorkspaceStillLoading is a server call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
 	WorkspaceStillLoading DiagnosticCode = "MGS3017"
 	// WritePathIsDirectory is a job fork whose write paths name an existing directory that
@@ -421,6 +421,11 @@ const (
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
 	PreflightOutsideClosure DiagnosticCode = "MGS3021"
+	// BrokerUnavailable is a step magus did not start under `broker: required` because no
+	// broker answered: nothing could arbitrate this host's capacity. Exits 69
+	// (EX_UNAVAILABLE), apart from MGS3009's 75, so a wrapper can tell "no arbiter" from
+	// "the host is busy".
+	BrokerUnavailable DiagnosticCode = "MGS3022"
 	// PipeCycle is a run whose standard input is written, through a chain of processes
 	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
@@ -468,7 +473,7 @@ const (
 	NearDuplicateServices DiagnosticCode = "MGS5001"
 	ServiceOpDetached     DiagnosticCode = "MGS5002"
 	CommandOpNeverExits   DiagnosticCode = "MGS5003"
-	DaemonRequired        DiagnosticCode = "MGS5004"
+	ServerRequired        DiagnosticCode = "MGS5004"
 	CharmPatchInvalid     DiagnosticCode = "MGS6001"
 	// CharmRenamed is a run activating a charm under a name magus has retired, with no
 	// selected target declaring that name for itself. The old name matches nothing, so
@@ -490,7 +495,7 @@ const (
 	NoAuthToken              DiagnosticCode = "MGS9004"
 	TokenNameExists          DiagnosticCode = "MGS9005"
 	TokenNotFound            DiagnosticCode = "MGS9006"
-	// HostNotAllowed is a request whose Host or Origin names a host the daemon does not
+	// HostNotAllowed is a request whose Host or Origin names a host the server does not
 	// serve: the DNS-rebinding guard, answered 403.
 	HostNotAllowed DiagnosticCode = "MGS9007"
 	// LoopbackPeerRequired is a request to a local-only route from a peer that is not on
@@ -505,9 +510,9 @@ const (
 	// answered 401. A token that was sent and refused is BearerRejected instead: the two
 	// need different fixes (attach one, or mint a new one).
 	BearerMissing DiagnosticCode = "MGS9011"
-	// MethodNotAllowed is a daemon route asked with a method it does not serve, answered 405.
+	// MethodNotAllowed is a server route asked with a method it does not serve, answered 405.
 	MethodNotAllowed DiagnosticCode = "MGS9012"
-	// ConsoleNotBuilt is a share started while the daemon found no built console to serve.
+	// ConsoleNotBuilt is a share started while the server found no built console to serve.
 	ConsoleNotBuilt DiagnosticCode = "MGS9013"
 	// ShareUnavailable is a share whose LAN listener could not start: no private-range
 	// interface is up, or the listener could not bind.
@@ -581,17 +586,17 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
-	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
+	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, PipeCycle,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
-	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
+	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, ServerRequired,
 	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,

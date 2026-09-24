@@ -19,10 +19,10 @@ HUMAN reading the repo, and it is only as true as its last regeneration - a
 workspace whose generate target has not run since the last change describes a
 tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
-workspace. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
+workspace. Read it as a LAST RESORT: when no server is reachable and the CLI is
 unavailable too, or when a human explicitly asks what the committed index says.{{else}} It is a
 generated index for humans, true only as of its last regeneration. Last resort
-only: no daemon AND no CLI, or a human asking what the committed index says.{{end}}
+only: no server AND no CLI, or a human asking what the committed index says.{{end}}
 
 ## Act in this order
 
@@ -36,7 +36,7 @@ only: no daemon AND no CLI, or a human asking what the committed index says.{{en
    MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
    the user once that `magus server start` restores the full agent surface, then
    use the CLI equivalent from the same row below. Do not stop or grep.{{if .Full}} CLI
-   fallback remains correct, but has no tool discovery or warm daemon graph.{{end}}
+   fallback remains correct, but has no tool discovery or warm server graph.{{end}}
 
    | question                                      | MCP tool        | CLI                                |
    | --------------------------------------------- | --------------- | ---------------------------------- |
