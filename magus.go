@@ -139,6 +139,10 @@ type Magus struct {
 	// guard rule can come from. Nil until preloadMagusfiles runs.
 	policyLog *interp.SourceLog
 
+	// magusfileExports are the target keys each project's magusfile registered when
+	// load evaluated it, by project path. A project absent here was not evaluated.
+	magusfileExports map[string][]string
+
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver
@@ -373,6 +377,7 @@ func (m *Magus) load(ctx context.Context) error {
 		// never populated. The shadow ward reads only the tree, so it still reports.
 		return errors.Join(err, m.spellShadows())
 	}
+	m.magusfileExports = customTargets
 	// Workspace providers run HERE, in the one window where both facts they need are
 	// true: the magusfiles have been evaluated (so magus\workspace.provider has named
 	// its spells, and those spells are registered), and the registry has not been

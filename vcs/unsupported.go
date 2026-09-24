@@ -212,6 +212,10 @@ func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
 	return nil, decline[N](types.CapCheckoutProvisioner)
 }
 
+func (declines[N]) OtherCheckouts(string) ([]string, error) {
+	return nil, decline[N](types.CapCheckoutLister)
+}
+
 func (declines[N]) FetchRef(context.Context, string, string, string) (string, error) {
 	return "", decline[N](types.CapRevisionFetcher)
 }

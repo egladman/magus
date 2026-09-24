@@ -3494,9 +3494,9 @@ func (ix symbolIndex) addBuzzName(lit string) {
 	}
 }
 
-// installCall matches a package-manager install run from a magusfile, directly or through
-// the install() helper each JS project defines.
-var installCall = regexp.MustCompile(`\binstall\(\)|"(pnpm|npm|yarn)",\s*\["(install|ci)"`)
+// installCall matches a package-manager install run from a magusfile, directly, through an
+// install() helper, or through a spell's install op.
+var installCall = regexp.MustCompile(`\binstall\(\)|"(pnpm|npm|yarn)",\s*\["(install|ci)"|\["(pnpm-install|npm-ci|go-mod-download|uv-sync|cargo-fetch)"\]`)
 
 // exportedTarget matches the head of a target definition, capturing its name.
 var exportedTarget = regexp.MustCompile(`(?m)^export fun (\w+)\(`)

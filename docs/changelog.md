@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Each spell's install op is named binary + capability, one per binary.**
+  typescript's `pnpm-install` and `npm-ci`, go's `go-mod-download`, python's
+  `uv-sync`, rust's `cargo-fetch`. A project composes the one it needs into its
+  own top-level `install` target, which `build`/`test`/`lint` need; `:update`
+  rewrites the lockfile as before. An unchanged install replays without forking
+  the package manager. macOS seeds `node_modules` from a sibling checkout.
 - **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
   targets run first across every selected project; a failure stops everything, exits 3
   (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
@@ -186,6 +192,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
+  `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
+  package leaves the command alone.
+- **`install` probes only its own tools and skips dependency order.** A project's install
+  no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
+  not tsc.
 - **The agent guard hook no longer loads the workspace.** `magus shell` reads its rules
   from the root magusfile alone, and loads the committed copy only while a file that
   load read is uncommitted. Measured here: about 120ms per call, down from about 1.6s.
@@ -332,6 +344,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Workspace load is 10x faster.** A bare library import is no longer executed as a
+  candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
+  A run skips re-evaluating a magusfile that does not export the target, and an exact
+  source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
 - **The GitHub provider no longer offers a merge method a ruleset refuses.** `describe`
   intersected repository settings alone; it now narrows `methods` to what every active
   ruleset rule targeting the base branch also allows, drops `merge` under a required

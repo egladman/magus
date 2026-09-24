@@ -17,10 +17,6 @@ import (
 // new mirror cannot silently describe a shape the runtime fails to produce.
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
-	// Manifest's fields are a str and a [str], so it references no other mirror and
-	// its position here is free, but it is kept beside Path because a spell authors
-	// the two together in mgs_listManifests, and Path is what Manifest replaced there.
-	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
@@ -30,6 +26,10 @@ var boundaryTypes = []boundaryType{
 	// and only on the round trip, which is how SymbolIndexer went missing from a handle
 	// while the decoder still demanded it.
 	{Name: "Command", Type: reflect.TypeFor[spells.Command](), RuntimeObject: true},
+	// Must follow Command (Install.command is one) and precede Manifest (Manifest.installs
+	// is {str: Install}).
+	{Name: "Install", Type: reflect.TypeFor[spells.Install]()},
+	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	// Must follow Command: SymbolIndexer.command is one.
 	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},

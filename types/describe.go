@@ -190,6 +190,10 @@ type TargetGraphNode struct {
 	// grouped by spell in first-appearance order. It shows which toolchain a
 	// composite target drives: the part `deps` (sibling targets) omits.
 	Spells []TargetSpellUse `json:"spells,omitempty" yaml:"spells,omitempty"`
+	// DispatchOnly means the body is nothing but Spells: every statement calls one spell
+	// op with the target's own context, and nothing else runs. It is the static proof that
+	// the target does no work of its own, so the engine can schedule it as those ops.
+	DispatchOnly bool `json:"dispatch_only,omitempty" yaml:"dispatch_only,omitempty"`
 	// CrossDependencies are dependencies on specific targets in *other* projects,
 	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project
 	// target names), each carries the other project's path, so the graph can draw a

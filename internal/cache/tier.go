@@ -80,13 +80,18 @@ func (t *localTier) name() string { return "local" }
 
 func (t *localTier) writes() bool { return t.write }
 
-func (t *localTier) lookup(_ context.Context, s *Step, hash string) (*entry, error) {
+func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, error) {
 	m, err := t.c.readManifest(s.ProjectPath, hash)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, errTierMiss
 	}
 	if err != nil {
 		return nil, err
+	}
+	if moved := movedStamps(s.WorkspaceRoot, s.Stamps, m.Stamps); len(moved) > 0 {
+		slog.DebugContext(ctx, "cache.stamp", slog.String("project", s.ProjectPath),
+			slog.String("target", s.Target), slog.Any("moved", moved))
+		return nil, errTierMiss
 	}
 	return &entry{manifest: m, root: t.c.dir}, nil
 }
@@ -157,7 +162,8 @@ func (t *remoteTier) fail(ctx context.Context, op string, s *Step, hash string, 
 }
 
 func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, error) {
-	if !t.usable(ctx) {
+	// A stamped entry vouches for one local tree; see Step.Stamps.
+	if len(s.Stamps) > 0 || !t.usable(ctx) {
 		return nil, errTierMiss
 	}
 	// Timed around the whole fetch, import included: GetArtifact returns a stream, so
@@ -196,6 +202,9 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 }
 
 func (t *remoteTier) store(ctx context.Context, s *Step, snap *Manifest) error {
+	if len(s.Stamps) > 0 {
+		return nil
+	}
 	if remoteStatsFrom(ctx).isDegraded() {
 		if t.required {
 			return errRemoteDegraded
@@ -260,7 +269,7 @@ func (t *remoteTier) put(ctx context.Context, s *Step, hash string) error {
 // more than the miss it would save.
 func (t *remoteTier) backfill(ctx context.Context, s Step, hash string) {
 	stats := remoteStatsFrom(ctx)
-	if stats == nil || stats.isDegraded() {
+	if stats == nil || stats.isDegraded() || len(s.Stamps) > 0 {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)

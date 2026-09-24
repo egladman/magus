@@ -138,7 +138,8 @@ type VCSDriver interface {
 	// repo-relative with forward slashes. The exceptions: the path filters of Dirty,
 	// DirtyFiles, DirtyDiff, TrackedFiles, IgnoredFiles and RangeDiff are the backend's
 	// pathspecs, relative to dir; CheckoutProvisioner's dir names a checkout outside the
-	// repository; Bundler's file is an absolute path.
+	// repository; CheckoutLister returns absolute checkout roots; Bundler's file is an
+	// absolute path.
 	Bisector
 	MergeDriverInstaller
 	RefreshHookInstaller
@@ -165,6 +166,7 @@ type VCSDriver interface {
 	TreeMerger
 	GeneratedPathReporter
 	CheckoutProvisioner
+	CheckoutLister
 	RevisionFetcher
 	Pusher
 	Bundler
@@ -394,6 +396,7 @@ const (
 	CapTreeMerger            VCSCapability = "TreeMerger"
 	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
 	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
+	CapCheckoutLister        VCSCapability = "CheckoutLister"
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
 	CapPusher                VCSCapability = "Pusher"
 	CapBundler               VCSCapability = "Bundler"
@@ -493,6 +496,18 @@ type RemoteConfigReporter interface {
 	// ConfiguredRemote returns the default remote URL recorded in the config of the
 	// repository containing dir, or "" with ErrVCSUnsupported.
 	ConfiguredRemote(dir string) (string, error)
+}
+
+// CheckoutLister is the capability to list every checkout of the repository containing
+// root (a git worktree set) by reading files, without starting the backend. Unlike
+// CheckoutProvisioner.Checkouts it lists every checkout, not only those magus made. The
+// install op seeds a missing dependency tree from a sibling, on a path where a
+// subprocess per project is not affordable; the missing context.Context is that
+// contract, as it is for RemoteConfigReporter.
+type CheckoutLister interface {
+	// OtherCheckouts returns the root of every OTHER live checkout of root's repository,
+	// primary first. A checkout whose directory is gone is omitted.
+	OtherCheckouts(root string) ([]string, error)
 }
 
 // DefaultRefReporter is the capability (sibling of RemoteReporter) to report the

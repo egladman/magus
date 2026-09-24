@@ -807,3 +807,40 @@ func TestExpandSourcesDeduplicatesExactAndPattern(t *testing.T) {
 	}
 	assert.Equal(t, []string{"cmd/main.go"}, rels, "one file, named twice, hashed once")
 }
+
+// TestWalkBases pins which directories a pattern set needs walked: each static prefix
+// once, a nested one folded into its ancestor, the whole root when any pattern has no
+// prefix, and nothing for a prefix no walked path could match.
+func TestWalkBases(t *testing.T) {
+	assert.Equal(t, []string{"console", "docs/guides"},
+		walkBases([]string{"console/**/*.ts", "docs/guides/*.md", "console/src/*.ts", "docs/guides/**/*.md"}))
+	assert.Equal(t, []string{""}, walkBases([]string{"console/**/*.ts", "**/*.go"}))
+	assert.Equal(t, []string{""}, walkBases([]string{"./*.go"}))
+	assert.Equal(t, []string{"a", "ab"}, walkBases([]string{"ab/*.go", "a/*.go"}), "a sibling sharing a name prefix is not nested")
+	assert.Empty(t, walkBases([]string{"../other/*.go", "/abs/*.go"}))
+}
+
+// TestExpandSourcesPrefixWalkMatchesTheFullWalk pins that walking only the patterns'
+// static prefixes finds exactly what a walk of the whole root would: a prefix that is
+// missing, a symlink, an ignore dir or an output is skipped, never an error and never a
+// way past the full walk's pruning.
+func TestExpandSourcesPrefixWalkMatchesTheFullWalk(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation is restricted on Windows")
+	}
+	root := t.TempDir()
+	for _, f := range []string{"web/src/a.ts", "web/b.ts", "web/dist/c.ts", "other/d.ts", "real/e.ts", "vendor/x/f.ts"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(f)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, f), []byte(f), 0o644))
+	}
+	require.NoError(t, os.Symlink("real", filepath.Join(root, "link")))
+
+	out, err := expandSources([]string{"web/**/*.ts", "web/src/*.ts", "link/*.ts", "missing/*.ts", "vendor/x/*.ts"},
+		root, []string{"web/dist/**"}, nil)
+	require.NoError(t, err)
+	var rels []string
+	for _, ra := range out {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"web/b.ts", "web/src/a.ts"}, rels)
+}

@@ -3132,6 +3132,68 @@ func (_c *MockVCSDriver_Name_Call) RunAndReturn(run func() string) *MockVCSDrive
 	return _c
 }
 
+// OtherCheckouts provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) OtherCheckouts(root string) ([]string, error) {
+	ret := _mock.Called(root)
+
+	if len(ret) == 0 {
+		panic("no return value specified for OtherCheckouts")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(string) ([]string, error)); ok {
+		return returnFunc(root)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) []string); ok {
+		r0 = returnFunc(root)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) error); ok {
+		r1 = returnFunc(root)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_OtherCheckouts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OtherCheckouts'
+type MockVCSDriver_OtherCheckouts_Call struct {
+	*mock.Call
+}
+
+// OtherCheckouts is a helper method to define mock.On call
+//   - root string
+func (_e *MockVCSDriver_Expecter) OtherCheckouts(root interface{}) *MockVCSDriver_OtherCheckouts_Call {
+	return &MockVCSDriver_OtherCheckouts_Call{Call: _e.mock.On("OtherCheckouts", root)}
+}
+
+func (_c *MockVCSDriver_OtherCheckouts_Call) Run(run func(root string)) *MockVCSDriver_OtherCheckouts_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_OtherCheckouts_Call) Return(strings []string, err error) *MockVCSDriver_OtherCheckouts_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_OtherCheckouts_Call) RunAndReturn(run func(root string) ([]string, error)) *MockVCSDriver_OtherCheckouts_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ParentRef provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) ParentRef() string {
 	ret := _mock.Called()

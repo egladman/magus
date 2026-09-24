@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/internal/parsecache"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -49,7 +50,7 @@ const TargetContextGlobal = "__magus_target_context"
 // describe.Extract, which sees ctx-form declarations directly. Best-effort: a parse
 // failure yields nil, matching the extractor's never-error contract.
 func CtxFormTargetKeys(src string) map[string]bool {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil || prog == nil {
 		return nil
 	}
@@ -116,7 +117,7 @@ func RemovedAPINames() []string {
 // textual scan is the only thing left; it is reached only for a file that is already
 // failing, so at worst it re-explains a broken magusfile with the wrong migration.
 func RemovedAPICall(src string) (call, replacement string, ok bool) {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil || prog == nil {
 		for _, r := range removedMagusfileAPI {
 			if text := "magus." + strings.Join(r.path, "."); strings.Contains(src, text+"(") {
@@ -413,7 +414,7 @@ func spellImportNames(src string) []string {
 	if !strings.Contains(src, "magus/spell/") {
 		return nil
 	}
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return nil
 	}
@@ -439,7 +440,7 @@ func checkRemoteSpellImports(ctx context.Context, src string) error {
 	if !mentionsRemoteImport(src) {
 		return nil
 	}
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return nil //nolint:nilerr // Exec reports the syntax error
 	}
@@ -510,7 +511,7 @@ func (s *importErrors) take() error {
 // import (`as _`) binds no name; an alias binds itself; a plain import binds the path's
 // last segment. Returns nil on a parse error (Exec re-parses and reports it).
 func importBoundNames(src string) map[string]string {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return nil
 	}
@@ -693,7 +694,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
 	// replaces gopherbuzz's upstream default so a magusfile resolves siblings the same
 	// way regardless of the process cwd, and cannot escape via BUZZ_INCLUDE_PATH.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
@@ -880,7 +881,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	// (Parser.zig gates the same warning on `self.flavor != .Repl`): a REPL evaluates
 	// one statement at a time, so an import "unused so far" may just be used by a
 	// line not typed yet.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
 	buzzSess.SetIncludeDirs(nil)
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {

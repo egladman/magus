@@ -79,6 +79,12 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
 		opts.op, opts.cwd, opts.env = target, base.cwd, base.env
+		if tgt.Kind == spells.OpKindInstall {
+			if !opts.hasArgs {
+				opts.args = project.ExtraArgs(ctx)
+			}
+			return vm.Null, runInstall(ctx, tgt, opts)
+		}
 		res, err := runBuzzCommand(ctx, tgt, opts)
 		if err != nil {
 			return vm.Null, err
@@ -194,7 +200,7 @@ func targetsToMap(targets map[string]spells.Op) vm.Value {
 	for name, t := range targets {
 		// A synthesized op is magus's own product, not something the author wrote, and
 		// writing it back would re-present it to Decode as an authored declaration.
-		if t.Kind == spells.OpKindSymbolIndex {
+		if t.Kind == spells.OpKindSymbolIndex || t.Kind == spells.OpKindInstall {
 			continue
 		}
 		ops.MapSet(name, commandToMap(t.Command))

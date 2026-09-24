@@ -1121,6 +1121,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapTreeMerger:            {"git": true},
 	types.CapGeneratedPathReporter: {"git": true},
 	types.CapCheckoutProvisioner:   {"git": true},
+	types.CapCheckoutLister:        {"git": true},
 	types.CapRevisionFetcher:       {"git": true},
 	types.CapPusher:                {"git": true},
 	types.CapBundler:               {"git": true},
@@ -1194,6 +1195,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
 		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
 		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
+		{types.CapCheckoutLister, "OtherCheckouts", func(d types.VCSDriver, dir string) error { return errOf(d.OtherCheckouts(dir)) }},
 		{types.CapRevisionFetcher, "FetchRef", func(d types.VCSDriver, dir string) error { return errOf(d.FetchRef(ctx, dir, "-x", "refs/heads/main")) }},
 		{types.CapRevisionFetcher, "FetchCommit", func(d types.VCSDriver, dir string) error { return d.FetchCommit(ctx, dir, "-x", id) }},
 		{types.CapPusher, "Push", func(d types.VCSDriver, dir string) error {
