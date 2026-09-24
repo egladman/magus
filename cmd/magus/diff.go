@@ -139,7 +139,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	tui := wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
 
 	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
-		// The viewer can join a daemon's review, which ran with the daemon's gates, so the
+		// The viewer can join a server's review, which ran with the server's gates, so the
 		// flags could not be honored there.
 		return usagef("magus diff: --conformance-min-cohort and --conformance-min-share apply to the printed report; add --no-tui")
 	}
@@ -577,7 +577,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 		return types.Diff{}, err
 	}
 	rev.Base = base
-	// The churn lenses, from a fresh scan. The daemon serves these from a warm cache; a
+	// The churn lenses, from a fresh scan. The server serves these from a warm cache; a
 	// one-shot CLI has none, so it pays the bounded git-log walk here. Best-effort: a
 	// workspace with no history simply reports no churn rather than failing the diff.
 	// Files: true is required; without it the lens ranks PROJECTS and the per-file list is
@@ -752,12 +752,12 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	})
 }
 
-// attachDiffReview joins the shared review, daemon first.
+// attachDiffReview joins the shared review, server first.
 //
-// With a daemon running its session is the ONE session: the console tab and the agent are
+// With a server running its session is the ONE session: the console tab and the agent are
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
-// progress goes straight into the file the daemon's own store would have written.
+// progress goes straight into the file the server's own store would have written.
 func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) {
 	asOf := changeset.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
@@ -767,8 +767,8 @@ func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedConte
 	if err != nil {
 		return types.Diff{}, nil, nil, err
 	}
-	// Written straight into the store rather than through the daemon, which is sound only
-	// because there is no daemon: with one running it owns this file, and two writers would
+	// Written straight into the store rather than through the server, which is sound only
+	// because there is no server: with one running it owns this file, and two writers would
 	// each persist their own idea of the whole set. Attach is what loads the marks a previous
 	// session left AND what makes MarkViewed below have a session to write to.
 	store := changeset.NewStore(m.CacheDir())
@@ -829,7 +829,7 @@ type diffSync interface {
 	close()
 }
 
-// diffStoreSync persists the reader's progress with no daemon in the picture. There is no
+// diffStoreSync persists the reader's progress with no server in the picture. There is no
 // cursor to publish: nobody is listening.
 type diffStoreSync struct {
 	store *changeset.Store
@@ -852,14 +852,14 @@ func (s diffStoreSync) SetThreadsSeen(ids []string) {
 
 func (diffStoreSync) close() {}
 
-// diffBridge is the running daemon's session, reached over the same loopback routes the
+// diffBridge is the running server's session, reached over the same loopback routes the
 // console uses. The session it attached to travels with it, because a transport that could
 // hand back a session it had not attached would be a client of nothing.
 //
 // Writes leave on sends rather than on the caller's stack: every one of them is provoked by a
 // KEYPRESS (a cursor move, a read mark), and an inline post would put a network round trip
 // between the key and the screen moving, up to the full diffBridgeWrite deadline against a
-// daemon that has stopped answering.
+// server that has stopped answering.
 //
 // The two kinds of write get two queues, because they fail in opposite directions. A cursor is
 // idempotent by REPLACEMENT (the newest one says where the reader is and everything behind it
@@ -887,33 +887,33 @@ type diffBridge struct {
 // is not a faster one, it is computing the same thing locally.
 const diffBridgeAttach = 10 * time.Second
 
-// diffBridgeWrite bounds a coordination write. Short, because a wedged daemon must not hold
+// diffBridgeWrite bounds a coordination write. Short, because a wedged server must not hold
 // the sender long enough for the queue behind it to overflow, and because it is also how long
 // quitting waits for the last mark to leave.
 const diffBridgeWrite = time.Second
 
 // diffBridgeQueue bounds the CURSOR writes waiting to leave. Small on purpose: a backlog means
-// the daemon has stopped keeping up, and at that point the newest cursor is the only one worth
+// the server has stopped keeping up, and at that point the newest cursor is the only one worth
 // having: the ones behind it describe somewhere the reader no longer is.
 const diffBridgeQueue = 8
 
 // diffBridgeMarks bounds the read marks waiting to leave. Deep rather than small, because
 // nothing here may be evicted and the volume is bounded by a human pressing `v`: reaching the
-// end of it takes a daemon that has stopped answering AND a minute of uninterrupted marking.
+// end of it takes a server that has stopped answering AND a minute of uninterrupted marking.
 const diffBridgeMarks = 64
 
 // diffBridgeClose caps how long quitting waits for the queue to empty. The budget is one write
-// deadline per queued op, and this is the ceiling on it: a wedged daemon costs the shell a few
+// deadline per queued op, and this is the ceiling on it: a wedged server costs the shell a few
 // seconds rather than the whole queue's worth of deadlines.
 const diffBridgeClose = 3 * time.Second
 
-// dialDiffBridge attaches to the daemon's session, or returns nil when there is nothing to
-// join: no token, no listener, a daemon with no workspace. Every one of those is an ordinary
+// dialDiffBridge attaches to the server's session, or returns nil when there is nothing to
+// join: no token, no listener, a server with no workspace. Every one of those is an ordinary
 // state rather than an error: the terminal reads the diff on its own and says nothing about
-// a daemon the reader never asked for.
+// a server the reader never asked for.
 //
 // asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
-// the daemon computed its changeset from the same bytes. Without that check a daemon serving
+// the server computed its changeset from the same bytes. Without that check a server serving
 // a different workspace (the main checkout while this is a worktree) answers confidently
 // about a tree the reader is not looking at, and the coordinate every comment and every
 // viewed mark is keyed by would silently mean something else.
@@ -955,7 +955,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 }
 
 // start wires the sender. Split from dialDiffBridge so the queue can be driven against a stub
-// server without a daemon, a token, or the attach round trip.
+// server without a server, a token, or the attach round trip.
 func (b *diffBridge) start() {
 	b.cursors = make(chan diffSessionOp, diffBridgeQueue)
 	b.marks = make(chan diffSessionOp, diffBridgeMarks)
@@ -968,7 +968,7 @@ func (b *diffBridge) start() {
 	go b.deliver(ctx)
 }
 
-// diffSessionOp is one mutation of the shared session, the wire shape the daemon's
+// diffSessionOp is one mutation of the shared session, the wire shape the server's
 // /api/v1/diff/session route takes.
 type diffSessionOp struct {
 	Op     string `json:"op"`
@@ -988,7 +988,7 @@ func (b *diffBridge) SetCursor(c types.DiffCursor) {
 	b.queueCursor(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
 }
 
-// SetViewed publishes a read mark, which the daemon persists for every client at once.
+// SetViewed publishes a read mark, which the server persists for every client at once.
 func (b *diffBridge) SetViewed(digest string, on bool) {
 	b.queueMark(diffSessionOp{Op: "viewed", Digest: digest, On: on})
 }
@@ -1002,7 +1002,7 @@ func (b *diffBridge) SetThreadsSeen(ids []string) {
 
 // queueCursor hands the newest cursor to the sender, evicting the OLDEST when the queue is
 // full. It never blocks: the key loop is what calls it, and difftui.Sync promises best-effort
-// delivery precisely so a slow daemon costs the reader nothing.
+// delivery precisely so a slow server costs the reader nothing.
 //
 // A plain non-blocking send drops the ARRIVING op instead, which keeps exactly the positions
 // the reader has already walked past and throws away the only one still true.
@@ -1035,7 +1035,7 @@ func (b *diffBridge) queueCursor(op diffSessionOp) {
 // because an unbounded one would DEADLOCK the quit path: close runs after the key loop returns,
 // so a key loop parked in here is one that can never reach the drain that would empty the queue.
 //
-// Past that wait the mark is lost and there is no honest floor below it on this path: the daemon
+// Past that wait the mark is lost and there is no honest floor below it on this path: the server
 // owns the session file, so writing the local store instead would be a second writer persisting
 // its own idea of the whole set, and stderr belongs to the viewport until the reader quits.
 func (b *diffBridge) queueMark(op diffSessionOp) {
@@ -1092,11 +1092,11 @@ func (b *diffBridge) drain(ctx context.Context) {
 }
 
 // close stops the sender and gives what is already queued a bounded chance to leave: a mark
-// made on the last keypress should not be lost to the process exiting, and a daemon that has
+// made on the last keypress should not be lost to the process exiting, and a server that has
 // stopped answering should not hold the shell either.
 //
 // Spending the budget CANCELS the sender rather than just abandoning it, which is what aborts
-// the post already on the wire. Left uncancelled, the goroutine went on talking to the daemon
+// the post already on the wire. Left uncancelled, the goroutine went on talking to the server
 // about a session the reader had walked away from, with nothing left to receive the answer.
 func (b *diffBridge) close() {
 	defer b.cancel() // the drain finished inside its budget; nothing is on the wire to abort
@@ -1237,7 +1237,7 @@ func diagnosticLine(d types.Diagnostic) string {
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
-// daemon's insight scan uses, so the CLI and the console rank the same files the same way:
+// server's insight scan uses, so the CLI and the console rank the same files the same way:
 // two different windows would report two different "hottest file" answers for one tree.
 const diffHistoryCommits = 500
 
@@ -1637,7 +1637,7 @@ const impactListCap = 10
 // collectImpact joins the lenses the report needs onto an already-annotated changeset.
 //
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
-// that refuses to print because the symbol index is cold or no daemon is running is a
+// that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this surface reports context rather than passing judgement.
 func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) diffImpact {
 	p := diffImpact{Reach: impactReachOf(rev)}
@@ -2158,7 +2158,7 @@ func stampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.Resolv
 // is that they now outlive the session.
 //
 // It wraps rather than replaces the underlying sync, because publishing the reader's
-// progress to the daemon and recording a durable receipt are different jobs with different
+// progress to the server and recording a durable receipt are different jobs with different
 // lifetimes, and the viewer must keep knowing about neither.
 type earnedSync struct {
 	diffSync
@@ -2230,7 +2230,7 @@ func newEarnedSync(inner diffSync, content reviewedContent, cacheDir string, fil
 	return e
 }
 
-// SetViewed records the mark and forwards it, so the daemon and the console still see the
+// SetViewed records the mark and forwards it, so the server and the console still see the
 // reader's progress exactly as before.
 func (e *earnedSync) SetViewed(digest string, on bool) {
 	e.viewed[digest] = on

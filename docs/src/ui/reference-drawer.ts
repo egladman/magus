@@ -209,7 +209,7 @@ export function initRefDrawer(): void {
   // A glossary/reference link clicked ANYWHERE on the page (not just inside the drawer) opens its
   // target INLINE in the reference panel instead of navigating away - so looking up a term keeps you
   // on the surface. Opt-in by class or data-ref-open, and only for same-origin doc links; a fetch
-  // failure (e.g. a daemon that does not serve the page) falls back to navigation.
+  // failure (e.g. a server that does not serve the page) falls back to navigation.
   //
   // The auto-linked classes are listed because they ARE the reference links on the docs site:
   // .glossary-term (a glossary word), .code-xref (a command, diagnostic or method), and

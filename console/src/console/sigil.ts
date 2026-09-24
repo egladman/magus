@@ -172,12 +172,12 @@ export function describeSigil(spec: SigilSpec): string {
   );
 }
 
-// assignSigils turns the workspaces a daemon has loaded into marks that are DISTINCT FROM EACH OTHER.
+// assignSigils turns the workspaces a server has loaded into marks that are DISTINCT FROM EACH OTHER.
 //
 // Uniqueness cannot be guaranteed against arbitrary inputs - finitely many pictures, unboundedly many
 // paths, pigeonhole. It can be guaranteed across a KNOWN SET, which is the only place a collision
 // would ever be noticed: if two roots would draw the same picture, the later one is re-seeded until it
-// does not. Sorted first, so which one moves does not depend on the order the daemon happened to list
+// does not. Sorted first, so which one moves does not depend on the order the server happened to list
 // them, and the result is stable across reloads with nothing stored.
 export function assignSigils(roots: readonly string[]): Map<string, SigilSpec> {
   const out = new Map<string, SigilSpec>();

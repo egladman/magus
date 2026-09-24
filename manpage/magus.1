@@ -110,7 +110,10 @@ Human\-authored notes committed to the repository. See \fBmagus\-notes\fR(1).
 Read the working tree's changes in the order they deserve attention. See \fBmagus\-diff\fR(1).
 .TP
 \fBserver\fR
-Manage the persistent magus daemon. See \fBmagus\-server\fR(1).
+Manage the magus server: MCP, the console, APIs and background jobs. See \fBmagus\-server\fR(1).
+.TP
+\fBbroker\fR
+The per\-user process holding this host's capacity and shared services. See \fBmagus\-broker\fR(1).
 .TP
 \fBmcp\fR
 Serve MCP over stdio for the agent host that launched it. See \fBmagus\-mcp\fR(1).
@@ -137,7 +140,7 @@ Manage skills, harnesses, and agent feedback. See \fBmagus\-agent\fR(1).
 Manage the magus binary (update, refresh, registry, install\-shorthand). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
-Print the client and daemon versions. See \fBmagus\-version\fR(1).
+Print the client and server versions. See \fBmagus\-version\fR(1).
 .RE
 .SH ENVIRONMENT
 .RS
@@ -178,6 +181,9 @@ Maximum number of concurrently running per\-project build steps; overrides concu
 \fBMAGUS_CONCURRENCY_PROFILE\fR
 Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly (default: balanced). Equivalent magus.yaml key: \fBconcurrency_profile\fR.
 .TP
+\fBMAGUS_BROKER\fR
+Whether a run asks the broker for this host's capacity and shared services: required refuses a step when none answers (MGS3022, exit 69), best\-effort runs unarbitrated and says so once, off never starts or contacts one (default: best\-effort). Equivalent magus.yaml key: \fBbroker\fR.
+.TP
 \fBMAGUS_HISTORY_PATH\fR
 Path to the runtime\-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: \fBhistory_path\fR.
 .TP
@@ -199,8 +205,8 @@ Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalen
 \fBMAGUS_VCS_<NAME>_BASE_REF\fR
 Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 .TP
-\fBMAGUS_DAEMON_SOCKET\fR
-Env\-only, no magus.yaml equivalent: runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it
+\fBMAGUS_PROC_SOCKET\fR
+Env\-only, no magus.yaml equivalent: the proc\-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
 .TP
 \fBMAGUS_CI_MAX_SHARDS\fR
 Maximum number of parallel CI shards; \-1 means unlimited (default: 8). Equivalent magus.yaml key: \fBci.max_shards\fR.
@@ -232,20 +238,23 @@ Value of the resource attribute service.name on emitted spans/metrics (default: 
 \fBMAGUS_TELEMETRY_SAMPLE_RATIO\fR
 Head\-based trace sampling ratio in [0,1] (default: 1.0). Equivalent magus.yaml key: \fBtelemetry.sample_ratio\fR.
 .TP
-\fBMAGUS_DAEMON_ADDRESS\fR
-Adopt\-server socket as a unix:// URL; empty auto\-generates a per\-process socket. Equivalent magus.yaml key: \fBdaemon.address\fR.
+\fBMAGUS_SERVER_ENABLED\fR
+When false, no command hands itself to a running `magus server`; each invocation runs self\-contained (default: true). Equivalent magus.yaml key: \fBserver.enabled\fR.
 .TP
-\fBMAGUS_DAEMON_IDLE_TTL\fR
-Idle workspace eviction TTL for the multi\-workspace daemon; e.g. "6h", "30m" (default: 6h). Equivalent magus.yaml key: \fBdaemon.idle_ttl\fR.
+\fBMAGUS_SERVER_ADDRESS\fR
+Socket `magus server` listens on, as a unix:// URL; empty is server.sock in the runtime directory. Equivalent magus.yaml key: \fBserver.address\fR.
 .TP
-\fBMAGUS_DAEMON_WORKSPACES\fR
-Colon\-separated list of workspace roots the daemon will serve; non\-empty list triggers eager union of sandbox policies and rejection of out\-of\-list workspaces (MGS2010). Equivalent magus.yaml key: \fBdaemon.workspaces\fR.
+\fBMAGUS_SERVER_IDLE_TTL\fR
+Idle workspace eviction TTL for the multi\-workspace server; e.g. "6h", "30m" (default: 6h). Equivalent magus.yaml key: \fBserver.idle_ttl\fR.
+.TP
+\fBMAGUS_SERVER_WORKSPACES\fR
+Colon\-separated list of workspace roots the server will serve; non\-empty list triggers eager union of sandbox policies and rejection of out\-of\-list workspaces (MGS2010). Equivalent magus.yaml key: \fBserver.workspaces\fR.
 .TP
 \fBMAGUS_MCP_ENABLED\fR
 When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: \fBmcp.enabled\fR.
 .TP
 \fBMAGUS_MCP_ADDRESS\fR
-host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: \fBmcp.address\fR.
+host:port for the MCP Streamable HTTP server `magus server` starts (default: 127.0.0.1:7391). Equivalent magus.yaml key: \fBmcp.address\fR.
 .TP
 \fBMAGUS_MCP_INSECURE_BIND\fR
 Permit a non\-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: \fBmcp.insecure_bind\fR.
@@ -317,6 +326,7 @@ MAGUS_CACHE_DIR.
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-broker\fR(1),
 \fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

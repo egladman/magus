@@ -29,7 +29,7 @@ printf 'module bench\n' > "$WS/go.mod"
 : > "$WS/magusfile.tl"
 
 cd "$WS"
-export MAGUS_DAEMON_SOCKET=""
+export MAGUS_PROC_SOCKET=""
 unset MAGUS_LOG_LEVEL
 
 CASES=(help version "completion bash" ls)

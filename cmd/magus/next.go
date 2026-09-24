@@ -109,6 +109,11 @@ func emitConcurrencyNudge(ctx context.Context, sink *magus.Sink, m *magus.Magus,
 	if global.silent || !interactive.HintsEnabled() {
 		return
 	}
+	// A run the server executes shares its limiter with every client's runs, so a wait
+	// for a slot there says nothing about this invocation's profile.
+	if _, adopted := magusFromContext(ctx); adopted {
+		return
+	}
 	line := m.ConcurrencyNudge()
 	if line == "" {
 		return

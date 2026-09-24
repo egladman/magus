@@ -461,7 +461,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 
 /* --- Run browser (the log viewer's left master-detail tree; runtree.ts) --------------------------
    A collapsible aside down the left of the viewer, below the shared toolbar: a PF TreeView of prior
-   runs (project -> target -> run) read from the daemon's /api/v1/outputs. Selecting a run loads its
+   runs (project -> target -> run) read from the server's /api/v1/outputs. Selecting a run loads its
    verbatim output in the scroll box on the right. initRunBrowser reparents .console-render-scroll into
    .console-log-split so no scaffold markup changed; the split becomes the panel's flex:1 body row. */
 /* The view toolbar deliberately carries NO PatternFly size modifiers. Mixing them puts three

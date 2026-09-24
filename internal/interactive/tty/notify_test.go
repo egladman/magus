@@ -86,7 +86,7 @@ func TestNotifierKeepsAStickyToast(t *testing.T) {
 	z := NewZone(&buf, terminal(80, 24))
 	n, clock := newTestNotifier(z, 3)
 
-	require.NoError(t, n.Notify("daemon unreachable", SGRRed, 0))
+	require.NoError(t, n.Notify("server unreachable", SGRRed, 0))
 	clock.advance(time.Hour)
 	n.sweep()
 

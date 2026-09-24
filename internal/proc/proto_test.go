@@ -20,7 +20,7 @@ func TestStatusReplyOutput(t *testing.T) {
 	started := time.UnixMilli(1_700_000_050_000)
 	failure := &types.WorkspaceFailure{Message: "magusfile.buzz:3:1: expected expression"}
 	reply := &StatusReply{
-		ParentPID: 4242, DaemonVersion: "d1", Mode: "daemon", Capacity: 2, Running: 3, Queued: 1,
+		ParentPID: 4242, Version: "d1", Capacity: 2, Running: 3, Queued: 1,
 		Calls: []Call{
 			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, SubOp: "spawn", Inv: "inv1"},
 		},
@@ -34,13 +34,12 @@ func TestStatusReplyOutput(t *testing.T) {
 	}
 
 	assert.Equal(t, &types.StatusOutput{
-		ParentPID:     4242,
-		DaemonVersion: "d1",
-		Mode:          "daemon",
-		Capacity:      2,
-		Running:       3,
-		Available:     0,
-		Queued:        1,
+		ParentPID: 4242,
+		Version:   "d1",
+		Capacity:  2,
+		Running:   3,
+		Available: 0,
+		Queued:    1,
 		RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"run", "build"}, Workspace: "/ws", StartedAt: started, Step: "spawn", Inv: "inv1"},
 		},

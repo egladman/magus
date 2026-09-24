@@ -340,7 +340,7 @@ func (c *countObserver) OnError(error)            { c.errs++ }
 // TestAffectedRequestScopedObserver verifies the C4 fix: a graph observer is
 // scoped per request via context, not shared workspace state. Two independent
 // calls each route to their own observer (exactly one build each), and a call
-// with no observer touches neither — so concurrent daemon requests cannot
+// with no observer touches neither — so concurrent server requests cannot
 // clobber each other's observer.
 func TestAffectedRequestScopedObserver(t *testing.T) {
 	ws := newAffectedWorkspace(t)

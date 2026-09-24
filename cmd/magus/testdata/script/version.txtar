@@ -13,15 +13,15 @@
 exec magus version
 stdout 'magus'
 
-# The server half. These scripts run with a private SockDir and no daemon, so the
+# The server half. These scripts run with a private SockDir and no server, so the
 # probe finds nothing - and finding nothing is a plain line, never an error.
 exec magus version
-stdout 'daemon: not running'
+stdout 'server: not running'
 
-# --client is the zero-daemon-I/O form: the build stamp, and no server line at all.
+# --client is the zero-server-I/O form: the build stamp, and no server line at all.
 exec magus version --client
 stdout 'magus'
-! stdout 'daemon'
+! stdout 'server'
 
 # The engine line stays gated behind -v in the text form: that gate is a reading
 # convenience for a human and removing it would be a visible change to bare output.
@@ -38,9 +38,9 @@ stdout '"commit"'
 stdout '"build_date"'
 stdout '"engine": "buzz"'
 
-# One record carries both halves: the key is always present, empty when no daemon
-# answered, so a caller parses one shape whether or not a daemon is up.
-stdout '"daemon": ""'
+# One record carries both halves: the key is always present, empty when no server
+# answered, so a caller parses one shape whether or not a server is up.
+stdout '"server": ""'
 
 # Snake-case keys, matching every other structured surface: build_date, not BuildDate.
 ! stdout 'BuildDate'

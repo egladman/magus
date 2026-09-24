@@ -32,14 +32,14 @@ func TestLogViewerURL(t *testing.T) {
 	assert.Contains(t, after, "data=", "data must live in the fragment")
 }
 
-// TestLink pins the daemon-origin grammar Link mints: the ORIGIN is the daemon's own
+// TestLink pins the server-origin grammar Link mints: the ORIGIN is the server's own
 // loopback host, the surface is a /console/<surface>/ path, and only the one-time code rides
 // the fragment (never the query string, so it is not transmitted on the document GET). There
-// is no #live= host directive; the origin already names which daemon.
+// is no #live= host directive; the origin already names which server.
 func TestLink(t *testing.T) {
 	got := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "dashboard", Code: "mgx_abc123"})
 	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/#code=mgx_abc123", got)
-	assert.NotContains(t, got, "#live=", "the daemon-origin grammar carries no #live= host directive")
+	assert.NotContains(t, got, "#live=", "the server-origin grammar carries no #live= host directive")
 
 	before, after, found := strings.Cut(got, "#")
 	require.True(t, found, "url must have a fragment")
@@ -84,7 +84,7 @@ func TestEncodeComponent(t *testing.T) {
 	}
 }
 
-// TestKnownSurfaces guards the canonical clean-path surface list the daemon SPA fallback and the
+// TestKnownSurfaces guards the canonical clean-path surface list the server SPA fallback and the
 // minted links share: IsSurfaceRoute matches a bare surface segment and nothing else.
 func TestKnownSurfaces(t *testing.T) {
 	assert.True(t, IsSurfaceRoute("graph"))
@@ -127,14 +127,14 @@ func TestKeyDigestsParamEmpty(t *testing.T) {
 
 // A job's console link is the Jobs view with that job selected, and it is ABSOLUTE: a CLI
 // hands it to somebody who is not in the console already, so a path alone resolves against
-// nothing. With no daemon serving there is no origin, and the empty string is what lets the
+// nothing. With no server serving there is no origin, and the empty string is what lets the
 // caller say how to start one rather than print a dead link.
 func TestJobLink(t *testing.T) {
 	assert.Equal(t, "/console/plan/#job=pwa%2Fjob-watch", JobSurfaceLink("pwa/job-watch"))
 	assert.Equal(t, "http://127.0.0.1:7777/console/plan/#job=pwa%2Fjob-watch", JobLink("127.0.0.1:7777", "pwa/job-watch"))
-	assert.Empty(t, JobLink("", "pwa/job-watch"), "no serving daemon has no origin, so there is no link to print")
+	assert.Empty(t, JobLink("", "pwa/job-watch"), "no serving server has no origin, so there is no link to print")
 	assert.Empty(t, JobLink("127.0.0.1:7777", ""), "a link to no job in particular is the surface link, not this")
-	assert.Contains(t, KnownSurfaces, JobSurface, "the Jobs view has to be a surface the daemon serves the shell for")
+	assert.Contains(t, KnownSurfaces, JobSurface, "the Jobs view has to be a surface the server serves the shell for")
 }
 
 func TestOpenCommandAs(t *testing.T) {

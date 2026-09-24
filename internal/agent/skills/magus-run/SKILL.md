@@ -46,7 +46,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    - `{{tool "run_affected"}}` {target, base} - run ONLY the projects a VCS change
      touched{{if .Full}}; magus computes the set. Use for a pre-commit/CI gate{{end}}.
 
-   If the MCP tool errors or no daemon is connected, run the CLI equivalent
+   If the MCP tool errors or no server is connected, run the CLI equivalent
    (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`){{if .Full}} so a
    passing run costs a few lines, not a scroll of progress{{end}}.

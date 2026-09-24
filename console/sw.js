@@ -1,6 +1,6 @@
 // sw.js - the console app's own service worker. A conservative offline shell: it precaches the app
 // entry + its bundles + styles so a cold reload works offline, and serves everything else same-origin
-// cache-first-then-network. The console talks to the daemon over loopback at runtime (never cached).
+// cache-first-then-network. The console talks to the server over loopback at runtime (never cached).
 // BUILD_ID names the cache, and the build REWRITES the line below with a digest of the bytes in
 // PRECACHE (scripts/stamp-build.mjs, run by copy-static). It is derived, never edited: a new worker
 // only installs when sw.js differs from the copy the browser holds, so a hand-maintained id that
@@ -28,8 +28,8 @@ const PRECACHE = [
   BASE + "graph/explorer.js",
   BASE + "graph/graph.css",
   BASE + "graph/scaffold.html",
-  // Not the demo graph JSON: a daemon refuses to serve it (it is a workspace's data), and one
-  // failed entry fails addAll, so the worker would never install on a daemon origin. The hosted
+  // Not the demo graph JSON: a server refuses to serve it (it is a workspace's data), and one
+  // failed entry fails addAll, so the worker would never install on a server origin. The hosted
   // demo still caches it on first view through the network-first branch below.
   BASE + "dashboard/dashboard.js",
   BASE + "dashboard/dashboard.css",
@@ -51,10 +51,10 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // never touch daemon/loopback or cross-origin
-  // On the daemon's own origin the API is same-origin too, and cache-first would replay a stale
+  if (url.origin !== self.location.origin) return; // never touch server/loopback or cross-origin
+  // On the server's own origin the API is same-origin too, and cache-first would replay a stale
   // /readyz or buffer the endless /api/v1/events stream. Only the console's own files are the shell.
-  // sw.js stays uncached so the page can read the build the daemon serves (lib/sw.ts).
+  // sw.js stays uncached so the page can read the build the server serves (lib/sw.ts).
   if (!url.pathname.startsWith(BASE) || url.pathname === BASE + "sw.js") return;
   if (url.pathname.endsWith("/graph/knowledge-graph.json") || url.pathname.endsWith("/graph/target-graph.json")) {
     e.respondWith(

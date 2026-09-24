@@ -8,7 +8,7 @@ import (
 )
 
 // TestBuildGraphLink covers the pure seam under liveExplorerLink: with host/code
-// injected, it must format the exact daemon-origin deep-link
+// injected, it must format the exact server-origin deep-link
 // (http://<host>/console/graph/#<directives>&code=), drop the code directive
 // when there is no code, and omit (return "") only when there is no host to link to.
 func TestBuildGraphLink(t *testing.T) {
@@ -47,7 +47,7 @@ func TestBuildGraphLink(t *testing.T) {
 func TestLiveExplorerLinkCarriesNoToken(t *testing.T) {
 	got := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: "spell:go"})
 	if got == "" {
-		t.Skip("no daemon address configured here, so there is no link to assert on")
+		t.Skip("no server address configured here, so there is no link to assert on")
 	}
 	require.NotContains(t, got, "token=",
 		"the deep-link must stay unauthenticated; the token is composed in by authHint")
@@ -87,9 +87,9 @@ func TestAuthHintIsRunnable(t *testing.T) {
 
 func TestConsoleSkew(t *testing.T) {
 	require.Empty(t, consoleSkew("v1", "v1"))
-	require.Empty(t, consoleSkew("", "v1"), "a daemon that did not say is not skew")
+	require.Empty(t, consoleSkew("", "v1"), "a server that did not say is not skew")
 	got := consoleSkew("v1", "v2")
-	require.Contains(t, got, "daemon v1, this binary is v2")
+	require.Contains(t, got, "server v1, this binary is v2")
 	require.Contains(t, got, "server stop && ")
 	require.Contains(t, got, "server start` serves this build")
 }

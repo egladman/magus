@@ -139,7 +139,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 // the way out) is unchanged; only where the candidates come from moves.
 //
 // Degrades to nil rather than failing. A workspace whose graph has never been
-// built, or a daemon that is not running, still gets the path filter it always
+// built, or a server that is not running, still gets the path filter it always
 // had; a picker that refused to open because a search index was cold would be
 // strictly worse than one that searches less.
 func graphLookup(ctx context.Context, root string, byPath map[string]*types.Project) func(string) []string {

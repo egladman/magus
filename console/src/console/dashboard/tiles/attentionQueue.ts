@@ -8,11 +8,11 @@
 // nothing closes one but somebody deciding to. That is why this module has a write at all -
 // see disposeAttention - and why it has exactly one.
 //
-// A daemon predating the endpoint 404s GET /api/v1/attention, and that is a FIRST-CLASS
+// A server predating the endpoint 404s GET /api/v1/attention, and that is a FIRST-CLASS
 // outcome here rather than an error: loadAttention reports "absent" so the tile can say the
 // route is missing instead of showing an empty queue, which would read as "nobody is blocked".
 
-import { authHeaders } from "../../../lib/daemon";
+import { authHeaders } from "../../../lib/server";
 
 // ---- the wire shape --------------------------------------------------------
 
@@ -129,7 +129,7 @@ export function firstLine(message: string): string {
 
 // AttentionRead is the three answers the endpoint can give, kept apart because they mean
 // different things to a reader staring at an empty tile: nobody is blocked, the route is not
-// there, or the daemon could not be read. Collapsing them into one "no data" is how a missing
+// there, or the server could not be read. Collapsing them into one "no data" is how a missing
 // feature comes to look like a calm one - and on THIS tile that mistake reads as "you are not
 // needed", which is the one thing the queue exists to never say by accident.
 export type AttentionRead =
@@ -138,10 +138,10 @@ export type AttentionRead =
   | { readonly kind: "unreadable"; readonly detail: string };
 
 // loadAttention reads GET /api/v1/attention under the same bearer + no-store rules as the
-// target plan beside it. 404 and 501 are "absent", not failures: on any daemon predating
+// target plan beside it. 404 and 501 are "absent", not failures: on any server predating
 // the route that is the honest answer, and the tile says so by name.
 //
-// A cross-origin console (a hosted page reaching a loopback daemon over #port=) cannot always
+// A cross-origin console (a hosted page reaching a loopback server over #port=) cannot always
 // TELL the two apart - a 404 carrying no CORS headers surfaces to the browser as a network
 // error with no status at all - so the unreadable copy names the missing route as a possible
 // cause too rather than blaming the connection.
@@ -166,9 +166,9 @@ export async function loadAttention(host: string, signal?: AbortSignal): Promise
   }
 }
 
-// DisposeResult separates a REFUSAL from a failure. The daemon refuses a disposal for three
+// DisposeResult separates a REFUSAL from a failure. The server refuses a disposal for three
 // reasons a person can act on - the id names nothing, it names several, or somebody already
-// closed it - and each of those is the daemon working correctly. Reporting them as errors
+// closed it - and each of those is the server working correctly. Reporting them as errors
 // would train a reader to retry the one thing that will never succeed.
 export type DisposeResult =
   | { readonly kind: "ok" }
@@ -199,7 +199,7 @@ export async function disposeAttention(
     return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
   }
   if (res.ok) return { kind: "ok" };
-  // The daemon's own sentence, which names the candidates on an ambiguous prefix and says who
+  // The server's own sentence, which names the candidates on an ambiguous prefix and says who
   // closed an already-closed request. Replacing it with a status code would throw away the
   // only part a person can act on.
   const detail = (await res.text().catch(() => "")).trim() || "HTTP " + res.status;

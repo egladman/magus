@@ -262,7 +262,7 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	assert.Equal(t, 3, ran, "a refused call must not reach the tool")
 }
 
-// Over HTTP the credential reaches authorize on the request context, where the daemon's
+// Over HTTP the credential reaches authorize on the request context, where the server's
 // bearer guard stamps it.
 func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())

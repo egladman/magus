@@ -47,7 +47,7 @@ as read, so a saved plan renders more than once without being computed again.
 With \-\-graph: cap displayed depth (0 = unlimited)
 .TP
 \fB\-\-detach\fR
-Hand the run to the daemon and return immediately; follow it with magus status \-\-watch
+Hand the run to the server and return immediately; follow it with magus status \-\-watch
 .TP
 \fB\-\-graph\fR
 Render the dependency graph for the selected scope instead of executing
@@ -260,6 +260,7 @@ magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-broker\fR(1),
 \fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

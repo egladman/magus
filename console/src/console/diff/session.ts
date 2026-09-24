@@ -10,7 +10,7 @@
 // review. Pairing therefore needs no setup step anyone has to remember: opening the surface is
 // joining.
 
-import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/daemon";
+import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/server";
 
 // The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
@@ -162,7 +162,7 @@ export interface DiffComment {
   readonly id: string;
   readonly path: string;
   readonly hunk: number;
-  // The door the remark came through, stamped by the daemon. "unattributed" is the review
+  // The door the remark came through, stamped by the server. "unattributed" is the review
   // route: a draft its reader may publish or discard. It does not say a person wrote it.
   readonly author: "unattributed" | "agent";
   // Where the write came from: the OS account, the entry point, and the credential or MCP
@@ -189,7 +189,7 @@ export interface ReviewThread {
   readonly path: string;
   readonly line: number;
   // hunk is the index within path's hunks of the one holding line, or -1 when no hunk in this
-  // changeset does. Resolved by the daemon, not here: the arithmetic is the only hard part of
+  // changeset does. Resolved by the server, not here: the arithmetic is the only hard part of
   // placing a thread, and two surfaces doing it independently is the same remark sitting
   // against different code in the terminal and the browser.
   readonly hunk: number;
@@ -219,11 +219,11 @@ export interface ReviewInfo {
   // the provider does not answer it, which reads as open.
   readonly state?: string;
   readonly reason?: string;
-  // verdicts are the verdicts this reviewer may publish, decided by the daemon. The surface
+  // verdicts are the verdicts this reviewer may publish, decided by the server. The surface
   // renders exactly these and never works the permission out for itself: a rule re-implemented
   // in a browser is one that eventually disagrees with the one the publish path enforces.
   //
-  // Absent means a daemon too old to have an opinion, which reads as remarks only.
+  // Absent means a server too old to have an opinion, which reads as remarks only.
   readonly verdicts?: readonly ReviewVerdict[];
   // verdict_limit says WHY the set is only remarks: your own change, or a provider that did not
   // name either party. Different facts, and a surface that renders them alike misleads.
@@ -248,7 +248,7 @@ export interface DiffSuggestion {
 export interface DiffReview {
   readonly id: string;
   readonly base: string;
-  // The patch identity the daemon used to compute this session. Context requests carry it back
+  // The patch identity the server used to compute this session. Context requests carry it back
   // to the server, so a reviewer never sees current-file lines presented as context for an older
   // patch after the working tree has moved.
   readonly as_of?: string;
@@ -262,7 +262,7 @@ export interface DiffReview {
 import type { WireFile } from "./parse";
 
 export interface DiffResponse {
-  // The changeset arrives PARSED. The daemon owns the reader, including the hunk digests a
+  // The changeset arrives PARSED. The server owns the reader, including the hunk digests a
   // read receipt is keyed by, so this surface never hashes anything.
   readonly files: readonly WireFile[];
   // The same changeset as raw text. Unused here, and kept on the type because the route sends
@@ -335,7 +335,7 @@ export async function fetchReviewSession(host: string, signal: AbortSignal): Pro
 }
 
 // SessionOp is one mutation of the human's half of the session. Every one of these is stamped
-// ReviewAuthorHuman by the daemon because it arrives on this route; an agent reaches the
+// ReviewAuthorHuman by the server because it arrives on this route; an agent reaches the
 // session through MCP and is stamped there. Authorship is decided by transport, never by
 // payload, so nothing here needs to (or can) assert who is writing.
 // SeenOp is the reader's claim that these threads have been put in front of them, and it is the
@@ -392,7 +392,7 @@ export async function mutate(
 // Its own request, made AFTER the diff is on screen. This is the one call that leaves the
 // machine, and a reader must never wait on somebody else's forge to see their own changes.
 //
-// Failure resolves to a closed target rather than throwing, matching the daemon: the surface
+// Failure resolves to a closed target rather than throwing, matching the server: the surface
 // says the review could not be reached and stays a diff viewer, which is what it was before
 // any of this existed.
 export async function fetchReview(host: string, signal: AbortSignal): Promise<ReviewInfo> {
@@ -403,12 +403,12 @@ export async function fetchReview(host: string, signal: AbortSignal): Promise<Re
     });
     if (!res.ok) {
       reportHttpStatus(host, "the open review", res.status);
-      return { id: "", reason: `daemon answered ${res.status}`, threads: [] };
+      return { id: "", reason: `server answered ${res.status}`, threads: [] };
     }
     return (await res.json()) as ReviewInfo;
   } catch (e) {
     reportFetchFailure(host, "the open review", e);
-    return { id: "", reason: "the daemon could not be reached", threads: [] };
+    return { id: "", reason: "the server could not be reached", threads: [] };
   }
 }
 
@@ -420,7 +420,7 @@ export async function fetchReview(host: string, signal: AbortSignal): Promise<Re
 // reader believing their review landed when it never left, and they would find out from the
 // colleague who never replied.
 //
-// The daemon derives WHICH drafts go - unpublished, and written by the person - from the
+// The server derives WHICH drafts go - unpublished, and written by the person - from the
 // session itself. Nothing is named here, so nothing here can widen the set.
 export async function publish(
   host: string,
@@ -435,10 +435,10 @@ export async function publish(
     signal,
   });
   if (!res.ok) {
-    // The daemon's body is the reason - "no pull request for this branch", "no credential",
+    // The server's body is the reason - "no pull request for this branch", "no credential",
     // an HTTP status from the host - and it is the only thing that tells the reader which of
     // several unrelated situations they are in.
-    throw new Error((await res.text()).trim() || `daemon answered ${res.status}`);
+    throw new Error((await res.text()).trim() || `server answered ${res.status}`);
   }
   return (await res.json()) as DiffReview;
 }
@@ -463,7 +463,7 @@ export async function reply(
     body: JSON.stringify({ op: "reply", id: thread, body }),
     signal,
   });
-  if (!res.ok) throw new Error((await res.text()).trim() || `daemon answered ${res.status}`);
+  if (!res.ok) throw new Error((await res.text()).trim() || `server answered ${res.status}`);
 }
 
 // BranchChange is one other line of work and the paths it changes, as of the reader's LAST FETCH.
@@ -474,7 +474,7 @@ export interface BranchChange {
   readonly paths: readonly string[];
   // local separates a branch in this repository from a remote-tracking copy of somebody else's.
   // The two differ in what the answer is AS OF: a local branch is current, a tracking copy is
-  // exactly as fresh as the last fetch. Optional, so a daemon older than the field reads as
+  // exactly as fresh as the last fetch. Optional, so a server older than the field reads as
   // remote-tracking - which is what every answer was before it existed.
   readonly local?: boolean;
 }
@@ -503,7 +503,7 @@ export interface RunVerdict {
 //
 // This is the one review capability with no provider or backend behind it: it asks the machine
 // the code is on, so it behaves identically on GitHub, GitLab, git, hg, or no forge at all. The
-// daemon refuses any target the magusfile does not declare for that project, which is what keeps
+// server refuses any target the magusfile does not declare for that project, which is what keeps
 // a browser-reachable button from being able to name arbitrary work.
 //
 // A transport failure reports "unknown" rather than "failed": the run did not fail, the question
@@ -577,7 +577,7 @@ export async function fetchBranches(
 export class HttpError extends Error {
   readonly status: number;
   constructor(status: number) {
-    super(`daemon answered ${status}`);
+    super(`server answered ${status}`);
     this.status = status;
   }
 }

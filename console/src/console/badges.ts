@@ -7,12 +7,12 @@
 // that never changes is decoration. Notes was the cheaper call and was rejected for exactly that.
 //
 // Same contract as pulse.ts, for the same reasons: best-effort, hidden rather than zeroed when there
-// is no answer, and latched off per host once the daemon says it does not serve the route.
-import { authHeaders, validateLoopbackHost } from "../lib/daemon";
+// is no answer, and latched off per host once the server says it does not serve the route.
+import { authHeaders, validateLoopbackHost } from "../lib/server";
 
-// Hosts whose daemon has no diff route. A plain fetch 404 is NOT a ConnectError, so daemon.ts's
+// Hosts whose server has no diff route. A plain fetch 404 is NOT a ConnectError, so server.ts's
 // isCapabilityDenied cannot classify it - the status code is the only signal, and it has to be read
-// here. 404/501 mean the route cannot appear while this daemon runs; anything else (a 5xx, a dropped
+// here. 404/501 mean the route cannot appear while this server runs; anything else (a 5xx, a dropped
 // connection, a blocked cross-origin request) is an outage that must keep retrying, or one blip would
 // blank the badge for the rest of the session.
 const routeless = new Set<string>();
@@ -52,7 +52,7 @@ export async function fetchDiffCount(
   }
 }
 
-// Thrown when the daemon answers "no such route", so fetchDiffCount can tell a permanent absence from
+// Thrown when the server answers "no such route", so fetchDiffCount can tell a permanent absence from
 // a passing outage without the transport leaking into it.
 export class RoutelessError extends Error {
   // Without this every stack trace and console line reads "Error", which is the one thing the class
@@ -60,12 +60,12 @@ export class RoutelessError extends Error {
   override name = "RoutelessError";
 }
 
-// How long to wait before giving up on one read. Matches lib/daemon.ts's readiness probe, which rides
+// How long to wait before giving up on one read. Matches lib/server.ts's readiness probe, which rides
 // the same interval: without it a hung connection leaves a request pending per tick, unbounded.
 const TIMEOUT_MS = 3000;
 
 async function getDiffCount(host: string): Promise<number | null> {
-  // Defense in depth, mirroring lib/daemon.ts's fetchReadiness: the caller passes an already-resolved
+  // Defense in depth, mirroring lib/server.ts's fetchReadiness: the caller passes an already-resolved
   // host, but re-verify it is literal loopback OR the page's OWN origin before attaching the bearer
   // token, so a future caller that ever passes a raw string cannot send the token to a third party.
   // The LAN-share host is same-origin, so it passes here where validateLoopbackHost alone would not.

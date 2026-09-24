@@ -92,7 +92,7 @@ type Event struct {
 	// Set ONLY on a scope event (Kind==KindScope) that carries no target: the projects
 	// this run selected on files nothing declares. It rides the run's own stream rather
 	// than a second channel because it is a fact ABOUT this run's scope, and because the
-	// consumers that need it (a live viewer, the daemon's run registry) are already
+	// consumers that need it (a live viewer, the server's run registry) are already
 	// reading these frames.
 	Undeclared []UndeclaredSeed `json:"undeclared,omitempty"`
 }

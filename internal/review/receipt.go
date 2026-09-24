@@ -167,7 +167,7 @@ func Record(cacheDir string, add []Receipt) error {
 		return err
 	}
 	// Written to a temp file and renamed, because this store has two writers by design: the
-	// daemon mints from a console keypress while the CLI mints from `--ack` or a closing
+	// server mints from a console keypress while the CLI mints from `--ack` or a closing
 	// viewer, in another process. A truncating write interrupted between those leaves a
 	// half-written JSON array, and Load treats a corrupt store as an EMPTY one, so a crash
 	// would silently discard every receipt rather than failing loudly.

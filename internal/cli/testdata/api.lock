@@ -1,3 +1,4 @@
+config broker
 config cache.dir
 config cache.include.arch.enabled
 config cache.include.os.enabled
@@ -13,15 +14,6 @@ config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
 config console.enabled
-config daemon.address
-config daemon.enabled
-config daemon.idle_ttl
-config daemon.maintenance.check_review
-config daemon.maintenance.prune_preserved
-config daemon.maintenance.rotate_activities
-config daemon.maintenance.rotate_logs
-config daemon.maintenance.sync_graph
-config daemon.workspaces
 config default_charms
 config diff.tui
 config dry_run
@@ -65,6 +57,15 @@ config sandbox.enabled
 config sandbox.env.passthrough
 config secret.interactive_timeout
 config secret.unattended_timeout
+config server.address
+config server.enabled
+config server.idle_ttl
+config server.maintenance.check_review
+config server.maintenance.prune_preserved
+config server.maintenance.rotate_activities
+config server.maintenance.rotate_logs
+config server.maintenance.sync_graph
+config server.workspaces
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
 config stall_timeout
@@ -225,6 +226,7 @@ flag where/literal
 flag where/regex
 subcommand affected
 subcommand agent
+subcommand broker
 subcommand buzz
 subcommand clean
 subcommand completion

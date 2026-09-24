@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the daemon's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
-// fire-and-forget, coalescing mechanism the daemon uses for any adopted work, so an identical
-// in-flight job is never started twice. Every RPC requires the daemon bearer token; the service
+// fire-and-forget, coalescing mechanism the server uses for any adopted work, so an identical
+// in-flight job is never started twice. Every RPC requires the server bearer token; the service
 // is mounted behind the same guard as /mcp and never served unauthenticated. buf-breaking gates
 // this file: fields and RPCs may be ADDED (old clients ignore unknown fields), never renumbered
 // or removed. The response carries a full metadata snapshot (last run, current size) so a client
@@ -16,7 +16,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-// JobService is the daemon's control surface for background maintenance jobs. Trigger RPCs
+// JobService is the server's control surface for background maintenance jobs. Trigger RPCs
 // submit a job and return immediately; ListJobs reports every job's state. Read surfaces stay on
 // the per-domain services - this one only mutates.
 service JobService {
@@ -51,18 +51,20 @@ message RunJobResponse {
   string invocation_id = 2; // the running job's invocation id (the new one, or the coalesced one)
   // Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
   // not an absolute URL, because the reader is the console itself and resolves it against
-  // its own origin. Empty only when the daemon coalesced a submit it could not name, since
+  // its own origin. Empty only when the server coalesced a submit it could not name, since
   // a run with no invocation has nothing to link to.
   string console_url = 3;
   Job job = 4;              // the job's descriptor plus its last-run and current-size metadata
 }
 
 // JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
-// daemon's own housekeeping from work a session was handed without asking a second door.
+// server's own housekeeping from work a session was handed without asking a second door.
 enum JobHolder {
+  reserved 1;               // was JOB_HOLDER_DAEMON, the process `magus server` replaced
+  reserved "JOB_HOLDER_DAEMON";
   JOB_HOLDER_UNSPECIFIED = 0;
-  JOB_HOLDER_DAEMON = 1;  // the daemon's own maintenance catalog
   JOB_HOLDER_SESSION = 2; // work an orchestrator declared for somebody else to hold
+  JOB_HOLDER_SERVER = 3;  // the server's own maintenance catalog
 }
 
 // Job is the full picture of one job: what it is, who holds it, whether an instance is

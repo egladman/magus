@@ -215,7 +215,7 @@ func TestTextSinkProse(t *testing.T) {
 		{report.RunRemote{}, "remote: 0 restored, 0 missed, 0 stored, 0 failed (0 B down, 0 B up)\n"},
 		{report.RunRemote{Hits: 1, Misses: 2, Stored: 3, DownBytes: 2048}, "remote: 1 restored, 2 missed, 3 stored, 0 failed (2.0 KiB down, 0 B up)\n"},
 		{report.RunDetach{Invocation: "inv1", State: string(DetachQueued)}, "magus: detached as inv1\n  read it with: magus query invocation inv1\n"},
-		{report.RunDetach{State: string(DetachCoalesced)}, "magus: the daemon is already running this exact command; not queued twice\n"},
+		{report.RunDetach{State: string(DetachCoalesced)}, "magus: the server is already running this exact command; not queued twice\n"},
 		// Debug detail stays out of a default run.
 		{report.DiagnosticEmitted{Unit: "api", Code: "MGS1028"}, ""},
 		{report.ShardTotal{Shard: "1", NShards: 2}, ""},

@@ -128,7 +128,7 @@ func (selfStatusErr) Error() string   { return "the machine is busy" }
 func (e selfStatusErr) ExitCode() int { return e.code }
 
 // TestSelfDescribedExitStatusSurvives pins that a failure carrying its own status keeps
-// it locally, matching what the daemon already forwards for an adopted run. A contended
+// it locally, matching what the server already forwards for an adopted run. A contended
 // lock exits 75 (EX_TEMPFAIL); collapsing it to 1 is what made a busy machine read as a
 // broken build.
 func TestSelfDescribedExitStatusSurvives(t *testing.T) {

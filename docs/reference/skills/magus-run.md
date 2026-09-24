@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `584446871c54` |
+| `skill-content` | `03d4e6f94f87` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -90,7 +90,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.
    - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
      touched.
 
-   If the MCP tool errors or no daemon is connected, run the CLI equivalent
+   If the MCP tool errors or no server is connected, run the CLI equivalent
    (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`).
 2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one
@@ -281,7 +281,7 @@ VCS.
    - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
      touched; magus computes the set. Use for a pre-commit/CI gate.
 
-   If the MCP tool errors or no daemon is connected, run the CLI equivalent
+   If the MCP tool errors or no server is connected, run the CLI equivalent
    (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`) so a
    passing run costs a few lines, not a scroll of progress.

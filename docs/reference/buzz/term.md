@@ -21,7 +21,7 @@ Terminal interaction: capability probes, an interactive picker, and styled outpu
 
 ### isInteractive
 
-Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.
+Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a server this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.
 
 **Signature:** `term\isInteractive() -> bool` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L117)
 
@@ -140,7 +140,7 @@ term\notify("cache stampede on go-build", level: term\LogLevel.warn);
 term\notify("deploy skipped: no credentials", level: term\LogLevel.error, ttl_ms: 15000);
 
 // A negative ttl keeps it until newer notifications push it out of the band.
-term\notify("daemon unreachable", level: term\LogLevel.error, ttl_ms: -1);
+term\notify("server unreachable", level: term\LogLevel.error, ttl_ms: -1);
 ```
 
 ### clearScreen
