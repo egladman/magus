@@ -403,6 +403,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
+		if reason := denyTokenStatePath(location, input); reason != "" {
+			verdict.Decision, verdict.Reason, verdict.Rule = "deny", reason, string(denyRuleTokenState)
+		}
 		denyUndeclared("")
 		if verdict.Decision != "deny" {
 			switch g := gradeLeasedWrite(ctx, deps, actingLease, input); g.Decision {
@@ -520,6 +523,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
+		v = rankTokenState(v, denyTokenStateCommand(location, input, shellD))
 		// Outside Evaluate for the same reason the two rules above are: it reads session
 		// state (which skills have loaded) rather than the line alone, and Evaluate's
 		// verdict is a pure function of what was handed in.

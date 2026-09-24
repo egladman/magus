@@ -85,6 +85,15 @@ func methodName(procedure string) string {
 // mutation-only mount stays a three-argument call.
 type options struct {
 	auditReads bool // when true, read verbs are recorded too, not just mutations
+	subject    func(connect.AnyResponse) (blob []byte, preview string)
+}
+
+// WithSubject records what a successful call acted on: fn renders the response's subject as a
+// blob, stored as the event's request payload, and a one-line preview. fn must never render a
+// secret; a nil blob records nothing extra. The token service uses it so a mint or revoke names
+// the token's id, not only the method.
+func WithSubject(fn func(connect.AnyResponse) (blob []byte, preview string)) Option {
+	return func(o *options) { o.subject = fn }
 }
 
 // Option configures an Interceptor. See WithAuditReads.
@@ -127,6 +136,12 @@ func Interceptor(trailDir string, kind trail.Kind, opts ...Option) connect.Inter
 				if err != nil {
 					ev.Outcome = trail.OutcomeError
 					ev.Error = err.Error()
+				}
+				if cfg.subject != nil && err == nil && resp != nil {
+					if blob, preview := cfg.subject(resp); len(blob) > 0 {
+						ev.RequestRef, ev.RequestBytes = trail.WriteBlob(ctx, trailDir, "tok", blob)
+						ev.Preview = preview
+					}
 				}
 				trail.Append(ctx, trailDir, ev)
 			}

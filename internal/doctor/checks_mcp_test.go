@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,47 +16,97 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCheckMCPTokens(t *testing.T) {
-	t.Run("absent cli token and no connectors", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
-		got := (&runner{}).checkMCPTokens()
+func TestCheckTokens(t *testing.T) {
+	isolate := func(t *testing.T) string {
+		state := t.TempDir()
+		t.Setenv("XDG_STATE_HOME", state)
+		require.NoError(t, os.MkdirAll(filepath.Join(state, "magus"), 0o700))
+		return state
+	}
+
+	t.Run("absent operator token and no stored tokens", func(t *testing.T) {
+		isolate(t)
+		got := (&runner{}).checkTokens()
 		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Contains(t, got.Message, "cli token: absent")
-		assert.Contains(t, got.Message, "0 connector token(s)")
+		assert.Contains(t, got.Message, "operator token: absent")
+		assert.Contains(t, got.Message, "0 stored token(s)")
 		assert.Empty(t, got.Details)
 	})
 
-	t.Run("present cli token shows fingerprint", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
-		tok, err := auth.Generate()
+	t.Run("present operator token shows its id", func(t *testing.T) {
+		isolate(t)
+		tok, err := auth.GenerateOperator()
 		require.NoError(t, err)
-		_, err = auth.SaveNew(tok)
+		_, err = auth.SaveNewOperator(tok)
 		require.NoError(t, err)
-
-		got := (&runner{}).checkMCPTokens()
-		assert.Contains(t, got.Message, "cli token: present (fingerprint "+auth.Fingerprint(tok))
+		got := (&runner{}).checkTokens()
+		assert.Contains(t, got.Message, "operator token: present (id "+auth.TokenID(tok))
 	})
 
-	t.Run("expired and soon connectors are flagged; never is quiet", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
-		store, err := auth.LoadConnectorStore()
+	t.Run("a token expiring within 14 days is advice", func(t *testing.T) {
+		isolate(t)
+		dir, err := auth.StoreDir()
 		require.NoError(t, err)
-		_, _, err = store.Create("expired", time.Now().Add(-time.Hour), auth.ScopeMCP)
+		store, err := auth.LoadStore(dir)
 		require.NoError(t, err)
-		_, _, err = store.Create("soon", time.Now().Add(48*time.Hour), auth.ScopeMCP)
-		require.NoError(t, err)
-		_, _, err = store.Create("forever", time.Time{}, auth.ScopeMCP)
-		require.NoError(t, err)
-
-		got := (&runner{}).checkMCPTokens()
-		assert.Equal(t, types.CheckOK, got.Status, "credential state is informational, never a failure")
-		assert.Contains(t, got.Message, "3 connector token(s)")
-
+		for name, g := range map[string]types.Grant{"soon": types.GrantConnector, "later": types.GrantConsole} {
+			ttl := 48 * time.Hour
+			if name == "later" {
+				ttl = 60 * 24 * time.Hour
+			}
+			_, _, err = store.Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: g, TTL: ttl})
+			require.NoError(t, err)
+		}
+		got := (&runner{}).checkTokens()
+		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Contains(t, got.Message, "2 stored token(s)")
 		joined := strings.Join(got.Details, "\n")
-		assert.Contains(t, joined, `connector "expired" expired`)
-		assert.Contains(t, joined, "revoke it: magus config mcp connector revoke expired")
-		assert.Contains(t, joined, `connector "soon" expires in`)
-		assert.NotContains(t, joined, "forever", "a never-expiring token must not be flagged")
+		assert.Contains(t, joined, `token "soon" (mcp=write) expires in`)
+		assert.NotContains(t, joined, "later")
+	})
+
+	t.Run("an old operator file and a retired store fail with their codes", func(t *testing.T) {
+		state := isolate(t)
+		require.NoError(t, os.WriteFile(filepath.Join(state, "magus", "mcp_token"), []byte("b2xkLWZvcm1hdA\n"), 0o600))
+		old := filepath.Join(state, "magus", "connectors.d", "obsidian.json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o700))
+		require.NoError(t, os.WriteFile(old, []byte(`{"version":1}`), 0o600))
+		got := (&runner{}).checkTokens()
+		assert.Equal(t, types.CheckFail, got.Status)
+		joined := strings.Join(got.Details, "\n")
+		assert.Contains(t, joined, "MGS9016")
+		assert.Contains(t, joined, "MGS9017")
+		assert.Contains(t, joined, old)
+	})
+
+	// A record no mint could have written is skipped by the store, and doctor fails on it,
+	// naming the file, while the good tokens beside it still count.
+	t.Run("a planted token record fails naming its file", func(t *testing.T) {
+		isolate(t)
+		dir, err := auth.StoreDir()
+		require.NoError(t, err)
+		store, err := auth.LoadStore(dir)
+		require.NoError(t, err)
+		_, _, err = store.Mint(types.GrantOperator, auth.MintRequest{Name: "good", Grant: types.GrantConsole, TTL: time.Hour})
+		require.NoError(t, err)
+		planted := filepath.Join(dir, "planted.json")
+		body := `{"version":2,"id":"aaaaaaaa","name":"planted","class":"stored","sha256":"` + strings.Repeat("a", 64) +
+			`","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`
+		require.NoError(t, os.WriteFile(planted, []byte(body), 0o600))
+		got := (&runner{}).checkTokens()
+		assert.Equal(t, types.CheckFail, got.Status)
+		joined := strings.Join(got.Details, "\n")
+		assert.Contains(t, joined, "MGS9019")
+		assert.Contains(t, joined, planted)
+		assert.Contains(t, got.Message, "1 stored token(s)")
+	})
+
+	t.Run("a state dir other accounts can read is advice", func(t *testing.T) {
+		state := isolate(t)
+		require.NoError(t, os.Chmod(filepath.Join(state, "magus"), 0o755))
+		got := (&runner{}).checkTokens()
+		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Contains(t, strings.Join(got.Details, "\n"), "chmod 700")
 	})
 }
 

@@ -2,40 +2,21 @@
 //
 // Source: magus/token/v1alpha1/token.proto
 
-// Package magus.token.v1alpha1 is the console-facing TokenService: the typed MANAGEMENT
-// surface for the daemon's auth tokens. It is VIEW-AND-REVOKE ONLY - it can list
-// tokens and revoke them, but it can NEVER mint one. Minting stays a CLI-only
-// operation (`magus config mcp connector`); the browser has no path to a durable
-// credential, which closes the XSS-to-durable-credential escalation by construction.
-// It is a SECOND door onto the same on-disk connector store the CLI writes - not a
-// second store - plus a read/revoke view of the daemon's in-memory share token. Two
-// tokens are deliberately out of reach here:
-//   - the OPERATOR token (the built-in cli credential, auto-seeded on first daemon
-//     start): it is bootstrap-only and managed SOLELY by the CLI. It lives in a store
-//     this service never opens, so it is structurally INVISIBLE and IMMUTABLE to the
-//     browser-facing surface - it can be neither enumerated by ListTokens nor targeted
-//     by RevokeToken (a revoke keyed on its fingerprint returns NotFound and leaves it
-//     on disk), so the management UI can never lock the operator out of the daemon it
-//     authenticates against. This is by construction, not by convention: see
-//     TokenScope's TOKEN_SCOPE_OPERATOR and the handler's boundary tests.
-//   - there is NO renew/extend RPC by design: a token is reminted (via the CLI),
-//     never extended, for cryptographic hygiene (a fresh secret on rotation, not a
-//     longer-lived one).
+// Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
+// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// the same token store the CLI writes (tokens.d) and the same share manager the share
+// endpoint drives, never a second store.
 //
-// Access policy - the three-tier credential model, enforced at the mount:
-//   - cli token (operator): the ONLY credential accepted on ANY TokenService RPC.
-//     Token management is operator-tier because whoever can revoke tokens owns the
-//     daemon.
-//   - connector token (MCP client): valid on the data surfaces (/mcp, the console
-//     read/control services) but REJECTED here - a client credential must never
-//     revoke credentials (privilege self-replication).
-//   - share token (read-only viewer): valid only on the ephemeral LAN share
-//     listener, which never mounts this service; it cannot reach any RPC here.
+// Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
+// viewer, connector or share token is refused at the mount with 403. A mint and a revoke are
+// ALSO checked against the caller's own grant (a token is never granted, or revoked, beyond
+// what its caller holds), so the mount is defense in depth rather than the rule.
 //
-// The service is mounted on the loopback listener behind a cli-token-only bearer
-// guard and NEVER on the LAN share listener. buf-breaking gates this file: fields
-// and RPCs may be ADDED (old clients ignore unknown fields), never renumbered or
-// removed.
+// The operator token is out of reach here: it lives in a file this service never opens, so it
+// is neither listed nor revocable, and the management UI cannot lock the operator out. There
+// is no renew RPC: a token is reminted, never extended.
+//
+// buf-breaking gates this file: fields and RPCs may be ADDED, never renumbered or removed.
 package tokenv1alpha1connect
 
 import (
@@ -79,24 +60,16 @@ const (
 
 // TokenServiceClient is a client for the magus.token.v1alpha1.TokenService service.
 type TokenServiceClient interface {
-	// ListTokens returns every connector token plus the active share token (if any),
-	// each described by a prefix-only fingerprint - never the secret bytes.
+	// ListTokens returns every stored token plus the active share link (if any), each described
+	// without its secret.
 	ListTokens(context.Context, *connect.Request[v1alpha1.ListTokensRequest]) (*connect.Response[v1alpha1.ListTokensResponse], error)
-	// RevokeToken removes a connector token or the share token by identifier.
-	// Revoking the share token also closes its LAN listener. The cli token is not
-	// revocable here.
+	// RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+	// the share link also closes its LAN listener. The operator token is not revocable here.
 	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
-	// CreateToken mints a console or viewer token and returns its secret ONCE.
-	//
-	// It cannot escalate, and that is a property of the MOUNT rather than of any check
-	// here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier
-	// and nothing else, so a console, viewer, or connector token cannot reach this method
-	// to call it at all. The only caller who can already dominates every scope it may mint.
-	//
-	// What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE_READ only.
-	// OPERATOR is refused because that credential lives in a file this service never opens
-	// and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a
-	// browser would cross the exact tier boundary this model exists to draw.
+	// CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+	// console grants only (a browser has no business minting an /mcp token), never more than
+	// the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+	// is refused, never shortened.
 	CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error)
 }
 
@@ -156,24 +129,16 @@ func (c *tokenServiceClient) CreateToken(ctx context.Context, req *connect.Reque
 
 // TokenServiceHandler is an implementation of the magus.token.v1alpha1.TokenService service.
 type TokenServiceHandler interface {
-	// ListTokens returns every connector token plus the active share token (if any),
-	// each described by a prefix-only fingerprint - never the secret bytes.
+	// ListTokens returns every stored token plus the active share link (if any), each described
+	// without its secret.
 	ListTokens(context.Context, *connect.Request[v1alpha1.ListTokensRequest]) (*connect.Response[v1alpha1.ListTokensResponse], error)
-	// RevokeToken removes a connector token or the share token by identifier.
-	// Revoking the share token also closes its LAN listener. The cli token is not
-	// revocable here.
+	// RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+	// the share link also closes its LAN listener. The operator token is not revocable here.
 	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
-	// CreateToken mints a console or viewer token and returns its secret ONCE.
-	//
-	// It cannot escalate, and that is a property of the MOUNT rather than of any check
-	// here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier
-	// and nothing else, so a console, viewer, or connector token cannot reach this method
-	// to call it at all. The only caller who can already dominates every scope it may mint.
-	//
-	// What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE_READ only.
-	// OPERATOR is refused because that credential lives in a file this service never opens
-	// and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a
-	// browser would cross the exact tier boundary this model exists to draw.
+	// CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+	// console grants only (a browser has no business minting an /mcp token), never more than
+	// the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+	// is refused, never shortened.
 	CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error)
 }
 

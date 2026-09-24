@@ -426,6 +426,9 @@ type Secret struct {
 type MCP struct {
 	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
 	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
+	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
+	// plaintext HTTP, so without it the daemon refuses to start rather than warn.
+	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
 }
 
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
@@ -798,6 +801,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
+		{"MAGUS_MCP_INSECURE_BIND", "mcp.insecure_bind", "false", "Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
 		{"MAGUS_VOLATILITY_ENABLED", "volatility.enabled", "true", "Master switch for volatility detection and auto-retry; false disables all retry logic"},
 		{"MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES", "volatility.bootstrap_samples", "20", "Number of outcomes below which all failures are retried once (bootstrap phase)"},

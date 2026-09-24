@@ -168,14 +168,18 @@ on it.
 address. If you set `mcp.address` to a non-loopback IP (for k8s or LAN use),
 the console logs a warning and does not register its routes.
 
-**Bearer token.** Every request must carry `Authorization: Bearer <token>`.
-The token is the same one the MCP server uses. Retrieve it with:
+**Bearer token.** Every request must carry `Authorization: Bearer <token>`
+holding `console=read` for the read routes and `console=write` for the rest (see
+[Tokens and grants](../concepts/tokens.md)). The links magus prints carry a one-time
+code the console trades for a console token that expires in 12 hours; mint a token
+yourself with:
 
 ```sh
-magus config token print
+magus config console token create --expires 12h
 ```
 
-The token is stored on disk (`~/.config/magus/mcp-token`) and never logged.
+Only its hash is stored, and it is never logged. A console token is refused at
+`/mcp` and by token management.
 
 **DNS-rebind guard.** Every console route validates `Host` and, when present,
 `Origin`. Loopback hosts are always accepted. For the `/api/` bridge and the
@@ -244,7 +248,7 @@ log in the address bar).
 
 ```text
 [pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
-    bearer token: magus config token print
+    console token: magus config console token create
 ```
 
 When the daemon is not running, the check is skipped (not a failure).

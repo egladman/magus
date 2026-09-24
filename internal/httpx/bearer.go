@@ -1,10 +1,14 @@
 package httpx
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -13,97 +17,199 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// verifier decides whether a presented bearer token is accepted and, when it is, names
-// the credential it matched. It is the one knob that varies across loopback endpoints:
-// the daemon passes auth.VerifyMCPBearer (cli token or a non-expired named connector
-// token), while the ephemeral live and blob servers pass SingleTokenVerifier over their
-// per-run token.
-type verifier func(presented string) (credential string, ok bool)
+// Verifier authenticates a presented bearer token: it names the credential the token is, or
+// reports false. It must fail closed on any error. It decides nothing about routes; that is
+// the guard's Need against the credential's Grant.
+type Verifier func(presented string) (types.Credential, bool)
 
-// BearerGuard rejects any request whose token fails verify. The token is read
-// ONLY from the `Authorization: Bearer <token>` header. This is the default and
-// the right choice for every endpoint a non-browser client reaches (the MCP
-// endpoint, plain fetch() clients): a bearer token must not travel in the URL,
-// where it leaks into access logs, proxy logs, and browser history (RFC 6750
-// section 2.3). For the browser-EventSource endpoints that genuinely cannot set
-// a header, use [BearerGuardWithQueryToken] instead: an explicit opt-in, so a
-// new mount is header-only unless it deliberately widens the carrier.
+// reverifyEvery is how often an admitted request's token is checked again while its handler
+// runs. It is what reaches a stream a token opened: revoke or expire the token and the
+// request's context is cancelled within this long.
+var reverifyEvery = 5 * time.Second
+
+// BearerGuard admits a request when verify names a credential AND that credential's Grant
+// allows need. It is the one place magus decides whether a credential may use a route. It
+// refuses to build with a need that is zero or invalid (see types.Need.Validate).
 //
-// verify is called on every request, so a rotate, create, or revoke takes effect
-// without restarting the server; it must fail closed (return false) on any error.
-// A refusal is a 401 in format: MGS9011 when no token was presented, MGS9001 when
-// one was, which never says whether it was wrong, expired, or revoked. An accepted
-// request reaches next with the credential's name and the rpc entry point on its
-// context (trail.CredentialFromContext, trail.EntryPointFromContext), which every record
-// made under it is stamped from. A mount that is not the RPC surface restamps its own
-// entry point inside.
-func BearerGuard(format rpcerr.Format, verify verifier, next http.Handler) http.Handler {
-	return guard(format, verify, headerToken, next)
+// The token is read ONLY from the `Authorization: Bearer <token>` header: a bearer token must
+// not travel in a URL, where it lands in access logs, proxy logs and history (RFC 6750
+// section 2.3). An EventSource route that cannot set a header opts in to the query carrier
+// with [BearerGuardWithQueryToken].
+//
+// Refusals, in format: 401 MGS9011 when no token was presented; 401 MGS9001 when the token is
+// not a credential here (wrong, expired, revoked, of a class this listener does not accept, or
+// the operator token from a peer that is not loopback), never saying which; 403 MGS9015 when
+// it is a credential whose grant is below need, naming the need. An admitted request reaches
+// next with the credential and the rpc entry point on its context, and a context the guard
+// cancels as soon as the token stops verifying or stops allowing need (checked every
+// reverifyEvery), so a long-lived stream ends when its token is revoked or expires.
+func BearerGuard(format rpcerr.Format, verify Verifier, need types.Need, next http.Handler) (http.Handler, error) {
+	if err := need.Validate(); err != nil {
+		return nil, fmt.Errorf("httpx: %w", err)
+	}
+	return guard(format, verify, func(*http.Request) types.Need { return need }, headerToken, next), nil
 }
 
-// BearerGuardWithQueryToken is [BearerGuard] that ALSO accepts the token from a
-// `?token=<token>` query parameter, preferring the header when both are present.
-// Use it ONLY for endpoints a browser EventSource connects to: EventSource cannot
-// set an Authorization header, so the query carrier is the sole option. It is a
-// deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3);
-// keep it off the MCP endpoint, which every supported client reaches with a header.
-func BearerGuardWithQueryToken(format rpcerr.Format, verify verifier, next http.Handler) http.Handler {
-	return guard(format, verify, presentedToken, next)
+// BearerGuardWithQueryToken is [BearerGuard] that also accepts the token from a `?token=`
+// query parameter, preferring the header. Use it ONLY for a route a browser EventSource
+// connects to, which cannot set a header; keep it off /mcp.
+func BearerGuardWithQueryToken(format rpcerr.Format, verify Verifier, need types.Need, next http.Handler) (http.Handler, error) {
+	if err := need.Validate(); err != nil {
+		return nil, fmt.Errorf("httpx: %w", err)
+	}
+	return guard(format, verify, func(*http.Request) types.Need { return need }, presentedToken, next), nil
 }
 
-// guard is the shared 401-or-pass core; extract names the token carriers a given
-// mount accepts (header-only, or header-plus-query).
-func guard(format rpcerr.Format, verify verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
+// ProcedureGuard is [BearerGuard] for a Connect service, holding each procedure to its own
+// need: needs maps a procedure path ("/magus.job.v1alpha1.JobService/RunJob") to it. A path it
+// does not name is held to the strictest need in it, and reaches a handler that answers it
+// not found. It refuses to build with an empty table or an invalid need.
+func ProcedureGuard(format rpcerr.Format, verify Verifier, needs map[string]types.Need, next http.Handler) (http.Handler, error) {
+	if len(needs) == 0 {
+		return nil, errors.New("httpx: a procedure guard needs at least one procedure")
+	}
+	var strictest types.Need
+	for proc, n := range needs {
+		if err := n.Validate(); err != nil {
+			return nil, fmt.Errorf("httpx: %s: %w", proc, err)
+		}
+		if strictest == (types.Need{}) || stricter(n, strictest) {
+			strictest = n
+		}
+	}
+	needOf := func(r *http.Request) types.Need {
+		if n, ok := needs[r.URL.Path]; ok {
+			return n
+		}
+		return strictest
+	}
+	return guard(format, verify, needOf, headerToken, next), nil
+}
+
+// stricter orders needs so the fallback for an unknown procedure is the one fewest grants
+// meet: token management, then any write, then a read.
+func stricter(a, b types.Need) bool {
+	rank := func(n types.Need) int {
+		if n.Surface == types.SurfaceTokens {
+			return 10
+		}
+		return int(n.Level)
+	}
+	return rank(a) > rank(b)
+}
+
+func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) types.Need, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := extract(r)
 		if !ok {
 			format.Write(w, r, bearerMissing)
 			return
 		}
-		credential, ok := verify(presented)
+		need := needOf(r)
+		cred, ok := admit(verify, presented, r)
 		if !ok {
 			format.Write(w, r, bearerRejected)
 			return
 		}
-		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
+		if !cred.Grant.Allows(need) {
+			format.Write(w, r, grantBelow(need, cred.Grant))
+			return
+		}
+		ctx, cancel := context.WithCancel(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), cred), types.EntryPointRPC))
+		defer cancel()
+		go reverify(ctx, cancel, verify, presented, need, r)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// Telling a missing token from a refused one reveals only what the caller already
-// knows, whether it sent one. Wrong, expired, and revoked stay one answer, so a
-// caller cannot probe which tokens exist.
+// admit verifies presented, and refuses the operator token from a peer that is not loopback,
+// judged by the TCP peer address and never a header. A daemon bound beyond loopback
+// (mcp.insecure_bind) serves stored tokens to the network; the operator token stays local.
+func admit(verify Verifier, presented string, r *http.Request) (types.Credential, bool) {
+	cred, ok := verify(presented)
+	if !ok {
+		return types.Credential{}, false
+	}
+	if cred.Class == types.ClassOperator && !isLoopbackAddr(r.RemoteAddr) {
+		return types.Credential{}, false
+	}
+	return cred, true
+}
+
+// reverify cancels the request when its token stops verifying or stops allowing need. It
+// returns when ctx ends, which the guard ensures by cancelling ctx when the handler returns.
+func reverify(ctx context.Context, cancel context.CancelFunc, verify Verifier, presented string, need types.Need, r *http.Request) {
+	tick := time.NewTicker(reverifyEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if cred, ok := admit(verify, presented, r); !ok || !cred.Grant.Allows(need) {
+				cancel()
+				return
+			}
+		}
+	}
+}
+
+// grantBelow is the 403 for a valid credential below the need. It names the need, and names a
+// mint only where a mint can reach it: nothing a person can mint reaches token management.
+func grantBelow(need types.Need, held types.Grant) rpcerr.Error {
+	heldText := held.String()
+	if heldText == "" {
+		heldText = "nothing"
+	}
+	msg := "this route needs " + need.String() + " and the token presented holds " + heldText
+	switch {
+	case need.Surface == types.SurfaceTokens:
+		msg += "; only the operator token reaches it, used from the user's own shell"
+	case need.Surface == types.SurfaceMCP:
+		msg += "; a connector token reaches it: magus config mcp connector create"
+	case need.Level == types.LevelWrite:
+		msg += "; a console token reaches it: magus config console token create"
+	default:
+		msg += "; a viewer token reaches it: magus config console token create --viewer"
+	}
+	return rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.GrantInsufficient, Message: msg}
+}
+
+// Telling a missing token from a refused one reveals only what the caller already knows,
+// whether it sent one. Wrong, expired, revoked and wrong-class stay one answer, so a caller
+// cannot probe which tokens exist.
 var (
 	bearerMissing = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerMissing,
-		Message: "the request carried no bearer token; send one as `Authorization: Bearer <token>`. Mint or inspect a connector token with: magus config mcp connector",
+		Message: "the request carried no bearer token; send one as `Authorization: Bearer <token>`. Mint one with: magus config mcp connector create, or magus config console token create",
 	}
 	bearerRejected = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerRejected,
-		Message: "the daemon rejected the bearer token: it is wrong, expired, or revoked. Mint or inspect a connector token with: magus config mcp connector",
+		Message: "the daemon rejected the bearer token: it is wrong, expired, or revoked. Mint one with: magus config mcp connector create, or magus config console token create",
 	}
 )
 
-// SingleTokenVerifier returns a [verifier] that accepts exactly the one token
-// yielded by expected. It compares the SHA-256 digests of the presented and
-// expected tokens with subtle.ConstantTimeCompare: the digests are equal-length,
-// so the comparison reveals neither the secret's bytes nor its length. (Hashing
-// an attacker-controlled input is itself length-dependent, but that timing
-// channel is independent of the secret.) A load error from expected fails closed.
-// The ephemeral live and blob servers use this with their per-run token, which has
-// no name; the daemon uses a richer, per-surface verifier (auth.VerifyMCPBearer or
-// auth.VerifyConsoleBearer) instead.
-func SingleTokenVerifier(expected func() (string, error)) verifier {
-	return func(presented string) (string, bool) {
+// SingleTokenVerifier returns a [Verifier] that accepts exactly the one token expected yields,
+// as a classless credential holding grant. The digests are compared in constant time, so the
+// check reveals neither the secret's bytes nor its length. A load error fails closed.
+//
+// The per-run page servers use it, and their token stays unprefixed and outside auth's
+// classes: it is minted, held and checked inside one process for one page, is never stored,
+// and no other listener could accept it, so there is no store for a prefix to route to.
+func SingleTokenVerifier(expected func() (string, error), grant types.Grant) Verifier {
+	return func(presented string) (types.Credential, bool) {
 		want, err := expected()
 		if err != nil {
-			return "", false
+			return types.Credential{}, false
 		}
 		got := sha256.Sum256([]byte(presented))
 		wantSum := sha256.Sum256([]byte(want))
-		return "", subtle.ConstantTimeCompare(got[:], wantSum[:]) == 1
+		if subtle.ConstantTimeCompare(got[:], wantSum[:]) != 1 {
+			return types.Credential{}, false
+		}
+		return types.Credential{Grant: grant}, true
 	}
 }
 
@@ -112,9 +218,8 @@ func headerToken(r *http.Request) (string, bool) {
 	return bearerToken(r.Header.Get("Authorization"))
 }
 
-// presentedToken extracts the token a request carries, preferring the
-// `Authorization: Bearer` header and falling back to a `?token=` query
-// parameter. It reports false when neither carrier supplies a non-empty token.
+// presentedToken prefers the `Authorization: Bearer` header and falls back to a `?token=`
+// query parameter.
 func presentedToken(r *http.Request) (string, bool) {
 	if tok, ok := headerToken(r); ok {
 		return tok, true
@@ -125,8 +230,8 @@ func presentedToken(r *http.Request) (string, bool) {
 	return "", false
 }
 
-// bearerToken extracts the credential from an Authorization header value. The
-// scheme is matched case-insensitively per RFC 6750; the token itself is not.
+// bearerToken extracts the credential from an Authorization header value. The scheme is
+// matched case-insensitively per RFC 6750; the token itself is not.
 func bearerToken(header string) (string, bool) {
 	const scheme = "bearer "
 	if len(header) < len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {

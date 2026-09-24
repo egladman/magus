@@ -323,7 +323,7 @@ func scopePaths(r *http.Request) []string {
 // account and the credential the bearer guard verified. The agent's half lives on the MCP
 // surface and is stamped DiffAuthorAgent there. The stamp is decided by WHICH ROUTE the
 // write arrived on and never by the payload, but the route does not prove a person: any
-// process of the account can read a console or cli token, so the origin records which
+// process of the account can mint a console token, so the origin records which
 // credential wrote the remark rather than claiming who held it.
 //
 // It is one route with an `op` rather than five, because these are all small mutations of one

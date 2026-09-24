@@ -18,7 +18,6 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
@@ -1014,9 +1013,9 @@ func liveBridgeReachable(ctx context.Context) bool {
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
-// The token is loaded from the on-disk token file written by auth.Save/SaveNew.
-// It is embedded in the URL fragment (which browsers do not transmit in HTTP
-// requests) and is stripped from the fragment by the page on first load.
+// The link carries a one-time code in the URL fragment (which browsers do not transmit in HTTP
+// requests), never a token: the page trades it once, within a minute, for a console=write token
+// living console.LinkTokenLifetime, so the opener's argv holds nothing worth stealing.
 func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
@@ -1041,14 +1040,13 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		return errSilent{exitCode: 1}
 	}
 
-	token, err := auth.Load()
+	code, err := mintConsoleLinkCode()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: could not load the MCP token: %v\n", err)
-		fmt.Fprintf(os.Stderr, "If no token exists yet, run: %s\n", hint.MCPTokenGenerate)
+		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: could not mint a sign-in code for the link: %v\n", err)
 		return errSilent{exitCode: 1}
 	}
 
-	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Token: token}
+	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Code: code}
 	if useTargets {
 		linkOpts.Fragment = append(linkOpts.Fragment, console.FragmentParam{Key: "flavor", Value: "targets"})
 	}

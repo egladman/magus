@@ -141,7 +141,7 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 		Actor:         e.Label(),
 		User:          e.User,
 		EntryPoint:    string(e.EntryPoint),
-		Credential:    e.Credential,
+		Credential:    wireCredential(e.Credential),
 		Agent:         e.Agent,
 		Host:          encodeHost(e),
 		Session:       e.Session,
@@ -161,6 +161,14 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 		pe.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
 	}
 	return pe
+}
+
+// wireCredential maps a verified credential onto the wire, nil for none.
+func wireCredential(c types.Credential) *activityv1.Credential {
+	if c == (types.Credential{}) {
+		return nil
+	}
+	return &activityv1.Credential{Class: string(c.Class), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
 }
 
 // pageOffset reads a page token as an offset into the filtered stream. An unparseable token errors

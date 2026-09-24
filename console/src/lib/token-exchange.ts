@@ -1,91 +1,100 @@
-// token-exchange.ts - trades an operator token for a console-scoped one, once per token.
+// token-exchange.ts - how the console comes to hold a console token and not a stronger one.
 //
-// WHY THIS EXISTS. The console authenticated with the operator token: the bootstrap
-// credential that also opens /mcp and token management. Holding it in a browser makes the
-// credential tiers theoretical - the whole point of a console tier is that a credential
-// handed to a page cannot reach the agent tool surface. This swaps the page's copy for a
-// token that opens the console and is refused at /mcp, so a leaked browser credential
-// reaches strictly less.
+// Two ways in. A CLI-opened link carries a one-time code (#code=mgx_...), never a token: the
+// code lives a minute and is spent on first use, so the opener's argv, a history file or a
+// screen share holds nothing worth taking. redeemLinkCode trades it at the daemon for the
+// console token it stands for. And a page that was handed the operator token itself (a pasted
+// token, an old link) trades it once for a console token via TokenService, because the operator
+// token also reaches /mcp and token management, which a browser has no business holding.
 //
 // WHY IT IS A SEPARATE MODULE from lib/daemon. daemon.ts documents that a page importing
 // only its primitives is tree-shaken clear of the ConnectRPC transport code; importing
-// TokenService there would put the token client in every surface bundle. Only a surface
-// that actually exchanges pays for this one.
+// TokenService there would put the token client in every surface bundle. Only the shell,
+// which does the trading for every tab, pays for this one.
 //
-// DETECTION IS BY ATTEMPT, NOT BY INSPECTION. Nothing in a token's bytes says which tier
-// it belongs to, and the console must not try to guess. TokenService is mounted behind the
-// operator-only guard, so a CreateToken call that SUCCEEDS is itself the proof the page
-// held the operator token; a refusal means it already holds a scoped one and there is
-// nothing to do. So a REFUSAL is never shown; any other failure is (see the shell's
-// caller), because it leaves the operator credential in the browser.
+// A token's class is its prefix (mgo_ operator, mgs_ stored, mgl_ share link), and the prefix
+// alone decides: only an mgo_ token is traded, and every failure to trade one is a failure the
+// caller surfaces, a refusal included, because each leaves the operator credential in the
+// browser.
 
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
-import { TokenScope, TokenService } from "@wire/token/v1alpha1/token_pb";
-import {
-  createDaemonTransport,
-  getLiveToken,
-  hasScopedToken,
-  isCapabilityDenied,
-  markScopedToken,
-  setLiveToken,
-} from "./daemon";
+import { Level, TokenService } from "@wire/token/v1alpha1/token_pb";
+import { createDaemonTransport, getLiveToken, setLiveToken } from "./daemon";
 
 // Outcome names what happened, so a caller can log or test it without inspecting storage.
-// "denied" is the ordinary steady state once the swap has happened on another surface.
-export type Outcome = "no-token" | "already-scoped" | "exchanged" | "denied" | "failed";
+export type Outcome = "no-token" | "already-scoped" | "exchanged" | "failed";
 
 // mint returns a freshly minted console token's secret. Injectable so the decision logic
 // below is testable without a transport or a daemon.
 export type Mint = () => Promise<string>;
 
-// ensureScopedToken performs the swap at most once.
-//
-// The ORDER is the safety property: the new secret is written to storage BEFORE the
-// exchange is marked done, and the operator token is only ever replaced by an overwrite
-// of the same key. There is no window in which the page has discarded the credential it
-// had without having stored the one that replaces it. If the write fails, the mark is not
-// set, so a later load retries rather than stranding the page with a token it did not keep.
-export async function ensureScopedToken(mint: Mint): Promise<Outcome> {
-  if (getLiveToken() === null) return "no-token";
-  if (hasScopedToken()) return "already-scoped";
+// OPERATOR_PREFIX marks the operator class (internal/auth/format.go).
+const OPERATOR_PREFIX = "mgo_";
 
+// ensureConsoleToken trades an operator token for a console token; any other token is left
+// alone. The new secret is written to storage before anything else happens, and the operator
+// token is only ever replaced by an overwrite of the same key, so there is no window in which
+// the page holds neither.
+export async function ensureConsoleToken(mint: Mint): Promise<Outcome> {
+  const held = getLiveToken();
+  if (held === null) return "no-token";
+  if (!held.startsWith(OPERATOR_PREFIX)) return "already-scoped";
   let secret: string;
   try {
     secret = await mint();
-  } catch (e) {
-    // A refusal is the expected answer for a page that already holds a console token: the
-    // operator-only mount declines it. Nothing is wrong and nothing should be surfaced.
-    if (isCapabilityDenied(e)) {
-      markScopedToken();
-      return "denied";
-    }
-    // reported: by the daemon transport, and the caller reports "failed". The mark stays unset so
-    // the next load retries with the credential the page still holds.
+  } catch {
+    // reported: by the daemon transport, and the caller reports "failed", a refusal included.
     return "failed";
   }
-
   if (!secret || !setLiveToken(secret)) return "failed";
-  markScopedToken();
   return "exchanged";
 }
 
-// CONSOLE_TOKEN_TTL_MS is the lifetime the console asks for: the daemon's own ceiling for a
-// browser-minted token (maxConsoleTokenTTL in internal/handler/token/service.go), which refuses a
-// mint with no expiry. Asking for the ceiling rather than less keeps the page signed in as long as
-// the daemon allows; the daemon clamps anything further out, so a drift here cannot mint a longer one.
+// CONSOLE_TOKEN_TTL_MS is the lifetime the console asks for: the default for a stored token
+// (auth.DefaultTokenTTL). The daemon requires an expiry and refuses one past auth.MaxTokenTTL
+// (366 days) rather than shortening it, so this must stay under that.
 export const CONSOLE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
-// exchangeOperatorToken wires ensureScopedToken to the real daemon. The minted token carries no
+// exchangeOperatorToken wires ensureConsoleToken to the real daemon. The minted token carries no
 // name (the daemon derives a unique one). When it expires the daemon answers 401, which signs the
 // console out with a notice (lib/daemon signalAuthLost) rather than failing surface by surface.
 export async function exchangeOperatorToken(host: string, now = Date.now()): Promise<Outcome> {
   const client = createClient(TokenService, createDaemonTransport(host, getLiveToken()));
-  return ensureScopedToken(async () => {
+  return ensureConsoleToken(async () => {
     const resp = await client.createToken({
-      scope: TokenScope.CONSOLE,
+      grant: { console: Level.WRITE },
       expireTime: timestampFromMs(now + CONSOLE_TOKEN_TTL_MS),
     });
     return resp.secret;
   });
+}
+
+// redeemLinkCode trades a link's one-time code for the console token it stands for, at the
+// daemon that served the page, and stores it. The code is the credential, so it is sent in the
+// body and nowhere else. Anything but a stored token is "failed": a used or expired code, a
+// daemon that cannot be reached, a store that refused the write.
+export async function redeemLinkCode(host: string, code: string): Promise<Outcome> {
+  let res: Response;
+  try {
+    res = await fetch("http://" + host + "/api/v1/token/exchange", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+  } catch {
+    // reported: the caller reports "failed" with what to do next
+    return "failed";
+  }
+  if (!res.ok) return "failed";
+  let token: unknown;
+  try {
+    token = ((await res.json()) as { token?: unknown }).token;
+  } catch {
+    // reported: the caller reports "failed"
+    return "failed";
+  }
+  if (typeof token !== "string" || !token || !setLiveToken(token)) return "failed";
+  return "exchanged";
 }

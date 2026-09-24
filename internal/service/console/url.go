@@ -4,7 +4,9 @@ import (
 	"net/url"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	wire "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/hint"
@@ -96,14 +98,15 @@ func KeyDigestsParam(digests []KeyClassDigest) string {
 
 // LinkOpts is the input to Link: the single home for the daemon-origin console URL grammar.
 // Host is the daemon's loopback host:port (from mcp.address); Surface is a console surface
-// segment (see KnownSurfaces: "dashboard", "graph", ...); Token is an optional bearer token;
-// Fragment holds any extra content directives that ride the fragment ahead of the token.
+// segment (see KnownSurfaces: "dashboard", "graph", ...); Code is an optional one-time exchange
+// code (mgx_) the console trades for its token; Fragment holds any extra content directives
+// that ride the fragment ahead of the code.
 type LinkOpts struct {
 	Host    string
 	Surface string
-	Token   string
+	Code    string
 	// Fragment is the ordered list of extra content directives (e.g. {"flavor","targets"} or
-	// {"view","blast"}) appended to the fragment BEFORE the token. Order is preserved so callers
+	// {"view","blast"}) appended to the fragment BEFORE the code. Order is preserved so callers
 	// get stable, testable output; each value is percent-encoded with the one escaping policy.
 	Fragment []FragmentParam
 }
@@ -129,14 +132,14 @@ func Root(host string) string {
 }
 
 // Link assembles a console surface's daemon-origin deep link:
-// http://<host>/console/<surface>/#[<directives>&]token=<token>. Under the daemon-origin grammar
+// http://<host>/console/<surface>/#[<directives>&]code=<code>. Under the daemon-origin grammar
 // the ORIGIN names which daemon: the daemon serves both the console shell (over its loopback
-// /console/) and the data API, so nothing but content state and the bearer token rides the
+// /console/) and the data API, so nothing but content state and the exchange code rides the
 // fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
 // surface URL: the daemon serves the shell for it (SPA fallback) and the console's boot router
-// opens that surface from the path. The token rides the fragment (never transmitted on the
-// document GET) and is emitted LAST, after any content directives, so callers hold a secret: a
-// link with a token must only be surfaced to an interactive user, never written to a log.
+// opens that surface from the path. The code rides the fragment (never transmitted on the
+// document GET) and is emitted LAST, after any content directives. It is single use and lives a
+// minute, so a link seen in a process list or a log is spent or dead, never a credential.
 //
 // This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
 // the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
@@ -146,8 +149,8 @@ func Link(opts LinkOpts) string {
 	for _, p := range opts.Fragment {
 		parts = append(parts, p.Key+"="+encodeComponent(p.Value))
 	}
-	if opts.Token != "" {
-		parts = append(parts, "token="+encodeComponent(opts.Token))
+	if opts.Code != "" {
+		parts = append(parts, "code="+encodeComponent(opts.Code))
 	}
 	frag := ""
 	if len(parts) > 0 {
@@ -178,12 +181,23 @@ func SurfaceLink(surface string, fragment ...FragmentParam) string {
 	return "/console/" + surface + "/" + frag
 }
 
+// LinkTokenLifetime is how long the console token a sign-in link stands for lives, whether the
+// CLI mints its code directly or a sign-in line asks for one.
+const LinkTokenLifetime = 12 * time.Hour
+
+// LinkTokenExpires is LinkTokenLifetime spelled as an --expires value ("12h").
+func LinkTokenExpires() string { return strconv.Itoa(int(LinkTokenLifetime.Hours())) + "h" }
+
 // OpenCommand is a shell line that opens link signed in:
-// open "<link>#token=$(magus config token print)", with the platform's opener.
+// open "<link>#code=$(magus config console token create --code --expires 12h)", with the
+// platform's opener.
 //
-// The token is a command substitution the reader's own shell expands, so nothing that
-// prints this line ever holds the secret. The link must not carry a token already; it is
-// percent-encoded, so it holds nothing a double-quoted shell word would expand.
+// The code is a command substitution the reader's own shell expands, so nothing that prints
+// this line ever holds a secret, and what reaches the opener's argv is a one-time code that
+// lives a minute rather than a token. It stands for a console=write token that expires, never
+// the operator token, so the browser never holds a credential that can reach token
+// management. The link must not carry a code already; it is percent-encoded, so it holds
+// nothing a double-quoted shell word would expand.
 //
 // The command is spelled as this process was invoked, which is right for a CLI line and
 // wrong for a daemon reply read in another directory: that caller uses [OpenCommandAs]
@@ -206,7 +220,7 @@ func OpenCommandAs(link, goos, bin string) string {
 		// cmd.exe never expands $(...), so the line is PowerShell's, where it does.
 		opener = "Start-Process"
 	}
-	return opener + ` "` + link + sep + "token=$(" + hint.ConfigTokenPrint.StringAs(bin) + `)"`
+	return opener + ` "` + link + sep + "code=$(" + hint.ConfigConsoleTokenCreate.WithAs(bin, "--code", "--expires", LinkTokenExpires()) + `)"`
 }
 
 // encodeComponent percent-encodes s the way the browser's encodeURIComponent does, which is what

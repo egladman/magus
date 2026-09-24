@@ -1014,22 +1014,22 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 		},
 		{
 			Name:  "mcp",
-			Short: "Manage the MCP server auth token",
+			Short: "Manage MCP connector tokens",
 			Children: []Command{
 				{
 					Name:  "connector",
-					Short: "Manage connector tokens",
+					Short: "Manage connector tokens (mcp=write)",
 					Children: []Command{
 						{
 							Name:  "create",
 							Short: "Mint a connector token",
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this connector token (default: connector-N)"},
-								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
 							},
 						},
-						{Name: "ls", Short: "List connector tokens: names, fingerprints, and expiry (never the secret)"},
-						{Name: "revoke", Short: "Revoke a connector token"},
+						{Name: "ls", Short: "List every stored token: names, ids, classes, grants, and expiry (never the secret)"},
+						{Name: "revoke", Short: "Revoke a stored token by exact id or exact name"},
 					},
 				},
 			},
@@ -1045,7 +1045,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
-				{Name: "print", Short: "Print the current operator token to stdout"},
+				{Name: "print", Short: "Print the current operator token to stdout (denied to agent sessions)"},
 				{Name: "revoke", Short: "Delete the operator token (the daemon mints a fresh one on next start)"},
 				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
 			},
@@ -1063,12 +1063,13 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							Short: "Mint a console token",
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this console token (default: console-N)"},
-								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
 								{Name: "viewer", Kind: FlagBool, Doc: "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share"},
+								{Name: "code", Kind: FlagBool, Doc: "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once"},
 							},
 						},
-						{Name: "ls", Short: "List console tokens"},
-						{Name: "revoke", Short: "Revoke a console token"},
+						{Name: "ls", Short: "List every stored token"},
+						{Name: "revoke", Short: "Revoke a stored token by exact id or exact name"},
 					},
 				},
 			},
@@ -1171,7 +1172,7 @@ needs to reach it - the endpoint, the auth token command, and a liveness
 probe - and exits non-zero, since it starts nothing itself.
 
   magus server start                    start the daemon (MCP comes up with it)
-  magus config token print              print the bearer token
+  magus config mcp connector create     mint a bearer token for one client
   magus status --probe=liveness,mcp     confirm the endpoint is serving
 
 Per-client configuration lives in docs/guides/integrations/mcp.md, not in

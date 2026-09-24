@@ -3,94 +3,50 @@ package auth
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
-func TestMintShareTokenVerify(t *testing.T) {
-	secret, tok, err := MintShareToken(15 * time.Minute)
-	if err != nil {
-		t.Fatalf("MintShareToken: %v", err)
-	}
-	if !validTokenFormat(secret) {
-		t.Fatalf("minted secret %q is not a valid mgs_ token", secret)
-	}
-	if tok.Scope != ShareScopeRead {
-		t.Fatalf("scope = %q, want %q", tok.Scope, ShareScopeRead)
-	}
+func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
+	t.Parallel()
+	secret, tok, err := MintShare(types.GrantConsole, 10*time.Minute)
+	require.NoError(t, err)
+	class, ok := classOf(secret)
+	require.True(t, ok)
+	assert.Equal(t, types.ClassShare, class)
+
 	now := time.Now()
-	if !tok.Verify(secret, now) {
-		t.Fatalf("Verify rejected the freshly minted secret")
-	}
-
-	// A different, independently valid share token must not verify against tok.
-	other, _, err := MintShareToken(15 * time.Minute)
-	if err != nil {
-		t.Fatalf("MintShareToken (other): %v", err)
-	}
-	if tok.Verify(other, now) {
-		t.Fatalf("Verify accepted a different share token")
-	}
-
-	// A garbage / non-mgs_ token is rejected offline.
-	if tok.Verify("not-a-token", now) {
-		t.Fatalf("Verify accepted a malformed token")
-	}
+	assert.True(t, tok.Verify(secret, now))
+	other, _, err := MintShare(types.GrantConsole, 10*time.Minute)
+	require.NoError(t, err)
+	assert.False(t, tok.Verify(other, now), "another link's secret")
+	assert.False(t, tok.Verify(secret, tok.Expires.Add(time.Second)), "after expiry")
+	assert.False(t, ShareToken{}.Verify(secret, now), "the zero token verifies nothing")
+	assert.Equal(t, types.Credential{Class: types.ClassShare, ID: tok.ID(), Grant: types.GrantViewer}, tok.Credential())
 }
 
-func TestShareTokenExpiry(t *testing.T) {
-	secret, tok, err := MintShareToken(time.Minute)
-	if err != nil {
-		t.Fatalf("MintShareToken: %v", err)
+// The share door follows the minting rule: a minter below the share's grant is refused, and
+// the lifetime is bounded to a day with no clamp at either end.
+func TestMintShareFollowsTheMintingRule(t *testing.T) {
+	t.Parallel()
+	for _, minter := range []types.Grant{{}, types.GrantConnector, {Tokens: types.LevelWrite}} {
+		_, _, err := MintShare(minter, time.Hour)
+		assert.ErrorIs(t, err, ErrExceedsGrant, minter.String())
 	}
-	// Just before expiry it verifies; just after, it does not.
-	if !tok.Verify(secret, tok.Expires.Add(-time.Second)) {
-		t.Fatalf("Verify rejected an unexpired token")
+	for _, minter := range []types.Grant{types.GrantViewer, types.GrantConsole, types.GrantOperator} {
+		_, _, err := MintShare(minter, time.Hour)
+		assert.NoError(t, err, minter.String())
 	}
-	if tok.Verify(secret, tok.Expires.Add(time.Second)) {
-		t.Fatalf("Verify accepted an expired token")
+	for _, ttl := range []time.Duration{0, -time.Minute, 59 * time.Second, MaxShareTTL + time.Second, 90 * 24 * time.Hour} {
+		_, _, err := MintShare(types.GrantOperator, ttl)
+		assert.ErrorIs(t, err, ErrShareLifetime, ttl.String())
+		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, "one code for a token or a link outside its bound: %s", ttl)
 	}
-}
-
-func TestShareTokenWrongScopeRejected(t *testing.T) {
-	secret, tok, err := MintShareToken(time.Minute)
-	if err != nil {
-		t.Fatalf("MintShareToken: %v", err)
-	}
-	// A token whose scope is not read verifies nothing, even with the right bytes.
-	tok.Scope = "write"
-	if tok.Verify(secret, time.Now()) {
-		t.Fatalf("Verify accepted a non-read-scoped token")
-	}
-	// The zero value verifies nothing.
-	var zero ShareToken
-	if zero.Verify(secret, time.Now()) {
-		t.Fatalf("zero-value ShareToken verified a token")
-	}
-}
-
-// TestVerifyMCPBearerRejectsShareToken is the load-bearing separation test: the
-// daemon's own verifier (which guards /mcp and every mutating console route)
-// must NEVER accept a share token, even with a real cli token installed on disk.
-func TestVerifyMCPBearerRejectsShareToken(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
-	// Install a real cli token so VerifyMCPBearer has something legitimate to accept:
-	// the point is that it accepts THAT and still rejects the share token.
-	cli, err := Generate()
-	if err != nil {
-		t.Fatalf("Generate cli token: %v", err)
-	}
-	if _, err := Save(cli); err != nil {
-		t.Fatalf("Save cli token: %v", err)
-	}
-	if !accepted(VerifyMCPBearer(cli)) {
-		t.Fatalf("VerifyMCPBearer rejected the cli token")
-	}
-
-	shareSecret, _, err := MintShareToken(time.Minute)
-	if err != nil {
-		t.Fatalf("MintShareToken: %v", err)
-	}
-	if accepted(VerifyMCPBearer(shareSecret)) {
-		t.Fatalf("VerifyMCPBearer accepted a share token; the read scope must never reach /mcp or a mutating route")
-	}
+	_, tok, err := MintShare(types.GrantOperator, MaxShareTTL)
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().Add(MaxShareTTL), tok.Expires, time.Second)
+	assert.Equal(t, 24*time.Hour, MaxShareTTL, "the owner's decision: a share link lives a day at most")
 }

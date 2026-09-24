@@ -96,25 +96,24 @@ until you click it.
 How it works, and where the guards sit:
 
 - **Loopback-only trigger.** The share button POSTs `/api/v1/share` on the daemon's
-  loopback HTTP server. That route requires the local peer and the existing bearer
-  token (the cli or a connector token), so only the already-authenticated console on
-  your own machine can open a share. A network client cannot reach it.
+  loopback HTTP server. That route requires the local peer and a token holding
+  `console=write`, so only the already-authenticated console on your own machine can
+  open a share. A network client cannot reach it.
 - **Ephemeral, time-boxed LAN listener.** On success the daemon picks the machine's
   private LAN IPv4, binds a NEW listener on an ephemeral port, and serves ONLY the read
   surface there: the console static assets, the read JSON routes
   (`status`, `events`, `insight`, `outputs`, `output`), and the read-only Connect
   services (activity, metrics). It does NOT serve `/mcp`, the share endpoint, or any
-  mutating route. The listener closes automatically after 15 minutes, and on daemon
-  shutdown.
-- **Short-lived, read-scoped token.** Each share mints a fresh token in the `mgs_`
-  family, hashed at rest and stamped with a read-only scope. The listener is bound 1:1
-  to that one token: it accepts nothing else. The cli token, connector tokens, an
-  expired share token, and a share token from any previous share session are all
-  rejected. Every share supersedes the last - a repeat click revokes the old token and
-  closes its listener before returning a new one, so there is only ever one live share.
-- **The daemon verifier never accepts a share token.** The verifier that guards `/mcp`
-  and every mutating console route matches only the cli and connector tiers, so a share
-  token is refused there. The read scope cannot reach a mutating surface.
+  mutating route. The listener closes when the share expires (15 minutes by default,
+  at most 24 hours; a longer request is refused), and on daemon shutdown.
+- **Short-lived, read-only token.** Each share mints a fresh `mgl_` token holding
+  `console=read`, kept in daemon memory as a hash. The listener is bound 1:1 to that
+  one token: it accepts nothing else. The operator token, stored tokens, an expired
+  share token, and a share token from any previous share are all rejected, so the
+  operator secret never crosses the LAN. Every share supersedes the last: a repeat
+  click revokes the old token and closes its listener before returning a new one.
+- **The loopback daemon never accepts a share token.** It refuses the `mgl_` class
+  outright, before any lookup.
 - **Same-origin, so CORS never engages.** The phone loads the console FROM the share
   listener, then its data fetches go back to the same origin. No cross-origin request is
   made, so the daemon's CORS middleware is never involved and is untouched by this

@@ -433,7 +433,7 @@ type DiffReviewed struct {
 //
 // It is STAMPED BY THE DAEMON from the route the write arrived on, and never read from the
 // payload, so a writer cannot choose it. It does not say who wrote the remark: the review
-// route admits any holder of a console or cli token, which an agent in the same OS account
+// route admits any holder of console=write, which an agent in the same OS account
 // can read. The comment's [Origin] is what records whose account and which credential
 // wrote it.
 type DiffAuthor string

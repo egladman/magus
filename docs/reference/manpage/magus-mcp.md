@@ -21,7 +21,7 @@ needs to reach it - the endpoint, the auth token command, and a liveness
 probe - and exits non-zero, since it starts nothing itself.
 
 magus server start                    start the daemon (MCP comes up with it)
-  magus config token print              print the bearer token
+  magus config mcp connector create     mint a bearer token for one client
   magus status --probe=liveness,mcp     confirm the endpoint is serving
 
 Per-client configuration lives in docs/guides/integrations/mcp.md, not in

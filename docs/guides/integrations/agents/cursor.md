@@ -44,7 +44,7 @@ pointer); Magus does not write `.cursor/mcp.json`.
 
 ```sh
 magus server start
-export MAGUS_MCP_TOKEN="$(magus config token print)"   # or a connector token
+magus config mcp connector create --name cursor --expires 366d   # shown once: store it as MAGUS_MCP_TOKEN
 magus agent harness apply --id cursor   # prints setup hint; wires hooks only
 ```
 

@@ -1373,6 +1373,23 @@ func ObjectJobUnattributedWrite(v types.JobUnattributedWrite) vm.Value {
 	return out
 }
 
+func ObjectGrant(v types.Grant) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("tokens", vm.IntValue(int64(v.Tokens)))
+	out.MapSet("mcp", vm.IntValue(int64(v.MCP)))
+	out.MapSet("console", vm.IntValue(int64(v.Console)))
+	return out
+}
+
+func ObjectCredential(v types.Credential) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("class", vm.StrValue(string(v.Class)))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("grant", ObjectGrant(v.Grant))
+	return out
+}
+
 func ObjectOrigin(v types.Origin) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("user", vm.StrValue(v.User))
@@ -1381,7 +1398,7 @@ func ObjectOrigin(v types.Origin) vm.Value {
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
 	out.MapSet("agent", vm.StrValue(v.Agent))
-	out.MapSet("credential", vm.StrValue(v.Credential))
+	out.MapSet("credential", ObjectCredential(v.Credential))
 	return out
 }
 

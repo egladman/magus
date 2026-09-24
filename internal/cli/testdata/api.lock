@@ -55,6 +55,7 @@ config log.stream
 config max_failures
 config mcp.address
 config mcp.enabled
+config mcp.insecure_bind
 config report.filter
 config required_version
 config sandbox.allow.<name>.mode

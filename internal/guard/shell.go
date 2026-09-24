@@ -103,6 +103,7 @@ const (
 	denyRuleCd                denyRuleName = "cd"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
+	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 
@@ -115,6 +116,9 @@ const (
 	// Upgraded from the push-gate ADVISORY when the run log proves no green gate covers
 	// this commit; see internal/guard/push.go.
 	denyRulePushUngated denyRuleName = "push-ungated"
+	// Both surfaces, like cache-dir-write: a file write and a shell line; see
+	// internal/guard/credential.go.
+	denyRuleTokenState denyRuleName = "token-state"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a
@@ -1089,6 +1093,9 @@ var (
 		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
+	denyCredentialVerb = "Use the token you were given. Minting, printing, rotating or revoking a credential is the person's to do: `" + hint.ConfigMCPConnectorCreate.With("--name", "<client>") + "` mints one holding mcp=write, and they run it for you.\n" +
+		"A session that mints a token, or holds a console link's code, holds a grant nobody handed it; the operator token also reaches token management, so whoever reads it can mint any grant."
+
 	denyNotesAuthor = "Use `" + hint.MemoryPut.With("<name>") + "`: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
 		"If it genuinely belongs in the notes, say so and let the person run it."
@@ -1569,6 +1576,10 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// human's statement, and both have to hold however the command is spelled.
 	if personOnlyFires(cmds, parsed, command) {
 		return ShellVerdict{Deny: denyPersonOnly, Rule: denyRule{Name: denyRulePersonOnly}}
+	}
+	// A credential rule, so it holds however the line is spelled, before any rule about shape.
+	if credentialVerbFires(cmds, parsed, command) {
+		return ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}
 	}
 	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}

@@ -5,6 +5,8 @@ import {
   normalizeDaemonHost,
   daemonAttach,
   adoptDaemonOrigin,
+  consumeLinkCode,
+  getLiveToken,
   isReadOnly,
   mayLoadBundledDemo,
   parseRefusal,
@@ -115,6 +117,24 @@ function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
   }
 }
 
+// A link's one-time code leaves the fragment at once and is held in memory only: it is never
+// written to storage, and every other directive survives the rewrite.
+test("consumeLinkCode takes the code out of the fragment and stores nothing", () => {
+  withBrowserGlobals({ hash: "#job=a&code=mgx_abc" }, () => {
+    const g = globalThis as unknown as { history: { replaceState: (...a: unknown[]) => void } };
+    let rewritten = "";
+    g.history.replaceState = (_s: unknown, _t: unknown, url: unknown) => {
+      rewritten = String(url);
+    };
+    assert.equal(consumeLinkCode(), "mgx_abc");
+    assert.equal(rewritten, "/console/dashboard/#job=a");
+    assert.equal(getLiveToken(), null, "a code is not a token and is not stored");
+  });
+  withBrowserGlobals({ hash: "#job=a" }, () => {
+    assert.equal(consumeLinkCode(), null);
+  });
+});
+
 // Kept LAST: adoptDaemonOrigin only ever sets the module read-only/own-origin flags to
 // true, so once read-only is entered it stays entered for the rest of this module's tests.
 test("a LAN-share origin resolves the daemon to the page's own LAN origin (not loopback)", () => {
@@ -154,11 +174,12 @@ test("parseRefusal reads an AIP-193 body's message and Help link", () => {
   });
 });
 
-// The token substitution only expands in a shell that knows $(...): PowerShell on Windows, never
-// cmd.exe's start.
+// The code substitution only expands in a shell that knows $(...): PowerShell on Windows, never
+// cmd.exe's start. What reaches the opener is a one-time code, never a token.
 test("signInCommand uses each platform's opener", () => {
   const url = "http://127.0.0.1:7391/console/";
-  const tail = ' "http://127.0.0.1:7391/console/#token=$(magus config token print)"';
+  const tail =
+    ' "http://127.0.0.1:7391/console/#code=$(magus config console token create --code --expires 12h)"';
   assert.equal(signInCommand(url, "MacIntel"), "open" + tail);
   assert.equal(signInCommand(url, "Win32"), "Start-Process" + tail);
   assert.equal(signInCommand(url, "Linux x86_64"), "xdg-open" + tail);

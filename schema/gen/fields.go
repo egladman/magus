@@ -301,6 +301,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_MCP_ADDRESS",
 	},
 	{
+		GoPath:   "MCP.InsecureBind",
+		YamlPath: "mcp.insecure_bind",
+		EnvVar:   "MAGUS_MCP_INSECURE_BIND",
+		Flag:     fieldtype.FlagNames{Long: "mcp-insecure-bind"},
+		Kind:     fieldtype.KindBool,
+		Usage:    "MAGUS_MCP_INSECURE_BIND: InsecureBind permits a non-loopback Address.",
+	},
+	{
 		GoPath:   "Console.Enabled",
 		YamlPath: "console.enabled",
 		EnvVar:   "MAGUS_CONSOLE_ENABLED",

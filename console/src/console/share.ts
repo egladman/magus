@@ -15,7 +15,7 @@
 //
 // The daemon does the real work (mint token, open the LAN listener); this module is
 // presentation plus one authenticated POST that carries the chosen ttl_seconds (the
-// daemon clamps it). Every failure is surfaced as a toast, never a silent no-op.
+// daemon refuses one out of range). Every failure is surfaced as a toast, never a silent no-op.
 //
 // It is a loopback-console affordance only: a read-only viewer over the LAN never
 // mounts the panel, and the daemon would reject the share trigger anyway (it is
@@ -33,33 +33,23 @@ import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
 import { encodeToCanvas } from "../lib/qr";
 
-// The lifetimes the operator picks before minting, in seconds (sent as ttl_seconds).
-// The daemon clamps to [share.MinTTL, share.MaxTTL]; the default is the first entry.
-// Two clusters, because there are two different jobs here and they were being served by one.
+// The lifetimes the operator picks before minting, in seconds (sent as ttl_seconds). The daemon
+// refuses anything outside [1 minute, 24 hours] (auth.MinShareTTL, auth.MaxShareTTL) rather than
+// shortening it, so every entry here must sit inside that range; the default is the first entry.
 //
-// The short end is a glance: hand someone a link, they look, it dies. The long end is an AMBIENT
-// DISPLAY - Big Picture on a TV or a spare monitor - which outlives any session, and for which a
-// link that expired nightly meant re-minting every morning. In practice that does not produce
-// diligent re-minting, it produces people not using the feature.
+// The ceiling is a day, and there is no never-expires option. A share link is a bearer credential
+// served over plaintext HTTP on the LAN and bound to a device by its source address alone:
+// whoever holds the URL is the audience, and URLs end up pasted into chat, photographed off
+// screens, and left in a kiosk browser's history. A display that must stay up longer is re-shared
+// each day.
 //
-// The ceiling is a quarter, matching share.MaxTTL, and there is deliberately no never-expires
-// option. This is a bearer credential: whoever holds the URL is the audience, and URLs end up
-// pasted into chat, photographed off screens, and left in a kiosk browser's history. Every one of
-// those becomes permanent the moment the link does. A bounded worst case is the whole point.
-//
-// FIVE options on a roughly exponential ladder (24x, 7x, 4x, 3x), not seven on a linear-ish one.
-// Seven chips did not fit the panel and wrapped into a ragged block, and the extra rungs bought
-// nothing: nobody meaningfully distinguishes a 15-minute link from a 1-hour one, and 8 hours and 24
-// hours are the same decision ("today"). Each remaining step is a different INTENT - show someone
-// now, leave it up today, leave it up this week, leave it up this month, leave it up this quarter -
-// which is the only axis a picker like this should offer.
-const DAY = 24 * 60 * 60;
+// Each option is a different intent: show someone now, leave it up for a sitting, leave it up
+// today.
+const HOUR = 60 * 60;
 const DURATIONS: readonly { label: string; seconds: number }[] = [
-  { label: "1 hour", seconds: 60 * 60 },
-  { label: "1 day", seconds: DAY },
-  { label: "1 week", seconds: 7 * DAY },
-  { label: "30 days", seconds: 30 * DAY },
-  { label: "90 days", seconds: 90 * DAY },
+  { label: "1 hour", seconds: HOUR },
+  { label: "8 hours", seconds: 8 * HOUR },
+  { label: "1 day", seconds: 24 * HOUR },
 ];
 
 export interface SharePanel {

@@ -1071,7 +1071,7 @@ func storedDiffReview(cacheDir, patch string) *types.DiffReview {
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
 func daemonDiffReview(ctx context.Context) *types.DiffReview {
-	token, err := auth.Load()
+	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil
 	}
@@ -1119,7 +1119,7 @@ func reviewThreads(ctx context.Context, m *magus.Magus) ([]types.ReviewThread, s
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
 func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, reason string, served bool) {
-	token, err := auth.Load()
+	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil, "", false
 	}

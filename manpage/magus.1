@@ -247,6 +247,9 @@ When 0 or false, refuse to start the MCP server (default: true). Equivalent magu
 \fBMAGUS_MCP_ADDRESS\fR
 host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: \fBmcp.address\fR.
 .TP
+\fBMAGUS_MCP_INSECURE_BIND\fR
+Permit a non\-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: \fBmcp.insecure_bind\fR.
+.TP
 \fBMAGUS_HINTS_ENABLED\fR
 When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: \fBhints.enabled\fR.
 .TP

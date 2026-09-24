@@ -159,6 +159,9 @@ var boundaryTypes = []boundaryType{
 	// an Origin.
 	{Name: "JobRelease", Type: reflect.TypeFor[types.JobRelease](), RuntimeObject: true},
 	{Name: "JobUnattributedWrite", Type: reflect.TypeFor[types.JobUnattributedWrite](), RuntimeObject: true},
+	// Leaf first: Origin.credential is a Credential, whose grant is a Grant.
+	{Name: "Grant", Type: reflect.TypeFor[types.Grant](), RuntimeObject: true},
+	{Name: "Credential", Type: reflect.TypeFor[types.Credential](), RuntimeObject: true},
 	{Name: "Origin", Type: reflect.TypeFor[types.Origin](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
 	{Name: "CompletionGate", Type: reflect.TypeFor[types.CompletionGate](), RuntimeObject: true},

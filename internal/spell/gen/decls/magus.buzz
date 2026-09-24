@@ -547,6 +547,19 @@ export object JobUnattributedWrite {
     at: int = 0,
 }
 
+export object Grant {
+    tokens: int = 0,
+    mcp: int = 0,
+    console: int = 0,
+}
+
+export object Credential {
+    class: str = "",
+    id: str = "",
+    name: str = "",
+    grant: Grant = Grant{},
+}
+
 export object Origin {
     user: str = "",
     uid: str = "",
@@ -554,7 +567,7 @@ export object Origin {
     host: str = "",
     session: str = "",
     agent: str = "",
-    credential: str = "",
+    credential: Credential = Credential{},
 }
 
 export object JobResultValidation {

@@ -76,7 +76,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 ### config mcp connector create options
 
 **--expires** *string*
-: Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+: Lifetime: a duration like 90d or 48h, at most 366d (default 90d)
 
 **--name** *string*
 : Name for this connector token (default: connector-N)
@@ -88,8 +88,11 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config console token create options
 
+**--code**
+: Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once
+
 **--expires** *string*
-: Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+: Lifetime: a duration like 90d or 48h, at most 366d (default 90d)
 
 **--name** *string*
 : Name for this console token (default: console-N)
@@ -112,7 +115,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 : Manage the build cache (prune)
 
 **mcp**
-: Manage the MCP server auth token
+: Manage MCP connector tokens
 
 **token**
 : Manage the operator token (every surface)

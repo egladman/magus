@@ -9,6 +9,7 @@ import (
 	"net/netip"
 
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/types"
 )
 
 // TokenServer is a running loopback server on an ephemeral 127.0.0.1 port for one browser
@@ -37,9 +38,15 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 		return nil, fmt.Errorf("httpx: mint token: %w", err)
 	}
 	t := &TokenServer{srv: s, token: hex.EncodeToString(raw), done: make(chan struct{})}
-	verify := SingleTokenVerifier(func() (string, error) { return t.token, nil })
+	// The per-run token reads its one page's data and nothing more.
+	verify := SingleTokenVerifier(func() (string, error) { return t.token, nil }, types.GrantViewer)
+	need := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
 	for pattern, h := range routes {
-		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, h))))
+		guarded, err := BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, need, h)
+		if err != nil {
+			return nil, err
+		}
+		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(guarded)))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel

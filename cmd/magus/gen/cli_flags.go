@@ -115,6 +115,8 @@ const (
 	FlagConfigCachePruneOlderThan = "older-than"
 	// config cache prune: --remote
 	FlagConfigCachePruneRemote = "remote"
+	// config console token create: --code
+	FlagConfigConsoleTokenCreateCode = "code"
 	// config console token create: --expires
 	FlagConfigConsoleTokenCreateExpires = "expires"
 	// config console token create: --name
@@ -1503,7 +1505,7 @@ type ConfigMCPConnectorCreateFlags struct {
 func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFlags {
 	var f ConfigMCPConnectorCreateFlags
 	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
-	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
 	return &f
 }
 
@@ -1524,14 +1526,16 @@ type ConfigConsoleTokenCreateFlags struct {
 	Name    string // --name
 	Expires string // --expires
 	Viewer  bool   // --viewer
+	Code    bool   // --code
 }
 
 // BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
 func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFlags {
 	var f ConfigConsoleTokenCreateFlags
 	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
-	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
 	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
+	fs.BoolVar(&f.Code, FlagConfigConsoleTokenCreateCode, false, "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once")
 	return &f
 }
 

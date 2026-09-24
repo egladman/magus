@@ -281,12 +281,13 @@ func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
 	loc := tmpLoc(t, t.TempDir())
-	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), "connector-1"), "claude-code")
+	cred := types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "connector-1", Grant: types.GrantConnector}
+	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
 	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	want := trail.LocalOrigin(t.Context())
-	want.EntryPoint, want.Credential, want.Host = types.EntryPointMCP, "connector-1", "claude-code"
+	want.EntryPoint, want.Credential, want.Host = types.EntryPointMCP, cred, "claude-code"
 	require.NotEmpty(t, want.UID, "the OS always answers with a uid")
 	assert.Equal(t, want, stored.RegisteredBy, "the door's facts, plus the OS account the store read itself")
 

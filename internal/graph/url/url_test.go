@@ -10,8 +10,8 @@ import (
 // link's ORIGIN under the daemon-origin grammar: http://<loopHost>/console/graph/.
 const loopHost = "127.0.0.1:7391"
 
-// tok is a representative bearer token (mgs_ + alnum, no chars that encode).
-const tok = "mgs_abc123DEF456"
+// tok is a representative exchange code (mgx_ + alnum, no chars that encode).
+const tok = "mgx_abc123DEF456"
 
 func TestGraphLink(t *testing.T) {
 	tests := []struct {
@@ -24,26 +24,26 @@ func TestGraphLink(t *testing.T) {
 			name: "query only",
 			opts: GraphLinkOpts{
 				Host:  loopHost,
-				Token: tok,
+				Code:  tok,
 				Query: "kind:target",
 			},
-			want: "http://127.0.0.1:7391/console/graph/#q=kind%3Atarget&token=mgs_abc123DEF456",
+			want: "http://127.0.0.1:7391/console/graph/#q=kind%3Atarget&code=mgx_abc123DEF456",
 		},
 		{
 			name: "view plus node",
 			opts: GraphLinkOpts{
-				Host:  loopHost,
-				Token: tok,
-				View:  "blast",
-				Node:  "target:build",
+				Host: loopHost,
+				Code: tok,
+				View: "blast",
+				Node: "target:build",
 			},
-			want: "http://127.0.0.1:7391/console/graph/#view=blast&node=target%3Abuild&token=mgs_abc123DEF456",
+			want: "http://127.0.0.1:7391/console/graph/#view=blast&node=target%3Abuild&code=mgx_abc123DEF456",
 		},
 		{
 			name: "all set: trace view with node and to, plus query",
 			opts: GraphLinkOpts{
 				Host:  loopHost,
-				Token: tok,
+				Code:  tok,
 				Query: "a b",
 				View:  "trace",
 				Node:  "target:a",
@@ -52,21 +52,21 @@ func TestGraphLink(t *testing.T) {
 			// q= is percent-encoded (space -> %20, not +) so the page's
 			// decodeURIComponent reads it back verbatim. Content directives lead; the
 			// token is emitted last.
-			want: "http://127.0.0.1:7391/console/graph/#q=a%20b&view=trace&node=target%3Aa&to=target%3Ab&token=mgs_abc123DEF456",
+			want: "http://127.0.0.1:7391/console/graph/#q=a%20b&view=trace&node=target%3Aa&to=target%3Ab&code=mgx_abc123DEF456",
 		},
 		{
-			name: "only the token: bare token fragment",
+			name: "only the code: bare code fragment",
 			opts: GraphLinkOpts{
-				Host:  loopHost,
-				Token: tok,
+				Host: loopHost,
+				Code: tok,
 			},
-			want: "http://127.0.0.1:7391/console/graph/#token=mgs_abc123DEF456",
+			want: "http://127.0.0.1:7391/console/graph/#code=mgx_abc123DEF456",
 		},
 		{
 			name: "no daemon: empty host yields sentinel",
 			opts: GraphLinkOpts{
 				Host:  "",
-				Token: tok,
+				Code:  tok,
 				Query: "kind:target",
 			},
 			err: ErrNoDaemon,

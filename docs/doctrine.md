@@ -330,6 +330,13 @@ already means allow, a notice on every file edit was judged the worse noise,
 and hearing about it there is opt-in. Whoever runs the guard should be
 able to read what it does and repair it without us.
 
+The same holds for credentials: the guard is a seatbelt, not a boundary against
+a process running as you, which can read any file magus can. So the guard
+refuses what an agent should not do, and magus separately enforces every layer
+it can prove, a planted token file that cannot grant more than a mint, a token
+that never mints a wider one, rather than claiming a sandbox it does not have
+([Tokens and grants](concepts/tokens.md#trust-model)).
+
 ### A refusal carries its reason
 
 A refusal names the mechanism and a next step. Diagnostics are coded and

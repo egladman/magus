@@ -4,40 +4,21 @@
 // 	protoc        (unknown)
 // source: magus/token/v1alpha1/token.proto
 
-// Package magus.token.v1alpha1 is the console-facing TokenService: the typed MANAGEMENT
-// surface for the daemon's auth tokens. It is VIEW-AND-REVOKE ONLY - it can list
-// tokens and revoke them, but it can NEVER mint one. Minting stays a CLI-only
-// operation (`magus config mcp connector`); the browser has no path to a durable
-// credential, which closes the XSS-to-durable-credential escalation by construction.
-// It is a SECOND door onto the same on-disk connector store the CLI writes - not a
-// second store - plus a read/revoke view of the daemon's in-memory share token. Two
-// tokens are deliberately out of reach here:
-//   - the OPERATOR token (the built-in cli credential, auto-seeded on first daemon
-//     start): it is bootstrap-only and managed SOLELY by the CLI. It lives in a store
-//     this service never opens, so it is structurally INVISIBLE and IMMUTABLE to the
-//     browser-facing surface - it can be neither enumerated by ListTokens nor targeted
-//     by RevokeToken (a revoke keyed on its fingerprint returns NotFound and leaves it
-//     on disk), so the management UI can never lock the operator out of the daemon it
-//     authenticates against. This is by construction, not by convention: see
-//     TokenScope's TOKEN_SCOPE_OPERATOR and the handler's boundary tests.
-//   - there is NO renew/extend RPC by design: a token is reminted (via the CLI),
-//     never extended, for cryptographic hygiene (a fresh secret on rotation, not a
-//     longer-lived one).
+// Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
+// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// the same token store the CLI writes (tokens.d) and the same share manager the share
+// endpoint drives, never a second store.
 //
-// Access policy - the three-tier credential model, enforced at the mount:
-//   - cli token (operator): the ONLY credential accepted on ANY TokenService RPC.
-//     Token management is operator-tier because whoever can revoke tokens owns the
-//     daemon.
-//   - connector token (MCP client): valid on the data surfaces (/mcp, the console
-//     read/control services) but REJECTED here - a client credential must never
-//     revoke credentials (privilege self-replication).
-//   - share token (read-only viewer): valid only on the ephemeral LAN share
-//     listener, which never mounts this service; it cannot reach any RPC here.
+// Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
+// viewer, connector or share token is refused at the mount with 403. A mint and a revoke are
+// ALSO checked against the caller's own grant (a token is never granted, or revoked, beyond
+// what its caller holds), so the mount is defense in depth rather than the rule.
 //
-// The service is mounted on the loopback listener behind a cli-token-only bearer
-// guard and NEVER on the LAN share listener. buf-breaking gates this file: fields
-// and RPCs may be ADDED (old clients ignore unknown fields), never renumbered or
-// removed.
+// The operator token is out of reach here: it lives in a file this service never opens, so it
+// is neither listed nor revocable, and the management UI cannot lock the operator out. There
+// is no renew RPC: a token is reminted, never extended.
+//
+// buf-breaking gates this file: fields and RPCs may be ADDED, never renumbered or removed.
 
 package tokenv1alpha1
 
@@ -58,105 +39,192 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// TokenScope names the CLASS a token belongs to in the credential model,
-// so a client can group and label listed tokens - and so the full taxonomy is named
-// in one place even for the class this service never lists. A connector token is a
-// full MCP bearer minted for an external client; a share-read token is the short-lived,
-// read-only secret behind "share to phone"; the operator token is the built-in cli
-// credential.
-type TokenScope int32
+// Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+// every lower one. The zero value is none.
+type Level int32
 
 const (
-	TokenScope_TOKEN_SCOPE_UNSPECIFIED TokenScope = 0
-	// TOKEN_SCOPE_OPERATOR is the built-in cli token: auto-seeded on first daemon start,
-	// the bootstrap "god" credential that authenticates the operator to the daemon. It is
-	// managed SOLELY by the CLI and is structurally invisible+immutable to this service -
-	// it lives in a store this handler never opens, so it can be neither listed nor
-	// revoked here and this value therefore NEVER appears in a ListTokensResponse. It
-	// exists in the enum to name the class, not because the wire ever carries it.
-	TokenScope_TOKEN_SCOPE_OPERATOR TokenScope = 3
-	// TOKEN_SCOPE_CONNECTOR reaches /mcp and nothing else: the tier an external agent
-	// holds.
-	TokenScope_TOKEN_SCOPE_CONNECTOR TokenScope = 1
-	// TOKEN_SCOPE_SHARE_READ is the short-lived secret behind "share to phone", minted by
-	// the LAN share listener rather than stored. Distinct from CONSOLE_READ, which reaches
-	// the same routes but is a stored, named token with its own lifetime.
-	TokenScope_TOKEN_SCOPE_SHARE_READ TokenScope = 2
-	// TOKEN_SCOPE_CONSOLE reaches the console read and write surfaces, never /mcp.
-	TokenScope_TOKEN_SCOPE_CONSOLE TokenScope = 4
-	// TOKEN_SCOPE_CONSOLE_READ is the viewer tier: the console's read surface alone.
-	TokenScope_TOKEN_SCOPE_CONSOLE_READ TokenScope = 5
+	Level_LEVEL_UNSPECIFIED Level = 0 // none
+	Level_LEVEL_READ        Level = 1
+	Level_LEVEL_WRITE       Level = 2
 )
 
-// Enum value maps for TokenScope.
+// Enum value maps for Level.
 var (
-	TokenScope_name = map[int32]string{
-		0: "TOKEN_SCOPE_UNSPECIFIED",
-		3: "TOKEN_SCOPE_OPERATOR",
-		1: "TOKEN_SCOPE_CONNECTOR",
-		2: "TOKEN_SCOPE_SHARE_READ",
-		4: "TOKEN_SCOPE_CONSOLE",
-		5: "TOKEN_SCOPE_CONSOLE_READ",
+	Level_name = map[int32]string{
+		0: "LEVEL_UNSPECIFIED",
+		1: "LEVEL_READ",
+		2: "LEVEL_WRITE",
 	}
-	TokenScope_value = map[string]int32{
-		"TOKEN_SCOPE_UNSPECIFIED":  0,
-		"TOKEN_SCOPE_OPERATOR":     3,
-		"TOKEN_SCOPE_CONNECTOR":    1,
-		"TOKEN_SCOPE_SHARE_READ":   2,
-		"TOKEN_SCOPE_CONSOLE":      4,
-		"TOKEN_SCOPE_CONSOLE_READ": 5,
+	Level_value = map[string]int32{
+		"LEVEL_UNSPECIFIED": 0,
+		"LEVEL_READ":        1,
+		"LEVEL_WRITE":       2,
 	}
 )
 
-func (x TokenScope) Enum() *TokenScope {
-	p := new(TokenScope)
+func (x Level) Enum() *Level {
+	p := new(Level)
 	*p = x
 	return p
 }
 
-func (x TokenScope) String() string {
+func (x Level) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (TokenScope) Descriptor() protoreflect.EnumDescriptor {
+func (Level) Descriptor() protoreflect.EnumDescriptor {
 	return file_magus_token_v1alpha1_token_proto_enumTypes[0].Descriptor()
 }
 
-func (TokenScope) Type() protoreflect.EnumType {
+func (Level) Type() protoreflect.EnumType {
 	return &file_magus_token_v1alpha1_token_proto_enumTypes[0]
 }
 
-func (x TokenScope) Number() protoreflect.EnumNumber {
+func (x Level) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use TokenScope.Descriptor instead.
-func (TokenScope) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use Level.Descriptor instead.
+func (Level) EnumDescriptor() ([]byte, []int) {
 	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{0}
 }
 
-// TokenInfo describes one manageable token WITHOUT its secret, minimized to exactly
-// what a view+revoke UI needs. A read-only list is still an intelligence surface -
-// names, timing, and expiries let a viewer fingerprint the deployment - so it carries
-// ONLY: a short revoke handle (identifier, the prefix-only fingerprint, never the token
-// bytes or the full hash), the token class (scope), the expiry, and the user-chosen
-// name (the operator needs the name to know which token to revoke). It deliberately
-// omits the raw secret, the full hash, any filesystem path, the creation time, and
-// every other internal storage detail: none is needed to revoke, all would help a
-// viewer map the infrastructure.
+// CredentialClass is which kind of token a record is, carried in the token's prefix.
+type CredentialClass int32
+
+const (
+	CredentialClass_CREDENTIAL_CLASS_UNSPECIFIED CredentialClass = 0
+	CredentialClass_CREDENTIAL_CLASS_OPERATOR    CredentialClass = 1 // mgo_; never listed here
+	CredentialClass_CREDENTIAL_CLASS_STORED      CredentialClass = 2 // mgs_
+	CredentialClass_CREDENTIAL_CLASS_SHARE       CredentialClass = 3 // mgl_
+	CredentialClass_CREDENTIAL_CLASS_EXCHANGE    CredentialClass = 4 // mgx_, a console link's one-time code
+)
+
+// Enum value maps for CredentialClass.
+var (
+	CredentialClass_name = map[int32]string{
+		0: "CREDENTIAL_CLASS_UNSPECIFIED",
+		1: "CREDENTIAL_CLASS_OPERATOR",
+		2: "CREDENTIAL_CLASS_STORED",
+		3: "CREDENTIAL_CLASS_SHARE",
+		4: "CREDENTIAL_CLASS_EXCHANGE",
+	}
+	CredentialClass_value = map[string]int32{
+		"CREDENTIAL_CLASS_UNSPECIFIED": 0,
+		"CREDENTIAL_CLASS_OPERATOR":    1,
+		"CREDENTIAL_CLASS_STORED":      2,
+		"CREDENTIAL_CLASS_SHARE":       3,
+		"CREDENTIAL_CLASS_EXCHANGE":    4,
+	}
+)
+
+func (x CredentialClass) Enum() *CredentialClass {
+	p := new(CredentialClass)
+	*p = x
+	return p
+}
+
+func (x CredentialClass) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CredentialClass) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_token_v1alpha1_token_proto_enumTypes[1].Descriptor()
+}
+
+func (CredentialClass) Type() protoreflect.EnumType {
+	return &file_magus_token_v1alpha1_token_proto_enumTypes[1]
+}
+
+func (x CredentialClass) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CredentialClass.Descriptor instead.
+func (CredentialClass) EnumDescriptor() ([]byte, []int) {
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{1}
+}
+
+// Grant is what a token may do: one level per surface, as the daemon enforces it.
+type Grant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tokens        Level                  `protobuf:"varint,1,opt,name=tokens,proto3,enum=magus.token.v1alpha1.Level" json:"tokens,omitempty"`
+	Mcp           Level                  `protobuf:"varint,2,opt,name=mcp,proto3,enum=magus.token.v1alpha1.Level" json:"mcp,omitempty"`
+	Console       Level                  `protobuf:"varint,3,opt,name=console,proto3,enum=magus.token.v1alpha1.Level" json:"console,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Grant) Reset() {
+	*x = Grant{}
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Grant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Grant) ProtoMessage() {}
+
+func (x *Grant) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Grant.ProtoReflect.Descriptor instead.
+func (*Grant) Descriptor() ([]byte, []int) {
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Grant) GetTokens() Level {
+	if x != nil {
+		return x.Tokens
+	}
+	return Level_LEVEL_UNSPECIFIED
+}
+
+func (x *Grant) GetMcp() Level {
+	if x != nil {
+		return x.Mcp
+	}
+	return Level_LEVEL_UNSPECIFIED
+}
+
+func (x *Grant) GetConsole() Level {
+	if x != nil {
+		return x.Console
+	}
+	return Level_LEVEL_UNSPECIFIED
+}
+
+// TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
+// revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
+// hash), the class, the grant, the expiry, and the name. A list is still an intelligence
+// surface, so it omits the full hash, any filesystem path, and the creation time.
 type TokenInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`             // connector name, or a label for the share token
-	Identifier    string                 `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"` // prefix-only fingerprint; the Revoke key
-	Scope         TokenScope             `protobuf:"varint,3,opt,name=scope,proto3,enum=magus.token.v1alpha1.TokenScope" json:"scope,omitempty"`
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"` // unset means the token never expires
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // the token's name, or a label for the share link
+	Id            string                 `protobuf:"bytes,8,opt,name=id,proto3" json:"id,omitempty"`     // the 8-hex id; a Revoke key
+	Class         CredentialClass        `protobuf:"varint,9,opt,name=class,proto3,enum=magus.token.v1alpha1.CredentialClass" json:"class,omitempty"`
+	Grant         *Grant                 `protobuf:"bytes,7,opt,name=grant,proto3" json:"grant,omitempty"`
+	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TokenInfo) Reset() {
 	*x = TokenInfo{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[0]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -168,7 +236,7 @@ func (x *TokenInfo) String() string {
 func (*TokenInfo) ProtoMessage() {}
 
 func (x *TokenInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[0]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -181,7 +249,7 @@ func (x *TokenInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenInfo.ProtoReflect.Descriptor instead.
 func (*TokenInfo) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{0}
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TokenInfo) GetName() string {
@@ -191,18 +259,25 @@ func (x *TokenInfo) GetName() string {
 	return ""
 }
 
-func (x *TokenInfo) GetIdentifier() string {
+func (x *TokenInfo) GetId() string {
 	if x != nil {
-		return x.Identifier
+		return x.Id
 	}
 	return ""
 }
 
-func (x *TokenInfo) GetScope() TokenScope {
+func (x *TokenInfo) GetClass() CredentialClass {
 	if x != nil {
-		return x.Scope
+		return x.Class
 	}
-	return TokenScope_TOKEN_SCOPE_UNSPECIFIED
+	return CredentialClass_CREDENTIAL_CLASS_UNSPECIFIED
+}
+
+func (x *TokenInfo) GetGrant() *Grant {
+	if x != nil {
+		return x.Grant
+	}
+	return nil
 }
 
 func (x *TokenInfo) GetExpireTime() *timestamppb.Timestamp {
@@ -220,7 +295,7 @@ type ListTokensRequest struct {
 
 func (x *ListTokensRequest) Reset() {
 	*x = ListTokensRequest{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[1]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -232,7 +307,7 @@ func (x *ListTokensRequest) String() string {
 func (*ListTokensRequest) ProtoMessage() {}
 
 func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[1]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -245,7 +320,7 @@ func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokensRequest.ProtoReflect.Descriptor instead.
 func (*ListTokensRequest) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{1}
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{2}
 }
 
 type ListTokensResponse struct {
@@ -257,7 +332,7 @@ type ListTokensResponse struct {
 
 func (x *ListTokensResponse) Reset() {
 	*x = ListTokensResponse{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[2]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -269,7 +344,7 @@ func (x *ListTokensResponse) String() string {
 func (*ListTokensResponse) ProtoMessage() {}
 
 func (x *ListTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[2]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -282,7 +357,7 @@ func (x *ListTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokensResponse.ProtoReflect.Descriptor instead.
 func (*ListTokensResponse) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{2}
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListTokensResponse) GetTokens() []*TokenInfo {
@@ -294,19 +369,20 @@ func (x *ListTokensResponse) GetTokens() []*TokenInfo {
 
 type CreateTokenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// A human label, unique among stored tokens. Empty asks the daemon to derive one.
+	// A human label, unique among stored tokens, that does not look like an id. Empty asks the
+	// daemon to derive one.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; anything else is refused.
-	Scope TokenScope `protobuf:"varint,2,opt,name=scope,proto3,enum=magus.token.v1alpha1.TokenScope" json:"scope,omitempty"`
-	// Absent means the token never expires.
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expire_time,json=expireTime,proto3,oneof" json:"expire_time,omitempty"`
+	// Required: when the token dies, in the future and at most 366 days out.
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expire_time,json=expireTime,proto3,oneof" json:"expire_time,omitempty"`
+	// The grant to mint. Console levels only; within the caller's own grant.
+	Grant         *Grant `protobuf:"bytes,4,opt,name=grant,proto3" json:"grant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateTokenRequest) Reset() {
 	*x = CreateTokenRequest{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[3]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -318,7 +394,7 @@ func (x *CreateTokenRequest) String() string {
 func (*CreateTokenRequest) ProtoMessage() {}
 
 func (x *CreateTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[3]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -331,7 +407,7 @@ func (x *CreateTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreateTokenRequest) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{3}
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateTokenRequest) GetName() string {
@@ -341,13 +417,6 @@ func (x *CreateTokenRequest) GetName() string {
 	return ""
 }
 
-func (x *CreateTokenRequest) GetScope() TokenScope {
-	if x != nil {
-		return x.Scope
-	}
-	return TokenScope_TOKEN_SCOPE_UNSPECIFIED
-}
-
 func (x *CreateTokenRequest) GetExpireTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpireTime
@@ -355,11 +424,16 @@ func (x *CreateTokenRequest) GetExpireTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource,
-// because the secret is NOT part of the resource: TokenInfo is deliberately secret-free
-// so that listing tokens cannot leak one, and the plaintext exists only in this reply and
-// is unrecoverable afterwards. Returning TokenInfo alone would drop the one value the
-// caller needs; adding the secret TO TokenInfo would put it on every List response.
+func (x *CreateTokenRequest) GetGrant() *Grant {
+	if x != nil {
+		return x.Grant
+	}
+	return nil
+}
+
+// CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because
+// the secret is NOT part of the resource: TokenInfo is secret-free so that listing tokens
+// cannot leak one, and the plaintext exists only in this reply.
 type CreateTokenResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Token *TokenInfo             `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -371,7 +445,7 @@ type CreateTokenResponse struct {
 
 func (x *CreateTokenResponse) Reset() {
 	*x = CreateTokenResponse{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[4]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -383,7 +457,7 @@ func (x *CreateTokenResponse) String() string {
 func (*CreateTokenResponse) ProtoMessage() {}
 
 func (x *CreateTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[4]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -396,7 +470,7 @@ func (x *CreateTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreateTokenResponse) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{4}
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateTokenResponse) GetToken() *TokenInfo {
@@ -415,9 +489,7 @@ func (x *CreateTokenResponse) GetSecret() string {
 
 type RevokeTokenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted
-	// here too, since it identifies the same token and is what a listing gives a reader to
-	// copy.
+	// The token's exact id (8 hex digits), or its exact name.
 	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -425,7 +497,7 @@ type RevokeTokenRequest struct {
 
 func (x *RevokeTokenRequest) Reset() {
 	*x = RevokeTokenRequest{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[5]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -437,7 +509,7 @@ func (x *RevokeTokenRequest) String() string {
 func (*RevokeTokenRequest) ProtoMessage() {}
 
 func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[5]
+	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -450,7 +522,7 @@ func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTokenRequest.ProtoReflect.Descriptor instead.
 func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{5}
+	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RevokeTokenRequest) GetName() string {
@@ -464,37 +536,44 @@ var File_magus_token_v1alpha1_token_proto protoreflect.FileDescriptor
 
 const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"\n" +
-	" magus/token/v1alpha1/token.proto\x12\x14magus.token.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xd4\x01\n" +
+	" magus/token/v1alpha1/token.proto\x12\x14magus.token.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xa2\x01\n" +
+	"\x05Grant\x123\n" +
+	"\x06tokens\x18\x01 \x01(\x0e2\x1b.magus.token.v1alpha1.LevelR\x06tokens\x12-\n" +
+	"\x03mcp\x18\x02 \x01(\x0e2\x1b.magus.token.v1alpha1.LevelR\x03mcp\x125\n" +
+	"\aconsole\x18\x03 \x01(\x0e2\x1b.magus.token.v1alpha1.LevelR\aconsole\"\x9b\x02\n" +
 	"\tTokenInfo\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
-	"\n" +
-	"identifier\x18\x02 \x01(\tR\n" +
-	"identifier\x126\n" +
-	"\x05scope\x18\x03 \x01(\x0e2 .magus.token.v1alpha1.TokenScopeR\x05scope\x12;\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
+	"\x02id\x18\b \x01(\tR\x02id\x12;\n" +
+	"\x05class\x18\t \x01(\x0e2%.magus.token.v1alpha1.CredentialClassR\x05class\x121\n" +
+	"\x05grant\x18\a \x01(\v2\x1b.magus.token.v1alpha1.GrantR\x05grant\x12;\n" +
 	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTimeJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\acreatedR\tlast_used\"\x13\n" +
+	"expireTimeJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\n" +
+	"identifierR\x05scopeR\acreatedR\tlast_used\"\x13\n" +
 	"\x11ListTokensRequest\"M\n" +
 	"\x12ListTokensResponse\x127\n" +
-	"\x06tokens\x18\x01 \x03(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x06tokens\"\xbc\x01\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x06tokens\"\xba\x01\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12@\n" +
-	"\x05scope\x18\x02 \x01(\x0e2 .magus.token.v1alpha1.TokenScopeB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05scope\x12@\n" +
 	"\vexpire_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\n" +
-	"expireTime\x88\x01\x01B\x0e\n" +
-	"\f_expire_time\"d\n" +
+	"expireTime\x88\x01\x01\x121\n" +
+	"\x05grant\x18\x04 \x01(\v2\x1b.magus.token.v1alpha1.GrantR\x05grantB\x0e\n" +
+	"\f_expire_timeJ\x04\b\x02\x10\x03R\x05scope\"d\n" +
 	"\x13CreateTokenResponse\x125\n" +
 	"\x05token\x18\x01 \x01(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x05token\x12\x16\n" +
 	"\x06secret\x18\x02 \x01(\tR\x06secret\"1\n" +
 	"\x12RevokeTokenRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name*\xb1\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name*?\n" +
+	"\x05Level\x12\x15\n" +
+	"\x11LEVEL_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
-	"TokenScope\x12\x1b\n" +
-	"\x17TOKEN_SCOPE_UNSPECIFIED\x10\x00\x12\x18\n" +
-	"\x14TOKEN_SCOPE_OPERATOR\x10\x03\x12\x19\n" +
-	"\x15TOKEN_SCOPE_CONNECTOR\x10\x01\x12\x1a\n" +
-	"\x16TOKEN_SCOPE_SHARE_READ\x10\x02\x12\x17\n" +
-	"\x13TOKEN_SCOPE_CONSOLE\x10\x04\x12\x1c\n" +
-	"\x18TOKEN_SCOPE_CONSOLE_READ\x10\x052\xad\x02\n" +
+	"LEVEL_READ\x10\x01\x12\x0f\n" +
+	"\vLEVEL_WRITE\x10\x02*\xaa\x01\n" +
+	"\x0fCredentialClass\x12 \n" +
+	"\x1cCREDENTIAL_CLASS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19CREDENTIAL_CLASS_OPERATOR\x10\x01\x12\x1b\n" +
+	"\x17CREDENTIAL_CLASS_STORED\x10\x02\x12\x1a\n" +
+	"\x16CREDENTIAL_CLASS_SHARE\x10\x03\x12\x1d\n" +
+	"\x19CREDENTIAL_CLASS_EXCHANGE\x10\x042\xad\x02\n" +
 	"\fTokenService\x12_\n" +
 	"\n" +
 	"ListTokens\x12'.magus.token.v1alpha1.ListTokensRequest\x1a(.magus.token.v1alpha1.ListTokensResponse\x12X\n" +
@@ -515,36 +594,42 @@ func file_magus_token_v1alpha1_token_proto_rawDescGZIP() []byte {
 	return file_magus_token_v1alpha1_token_proto_rawDescData
 }
 
-var file_magus_token_v1alpha1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_token_v1alpha1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_magus_token_v1alpha1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_magus_token_v1alpha1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_magus_token_v1alpha1_token_proto_goTypes = []any{
-	(TokenScope)(0),               // 0: magus.token.v1alpha1.TokenScope
-	(*TokenInfo)(nil),             // 1: magus.token.v1alpha1.TokenInfo
-	(*ListTokensRequest)(nil),     // 2: magus.token.v1alpha1.ListTokensRequest
-	(*ListTokensResponse)(nil),    // 3: magus.token.v1alpha1.ListTokensResponse
-	(*CreateTokenRequest)(nil),    // 4: magus.token.v1alpha1.CreateTokenRequest
-	(*CreateTokenResponse)(nil),   // 5: magus.token.v1alpha1.CreateTokenResponse
-	(*RevokeTokenRequest)(nil),    // 6: magus.token.v1alpha1.RevokeTokenRequest
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(Level)(0),                    // 0: magus.token.v1alpha1.Level
+	(CredentialClass)(0),          // 1: magus.token.v1alpha1.CredentialClass
+	(*Grant)(nil),                 // 2: magus.token.v1alpha1.Grant
+	(*TokenInfo)(nil),             // 3: magus.token.v1alpha1.TokenInfo
+	(*ListTokensRequest)(nil),     // 4: magus.token.v1alpha1.ListTokensRequest
+	(*ListTokensResponse)(nil),    // 5: magus.token.v1alpha1.ListTokensResponse
+	(*CreateTokenRequest)(nil),    // 6: magus.token.v1alpha1.CreateTokenRequest
+	(*CreateTokenResponse)(nil),   // 7: magus.token.v1alpha1.CreateTokenResponse
+	(*RevokeTokenRequest)(nil),    // 8: magus.token.v1alpha1.RevokeTokenRequest
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_magus_token_v1alpha1_token_proto_depIdxs = []int32{
-	0, // 0: magus.token.v1alpha1.TokenInfo.scope:type_name -> magus.token.v1alpha1.TokenScope
-	7, // 1: magus.token.v1alpha1.TokenInfo.expire_time:type_name -> google.protobuf.Timestamp
-	1, // 2: magus.token.v1alpha1.ListTokensResponse.tokens:type_name -> magus.token.v1alpha1.TokenInfo
-	0, // 3: magus.token.v1alpha1.CreateTokenRequest.scope:type_name -> magus.token.v1alpha1.TokenScope
-	7, // 4: magus.token.v1alpha1.CreateTokenRequest.expire_time:type_name -> google.protobuf.Timestamp
-	1, // 5: magus.token.v1alpha1.CreateTokenResponse.token:type_name -> magus.token.v1alpha1.TokenInfo
-	2, // 6: magus.token.v1alpha1.TokenService.ListTokens:input_type -> magus.token.v1alpha1.ListTokensRequest
-	6, // 7: magus.token.v1alpha1.TokenService.RevokeToken:input_type -> magus.token.v1alpha1.RevokeTokenRequest
-	4, // 8: magus.token.v1alpha1.TokenService.CreateToken:input_type -> magus.token.v1alpha1.CreateTokenRequest
-	3, // 9: magus.token.v1alpha1.TokenService.ListTokens:output_type -> magus.token.v1alpha1.ListTokensResponse
-	1, // 10: magus.token.v1alpha1.TokenService.RevokeToken:output_type -> magus.token.v1alpha1.TokenInfo
-	5, // 11: magus.token.v1alpha1.TokenService.CreateToken:output_type -> magus.token.v1alpha1.CreateTokenResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0,  // 0: magus.token.v1alpha1.Grant.tokens:type_name -> magus.token.v1alpha1.Level
+	0,  // 1: magus.token.v1alpha1.Grant.mcp:type_name -> magus.token.v1alpha1.Level
+	0,  // 2: magus.token.v1alpha1.Grant.console:type_name -> magus.token.v1alpha1.Level
+	1,  // 3: magus.token.v1alpha1.TokenInfo.class:type_name -> magus.token.v1alpha1.CredentialClass
+	2,  // 4: magus.token.v1alpha1.TokenInfo.grant:type_name -> magus.token.v1alpha1.Grant
+	9,  // 5: magus.token.v1alpha1.TokenInfo.expire_time:type_name -> google.protobuf.Timestamp
+	3,  // 6: magus.token.v1alpha1.ListTokensResponse.tokens:type_name -> magus.token.v1alpha1.TokenInfo
+	9,  // 7: magus.token.v1alpha1.CreateTokenRequest.expire_time:type_name -> google.protobuf.Timestamp
+	2,  // 8: magus.token.v1alpha1.CreateTokenRequest.grant:type_name -> magus.token.v1alpha1.Grant
+	3,  // 9: magus.token.v1alpha1.CreateTokenResponse.token:type_name -> magus.token.v1alpha1.TokenInfo
+	4,  // 10: magus.token.v1alpha1.TokenService.ListTokens:input_type -> magus.token.v1alpha1.ListTokensRequest
+	8,  // 11: magus.token.v1alpha1.TokenService.RevokeToken:input_type -> magus.token.v1alpha1.RevokeTokenRequest
+	6,  // 12: magus.token.v1alpha1.TokenService.CreateToken:input_type -> magus.token.v1alpha1.CreateTokenRequest
+	5,  // 13: magus.token.v1alpha1.TokenService.ListTokens:output_type -> magus.token.v1alpha1.ListTokensResponse
+	3,  // 14: magus.token.v1alpha1.TokenService.RevokeToken:output_type -> magus.token.v1alpha1.TokenInfo
+	7,  // 15: magus.token.v1alpha1.TokenService.CreateToken:output_type -> magus.token.v1alpha1.CreateTokenResponse
+	13, // [13:16] is the sub-list for method output_type
+	10, // [10:13] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_magus_token_v1alpha1_token_proto_init() }
@@ -552,14 +637,14 @@ func file_magus_token_v1alpha1_token_proto_init() {
 	if File_magus_token_v1alpha1_token_proto != nil {
 		return
 	}
-	file_magus_token_v1alpha1_token_proto_msgTypes[3].OneofWrappers = []any{}
+	file_magus_token_v1alpha1_token_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_token_v1alpha1_token_proto_rawDesc), len(file_magus_token_v1alpha1_token_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   6,
+			NumEnums:      2,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

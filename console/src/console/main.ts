@@ -13,7 +13,7 @@ import {
   WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT,
   WORKSPACE_ROOTS as DEMO_WORKSPACES,
 } from "./demo-scenario";
-import { exchangeOperatorToken } from "../lib/token-exchange";
+import { exchangeOperatorToken, redeemLinkCode } from "../lib/token-exchange";
 import {
   openTab,
   closeTab,
@@ -76,6 +76,7 @@ import {
   fetchReadiness,
   isReadOnly,
   adoptDaemonOrigin,
+  consumeLinkCode,
   type ReadinessReport,
   type ReadinessComponent,
 } from "../lib/daemon";
@@ -967,10 +968,10 @@ export function startConsole(
   const readOnly = isReadOnly();
   document.documentElement.toggleAttribute("data-read-only", readOnly);
 
-  // Trade an operator token for a console-scoped one, once per token. Nothing waits on this:
-  // the console works whichever tier it holds. A failure IS surfaced, because it leaves the
-  // operator credential in the browser; the next load retries. Skipped for a read-only share
-  // session, whose share token the operator-only token mount would refuse anyway.
+  // Trade an operator token for a console token. The prefix decides: only an mgo_ token is
+  // sent, and nothing waits on it, since the console works either way. Every failure is
+  // surfaced, a refusal included, because each leaves the operator credential in the browser;
+  // the next load retries. Skipped for a read-only share session, which holds a share token.
   //
   // Here in the SHELL rather than in a surface because each surface is its own bundle: one
   // exchange in the composition root covers every tab, and the storage it writes is what
@@ -982,7 +983,7 @@ export function startConsole(
         if (outcome !== "failed") return;
         reportFailure(
           "Sign-in",
-          "Could not trade the operator token for a console token, so this browser still holds the operator token. Reload to retry.",
+          "Could not trade the operator token for a console token, so this browser still holds the operator token, which also reaches /mcp and token management. Reload to retry, or sign in with a console token: magus config console token create",
           "token-exchange:failed",
         );
       });
@@ -2494,4 +2495,23 @@ const tabBarHost = document.getElementById("console-tabs");
 const outlet =
   document.getElementById("console-outlet-content") ?? document.getElementById("console-outlet");
 const statusHost = document.getElementById("console-statusbar");
-if (tabBarHost && outlet && statusHost) startConsole(tabBarHost, outlet, statusHost);
+if (tabBarHost && outlet && statusHost) void signInThenStart(tabBarHost, outlet, statusHost);
+
+// signInThenStart trades a CLI link's one-time code for its console token BEFORE anything
+// mounts, so no surface ever makes a request signed with nothing. The code is redeemed at the
+// daemon that served this page, and a code that is used or expired is said so rather than
+// leaving the console to fail call by call.
+async function signInThenStart(
+  tabBarHost: HTMLElement,
+  outlet: HTMLElement,
+  statusHost: HTMLElement,
+): Promise<void> {
+  const code = consumeLinkCode();
+  if (code && (await redeemLinkCode(location.host, code)) === "failed")
+    reportFailure(
+      "Sign-in",
+      "This sign-in link was already used, has expired (a link signs in once, within a minute), or the daemon could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
+      "link-code:failed",
+    );
+  startConsole(tabBarHost, outlet, statusHost);
+}

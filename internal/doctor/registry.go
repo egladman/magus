@@ -51,10 +51,10 @@ var allChecks = []checkDef{
 		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkStaleSockets() },
 	},
 	{
-		Name:     "mcp-tokens",
-		Doc:      "the daemon's cli token and named connector tokens, and which are expiring",
+		Name:     "tokens",
+		Doc:      "the operator token and the stored tokens: whether each loads, and which are expiring",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkMCPTokens() },
+		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkTokens() },
 	},
 	{
 		Name:           "mcp-client",
