@@ -624,6 +624,7 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	d.caps()
 	d.noCheckouts()
 	d.noneGreen()
+	d.marks(nil)
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Rejected: []types.RejectedVerdict{{Change: "1", Reason: "not a zip"}, {Change: "8", Reason: "x"}}, Done: true}, nil)
 	d.waits(one, one.Head, "its verdict could not be read: not a zip")
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
