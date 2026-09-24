@@ -43,6 +43,10 @@ var (
 
 	// ErrProtocolMismatch: the client sent an unrecognized non-empty Protocol value.
 	ErrProtocolMismatch error = &notAdoptedError{"proc: protocol version mismatch"}
+
+	// ErrAdmissionOnly: the daemon was started by a run to hold the machine build budget
+	// and runs no work, adopted or background; the client runs the call locally.
+	ErrAdmissionOnly error = &notAdoptedError{"proc: this daemon holds only the machine build budget and runs no work; `magus server start` starts one that does"}
 )
 
 // NotAdopted reports whether err (or any error it wraps) is a call the daemon did
@@ -99,6 +103,8 @@ func decodeWireError(msg string) error {
 		return ErrVersionMismatch
 	case ErrCycleDetected.Error():
 		return ErrCycleDetected
+	case ErrAdmissionOnly.Error():
+		return ErrAdmissionOnly
 	}
 	if strings.HasPrefix(msg, ErrNotAdoptable.Error()+":") {
 		return fmt.Errorf("%w%s", ErrNotAdoptable, strings.TrimPrefix(msg, ErrNotAdoptable.Error()))

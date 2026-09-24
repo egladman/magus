@@ -57,9 +57,41 @@ accepting, prints the pid, and returns 0 - including when one is already running
 script can chain on it. Pass `--foreground` to run it blocking in the current process,
 which is what a supervisor wants (see [Keeping the daemon running](#keeping-the-daemon-running)).
 
+## Which process serves what
+
+A daemon serves what the reason it started calls for. There are two reasons, and a
+third kind of server that is not a daemon at all:
+
+| Process                 | Started by                                                          | Listens on                        | Serves                                                                                                         | Lifetime                                                    |
+| ----------------------- | ------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Your daemon             | `magus server start`                                                | the socket, and HTTP on `mcp.address` | status, the machine budget, shared services, background jobs and `--detach`; MCP, the console, health routes; scheduled maintenance and the VCS hooks | until you stop it                                            |
+| Admission daemon        | a `magus run` or `magus affected` that found no daemon              | the socket only                   | status, the machine budget, shared services                                                                    | exits after ten minutes with no claims, work or requests    |
+| Per-process proc server | any workspace command with no daemon to hand nested calls to        | a private socket                  | nested `magus` calls from that one command                                                                     | the command's own                                           |
+
+The admission daemon opens no network listener: no MCP, no console, no health routes.
+It runs no work either, so `--detach` and `magus job run` refuse it and say so. The run
+that starts one prints one line on stderr with its pid, what it is for, and when it
+exits (`-s` drops the line; a structured `-o` gets a `run.notice` record instead).
+
+`magus status` lists every live server with why it started and what it listens on:
+
+```text
+daemon pid 48213
+started for: admission (a run started it to hold the machine build budget; runs no work, exits after 10 minutes idle)
+listening: socket unix:///run/user/1000/magus/magus-daemon.sock, http none
+```
+
+`-o json` carries the same facts as `started_for` and `listeners` on each pool entry.
+
+`magus server start` with an admission daemon live replaces it, since that daemon cannot
+serve MCP or the console you asked for. While a build holds a claim on it or a run uses a
+service it hosts, replacing it would drop them, so `server start` exits 1 instead and
+names both ways forward: start again once they finish, or `magus server stop` first.
+
 ## Two transports
 
-The daemon is a single process with two listeners, one per audience. A **Unix domain
+A daemon you start is a single process with two listeners, one per audience; an
+admission daemon has only the first. A **Unix domain
 socket** is the local control plane (the proc RPC that dispatches jobs, answers status,
 and adopts nested calls into one concurrency pool); it is fast and private (`0700`), and
 the local CLI - including the `--probe=liveness` and `--probe=readiness` checks - uses it.
@@ -271,9 +303,9 @@ running, the daemon starts that service once and keeps it **warm** across separa
 invocations, so a shared Postgres stays up between `magus run test:a` and a later
 `magus run test:b` instead of restarting each time. Services are keyed by a
 configuration fingerprint, so identical definitions in different projects resolve to
-one instance. A per-process daemon (the one an unattended `magus run` spawns for
-itself) does not host services; only the stable `magus server` daemon does, which is
-why cross-invocation sharing needs it running.
+one instance. Either daemon hosts them, the one you started or the one a run started
+for admission; a per-process proc server does not. Stopping a daemon stops the
+services it hosts.
 
 The daemon reaps a service after an idle window once its last dependent releases (a
 30 minute default, overridable per service via `Service.idle`), and it records each

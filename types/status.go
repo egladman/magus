@@ -332,6 +332,41 @@ type StatusOutput struct {
 	RunningTargets []StatusRunningTarget `json:"running_targets,omitempty" yaml:"running_targets,omitempty"`
 	Workspaces     []StatusWorkspace     `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
 	Affected       []string              `json:"affected,omitempty" yaml:"affected,omitempty"`
+	// StartedFor is why a daemon exists; empty for a per-process proc server and for a
+	// daemon too old to say.
+	StartedFor DaemonStartedFor `json:"started_for,omitempty" yaml:"started_for,omitempty"`
+	// Listeners is every address the server accepts connections on. An HTTP entry is
+	// absent when nothing is served over HTTP.
+	Listeners []StatusListener `json:"listeners,omitempty" yaml:"listeners,omitempty"`
+}
+
+// DaemonStartedFor is why a daemon process exists, which decides what it serves.
+type DaemonStartedFor string
+
+const (
+	// DaemonStartedForPerson is a `magus server start`: the local socket, plus MCP and the
+	// console over HTTP on mcp.address.
+	DaemonStartedForPerson DaemonStartedFor = "person"
+	// DaemonStartedForAdmission is a daemon a run started to hold the machine build
+	// budget. It serves the local socket only, runs no work, and exits after ten idle
+	// minutes.
+	DaemonStartedForAdmission DaemonStartedFor = "admission"
+)
+
+// ListenerKind is the transport a [StatusListener] accepts on.
+type ListenerKind string
+
+const (
+	// ListenerSocket is the daemon's local socket, reachable only from this machine.
+	ListenerSocket ListenerKind = "socket"
+	// ListenerHTTP is the MCP endpoint and console.
+	ListenerHTTP ListenerKind = "http"
+)
+
+// StatusListener is one address a server accepts connections on.
+type StatusListener struct {
+	Kind    ListenerKind `json:"kind" yaml:"kind"`
+	Address string       `json:"address" yaml:"address"`
 }
 
 // StatusRunningTarget describes one running target in the pool.

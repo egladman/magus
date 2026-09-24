@@ -190,7 +190,9 @@ worktree on the machine.
 The [daemon](../guides/integrations/daemon.md) is the long-lived process that hosts the shared pool,
 owns the machine budget, and serves clients. It is the natural single point that
 knows what is running everywhere, which is why the budget lives there and why a run
-starts one.
+starts one. A daemon a run starts serves only that: its local socket, with the budget
+and shared services behind it, and no HTTP listener, MCP or console. See
+[Which process serves what](../guides/integrations/daemon.md#which-process-serves-what).
 
 It does not run your work. A top-level `magus run` executes in your own process and
 prints to your own terminal; it asks the daemon for admission and nothing else. A

@@ -483,6 +483,12 @@ func printPoolServers(w io.Writer, pools []types.StatusOutput) {
 	for _, p := range pools {
 		fmt.Fprintf(w, "  pid %-8d  %d/%d in use  %d available  %s\n",
 			p.ParentPID, p.Running, p.Capacity, p.Available, p.Socket)
+		if why := startedForText(p.StartedFor); why != "" {
+			fmt.Fprintf(w, "    started for %s\n", why)
+		}
+		if len(p.Listeners) > 0 {
+			fmt.Fprintf(w, "    listening: %s\n", listenersText(p.Listeners))
+		}
 	}
 }
 
@@ -583,8 +589,43 @@ func daemonVersionSkew(pool *types.StatusOutput) string {
 // which number they read.
 func printDaemonSummary(w io.Writer, p *types.StatusOutput, label string) {
 	fmt.Fprintf(w, "%s pid %d\n", label, p.ParentPID)
+	if why := startedForText(p.StartedFor); why != "" {
+		fmt.Fprintf(w, "started for: %s\n", why)
+	}
+	if len(p.Listeners) > 0 {
+		fmt.Fprintf(w, "listening: %s\n", listenersText(p.Listeners))
+	}
 	fmt.Fprintf(w, "capacity: %d   running: %d   available: %d   queued: %d\n",
 		p.Capacity, p.Running, p.Available, p.Queued)
+}
+
+// startedForText says why a daemon exists and what that means for its lifetime, or ""
+// for a server that does not report it.
+func startedForText(s types.DaemonStartedFor) string {
+	switch s {
+	case types.DaemonStartedForPerson:
+		return "person (`magus server start`; runs until stopped)"
+	case types.DaemonStartedForAdmission:
+		return fmt.Sprintf("admission (a run started it to hold the machine build budget; runs no work, exits after %d minutes idle)",
+			int(admissionIdleExit/time.Minute))
+	default:
+		return ""
+	}
+}
+
+// listenersText renders a listener set, always naming the HTTP side: "http none" is the
+// fact a person checks when asking whether anything is exposed.
+func listenersText(ls []types.StatusListener) string {
+	parts := make([]string, 0, len(ls)+1)
+	hasHTTP := false
+	for _, l := range ls {
+		parts = append(parts, string(l.Kind)+" "+l.Address)
+		hasHTTP = hasHTTP || l.Kind == types.ListenerHTTP
+	}
+	if !hasHTTP {
+		parts = append(parts, "http none")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // printConsoleStatus renders where a person opens the console. It is the answer to "where
@@ -902,6 +943,9 @@ func poolHeader(pool *types.StatusOutput, numCPU int) string {
 	}
 	parts := []string{label}
 	parts = append(parts, fmt.Sprintf("pid %d", pool.ParentPID))
+	if pool.StartedFor != "" {
+		parts = append(parts, "for "+string(pool.StartedFor))
+	}
 	if pool.DaemonVersion != "" {
 		parts = append(parts, pool.DaemonVersion)
 	}

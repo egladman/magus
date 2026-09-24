@@ -479,3 +479,62 @@ func TestSubmitJobVersionGate(t *testing.T) {
 		assert.Empty(t, reply.Inv, "a refused job returns no invocation id")
 	})
 }
+
+// TestAdmissionDaemonRunsNoWork pins what a daemon a run started for admission serves: the
+// budget and status, never a forwarded run or a background job. Either would load a
+// workspace and build inside a process nobody asked for, and a job would also hold it
+// past its idle exit.
+func TestAdmissionDaemonRunsNoWork(t *testing.T) {
+	var handled atomic.Int32
+	srv, err := New(Options{
+		Handler:    func(context.Context, []string) error { handled.Add(1); return nil },
+		StartedFor: types.DaemonStartedForAdmission,
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+
+	_, err = Forward(context.Background(), []string{"run", "build", "api"}, "", "")
+	require.ErrorIs(t, err, ErrAdmissionOnly, "the refusal survives the wire as its sentinel")
+	assert.True(t, NotAdopted(err), "so the client runs the call locally and quietly")
+
+	_, err = SubmitJob(context.Background(), srv.Addr(), []string{"graph", "build"}, "")
+	require.Error(t, err, "a background job is refused too")
+	assert.Contains(t, err.Error(), ErrAdmissionOnly.Error())
+
+	assert.Zero(t, handled.Load(), "the handler never ran")
+}
+
+// TestStatusReportsWhyAndWhereTheDaemonListens pins the two facts `magus status` shows for
+// every daemon: why it exists, and every address it accepts on, the socket first.
+func TestStatusReportsWhyAndWhereTheDaemonListens(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		startedFor types.DaemonStartedFor
+		http       string
+	}{
+		{"admission: the socket and nothing else", types.DaemonStartedForAdmission, ""},
+		{"person: the socket and the HTTP endpoint", types.DaemonStartedForPerson, "127.0.0.1:7391"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, err := New(Options{
+				Handler:     func(context.Context, []string) error { return nil },
+				StartedFor:  tc.startedFor,
+				HTTPAddress: func() string { return tc.http },
+			})
+			require.NoError(t, err)
+			defer srv.Close()
+			require.NoError(t, srv.Start())
+
+			st, err := QueryStatus(context.Background(), srv.Addr())
+			require.NoError(t, err)
+			want := []types.StatusListener{{Kind: types.ListenerSocket, Address: srv.Addr()}}
+			if tc.http != "" {
+				want = append(want, types.StatusListener{Kind: types.ListenerHTTP, Address: tc.http})
+			}
+			assert.Equal(t, tc.startedFor, st.StartedFor)
+			assert.Equal(t, want, st.Listeners)
+		})
+	}
+}

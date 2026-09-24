@@ -136,6 +136,14 @@ type Options struct {
 	// and only one daemon exists per user, which is what makes the budget the machine's
 	// rather than a process's.
 	MachineBudget *cache.MachineBudget
+	// StartedFor is why this daemon exists, reported on Status. A daemon started for
+	// admission refuses every request to run work with ErrAdmissionOnly: it holds the
+	// budget and hosts services, nothing else. Empty for a per-process proc server.
+	StartedFor types.DaemonStartedFor
+	// HTTPAddress, if set, reports the HTTP listener the process serves beside this
+	// socket, or "" for none. Called per Status request, since that listener binds after
+	// the socket does.
+	HTTPAddress func() string
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -313,6 +321,9 @@ func New(opts Options) (*Server, error) {
 		workspaceLister: opts.WorkspaceLister,
 		serviceLister:   opts.ServiceLister,
 		onJobDone:       opts.OnJobDone,
+		startedFor:      opts.StartedFor,
+		httpAddress:     opts.HTTPAddress,
+		socket:          ep.String(),
 	}
 	svc.markActive() // a daemon that has served nobody yet is not instantly idle
 	srv := &Server{
@@ -621,6 +632,9 @@ type service struct {
 	lastActive      atomic.Int64 // unix nanoseconds of the last client frame; read by IdleFor
 	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
+	startedFor      types.DaemonStartedFor
+	httpAddress     func() string
+	socket          string   // this server's own address, as Addr reports it
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting
 	nextID          atomic.Uint64
@@ -639,6 +653,9 @@ func (s *service) versionAdmits(reqVersion string) bool {
 // admitWork refuses a request to run magus that this daemon must not execute: one over the
 // argument limit, one speaking another protocol, or one from a different build.
 func (s *service) admitWork(request string, args []string, protocol, version string) error {
+	if s.startedFor == types.DaemonStartedForAdmission {
+		return ErrAdmissionOnly
+	}
 	if len(args) > maxArgs {
 		return fmt.Errorf("proc: %s.Args exceeds limit (%d > %d)", request, len(args), maxArgs)
 	}
@@ -833,6 +850,13 @@ func (s *service) status(req statusRequest, reply *StatusReply) error {
 	if s.machineBudget != nil {
 		m := s.machineBudget.Snapshot()
 		reply.Machine = &m
+	}
+	reply.StartedFor = s.startedFor
+	reply.Listeners = []types.StatusListener{{Kind: types.ListenerSocket, Address: s.socket}}
+	if s.httpAddress != nil {
+		if addr := s.httpAddress(); addr != "" {
+			reply.Listeners = append(reply.Listeners, types.StatusListener{Kind: types.ListenerHTTP, Address: addr})
+		}
 	}
 	s.calls.Range(func(_, v any) bool {
 		c, ok := v.(*activeCall)

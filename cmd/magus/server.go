@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -24,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service/console"
 	sysPID "github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
@@ -189,7 +192,9 @@ func serverStart(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "\nStart the persistent daemon that serves MCP and accepts nested magus calls.")
 			fmt.Fprintln(os.Stderr, "By default it auto-backgrounds: this command detaches the daemon, waits until")
 			fmt.Fprintln(os.Stderr, "it is accepting connections, prints its pid, and returns 0. Starting when a")
-			fmt.Fprintln(os.Stderr, "daemon is already running is a no-op that also returns 0.")
+			fmt.Fprintln(os.Stderr, "daemon is already running is a no-op that also returns 0, unless a run started")
+			fmt.Fprintln(os.Stderr, "that one only to hold the machine build budget: it serves no MCP or console, so")
+			fmt.Fprintln(os.Stderr, "this replaces it, and refuses while builds hold claims on it.")
 			fmt.Fprintln(os.Stderr, "\nWith --foreground the daemon runs in this process and blocks until stopped")
 			fmt.Fprintln(os.Stderr, "(SIGINT / SIGTERM or `"+hint.ServerStop.String()+"`). Use it under a process")
 			fmt.Fprintln(os.Stderr, "supervisor (systemd --user) or when debugging.")
@@ -209,39 +214,17 @@ func serverStart(ctx context.Context, args []string) error {
 		return fmt.Errorf("magus server start: daemon socket not available (no workspace found, or socket bind failed)")
 	}
 	fmt.Fprintf(os.Stderr, "magus: daemon listening on %s\n", addr)
-	// The socket above is unusable by a person and the console is the thing they open, so
-	// it is printed here rather than left in the log. A console that is not mounted says
-	// so: a silent absence is what sends somebody reading daemon.go.
-	if u := consoleRootURL(); u != "" {
-		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` mints one)\n", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenExpires()))
-	} else {
-		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
-	}
-	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
 
-	installRefreshHooks(ctx)
-	installDriftHooks(ctx)
-	installRegenHooks(ctx)
-
-	// Start the MCP HTTP server alongside the daemon so MCP clients can
-	// connect without a separate process. No-op when mcp.enabled=false.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// daemonProvider was built by startMultiWorkspaceDaemon (which runs before this
-	// command handler) so the bridge Magus shares the same OTel instruments the
-	// per-workspace builds record into.
-	startMCPWithDaemon(ctx, cancel, daemonProvider)
-
-	// Low-key background maintenance: rotate the trail/run-logs and reconcile the graph on their
-	// configured intervals, idle-gated. Only a persistent `server start` daemon schedules these,
-	// since they must outlive any single invocation. Socket and trail base are late-bound (set
-	// during startup), so the scheduler reads them per tick.
-	maintenance.Start(ctx, maintenance.Options{
-		Schedule: globalCfg.Daemon.Maintenance,
-		Socket:   func() string { return os.Getenv("MAGUS_DAEMON_SOCKET") },
-		Trail:    func() string { return daemonTrailBase },
-		Version:  version,
-	})
+	if daemonRole == types.DaemonStartedForAdmission {
+		// These lines land in the daemon log, which is where somebody looking at a
+		// process they did not start will read what it is.
+		fmt.Fprintf(os.Stderr, "magus: started by a run to hold this machine's build budget; no HTTP listener, no MCP, no console; exits after %d minutes idle\n",
+			int(admissionIdleExit/time.Minute))
+	} else {
+		startPersonSurface(ctx, cancel)
+	}
 
 	// Block until a signal cancels ctx OR an RPC `server stop` closes the proc server. The
 	// second case is the load-bearing one: the shutdown handler cancels only the listener's
@@ -258,6 +241,49 @@ func serverStart(ctx context.Context, args []string) error {
 	return nil
 }
 
+// startPersonSurface opens what a person's `magus server start` serves beyond the socket:
+// the VCS hooks that poke the daemon, MCP and the console over HTTP on mcp.address, and
+// the maintenance scheduler. A daemon a run started for admission opens none of it. A var
+// so a test can observe that without binding a port.
+var startPersonSurface = func(ctx context.Context, cancel context.CancelFunc) {
+	// The socket is unusable by a person and the console is the thing they open, so it is
+	// printed here rather than left in the log. A console that is not mounted says so: a
+	// silent absence is what sends somebody reading daemon.go.
+	if u := consoleRootURL(); u != "" {
+		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` mints one)\n", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenExpires()))
+	} else {
+		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
+	}
+	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
+
+	installRefreshHooks(ctx)
+	installDriftHooks(ctx)
+	installRegenHooks(ctx)
+
+	// No-op when mcp.enabled=false. The address is published before the listener binds,
+	// so a status read in that window reports a listener a moment early rather than a
+	// daemon that looks like an admission one.
+	if globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled {
+		if a, err := mcpAddrPort(); err == nil {
+			daemonHTTPAddr.Store(a.String())
+		}
+	}
+	// daemonProvider was built by startMultiWorkspaceDaemon (which runs before this
+	// command handler) so the bridge Magus shares the same OTel instruments the
+	// per-workspace builds record into.
+	startMCPWithDaemon(ctx, cancel, daemonProvider)
+
+	// Background maintenance: rotate the trail/run-logs and reconcile the graph on their
+	// configured intervals, idle-gated. Socket and trail base are late-bound (set during
+	// startup), so the scheduler reads them per tick.
+	maintenance.Start(ctx, maintenance.Options{
+		Schedule: globalCfg.Daemon.Maintenance,
+		Socket:   func() string { return os.Getenv("MAGUS_DAEMON_SOCKET") },
+		Trail:    func() string { return daemonTrailBase },
+		Version:  version,
+	})
+}
+
 // startDaemonBackground implements the default auto-backgrounding of `server start`. It runs
 // in the launching process before the daemon is built. It returns done==true when it fully
 // handled the request (the caller returns exitCode without building a daemon): a daemon was
@@ -269,11 +295,17 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 	if os.Getenv(daemonDetachEnv) != "" {
 		return 0, false // we are the detached child: run the daemon in the foreground
 	}
+	addr := cfg.Daemon.Address // startup defaulted this to the stable socket for `server start`
+	// Before the foreground return, so a supervisor's --foreground takes over too instead
+	// of failing to bind a socket the admission daemon holds.
+	if err := replaceAdmissionDaemon(ctx, addr); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return 1, true
+	}
 	if wantsForeground(subArgs) {
 		return 0, false // explicit foreground for a supervisor / debugging
 	}
 
-	addr := cfg.Daemon.Address // startup defaulted this to the stable socket for `server start`
 	// Idempotent start: a daemon already accepting on the socket means there is nothing to do.
 	if proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
@@ -296,6 +328,60 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 	}
 	fmt.Fprintf(os.Stderr, "magus: daemon started (pid %d) on %s; logs at %s\n", pid, addr, logPath)
 	return 0, true
+}
+
+// replaceAdmissionDaemon stops a daemon that a run started for admission, so a person's
+// `server start` gets the daemon they asked for. It is a no-op for nothing live at addr
+// and for a daemon a person started.
+//
+// Replacing rather than reporting "already running": that daemon serves no MCP and no
+// console, so answering the request with it would be a success that did not do what was
+// asked. Replacing costs nothing it cannot rebuild, EXCEPT while it is in use: a build
+// holding a claim, or a run using a service it hosts, would lose it mid-flight. Then this
+// refuses and names both ways forward rather than choosing for the person.
+func replaceAdmissionDaemon(ctx context.Context, addr string) error {
+	if !proc.SocketLive(ctx, addr) {
+		return nil
+	}
+	st, err := proc.QueryStatus(ctx, addr)
+	if err != nil {
+		return nil //nolint:nilerr // a daemon that will not say why it exists is not provably an admission one, so it is left alone
+	}
+	if st.StartedFor != types.DaemonStartedForAdmission {
+		return nil
+	}
+	if n := admissionDaemonUsers(st); n > 0 {
+		return fmt.Errorf("the daemon on %s (pid %d) was started by a run to hold the machine build budget and serves no MCP or console, and %d build(s) or service user(s) depend on it now; replacing it would drop them. Run `%s` again when they finish, or `%s` to drop them and then start",
+			addr, st.ParentPID, n, hint.ServerStart, hint.ServerStop)
+	}
+	fmt.Fprintf(os.Stderr, "magus: replacing the daemon a run started to hold the machine build budget (pid %d), which serves no MCP or console\n", st.ParentPID)
+	if err := proc.Shutdown(ctx, addr); err != nil {
+		return fmt.Errorf("could not stop the admission daemon (pid %d) on %s: %w", st.ParentPID, addr, err)
+	}
+	if err := waitDaemonStopped(ctx, addr, daemonStopTimeout); err != nil {
+		return fmt.Errorf("the admission daemon (pid %d) on %s did not stop: %w", st.ParentPID, addr, err)
+	}
+	return nil
+}
+
+// admissionDaemonUsers counts what would break if the daemon behind st exited now:
+// budget claims, work in its pool, and runs using a service it hosts.
+func admissionDaemonUsers(st *proc.StatusReply) int {
+	n := st.Running + st.Queued
+	if st.Machine != nil {
+		n += len(st.Machine.Holders)
+	}
+	for _, s := range st.Services {
+		n += s.Dependents
+	}
+	return n
+}
+
+// runsWork reports whether st is a daemon that accepts work outliving the caller: a
+// person's `server start`, never a per-process proc server or an admission daemon. A
+// daemon too old to report StartedFor predates admission-only daemons, so it counts.
+func runsWork(st *proc.StatusReply) bool {
+	return st != nil && st.Mode == "daemon" && st.StartedFor != types.DaemonStartedForAdmission
 }
 
 // servingSuffix names the workspaces a running daemon has loaded, or "" when it has none yet.
@@ -333,8 +419,11 @@ func servingSuffix(st *proc.StatusReply) string {
 // ancestry, and every workspace it serves would read those refs as its own: claims
 // belonging to an invocation that ended hours ago would be excused from the budget, and
 // a run with no ancestry of its own would be judged a nested magus that had lost it.
+//
+// admissionDaemonEnv, so the role a child runs as is the one its spawner passed rather
+// than whatever the caller's shell happened to carry.
 func daemonChildEnv() []string {
-	drop := []string{"MAGUS_DAEMON_SOCKET=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{"MAGUS_DAEMON_SOCKET=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL=", admissionDaemonEnv + "="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -455,19 +544,6 @@ func ensureConsoleDaemon(ctx context.Context, addr, root string) error {
 	}
 }
 
-// ensureAdmissionDaemon brings up the daemon that owns this machine's build budget and
-// returns its socket, or "" when it could not be started.
-//
-// This is the one place magus starts a daemon for a command that did not ask for one,
-// and it is deliberate: machine-wide admission has no other arbiter, so a run with no
-// daemon is a run that admits itself against a machine several other magus processes
-// are also admitting themselves against. Only a run reaches here (see
-// dispatchProfile.spawnsWork), so `magus ls` and every other question still costs
-// nothing.
-//
-// Fails OPEN, loudly. A daemon that will not start must not stop a build: the run
-// proceeds unarbitrated and says so, which is a smaller failure than refusing to build
-// because a background process would not come up.
 // admissionDaemonAddr is where the machine budget lives for this invocation: the
 // configured daemon.address when there is one, the per-user default otherwise. One
 // resolution, used to spawn, to wait, and to look up, because three spellings of the
@@ -480,9 +556,24 @@ func admissionDaemonAddr(cfg config.Config) string {
 }
 
 // admissionDaemonEnv marks a daemon that nobody asked for: one a run started only so
-// something could arbitrate the machine budget. It is set on the spawned child and read
-// by that child, which is the only process that can know how it came to exist.
+// something could arbitrate the machine budget. spawnAdmissionDaemon sets it on the child
+// and startMultiWorkspaceDaemon reads it into daemonRole, the only process that can know
+// how it came to exist. daemonChildEnv strips any inherited copy, so no other path sets it.
 const admissionDaemonEnv = "MAGUS_DAEMON_FOR_ADMISSION"
+
+// daemonRole is why this process is a daemon, published by startMultiWorkspaceDaemon
+// before serverStart runs. It decides what serverStart opens beside the socket.
+var daemonRole = types.DaemonStartedForPerson
+
+// daemonHTTPAddr is the HTTP listener a person's daemon serves MCP and the console on,
+// empty while it serves none. The proc Status RPC reads it on every request.
+var daemonHTTPAddr atomic.Value // string
+
+// currentDaemonHTTPAddr reads daemonHTTPAddr, "" when unset.
+func currentDaemonHTTPAddr() string {
+	s, _ := daemonHTTPAddr.Load().(string)
+	return s
+}
 
 const (
 	// admissionIdleExit is how long an unasked-for daemon stays up with nothing to do.
@@ -508,7 +599,7 @@ const (
 // watchAdmissionIdle stops a daemon that was started for admission once nothing has
 // wanted it for admissionIdleExit. A no-op for a daemon somebody started deliberately.
 func watchAdmissionIdle(ctx context.Context, srv *proc.Server) {
-	if os.Getenv(admissionDaemonEnv) == "" {
+	if daemonRole != types.DaemonStartedForAdmission {
 		return
 	}
 	go func() {
@@ -542,29 +633,71 @@ var spawnAdmissionDaemon = func() (pid int, logPath string, err error) {
 	return spawnDetachedDaemon([]string{"server", "start", "--foreground"}, admissionDaemonEnv+"=1")
 }
 
-func ensureAdmissionDaemon(ctx context.Context, addr string) string {
+// ensureAdmissionDaemon brings up the daemon that owns this machine's build budget and
+// returns its socket, or "" when it could not be started. startedPID is the daemon this
+// call started, 0 when one was already live or none came up; the caller announces it
+// with announceAdmissionDaemon once the display flags are parsed.
+//
+// This is the one place magus starts a daemon for a command that did not ask for one,
+// and it is deliberate: machine-wide admission has no other arbiter, so a run with no
+// daemon is a run that admits itself against a machine several other magus processes
+// are also admitting themselves against. Only a run reaches here (see
+// dispatchProfile.spawnsWork), so `magus ls` and every other question still costs
+// nothing.
+//
+// Fails OPEN, loudly. A daemon that will not start must not stop a build: the run
+// proceeds unarbitrated and says so, which is a smaller failure than refusing to build
+// because a background process would not come up.
+func ensureAdmissionDaemon(ctx context.Context, addr string) (sock string, startedPID int) {
 	// ONE address for all three steps. Spawning against the configured address while
 	// waiting on the default meant any non-default daemon.address timed out after the
 	// full readiness window and then reaped the healthy daemon it had just started:
 	// a minute of latency per command, ending in a SIGKILL of the thing that worked.
 	if proc.SocketLive(ctx, addr) {
-		return addr
+		return addr, 0
 	}
 	pid, logPath, err := spawnAdmissionDaemon()
 	if err != nil {
 		slog.Warn("magus: machine-wide admission is OFF for this run: the daemon that holds the budget could not be started",
 			slog.String("error", err.Error()))
-		return ""
+		return "", 0
 	}
 	if err := waitDaemonReady(ctx, addr, daemonReadyTimeout); err != nil {
 		reapDaemon(ctx, pid, addr)
 		slog.Warn("magus: machine-wide admission is OFF for this run: the daemon that holds the budget did not come up",
 			slog.String("error", err.Error()), slog.String("log", logPath))
-		return ""
+		return "", 0
 	}
-	slog.Info("magus: started the daemon that arbitrates this machine's build budget",
-		slog.Int("pid", pid), slog.String("log", logPath))
-	return addr
+	return addr, pid
+}
+
+// announceAdmissionDaemon tells the person that their run left a process behind: which
+// one, what it is for, when it goes away, and that it listens on nothing but its socket.
+// A background process nobody mentions is the surprise this line exists to remove, so it
+// is a notice on stderr rather than a log record a default level filters out.
+//
+// quiet (-q or -s) drops it. Any structured -o gets a run.notice record instead of prose,
+// so a caller parsing stderr meets one record shape.
+func announceAdmissionDaemon(w io.Writer, pid int, output string, quiet bool) {
+	if pid == 0 || quiet {
+		return
+	}
+	idle := int(admissionIdleExit / time.Minute)
+	msg := fmt.Sprintf("started a background daemon (pid %d) to hold this machine's build budget; it opens no network listener and stops after %d minutes idle (`%s` lists it)",
+		pid, idle, hint.Status)
+	if output != "" && output != string(outputText) {
+		_ = report.NewLineEncoder(w).Encode(report.Notice{
+			Level:   slog.LevelInfo,
+			Message: msg,
+			Attrs: map[string]any{
+				"pid":         pid,
+				"started_for": string(types.DaemonStartedForAdmission),
+				"idle_exit_s": int(admissionIdleExit / time.Second),
+			},
+		})
+		return
+	}
+	fmt.Fprintf(w, "magus: %s\n", msg)
 }
 
 // reapDaemon kills a daemon this process spawned but never got a working socket out of.
@@ -769,11 +902,12 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	}
 	// Only a PERSISTENT daemon (`server start`) runs a job that outlives this process; a
 	// per-process proc server (which magus may spin up for any command) would die when this
-	// invocation exits, silently dropping the job. Submit only when we see a real daemon;
-	// otherwise no-op, so a hook stays a safe no-op off the daemon.
+	// invocation exits, silently dropping the job, and one a run started for admission runs
+	// no work. Submit only when we see a person's daemon; otherwise no-op, so a hook stays a
+	// safe no-op off the daemon.
 	st, serr := proc.QueryStatus(ctx, addr)
-	if serr != nil || st == nil || st.Mode != "daemon" {
-		return nil //nolint:nilerr // not a persistent daemon: no-op so a hook stays a safe no-op off the daemon
+	if serr != nil || !runsWork(st) {
+		return nil //nolint:nilerr // not a daemon that runs work: no-op so a hook stays a safe no-op off the daemon
 	}
 	inv, err := proc.SubmitJob(ctx, addr, job.Argv, version)
 	if err != nil {

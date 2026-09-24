@@ -189,6 +189,10 @@ type StatusReply struct {
 	// magus on the machine holds and who is queued for it. Nil for a per-process proc
 	// server, which arbitrates nothing beyond itself.
 	Machine *types.MachineSnapshot `json:"machine,omitempty"`
+	// StartedFor is why this daemon exists. Empty for a per-process proc server.
+	StartedFor types.DaemonStartedFor `json:"started_for,omitempty"`
+	// Listeners is every address this server accepts on, its own socket first.
+	Listeners []types.StatusListener `json:"listeners,omitempty"`
 }
 
 // StatusOutput is r as the status report's pool section, nil for a nil reply. It is the
@@ -208,8 +212,10 @@ func (r *StatusReply) StatusOutput() *types.StatusOutput {
 		Running:       r.Running,
 		// Floored: a daemon whose capacity was clamped under load can report more running
 		// than capacity, and "-2 available" is worse than "0".
-		Available: max(0, r.Capacity-r.Running),
-		Queued:    r.Queued,
+		Available:  max(0, r.Capacity-r.Running),
+		Queued:     r.Queued,
+		StartedFor: r.StartedFor,
+		Listeners:  r.Listeners,
 	}
 	for _, c := range r.Calls {
 		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{

@@ -148,8 +148,8 @@ func printConsoleJobLine(out io.Writer, id string) {
 }
 
 // probeConsoleDaemon reports whether a PERSISTENT daemon is up, and its version. A
-// per-process proc server answers a socket too and serves no console, so only a "daemon"
-// mode counts.
+// per-process proc server answers a socket too and serves no console, and neither does a
+// daemon a run started for admission, so only a person's daemon counts.
 //
 // It probes the daemon's own address, never MAGUS_DAEMON_SOCKET: when the daemon refuses a
 // mismatched build, startup points that variable at this process's own proc server, and
@@ -163,7 +163,7 @@ func probeConsoleDaemon() (serving bool, daemonVersion string) {
 	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
 	defer cancel()
 	st, err := proc.QueryStatus(ctx, admissionDaemonAddr(globalCfg))
-	if err != nil || st == nil || st.Mode != "daemon" {
+	if err != nil || !runsWork(st) {
 		return false, ""
 	}
 	return true, st.DaemonVersion

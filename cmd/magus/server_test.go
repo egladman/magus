@@ -13,7 +13,9 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp/bindings"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
@@ -91,8 +93,9 @@ func TestEnsureAdmissionDaemonAdoptsALiveOne(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	got := ensureAdmissionDaemon(context.Background(), addr)
+	got, pid := ensureAdmissionDaemon(context.Background(), addr)
 	assert.Equal(t, addr, got, "the run arbitrates against the daemon that is already up")
+	assert.Zero(t, pid, "nothing was started, so nothing is announced")
 	assert.Zero(t, *spawned, "a second daemon was started over the live one")
 }
 
@@ -110,9 +113,10 @@ func TestEnsureAdmissionDaemonStartsOneWhenAbsent(t *testing.T) {
 	// The spawn is trapped, so nothing comes up and the readiness wait fails. What is
 	// under test is that a start was ATTEMPTED, and that a run whose daemon never
 	// arrives is told there is no arbiter rather than being blocked.
-	got := ensureAdmissionDaemon(context.Background(), daemonDefaultAddr())
+	got, pid := ensureAdmissionDaemon(context.Background(), daemonDefaultAddr())
 	assert.Equal(t, 1, *spawned, "with nothing serving, a run starts the arbiter")
 	assert.Empty(t, got, "and a daemon that never came up is reported as no arbiter, not as one")
+	assert.Zero(t, pid, "nor announced as one")
 }
 
 // trapAdmissionSpawn replaces the spawn seam for one test and counts the calls. No
@@ -205,13 +209,214 @@ func TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	t.Setenv(admissionDaemonEnv, "")
+	setDaemonRole(t, types.DaemonStartedForPerson)
 	watchAdmissionIdle(t.Context(), srv)
 	select {
 	case <-srv.Done():
 		t.Fatal("a daemon somebody started deliberately must not time itself out")
 	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+// setDaemonRole sets daemonRole for one test.
+func setDaemonRole(t *testing.T, role types.DaemonStartedFor) {
+	t.Helper()
+	prev := daemonRole
+	daemonRole = role
+	t.Cleanup(func() { daemonRole = prev })
+}
+
+// runServerStart drives serverStart against srv as the daemon's own socket and returns once
+// srv is closed, reporting how many times the person surface was opened. The surface is
+// trapped, so nothing binds a port; what is under test is the decision to open it.
+func runServerStart(t *testing.T, srv *proc.Server) int {
+	t.Helper()
+	opened := 0
+	prevSurface, prevServer := startPersonSurface, daemonServer
+	startPersonSurface = func(context.Context, context.CancelFunc) { opened++ }
+	daemonServer = srv
+	t.Cleanup(func() { startPersonSurface, daemonServer = prevSurface, prevServer })
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+
+	done := make(chan error, 1)
+	go func() { done <- serverStart(context.Background(), nil) }()
+	srv.Close()
+	require.NoError(t, <-done)
+	return opened
+}
+
+// TestAdmissionDaemonOpensNoHTTPListener pins that a daemon a run started serves its socket
+// and nothing else: no MCP, no console, no maintenance, no VCS hooks. Asserted on the
+// decision and on the listener set the daemon reports, never on a port staying closed for
+// a while, which would pass for a listener that merely bound late.
+func TestAdmissionDaemonOpensNoHTTPListener(t *testing.T) {
+	setDaemonRole(t, types.DaemonStartedForAdmission)
+	daemonHTTPAddr.Store("")
+	srv, err := proc.New(proc.Options{
+		Handler:     func(context.Context, []string) error { return nil },
+		StartedFor:  daemonRole,
+		HTTPAddress: currentDaemonHTTPAddr,
+	})
+	require.NoError(t, err)
+	require.NoError(t, srv.Start())
+
+	st, err := proc.QueryStatus(context.Background(), srv.Addr())
+	require.NoError(t, err)
+	assert.Equal(t, []types.StatusListener{{Kind: types.ListenerSocket, Address: srv.Addr()}}, st.Listeners,
+		"the socket is the only listener")
+
+	assert.Zero(t, runServerStart(t, srv), "no HTTP, MCP, console, maintenance or hooks for an admission daemon")
+	assert.Empty(t, currentDaemonHTTPAddr())
+}
+
+// TestPersonDaemonOpensItsSurface is the other half: the same path for a person's
+// `server start` does open it, so the test above cannot pass by never opening anything.
+func TestPersonDaemonOpensItsSurface(t *testing.T) {
+	setDaemonRole(t, types.DaemonStartedForPerson)
+	srv, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	require.NoError(t, srv.Start())
+
+	assert.Equal(t, 1, runServerStart(t, srv))
+}
+
+// TestAnnounceAdmissionDaemon pins the one line a run prints when it leaves a daemon behind,
+// and that the display flags govern it the way they govern every other notice.
+func TestAnnounceAdmissionDaemon(t *testing.T) {
+	t.Run("text says what, why, what it listens on, and when it goes", func(t *testing.T) {
+		var buf strings.Builder
+		announceAdmissionDaemon(&buf, 4242, "", false)
+		assert.Equal(t, "magus: started a background daemon (pid 4242) to hold this machine's build budget; it opens no network listener and stops after 10 minutes idle (`magus status` lists it)\n",
+			buf.String())
+	})
+	t.Run("quiet and silent drop it", func(t *testing.T) {
+		var buf strings.Builder
+		announceAdmissionDaemon(&buf, 4242, "", true)
+		assert.Empty(t, buf.String())
+	})
+	t.Run("nothing started, nothing said", func(t *testing.T) {
+		var buf strings.Builder
+		announceAdmissionDaemon(&buf, 0, "", false)
+		assert.Empty(t, buf.String())
+	})
+	t.Run("structured output gets a record, not prose", func(t *testing.T) {
+		var buf strings.Builder
+		announceAdmissionDaemon(&buf, 4242, string(FormatJSONL), false)
+		var rec struct {
+			Type  string         `json:"type"`
+			Level string         `json:"level"`
+			Msg   string         `json:"msg"`
+			Attrs map[string]any `json:"attrs"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(buf.String()), &rec))
+		assert.Equal(t, "run.notice", rec.Type)
+		assert.Equal(t, "info", rec.Level)
+		assert.Contains(t, rec.Msg, "pid 4242")
+		assert.Equal(t, map[string]any{"pid": float64(4242), "started_for": "admission", "idle_exit_s": float64(600)}, rec.Attrs)
+	})
+}
+
+// TestStatusListsEachDaemonWithWhyAndListeners pins what `magus status` says about every
+// live server, in text and in -o json: why it exists and what it listens on, with the
+// absence of an HTTP listener stated rather than left for the reader to infer.
+func TestStatusListsEachDaemonWithWhyAndListeners(t *testing.T) {
+	replies := map[string]*proc.StatusReply{
+		"unix:///run/person.sock": {ParentPID: 10, Mode: "daemon", StartedFor: types.DaemonStartedForPerson,
+			Listeners: []types.StatusListener{{Kind: types.ListenerSocket, Address: "unix:///run/person.sock"}, {Kind: types.ListenerHTTP, Address: "127.0.0.1:7391"}}},
+		"unix:///run/admission.sock": {ParentPID: 20, Mode: "daemon", StartedFor: types.DaemonStartedForAdmission,
+			Listeners: []types.StatusListener{{Kind: types.ListenerSocket, Address: "unix:///run/admission.sock"}}},
+	}
+	var snap types.StatusSnapshot
+	applyStatusPools(context.Background(), &snap, []string{"unix:///run/person.sock", "unix:///run/admission.sock"},
+		func(_ context.Context, addr string) (*proc.StatusReply, error) { return replies[addr], nil })
+	require.Len(t, snap.Pools, 2)
+
+	var text strings.Builder
+	printDaemonSummary(&text, &snap.Pools[1], "daemon")
+	assert.Equal(t, "daemon pid 20\n"+
+		"started for: admission (a run started it to hold the machine build budget; runs no work, exits after 10 minutes idle)\n"+
+		"listening: socket unix:///run/admission.sock, http none\n"+
+		"capacity: 0   running: 0   available: 0   queued: 0\n", text.String())
+
+	text.Reset()
+	printPoolServers(&text, snap.Pools)
+	assert.Contains(t, text.String(), "started for person (`magus server start`; runs until stopped)\n    listening: socket unix:///run/person.sock, http 127.0.0.1:7391\n")
+	assert.Contains(t, text.String(), "started for admission")
+
+	out, err := json.Marshal(snap.Pools[1])
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `"started_for":"admission","listeners":[{"kind":"socket","address":"unix:///run/admission.sock"}]`)
+}
+
+// TestServerStartReplacesAnIdleAdmissionDaemon pins that a person's `server start` is not
+// silently satisfied by a daemon that serves no MCP or console: an idle one is replaced.
+func TestServerStartReplacesAnIdleAdmissionDaemon(t *testing.T) {
+	srv, err := proc.New(proc.Options{
+		Handler:    func(context.Context, []string) error { return nil },
+		StartedFor: types.DaemonStartedForAdmission,
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	require.NoError(t, replaceAdmissionDaemon(context.Background(), srv.Addr()))
+	assert.False(t, proc.SocketLive(context.Background(), srv.Addr()), "the admission daemon is gone")
+	select {
+	case <-srv.Done():
+	default:
+		t.Fatal("the admission daemon was not shut down")
+	}
+}
+
+// TestServerStartRefusesToReplaceABusyAdmissionDaemon is the refusal: replacing a daemon a
+// run is using drops that run's service mid-flight, so `server start` exits 1, says why and
+// how, and leaves it running.
+func TestServerStartRefusesToReplaceABusyAdmissionDaemon(t *testing.T) {
+	t.Setenv(daemonDetachEnv, "")
+	srv, err := proc.New(proc.Options{
+		Handler:       func(context.Context, []string) error { return nil },
+		StartedFor:    types.DaemonStartedForAdmission,
+		ServiceLister: func() []types.StatusService { return []types.StatusService{{ID: "db", Dependents: 1}} },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	err = replaceAdmissionDaemon(context.Background(), srv.Addr())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "was started by a run to hold the machine build budget")
+	assert.Contains(t, err.Error(), "`magus server stop`")
+
+	var cfg config.Config
+	cfg.Daemon.Address = srv.Addr()
+	code, done := startDaemonBackground(context.Background(), cfg, []string{"start"})
+	assert.Equal(t, 1, code)
+	assert.True(t, done, "it refuses before spawning anything")
+	assert.True(t, proc.SocketLive(context.Background(), srv.Addr()), "the busy daemon keeps running")
+}
+
+// TestServerStartLeavesAPersonDaemonAlone: replacement is only for admission daemons.
+func TestServerStartLeavesAPersonDaemonAlone(t *testing.T) {
+	srv, err := proc.New(proc.Options{
+		Handler:    func(context.Context, []string) error { return nil },
+		StartedFor: types.DaemonStartedForPerson,
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	require.NoError(t, replaceAdmissionDaemon(context.Background(), srv.Addr()))
+	assert.True(t, proc.SocketLive(context.Background(), srv.Addr()))
+}
+
+// TestRunsWork pins which servers accept work that outlives the caller: `--detach` and
+// `job run` submit only to these.
+func TestRunsWork(t *testing.T) {
+	assert.True(t, runsWork(&proc.StatusReply{Mode: "daemon", StartedFor: types.DaemonStartedForPerson}))
+	assert.True(t, runsWork(&proc.StatusReply{Mode: "daemon"}), "a daemon too old to say predates admission daemons")
+	assert.False(t, runsWork(&proc.StatusReply{Mode: "daemon", StartedFor: types.DaemonStartedForAdmission}))
+	assert.False(t, runsWork(&proc.StatusReply{Mode: "proc"}))
+	assert.False(t, runsWork(nil))
 }
 
 func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {

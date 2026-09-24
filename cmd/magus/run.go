@@ -937,7 +937,12 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 			"--detach hands the work to the daemon, and none is running; start one with `%s`", hint.ServerStart)
 	}
 	st, serr := proc.QueryStatus(ctx, addr)
-	if serr != nil || st == nil || st.Mode != "daemon" {
+	if serr == nil && st != nil && st.StartedFor == types.DaemonStartedForAdmission {
+		return types.WrapDiagnostic(types.DaemonRequired, nil,
+			"--detach needs a daemon a person started, and the one on %s (pid %d) was started by a run to hold the machine build budget: it runs no work. `%s` replaces it",
+			addr, st.ParentPID, hint.ServerStart)
+	}
+	if !runsWork(st) {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
 			"--detach needs the persistent daemon, and %s is not one: a per-process server exits with this command, so the work would be queued and silently dropped. Start it with `%s`",
 			addr, hint.ServerStart)

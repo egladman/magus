@@ -29,6 +29,12 @@ http://127.0.0.1:7391/mcp
 
 `magus doctor` reports whether MCP is reachable and prints the endpoint URL.
 
+Only a daemon you start serves MCP over HTTP. A `magus run` that finds no daemon starts
+one to hold the machine build budget, and that one listens on its local socket alone: no
+MCP, no console, no health routes. `magus status` shows it as `started for: admission`
+with `http none`, and `magus server start` replaces it with one that serves MCP. See
+[Which process serves what](daemon.md#which-process-serves-what).
+
 ## Is MCP actually reachable?
 
 An agent host connects to the MCP endpoint over HTTP; nothing starts that endpoint on

@@ -636,6 +636,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// It gates leaf behavior below: a nested process suppresses its own server
 	// only while it has a live parent to forward to.
 	parentLive := false
+	// admissionPID is a daemon this run started, announced once the flag parse below
+	// has settled -o, which decides the notice's shape.
+	admissionPID := 0
 	if profile.needsDaemonFwd {
 		stopSock := trace.phase("startup.daemon_socket_lookup")
 		sock := os.Getenv("MAGUS_DAEMON_SOCKET")
@@ -660,7 +663,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 				// is where the daemon this run starts will actually bind, and looking for
 				// it anywhere else finds nothing however healthy it is.
 				if !ok && profile.spawnsWork {
-					s = ensureAdmissionDaemon(rootCtx, admissionDaemonAddr(globalCfg))
+					s, admissionPID = ensureAdmissionDaemon(rootCtx, admissionDaemonAddr(globalCfg))
 					ok = s != ""
 				}
 				if ok {
@@ -781,6 +784,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// MAGUS_CONCURRENCY ever reached it. Re-syncing here is what makes the flag real.
 	cfg = globalCfg
 	stopFlags()
+	announceAdmissionDaemon(os.Stderr, admissionPID, global.output, global.quiet || global.silent)
 
 	// exitUsage, not 0. No subcommand is the same category as an unknown one (the
 	// invocation was wrong and nothing was attempted), and that path already exits 2
@@ -1158,6 +1162,9 @@ var daemonTrailBase string
 // startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.
 // When cfg.Daemon.Workspaces is non-empty it eagerly loads declared workspaces and applies landlock.
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
+	if os.Getenv(admissionDaemonEnv) != "" {
+		daemonRole = types.DaemonStartedForAdmission
+	}
 	n := cfg.Concurrency
 	if n <= 0 {
 		n = cache.ProfileConcurrency(cfg.ConcurrencyProfile)
@@ -1192,8 +1199,14 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// provider is owned by the daemon process, not any workspace, and is never shut down
 	// (magus.Close does not touch it), so sharing it carries no double-shutdown hazard. On
 	// init failure fall back to a disabled provider so the daemon still starts.
+	//
+	// A daemon started for admission runs no build and serves no dashboard, so it records
+	// nothing and dials no collector.
 	telCfg := observability.ConfigFromTelemetry(cfg.Telemetry, version, "")
 	telCfg.LocalCollect = true
+	if daemonRole == types.DaemonStartedForAdmission {
+		telCfg = observability.Config{}
+	}
 	sharedTel, terr := otlp.New(ctx, telCfg)
 	if terr != nil {
 		slog.Warn("daemon: telemetry init failed; dashboard metrics disabled", slog.String("error", terr.Error()))
@@ -1230,7 +1243,11 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 			slog.Error("daemon workspace union setup failed", slog.String("error", err.Error()))
 			return
 		}
-		reg.warmInBackground(ctx, declared)
+		// Warming loads workspaces for work an admission daemon refuses to run. The
+		// sandbox above still applies: it bounds the services such a daemon hosts.
+		if daemonRole != types.DaemonStartedForAdmission {
+			reg.warmInBackground(ctx, declared)
+		}
 	}
 
 	srv, err := proc.New(proc.Options{
@@ -1260,6 +1277,8 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		MachineBudget:   machineBudget,
 		Version:         version,
 		Address:         cfg.Daemon.Address,
+		StartedFor:      daemonRole,
+		HTTPAddress:     currentDaemonHTTPAddr,
 	})
 	if err != nil {
 		slog.Error("daemon server init failed", slog.String("error", err.Error()))
