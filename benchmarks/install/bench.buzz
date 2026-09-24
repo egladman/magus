@@ -25,7 +25,7 @@
 // The magus measured is the binary running this file, reached through magus\run. Every
 // MAGUS_* variable is cleared from this process's environment before either contender
 // runs, so that child is a top-level invocation, not one nested inside the `magus buzz`
-// that is running this file: with no daemon variable to forward, it shares no
+// that is running this file: with no server variable to forward, it shares no
 // concurrency budget or socket with its parent.
 //
 // Reports medians (seconds) and the host's load average as one JSON object on stdout.

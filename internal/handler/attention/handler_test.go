@@ -289,7 +289,7 @@ func TestAttentionHandler_MalformedBodyReturns400(t *testing.T) {
 
 // TestAttentionHandler_OversizedBodyIsRefused proves the request body is capped: a POST
 // larger than handler.MaxWireBodyBytes fails the decode instead of being read whole into
-// memory, so an authenticated or LAN-reachable client cannot exhaust the daemon with one
+// memory, so an authenticated or LAN-reachable client cannot exhaust the server with one
 // giant body. attention stands in for every raw-JSON route wrapped with LimitRequestBody.
 func TestAttentionHandler_OversizedBodyIsRefused(t *testing.T) {
 	root, _ := plantStore(t)

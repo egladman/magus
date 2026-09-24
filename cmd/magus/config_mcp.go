@@ -119,7 +119,7 @@ func configMCPConnectorCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Mint a new connector token in the mgs_ format, store its SHA-256 0600 in the")
 		fmt.Fprintln(os.Stderr, "user state dir, and print the secret ONCE. The secret cannot be retrieved")
-		fmt.Fprintln(os.Stderr, "later; rotate by creating a new token. A running daemon accepts it immediately.")
+		fmt.Fprintln(os.Stderr, "later; rotate by creating a new token. A running server accepts it immediately.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -182,7 +182,7 @@ func tokenRevoke(cmd string, args []string) error {
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: magus %s <id|name>\n\n", cmd)
-		fmt.Fprintln(os.Stderr, "Delete a stored token by its exact 8-hex id or its exact name. The daemon stops")
+		fmt.Fprintln(os.Stderr, "Delete a stored token by its exact 8-hex id or its exact name. The server stops")
 		fmt.Fprintln(os.Stderr, "accepting it at once, open streams included.")
 	}
 	if err := fs.Parse(args); err != nil {

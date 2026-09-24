@@ -21,7 +21,7 @@
 // store ever grew a delete it would be the shared one - which is precisely the store where
 // the CLI and a reviewed commit already do the job better. Neither gets one.
 //
-// Access policy: every RPC requires the daemon bearer token, mounted on loopback behind the
+// Access policy: every RPC requires the server bearer token, mounted on loopback behind the
 // same guard as the other cli-token console services, and NEVER on the LAN share listener.
 // The private store is by definition not shared with anyone, and a shared phone view must not
 // be able to read it.

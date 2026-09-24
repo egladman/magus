@@ -4,8 +4,8 @@ import "time"
 
 // MachineClaim is one step's request on the machine-wide admission budget.
 //
-// It crosses the proc socket AND lands in `magus status`, which is why it lives here
-// rather than in the package that arbitrates it: the engine, the daemon, and every
+// It crosses the broker socket AND lands in `magus status`, which is why it lives here
+// rather than in the package that arbitrates it: the engine, the broker, and every
 // status renderer read one definition. Two shapes projected onto each other drifted
 // their field names within a week of being written.
 //
@@ -17,9 +17,12 @@ type MachineClaim struct {
 	MemoryMB   int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
 	Slots      int    `json:"slots,omitzero" yaml:"slots,omitempty"`
 	PID        int    `json:"pid" yaml:"pid"`
-	// Dir is where the claiming run was started. One daemon serves every worktree, so a
+	// Dir is where the claiming run was started. One broker serves every worktree, so a
 	// pid alone does not say which tree to go and look at.
 	Dir string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	// Command is the holder's argv, space-joined; the broker fills it from the
+	// connection when the claim leaves it out.
+	Command string `json:"command,omitempty" yaml:"command,omitempty"`
 	// Invocation is this run's own reference, recorded so a DESCENDANT magus can tell a
 	// claim it runs underneath from one competing with it.
 	Invocation string `json:"invocation,omitempty" yaml:"invocation,omitempty"`
@@ -47,6 +50,7 @@ type MachineClaimant struct {
 	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
 	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
 	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
 	Since    time.Time `json:"since,omitempty" yaml:"since,omitempty"`
 }
 
@@ -70,7 +74,7 @@ type MachineVerdict struct {
 }
 
 // MachineSnapshot is the whole machine budget: what it is, what is spent, and the
-// claims spending it. It is what `magus status` reports and what the daemon serves.
+// claims spending it. It is what `magus status` reports and what the broker serves.
 type MachineSnapshot struct {
 	BudgetMB    int `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`

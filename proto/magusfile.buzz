@@ -69,7 +69,7 @@ magus\project({
 // ctx.versions sibling to ctx.readsFiles.
 // buf-build alongside the codegen emits a descriptor set carrying SourceCodeInfo - the proto
 // comments, which protoc-gen-go strips from the rawDesc it embeds. cmd/magus-protodocs reads
-// that file to generate the daemon API reference. It is produced HERE, not shelled out to from
+// that file to generate the server API reference. It is produced HERE, not shelled out to from
 // the generator, so the chain (.proto -> descriptor -> docs pages) is visible to the graph and
 // buf's own version probe enters this project's cache key rather than nothing's.
 // It lands in gen/, which the declaration below restates.

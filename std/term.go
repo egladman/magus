@@ -47,7 +47,7 @@ var Term = Module{
 	Methods: []Method{
 		{
 			Name:    "is_interactive",
-			Doc:     "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
+			Doc:     "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a server this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    TermIsInteractive,
 		},

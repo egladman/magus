@@ -27,9 +27,9 @@ func configToken(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config token <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "The OPERATOR credential: the daemon accepts it on every surface - /mcp, the")
+		fmt.Fprintln(os.Stderr, "The OPERATOR credential: the server accepts it on every surface - /mcp, the")
 		fmt.Fprintln(os.Stderr, "console, and token management - and the CLI's own commands use it. Send it as")
-		fmt.Fprintln(os.Stderr, "`Authorization: Bearer <token>`. The daemon generates one on first start.")
+		fmt.Fprintln(os.Stderr, "`Authorization: Bearer <token>`. The server generates one on first start.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "For a credential scoped to ONE surface, mint a client token instead:")
 		fmt.Fprintln(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.String()+"     an agent, /mcp only")
@@ -38,7 +38,7 @@ func configToken(args []string) error {
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  generate   mint a new token (refuses to overwrite unless --force)")
 		fmt.Fprintln(os.Stderr, "  print      print the current token to stdout")
-		fmt.Fprintln(os.Stderr, "  revoke     delete the token (the daemon mints a fresh one on next start)")
+		fmt.Fprintln(os.Stderr, "  revoke     delete the token (the server mints a fresh one on next start)")
 		fmt.Fprintln(os.Stderr, "  status     show whether a token exists and its fingerprint")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config token <subcommand> -h` for flags.")
@@ -79,7 +79,7 @@ func configTokenGenerate(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Mint a new mgo_ operator token and store it 0600 in the user state dir.")
 		fmt.Fprintln(os.Stderr, "Refuses to overwrite an existing token unless --force is given. A running")
-		fmt.Fprintln(os.Stderr, "daemon picks up a rotated token automatically - no restart needed.")
+		fmt.Fprintln(os.Stderr, "server picks up a rotated token automatically - no restart needed.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -94,7 +94,7 @@ func configTokenGenerate(args []string) error {
 	}
 
 	// Non-force path uses a create-only write so we never clobber a token the
-	// daemon may already be serving; --force is an explicit atomic overwrite.
+	// server may already be serving; --force is an explicit atomic overwrite.
 	var path string
 	if gf.Force {
 		path, err = auth.SaveOperator(tok)
@@ -114,7 +114,7 @@ func configTokenGenerate(args []string) error {
 	// terminal log that captures both.
 	fmt.Printf("%s\n", tok)
 	fmt.Fprintf(os.Stderr, "\nmagus config token generate: wrote %s\n", path)
-	fmt.Fprintln(os.Stderr, "A running daemon picks this up automatically - no restart needed.")
+	fmt.Fprintln(os.Stderr, "A running server picks this up automatically - no restart needed.")
 	fmt.Fprintln(os.Stderr, "For an MCP client, mint a scoped token instead: "+hint.ConfigMCPConnectorCreate.String())
 	return nil
 }
@@ -155,7 +155,7 @@ func configTokenStatus(args []string) error {
 	}
 	tok, err := auth.LoadOperator()
 	if errors.Is(err, auth.ErrNoToken) {
-		fmt.Printf("token:       absent (the daemon mints one on next start)\n")
+		fmt.Printf("token:       absent (the server mints one on next start)\n")
 		fmt.Printf("path:        %s\n", path)
 		return nil
 	}

@@ -18,7 +18,7 @@ import (
 // jobTool (magus_job) declares jobs and lets a holder act on one: an orchestrating agent
 // forks a job, a holder takes it (exec) and later returns its work, and anyone lists the
 // plan. It is the AGENT's write door onto internal/job; magus\job and `magus job` are the
-// others, and the daemon's JobService reads the same file.
+// others, and the server's JobService reads the same file.
 //
 // It blocks no write to the tree: the AGENT GUARD is what reads these rows to grade one,
 // and exec's status is returned and stored as a fact rather than a refusal.
@@ -150,7 +150,7 @@ func jobResultParam(params map[string]any) (*types.JobResult, error) {
 
 var _ spells.Driver = (*jobTool)(nil)
 
-// symbolReader answers a symbol gate from the graph this daemon already serves.
+// symbolReader answers a symbol gate from the graph this server already serves.
 //
 // Resolved per name rather than loaded once, because the resolver shards the symbol index
 // and routes an exact symbol id to the shards that can hold it; asking for the whole graph

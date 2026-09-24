@@ -14,7 +14,7 @@ import (
 // no difference from magus having been target all along.
 //
 // argv[0] becomes target rather than whatever the caller was invoked as, matching
-// daemonCmd's convention in server.go. The rest of argv (everything after the
+// serverCmd's convention in server.go. The rest of argv (everything after the
 // original argv[0]) is passed through unchanged.
 //
 // execve either fully succeeds (in which case this never returns) or fails without

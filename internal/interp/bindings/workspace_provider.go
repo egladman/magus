@@ -87,7 +87,7 @@ func runWorkspaceProvider(ctx context.Context, spellName, root string) ([]spells
 	})
 	if err != nil {
 		// Report how long it actually ran rather than this function's ceiling: the
-		// caller may have carried a shorter deadline (a daemon request budget), and
+		// caller may have carried a shorter deadline (a server request budget), and
 		// naming 2m for a run that was cut off at 10s sends the reader to the wrong knob.
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, fmt.Errorf("spell %q: %s was still running after %s and was cancelled: %w",

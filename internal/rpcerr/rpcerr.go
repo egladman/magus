@@ -1,4 +1,4 @@
-// Package rpcerr builds the errors the daemon answers with. Each is one google.rpc.Status
+// Package rpcerr builds the errors the server answers with. Each is one google.rpc.Status
 // (AIP-193): a canonical code, a message, and typed details led by an ErrorInfo whose reason
 // is the MGS code. The same Status renders as a Connect error on a Connect service and as
 // AIP-193's HTTP/1.1+JSON everywhere else, so a client reads the reason identically from both.
@@ -33,7 +33,7 @@ const (
 	BuzzDomain = "github.com/egladman/magus/libs/gopherbuzz"
 )
 
-// Error is one daemon error before it is rendered. Reason is required: AIP-193 puts an
+// Error is one server error before it is rendered. Reason is required: AIP-193 puts an
 // ErrorInfo on every error, and the MGS code is its reason.
 type Error struct {
 	Code    connect.Code
@@ -53,8 +53,8 @@ type Error struct {
 
 // titles names each reason in its Help link, the heading of the reason's own page under
 // docs/reference/codes, which TestTitlesMatchTheCodePages holds them to. Every MGS9xxx code
-// is here, since that range is the daemon's and any of it can reach a writer;
-// TestEveryDaemonReasonHasATitle holds that.
+// is here, since that range is the server's and any of it can reach a writer;
+// TestEveryServerReasonHasATitle holds that.
 var titles = map[types.DiagnosticCode]string{
 	types.WorkspaceLoadFailed:       "workspace failed to load",
 	types.WorkspaceStillLoading:     "workspace still loading",
@@ -163,7 +163,7 @@ const (
 	FormatConnect
 )
 
-// Write renders err in format f. It is how a guard, serveUnloaded, and a daemon-level route
+// Write renders err in format f. It is how a guard, serveUnloaded, and a server-level route
 // such as the share endpoint answer an error before or instead of running a request, so the
 // no-store/no-sniff headers below apply to all of them rather than at each call site.
 // A 401 always carries the RFC 6750 challenge, which MCP clients key their auth flow on.

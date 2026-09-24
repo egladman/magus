@@ -194,7 +194,7 @@ test("destroy stops the rail following the workspace", () => {
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), false);
 });
 
-// A daemon that is not answering and a pool that is idle are DIFFERENT facts, and only one of them is
+// A server that is not answering and a pool that is idle are DIFFERENT facts, and only one of them is
 // a number. Showing a zero for the first would be a measurement the console never took.
 test("no reading hides the pulse rather than showing a zero", () => {
   const { host, pulse } = mount({ tabs: [], activeId: null });
@@ -207,7 +207,7 @@ test("no reading hides the pulse rather than showing a zero", () => {
   assert.equal(el.dataset.state, "idle");
 
   pulse.set(null);
-  assert.equal(el.hidden, true, "losing the daemon hides it again");
+  assert.equal(el.hidden, true, "losing the server hides it again");
 });
 
 // aria-label is only honored on an element whose role supports naming from the author; a bare div's
@@ -219,7 +219,7 @@ test("the reading is nameable and announces itself", () => {
   assert.ok(el);
   assert.equal(el.getAttribute("role"), "status");
   pulse.set({ running: 1, queued: 0, workspaces: [], cache: null });
-  assert.equal(el.getAttribute("aria-label"), "1 running on this daemon");
+  assert.equal(el.getAttribute("aria-label"), "1 running on this server");
 });
 
 // It is a live region, so rewriting identical text re-announces it. A 15s poll on a steady pool must
@@ -248,7 +248,7 @@ test("the reading follows the pool and the rail's own width", () => {
   pulse.set({ running: 2, queued: 0, workspaces: [], cache: null });
   assert.equal(text(), "2");
   assert.equal(el.dataset.state, "running");
-  assert.equal(el.getAttribute("aria-label"), "2 running on this daemon");
+  assert.equal(el.getAttribute("aria-label"), "2 running on this server");
 
   // Expanding must repaint the reading, not just the rows - the collapsed form is a bare number.
   expCell.set(true);

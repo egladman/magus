@@ -230,7 +230,7 @@ func newFixtureRun(files map[string]string) (fixtureRun, error) {
 //
 // The environment is testkit.Environ's, so the page reads the same wherever it is
 // regenerated. Two leaks forced that: `explain`'s Graph Explorer deep-link carries the
-// daemon auth token, read from a file in the state dir whether or not a daemon runs, so
+// server auth token, read from a file in the state dir whether or not a server runs, so
 // a developer's capture embedded a real token; and an inherited MAGUS_CACHE_DIR (the
 // merge queue's per-candidate cache) carries run history `explain` prints.
 func capture(bin string, run fixtureRun, argv []string) (string, error) {

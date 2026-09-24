@@ -5,7 +5,7 @@ import { initialState } from "../state";
 
 const JSON_HEADERS = new Headers({ "content-type": "application/json" });
 
-// The listing as the daemon serializes it: protobuf JSON over Connect, so an enum is its name and
+// The listing as the server serializes it: protobuf JSON over Connect, so an enum is its name and
 // an int64 is a string.
 function listing(jobs: unknown[]): Response {
   return {
@@ -31,7 +31,7 @@ test("summarizes the jobs on the dashboard, saying who holds each one", async ()
       {
         name: "jobs/clear-cache",
         id: "clear-cache",
-        holder: "JOB_HOLDER_DAEMON",
+        holder: "JOB_HOLDER_SERVER",
         state: "running",
       },
       { name: "jobs/diff", id: "diff", holder: "JOB_HOLDER_SESSION", state: "declared" },
@@ -48,11 +48,11 @@ test("summarizes the jobs on the dashboard, saying who holds each one", async ()
       "polite",
     );
     assert.deepEqual(ids(tile), ["clear-cache", "diff"]);
-    // The holder rides beside the state: a daemon job and a session's job read the same at a
+    // The holder rides beside the state: a server job and a session's job read the same at a
     // glance otherwise, and on the board that is where they are most easily confused.
     assert.equal(
       tile.el.querySelector(".console-dashboard-jobs__state")?.textContent,
-      "daemon, running",
+      "server, running",
     );
   } finally {
     tile.destroy();
@@ -75,7 +75,7 @@ test("keeps intervention work visible in the shared demo", () => {
   }
 });
 
-test("ignores a completed request from the previous daemon", async () => {
+test("ignores a completed request from the previous server", async () => {
   const originalFetch = globalThis.fetch;
   const replies: ((value: Response) => void)[] = [];
   globalThis.fetch = () => new Promise<Response>((resolve) => replies.push(resolve));
@@ -103,7 +103,7 @@ test("ignores a completed request from the previous daemon", async () => {
   }
 });
 
-// A daemon that declines the job service is not a workspace with no work in it, and the tile has to
+// A server that declines the job service is not a workspace with no work in it, and the tile has to
 // say which it met.
 test("a refused job service says so rather than reading as an idle workspace", async () => {
   const originalFetch = globalThis.fetch;
@@ -119,7 +119,7 @@ test("a refused job service says so rather than reading as an idle workspace", a
   try {
     tile.update({ ...initialState(), liveHost: "127.0.0.1:7391" });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(summary(tile), "This daemon does not serve jobs.");
+    assert.equal(summary(tile), "This server does not serve jobs.");
     assert.deepEqual(ids(tile), []);
   } finally {
     tile.destroy();

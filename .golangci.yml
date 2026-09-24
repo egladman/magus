@@ -16,7 +16,7 @@ linters:
     # compiler ignores it silently and the constraint you thought you wrote never
     # applies. `// go:build linux` (one stray space) compiles a linux-only file on
     # every platform. This tree carries ~52 build-tagged files (io_uring, the stat and
-    # topology variants, the unix/windows daemon detach pair), so that failure would be
+    # topology variants, the unix/windows server detach pair), so that failure would be
     # both easy to introduce and slow to attribute. Zero findings when adopted: it is a
     # ratchet, not a cleanup.
     - gocheckcompilerdirectives # //go: directives are well-formed and actually apply

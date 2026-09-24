@@ -244,7 +244,7 @@ func TestAcquireAllReleasesOnContention(t *testing.T) {
 	relA()
 }
 
-// TestInProcessContentionQueues pins the daemon shape: two unrelated invocations in ONE
+// TestInProcessContentionQueues pins the server shape: two unrelated invocations in ONE
 // process (two adopted clients, or a client and the symbol indexer) contend for a project.
 // flock conflicts per open file description, so without in-process arbitration the second
 // is refused as "another magus process" naming its own pid.
@@ -503,9 +503,9 @@ func ancestryCtx(t *testing.T, ids ...string) context.Context {
 // a target that runs magus against a project its own invocation already locked used to
 // wait forever, because the holder cannot release until the waiter exits.
 //
-// Both acquires happen in ONE process, which is not a shortcut: it is the daemon shape
+// Both acquires happen in ONE process, which is not a shortcut: it is the server shape
 // exactly. flock is per open file description, so a second handle in the same process
-// contends like any other, and under a daemon the holder and the waiter really are one
+// contends like any other, and under a server the holder and the waiter really are one
 // process. The ctx timeout is the regression guard: without the refusal this test hangs
 // until the deadline instead of failing on the first assertion.
 func TestReentrantLockRefusedNotAwaited(t *testing.T) {
@@ -711,7 +711,7 @@ func TestWatchWorkspaceRootIgnoresTransientStatErrors(t *testing.T) {
 
 // TestWatchWorkspaceRootStopJoins pins that stop() waits for the goroutine. Closing
 // the signal alone leaves a goroutine that can still reach release() afterwards, and
-// in the daemon that late release lands on whatever the NEXT run holds.
+// in the server that late release lands on whatever the NEXT run holds.
 func TestWatchWorkspaceRootStopJoins(t *testing.T) {
 	root := t.TempDir()
 	var released atomic.Bool
@@ -888,7 +888,7 @@ func TestSupersedeQualifier(t *testing.T) {
 // tail exactly: a run that has finished its batch still holds every lock, and is
 // superseded like any other gate.
 //
-// Both lockers live in one process, which is the daemon shape rather than a shortcut:
+// Both lockers live in one process, which is the server shape rather than a shortcut:
 // flock is per open file description, so a second handle contends like any other.
 func TestALaterGateTakesTheLockAndTheEarlierOneReportsMGS3014(t *testing.T) {
 	quickSupersede(t, 5*time.Second)

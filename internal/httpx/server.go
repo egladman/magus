@@ -1,5 +1,5 @@
 // Package httpx owns the loopback-only HTTP server core and the DNS-rebind
-// guard shared by magus's daemon-facing HTTP surfaces. The server binds
+// guard shared by magus's server-facing HTTP surfaces. The server binds
 // 127.0.0.1 exclusively: serving to a network interface is never allowed, so
 // the bind host is not configurable; only the port is taken from the caller's
 // address.

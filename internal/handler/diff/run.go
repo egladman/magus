@@ -29,7 +29,7 @@ type runSource interface {
 // rather than a forge, so it works identically on GitHub, GitLab, a fork, or no forge at all, and
 // on git or hg alike. Nothing below touches either boundary.
 //
-// A run is named by a TARGET and a PROJECT, never by an argv. The daemon's job dispatch admits
+// A run is named by a TARGET and a PROJECT, never by an argv. The server's job dispatch admits
 // the resulting `run <target> <project>` only when the magusfile declares that target for that
 // project, so the console can ask for work the workspace already defines and cannot ask for
 // anything else. That is strictly less than a terminal's `magus run`, which is the bar a browser-
@@ -41,22 +41,22 @@ type RunHandler struct {
 	// decided, read back after the live registry has pruned it.
 	cacheDir string
 	version  string
-	// socket returns the daemon's proc socket address to submit to, and submitFn/statusFn are
+	// socket returns the server's proc socket address to submit to, and submitFn/statusFn are
 	// the proc entry points, injectable so the submit and poll paths are testable without a
-	// live daemon.
+	// live server.
 	socket   func() string
 	submitFn func(ctx context.Context, addr string, argv []string, version string) (string, error)
 	statusFn func(ctx context.Context, addr string) (*proc.StatusReply, error)
 }
 
 // NewRunHandler returns the inline-run handler. A nil workspace declares no targets, so every
-// request is refused as undeclared, which is what a daemon with no workspace can honestly say.
+// request is refused as undeclared, which is what a server with no workspace can honestly say.
 func NewRunHandler(workspace runSource, cacheDir, version string, log *slog.Logger) *RunHandler {
 	h := &RunHandler{
 		workspace: workspace,
 		cacheDir:  cacheDir,
 		version:   version,
-		socket:    func() string { return os.Getenv("MAGUS_DAEMON_SOCKET") },
+		socket:    func() string { return os.Getenv("MAGUS_PROC_SOCKET") },
 		submitFn:  proc.SubmitJob,
 		statusFn:  proc.QueryStatus,
 	}
@@ -68,7 +68,7 @@ func NewRunHandler(workspace runSource, cacheDir, version string, log *slog.Logg
 //
 // The patch digest the reader is looking at is NOT here. Staleness is a client-side comparison
 // (the surface knows which digest it rendered against when the verdict arrived, and greys the
-// verdict out when its own digest moves), so sending it to the daemon would only give it a second
+// verdict out when its own digest moves), so sending it to the server would only give it a second
 // place to be wrong.
 type diffRunRequest struct {
 	Target  string `json:"target"`
@@ -176,18 +176,18 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 	handler.WriteJSON(w, out)
 }
 
-// submit hands argv to the daemon's own proc socket, the same self-dial the JobService uses, so
+// submit hands argv to the server's own proc socket, the same self-dial the JobService uses, so
 // an inline run rides the identical coalescing and journal path a terminal's run does.
 func (h *RunHandler) submit(ctx context.Context, argv []string) error {
 	addr := h.socket()
 	if addr == "" {
-		return errors.New("no daemon socket to submit to; run `magus server start`")
+		return errors.New("no server socket to submit to; run `magus server start`")
 	}
 	_, err := h.submitFn(ctx, addr, argv, h.version)
 	return err
 }
 
-// isRunning reports whether argv is already in flight in the daemon. A failed status query
+// isRunning reports whether argv is already in flight in the server. A failed status query
 // reports not-running: the submit that follows coalesces anyway, so the worst case is an
 // accurate reply built from one extra round trip, never a duplicate run.
 func (h *RunHandler) isRunning(ctx context.Context, argv []string) bool {

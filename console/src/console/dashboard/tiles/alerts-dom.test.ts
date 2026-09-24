@@ -128,7 +128,7 @@ test("carries the notification's deep link onto the card as an action", () => {
 test("an alert with no link renders no action rather than a dead one", () => {
   const rail = mountAlertRail();
   viewMode.set("bigPicture");
-  fire({ source: "Daemon", kind: "error", key: "bare", message: "Daemon health is down." });
+  fire({ source: "Server", kind: "error", key: "bare", message: "Server health is down." });
   assert.equal(actions(rail.el).length, 0);
   assert.equal(lines(rail.el).length, 1, "the alert itself still shows");
   rail.destroy();

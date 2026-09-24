@@ -117,7 +117,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 // TestGateEvaluateRefusesWhenIdle: the same finding on an IDLE pool also refuses.
 //
 // This asserted the opposite until 2026-09-07, which made the feature inert: load is read
-// from the daemon, ordinary commands run without a persistent one, so the idle branch was
+// from the server, ordinary commands run without a persistent one, so the idle branch was
 // the one every real redundant gate took.
 func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 	testkit.Isolate(t)

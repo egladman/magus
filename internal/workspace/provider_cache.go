@@ -22,7 +22,7 @@ import (
 )
 
 // A provider shells out to a foreign tool, and it runs on the LOAD PATH of every
-// magus command: `magus ls`, completion, every run, every daemon refresh. Without a
+// magus command: `magus ls`, completion, every run, every server refresh. Without a
 // cache, wiring one would make `nx graph` (seconds, on a large repo) the floor for
 // everything magus does. So the answer is remembered, and re-derived only when
 // something that decides the project set changes.

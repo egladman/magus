@@ -278,7 +278,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
 		// Reclaim everything this forwarder added. Eagerly, here, rather than lazily on
-		// the next lookup: a daemon serving a workspace for days would otherwise
+		// the next lookup: a server serving a workspace for days would otherwise
 		// accumulate a dead map entry plus sixteen redaction strings per run, and Redact
 		// scans that set on every captured write.
 		//

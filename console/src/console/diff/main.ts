@@ -1,6 +1,6 @@
 // main.ts - the console's Diff surface.
 //
-// A magus review is not a text diff. The daemon already knows which changed files are
+// A magus review is not a text diff. The server already knows which changed files are
 // generated, how widely each changed symbol is referenced, whether any of it is public API,
 // and what coverage was observed - so this surface spends the reader's attention in
 // CONSEQUENCE order rather than alphabetical order, and folds away the files a target
@@ -14,7 +14,7 @@
 //  2. TWO-PHASE. The patch paints immediately; the annotations decorate it when they land.
 //     Holding a readable diff behind the slower overlay would trade the thing the reader
 //     wants for the thing they have not asked for yet.
-//  3. PAIRED. Everything here reads and writes a session the daemon owns, which an agent
+//  3. PAIRED. Everything here reads and writes a session the server owns, which an agent
 //     joins over MCP. The agent can see where the reader is and suggest; only the reader
 //     navigates.
 //
@@ -103,12 +103,12 @@ import {
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
 import {
-  resolveDaemonHostOrRemembered,
+  resolveServerHostOrRemembered,
   isUnreachable,
   parseHash,
-  adoptDaemonOrigin,
+  adoptServerOrigin,
   wantsDemo,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { persisted } from "../../lib/persist";
 import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../view";
@@ -207,7 +207,7 @@ interface State {
   // rows, since a fold or a mode switch changes which hunk a line sits in.
   threads: PlacedThreads | null;
   viewed: Set<string>;
-  // digestByRow maps a hunk row index to the digest the daemon computed for that hunk. Filled
+  // digestByRow maps a hunk row index to the digest the server computed for that hunk. Filled
   // in full at rebuild - the browser hashes nothing, so every digest is known before the first
   // paint rather than resolving as rows scroll into view.
   digestByRow: Map<number, string>;
@@ -306,7 +306,7 @@ function label(text: string, modifier?: string, title?: string): HTMLElement {
 //
 // "working" is a STATE rather than a ref (types.Diff.Base), and the working diff is the tree
 // against HEAD - so it is the one value expanded into both sides. Every other base is a ref the
-// daemon took the diff against and nothing here knows the other side of, which is why an
+// server took the diff against and nothing here knows the other side of, which is why an
 // arbitrary base gets the phrasing types.Diff.Base's own readers use rather than an invented
 // second side.
 function scopeLabel(base: string): string {
@@ -344,7 +344,7 @@ function prefersReducedMotion(): boolean {
 function lineText(line: DiffLine, lang: Language): HTMLElement {
   const el = h("span", "console-diff-row__text");
   const text = line.text || " ";
-  // The daemon computed this, exactly as it computed the hunk digests. The browser used to
+  // The server computed this, exactly as it computed the hunk digests. The browser used to
   // work it out itself and Go worked out the same thing for the terminal viewer, with a
   // comment on the Go side asking whoever edited the TypeScript to re-transcribe its test
   // vectors by hand - so the same changed line could be highlighted two ways and nothing
@@ -406,8 +406,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // review the reader has not seen yet.
   let mergedSeen = false;
 
-  // The daemon-free showcase, on the fragment every other surface reads. Derived ONCE, here,
-  // rather than per fetch: a console served BY a daemon would otherwise answer host_() with a
+  // The server-free showcase, on the fragment every other surface reads. Derived ONCE, here,
+  // rather than per fetch: a console served BY a server would otherwise answer host_() with a
   // real origin and the showcase would start writing a stranger's review session.
   const demo = wantsDemo(parseHash());
 
@@ -917,7 +917,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const said = h("span", "console-diff-row__comment console-diff-md");
       setMarkdown(said, row.thread.body);
       el.append(who, said);
-      // "new" first: it is the reason to read this row rather than skim past it, and the daemon
+      // "new" first: it is the reason to read this row rather than skim past it, and the server
       // marks it only on the response that first carried the thread - so it answers "since last
       // time" rather than "recently", which decays into a badge that is always on.
       if (row.thread.new) el.append(label("new", "pf-m-orange"));
@@ -929,7 +929,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       el.dataset.author = row.comment.author;
       if (row.comment.resolved) el.dataset.resolved = "";
       const who = h("span", "console-diff-row__who");
-      // The agent's own label when it gave one; otherwise the OS account the daemon recorded,
+      // The agent's own label when it gave one; otherwise the OS account the server recorded,
       // which says whose account wrote the remark and never claims it was a person.
       who.textContent =
         row.comment.author === "agent"
@@ -1228,17 +1228,17 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // --- session sync ---------------------------------------------------------
 
-  // host_ resolves which daemon to read.
+  // host_ resolves which server to read.
   //
-  // adoptDaemonOrigin() is called HERE, not left to the shell, and the reason is easy to miss:
-  // each surface is its own bundle, so lib/daemon's module-level "did we adopt this origin"
+  // adoptServerOrigin() is called HERE, not left to the shell, and the reason is easy to miss:
+  // each surface is its own bundle, so lib/server's module-level "did we adopt this origin"
   // flag is per-bundle state. The shell adopting it does not make it true in here. Without
   // this call the surface falls back to whatever host the dashboard happened to persist, so
-  // Review would report "no daemon connected" on a console served BY that very daemon until
+  // Review would report "no server connected" on a console served BY that very server until
   // the reader had visited the dashboard first.
   const host_ = (): string | null => {
-    adoptDaemonOrigin();
-    return resolveDaemonHostOrRemembered(parseHash());
+    adoptServerOrigin();
+    return resolveServerHostOrRemembered(parseHash());
   };
 
   const canCollaborate = (): boolean => demo || state.collaboration === "live";
@@ -1314,7 +1314,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (focus) context.focus();
     const hp = host_();
     if (!hp) {
-      contextBody.textContent = "Connect a daemon to read the current working-tree file.";
+      contextBody.textContent = "Connect a server to read the current working-tree file.";
       return;
     }
     try {
@@ -1351,7 +1351,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       : !touch.session
         ? "the host supplied no session id"
         : !hp
-          ? "no daemon is connected"
+          ? "no server is connected"
           : "";
     if (offline || !hp || !touch.session) {
       renderAgentSession(sessionBody, touch, { offline });
@@ -1365,7 +1365,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffReview | null> => {
     // In the showcase the store is in memory: the reader's marks, comments and answers have to
-    // land somewhere or the affordances read as broken, and there is no daemon to land them in.
+    // land somewhere or the affordances read as broken, and there is no server to land them in.
     if (demo) {
       if (!state.session) return null;
       const next = applyDemoOp(state.session, op);
@@ -1388,7 +1388,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return s;
   };
 
-  // applySession takes the daemon's copy as authoritative and re-lays the stream, because a
+  // applySession takes the server's copy as authoritative and re-lays the stream, because a
   // comment - the human's or an agent's - is a ROW, so it changes the scroll geometry. Only
   // repainting would leave the new remark invisible until the next unrelated rebuild.
   const applySession = (s: DiffReview, relayout = true): boolean => {
@@ -1444,7 +1444,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // --- model rebuild --------------------------------------------------------
 
-  // The daemon computed every digest, so this is a lookup rather than a hash. It used to hash
+  // The server computed every digest, so this is a lookup rather than a hash. It used to hash
   // in the browser, lazily and per visible hunk, which is why the read count lagged: a hunk
   // already marked in an earlier session stayed uncounted until it scrolled into view.
   const digestForHunk = (rowIndex: number): string | undefined => state.digestByRow.get(rowIndex);
@@ -1805,7 +1805,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // currentProject is the project of the file the reader is on, which is what the one run control
   // is about. Focus mode has an exact answer; the dense view uses the file at the cursor, and
   // falls back to the first changed file so the control is never blank on arrival.
-  // treeState identifies the code a verdict is about: the patch digest the daemon computed for
+  // treeState identifies the code a verdict is about: the patch digest the server computed for
   // the working tree, the same one the context lookup pins its reads to. It moves the moment the
   // reader edits anything, which is exactly when a verdict stops describing what is on screen.
   const treeState = (): string => state.session?.as_of ?? "";
@@ -1868,7 +1868,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // startRun submits the project in view, then polls until it settles.
   //
-  // The daemon coalesces, so pressing this while the reader's own terminal is already running the
+  // The server coalesces, so pressing this while the reader's own terminal is already running the
   // same target joins that run rather than starting a second - and the reply says which happened,
   // which is why the surface can show "Testing..." without ever having to claim it started it.
   const startRun = async (): Promise<void> => {
@@ -2280,7 +2280,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the two are one act to the reader, and a pass that costs two keystrokes per hunk is a pass
   // that gets abandoned. `]` still moves without marking, for reading something twice.
   //
-  // The move does NOT wait on the mark. Recording a read is a round trip to the daemon, and a
+  // The move does NOT wait on the mark. Recording a read is a round trip to the server, and a
   // pass that pauses on each keypress until it answers is a pass that feels broken; the mark and
   // the move are independent, so the move happens now and the count catches up when the write
   // lands.
@@ -2507,7 +2507,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (disposed) return;
     state.review = info;
     await rebuild();
-    // Now that they are ON SCREEN, say so. The daemon marks nothing as it answers - it cannot
+    // Now that they are ON SCREEN, say so. The server marks nothing as it answers - it cannot
     // know this fetch was rendered rather than aborted, refreshed away, or raced by a second
     // tab - so the watermark moves here, after the conversation has actually been drawn.
     const shown = info.threads.filter((t) => t.new).map((t) => t.id);
@@ -2541,7 +2541,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // drafts are the remarks that have not left yet: written by the person, on this session.
   //
-  // An agent's remark is NEVER here. It reaches the session over MCP, and the daemon derives
+  // An agent's remark is NEVER here. It reaches the session over MCP, and the server derives
   // the published set from the session rather than from the request, so this is the same
   // filter stated on both sides rather than a rule one side could relax.
   const drafts = (): DiffComment[] =>
@@ -2611,9 +2611,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       scroll.focus();
     };
 
-    // What this review will SAY. Rendered from the daemon's allowed set, never worked out here:
+    // What this review will SAY. Rendered from the server's allowed set, never worked out here:
     // a permission rule re-implemented in a browser is one that eventually disagrees with the
-    // one the publish path enforces. An older daemon sends none, which reads as remarks only.
+    // one the publish path enforces. An older server sends none, which reads as remarks only.
     const allowed = state.review.verdicts ?? ["comment"];
     let verdict: ReviewVerdict = "comment";
     const verdicts = h("div", "console-diff-composer__verdicts");
@@ -2695,7 +2695,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return "";
     }
     const hp = host_();
-    if (!hp) return "Connect a daemon to publish.";
+    if (!hp) return "Connect a server to publish.";
     try {
       const next = await publish(hp, summary, verdict, controller.signal);
       if (disposed) return "";
@@ -2797,7 +2797,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return "";
     }
     const hp = host_();
-    if (!hp) return "Connect a daemon to reply.";
+    if (!hp) return "Connect a server to reply.";
     try {
       await reply(hp, thread, body, controller.signal);
       if (disposed) return "";
@@ -3086,7 +3086,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     state.phase = "empty";
     root.dataset.phase = "empty";
     renderConnectPrompt(emptySlots, promptState, {
-      purpose: "Diff reads the working tree through a local daemon.",
+      purpose: "Diff reads the working tree through a local server.",
       onRetry: () => void load(),
     });
   };
@@ -3100,9 +3100,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const superseded = (): boolean => disposed || generation !== loadGeneration;
     stopPolling();
     // The showcase joins the same pipeline one step in, with the patch and the session the
-    // daemon would have returned. Everything below order() is the production path, so what it
+    // server would have returned. Everything below order() is the production path, so what it
     // shows off is the surface itself rather than a rendering of it. No fetch is issued at all,
-    // which is what makes /console/diff/#demo work with no daemon, no workspace and offline.
+    // which is what makes /console/diff/#demo work with no server, no workspace and offline.
     if (demo) {
       state.collaboration = "live";
       const sess = demoSession();
@@ -3143,19 +3143,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const status = e instanceof HttpError ? e.status : 0;
       showEmpty(
         status === 503 ? "No workspace" : "Could not read the diff",
-        status === 503 ? "The daemon is running but has not opened a workspace yet." : String(e),
+        status === 503 ? "The server is running but has not opened a workspace yet." : String(e),
       );
       return;
     }
 
     const parsed = fromWire(files);
     if (parsed.length === 0) {
-      // NOT an empty state: the daemon sent a patch and this reader failed on it. Titling that
+      // NOT an empty state: the server sent a patch and this reader failed on it. Titling that
       // "nothing to read" tells someone their tree is clean when it is not, which is the one
       // wrong answer that costs something - they stop looking.
       showEmpty(
         "Could not read the diff",
-        "The daemon returned a patch this reader could not parse.",
+        "The server returned a patch this reader could not parse.",
       );
       return;
     }
@@ -3229,7 +3229,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   void load();
   // Only a reader with nothing on screen follows a new address. An open review carries read marks
-  // and drafts that belong to the daemon it came from.
+  // and drafts that belong to the server it came from.
   const unsubscribeHost = subscribeDefaultHost(() => {
     if (state.phase !== "ready") void load();
   });

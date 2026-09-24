@@ -1,9 +1,9 @@
-// demo-dom.test.ts - the Diff surface's daemon-free showcase, mounted. document/window come
+// demo-dom.test.ts - the Diff surface's server-free showcase, mounted. document/window come
 // from test-setup.mjs (node --import), the same as the other *-dom tests.
 //
 // What is pinned here is the promise the #demo fragment makes: the surface renders FULLY with
-// no daemon, no workspace and no network. So fetch is replaced with one that fails the test if
-// it is called at all - a showcase that quietly falls back to a daemon works on the machine
+// no server, no workspace and no network. So fetch is replaced with one that fails the test if
+// it is called at all - a showcase that quietly falls back to a server works on the machine
 // that has one running and shows an empty state to everybody else, which is the failure this
 // mode exists to prevent.
 
@@ -35,7 +35,7 @@ async function settle(turns = 12): Promise<void> {
   for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-test("#demo renders the changeset with no daemon", async () => {
+test("#demo renders the changeset with no server", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();
@@ -48,7 +48,7 @@ test("#demo renders the changeset with no daemon", async () => {
   );
   assert.equal(paths[0], "libs/authkit/claims.go");
 
-  // Rows the daemon's annotations produce, not the patch's: a story row is a touch, and the
+  // Rows the server's annotations produce, not the patch's: a story row is a touch, and the
   // text row proves the patch body reached the virtualizer.
   assert.ok(document.querySelector(".console-diff-row--story"));
   const text = [...document.querySelectorAll(".console-diff-row__text")].map(
@@ -93,7 +93,7 @@ test("#demo shows the agent's pending suggestions in the rail", async () => {
   assert.equal(items.length, 2);
   assert.equal(items[0]?.querySelector(".console-diff-rail__who")?.textContent, "claude-code");
 
-  // Skipping answers the suggestion in memory, so the rail has to shrink with no daemon in it.
+  // Skipping answers the suggestion in memory, so the rail has to shrink with no server in it.
   (items[0]?.querySelector(".console-diff-rail__skip") as HTMLButtonElement).click();
   await settle();
   assert.equal(document.querySelectorAll(".console-diff-rail__item").length, 1);
@@ -128,10 +128,10 @@ test("#demo answers the peek command instead of doing nothing", async () => {
 });
 
 // The surface used to carry its own "See the demo" button. It does not any more - one entry point for
-// the whole console, the title bar's Workspace menu - so what it owes someone with no daemon is a
+// the whole console, the title bar's Workspace menu - so what it owes someone with no server is a
 // SENTENCE naming where a populated version lives, not a dead end. Every /console/<surface>/ path is
 // the shell with a <base> injected (scripts/surface-stubs.mjs), so that menu is always on screen.
-test("without #demo and without a daemon the surface says where a populated one lives", async () => {
+test("without #demo and without a server the surface says where a populated one lives", async () => {
   const dispose = activate(document.body);
   await settle();
 
@@ -550,11 +550,11 @@ test("#demo reports a run in flight, then its verdict", async () => {
   dispose.deactivate();
 });
 
-// The verdict control is the reachable half of the approval rule. The daemon decides what is
+// The verdict control is the reachable half of the approval rule. The server decides what is
 // allowed and refuses anything else at publish time, but a rule nobody can invoke is a feature
 // that never fires - which is the failure these pin.
 
-test("#demo offers every verdict the daemon allowed", async () => {
+test("#demo offers every verdict the server allowed", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();
@@ -674,7 +674,7 @@ test("the head names the surface and the two sides being compared", async () => 
 
   const head = document.querySelector(".console-diff-toolbar__head");
   assert.equal(head?.querySelector(".console-diff-toolbar__eyebrow")?.textContent, "Review");
-  // The demo session's base is "working", the STATE the daemon reports for the uncommitted tree
+  // The demo session's base is "working", the STATE the server reports for the uncommitted tree
   // (types.Diff.Base) - so both sides have to be spelled out rather than echoed.
   assert.equal(
     head?.querySelector(".console-diff-toolbar__scope")?.textContent,

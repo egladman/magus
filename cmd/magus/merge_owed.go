@@ -31,7 +31,7 @@ const (
 // serverRegenerateOwed is the worker for the regenerate-owed job: it runs the
 // regenerations the merge driver recorded, once, over the finished tree, and stages what
 // they wrote. The post-merge, post-rewrite and post-commit hooks installed by
-// installRegenHooks submit it and return, so the work happens on the daemon.
+// installRegenHooks submit it and return, so the work happens on the server.
 //
 // It stages and never amends. The job runs after git has returned and the person may
 // already be typing the next command, so moving HEAD under them is a race, and the
@@ -251,7 +251,7 @@ func (s owedSettlement) notice(fold string) string {
 
 // installRegenHooks installs the hook that submits the regenerate-owed job after a
 // merge, rebase, amend or merge-concluding commit. Same guarantees as installDriftHooks:
-// best-effort, never fatal to starting the daemon, a no-op on a backend without it.
+// best-effort, never fatal to starting the server, a no-op on a backend without it.
 func installRegenHooks(ctx context.Context) {
 	cwd, err := os.Getwd()
 	if err != nil {

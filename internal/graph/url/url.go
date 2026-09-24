@@ -1,15 +1,15 @@
-// Package url builds daemon-origin Graph Explorer links with a pre-applied
+// Package url builds server-origin Graph Explorer links with a pre-applied
 // query or named view, so a magus CLI command can print a clickable "view this in
 // the Graph Explorer" line as a COMPLEMENTARY aid alongside its normal output.
 //
 // The link reproduces `magus graph export --open --follow` (cmd/magus/graph_open.go,
-// graphOpenLive) under the daemon-origin grammar: the ORIGIN names which daemon,
-// and the page is served by that daemon from its own loopback /console/graph/. So
+// graphOpenLive) under the server-origin grammar: the ORIGIN names which server,
+// and the page is served by that server from its own loopback /console/graph/. So
 // the link is http://<host>/console/graph/#<directives>, where <host> is the
-// daemon's loopback host:port; the browser loads the page and its graph DATA
+// server's loopback host:port; the browser loads the page and its graph DATA
 // (http://<host>/api/v1/graph) from the one same origin; nothing rides a hosted
-// static origin, and no #live= daemon param is needed (the origin already says
-// which daemon).
+// static origin, and no #live= server param is needed (the origin already says
+// which server).
 //
 // On top of that, the caller can pre-apply the fragment directives the page honors
 // on load (console/src/console/graph/main.ts applyDeepLinks): `q=` auto-runs a
@@ -22,7 +22,7 @@
 // without one still opens the explorer, it just is not pre-authenticated.
 //
 // It does NOT hand-build the URL string: it composes internal/service/console.Link,
-// the single home for the daemon-origin console URL grammar, so the escaping policy
+// the single home for the server-origin console URL grammar, so the escaping policy
 // (encodeURIComponent-equivalent) and the "/console/<surface>/#...token-last" shape
 // live in one place for every producer.
 package url
@@ -33,18 +33,18 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 )
 
-// ErrNoDaemon is returned when Host is empty: there is no loopback origin to build
+// ErrNoServer is returned when Host is empty: there is no loopback origin to build
 // the link from, so no link can be built. Callers treat it as "omit the link", not
 // a hard failure.
-var ErrNoDaemon = errors.New("graph link: no daemon host; omit the link")
+var ErrNoServer = errors.New("graph link: no server host; omit the link")
 
-// GraphLinkOpts is the input to GraphLink. Host comes from the daemon address the
+// GraphLinkOpts is the input to GraphLink. Host comes from the server address the
 // caller already resolves; Code is an optional one-time sign-in code; the four directive
 // fields are all optional.
 type GraphLinkOpts struct {
-	// Host is the daemon's loopback host:port, e.g. "127.0.0.1:7391". It is the
+	// Host is the server's loopback host:port, e.g. "127.0.0.1:7391". It is the
 	// link's ORIGIN: the page is served from http://<Host>/console/graph/. Empty
-	// Host yields ErrNoDaemon.
+	// Host yields ErrNoServer.
 	Host string
 	// Code is a one-time exchange code (mgx_) the page trades for its token. It is
 	// embedded in the fragment (never transmitted in an HTTP request) and stripped by
@@ -65,25 +65,25 @@ type GraphLinkOpts struct {
 	To string
 }
 
-// GraphLink formats a daemon-origin Graph Explorer URL with the given directives
-// applied. It returns ErrNoDaemon when Host is empty. The result is
+// GraphLink formats a server-origin Graph Explorer URL with the given directives
+// applied. It returns ErrNoServer when Host is empty. The result is
 // `http://<host>/console/graph/#[q=][&view=][&node=][&to=][&code=<code>]`, with only
 // the directives that are set included and every value percent-encoded so the page's
 // decodeURIComponent-based hash parser reads it back exactly. The code is emitted
-// LAST, after the content directives, matching the daemon-origin grammar.
+// LAST, after the content directives, matching the server-origin grammar.
 //
-// The clean /console/graph/ PATH is the canonical surface URL: the daemon serves the
+// The clean /console/graph/ PATH is the canonical surface URL: the server serves the
 // console shell for it (SPA fallback) and the console's boot router opens the graph
-// surface from the path. The ORIGIN names the daemon: it serves both the shell and
+// surface from the path. The ORIGIN names the server: it serves both the shell and
 // the graph data over its own loopback.
 func GraphLink(opts GraphLinkOpts) (string, error) {
 	if opts.Host == "" {
-		return "", ErrNoDaemon
+		return "", ErrNoServer
 	}
 
 	// Content directives first, in a fixed order for stable output; console.Link appends
 	// the code last and applies the one shared escaping policy. There is no #live= host
-	// directive: the ORIGIN already names which daemon serves both the page and its data.
+	// directive: the ORIGIN already names which server serves both the page and its data.
 	var frag []console.FragmentParam
 	if opts.Query != "" {
 		frag = append(frag, console.FragmentParam{Key: "q", Value: opts.Query})

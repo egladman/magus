@@ -37,7 +37,7 @@ or extension reads credentials from disk and exfiltrates them.
 - Inheritance of secret-bearing env vars in child processes:
   `AWS_*`, `GITHUB_TOKEN`, `VAULT_*`, `OP_SESSION_*`, `NPM_TOKEN`,
   `ANTHROPIC_API_KEY`, etc. By default only `HOME`, `PATH`, `USER`,
-  locale vars, terminal vars, and the `MAGUS_*` daemon coordination
+  locale vars, terminal vars, and the `MAGUS_*` server coordination
   vars pass through.
 
 ## What sandbox does NOT block (v1)
@@ -109,7 +109,7 @@ Two layers run together:
 - [MGS2005](MGS2005.md): landlock unavailable; interpreter-level only.
 - [MGS2006](MGS2006.md): likely PATH-shim manager (mise/asdf/direnv) stripped.
 - [MGS2007](MGS2007.md): exec denied.
-- [MGS2008](MGS2008.md): daemon socket withheld from sandboxed children.
+- [MGS2008](MGS2008.md): server socket withheld from sandboxed children.
 - [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).
 - [MGS3009](MGS3009.md): machine budget exhausted.
 - [MGS3010](MGS3010.md): redundant gate deferred.
@@ -117,12 +117,13 @@ Two layers run together:
 - [MGS3012](MGS3012.md): invocation stalled with its project locks held.
 - [MGS3013](MGS3013.md): every build slot held by a step that is itself waiting.
 - [MGS3014](MGS3014.md): gate superseded by a later gate on the same tree.
-- [MGS3016](MGS3016.md): a daemon call against a workspace that failed to load.
-- [MGS3017](MGS3017.md): a daemon call against a workspace still loading.
+- [MGS3016](MGS3016.md): a server call against a workspace that failed to load.
+- [MGS3017](MGS3017.md): a server call against a workspace still loading.
 - [MGS3018](MGS3018.md): a job forked with a directory as a write path.
 - [MGS3019](MGS3019.md): the merge queue's status is required from another integration than its credential's.
 - [MGS3020](MGS3020.md): a --preflight target failed, so the invoked target never started.
 - [MGS3021](MGS3021.md): a --preflight target outside the invoked target's closure.
+- [MGS3023](MGS3023.md): a pipe whose writers loop back into the run reading it.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

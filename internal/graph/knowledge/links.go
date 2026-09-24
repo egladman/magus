@@ -85,7 +85,7 @@ func parseCitation(raw string) (citation, bool) {
 		return citation{}, false
 	}
 	// Userinfo is credential-shaped and is never part of a document's identity. Measured:
-	// console/src/lib/daemon.ts carries http://127.0.0.1:7391@evil.com in a comment as the
+	// console/src/lib/server.ts carries http://127.0.0.1:7391@evil.com in a comment as the
 	// spoofing case its origin check rejects. Indexing that as an upstream doc would be
 	// exactly backwards.
 	if u.User != nil {

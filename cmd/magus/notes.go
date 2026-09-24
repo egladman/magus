@@ -816,7 +816,7 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 //
 // It exists because a review thread is otherwise scattered. The changeset store persists the
 // unsent remarks a person wrote, and the forge holds what colleagues said back; nothing joins
-// them into one readable record that outlives the review. A running daemon holds MORE than the
+// them into one readable record that outlives the review. A running server holds MORE than the
 // store does (an agent's remarks, and remarks already published), and capture says so when it
 // had to read the store instead, because a transcript quietly missing half a conversation is
 // worse than no transcript.
@@ -843,7 +843,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
-	sess, fromDaemon := captureSession(ctx, m)
+	sess, fromServer := captureSession(ctx, m)
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
 	threads, partial := reviewThreads(ctx, m)
@@ -915,10 +915,10 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		fmt.Printf("Part of the review could not be read, so this transcript is incomplete: %s\n", partial)
 	}
 	// Named for the same reason. The store keeps your unsent remarks and nothing else, so a
-	// capture taken without a daemon is missing anything an agent said and anything already
+	// capture taken without a server is missing anything an agent said and anything already
 	// published to the review, and the reader has to be told which record they are holding.
-	if !fromDaemon {
-		fmt.Println("Read from the local review store, so this holds your unsent remarks. A running daemon would also carry an agent's remarks and any already published.")
+	if !fromServer {
+		fmt.Println("Read from the local review store, so this holds your unsent remarks. A running server would also carry an agent's remarks and any already published.")
 	}
 
 	// Fingerprint the anchored files, exactly as a written note is fingerprinted on save. It
@@ -1033,15 +1033,15 @@ func captureName(sess *types.DiffReview) string {
 }
 
 // captureSession is the local half of the conversation to transcribe, and whether it came from
-// a running daemon.
+// a running server.
 //
-// The daemon is preferred because it holds strictly more: an agent's remarks, and remarks
+// The server is preferred because it holds strictly more: an agent's remarks, and remarks
 // already published to the review, neither of which the store keeps. But the store keeps the
 // unsent human ones, which is what a person writing alone in `magus diff` produces, so the
-// absence of a daemon is a smaller transcript rather than no transcript. The caller says which
+// absence of a server is a smaller transcript rather than no transcript. The caller says which
 // one it got; see notesCapture's output.
 func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool) {
-	if sess := daemonDiffReview(ctx); sess != nil {
+	if sess := serverDiffReview(ctx); sess != nil {
 		return sess, true
 	}
 	patch, _ := m.WorkingDiff(ctx, nil)
@@ -1050,7 +1050,7 @@ func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, boo
 
 // storedDiffReview rebuilds what a capture needs from the files the store persists.
 //
-// AsOf is the patch digest attachDiffReview would have stamped with no daemon in the picture,
+// AsOf is the patch digest attachDiffReview would have stamped with no server in the picture,
 // so the note this capture names is the one either path would have named for this tree. No
 // patch leaves it EMPTY rather than digesting the empty string, which would name every such
 // capture the same note and make the second one collide with the first.
@@ -1062,7 +1062,7 @@ func storedDiffReview(cacheDir, patch string) *types.DiffReview {
 	return sess
 }
 
-// daemonDiffReview reads the running daemon's review session, or nil when there is no daemon,
+// serverDiffReview reads the running server's review session, or nil when there is no server,
 // no token, or nothing attached. Every failure is nil rather than an error: the caller has one
 // message to print for all of them, and it is about the session rather than the transport.
 //
@@ -1070,7 +1070,7 @@ func storedDiffReview(cacheDir, patch string) *types.DiffReview {
 // symbol shards and walks a reverse closure, and it wants the paths under review. This one
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
-func daemonDiffReview(ctx context.Context) *types.DiffReview {
+func serverDiffReview(ctx context.Context) *types.DiffReview {
 	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil
@@ -1100,25 +1100,25 @@ func daemonDiffReview(ctx context.Context) *types.DiffReview {
 // reviewThreads reads what colleagues said on the review this branch has open, and the reason
 // the read was incomplete when there is one.
 //
-// The daemon answers when one is running, because its session also knows which threads the
+// The server answers when one is running, because its session also knows which threads the
 // reader has already had on screen. Without one the forge is asked directly: a colleague's
 // remark is a fact about the review, not about whether a background process happens to be up,
 // and the same patch on the same branch must not show a different conversation either way.
 func reviewThreads(ctx context.Context, m *magus.Magus) ([]types.ReviewThread, string) {
-	if threads, reason, served := daemonReviewThreads(ctx); served {
+	if threads, reason, served := serverReviewThreads(ctx); served {
 		return threads, reason
 	}
 	return localReviewThreads(ctx, m.ReviewOrigin(ctx), m.CacheDir())
 }
 
-// daemonReviewThreads reads the threads from a running daemon. served says whether the daemon
-// answered at all, which is what separates "no daemon, ask the forge yourself" from "the daemon
+// serverReviewThreads reads the threads from a running server. served says whether the server
+// answered at all, which is what separates "no server, ask the forge yourself" from "the server
 // looked and there is no review open".
 //
 // The reason is separate from the emptiness, and only non-empty when magus READ the review and
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
-func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, reason string, served bool) {
+func serverReviewThreads(ctx context.Context) (threads []types.ReviewThread, reason string, served bool) {
 	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil, "", false
@@ -1154,19 +1154,19 @@ func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, rea
 	return body.Threads, body.Reason, true
 }
 
-// localReviewThreads asks the forge itself, the way the check-review job and the daemon's own
-// review handler do. Placement is left to the caller: the daemon resolves threads against the
+// localReviewThreads asks the forge itself, the way the check-review job and the server's own
+// review handler do. Placement is left to the caller: the server resolves threads against the
 // working tree, and a caller showing some other patch has to place them against that one.
 //
 // The origin and the cache dir are passed rather than a workspace, so a test can answer them
-// without a repository, the narrowing the daemon's own review source uses.
+// without a repository, the narrowing the server's own review source uses.
 func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir string) ([]types.ReviewThread, string) {
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		return nil, ""
 	}
 	threads, err := bindings.ReviewThreads(ctx, at)
-	// The watermark is PERSISTED, so the new-thread mark survives without the daemon that
+	// The watermark is PERSISTED, so the new-thread mark survives without the server that
 	// normally applies it. Reading it here never moves it, for the reason the handler gives.
 	watermark := types.DiffReview{SeenThreads: changeset.NewStore(cacheDir).LoadSeenThreads()}
 	fresh := make(map[string]struct{})

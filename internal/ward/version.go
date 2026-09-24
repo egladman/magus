@@ -32,7 +32,7 @@ import (
 //     every one written before this existed.
 //   - running == "" is a caller that never supplied a version: a bare library
 //     caller of magus.Open, or a test. It has no version to be too old, so there is
-//     nothing to compare and the check passes. Same escape hatch the daemon
+//     nothing to compare and the check passes. Same escape hatch the server
 //     adoption gate uses.
 //
 // A DEV BUILD also passes, in either spelling: the unstamped sentinel ("unknown") and

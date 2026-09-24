@@ -40,7 +40,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 
 // A recorded command must never carry its arguments into the review payload, because that
 // payload is served to every MCP client. This is a REGRESSION test for an observed leak: an
-// op=state response carried a live daemon bearer token, in exactly the shape below, because
+// op=state response carried a live server bearer token, in exactly the shape below, because
 // the trail stored the command line verbatim.
 func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
 	const token = "mgs_liveTokenThatMustNotEscape" // a fixture, not a credential

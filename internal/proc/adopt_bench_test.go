@@ -8,7 +8,7 @@ import (
 )
 
 // newBenchServer starts an proc server with a no-op handler and registers
-// b.Cleanup to close it. It sets MAGUS_DAEMON_SOCKET so Forward/QueryStatus
+// b.Cleanup to close it. It sets MAGUS_PROC_SOCKET so Forward/QueryStatus
 // can dial it.
 func newBenchServer(b *testing.B) string {
 	b.Helper()
@@ -23,7 +23,7 @@ func newBenchServer(b *testing.B) string {
 		b.Fatalf("Start: %v", err)
 	}
 	b.Cleanup(srv.Close)
-	b.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	b.Setenv(SocketEnv, srv.Addr())
 	return srv.Addr()
 }
 
@@ -107,7 +107,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	})
 
 	addr := srv.Addr()
-	b.Setenv("MAGUS_DAEMON_SOCKET", addr)
+	b.Setenv(SocketEnv, addr)
 	ctx := context.Background()
 
 	// Fill the server's inflight registry with 32 blocked handlers.

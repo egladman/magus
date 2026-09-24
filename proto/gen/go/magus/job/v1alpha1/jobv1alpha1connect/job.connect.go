@@ -2,12 +2,12 @@
 //
 // Source: magus/job/v1alpha1/job.proto
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the daemon's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
-// fire-and-forget, coalescing mechanism the daemon uses for any adopted work, so an identical
-// in-flight job is never started twice. Every RPC requires the daemon bearer token; the service
+// fire-and-forget, coalescing mechanism the server uses for any adopted work, so an identical
+// in-flight job is never started twice. Every RPC requires the server bearer token; the service
 // is mounted behind the same guard as /mcp and never served unauthenticated. buf-breaking gates
 // this file: fields and RPCs may be ADDED (old clients ignore unknown fields), never renumbered
 // or removed. The response carries a full metadata snapshot (last run, current size) so a client

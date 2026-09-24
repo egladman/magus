@@ -18,7 +18,7 @@ with a generic LSP client can offer, for a `*.buzz` file:
 
 The analysis is the same engine the [interactive playground](../../playground.html)
 uses; `magus buzz lsp` is just the transport that hands it to your editor. It reads the
-document text the editor sends and needs no workspace, config, or daemon.
+document text the editor sends and needs no workspace, config, or server.
 
 ## Prerequisites
 

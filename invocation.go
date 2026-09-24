@@ -29,7 +29,7 @@ import (
 // lifecycle events still reach any extra handlers, so a run never fails on capture. The
 // command/lineage is what the viewer surfaces; see magus.viewer.v1.Invocation.
 func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusVersion string, extra ...slog.Handler) (context.Context, func(error)) {
-	// Reuse an id already threaded onto ctx (the daemon mints it in proc.service.run so the
+	// Reuse an id already threaded onto ctx (the server mints it in proc.service.run so the
 	// adopted call's pool entry can carry its inv and deep-link to this run's live log);
 	// otherwise mint a fresh one: the plain CLI path.
 	id := journal.InvocationIDFromContext(ctx)

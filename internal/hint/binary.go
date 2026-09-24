@@ -79,9 +79,9 @@ func BinaryName() string {
 // OnPath respells next as the PATH invocation, for a surface whose reader is not this
 // process.
 //
-// The daemon resolves its own argv0 once at startup, so a server started as
+// The server resolves its own argv0 once at startup, so a server started as
 // `./magus server start` would otherwise render `./magus ...` into every MCP reply,
-// which resolves against the CLIENT's working directory rather than the daemon's.
+// which resolves against the CLIENT's working directory rather than the server's.
 func OnPath(next []Next) []Next {
 	if BinaryName() == DefaultBinaryName {
 		return next

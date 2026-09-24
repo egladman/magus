@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 )
 
-// warmGraph is the daemon's concurrency-safe cache of the workspace knowledge
+// warmGraph is the server's concurrency-safe cache of the workspace knowledge
 // graph. It is always fresh, never best-effort: the cache is trusted only while a
 // file watcher invalidates it on source changes; without a watcher (a one-shot
 // CLI) every Get rebuilds cache-first, identical to the old always-rebuild path.
@@ -85,7 +85,7 @@ func (w *warmGraph) Get(ctx context.Context, refresh bool) (*knowledge.Graph, er
 	return g, nil
 }
 
-// Healthy reports the warm graph's watcher state for the daemon's /readyz readiness
+// Healthy reports the warm graph's watcher state for the server's /readyz readiness
 // surface: watching is true once a file watcher is invalidating the cache on source
 // changes, valid is true when the cache currently holds a fresh graph (so the next Get
 // answers from memory instead of rebuilding). Guarded by the same mutex as Get/cached.
@@ -172,7 +172,7 @@ func (w *warmGraph) stopWatching() {
 	w.mu.Unlock()
 }
 
-// KnowledgeGraphHealthy reports the daemon's warm-knowledge-graph watcher state, for the
+// KnowledgeGraphHealthy reports the server's warm-knowledge-graph watcher state, for the
 // /readyz readiness surface's "knowledge_graph" component. It goes through
 // warmKnowledgeGraph (the same lazily-created holder KnowledgeGraph reads), so calling it
 // before WatchKnowledgeGraph has ever run reports watching=false rather than panicking on

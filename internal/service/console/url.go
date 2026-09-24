@@ -15,7 +15,7 @@ import (
 
 // KnownSurfaces is the CANONICAL list of the console's deep-linkable surfaces, by their clean
 // URL path segment. It is the single source of truth shared by the two producers of the clean
-// /console/<surface>/ grammar: Link/GraphLink mint these segments, and the daemon's static
+// /console/<surface>/ grammar: Link/GraphLink mint these segments, and the server's static
 // handler serves the console shell for a bare /console/<surface>/ request (SPA fallback) so the
 // console's own boot router can open that surface from the path. The decoupled console is a
 // single shell page; these clean paths are its public surface URLs (there is no ?app= query form
@@ -23,7 +23,7 @@ import (
 var KnownSurfaces = []string{"logs", "dashboard", "graph", "activity", "notes", "diff", "plan", "runs"}
 
 // IsSurfaceRoute reports whether seg is exactly one known surface segment (no sub-path), i.e. a
-// bare /console/<surface>/ route the daemon must serve the shell for rather than a static file.
+// bare /console/<surface>/ route the server must serve the shell for rather than a static file.
 func IsSurfaceRoute(seg string) bool {
 	return slices.Contains(KnownSurfaces, seg)
 }
@@ -53,7 +53,7 @@ func CanonicalSurfacePath(seg string) (string, bool) {
 // keyDigests carries the run's cache-key identity as a `key` directive holding
 // "<class>:<digest>,..." (see KeyDigestsParam). It is what lets the viewer answer
 // "why did CI get a different ref than me" without either machine seeing the other's
-// tree: the page compares the digests in the link against the ones the local daemon
+// tree: the page compares the digests in the link against the ones the local server
 // computes and reports WHICH CLASS differs. Digests are short and per-class, so this
 // costs a few dozen bytes of a fragment budget measured in tens of kilobytes. Empty
 // keyDigests omits the directive entirely.
@@ -96,8 +96,8 @@ func KeyDigestsParam(digests []KeyClassDigest) string {
 	return strings.Join(parts, ",")
 }
 
-// LinkOpts is the input to Link: the single home for the daemon-origin console URL grammar.
-// Host is the daemon's loopback host:port (from mcp.address); Surface is a console surface
+// LinkOpts is the input to Link: the single home for the server-origin console URL grammar.
+// Host is the server's loopback host:port (from mcp.address); Surface is a console surface
 // segment (see KnownSurfaces: "dashboard", "graph", ...); Code is an optional one-time exchange
 // code (mgx_) the console trades for its token; Fragment holds any extra content directives
 // that ride the fragment ahead of the code.
@@ -131,12 +131,12 @@ func Root(host string) string {
 	return "http://" + host + "/console/"
 }
 
-// Link assembles a console surface's daemon-origin deep link:
-// http://<host>/console/<surface>/#[<directives>&]code=<code>. Under the daemon-origin grammar
-// the ORIGIN names which daemon: the daemon serves both the console shell (over its loopback
+// Link assembles a console surface's server-origin deep link:
+// http://<host>/console/<surface>/#[<directives>&]code=<code>. Under the server-origin grammar
+// the ORIGIN names which server: the server serves both the console shell (over its loopback
 // /console/) and the data API, so nothing but content state and the exchange code rides the
 // fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
-// surface URL: the daemon serves the shell for it (SPA fallback) and the console's boot router
+// surface URL: the server serves the shell for it (SPA fallback) and the console's boot router
 // opens that surface from the path. The code rides the fragment (never transmitted on the
 // document GET) and is emitted LAST, after any content directives. It is single use and lives a
 // minute, so a link seen in a process list or a log is spent or dead, never a credential.
@@ -161,7 +161,7 @@ func Link(opts LinkOpts) string {
 
 // SurfaceLink is Link without an origin: /console/<surface>/#<directives>.
 //
-// For a response the CONSOLE ITSELF reads. The console is served from the daemon it is
+// For a response the CONSOLE ITSELF reads. The console is served from the server it is
 // asking, so it already knows the origin; sending an absolute URL would mean the handler
 // guessing a host it does not otherwise need, and guessing it wrong behind a proxy or a
 // forwarded port. It also carries no token, because a caller already inside the console
@@ -200,7 +200,7 @@ func LinkTokenExpires() string { return strconv.Itoa(int(LinkTokenLifetime.Hours
 // nothing a double-quoted shell word would expand.
 //
 // The command is spelled as this process was invoked, which is right for a CLI line and
-// wrong for a daemon reply read in another directory: that caller uses [OpenCommandAs]
+// wrong for a server reply read in another directory: that caller uses [OpenCommandAs]
 // with hint.DefaultBinaryName.
 func OpenCommand(link string) string {
 	return OpenCommandAs(link, runtime.GOOS, hint.BinaryName())
@@ -242,15 +242,15 @@ const JobSurface = "plan"
 func jobFragment(id string) FragmentParam { return FragmentParam{Key: "job", Value: id} }
 
 // JobSurfaceLink is one job's row in the console Jobs view, without an origin: the form a
-// handler hands back to the console, which is already served from the daemon it is asking.
+// handler hands back to the console, which is already served from the server it is asking.
 // See [SurfaceLink].
 func JobSurfaceLink(id string) string { return SurfaceLink(JobSurface, jobFragment(id)) }
 
-// JobLink is [JobSurfaceLink] against the loopback origin of the daemon serving the
+// JobLink is [JobSurfaceLink] against the loopback origin of the server serving the
 // console: what a CLI hands a PERSON, who is not in the console already and for whom a
 // bare path resolves against nothing.
 //
-// An empty host returns "", and the caller then says how to start a daemon. That degrade is
+// An empty host returns "", and the caller then says how to start a server. That degrade is
 // the point rather than an oversight: a link to an origin nothing is listening on reads as
 // "the console is broken" instead of "nothing is serving it", and the person cannot tell
 // the two apart from a browser error page.

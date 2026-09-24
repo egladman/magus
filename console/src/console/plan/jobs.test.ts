@@ -5,7 +5,7 @@
 // What is worth pinning here is the READING the model produces, not its shape: whether a listing an
 // agent wrote by hand still draws (a duplicate id, a self-parent, a parent that is not in the
 // listing, a cycle), whether no_return survives as its own state all the way to the overview line,
-// and whether a job the daemon is running right now can ever read as one nobody started. Each of
+// and whether a job the server is running right now can ever read as one nobody started. Each of
 // those fails SILENTLY - a plausible-looking picture that says the wrong thing is worse than an
 // empty panel.
 
@@ -149,7 +149,7 @@ test("a depends_on naming a job outside this listing draws no edge and is not in
   );
 });
 
-// The id is what a job is drawn, selected and joined by, and the daemon may send either spelling.
+// The id is what a job is drawn, selected and joined by, and the server may send either spelling.
 test("a job with no bare id falls back to the last segment of its resource name", () => {
   assert.equal(jobKey(create(JobSchema, { name: "jobs/rotate-activities" })), "rotate-activities");
   assert.equal(jobKey(create(JobSchema, { name: "jobs/x", id: "x" })), "x");
@@ -162,7 +162,7 @@ test("a job with no bare id falls back to the last segment of its resource name"
 
 // ---- states ----------------------------------------------------------------
 
-test("an unrecognized state reads as declared and keeps what the daemon said", () => {
+test("an unrecognized state reads as declared and keeps what the server said", () => {
   const model = buildJobTree([job("a", { state: "cancelled" })]);
   const node = model.byId.get("a");
   assert.equal(node?.state, "declared", "nothing unknown may ever read as a pass or a fail");
@@ -176,19 +176,19 @@ test("no_return is its own state and is never folded into fail", () => {
   assert.equal(model.counts.fail, 1);
 });
 
-// The daemon's own catalog reports an instance in flight on its own flag rather than in the
+// The server's own catalog reports an instance in flight on its own flag rather than in the
 // lifecycle string, so a job the reader can watch working must not be drawn as one nobody started.
 test("a job in flight reads as running whatever its state string says", () => {
   const model = buildJobTree([
     create(JobSchema, {
       name: "jobs/clear-cache",
       id: "clear-cache",
-      holder: JobHolder.DAEMON,
+      holder: JobHolder.SERVER,
       running: true,
     }),
   ]);
   assert.equal(model.byId.get("clear-cache")?.state, "running");
-  assert.equal(model.byId.get("clear-cache")?.holder, JobHolder.DAEMON);
+  assert.equal(model.byId.get("clear-cache")?.holder, JobHolder.SERVER);
 });
 
 // ---- the overview line -----------------------------------------------------
@@ -209,7 +209,7 @@ test("the no-return call-out is present even when it is zero", () => {
   assert.equal(overviewLine(buildJobTree([])), "0 jobs. 0 no-return.");
 });
 
-// ---- what a daemon job carries ---------------------------------------------
+// ---- what a server job carries ---------------------------------------------
 
 test("size reads both halves when they are there, and nothing when they are not", () => {
   assert.equal(
@@ -257,7 +257,7 @@ test("a finished job is never stale, and neither is one carrying no timestamp", 
   assert.equal(
     isStale(false, 0, now),
     false,
-    "an unstamped job is a daemon fact, not a dead worker",
+    "an unstamped job is a server fact, not a dead worker",
   );
 });
 

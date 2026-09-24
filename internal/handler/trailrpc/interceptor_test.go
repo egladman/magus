@@ -14,7 +14,7 @@ import (
 
 	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
 	// for TestKnownVerbs to enumerate. This is the whole point of the ratchet: a new service/method
-	// linked into the daemon is visible here, so an unclassified verb cannot ship unnoticed.
+	// linked into the server is visible here, so an unclassified verb cannot ship unnoticed.
 	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"

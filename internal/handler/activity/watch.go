@@ -19,13 +19,13 @@ import (
 // cadence would buy latency nobody can see and pay for it on every open drawer.
 const defaultPoll = time.Second
 
-// Option configures a Service. Variadic so the daemon can hand over the sources it happens
+// Option configures a Service. Variadic so the server can hand over the sources it happens
 // to have: a bridge with no job store still serves the trail half, which is what the view
 // did before any of this existed.
 type Option func(*Service)
 
 // WithJobs gives the view the repository's job plan, read at call time rather than
-// captured: rows change state, release paths and appear while the daemon runs, and a slice
+// captured: rows change state, release paths and appear while the server runs, and a slice
 // taken at mount time would attribute against a plan that stopped being true.
 func WithJobs(rows func() []types.Job) Option {
 	return func(s *Service) { s.jobs = rows }

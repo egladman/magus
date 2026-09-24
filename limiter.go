@@ -10,7 +10,7 @@ import (
 )
 
 // Limiter is a weighted semaphore that caps concurrent spell executions.
-// Obtain one with [NewLimiter] and share it across daemon workspaces via [WithLimiter].
+// Obtain one with [NewLimiter] and share it across server workspaces via [WithLimiter].
 type Limiter struct{ lim *cache.Limiter }
 
 // NewLimiter creates a Limiter with capacity n. n ≤ 0 defaults to
@@ -30,7 +30,7 @@ func DefaultConcurrency() int { return cache.DefaultConcurrency() }
 // Capacity returns the configured concurrency cap.
 func (l *Limiter) Capacity() int { return l.lim.Capacity() }
 
-// WithLimiter injects a pre-built Limiter (e.g. shared across daemon workspaces).
+// WithLimiter injects a pre-built Limiter (e.g. shared across server workspaces).
 // When omitted, Open constructs a private limiter from magus.yaml/Concurrency.
 func WithLimiter(l *Limiter) Option {
 	return func(o *workspace.Load) { o.Limiter = l.lim }
@@ -69,11 +69,11 @@ func (p slotPressure) nudge() string {
 // Magus's targets queued for slots while cores the aggressive profile would use sat
 // idle, and "" otherwise. The caller decides whether and how often to print it.
 //
-// Silent when concurrency was set explicitly, when the profile is already aggressive,
-// and in the daemon, whose limiter spans every client's runs.
+// Silent when concurrency was set explicitly and when the profile is already
+// aggressive. A caller whose limiter spans other invocations' runs (the server's) does
+// not ask: a wait there is not this invocation's profile.
 func (m *Magus) ConcurrencyNudge() string {
-	// Only the daemon hands its workspaces a machine admitter.
-	if m.cache == nil || m.machineAdmitter != nil {
+	if m.cache == nil {
 		return ""
 	}
 	aggressiveWidth, _ := cache.ClampConcurrency(cache.ProfileConcurrency(types.ProfileAggressive))

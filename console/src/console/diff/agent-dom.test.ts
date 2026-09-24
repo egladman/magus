@@ -1,5 +1,5 @@
 // agent-dom.test.ts - the session panel: Ran, transcript turns, and the sentence that stands in
-// for every part of a transcript the daemon could not show.
+// for every part of a transcript the server could not show.
 
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
@@ -34,7 +34,7 @@ const touch: DiffTouch = {
   ran: ["magus", "go"],
 };
 
-// What the daemon answers today: tool turns only, and the three parts session load never carries.
+// What the server answers today: tool turns only, and the three parts session load never carries.
 function toolOnly(): SessionActivity {
   return create(SessionActivitySchema, {
     session: "sess-1",
@@ -124,16 +124,16 @@ test("a recorded reasoning turn renders and suppresses its unavailable sentence"
   assert.deepEqual(texts(body, ".console-diff-agent__notice"), []);
 });
 
-test("a daemon that did not answer still states reasoning is unavailable", () => {
+test("a server that did not answer still states reasoning is unavailable", () => {
   const body = document.createElement("div");
   renderAgentSession(body, touch, {
-    failed: "viewer: this daemon does not serve session activity",
+    failed: "viewer: this server does not serve session activity",
   });
 
   assert.equal(body.querySelectorAll(".console-diff-agent__program").length, 2);
   assert.ok(
     texts(body, ".console-diff-agent__notice").includes(
-      "Reasoning unavailable for this session: the daemon did not answer (viewer: this daemon does not serve session activity).",
+      "Reasoning unavailable for this session: the server did not answer (viewer: this server does not serve session activity).",
     ),
   );
 });

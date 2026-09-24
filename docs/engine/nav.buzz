@@ -144,7 +144,7 @@ export fun renderTocList(content: str) > str !> any {
 
 // renderSettingsPanel renders the gear button and its dropdown, the rightmost control in
 // every top bar. The theme (auto/light/dark) cycle lives here on EVERY page. showConsole
-// adds the daemon-app operator prefs (refresh rate, daemon host) that only the console apps
+// adds the server-app operator prefs (refresh rate, server host) that only the console apps
 // read; docs, playground, 404, and offline get the theme row alone. console-settings.js
 // opens/closes the panel and persists poll/host; theme.js drives #theme-cycle (it owns the
 // pre-paint theme set()). Both scripts no-op when their controls are absent.
@@ -152,7 +152,7 @@ export fun renderSettingsPanel(showConsole: bool) > str !> any {
     var rows = "";
     if (showConsole) {
         rows = `          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
-          <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
+          <label class="settings-row"><span>Server host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
 `;
     }
     // "Saved locally" rather than "in this browser": these apps install as a PWA, so

@@ -97,14 +97,21 @@ func WithCollapse(collapse bool) Option {
 // host. A step that does not fit fails fast (MGS3009, exit 75); magus never queues
 // behind a peer already holding the budget.
 //
-// admitter must reach the ONE arbiter for this machine, which is the user's daemon.
+// admitter must reach the ONE arbiter for this machine, which is the user's broker.
 // Omitting the option leaves admission per-process, which is what a library caller
 // with no host to arbitrate wants.
 //
-// Applied after WithLogger, so a lost arbiter is reported through the caller's logger
-// rather than the default one.
+// A step the admitter cannot answer for runs unarbitrated, said once through the
+// caller's logger, unless WithMachineAdmissionRequired is also given.
 func WithMachineAdmission(admitter MachineAdmitter) Option {
 	return func(c *Cache) { c.machineAdmitter = admitter }
+}
+
+// WithMachineAdmissionRequired refuses a step the admitter cannot answer for (MGS3022,
+// exit 69) instead of running it unarbitrated. It has no effect without
+// WithMachineAdmission.
+func WithMachineAdmissionRequired() Option {
+	return func(c *Cache) { c.machineRequired = true }
 }
 
 // RunOption configures a single Cache.Run (or RunAll) invocation.

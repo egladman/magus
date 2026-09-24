@@ -20,9 +20,9 @@ stdout 'projects:'
 exec magus ls -o name
 
 # -- status ------------------------------------------------------------------
-# Daemon is off in these scripts, so status reports the local view. That is the
+# The server is off in these scripts, so status reports the local view. That is the
 # interesting case anyway: the lock and symbol-index sections are workspace-local and
-# populated with no daemon at all.
+# populated with no server at all.
 exec magus status
 exec magus status -o json
 stdout '"telemetry"'

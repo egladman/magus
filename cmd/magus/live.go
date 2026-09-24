@@ -24,7 +24,7 @@ import (
 // The link, the data, and the server are all loopback-local; the fragment carrying the
 // connection details is never transmitted, so nothing about the run leaves the machine.
 // This is the run-time sibling of `magus query ref --open` (a finished run) and mirrors
-// `graph export --open --follow`, but streams over loopback SSE rather than the daemon bridge.
+// `graph export --open --follow`, but streams over loopback SSE rather than the server bridge.
 func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func()) {
 	if !enabled {
 		return nil, func() {}

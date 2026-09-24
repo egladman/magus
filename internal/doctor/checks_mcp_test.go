@@ -112,37 +112,37 @@ func TestCheckTokens(t *testing.T) {
 
 // TestProbeBridgeReachability pins which lifecycle the skip keys on.
 //
-// It used to key on the PROC daemon being reachable, and magus spins one of those up for
+// It used to key on the PROC server being reachable, and magus spins one of those up for
 // ordinary commands, so a plain `magus doctor` adopted one, the skip could never fire, and
 // every machine without a console failed here. The bridge rides on the MCP HTTP server that
 // only `magus server start` starts, so that is what "expected" has to mean.
 func TestProbeBridgeReachability(t *testing.T) {
 	t.Run("console disabled skips", func(t *testing.T) {
-		got := probeBridgeReachability(t.Context(), &DaemonInfo{})
+		got := probeBridgeReachability(t.Context(), &ServerInfo{})
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "console.enabled: false")
 	})
 
 	t.Run("mcp disabled skips", func(t *testing.T) {
-		got := probeBridgeReachability(t.Context(), &DaemonInfo{BridgeEnabled: true})
+		got := probeBridgeReachability(t.Context(), &ServerInfo{BridgeEnabled: true})
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "mcp.enabled is false")
 	})
 
-	// The regression: an adopted per-process daemon is Reachable and serves no bridge.
-	t.Run("a reachable non-persistent daemon still skips", func(t *testing.T) {
-		got := probeBridgeReachability(t.Context(), &DaemonInfo{
+	// The regression: an adopted per-process server is Reachable and serves no bridge.
+	t.Run("a reachable non-persistent server still skips", func(t *testing.T) {
+		got := probeBridgeReachability(t.Context(), &ServerInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, MCPAddr: "127.0.0.1:1",
 		})
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
-		assert.Contains(t, got.Message, "no persistent daemon")
+		assert.Contains(t, got.Message, "no persistent server")
 	})
 
-	// And the other half, which is what the check is FOR: a daemon that promised a bridge
+	// And the other half, which is what the check is FOR: a server that promised a bridge
 	// and is not serving one is a failure, not a shrug.
-	t.Run("a persistent daemon with no bridge fails", func(t *testing.T) {
-		got := probeBridgeReachability(t.Context(), &DaemonInfo{
+	t.Run("a persistent server with no bridge fails", func(t *testing.T) {
+		got := probeBridgeReachability(t.Context(), &ServerInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: unreachableAddr(t),
 		})
@@ -156,7 +156,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 		}))
 		defer srv.Close()
-		got := probeBridgeReachability(t.Context(), &DaemonInfo{
+		got := probeBridgeReachability(t.Context(), &ServerInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: strings.TrimPrefix(srv.URL, "http://"),
 		})

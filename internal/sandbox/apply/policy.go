@@ -46,11 +46,11 @@ var globalsMu sync.Mutex
 // Subsequent Apply calls with a different fingerprint are rejected (MGS2010) because the ruleset is immutable.
 var policyFingerprint string
 
-// appliedExternally is set when the daemon has already applied the union ruleset via MarkAppliedExternally.
+// appliedExternally is set when the server has already applied the union ruleset via MarkAppliedExternally.
 // In this mode per-workspace Apply calls are attach-only (no syscall, no fingerprint check).
 var appliedExternally bool
 
-// MarkAppliedExternally records that the daemon has already applied the union landlock ruleset.
+// MarkAppliedExternally records that the server has already applied the union landlock ruleset.
 // Subsequent per-workspace Apply calls become attach-only; the MGS2010 fingerprint check is skipped.
 func MarkAppliedExternally(fp string) {
 	applyOnce.Do(func() {})
@@ -107,7 +107,7 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 	globalsMu.Lock()
 	externally := appliedExternally
 	globalsMu.Unlock()
-	if externally { // daemon applied union policy; attach-only
+	if externally { // server applied union policy; attach-only
 		return sandbox.WithPolicy(ctx, policy), nil
 	}
 
@@ -146,7 +146,7 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 	globalsMu.Unlock()
 	if fp != current { // mismatch: kernel-level and binding-level policies would disagree
 		RecordApply(ctx, 0, "mismatch", "workspace", nil) // no ruleset installed; count the outcome, not rules
-		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this daemon process (fingerprint %s vs %s); restart the daemon to pick up new sandbox configuration",
+		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this server process (fingerprint %s vs %s); restart the server to pick up new sandbox configuration",
 			types.DiagnosticErrorf(types.SandboxPolicyMismatch, "sandbox policy mismatch"),
 			root, fp, current)
 	}

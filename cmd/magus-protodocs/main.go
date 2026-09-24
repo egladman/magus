@@ -1,4 +1,4 @@
-// Command magus-protodocs generates the daemon API reference from the .proto contract, so
+// Command magus-protodocs generates the server API reference from the .proto contract, so
 // a third party can build a client without reading the schema out of the repository. It is
 // wired into docs/magusfile.buzz's content_generate target and drift-gated there; run it
 // directly only to iterate on the generator itself:
@@ -438,7 +438,7 @@ func isDeprecated(opts protoreflect.ProtoMessage) bool {
 
 // fieldConstraints renders a field's buf.validate rules as short phrases
 // ("0 to 1000", "matches `^[a-z]{2,8}[0-9a-f]+$`", "required"), so the reference states what
-// the daemon actually enforces instead of leaving a client to discover it from a rejected
+// the server actually enforces instead of leaving a client to discover it from a rejected
 // request.
 func fieldConstraints(fd protoreflect.FieldDescriptor) string {
 	opts, ok := fd.Options().(*descriptorpb.FieldOptions)
@@ -905,7 +905,7 @@ func writeAll(a api, outDir string) (int, error) {
 	// live now that pages nest by .proto path. The drift gate only compares files the
 	// generator writes, so one it stops writing is invisible to it: a deleted RPC's page
 	// would otherwise sit in the committed tree indefinitely, describing something the
-	// daemon no longer serves.
+	// server no longer serves.
 	//
 	// Only a page carrying this generator's own generated_from is removed. Without that
 	// check the sweep deletes every .md under -out that this run did not write, which
@@ -989,18 +989,18 @@ func (a api) computeUsedBy() map[string][]usage {
 func renderIndex(a api) string {
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
-		Title:         "Daemon API",
-		Description:   "The magus daemon's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.",
+		Title:         "Server API",
+		Description:   "The magus server's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.",
 		GeneratedFrom: indexGeneratedFrom,
-		Tags:          []string{"api", "proto", "protobuf", "connect", "grpc", "daemon", "reference"},
+		Tags:          []string{"api", "proto", "protobuf", "connect", "grpc", "server", "reference"},
 	})
 
-	b.WriteString("# Daemon API\n\n")
-	b.WriteString("The daemon serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.\n\n")
-	b.WriteString("This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract. Every service, method, message, and enum heading below links to the exact line in the `.proto` source that defines it.\n\n")
+	b.WriteString("# Server API\n\n")
+	b.WriteString("The server serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.\n\n")
+	b.WriteString("This reference is generated from the `.proto` contract, so it cannot drift from what the server serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract. Every service, method, message, and enum heading below links to the exact line in the `.proto` source that defines it.\n\n")
 
 	b.WriteString("## Before you call anything\n\n")
-	b.WriteString("Start the daemon with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.\n\n")
+	b.WriteString("Start the server with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.\n\n")
 
 	b.WriteString("## Services\n\n")
 	services := make([][]string, 0, len(a.services))
@@ -1146,7 +1146,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:       s.Name,
-		Description: firstSentence(s.Doc, fmt.Sprintf("The %s service in the magus daemon API: every method, request, response, and enum.", s.Name)),
+		Description: firstSentence(s.Doc, fmt.Sprintf("The %s service in the magus server API: every method, request, response, and enum.", s.Name)),
 		// The heading-level source links already point at this page's own .proto file
 		// and line; the section overview is where the whole schema's source is named.
 		GeneratedFrom: pageGeneratedFrom,
@@ -1160,7 +1160,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 	if s.Doc != "" {
 		fmt.Fprintf(&b, "%s\n\n", s.Doc)
 	}
-	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Part of the [daemon API](%s.md).\n\n", s.Package, s.File, sourceLink(s.File, s.Line), relLink(path, "index"))
+	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Part of the [server API](%s.md).\n\n", s.Package, s.File, sourceLink(s.File, s.Line), relLink(path, "index"))
 
 	b.WriteString("## Methods\n\n")
 	for _, m := range s.Methods {
@@ -1200,7 +1200,7 @@ func renderPackage(a api, p pkgPage, usedBy map[string][]usage) string {
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:         title,
-		Description:   firstSentence(p.Doc, fmt.Sprintf("The %s package in the magus daemon API: shared types with no service of their own.", title)),
+		Description:   firstSentence(p.Doc, fmt.Sprintf("The %s package in the magus server API: shared types with no service of their own.", title)),
 		GeneratedFrom: pageGeneratedFrom,
 		Tags:          []string{"api", "proto", "connect", "grpc", strings.ReplaceAll(strings.TrimPrefix(p.Package, "magus."), ".", "-")},
 	})
@@ -1209,7 +1209,7 @@ func renderPackage(a api, p pkgPage, usedBy map[string][]usage) string {
 	if p.Doc != "" {
 		fmt.Fprintf(&b, "%s\n\n", p.Doc)
 	}
-	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Declares no service of its own; part of the [daemon API](%s.md).\n\n", p.Package, p.File, sourceLink(p.File, p.Line), relLink(path, "index"))
+	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Declares no service of its own; part of the [server API](%s.md).\n\n", p.Package, p.File, sourceLink(p.File, p.Line), relLink(path, "index"))
 
 	msgNames := a.messagesInPackage(p.Package)
 	enumNames := a.enumsInPackage(p.Package)

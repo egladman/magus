@@ -1,7 +1,7 @@
 # The merge driver keeps one side of a conflicted generated file and records the
 # regeneration it owes; the regenerate-owed worker, which the post-merge, post-rewrite
-# and post-commit hooks submit to the daemon, runs it once over the finished tree and
-# stages the result. The daemon is off here, so the script runs the worker itself, as
+# and post-commit hooks submit to the server, runs it once over the finished tree and
+# stages the result. The server is off here, so the script runs the worker itself, as
 # the job would.
 #
 # Both operations git can run the driver under are covered: a merge, and a rebase whose

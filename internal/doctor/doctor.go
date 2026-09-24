@@ -12,45 +12,50 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// DaemonInfo carries live daemon state for the daemon-related doctor checks.
-// A nil daemon field means no daemon was found or queried.
-type DaemonInfo struct {
-	// Reachable is true when the daemon was successfully dialed.
+// ServerInfo carries live server state for the server-related doctor checks.
+// A nil ServerInfo means no server was found or queried.
+type ServerInfo struct {
+	// Reachable is true when the server was successfully dialed.
 	Reachable bool
 	// SockAddr is the resolved socket address (for display in check details).
 	SockAddr string
-	// ParentPID is the daemon's OS process ID.
+	// ParentPID is the server's OS process ID.
 	ParentPID int
-	// DaemonVersion is the version string reported by the daemon, and ClientVersion the
-	// version of the binary asking. They are compared rather than displayed: a daemon of
+	// ServerVersion is the version string reported by the server, and ClientVersion the
+	// version of the binary asking. They are compared rather than displayed: a server of
 	// another vintage answers every call with a decoder that does not know this build's
 	// fields, and writes back what it read.
-	DaemonVersion string
+	ServerVersion string
 	ClientVersion string
 	// Capacity / Running / Queued mirror the pool snapshot.
 	Capacity int
 	Running  int
 	Queued   int
-	// Workspaces lists workspace roots currently loaded by the daemon.
+	// Workspaces lists workspace roots currently loaded by the server.
 	Workspaces []LoadedWorkspace
 	// SockDir is the directory scanned for socket files.
 	SockDir string
+	// ServerSocket and BrokerSocket are the file names `magus server` and the broker
+	// listen on inside SockDir, so the sockets check reports each by its role. Either
+	// may be empty, and that socket is then scanned like any other.
+	ServerSocket string
+	BrokerSocket string
 	// MCPAddr is the host:port the MCP server listens on, for bridge reachability checks.
 	MCPAddr string
 	// BridgeEnabled is true when the bridge is not explicitly disabled in config.
 	BridgeEnabled bool
 	// MCPEnabled is true when the MCP server is not explicitly disabled in config. The
 	// bridge is mounted on that server, so a false here means no bridge is served no
-	// matter what the daemon is doing.
+	// matter what the server is doing.
 	MCPEnabled bool
-	// Persistent is true when the process answering on the socket is a `magus server
-	// start` daemon rather than the per-process proc server any command may spin up.
-	// Only the persistent one starts the MCP HTTP server, so this (and not Reachable)
+	// Persistent is true when the process answering on the socket is `magus server`
+	// rather than the per-process proc server any command may spin up.
+	// Only the server starts the MCP HTTP server, so this (and not Reachable)
 	// is what says a bridge is expected.
 	Persistent bool
 }
 
-// LoadedWorkspace describes one workspace slot in the daemon.
+// LoadedWorkspace describes one workspace slot in the server.
 type LoadedWorkspace struct {
 	Root       string
 	LoadedAt   time.Time
@@ -59,7 +64,7 @@ type LoadedWorkspace struct {
 
 type options struct {
 	cfg          config.Config
-	daemonInfo   *DaemonInfo
+	serverInfo   *ServerInfo
 	probe        bool
 	skills       *agent.Catalog
 	explanations *Explanations
@@ -72,10 +77,10 @@ type Option func(*options)
 // WithConfig sets the resolved workspace config.
 func WithConfig(c config.Config) Option { return func(o *options) { o.cfg = c } }
 
-// WithDaemonInfo passes live daemon state for the daemon-related checks.
-// Pass a nil-pointer-equivalent (empty DaemonInfo with Reachable=false) when
-// the daemon is not running; this is not an error.
-func WithDaemonInfo(d DaemonInfo) Option { return func(o *options) { o.daemonInfo = &d } }
+// WithServerInfo passes live server state for the server-related checks.
+// Pass an empty ServerInfo (Reachable false) when the server is not running;
+// that is not an error.
+func WithServerInfo(s ServerInfo) Option { return func(o *options) { o.serverInfo = &s } }
 
 // WithSkillCatalog supplies the agent skill catalog so the installed copies can be graded
 // against this binary. The sources are embedded in the CLI, so a caller without them (the
@@ -140,7 +145,7 @@ type runner struct {
 // WorkspaceReader role rather than the full repository.
 //
 // ctx bounds the checks that do I/O. Doctor is not pure inspection: it resolves a VCS
-// base ref through a git subprocess, dials the daemon socket, GETs the console
+// base ref through a git subprocess, dials the server socket, GETs the console
 // endpoint, and walks the whole tree twice. Those took context.Background(), so the MCP
 // handler had to discard the caller's context and an agent could not cancel a run that
 // blocks for seconds on a hung socket.
