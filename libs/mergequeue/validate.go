@@ -487,33 +487,8 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
 		return v.Decision, r.decide(v)
 	}
-	msg, err := squashMessage(ctx, r.vcs, r.clone.Root, r.plan.BaseCommit, f.change)
-	if err != nil {
-		return "", fmt.Errorf("squash message of %s: %w", f.change.Label(), err)
-	}
-	v.Decision, v.Message = types.DecisionMerge, msg
+	v.Decision = types.DecisionMerge
 	return v.Decision, r.decide(v)
-}
-
-// squashMessage is the conventional squash body for c's own commits: one "* subject"
-// paragraph each, oldest first, merges left out. A stacked change's own commits start
-// at its stack base.
-func squashMessage(ctx context.Context, v types.ReadVCS, root, baseCommit string, c types.Change) (string, error) {
-	from := baseCommit
-	if c.StackBase != "" {
-		from = c.StackBase
-	}
-	commits, err := v.RangeCommits(ctx, root, from, c.Head, nil)
-	if err != nil {
-		return "", err
-	}
-	var parts []string
-	for _, cm := range slices.Backward(commits) {
-		if len(cm.Parents) <= 1 {
-			parts = append(parts, "* "+cm.Subject)
-		}
-	}
-	return strings.Join(parts, "\n\n"), nil
 }
 
 // ground stops a flight's gate, waits for it, and removes its checkout.

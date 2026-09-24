@@ -31,7 +31,18 @@ const DefaultStatusContext = "merge-queue"
 // back to pending, and each run first sets back any success an earlier run left. What
 // remains is a push to the base between that read and the merge, which the check after
 // the merge detects, stopping applying.
+//
+// Nothing of the plan is taken on its word where the applier can read it itself: the
+// plan must name the applier's own Base and RemoteURL, its base commit must be on the
+// base, and a stacked change's stack base must be the reviewed head of the change
+// beneath it (see [magustypes.QueuePlanUnverified]). Each squash message is the
+// applier's own, from the change's commits.
 type Applier struct {
+	// Base is the branch the applier merges into and RemoteURL the URL of the remote the
+	// provider names its repository by; both are the applier's own, and a plan naming
+	// others is refused. Base is required.
+	Base      string
+	RemoteURL string
 	// StatusContext names the commit status an Applier posts; empty means
 	// [DefaultStatusContext].
 	StatusContext string
@@ -88,19 +99,29 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 	if err := plan.Check(); err != nil {
 		return err
 	}
+	if a.Base == "" {
+		return errors.New("applier needs the base branch it merges into")
+	}
+	switch {
+	case plan.Base != a.Base:
+		return magustypes.DiagnosticErrorf(magustypes.QueuePlanUnverified, "the plan merges into %q, and this applier merges into %q", plan.Base, a.Base)
+	case plan.RemoteURL != a.RemoteURL:
+		return magustypes.DiagnosticErrorf(magustypes.QueuePlanUnverified, "the plan names remote %q, and this applier's remote is %q", plan.RemoteURL, a.RemoteURL)
+	}
 	if a.Committer != (magustypes.Person{}) && (a.Committer.Name == "" || a.Committer.Email == "") {
 		return fmt.Errorf("committer %q <%s> needs a name and an email", a.Committer.Name, a.Committer.Email)
 	}
-	r := &applyRun{Applier: a, plan: plan, committer: a.Committer, merged: map[string]bool{}, got: map[string]types.Verdict{}, rebuilt: map[string]string{}}
+	r := &applyRun{Applier: a, plan: plan, committer: a.Committer, merged: map[string]bool{}, got: map[string]types.Verdict{},
+		rebuilt: map[string]string{}, confirmed: map[string]string{}, onBase: map[string]bool{plan.BaseCommit: true}}
 	if !a.DryRun {
-		caps, err := a.provider.Describe(ctx, types.ListQuery{Base: plan.Base, RemoteURL: plan.RemoteURL, StatusContext: a.statusContext(), App: a.App})
+		caps, err := a.provider.Describe(ctx, types.ListQuery{Base: a.Base, RemoteURL: a.RemoteURL, StatusContext: a.statusContext(), App: a.App})
 		if err != nil {
 			return fmt.Errorf("describe the provider: %w", err)
 		}
 		if err := caps.Check(); err != nil {
 			return err
 		}
-		if err := checkCredential(caps.Setup, plan.Base); err != nil {
+		if err := checkCredential(caps.Setup, a.Base); err != nil {
 			return err
 		}
 		r.caps = caps
@@ -202,6 +223,9 @@ type applyRun struct {
 	merged    map[string]bool
 	got       map[string]types.Verdict
 	rebuilt   map[string]string // change -> the candidate this run rebuilt and checked it against
+	confirmed map[string]string // change -> the head the provider reported for it this run
+	onBase    map[string]bool   // base tips found to carry the plan's base commit
+	listing   *types.Changes    // the provider's own listing, read once a stack needs it
 }
 
 // accept files a verdict under the plan's own record of its change. A verdict names
@@ -400,6 +424,145 @@ func (r *applyRun) onto(v types.Verdict) (string, bool) {
 	return cand, ok
 }
 
+// tip reads the base's tip to merge onto, and stops applying unless it carries the
+// plan's base commit: every candidate was built on that commit, so a base without it is
+// not the one the plan was made for.
+func (r *applyRun) tip(ctx context.Context) (string, error) {
+	tip, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
+	if err != nil || r.onBase[tip] {
+		return tip, err
+	}
+	on, err := r.vcs.IsAncestor(ctx, r.clone.Root, r.plan.BaseCommit, tip)
+	if err != nil {
+		return "", fmt.Errorf("is the plan's base commit on %s: %w", r.plan.Base, err)
+	}
+	if !on {
+		return "", magustypes.DiagnosticErrorf(magustypes.QueuePlanUnverified,
+			"the plan's base commit %s is not on %s at %s", short(r.plan.BaseCommit), r.plan.Base, short(tip))
+	}
+	r.onBase[tip] = true
+	return tip, nil
+}
+
+// unverified is the error that stops applying when the plan's record of c disagrees
+// with what applying reads itself.
+func unverified(c types.Change, why string) error {
+	return magustypes.DiagnosticErrorf(magustypes.QueuePlanUnverified, "the plan's stack of %s: %s", c.Label(), why)
+}
+
+// verifyStack checks c's stack base and the change beneath it against the version
+// control and the provider before anything uses them. A stack base is where the delta
+// c's reviewers approved starts; a merge measured from any other commit merges a delta
+// nobody reviewed, so a stack base the version control or a confirmed head disagrees
+// with stops applying. A stack the provider now declares differently makes c wait (a
+// *waitError), since the plan may have been right when it was made. c's head must be
+// fetched.
+func (r *applyRun) verifyStack(ctx context.Context, c types.Change) error {
+	if c.StackBase == "" {
+		if c.Below != "" {
+			return unverified(c, "it is stacked on #"+c.Below+" with no stack base")
+		}
+		return nil
+	}
+	root := r.clone.Root
+	carried, err := r.vcs.IsAncestor(ctx, root, c.StackBase, c.Head)
+	if err != nil {
+		return err
+	}
+	if !carried || c.StackBase == c.Head {
+		return unverified(c, "stack base "+short(c.StackBase)+" is not beneath its head "+short(c.Head))
+	}
+	onBase, err := r.vcs.IsAncestor(ctx, root, c.StackBase, r.plan.BaseCommit)
+	if err != nil {
+		return err
+	}
+	if onBase {
+		return unverified(c, "stack base "+short(c.StackBase)+" is already on "+r.plan.Base)
+	}
+	listed, err := r.listed(ctx)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(listed.Changes, func(l types.Change) bool { return l.ID == c.ID })
+	if i < 0 {
+		return &waitError{code: types.CodeWaitWithdrawn, reason: "the provider no longer lists it as queued"}
+	}
+	beneath := c.Below
+	if beneath != "" {
+		gi, pos, _ := find(r.plan, c.Below)
+		below := r.plan.Partitions[gi][pos]
+		if r.confirmed[below.ID] != below.Head {
+			return unverified(c, "#"+below.ID+" beneath it was not confirmed at "+short(below.Head)+" this run")
+		}
+		top, err := ownTop(ctx, r.vcs, root, r.plan.BaseCommit, below.Head)
+		if err != nil {
+			return err
+		}
+		if top != c.StackBase {
+			return unverified(c, "stack base "+short(c.StackBase)+" is not "+short(top)+", the head #"+below.ID+" was reviewed at")
+		}
+	} else if beneath, err = r.mergedBeneath(ctx, listed.Merged, c); err != nil {
+		return err
+	}
+	if p := listed.Changes[i].Parent; p != "" && p != beneath {
+		return &waitError{code: types.CodeWaitRestack, reason: "the provider now says it is stacked on #" + p + ", not #" + beneath}
+	}
+	return nil
+}
+
+// mergedBeneath returns the merged change c's stack base belongs to, among the merged
+// changes the provider lists: the newest of that change's own commits c carries, as
+// planning chose it, from a change whose commit is on the plan's base commit.
+func (r *applyRun) mergedBeneath(ctx context.Context, merged []types.MergedChange, c types.Change) (string, error) {
+	root := r.clone.Root
+	for _, m := range merged {
+		if err := r.vcs.FetchCommit(ctx, root, r.clone.Remote, m.Head); err != nil {
+			return "", fmt.Errorf("fetch the head #%s merged at: %w", m.ID, err)
+		}
+		own, err := r.vcs.RangeCommits(ctx, root, r.plan.BaseCommit, m.Head, nil)
+		if err != nil {
+			return "", fmt.Errorf("commits of #%s: %w", m.ID, err)
+		}
+		k := slices.IndexFunc(own, func(cm magustypes.Commit) bool { return cm.ID == c.StackBase })
+		if k < 0 {
+			continue
+		}
+		for _, newer := range own[:k] {
+			in, err := r.vcs.IsAncestor(ctx, root, newer.ID, c.Head)
+			if err != nil {
+				return "", err
+			}
+			if in {
+				return "", unverified(c, "stack base "+short(c.StackBase)+" is not the newest commit of #"+m.ID+" it carries, "+short(newer.ID))
+			}
+		}
+		if err := r.vcs.FetchCommit(ctx, root, r.clone.Remote, m.Commit); err != nil {
+			return "", fmt.Errorf("fetch the commit #%s merged as: %w", m.ID, err)
+		}
+		on, err := r.vcs.IsAncestor(ctx, root, m.Commit, r.plan.BaseCommit)
+		if err != nil {
+			return "", err
+		}
+		if !on {
+			return "", unverified(c, "#"+m.ID+" beneath it merged as "+short(m.Commit)+", which "+r.plan.Base+" does not carry")
+		}
+		return m.ID, nil
+	}
+	return "", unverified(c, "stack base "+short(c.StackBase)+" is neither the head of a change beneath it nor a commit of one the provider lists as merged")
+}
+
+// listed is the provider's own listing of the base, read once per run.
+func (r *applyRun) listed(ctx context.Context) (types.Changes, error) {
+	if r.listing == nil {
+		l, err := r.provider.ListChanges(ctx, types.ListQuery{Base: r.Base, RemoteURL: r.RemoteURL})
+		if err != nil {
+			return types.Changes{}, fmt.Errorf("list the changes on %s: %w", r.Base, err)
+		}
+		r.listing = &l
+	}
+	return *r.listing, nil
+}
+
 func (r *applyRun) mergeOne(ctx context.Context, v types.Verdict) (bool, error) {
 	c := v.Change
 	if r.DryRun {
@@ -410,7 +573,7 @@ func (r *applyRun) mergeOne(ctx context.Context, v types.Verdict) (bool, error) 
 	if !ok {
 		return false, r.wait(ctx, c, c.Head, types.CodeWaitRevalidate, "validated on top of #"+v.After+", whose candidate this run did not rebuild")
 	}
-	tip, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
+	tip, err := r.tip(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -430,6 +593,13 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
+	if err := r.verifyStack(ctx, c); err != nil {
+		var held *waitError
+		if errors.As(err, &held) {
+			return nil, r.wait(ctx, c, c.Head, held.code, held.reason)
+		}
+		return nil, err
+	}
 	stackBase := ""
 	if c.Below == "" || r.merged[c.Below] {
 		stackBase = c.StackBase
@@ -440,6 +610,9 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	}
 	if a.carried != "" {
 		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: carriedNotice(a)})
+	}
+	if a.Head == c.Head {
+		r.confirmed[c.ID] = a.Head
 	}
 	switch {
 	case a.Head != c.Head:
@@ -680,13 +853,17 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	if now != tip {
 		return false, r.wait(ctx, c, commit, types.CodeWaitRevalidate, baseMoved(r.plan.Base, now))
 	}
+	msg, err := squashMessage(ctx, r.vcs, r.clone.Root, r.plan.BaseCommit, c)
+	if err != nil {
+		return false, fmt.Errorf("squash message of %s: %w", c.Label(), err)
+	}
 	// Green before the merge: a provider that merges on its own once the status passes
 	// (GitHub's auto-merge) merges now, and one that does not takes the queue's call.
 	if err := r.post(ctx, c, commit, types.StateSuccess, "validated as "+short(rd.cand)+"; merging"); err != nil {
 		r.revokeOne(ctx, c, commit, err)
 		return false, err
 	}
-	res, err := r.provider.MergeChange(ctx, c, types.MergeOptions{Commit: commit, Message: v.Message})
+	res, err := r.provider.MergeChange(ctx, c, types.MergeOptions{Commit: commit, Message: msg})
 	if err != nil {
 		return false, r.wait(context.WithoutCancel(ctx), c, commit, types.CodeWaitProviderRefused, "the provider refused the merge: "+err.Error())
 	}
@@ -696,6 +873,27 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 	}
 	r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: commit, ByProvider: res.ByProvider})
 	return true, r.mergedAs(ctx, c, tip, after, commit, rd.tree, v.Method)
+}
+
+// squashMessage is the conventional squash body for c's own commits: one "* subject"
+// paragraph each, oldest first, merges left out. A stacked change's own commits start
+// at its stack base. Validation never supplies it: its jobs run the change's code.
+func squashMessage(ctx context.Context, v types.ReadVCS, root, baseCommit string, c types.Change) (string, error) {
+	from := baseCommit
+	if c.StackBase != "" {
+		from = c.StackBase
+	}
+	commits, err := v.RangeCommits(ctx, root, from, c.Head, nil)
+	if err != nil {
+		return "", err
+	}
+	var parts []string
+	for _, cm := range slices.Backward(commits) {
+		if len(cm.Parents) <= 1 {
+			parts = append(parts, "* "+cm.Subject)
+		}
+	}
+	return strings.Join(parts, "\n\n"), nil
 }
 
 // stillQueued reads c's merge intent, base and head again right before its merge, and
@@ -948,7 +1146,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 	if !ok {
 		return 1, r.settle(ctx, bottom)
 	}
-	tip, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
+	tip, err := r.tip(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -1018,13 +1216,17 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 		}
 		return len(run), nil
 	}
+	msg, err := squashMessage(ctx, r.vcs, r.clone.Root, r.plan.BaseCommit, top.v.Change)
+	if err != nil {
+		return 0, fmt.Errorf("squash message of %s: %w", top.v.Change.Label(), err)
+	}
 	for i, st := range steps {
 		if err := r.post(ctx, st.v.Change, st.v.Change.Head, types.StateSuccess, "validated as "+short(st.cand)+"; merging in a stack"); err != nil {
 			r.revoke(ctx, steps[:i+1], err)
 			return 0, err
 		}
 	}
-	res, mergeErr := r.provider.MergeChange(ctx, top.v.Change, types.MergeOptions{Commit: top.v.Change.Head, Message: top.v.Message, Through: pins(members)})
+	res, mergeErr := r.provider.MergeChange(ctx, top.v.Change, types.MergeOptions{Commit: top.v.Change.Head, Message: msg, Through: pins(members)})
 	after, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
 	if err != nil {
 		r.revoke(ctx, steps, err)
@@ -1198,7 +1400,7 @@ func (r *applyRun) wait(ctx context.Context, c types.Change, commit string, code
 // revokeStale sets back to pending every success on an open change: nothing is about to
 // merge when a run starts, so any success is one an earlier run could not follow through.
 func (r *applyRun) revokeStale(ctx context.Context) error {
-	green, err := r.provider.ListGreen(ctx, types.ListQuery{Base: r.plan.Base, RemoteURL: r.plan.RemoteURL}, r.statusContext())
+	green, err := r.provider.ListGreen(ctx, types.ListQuery{Base: r.Base, RemoteURL: r.RemoteURL}, r.statusContext())
 	if err != nil {
 		return fmt.Errorf("list the changes carrying %s at success: %w", r.statusContext(), err)
 	}

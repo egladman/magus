@@ -1756,9 +1756,11 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 		{
 			Name:  "apply",
 			Short: "Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)",
-			Usage: "magus queue apply --provider <provider> [flags] <source>",
+			Usage: "magus queue apply --provider <provider> --base <branch> [flags] <source>",
 			Flags: append(append([]Flag{
 				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it"},
+				{Name: "workflow", Kind: FlagString, Doc: "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)"},
 				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts; branch protection requires it"},
 				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
@@ -1775,8 +1777,8 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'"},
-		{"Merge the green ones as they arrive", "magus queue apply --provider github verdicts"},
-		{"Merge from a validation run's artifacts", "magus queue apply --provider github run:acme/widgets/runs/7"},
+		{"Merge the green ones as they arrive", "magus queue apply --provider github --base main verdicts"},
+		{"Merge from a validation run's artifacts", "magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7"},
 		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},
 	},
 }

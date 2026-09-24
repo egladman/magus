@@ -434,7 +434,17 @@ const (
 	// its arguments: it holds shell syntax (a variable, a substitution, an operator, a
 	// redirection, a glob, an assignment prefix) that nothing would act on, since the
 	// queue runs a hook with no shell. Refused before anything runs.
-	QueueHookNotACommand      DiagnosticCode = "MGS3026"
+	QueueHookNotACommand DiagnosticCode = "MGS3026"
+	// QueueRunUntrusted is a merge queue apply asked to follow a validation run that
+	// something other than the base branch's own queue workflow started: a pull request's
+	// event, a fork, another branch or another workflow. What such a run uploads is its
+	// author's claim, so apply reads none of it.
+	QueueRunUntrusted DiagnosticCode = "MGS3027"
+	// QueuePlanUnverified is a merge queue plan that disagrees with what apply reads
+	// itself: another base or remote, a base commit the base does not carry, or a stack
+	// base that is not the reviewed head of the change beneath. Apply stops before it
+	// merges anything that rests on it.
+	QueuePlanUnverified       DiagnosticCode = "MGS3028"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -598,6 +608,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, QueueHookNotACommand,
+	QueueRunUntrusted, QueuePlanUnverified,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
