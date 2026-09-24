@@ -328,3 +328,8 @@ tags/magus-no-wait/
 # policy, written with magus\guard.command. A rule page is generated per shipped rule,
 # so it retires rather than aliases.
 reference/rules/ci-watch/
+
+# read-ack was renamed agent-sign-off. A rule page is generated per shipped rule, so the old
+# page retires rather than aliases, and the fingerprint tag only it carried goes with it.
+reference/rules/read-ack/
+tags/fingerprint/

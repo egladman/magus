@@ -497,7 +497,7 @@ func TestAttentionDisposeReportsAPrefixThatMatchesNothing(t *testing.T) {
 // TestAttentionDisposeRefusesWithoutATerminal is finding F1's fix: disposing closes a
 // request that exists to reach a PERSON (docs/doctrine.md, "Manual on purpose"), and
 // until now nothing here checked that a person, rather than a script, was running it.
-// The guard denies the command outright (rule person-only), but it fails OPEN where it
+// The guard denies the command outright (rule agent-sign-off), but it fails OPEN where it
 // is unwired, the same gap `diff --ack` closed this way first.
 func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
 	root := attentionTestRoot(t)
