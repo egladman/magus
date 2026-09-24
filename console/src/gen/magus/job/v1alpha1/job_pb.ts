@@ -2,12 +2,12 @@
 // @generated from file magus/job/v1alpha1/job.proto (package magus.job.v1alpha1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the daemon's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
-// fire-and-forget, coalescing mechanism the daemon uses for any adopted work, so an identical
-// in-flight job is never started twice. Every RPC requires the daemon bearer token; the service
+// fire-and-forget, coalescing mechanism the server uses for any adopted work, so an identical
+// in-flight job is never started twice. Every RPC requires the server bearer token; the service
 // is mounted behind the same guard as /mcp and never served unauthenticated. buf-breaking gates
 // this file: fields and RPCs may be ADDED (old clients ignore unknown fields), never renumbered
 // or removed. The response carries a full metadata snapshot (last run, current size) so a client
@@ -24,7 +24,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/job/v1alpha1/job.proto.
  */
 export const file_magus_job_v1alpha1_job: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9qb2IvdjFhbHBoYTEvam9iLnByb3RvEhJtYWd1cy5qb2IudjFhbHBoYTEikgEKDlJ1bkpvYlJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8ubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdFN0YXRlEhUKDWludm9jYXRpb25faWQYAiABKAkSEwoLY29uc29sZV91cmwYAyABKAkSJAoDam9iGAQgASgLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYiLuBAoDSm9iEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHcnVubmluZxgDIAEoCBIsCghsYXN0X3J1bhgEIAEoCzIaLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSdW4SMAoGdGFyZ2V0GAUgASgLMiAubWFndXMuam9iLnYxYWxwaGExLlJlc291cmNlU2l6ZRIKCgJpZBgGIAEoCRItCgZob2xkZXIYByABKA4yHS5tYWd1cy5qb2IudjFhbHBoYTEuSm9iSG9sZGVyEg0KBXN0YXRlGAggASgJEhAKCGNyaXRlcmlhGAkgASgJEg4KBnBhcmVudBgKIAEoCRINCgVtb2RlbBgLIAEoCRINCgVjaGVjaxgMIAEoCRITCgt3cml0ZV9wYXRocxgNIAMoCRISCgpkZW55X3BhdGhzGA4gAygJEhIKCnJlYWRfcGF0aHMYDyADKAkSEgoKZGVwZW5kc19vbhgQIAMoCRIRCglyZWFkX29ubHkYESABKAgSEgoKY2hlY2twb2ludBgSIAEoCRIwCghyZWxlYXNlcxgTIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZWxlYXNlEg8KB2NyZWF0ZWQYFCABKAMSDwoHdXBkYXRlZBgVIAEoAxI8ChBjb21wbGV0aW9uX2dhdGVzGBYgAygLMiIubWFndXMuam9iLnYxYWxwaGExLkNvbXBsZXRpb25HYXRlEi0KBnJlc3VsdBgXIAEoCzIdLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZXN1bHQSEAoIZGVhZGxpbmUYGCABKAMikgEKDkNvbXBsZXRpb25HYXRlEgoKAmlkGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEgwKBGtpbmQYAyABKAkSDgoGZXhwZWN0GAQgASgJEg0KBWNoZWNrGAUgASgJEg0KBXBhdGhzGAYgAygJEg8KB3N5bWJvbHMYByADKAkSEgoKZGVwZW5kc19vbhgIIAMoCSJRCglKb2JSZXN1bHQSFQoNY2hhbmdlZF9wYXRocxgBIAMoCRIYChB1bnJlc29sdmVkX3Jpc2tzGAIgAygJEhMKC2Rlc2NlbmRhbnRzGAMgAygJIj8KCkpvYlJlbGVhc2USDAoEcGF0aBgBIAEoCRIOCgZkaWdlc3QYAiABKAkSEwoLcmVsZWFzZWRfYXQYAyABKAMiTAoKSm9iT3ZlcmxhcBINCgVqb2JfYRgBIAEoCRINCgVqb2JfYhgCIAEoCRIPCgdwYXRoc19hGAMgAygJEg8KB3BhdGhzX2IYBCADKAkixQEKBkpvYlJ1bhIVCg1pbnZvY2F0aW9uX2lkGAEgASgJEiwKCGVuZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCghkdXJhdGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIKCgJvaxgEIAEoCBINCgVlcnJvchgFIAEoCRIVCg1pdGVtc19yZW1vdmVkGAYgASgDEhcKD2J5dGVzX3JlY2xhaW1lZBgHIAEoAyI2CgxSZXNvdXJjZVNpemUSEgoKc2l6ZV9ieXRlcxgBIAEoAxISCgppdGVtX2NvdW50GAIgASgDIjwKDVJ1bkpvYlJlcXVlc3QSKwoEbmFtZRgBIAEoCUIdukgachgyFl5qb2JzL1thLXpdW2EtejAtOS1dKiQiRAoPTGlzdEpvYnNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJIoQBChBMaXN0Sm9ic1Jlc3BvbnNlEiUKBGpvYnMYASADKAsyFy5tYWd1cy5qb2IudjFhbHBoYTEuSm9iEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIwCghvdmVybGFwcxgDIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JPdmVybGFwKmkKC1N1Ym1pdFN0YXRlEhwKGFNVQk1JVF9TVEFURV9VTlNQRUNJRklFRBAAEhoKFlNVQk1JVF9TVEFURV9TVUJNSVRURUQQARIgChxTVUJNSVRfU1RBVEVfQUxSRUFEWV9SVU5OSU5HEAIqVgoJSm9iSG9sZGVyEhoKFkpPQl9IT0xERVJfVU5TUEVDSUZJRUQQABIVChFKT0JfSE9MREVSX0RBRU1PThABEhYKEkpPQl9IT0xERVJfU0VTU0lPThACMrQBCgpKb2JTZXJ2aWNlElUKCExpc3RKb2JzEiMubWFndXMuam9iLnYxYWxwaGExLkxpc3RKb2JzUmVxdWVzdBokLm1hZ3VzLmpvYi52MWFscGhhMS5MaXN0Sm9ic1Jlc3BvbnNlEk8KBlJ1bkpvYhIhLm1hZ3VzLmpvYi52MWFscGhhMS5SdW5Kb2JSZXF1ZXN0GiIubWFndXMuam9iLnYxYWxwaGExLlJ1bkpvYlJlc3BvbnNlQtMBChZjb20ubWFndXMuam9iLnYxYWxwaGExQghKb2JQcm90b1ABWkVnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9qb2IvdjFhbHBoYTE7am9idjFhbHBoYTGiAgNNSliqAhJNYWd1cy5Kb2IuVjFhbHBoYTHKAhJNYWd1c1xKb2JcVjFhbHBoYTHiAh5NYWd1c1xKb2JcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhRNYWd1czo6Sm9iOjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
+  fileDesc("ChxtYWd1cy9qb2IvdjFhbHBoYTEvam9iLnByb3RvEhJtYWd1cy5qb2IudjFhbHBoYTEikgEKDlJ1bkpvYlJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8ubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdFN0YXRlEhUKDWludm9jYXRpb25faWQYAiABKAkSEwoLY29uc29sZV91cmwYAyABKAkSJAoDam9iGAQgASgLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYiLuBAoDSm9iEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHcnVubmluZxgDIAEoCBIsCghsYXN0X3J1bhgEIAEoCzIaLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSdW4SMAoGdGFyZ2V0GAUgASgLMiAubWFndXMuam9iLnYxYWxwaGExLlJlc291cmNlU2l6ZRIKCgJpZBgGIAEoCRItCgZob2xkZXIYByABKA4yHS5tYWd1cy5qb2IudjFhbHBoYTEuSm9iSG9sZGVyEg0KBXN0YXRlGAggASgJEhAKCGNyaXRlcmlhGAkgASgJEg4KBnBhcmVudBgKIAEoCRINCgVtb2RlbBgLIAEoCRINCgVjaGVjaxgMIAEoCRITCgt3cml0ZV9wYXRocxgNIAMoCRISCgpkZW55X3BhdGhzGA4gAygJEhIKCnJlYWRfcGF0aHMYDyADKAkSEgoKZGVwZW5kc19vbhgQIAMoCRIRCglyZWFkX29ubHkYESABKAgSEgoKY2hlY2twb2ludBgSIAEoCRIwCghyZWxlYXNlcxgTIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZWxlYXNlEg8KB2NyZWF0ZWQYFCABKAMSDwoHdXBkYXRlZBgVIAEoAxI8ChBjb21wbGV0aW9uX2dhdGVzGBYgAygLMiIubWFndXMuam9iLnYxYWxwaGExLkNvbXBsZXRpb25HYXRlEi0KBnJlc3VsdBgXIAEoCzIdLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZXN1bHQSEAoIZGVhZGxpbmUYGCABKAMikgEKDkNvbXBsZXRpb25HYXRlEgoKAmlkGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEgwKBGtpbmQYAyABKAkSDgoGZXhwZWN0GAQgASgJEg0KBWNoZWNrGAUgASgJEg0KBXBhdGhzGAYgAygJEg8KB3N5bWJvbHMYByADKAkSEgoKZGVwZW5kc19vbhgIIAMoCSJRCglKb2JSZXN1bHQSFQoNY2hhbmdlZF9wYXRocxgBIAMoCRIYChB1bnJlc29sdmVkX3Jpc2tzGAIgAygJEhMKC2Rlc2NlbmRhbnRzGAMgAygJIj8KCkpvYlJlbGVhc2USDAoEcGF0aBgBIAEoCRIOCgZkaWdlc3QYAiABKAkSEwoLcmVsZWFzZWRfYXQYAyABKAMiTAoKSm9iT3ZlcmxhcBINCgVqb2JfYRgBIAEoCRINCgVqb2JfYhgCIAEoCRIPCgdwYXRoc19hGAMgAygJEg8KB3BhdGhzX2IYBCADKAkixQEKBkpvYlJ1bhIVCg1pbnZvY2F0aW9uX2lkGAEgASgJEiwKCGVuZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCghkdXJhdGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIKCgJvaxgEIAEoCBINCgVlcnJvchgFIAEoCRIVCg1pdGVtc19yZW1vdmVkGAYgASgDEhcKD2J5dGVzX3JlY2xhaW1lZBgHIAEoAyI2CgxSZXNvdXJjZVNpemUSEgoKc2l6ZV9ieXRlcxgBIAEoAxISCgppdGVtX2NvdW50GAIgASgDIjwKDVJ1bkpvYlJlcXVlc3QSKwoEbmFtZRgBIAEoCUIdukgachgyFl5qb2JzL1thLXpdW2EtejAtOS1dKiQiRAoPTGlzdEpvYnNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJIoQBChBMaXN0Sm9ic1Jlc3BvbnNlEiUKBGpvYnMYASADKAsyFy5tYWd1cy5qb2IudjFhbHBoYTEuSm9iEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIwCghvdmVybGFwcxgDIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JPdmVybGFwKmkKC1N1Ym1pdFN0YXRlEhwKGFNVQk1JVF9TVEFURV9VTlNQRUNJRklFRBAAEhoKFlNVQk1JVF9TVEFURV9TVUJNSVRURUQQARIgChxTVUJNSVRfU1RBVEVfQUxSRUFEWV9SVU5OSU5HEAIqbwoJSm9iSG9sZGVyEhoKFkpPQl9IT0xERVJfVU5TUEVDSUZJRUQQABIWChJKT0JfSE9MREVSX1NFU1NJT04QAhIVChFKT0JfSE9MREVSX1NFUlZFUhADIgQIARABKhFKT0JfSE9MREVSX0RBRU1PTjK0AQoKSm9iU2VydmljZRJVCghMaXN0Sm9icxIjLm1hZ3VzLmpvYi52MWFscGhhMS5MaXN0Sm9ic1JlcXVlc3QaJC5tYWd1cy5qb2IudjFhbHBoYTEuTGlzdEpvYnNSZXNwb25zZRJPCgZSdW5Kb2ISIS5tYWd1cy5qb2IudjFhbHBoYTEuUnVuSm9iUmVxdWVzdBoiLm1hZ3VzLmpvYi52MWFscGhhMS5SdW5Kb2JSZXNwb25zZULTAQoWY29tLm1hZ3VzLmpvYi52MWFscGhhMUIISm9iUHJvdG9QAVpFZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvam9iL3YxYWxwaGExO2pvYnYxYWxwaGExogIDTUpYqgISTWFndXMuSm9iLlYxYWxwaGExygISTWFndXNcSm9iXFYxYWxwaGEx4gIeTWFndXNcSm9iXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIUTWFndXM6OkpvYjo6VjFhbHBoYTFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * RunJobResponse reports what the submission did: whether the job started or coalesced, the
@@ -49,7 +49,7 @@ export type RunJobResponse = Message<"magus.job.v1alpha1.RunJobResponse"> & {
   /**
    * Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
    * not an absolute URL, because the reader is the console itself and resolves it against
-   * its own origin. Empty only when the daemon coalesced a submit it could not name, since
+   * its own origin. Empty only when the server coalesced a submit it could not name, since
    * a run with no invocation has nothing to link to.
    *
    * @generated from field: string console_url = 3;
@@ -613,7 +613,7 @@ export const SubmitStateSchema: GenEnum<SubmitState> = /*@__PURE__*/
 
 /**
  * JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
- * daemon's own housekeeping from work a session was handed without asking a second door.
+ * server's own housekeeping from work a session was handed without asking a second door.
  *
  * @generated from enum magus.job.v1alpha1.JobHolder
  */
@@ -624,18 +624,18 @@ export enum JobHolder {
   UNSPECIFIED = 0,
 
   /**
-   * the daemon's own maintenance catalog
-   *
-   * @generated from enum value: JOB_HOLDER_DAEMON = 1;
-   */
-  DAEMON = 1,
-
-  /**
    * work an orchestrator declared for somebody else to hold
    *
    * @generated from enum value: JOB_HOLDER_SESSION = 2;
    */
   SESSION = 2,
+
+  /**
+   * the server's own maintenance catalog
+   *
+   * @generated from enum value: JOB_HOLDER_SERVER = 3;
+   */
+  SERVER = 3,
 }
 
 /**
@@ -645,7 +645,7 @@ export const JobHolderSchema: GenEnum<JobHolder> = /*@__PURE__*/
   enumDesc(file_magus_job_v1alpha1_job, 1);
 
 /**
- * JobService is the daemon's control surface for background maintenance jobs. Trigger RPCs
+ * JobService is the server's control surface for background maintenance jobs. Trigger RPCs
  * submit a job and return immediately; ListJobs reports every job's state. Read surfaces stay on
  * the per-domain services - this one only mutates.
  *

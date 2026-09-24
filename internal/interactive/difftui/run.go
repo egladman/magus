@@ -39,7 +39,7 @@ type Options struct {
 	Out   io.Writer
 	Probe tty.Probe
 	Input Input
-	// Sync is nil when nothing is listening: no daemon, no console, no agent.
+	// Sync is nil when nothing is listening: no server, no console, no agent.
 	Sync Sync
 	// Summary is the one line left behind in the scrollback when the reader quits, so the
 	// session records what was read rather than vanishing without a trace. It is called at that

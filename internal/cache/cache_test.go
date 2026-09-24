@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1229,4 +1230,42 @@ func TestSharedStepContextIsAPassThroughOutsideAScheduledTarget(t *testing.T) {
 	shared := SharedStepContext(parent)
 	cancel()
 	assert.True(t, errors.Is(shared.Err(), context.Canceled), "with no base the caller still cancels the step")
+}
+
+// TestRunAllSeatsAJobserverOnlyForAMultiSlotStep drives the whole seat: a step granted
+// three slots hands its process a live pipe holding two tokens, and a step that
+// declared nothing leaves MAKEFLAGS as it found it.
+func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no pipe jobserver: exec.Cmd cannot hand a child extra descriptors there")
+	}
+	root, c := openCache(t)
+	steps := []Step{
+		{ProjectPath: "wide", Target: "build", WorkspaceRoot: root, Slots: 3},
+		{ProjectPath: "narrow", Target: "build", WorkspaceRoot: root},
+	}
+	var mu sync.Mutex
+	got := map[string][2]string{}
+	_, err := c.RunAll(context.Background(), steps, func(ctx context.Context, s Step) error {
+		flags, err := runPkg.Exec(ctx, "sh", []string{"-c", `printf %s "$CARGO_MAKEFLAGS"`}, runPkg.ExecOptions{Capture: true, Quiet: true})
+		if err != nil {
+			return err
+		}
+		var tokens runPkg.ExecResult
+		if s.Slots > 1 {
+			if tokens, err = runPkg.Exec(ctx, "sh", []string{"-c", "head -c 2 <&3"}, runPkg.ExecOptions{Capture: true, Quiet: true}); err != nil {
+				return err
+			}
+		}
+		mu.Lock()
+		got[s.ProjectPath] = [2]string{flags.Stdout, tokens.Stdout}
+		mu.Unlock()
+		return nil
+	}, WithLimiter(NewLimiter(4)))
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string][2]string{
+		"wide":   {"-j --jobserver-fds=3,4 --jobserver-auth=3,4", "++"},
+		"narrow": {os.Getenv("CARGO_MAKEFLAGS"), ""},
+	}, got)
 }

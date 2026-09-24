@@ -15,7 +15,7 @@ import { mountActivityDrawer } from "./activityDrawer";
 
 // A fresh body per test: mountActivityDrawer appends a singleton and the suite runs with
 // --experimental-test-isolation=none, so panels would otherwise accumulate across tests.
-// Storage is cleared too, so resolveDaemonHost finds nothing configured and the refresh a
+// Storage is cleared too, so resolveServerHost finds nothing configured and the refresh a
 // newly-opened drawer kicks off resolves to the not-connected state without touching the network.
 //
 // Emptying the body is NOT what a shell tearing a drawer down does, though - the listeners live on
@@ -101,14 +101,14 @@ test("Escape dismisses an open drawer and is inert while it is shut", () => {
   drawer.destroy();
 });
 
-test("with no daemon configured, both sections say so instead of reading as empty", () => {
+test("with no server configured, both sections say so instead of reading as empty", () => {
   const drawer = mountActivityDrawer();
   drawer.open();
   const empties = [...panel().querySelectorAll(".console-shell-activity__empty")].map(
     (e) => e.textContent,
   );
   // "Not connected" and "nothing is running" are different facts, and the second one is a lie here.
-  assert.deepEqual(empties, ["Not connected to a daemon.", "Not connected to a daemon."]);
+  assert.deepEqual(empties, ["Not connected to a server.", "Not connected to a server."]);
   drawer.destroy();
 });
 

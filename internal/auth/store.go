@@ -390,7 +390,7 @@ func (s *Store) removeExact(t Token) error {
 
 // Mint stores a new token and returns its secret, which cannot be recovered afterwards.
 // minter is the grant of whoever asks: the CLI passes [types.GrantOperator] (the shell is the
-// user), and a daemon handler passes the grant of the credential its request verified as. It
+// user), and a server handler passes the grant of the credential its request verified as. It
 // refuses, each with a coded error unwrapping to its sentinel: an invalid or empty grant, or
 // one holding tokens=write, which only the operator has (ErrInvalidTokenRequest); a grant not
 // Within minter (ErrExceedsGrant); a TTL outside (0, MaxTokenTTL] (ErrTokenLifetime); a name

@@ -23,12 +23,26 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/testenv"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
+
+// TestMain clears every MAGUS_* configuration variable before any test runs. This suite
+// is run by magus, so it inherits whatever the invoking job exported, and the merge
+// queue's gate exports MAGUS_CACHE_DIR to give each candidate a cache of its own. Every
+// workspace a test opened then shared that one cache, so a test counting real
+// executions was served another test's entry. A test that wants one says so with
+// t.Setenv. testenv then keeps the run off the user's runtime dir and broker.
+func TestMain(m *testing.M) {
+	for _, v := range config.EnvVarDocs() {
+		_ = os.Unsetenv(v.EnvVar)
+	}
+	os.Exit(testenv.Wrap(m).Run())
+}
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
 // affected --stdin streaming flow.
@@ -776,13 +790,13 @@ func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
 // TestSharedProviderVisibleAcrossMagus proves the /dashboard data-flow invariant: when two
 // Magus instances are opened with ONE shared observability provider (WithProvider), a metric
 // recorded through one is visible via the other's MetricsCollector. This is exactly what lets
-// the daemon's bridge Magus read the counters that separate per-workspace registry builds
+// the server's bridge Magus read the counters that separate per-workspace registry builds
 // record. Without a shared provider each Magus has its own ManualReader and the bridge
 // collector reads zeros: the bug this feature fixes.
 func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	ctx := context.Background()
 
-	// One provider, LocalCollect on (as the daemon builds it), shared by both workspaces.
+	// One provider, LocalCollect on (as the server builds it), shared by both workspaces.
 	tel, err := otlp.New(ctx, observability.Config{LocalCollect: true})
 	require.NoError(t, err)
 
@@ -1054,7 +1068,7 @@ func TestClose_JoinsProviderShutdownError(t *testing.T) {
 	assert.ErrorIs(t, err, wantErr)
 }
 
-// TestClose_LeavesInjectedProviderRunning covers the daemon case (WithProvider):
+// TestClose_LeavesInjectedProviderRunning covers the server case (WithProvider):
 // several workspaces plus the bridge Magus share ONE provider so metrics survive
 // workspace eviction (see cmd/magus/registry.go's wsRegistry, which Closes an idle
 // workspace while the shared provider keeps serving the others). Close must not
@@ -1202,7 +1216,7 @@ func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
 }
 
 func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
-	err := errors.New("daemon: load config /repo: magus.yaml: unknown key")
+	err := errors.New("server: load config /repo: magus.yaml: unknown key")
 	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
 }
 

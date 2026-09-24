@@ -1,12 +1,12 @@
-// demo.ts - the activity trail for the daemon-free showcase (the shared #demo fragment) and the
-// no-daemon empty state's "see the demo" path. It maps the shared scenario's activity beats
+// demo.ts - the activity trail for the server-free showcase (the shared #demo fragment) and the
+// no-server empty state's "see the demo" path. It maps the shared scenario's activity beats
 // (demo-scenario.ts) into ActivityEvent protos, so the trail tells the SAME story as the recent-runs
 // tree, the log waterfall, and the dashboard: the same agent MCP calls that drove the runs (tied by
 // responseRef and timing), the branch-switch reindex job that explains WHY services/identity:test
 // suddenly broke, the config/token beats that authorized the agent, the denied sandbox write, and
 // the failed lookup for a pruned ref. Newest first, the order the service returns. Because it is the scenario's data in wire shape, the Activity surface's
 // rendering (foldable, status-accented sections, ok vs error accents, the kind-grouped index) is
-// fully inspectable without a running daemon.
+// fully inspectable without a running server.
 
 import { create } from "@bufbuild/protobuf";
 import {

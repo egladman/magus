@@ -19,7 +19,7 @@ type ParamDescriptor = gen.ParamDescriptor
 // the package always compiles in.
 type ToolDescriptor = gen.ToolDescriptor
 
-// Registry is the canonical list of MCP tools the magus daemon exposes.
+// Registry is the canonical list of MCP tools the magus server exposes.
 // registerTools pairs each entry with the SpellDriver of the same name and
 // panics in either direction when one has no counterpart.
 var Registry = gen.Registry

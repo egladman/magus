@@ -30,7 +30,7 @@ describe("the console status bar", () => {
     assert.equal(conn().dataset.owner, "surface");
   });
 
-  // The whole point of the split: a surface with nothing to say about the daemon must leave the dot
+  // The whole point of the split: a surface with nothing to say about the server must leave the dot
   // alone rather than assert "not connected" about a link it never probed.
   test("a surface with no link of its own leaves the dot unclaimed", () => {
     publishStatus({ count: "2373 nodes" });

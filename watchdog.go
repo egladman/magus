@@ -67,8 +67,8 @@ func (w *abortWatch) close() {
 // aborted. watchWorkspaceRoot answers the same problem the same way, and the release it
 // shares is already idempotent for exactly this second caller (see acquireProjectLocks).
 //
-// It runs entirely in this process. The daemon is an accelerant and never a capability
-// gate, and an invocation stalling with no daemon up is exactly the case where nobody
+// It runs entirely in this process. The server is an accelerant and never a capability
+// gate, and an invocation stalling with no server up is exactly the case where nobody
 // else is watching, so the net cannot depend on one.
 //
 // Distinct from a target ceiling (config.TargetTimeout, a target's own declared timeout,

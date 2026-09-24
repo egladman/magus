@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -19,12 +20,39 @@ import (
 	"strings"
 )
 
-// fixtureFiles is the curated workspace the examples run against: it declares the
-// built-in go spell (so the output carries realistic, recognizable IDs: tool:go,
-// op:go:go-test) but only a couple of targets, so the output stays small and stable
-// across releases (it depends on the go spell's fixed op set, not on whatever this
-// repo happens to contain).
-var fixtureFiles = map[string]string{
+// Each fixture is written once and shared by every example that names it, in order, so an
+// example sees the state its predecessors left behind (a fire-once hint stays fired).
+const (
+	// graphFixture is the curated workspace the knowledge-graph examples run against: it
+	// declares the built-in go spell (so the output carries realistic, recognizable IDs:
+	// tool:go, op:go:go-test) but only a couple of targets, so the output stays small and
+	// stable across releases (it depends on the go spell's fixed op set, not on whatever
+	// this repo happens to contain).
+	graphFixture = "graph"
+	// reviewFixture is the workspace the review example runs against. It declares no spell,
+	// so no project has a symbol indexer and the conformance section reads "not checked". A
+	// spell that indexes would make `magus diff` run its indexer against the fixture, and the
+	// page would then record whether that indexer is installed and succeeds, down to the
+	// random temp directory it names when it fails.
+	reviewFixture = "review"
+)
+
+var fixtures = map[string]map[string]string{graphFixture: {
+	"magus.yaml": "concurrency: 4\n",
+	"magusfile.buzz": `import "magus";
+import "magus/spell/go";
+magus.project({ "spells": [go] });
+
+// Format the Go sources.
+export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
+
+// Run the Go test suite; formats first.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    go["go-test"]();
+}
+`,
+}, reviewFixture: {
 	"magus.yaml": "concurrency: 4\n",
 	// The changeset the review example describes, as a PATCH rather than a repository.
 	// `magus diff <patch-file>` is an input magus already documents, so the fixture needs no
@@ -39,27 +67,24 @@ var fixtureFiles = map[string]string{
 -func main() {}
 +func main() { println("hello") }
 `,
+	// vet claims the Go files as sources, so the changed file reads as source rather than
+	// unclaimed without a spell.
 	"magusfile.buzz": `import "magus";
-import "magus/spell/go";
-magus.project({ "spells": [go] });
+magus.project({});
 
-// Format the Go sources.
-export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
-
-// Run the Go test suite; formats first.
-export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(format);
-    go["go-test"]();
-}
+// Vet the Go sources.
+export fun vet(ctx: magus\Context, args: [str]) > void { ctx.readsFiles("*.go"); }
 `,
-}
+}}
 
-// example is one worked example: the page it belongs on, its marker slug, and the magus argv to
-// run. The displayed command line is derived from the argv, so the two never disagree.
+// example is one worked example: the page it belongs on, its marker slug, the fixture it runs
+// in, and the magus argv to run. The displayed command line is derived from the argv, so the
+// two never disagree.
 type example struct {
-	docs string // the Markdown file, relative to -dir, carrying this example's markers
-	slug string
-	argv []string
+	docs    string // the Markdown file, relative to -dir, carrying this example's markers
+	slug    string
+	fixture string // a key of fixtures
+	argv    []string
 }
 
 func (e example) command() string { return "magus " + strings.Join(e.argv, " ") }
@@ -70,9 +95,9 @@ const (
 )
 
 var examples = []example{
-	{docs: knowledgeDoc, slug: "explain-tool-go", argv: []string{"explain", "tool:go"}},
-	{docs: knowledgeDoc, slug: "explain-target-test", argv: []string{"explain", "target:.:test"}},
-	{docs: knowledgeDoc, slug: "path-test-to-tool", argv: []string{"path", "target:.:test", "tool:go"}},
+	{docs: knowledgeDoc, slug: "explain-tool-go", fixture: graphFixture, argv: []string{"explain", "tool:go"}},
+	{docs: knowledgeDoc, slug: "explain-target-test", fixture: graphFixture, argv: []string{"explain", "target:.:test"}},
+	{docs: knowledgeDoc, slug: "path-test-to-tool", fixture: graphFixture, argv: []string{"path", "target:.:test", "tool:go"}},
 	// The review prompt is captured rather than transcribed for the reason every example here is:
 	// it is prose magus assembles, so a hand-typed copy in the docs would describe a version
 	// nobody gets. It reads the fixture's patch file, so it needs no repository to review.
@@ -80,7 +105,7 @@ var examples = []example{
 	// --patch, not a positional: a positional narrows the changeset to a PATH, so the old spelling
 	// reviewed a clean working tree filtered to a file named change.patch and captured
 	// "clean: every change is committed" into the docs.
-	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt", "--patch", "change.patch"}},
+	{docs: reviewDoc, slug: "diff-prompt", fixture: reviewFixture, argv: []string{"diff", "--prompt", "--patch", "change.patch"}},
 }
 
 func main() {
@@ -108,20 +133,23 @@ func main() {
 	}
 }
 
-// renderExamples builds the current magus binary, writes the fixture, and captures
-// each example's stdout by running the binary against the fixture.
-func renderExamples() (map[string]string, error) {
+// writeFixture writes files into a fresh temp directory and returns it.
+func writeFixture(files map[string]string) (string, error) {
 	dir, err := os.MkdirTemp("", "magus-examples-")
 	if err != nil {
-		return nil, fmt.Errorf("temp fixture: %w", err)
+		return "", fmt.Errorf("temp fixture: %w", err)
 	}
-	defer os.RemoveAll(dir)
-	for name, body := range fixtureFiles {
+	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			return nil, fmt.Errorf("write fixture %s: %w", name, err)
+			return "", errors.Join(fmt.Errorf("write fixture %s: %w", name, err), os.RemoveAll(dir))
 		}
 	}
+	return dir, nil
+}
 
+// renderExamples builds the current magus binary, writes each fixture, and captures
+// each example's stdout by running the binary against its fixture.
+func renderExamples() (map[string]string, error) {
 	// Build HEAD's magus so the captured output reflects the current renderer, not a
 	// release on PATH, the whole point of the drift gate. The module path (not a
 	// relative ./cmd/magus) so this works whatever directory the generator runs from.
@@ -141,8 +169,25 @@ func renderExamples() (map[string]string, error) {
 		return nil, fmt.Errorf("build magus: %w", err)
 	}
 
+	dirs := map[string]string{}
+	defer func() {
+		for _, dir := range dirs {
+			_ = os.RemoveAll(dir)
+		}
+	}()
 	out := make(map[string]string, len(examples))
 	for _, ex := range examples {
+		dir, ok := dirs[ex.fixture]
+		if !ok {
+			files, known := fixtures[ex.fixture]
+			if !known {
+				return nil, fmt.Errorf("example %s names unknown fixture %q", ex.slug, ex.fixture)
+			}
+			if dir, err = writeFixture(files); err != nil {
+				return nil, err
+			}
+			dirs[ex.fixture] = dir
+		}
 		text, err := capture(bin, dir, ex.argv)
 		if err != nil {
 			return nil, fmt.Errorf("example %s (%s): %w", ex.slug, ex.command(), err)
@@ -154,12 +199,12 @@ func renderExamples() (map[string]string, error) {
 
 // capture runs the magus binary with argv in the fixture dir and returns its stdout.
 // Diagnostics ([warn]/[note]) go to stderr, so stdout is the clean command output;
-// the daemon is disabled so a shared background daemon cannot influence the result.
+// the server is disabled so a running `magus server` cannot influence the result.
 //
-// XDG_STATE_HOME is redirected into the fixture for a reason MAGUS_DAEMON_ENABLED
+// XDG_STATE_HOME is redirected into the fixture for a reason MAGUS_SERVER_ENABLED
 // does not cover: `explain` ends with a Graph Explorer deep-link, and that link
-// carries the daemon auth token, which auth.Load reads from a FILE in the state dir
-// whether or not a daemon is running. Captured on a developer's machine the examples
+// carries the server auth token, which auth.Load reads from a FILE in the state dir
+// whether or not a server is running. Captured on a developer's machine the examples
 // therefore embedded a real token in committed, published documentation; captured on
 // a runner they did not, so the same command produced two different pages and the
 // drift gate failed on CI alone. An empty state dir gives a machine-independent link
@@ -168,7 +213,8 @@ func capture(bin, dir string, argv []string) (string, error) {
 	cmd := exec.Command(bin, argv...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
-		"MAGUS_DAEMON_ENABLED=false",
+		"MAGUS_SERVER_ENABLED=false",
+		"MAGUS_BROKER=off",
 		"XDG_STATE_HOME="+filepath.Join(dir, "state"))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

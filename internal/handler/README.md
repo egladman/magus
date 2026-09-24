@@ -77,7 +77,7 @@ consistently:
 
 - INSIDE a handler, the domain import is aliased `store`:
   `store "github.com/egladman/magus/internal/notes"`.
-- In `internal/daemon`, which imports every handler at once, each is aliased `<name>handler`:
+- In `internal/server`, which imports every handler at once, each is aliased `<name>handler`:
   `noteshandler "github.com/egladman/magus/internal/handler/notes"`.
 
 Sharing the name with the domain package is expected and fine. Two packages sharing a name with
@@ -91,7 +91,7 @@ alias is telling you when it appears anywhere other than the two spellings above
     handler      internal/handler/*       (this package - request -> domain -> wire)
     service      internal/service/*       (pure application logic - no http/proto)
     repository   internal/cache, knowledge  (data access)
-    composition  internal/daemon          (assembles the daemon server)
+    composition  internal/server          (assembles the server server)
 
 Keep the arrows pointing down: a handler imports its service, httpx (to mount routes),
 and the repositories; nothing in a repository or in httpx imports a handler.

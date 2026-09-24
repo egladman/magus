@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
@@ -178,9 +180,9 @@ func TestErrSilentIsAlreadyReported(t *testing.T) {
 	assert.True(t, reported.AlreadyReported())
 }
 
-// TestCLIErrorsCarryTheirExitCode pins the method the DAEMON reads. exitCodeOf sees the
+// TestCLIErrorsCarryTheirExitCode pins the method the SERVER reads. exitCodeOf sees the
 // concrete types and could go on reading the fields; a forwarded run cannot, so without
-// the method `magus run bogus-target` exited 2 alone and 1 under a daemon.
+// the method `magus run bogus-target` exited 2 alone and 1 under a server.
 func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
@@ -197,11 +199,11 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 	}
 
 	_, ok := proc.ExitCode(errors.New("the work failed"))
-	assert.False(t, ok, "an ordinary failure names no code and stays the daemon's default 1")
+	assert.False(t, ok, "an ordinary failure names no code and stays the server's default 1")
 }
 
 // TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
-// branch of its own in exitCodeOf. The local path and the daemon now ask the error the
+// branch of its own in exitCodeOf. The local path and the server now ask the error the
 // same question, so the refusal must answer it rather than be recognised by type or by
 // diagnostic code, which is what lets one seam serve both this and a contended lock.
 func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
@@ -210,7 +212,7 @@ func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 	busy := machineBusyStub{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
 
 	code, ok := proc.ExitCode(busy)
-	require.True(t, ok, "the daemon must be able to read the code off a forwarded refusal")
+	require.True(t, ok, "the server must be able to read the code off a forwarded refusal")
 	assert.Equal(t, cache.ExitCodeMachineBusy, code)
 	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(busy), "and the local path must agree")
 	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(fmt.Errorf("run: %w", busy)),
@@ -633,10 +635,28 @@ func TestMCPAddrFallsBackToTheDefault(t *testing.T) {
 	assert.Equal(t, uint16(9999), parsed.Port())
 }
 
-func TestDaemonDefaultAddrIsAUnixSocket(t *testing.T) {
-	addr := daemonDefaultAddr()
-	assert.True(t, strings.HasPrefix(addr, "unix://"), addr)
-	assert.True(t, strings.HasSuffix(addr, "magus-daemon.sock"), addr)
+// TestServerAndBrokerSocketsSitApart pins the two addresses: each a unix socket in the
+// private socket directory, named for what listens there, and never the same file.
+func TestServerAndBrokerSocketsSitApart(t *testing.T) {
+	server, brk := proc.ServerDefaultAddr(), broker.DefaultAddr()
+	assert.True(t, strings.HasPrefix(server, "unix://"), server)
+	assert.True(t, strings.HasSuffix(server, "/server.sock"), server)
+	assert.True(t, strings.HasPrefix(brk, "unix://"), brk)
+	assert.True(t, strings.HasSuffix(brk, "/broker.sock"), brk)
+	assert.Equal(t, filepath.Dir(server), filepath.Dir(brk))
+}
+
+// TestResolveServerAddrNeverConsultsTheAdoptionSocket pins that the server's address is
+// config or server.sock, never MAGUS_PROC_SOCKET: inside a run that variable names the
+// run's own per-process pool, which dies with it.
+func TestResolveServerAddrNeverConsultsTheAdoptionSocket(t *testing.T) {
+	defer snapshotGlobals()()
+	t.Setenv(proc.SocketEnv, "unix:///tmp/magus-1-abc.sock")
+	globalCfg.Server.Address = ""
+	assert.Equal(t, proc.ServerDefaultAddr(), resolveServerAddr(""))
+	globalCfg.Server.Address = "unix:///tmp/configured.sock"
+	assert.Equal(t, "unix:///tmp/configured.sock", resolveServerAddr(""))
+	assert.Equal(t, "unix:///tmp/flag.sock", resolveServerAddr("unix:///tmp/flag.sock"))
 }
 
 // TestHintCanonicalSpellingTeachesCharmOnce covers the one place a run is told it spelled

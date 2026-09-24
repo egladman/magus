@@ -1,4 +1,4 @@
-// adapter.ts - maps the daemon's activity trail (magus.activity.v1alpha1 ActivityEvent list) into
+// adapter.ts - maps the server's activity trail (magus.activity.v1alpha1 ActivityEvent list) into
 // the shared RenderModel (console/render/model), so the activity view paints each recorded
 // action with the SAME foldable, status-accented section renderer the log viewer uses. One
 // event becomes one section: a one-line head (action, actor, outcome, duration, time) over a

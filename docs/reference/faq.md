@@ -1,7 +1,7 @@
 ---
 title: FAQ
-description: Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.
-tags: [faq, questions, spells, targets, charms, cache, affected, daemon]
+description: Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the broker and the server, and adding a tool.
+tags: [faq, questions, spells, targets, charms, cache, affected, broker, server]
 ---
 
 # FAQ
@@ -48,11 +48,12 @@ what it touches, so correctness is a declaration contract. See [cache.md](../con
 everything downstream of those projects in the dependency graph. `magus affected
 ci` is the monorepo CI workhorse. See [affected.md](../concepts/workspace/affected.md).
 
-## Do I have to run the daemon?
+## Do I have to run the server?
 
-No. magus runs fine without it. The daemon keeps spells and services warm across
-invocations and backs the MCP server; it starts on demand and is optional. Disable
-it with `MAGUS_DAEMON_ENABLED=false`. See [daemon.md](../guides/integrations/daemon.md).
+No. `magus server` serves MCP, the console and warm workspaces, and only a person
+starts it. The broker is different: a run starts it on its own to share the host's
+capacity and services across every magus, and it exits once it holds nothing. Set
+`broker: off` to run without one. See [server.md](../guides/integrations/server.md).
 
 ## How do I add support for a tool magus does not know?
 

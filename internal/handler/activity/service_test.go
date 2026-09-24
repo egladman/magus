@@ -69,7 +69,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 3, Kind: trail.KindJob, Workspace: "/ws/a",
-		Origin: types.Origin{EntryPoint: types.EntryPointDaemon},
+		Origin: types.Origin{EntryPoint: types.EntryPointServer},
 		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurationMs: 40,
 	})
 	agentReqBody := []byte(`{"schema_version":1,"tool":"Bash","command":"go test ./..."}`)
@@ -118,7 +118,7 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, "boom", events[1].GetError())
 	assert.Equal(t, "connector.create", events[2].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, events[2].GetKind())
-	// A daemon-wide action carries NO workspace, and the merge must not invent one. Event.Workspace
+	// A server-wide action carries NO workspace, and the merge must not invent one. Event.Workspace
 	// means "the root this action pertained to" (trail.go), and a token rotation genuinely pertains
 	// to no single workspace; substituting whichever trail happened to record it would make the
 	// field mean two different things depending on the row.
@@ -210,15 +210,15 @@ func TestGetPayload_RoundTripAndReject(t *testing.T) {
 }
 
 func TestMatchFilter_ActorsActions(t *testing.T) {
-	dir, _ := seedTrail(t) // mcp(claude,magus_query) token(console-1,connector.create) job(daemon,graph build)
+	dir, _ := seedTrail(t) // mcp(claude,magus_query) token(console-1,connector.create) job(server,graph build)
 
 	assert.Equal(t, []string{"graph build"},
-		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"daemon"}})))
+		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"server"}})))
 	assert.Equal(t, []string{"magus_query"},
 		actions(list(t, dir, &activityv1.ActivityQuery{Actions: []string{"magus_query"}})))
 	// actors AND actions both constrain: a mismatch on either drops the event.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{
-		Actors: []string{"daemon"}, Actions: []string{"magus_query"},
+		Actors: []string{"server"}, Actions: []string{"magus_query"},
 	}))
 	// an unmatched value yields nothing, not everything.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{"nobody"}}))
@@ -331,7 +331,7 @@ func TestListActivityEvents_MergesWorkspacesNewestFirst(t *testing.T) {
 }
 
 func TestListActivityEvents_PageSizeCapsTheMergedSet(t *testing.T) {
-	// page_size=3 over two trails must be the 3 most recent DAEMON-WIDE, not 3 from each.
+	// page_size=3 over two trails must be the 3 most recent SERVER-WIDE, not 3 from each.
 	a, b := seedAt(t, 1, 3, 5), seedAt(t, 2, 4, 6)
 
 	assert.Equal(t, []row{
@@ -357,8 +357,8 @@ func TestListActivityEvents_SkipsUnreadableWorkspace(t *testing.T) {
 
 func TestListActivityEvents_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t *testing.T) {
 	// Event.Workspace means "the root this action pertained to", and it is deliberately empty for a
-	// daemon-wide action (trail.go). Merging trails must not change that: an earlier revision filled
-	// blanks from the trail that happened to hold them, which made a daemon-wide MCP call or token
+	// server-wide action (trail.go). Merging trails must not change that: an earlier revision filled
+	// blanks from the trail that happened to hold them, which made a server-wide MCP call or token
 	// rotation claim a workspace it was never bound to, and left the field meaning one thing on some
 	// rows and something else on others.
 	//
@@ -374,8 +374,8 @@ func TestListActivityEvents_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t
 	assert.Equal(t, "/ws/a", byAction["Bash"], "a workspace-bound agent command keeps its own root")
 	assert.Equal(t, "/ws/a", byAction["graph build"], "a workspace-bound job keeps its own root")
 	assert.Equal(t, "/ws"+other, byAction["job-9"], "an event from the other trail keeps its root")
-	assert.Empty(t, byAction["connector.create"], "a daemon-wide token event stays unattributed")
-	assert.Empty(t, byAction["magus_query"], "a daemon-wide MCP call stays unattributed")
+	assert.Empty(t, byAction["connector.create"], "a server-wide token event stays unattributed")
+	assert.Empty(t, byAction["magus_query"], "a server-wide MCP call stays unattributed")
 }
 
 func TestListActivityEvents_SingleWorkspaceAndNoWorkspaces(t *testing.T) {
@@ -383,7 +383,7 @@ func TestListActivityEvents_SingleWorkspaceAndNoWorkspaces(t *testing.T) {
 	dir, _ := seedTrail(t)
 	assert.Len(t, listAll(t, svc(dir), 0), 4)
 
-	// ...and a daemon reporting no workspaces at all serves an empty page, not an error.
+	// ...and a server reporting no workspaces at all serves an empty page, not an error.
 	assert.Empty(t, listAll(t, NewService(nil), 0))
 	assert.Empty(t, listAll(t, NewService(func() []Workspace { return nil }), 0))
 	// A workspace with no cache dir to read is dropped rather than read as the process cwd.
@@ -391,7 +391,7 @@ func TestListActivityEvents_SingleWorkspaceAndNoWorkspaces(t *testing.T) {
 }
 
 func TestGetPayload_FindsTheHoldingWorkspace(t *testing.T) {
-	// The ref lives in the SECOND workspace's blob store; a daemon-wide view must still serve it.
+	// The ref lives in the SECOND workspace's blob store; a server-wide view must still serve it.
 	dir, ref := seedTrail(t)
 	s := svc(t.TempDir(), dir)
 
@@ -452,7 +452,7 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 }
 
 // TestListActivityEvents_FiltersBeforeTruncating is the regression for a page that starved on a
-// busy daemon: the newest page_size events were cut FIRST and the filter applied to the survivors,
+// busy server: the newest page_size events were cut FIRST and the filter applied to the survivors,
 // so a filter matching only older events answered "none". The console reads that as a false
 // absence: the review bells and the dashboard Agents tile all assert on it.
 func TestListActivityEvents_FiltersBeforeTruncating(t *testing.T) {

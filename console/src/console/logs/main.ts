@@ -19,10 +19,10 @@ import {
   parseHash,
   wantsDemo,
   getLiveToken,
-  daemonAttach,
-  adoptDaemonOrigin,
-  resolveDaemonHost,
-} from "../../lib/daemon";
+  serverAttach,
+  adoptServerOrigin,
+  resolveServerHost,
+} from "../../lib/server";
 import {
   fetchRunJournal,
   fetchRunOutput,
@@ -85,13 +85,13 @@ export const docTitle = signal<string | null>(null);
 // which must survive - the shared state.filterParsed is seeded once in state.ts, so nothing later
 // clobbers it back to empty.
 function init(): void {
-  // Adopt the serving origin FIRST, because everything below that resolves a daemon depends on it.
-  // Each surface is its own esbuild bundle, so lib/daemon's "did we adopt this origin" flag is
-  // PER-BUNDLE state: the shell setting it does not make it true in here, and daemonAttach then
-  // returns null on a console served by that very daemon. The activity surface hit this and fixed
-  // it there; the viewer had the same hole, which is why its run browser read "No daemon connected"
-  // on a page the daemon itself was serving.
-  adoptDaemonOrigin();
+  // Adopt the serving origin FIRST, because everything below that resolves a server depends on it.
+  // Each surface is its own esbuild bundle, so lib/server's "did we adopt this origin" flag is
+  // PER-BUNDLE state: the shell setting it does not make it true in here, and serverAttach then
+  // returns null on a console served by that very server. The activity surface hit this and fixed
+  // it there; the viewer had the same hole, which is why its run browser read "No server connected"
+  // on a page the server itself was serving.
+  adoptServerOrigin();
   wireControls();
   wireCommands();
   wireZoom();
@@ -100,9 +100,9 @@ function init(): void {
   wireRunBrowser();
 }
 
-// wireRunBrowser docks the run browser (runtree.ts) to the left of the viewer. It reads the daemon's
+// wireRunBrowser docks the run browser (runtree.ts) to the left of the viewer. It reads the server's
 // run and output feeds (or, in the #demo showcase, a synthetic set) and, on selection, loads that run
-// into this same viewer. Purely additive: with no reachable daemon and no demo the tree stays
+// into this same viewer. Purely additive: with no reachable server and no demo the tree stays
 // empty/hidden, so the #data/#src load and live-attach paths above are untouched.
 // runBrowser is the mounted browser's handle, kept module-level because the viewer names the body
 // header from whatever it has loaded and loadFromURL runs BEFORE the panel is mounted - a #inv= link
@@ -126,12 +126,12 @@ function wireRunBrowser(): void {
   const scroll = el("log-scroll");
   if (!scroll) return;
   const demo = wantsDemo(parseHash());
-  // resolveDaemonHost, NOT getDefaultHost: the browser auto-connects, and the daemon it should
+  // resolveServerHost, NOT getDefaultHost: the browser auto-connects, and the server it should
   // reach is usually the one SERVING this page, which getDefaultHost cannot see (it only reads the
-  // address typed into Settings). On the daemon-origin console that read the panel as "No daemon
-  // connected" while the status bar beside it said "daemon ready" - so the browser was empty in
+  // address typed into Settings). On the server-origin console that read the panel as "No server
+  // connected" while the status bar beside it said "server ready" - so the browser was empty in
   // exactly the setup it exists for.
-  const host = resolveDaemonHost(parseHash()) ?? "";
+  const host = resolveServerHost(parseHash()) ?? "";
   const token = getLiveToken();
   runBrowser = initRunBrowser({
     scroll,
@@ -205,7 +205,7 @@ async function openInvocation(
     return;
   }
   if (!host) {
-    setStatus("no daemon connected; set a daemon address in Settings", true);
+    setStatus("no server connected; set a server address in Settings", true);
     return;
   }
   const bytes = await fetchRunJournal(host, token, { inv });
@@ -254,7 +254,7 @@ function showJournal(journal: Journal, ref: string, focus?: string): void {
   if (focus) render();
 }
 
-// openRunOutput loads one browsed target. It asks the daemon for the RUN that produced the ref
+// openRunOutput loads one browsed target. It asks the server for the RUN that produced the ref
 // first, because the journal carries structure the stored blob has thrown away (exec boundaries,
 // per-target results, timing the waterfall plots); journals rotate on a coarser cap than outputs,
 // so a ref whose run has aged out still opens as verbatim text.
@@ -420,8 +420,8 @@ async function loadFromURL(): Promise<void> {
   renderFilterChips();
   const filterEl = el("log-filter");
   if (filterEl) (filterEl as HTMLInputElement).value = q;
-  // The shared BARE `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
-  // dashboard and graph explorer use) enters the daemon-free showcase: a synthetic run
+  // The shared BARE `#demo` fragment (wantsDemo, from lib/server - the same trigger the
+  // dashboard and graph explorer use) enters the server-free showcase: a synthetic run
   // streams in with a live-filling waterfall.
   //
   // Bare is the operative word. `#demo&inv=` names one run of the demo scenario, which is what the
@@ -469,14 +469,14 @@ async function loadFromURL(): Promise<void> {
   }
   // #inv= and a bare #ref= address a stored run in the LOCAL cache - what the run browser writes
   // when a row is selected, so reopening the page lands back on the run the reader was reading.
-  // Both need the daemon, which is why they sit after the two offline paths: a `magus query output
+  // Both need the server, which is why they sit after the two offline paths: a `magus query output
   // --open` link carries #ref= alongside its own #data= payload and returns above, so a ref reaching
-  // here is one this page wrote and the daemon can still resolve.
+  // here is one this page wrote and the server can still resolve.
   if (params.inv || params.ref) {
-    const host = resolveDaemonHost(params) ?? "";
+    const host = resolveServerHost(params) ?? "";
     const token = getLiveToken();
     // demo carries through: under #demo the ref names a run of the synthetic scenario, and reaching
-    // for a daemon for it would fail on a machine that has none - which is the whole point of demo.
+    // for a server for it would fail on a machine that has none - which is the whole point of demo.
     if (params.inv) await openInvocation(params.inv, params.inv, demo, host, token);
     else await openRunOutput(params.ref, undefined, "", demo, host, token);
     return;
@@ -484,13 +484,13 @@ async function loadFromURL(): Promise<void> {
   // No static content requested: connect live if an explicit `#port=` link resolves. A static
   // #data/#src above always wins, so a live attach never clobbers a pasted or fetched log.
   //
-  // A #port LINK specifically, not any resolved daemon: connectLive streams from `/events`, which is
-  // the EPHEMERAL per-run server `magus run --open` spins up, and the daemon does not serve that
-  // route at all (its own SSE is /api/v1/events, a graph-change feed). Attaching to a daemon origin
+  // A #port LINK specifically, not any resolved server: connectLive streams from `/events`, which is
+  // the EPHEMERAL per-run server `magus run --open` spins up, and the server does not serve that
+  // route at all (its own SSE is /api/v1/events, a graph-change feed). Attaching to a server origin
   // here therefore 404s and parks the surface on "disconnected" over an empty body - strictly worse
   // than the empty state, which at least says how to load something.
   const port = parseHash().port;
-  const attach = port === undefined ? null : daemonAttach(parseHash());
+  const attach = port === undefined ? null : serverAttach(parseHash());
   if (attach) {
     connectLive(attach, params);
     return;

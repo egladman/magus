@@ -4,7 +4,7 @@
 // 	protoc        (unknown)
 // source: magus/graph/v1alpha1/graph.proto
 
-// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the daemon
+// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the server
 // serves to the browser Graph Explorer. Two surfaces share it: the bulk subgraph document behind
 // GET /api/v1/graph (Graph/Node/Edge, mirroring types.KnowledgeGraphOutput - field names match
 // that type's JSON so a protojson encoding is wire-compatible with what the page already
@@ -1762,7 +1762,7 @@ func (x *Answer) GetGaps() []*SymbolGap {
 
 // SymbolGap is one project whose declared symbol index magus could not read: the evidence behind
 // an unknown verdict. The project is flattened to its two wire fields rather than nested,
-// because ProjectRef's third field is an absolute host path that never leaves the daemon.
+// because ProjectRef's third field is an absolute host path that never leaves the server.
 type SymbolGap struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectPath   string                 `protobuf:"bytes,1,opt,name=project_path,json=projectPath,proto3" json:"project_path,omitempty"` // workspace-relative; "." is the root

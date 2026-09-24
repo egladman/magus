@@ -1,7 +1,7 @@
 // lint-catch.mjs - reject a swallowed failure in console/src.
 //
 // The console's rule is that every failure reaches the person (lib/notifications reportFailure, or
-// the daemon transport and fetchSSE, which report on their own). A catch that drops its error is how
+// the server transport and fetchSSE, which report on their own). A catch that drops its error is how
 // a failure turns into an empty list or "not connected", so these shapes fail the lint:
 //
 //   catch {                  a catch that never binds the error

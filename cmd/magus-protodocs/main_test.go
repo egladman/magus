@@ -247,7 +247,7 @@ func fixtureSet() *descriptorpb.FileDescriptorSet {
 		}},
 		SourceCodeInfo: &descriptorpb.SourceCodeInfo{Location: []*descriptorpb.SourceCodeInfo_Location{
 			loc([]int32{2}, 2, "The token contract.\n", ""),
-			loc([]int32{6, 0}, 11, "Issues and lists tokens. Everything the daemon accepts as auth comes from here.\n", ""),
+			loc([]int32{6, 0}, 11, "Issues and lists tokens. Everything the server accepts as auth comes from here.\n", ""),
 			loc([]int32{6, 0, 2, 0}, 13, "Lists tokens, newest first.\n", ""),
 			loc([]int32{6, 0, 2, 1}, 15, "Streams tokens as they are issued.\n", ""),
 			loc([]int32{4, 0}, 20, "The filter and paging for ListTokens.\n", ""),
@@ -651,7 +651,7 @@ func TestSourceLink(t *testing.T) {
 // TestWriteAllRendersEveryPageAndPrunesTheRest: the drift gate only compares
 // files the generator writes, so a page it stops writing is invisible to it: a
 // deleted RPC's page would sit in the committed tree describing something the
-// daemon no longer serves.
+// server no longer serves.
 func TestWriteAllRendersEveryPageAndPrunesTheRest(t *testing.T) {
 	dir := t.TempDir()
 	stale := filepath.Join(dir, "token", "v1", "removed.md")
@@ -756,7 +756,7 @@ func TestServicePageStatesTheCallContract(t *testing.T) {
 		"`POST /magus.token.v1.TokenService/WatchTokens`: server streaming.",
 		"Takes [ListTokensRequest](#listtokensrequest), returns [ListTokensResponse](#listtokensresponse).",
 		"Package `magus.token.v1`, defined in `proto/magus/token/v1/token.proto`.",
-		"Part of the [daemon API](../../index.md).",
+		"Part of the [server API](../../index.md).",
 		"### RevokeToken\n\n**Deprecated.**",
 	} {
 		assert.Contains(t, body, want)
@@ -803,9 +803,9 @@ func TestProseIsEscapedForTheMarkdownItLandsIn(t *testing.T) {
 		"a pipe inside a code span still ends the table cell, so it is escaped there too")
 }
 
-// TestConstraintsStateWhatTheDaemonEnforces, so a client learns the rule from
+// TestConstraintsStateWhatTheServerEnforces, so a client learns the rule from
 // the reference instead of from a rejected request.
-func TestConstraintsStateWhatTheDaemonEnforces(t *testing.T) {
+func TestConstraintsStateWhatTheServerEnforces(t *testing.T) {
 	a := fixtureAPI(t)
 	filter := fieldNamed(t, a.messages["magus.token.v1.ListTokensRequest"], "filter")
 
@@ -898,7 +898,7 @@ func TestIndexOrientsAClientWithNoGeneratedCode(t *testing.T) {
 
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok)
-	assert.Equal(t, "Daemon API", fm.Title)
+	assert.Equal(t, "Server API", fm.Title)
 	assert.Equal(t, "proto/magus/**/*.proto", fm.GeneratedFrom)
 
 	for _, want := range []string{
@@ -935,7 +935,7 @@ func TestPackagePageDocumentsTypesWithNoServiceOfTheirOwn(t *testing.T) {
 	assert.Contains(t, fm.Tags, "query-v1")
 
 	for _, want := range []string{
-		"Declares no service of its own; part of the [daemon API](../../index.md).",
+		"Declares no service of its own; part of the [server API](../../index.md).",
 		"Ranges are half-open and read start\\|end.",
 		"### TimeRange\n",
 		"| `start` | string | 1 |",

@@ -352,7 +352,7 @@ test("an unmeasured file shows no read chip at all", () => {
 });
 
 // settled is spelled the same way in the terminal viewer (diff.File.Settled), against the same
-// read_state the daemon computes once. TestSettledFilesFoldByDefault is its counterpart there.
+// read_state the server computes once. TestSettledFilesFoldByDefault is its counterpart there.
 test("settled is read-and-unmoved, never merely read", () => {
   assert.equal(settled(ann("a.ts", { read_state: "read" })), true);
   // The control that keeps the fold honest: stale is read, then EDITED, which is the file that

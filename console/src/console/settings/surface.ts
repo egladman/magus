@@ -31,9 +31,9 @@ import {
   saveNodeShapes,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
-import { probeDaemon, normalizeDaemonHost, resolveDaemonHost } from "../../lib/daemon";
+import { probeServer, normalizeServerHost, resolveServerHost } from "../../lib/server";
 import { h } from "../view";
-import { daemonGuideLink } from "../connectPrompt";
+import { serverGuideLink } from "../connectPrompt";
 import {
   bigPictureSplitCell,
   collapsedCardsCell,
@@ -196,8 +196,8 @@ interface SettingsTab {
 
 // buildSettingsTabs renders a horizontal tab strip (role=tablist) over the section panels, showing
 // exactly one panel at a time so the surface is a set of focused views rather than one long scroll.
-// Returns the nav strip, the panels host, and setHidden - the daemon-gated Access tokens / Agent memory
-// tabs call setHidden(id, true) when the daemon declines the service, dropping both the tab and its
+// Returns the nav strip, the panels host, and setHidden - the server-gated Access tokens / Agent memory
+// tabs call setHidden(id, true) when the server declines the service, dropping both the tab and its
 // panel; hiding the active tab falls back to the first still-visible one.
 function buildSettingsTabs(tabs: SettingsTab[]): {
   root: HTMLElement;
@@ -362,11 +362,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   };
   const keymapDraft = createDraftCell<Keymap>({ ...committed.keymap }, () => recompute());
   const draftPrefs = (): Settings => ({
-    // A bare port in the daemon-host field expands to the literal loopback IP (8787 -> 127.0.0.1:8787),
-    // so the committed/stored value is a canonical host resolveDaemonHost accepts. Empty stays empty
+    // A bare port in the server-host field expands to the literal loopback IP (8787 -> 127.0.0.1:8787),
+    // so the committed/stored value is a canonical host resolveServerHost accepts. Empty stays empty
     // (loopback default); an unparsable value is kept as-typed so the Test button can report on it.
     poll: draftScalar.poll,
-    host: normalizeDaemonHost(draftScalar.host) ?? draftScalar.host.trim(),
+    host: normalizeServerHost(draftScalar.host) ?? draftScalar.host.trim(),
     theme: draftScalar.theme,
     focusRing: draftScalar.focusRing,
     motion: draftScalar.motion,
@@ -515,7 +515,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     resetBtn.disabled = none;
   }
 
-  // --- General: refresh rate + daemon host ---
+  // --- General: refresh rate + server host ---
   const generalForm = h("form", "pf-v6-c-form pf-m-horizontal");
   generalForm.addEventListener("submit", (e) => e.preventDefault());
 
@@ -575,7 +575,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // gets probed.
   const testBtn = h("button", "pf-v6-c-button pf-m-secondary", "Test") as HTMLButtonElement;
   testBtn.type = "button";
-  testBtn.title = "Try to reach a daemon at this address";
+  testBtn.title = "Try to reach a server at this address";
   testBtn.addEventListener("click", () => {
     const raw = hostInput.value.trim();
     if (!raw) {
@@ -585,7 +585,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     const generation = hostTestGeneration;
     testBtn.disabled = true;
     showHostTestStatus("Testing...", "pending");
-    void probeDaemon(raw).then((res) => {
+    void probeServer(raw).then((res) => {
       if (generation !== hostTestGeneration) return;
       testBtn.disabled = false;
       // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
@@ -607,7 +607,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const testItem = h("div", "pf-v6-c-input-group__item");
   testItem.append(testBtn);
   const guideItem = h("div", "pf-v6-c-input-group__item");
-  guideItem.append(daemonGuideLink());
+  guideItem.append(serverGuideLink());
   hostGroup.append(hostFill, testItem, guideItem);
   const hostField = h("div");
   hostField.append(hostGroup, hostTestStatus);
@@ -617,15 +617,15 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       "Refresh rate",
       pollSelect.id,
       pollControl,
-      "How often the VCS insight lenses re-poll the daemon.",
+      "How often the VCS insight lenses re-poll the server.",
     ),
   );
   generalForm.append(
     buildFormGroup(
-      "Daemon host",
+      "Server host",
       hostInput.id,
       hostField,
-      "The loopback daemon to connect to by default. Enter a bare port (for example 8787) and it expands to 127.0.0.1:8787, or give a full 127.0.0.1:port. Leave empty for the default loopback.",
+      "The loopback server to connect to by default. Enter a bare port (for example 8787) and it expands to 127.0.0.1:8787, or give a full 127.0.0.1:port. Leave empty for the default loopback.",
     ),
   );
 
@@ -1065,8 +1065,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       : "Saved. Takes effect on the next load.";
     // Confirm the commit with a TOAST, not a lingering inline line: the reload prompt when a live change
     // needs a reload to take effect, otherwise a transient success toast so a save is never silent.
-    // A host applies live only to views still waiting on a daemon (subscribeDefaultHost); a view
-    // already showing data keeps the daemon it came from, so the reload prompt stays for it too. Clear
+    // A host applies live only to views still waiting on a server (subscribeDefaultHost); a view
+    // already showing data keeps the server it came from, so the reload prompt stays for it too. Clear
     // any prior inline status so a stale message does not sit under the heading.
     setStatus("", "ok");
     if (applyLive && keys.has("poll")) {
@@ -1074,7 +1074,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     } else if (applyLive && keys.has("host")) {
       showRefreshToast(
         "Settings",
-        "Daemon address applied. Views already showing data keep their daemon until you reload.",
+        "Server address applied. Views already showing data keep their server until you reload.",
       );
     } else {
       showToast("Settings", msg);
@@ -1088,16 +1088,16 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     setStatus("Reset pending changes.", "ok");
   });
 
-  // The two LIVE sections talk to the daemon directly (not the staged-config model): they act on the
-  // daemon's own state - its auth tokens and the durable agent-memory files - so their edits apply
+  // The two LIVE sections talk to the server directly (not the staged-config model): they act on the
+  // server's own state - its auth tokens and the durable agent-memory files - so their edits apply
   // immediately over RPC rather than staging into the draft. Both resolve the same loopback host and
   // degrade to a clear "connect first" state when none is found.
   //
   // The two LIVE sections are gated by the SERVER, not a client-side mode guess: they always build,
-  // and each hides ITS OWN TAB (via tabs.setHidden below) if the daemon declines the service to this
+  // and each hides ITS OWN TAB (via tabs.setHidden below) if the server declines the service to this
   // client (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted on
   // the share listener, and guarded by token class), so those RPCs come back denied and that tab
-  // vanishes. Enforcement lives at the daemon; this only mirrors what the daemon already refuses.
+  // vanishes. Enforcement lives at the server; this only mirrors what the server already refuses.
   // Tokens (access control) and memory (the records agents write) are DISTINCT concerns, so each owns
   // its own tab - Access and Memory - and hides independently. (tabs is const-declared below; onDenied
   // only fires after an async RPC, so it is initialized by then.)
@@ -1106,15 +1106,15 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // model and applies the moment it is clicked.
   const installSection = buildInstallSection(deps.install);
 
-  const tokensSection = buildTokensSection(resolveDaemonHost(), {
+  const tokensSection = buildTokensSection(resolveServerHost(), {
     onDenied: () => tabs.setHidden("access", true),
   });
-  const memorySection = buildMemorySection(resolveDaemonHost(), {
+  const memorySection = buildMemorySection(resolveServerHost(), {
     onDenied: () => tabs.setHidden("memory", true),
   });
 
-  // Three tabs. General stacks the staged client sections (daemon address, appearance, keybindings,
-  // backup) plus About; Access and Memory each host one live daemon-facing section, kept apart because
+  // Three tabs. General stacks the staged client sections (server address, appearance, keybindings,
+  // backup) plus About; Access and Memory each host one live server-facing section, kept apart because
   // access control and the agents' knowledge store are distinct concerns. The action bar and pending
   // diff stay above the tabs: the staged draft is shared across the staged sections, so its commit
   // controls are global to the surface, not per-tab.
@@ -1146,7 +1146,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         buildSection(
           "Access tokens",
           tokensSection.el,
-          "List and revoke the daemon's connector tokens and the active read-only share token. Minting stays a CLI-only operation: the console can never create a token.",
+          "List and revoke the server's connector tokens and the active read-only share token. Minting stays a CLI-only operation: the console can never create a token.",
         ),
       ),
     },

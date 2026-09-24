@@ -625,7 +625,7 @@ func TestInvocationEventsByID(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 
-// TestInvocationReadsRefuseTraversal: the daemon's viewer RPCs pass a caller-supplied name
+// TestInvocationReadsRefuseTraversal: the server's viewer RPCs pass a caller-supplied name
 // straight to these two readers, so an id that is not shaped like one must be refused before
 // it is joined onto the runs dir; otherwise "inv/../../<path>" serves any .jsonl on the
 // machine over the Connect API.

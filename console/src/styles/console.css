@@ -1,7 +1,7 @@
 /* console.css - the console-app-ONLY shell: the slim top app bar and its waffle app launcher,
    the fixed bottom status bar, the full-height (console-fill) layout, the console-app button
    contrast, and the small accent palette + layout custom properties they consume. Loaded by the
-   daemon-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
+   server-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
    the status bar - after site.css. It is deliberately NOT loaded on the documentation pages:
    that is the console-vs-docs distinction. The shared nav panels the docs pages DO need (the
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
@@ -313,7 +313,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
      shell. The full-bleed exemption is the rule directly below. */
   padding-inline: var(--console-pad);
 }
-/* The shell's connect page, standing in a daemon surface's place (requireDaemon): centered in the
+/* The shell's connect page, standing in a server surface's place (requireServer): centered in the
    pane, and scrolling with it when the ways outgrow a short pane. */
 #console-outlet div[data-pane-id] > [data-connect-page] {
   flex: 1 0 auto;
@@ -1432,7 +1432,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
 /* The workspace scope control in the title bar (ui/scope-picker.ts). Square and normal-case like every
    other chip in this shell; it names the workspace this BROWSER TAB is scoped to, and hides itself
-   entirely until the daemon reports more than one. */
+   entirely until the server reports more than one. */
 /* ONE control: the border belongs to this wrapper so it encloses the caption AND the value. As two
    siblings they read as unrelated things sitting next to each other in a row of icon buttons. */
 .console-shell-scope {
@@ -1547,7 +1547,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 [data-launcher-connect] [data-empty-ways] { margin: 0.9rem 0 0; font-size: var(--pf-t--global--font--size--body--default); }
 
 /* Marks a row as NOT REAL: the demo's roots are spelled like checkouts (~/Repos/acme), so without
-   this the menu presents fabricated workspaces as though a daemon had loaded them. Also tags the demo
+   this the menu presents fabricated workspaces as though a server had loaded them. Also tags the demo
    action itself before you are in it. Subtle, because it is a qualifier on the name beside it rather
    than a status of its own. */
 /* A real label, not small caps floating beside the name. It appears ONLY on the menu rows, where it

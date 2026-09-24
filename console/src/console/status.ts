@@ -1,15 +1,15 @@
 // Renders the shell-owned status bar from one contribution shape.
 
-import { parseHash, wantsDemo } from "../lib/daemon";
+import { parseHash, wantsDemo } from "../lib/server";
 
 export type ConnectionState = "none" | "connecting" | "connected" | "disconnected" | "demo";
 
 // DEMO_HINT is the sentence the readiness poller and makeStatusBar also write, kept identical so
 // the tooltip does not change wording depending on which of the three last touched it.
-const DEMO_HINT = "Demo data is synthetic. Click to change the daemon address.";
+const DEMO_HINT = "Demo data is synthetic. Click to change the server address.";
 
 export interface StatusContribution {
-  // For a surface with its OWN link to the daemon (the graph's SSE stream, the log tail). Omit both
+  // For a surface with its OWN link to the server (the graph's SSE stream, the log tail). Omit both
   // otherwise and the shell's readiness poller answers. Pass either and you must pass both.
   connection?: ConnectionState;
   label?: string;
@@ -23,7 +23,7 @@ export interface StatusContribution {
 //
 // The CONNECTION half is overridden in demo mode, and that override is the point: a surface reports
 // the link IT believes it has, and in demo mode several believed different things. The log viewer
-// published "connected" - a daemon link that does not exist - while the graph explorer published
+// published "connected" - a server link that does not exist - while the graph explorer published
 // "not connected" and the dashboard published "demo", so one console said three things about
 // itself depending on which tab was in front. The fragment is the authority on demo everywhere else
 // in the shell (the readiness pulse, the connect screen, makeStatusBar), so it is the authority

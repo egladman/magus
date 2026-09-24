@@ -520,6 +520,7 @@ func TestStructuredRunEventTypes(t *testing.T) {
 		{"RunDry", RunDry{}, TypeRunDry},
 		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci"}, TypeLockSuperseded},
 		{"LockSupersedeRefused", LockSupersedeRefused{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeRefused},
+		{"LockPipeWait", LockPipeWait{UpstreamPID: 4242, Command: "magus affected ci --plan"}, TypeLockPipeWait},
 		{"DeterminismUnchecked", DeterminismUnchecked{Project: "api", Target: "build", Error: "open dist: permission denied"}, TypeDeterminismUnchecked},
 		{"Notice", Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
 	}

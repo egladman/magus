@@ -47,6 +47,7 @@ type Cache struct {
 	// in Open from the two fields below, which is where the caller's logger exists.
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
+	machineRequired bool
 	// The tiers Run walks, local first, built once in Open from the option inputs below.
 	local          *localTier
 	remote         *remoteTier // nil when no backend is configured
@@ -307,7 +308,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	// After the options, so its warnings reach the logger the caller chose.
 	c.mtimes = newMtimeStore(dir, c.log)
 	if c.machineAdmitter != nil {
-		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log}
+		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log, required: c.machineRequired}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err
@@ -712,7 +713,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			slog.String("ref", ref),
 			// The captured log's path on disk, carried so the pretty handler can make the
 			// ref a real hyperlink without resolving anything: a file:// link needs no
-			// daemon running, so it cannot be dead.
+			// server running, so it cannot be dead.
 			slog.String("log", lp),
 		)
 		if rc.onError != nil {
@@ -1171,10 +1172,25 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	}
 	defer release()
 	return c.Run(ctx, s, func(ctx context.Context) error {
-		ctx = ContextWithLimiter(ctx, lim)
-		ctx = WithSlotsHeld(ctx, slots)
-		return fn(ctx)
+		return runSeated(ctx, lim, slots, fn)
 	}, opts...)
+}
+
+// runSeated runs a step's body holding what admission seated it with: the limiter it
+// draws from, its slots, and a jobserver that holds make, cargo and any other client of
+// the GNU make protocol to those slots (run.SeatJobserver says when there is none).
+//
+// Inside Cache.Run's callback, so a replayed step opens no pipe, and the pool closes the
+// moment the body returns: whatever tokens a child still holds die with it.
+func runSeated(ctx context.Context, lim *Limiter, slots int, fn func(context.Context) error) error {
+	ctx = ContextWithLimiter(ctx, lim)
+	ctx = WithSlotsHeld(ctx, slots)
+	ctx, closeJobserver, err := runPkg.SeatJobserver(ctx, slots)
+	if err != nil {
+		return err
+	}
+	defer closeJobserver()
+	return fn(ctx)
 }
 
 // RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).
@@ -1365,9 +1381,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// of someone else's, so it counts against the budget and is worth reporting.
 			ran = true
 			r, err := c.Run(stepCtx, s, func(ctx context.Context) error {
-				ctx = ContextWithLimiter(ctx, lim)
-				ctx = WithSlotsHeld(ctx, slots)
-				return fn(ctx, s)
+				return runSeated(ctx, lim, slots, func(ctx context.Context) error { return fn(ctx, s) })
 			}, opts...)
 			// Write key before markDone; the markDone→waitForDeps happens-before edge
 			// ensures dependents see the key when they unblock.

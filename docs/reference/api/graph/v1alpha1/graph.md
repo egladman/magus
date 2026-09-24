@@ -7,15 +7,15 @@ tags: [api, proto, connect, grpc, graphservice]
 
 # GraphService
 
-GraphService answers the questions the CLI's query/explain/path/stats verbs answer, over the same knowledge graph. It exists so the browser stops reimplementing them: the Graph Explorer's filter was a second, divergent copy of the query grammar, scoring by raw degree over a payload the daemon had already sent whole.
+GraphService answers the questions the CLI's query/explain/path/stats verbs answer, over the same knowledge graph. It exists so the browser stops reimplementing them: the Graph Explorer's filter was a second, divergent copy of the query grammar, scoring by raw degree over a payload the server had already sent whole.
 
-Every verb is read-only, so the daemon mounts the service behind the console read bearer.
+Every verb is read-only, so the server mounts the service behind the console read bearer.
 
 The definition and schema\_version fields every domain output carries are deliberately absent here. The proto package IS the version and buf-breaking gates it, so a second version number could only ever disagree with the first; definition is CLI help prose, re-sent on every response to a typed client that already knows what it called.
 
 GET /api/v1/graph is NOT superseded. It is the bulk subgraph fetch - a whole document - which is a different job from ranked retrieval, and the page already speaks it.
 
-Package `magus.graph.v1alpha1`, defined in `proto/magus/graph/v1alpha1/graph.proto`. Source: [graph.proto:62](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L62). Part of the [daemon API](../../index.md).
+Package `magus.graph.v1alpha1`, defined in `proto/magus/graph/v1alpha1/graph.proto`. Source: [graph.proto:62](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L62). Part of the [server API](../../index.md).
 
 ## Methods
 
@@ -399,7 +399,7 @@ Used by: [ResolveNodes (response)](graph.md#resolvenodes).
 
 ### SymbolGap
 
-SymbolGap is one project whose declared symbol index magus could not read: the evidence behind an unknown verdict. The project is flattened to its two wire fields rather than nested, because ProjectRef's third field is an absolute host path that never leaves the daemon.
+SymbolGap is one project whose declared symbol index magus could not read: the evidence behind an unknown verdict. The project is flattened to its two wire fields rather than nested, because ProjectRef's third field is an absolute host path that never leaves the server.
 
 Source: [graph.proto:273](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L273).
 

@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, metricsservice]
 
 MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.
 
-Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Source: [metrics.proto:17](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L17). Part of the [daemon API](../../index.md).
+Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Source: [metrics.proto:17](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L17). Part of the [server API](../../index.md).
 
 ## Methods
 
@@ -33,7 +33,7 @@ Takes [StreamMetricsRequest](#streammetricsrequest), returns [StreamMetricsRespo
 
 ### Backfill
 
-Backfill is the ring-buffer history the daemon sends once, right after a dashboard connects, so the utilization grid and cache-rate trend start populated instead of empty.
+Backfill is the ring-buffer history the server sends once, right after a dashboard connects, so the utilization grid and cache-rate trend start populated instead of empty.
 
 Source: [metrics.proto:155](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L155).
 
@@ -143,7 +143,7 @@ Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (respons
 
 ### Sample
 
-Sample is one point in the rolling utilization/activity history. The daemon appends one per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid square per sample by utilization.
+Sample is one point in the rolling utilization/activity history. The server appends one per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid square per sample by utilization.
 
 Every field carries EXPLICIT PRESENCE, and that is the whole point of the message: a tick whose pool read or metric collection failed must record that it did not measure, never a zero. Zero is a measurement. An unset counter in a CUMULATIVE series is the dangerous case - a reader diffing adjacent samples sees one large negative step (indistinguishable from a counter reset) followed by one enormous positive step, so a single failed read corrupts the rate on both sides of it. capacity makes the same point in miniature: 0 already means "unlimited", so a zero written for "we could not read the pool" is not merely imprecise, it asserts the opposite of what happened.
 
@@ -160,7 +160,7 @@ Source: [metrics.proto:176](https://github.com/egladman/magus/blob/main/proto/ma
 | `cache_hits`         | int64     | 5 | _optional_ cumulative; diff adjacent samples for a hit rate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `cache_misses`       | int64     | 6 | _optional_ cumulative                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `target_runs`        | int64     | 7 | _optional_ cumulative target executions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `observe_start_time` | Timestamp | 8 | _optional_ observe\_start\_time identifies the GENERATION the cumulative counters above belong to: the instant the daemon began observing. The counters restart at zero when the daemon does, so two samples from different generations cannot be differenced - their difference is not a rate, it is the new process's total minus the old one's.  Carrying the identity is what lets a consumer BREAK the series at a restart instead of guessing. Do not infer a restart by comparing values: a decrease is also what an unreadable collection looks like, and clamping the negative to zero (which is what a consumer naturally reaches for) reports a restart as "no activity this minute" - a wrong answer that looks like a real one. |
+| `observe_start_time` | Timestamp | 8 | _optional_ observe\_start\_time identifies the GENERATION the cumulative counters above belong to: the instant the server began observing. The counters restart at zero when the server does, so two samples from different generations cannot be differenced - their difference is not a rate, it is the new process's total minus the old one's.  Carrying the identity is what lets a consumer BREAK the series at a restart instead of guessing. Do not infer a restart by comparing values: a decrease is also what an unreadable collection looks like, and clamping the negative to zero (which is what a consumer naturally reaches for) reports a restart as "no activity this minute" - a wrong answer that looks like a real one. |
 
 Used by: [StreamMetrics (response)](metrics.md#streammetrics).
 

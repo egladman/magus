@@ -484,7 +484,7 @@ func buzzUsage() {
 //
 // Opening is most of a run's cost, so it waits for the first read unless the policy
 // has to be in force before the first line runs. globalCfg is the config the open
-// would load, and an adopted workspace (daemon, tests) is already open.
+// would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
 	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Enabled {
 		return newLazyWorkspaceContext(ctx, root), nil

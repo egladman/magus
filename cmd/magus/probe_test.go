@@ -49,8 +49,8 @@ func TestEvaluateHealth(t *testing.T) {
 	assertHealth("liveness/unreachable-err", nil, errors.New("dial failed"), probeLiveness, "", false, "unreachable")
 	assertHealth("liveness/nil-reply-no-err", nil, nil, probeLiveness, "", false, "unreachable")
 	assertHealth("readiness/unreachable", nil, errors.New("no socket"), probeReadiness, "", false, "unreachable")
-	assertHealth("liveness/daemon-up-no-workspaces", makeReply(42), nil, probeLiveness, "", true, "42")
-	assertHealth("liveness/daemon-up-with-workspace", makeReply(99, "/ws"), nil, probeLiveness, "", true, "99")
+	assertHealth("liveness/server-up-no-workspaces", makeReply(42), nil, probeLiveness, "", true, "42")
+	assertHealth("liveness/server-up-with-workspace", makeReply(99, "/ws"), nil, probeLiveness, "", true, "99")
 	assertHealth("readiness/no-workspaces-no-root", makeReply(1), nil, probeReadiness, "", false, "no workspaces")
 	assertHealth("readiness/one-workspace-no-root", makeReply(1, "/ws"), nil, probeReadiness, "", true, "1 workspace")
 	assertHealth("readiness/two-workspaces-no-root", makeReply(1, "/ws", "/ws2"), nil, probeReadiness, "", true, "2 workspace")
@@ -58,19 +58,66 @@ func TestEvaluateHealth(t *testing.T) {
 	assertHealth("readiness/root-missing", makeReply(1, "/other"), nil, probeReadiness, "/repo", false, "/repo")
 	assertHealth("readiness/root-given-no-workspaces", makeReply(1), nil, probeReadiness, "/repo", false, "/repo")
 	assertHealth("readiness/root-trailing-slash-normalised", makeReply(1, "/repo"), nil, probeReadiness, "/repo/", true, "/repo")
-	assertHealth("readiness/daemon-mode-with-workspace",
-		&proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{{Root: "/ws"}}},
-		nil, probeReadiness, "", true, "1 workspace")
-	failed := &proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{
+	failed := &proc.StatusReply{ParentPID: 1, Workspaces: []proc.Workspace{
 		{Root: "/repo", State: types.WorkspaceFailed}, {Root: "/loading", State: types.WorkspaceLoading},
 	}}
 	assertHealth("readiness/failed-root-names-the-code", failed, nil, probeReadiness, "/repo", false, "MGS3016")
 	assertHealth("readiness/loading-root-not-ready", failed, nil, probeReadiness, "/loading", false, "is loading")
 	assertHealth("readiness/only-unloaded-workspaces", failed, nil, probeReadiness, "", false, "no workspaces loaded")
-	assertHealth("readiness/proc-mode-rejected",
-		&proc.StatusReply{ParentPID: 1, Mode: "proc"}, nil, probeReadiness, "", false, "per-process mode")
-	assertHealth("liveness/proc-mode-still-alive",
-		&proc.StatusReply{ParentPID: 7, Mode: "proc"}, nil, probeLiveness, "", true, "7")
+	assertHealth("readiness/per-process-pool-rejected", nil, errNotServer, probeReadiness, "", false, "not the server")
+}
+
+// TestServerSnapshotRefusesAPerProcessPool pins what replaced the "proc" mode string: only
+// a reply that carries the server's own report is the server, so a per-process pool
+// answering the probed socket reads as no server rather than as one with nothing loaded.
+func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
+	srv, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	_, err = serverSnapshot(srv.Addr())(t.Context())
+	require.ErrorIs(t, err, errNotServer)
+
+	server, err := proc.New(proc.Options{
+		Handler: func(context.Context, []string) error { return nil },
+		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
+	})
+	require.NoError(t, err)
+	defer server.Close()
+	require.NoError(t, server.Start())
+	out, err := serverSnapshot(server.Addr())(t.Context())
+	require.NoError(t, err)
+	assert.NotNil(t, out)
+}
+
+// TestServerSnapshotAsksTheServerNotTheRunsPool is the probe asking the right process.
+// Inside a run MAGUS_PROC_SOCKET names that run's own per-process pool, and pools no longer
+// bind server.address, so a probe that read the variable (or scanned for any live socket)
+// reached the pool and reported the server down while it was up. The probe asks
+// server.address, whatever the environment says.
+func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
+	defer snapshotGlobals()()
+	pool, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	defer pool.Close()
+	require.NoError(t, pool.Start())
+
+	server, err := proc.New(proc.Options{
+		Handler: func(context.Context, []string) error { return nil },
+		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 7} },
+	})
+	require.NoError(t, err)
+	defer server.Close()
+	require.NoError(t, server.Start())
+	globalCfg.Server.Address = server.Addr()
+	// Set only now: proc.New refuses to host a pool while the variable names a parent.
+	t.Setenv(proc.SocketEnv, pool.Addr())
+
+	out, err := serverSnapshot("")(t.Context())
+	require.NoError(t, err, "the probe must reach the server, not the run's pool")
+	ok, reason := evaluateHealth(out, err, probeLiveness, "")
+	assert.True(t, ok, reason)
 }
 
 func TestHealthHTTPHandler(t *testing.T) {
@@ -92,7 +139,7 @@ func TestHealthHTTPHandler(t *testing.T) {
 			h(rec, req)
 			assert.Equal(t, wantStatus, rec.Code, "body: %q", rec.Body.String())
 			// The body is a fixed generic token, never evaluateHealth's reason (which
-			// embeds the daemon PID). A kubelet reads only the status code, so this
+			// embeds the server PID). A kubelet reads only the status code, so this
 			// redaction cannot break probe use.
 			wantBody := "ok\n"
 			if wantStatus != http.StatusOK {
@@ -113,10 +160,10 @@ func TestHealthHTTPHandler(t *testing.T) {
 // TestHealthHTTPHandlerUnreachable drives the error path with a querier that
 // cannot be reached.
 func TestHealthHTTPHandlerUnreachable(t *testing.T) {
-	// A proc-dial error carrying the daemon socket path is exactly the kind of text
-	// evaluateHealth would fold into its reason ("daemon unreachable: ...dial <socket>").
+	// A proc-dial error carrying the server socket path is exactly the kind of text
+	// evaluateHealth would fold into its reason ("server unreachable: ...dial <socket>").
 	h := healthHTTPHandler(probeLiveness, func(context.Context) (*types.StatusOutput, error) {
-		return nil, errors.New("proc: query: dial /var/run/magus/daemon.sock: connection refused")
+		return nil, errors.New("proc: query: dial /var/run/magus/server.sock: connection refused")
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -124,11 +171,11 @@ func TestHealthHTTPHandlerUnreachable(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	// The redacted body must not surface the error text (and its socket path).
 	assert.Equal(t, "unavailable\n", rec.Body.String())
-	assert.NotContains(t, rec.Body.String(), "daemon.sock")
+	assert.NotContains(t, rec.Body.String(), "server.sock")
 }
 
 // TestHealthEndpointBodiesRedactSensitiveDetail is the regression guard for the security
-// fix: the unguarded /livez, /healthz, and /readyz bodies must never carry the daemon PID,
+// fix: the unguarded /livez, /healthz, and /readyz bodies must never carry the server PID,
 // a workspace root, or any filesystem path, even when the underlying snapshot is rich with
 // them. It drives the real handlers with a snapshot whose workspace roots and PID are
 // distinctive sentinels, then asserts none of those sentinels reach any body.
@@ -142,7 +189,7 @@ func TestHealthEndpointBodiesRedactSensitiveDetail(t *testing.T) {
 
 	// leaks lists the sentinels no unguarded health body may echo.
 	leaks := []string{
-		fmt.Sprintf("%d", sentinelPID), // the daemon PID
+		fmt.Sprintf("%d", sentinelPID), // the server PID
 		sentinelRoot,                   // a workspace root
 		"/srv/another/workspace",       // a second workspace root
 		"/",                            // any absolute-path fragment at all
@@ -191,14 +238,13 @@ func TestWorkspacesComponent(t *testing.T) {
 		snapshot *types.StatusOutput
 		want     types.ReadinessComponent
 	}{
-		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon unreachable"}},
-		{"proc-mode", &types.StatusOutput{Mode: "proc"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon is in per-process mode"}},
-		{"no-workspaces", &types.StatusOutput{Mode: "daemon"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
+		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "server unreachable"}},
+		{"no-workspaces", &types.StatusOutput{}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
 		// Two workspaces with recognizable roots: the count is wanted in Detail, but the
 		// roots themselves must NOT leak into it on this unguarded surface.
-		{"two-workspaces", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
-		{"one-failed", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
-		{"all-failed", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
+		{"two-workspaces", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
+		{"one-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
+		{"all-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

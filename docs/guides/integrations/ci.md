@@ -228,4 +228,4 @@ project, look for MGS1010 before looking anywhere else.
 - [affected.md](../../concepts/workspace/affected.md) - how the diff becomes a project set.
 - [MGS1010](../../reference/codes/magusfile/MGS1010.md) - the diagnostic for an uncomputable diff.
 - [ci.md](../../concepts/targets/ci.md) - the `ci` anchor these pipelines run.
-- [daemon.md](daemon.md) - concurrency when several CI steps share a machine.
+- [server.md](server.md) - concurrency when several CI steps share a machine.

@@ -110,7 +110,7 @@ func configConsoleTokenCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "Usage: magus config console token create [--name <n>] [--expires <dur>] [--viewer]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Mint a console token and print the secret ONCE, alone on stdout. It is accepted")
-		fmt.Fprintln(os.Stderr, "by the console and refused at /mcp. A running daemon accepts it immediately.")
+		fmt.Fprintln(os.Stderr, "by the console and refused at /mcp. A running server accepts it immediately.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()

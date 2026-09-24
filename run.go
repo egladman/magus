@@ -62,6 +62,7 @@ type run struct {
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	Preflight         []string // targets run first as a separate pass; see WithPreflight
 	preflight         []stage  // Preflight resolved against the selection by runResolved
+	stdio             *ProcessStdio
 }
 
 // out is the sink the run reports through.
@@ -1379,7 +1380,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// anything. Joined rather than merely cancelled: an in-flight report would
 	// otherwise land after the summary footer, or be cut off by process exit.
 	if m.cache != nil && !opts.DryRun {
-		// Rebase the heap peak and attribution: the daemon serves many invocations
+		// Rebase the heap peak and attribution: the server serves many invocations
 		// from one process against a heap that never shrinks, and without this the
 		// first run's peak is reported against every later one.
 		vm.ResetHeapStats()
@@ -1456,7 +1457,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	start := time.Now()
 	// Run-scoped remote-cache counters. Installed here rather than held on Cache
-	// because the daemon reuses one Cache per workspace across runs and can serve two
+	// because the server reuses one Cache per workspace across runs and can serve two
 	// adopted runs at once; RemoteSummary below reads them back off ctx.
 	ctx = cache.ContextWithRemoteStats(ctx)
 
@@ -1515,7 +1516,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// no lock and starts before one is taken.
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.report)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.report, opts.stdio)
 	if err != nil {
 		return err
 	}
@@ -1804,10 +1805,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	// One service supervisor per run: a service op reached as a dependency is started
 	// and readiness-gated, deduped by fingerprint so N dependents share one instance,
-	// and released when the run ends (warm on the daemon, or stopped in-process).
+	// and released when the run ends (warm on the broker, or stopped in-process).
 	svcSession := m.newServiceSession(ctx)
 	// context.WithoutCancel: a cancelled run (Ctrl-C) still has to release the
-	// services it acquired, or an in-process one leaks running and a daemon-hosted
+	// services it acquired, or an in-process one leaks running and a broker-hosted
 	// one leaks its ref-count: passing the already-cancelled ctx through would make
 	// Shutdown's bounded wait for e.ready return immediately and skip stopping
 	// anything still starting. Bounded so a wedged service cannot hang teardown.
@@ -1820,6 +1821,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	for i := range steps {
 		stampRevision(&steps[i])
 	}
+	// The loop above joins the revision goroutine only when there is a step, and a
+	// preflight pass can leave none.
+	<-revisionDone
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: opts.NoCache, opts: cacheOpts,
@@ -2529,7 +2533,7 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 
 // driftDetail is the diff of what moved, appended to the gate's message.
 //
-// Names alone were not enough twice running: one of them turned out to be a daemon auth
+// Names alone were not enough twice running: one of them turned out to be a server auth
 // token captured into a docs example, which no filename could have shown. This gate fires
 // where its reader has a CI log and no tree, so the bytes have to travel with the verdict.
 //

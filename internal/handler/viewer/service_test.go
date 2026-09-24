@@ -312,7 +312,7 @@ func TestStreamEventsResumesFromSince(t *testing.T) {
 }
 
 // TestStreamEventsEndsOnClientCancel checks a caller walking away from an unfinished run ends the
-// RPC rather than leaving the daemon polling a journal nobody reads.
+// RPC rather than leaving the server polling a journal nobody reads.
 func TestStreamEventsEndsOnClientCancel(t *testing.T) {
 	runs := &fakeRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
 	client := streamClient(t, runs)

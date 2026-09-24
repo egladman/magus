@@ -1,5 +1,5 @@
-// connectPrompt.ts - the one prompt a surface shows while it has no daemon to read. Every
-// daemon-backed surface renders it through renderConnectPrompt, so the words, the actions and the
+// connectPrompt.ts - the one prompt a surface shows while it has no server to read. Every
+// server-backed surface renders it through renderConnectPrompt, so the words, the actions and the
 // docs link cannot drift between surfaces. What a surface shows once it IS connected (nothing kept
 // yet, a clean tree) stays the surface's own and goes through renderEmptyMessage: those are facts
 // about its data, not the connection.
@@ -10,21 +10,21 @@ import {
   AUTH_LOST_EVENT,
   getLiveToken,
   parseHash,
-  resolveDaemonHostOrRemembered,
+  resolveServerHostOrRemembered,
   signInCommand,
   wantsDemo,
-} from "../lib/daemon";
+} from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 import type { ConnectionState } from "./status";
 import { h } from "./view";
 
-export const DAEMON_GUIDE_URL = "https://eli.gladman.cc/magus/guides/integrations/daemon/";
+export const SERVER_GUIDE_URL = "https://eli.gladman.cc/magus/guides/integrations/server/";
 
 // Surfaces are separate bundles with separate command registries, so a surface cannot reach the
 // shell through dispatchCommand. The shell listens for this on document and opens the address field.
-export const REQUEST_DAEMON_SETTINGS_EVENT = "magus:request-daemon-settings";
+export const REQUEST_SERVER_SETTINGS_EVENT = "magus:request-server-settings";
 
 // The prompt's states are the status bar's own ConnectionState values, narrowed to the three a
 // surface can be stuck in, so the console keeps one vocabulary for a connection.
@@ -60,23 +60,23 @@ export function renderConnectPrompt(
   slots.actions.dataset.connectPrompt = key;
   switch (state.connection) {
     case "none":
-      slots.title.textContent = "No daemon connected";
+      slots.title.textContent = "No server connected";
       slots.message.textContent = options.purpose ?? "";
       slots.actions.replaceChildren(
         startWay("Then open the link it prints, or enter the address it listens on.", [
-          wayButton("pf-m-primary", "Set daemon address", requestDaemonSettings),
-          daemonGuideLink(),
+          wayButton("pf-m-primary", "Set server address", requestServerSettings),
+          serverGuideLink(),
         ]),
         demoWay(),
       );
       return;
     case "connecting":
       slots.title.textContent = "Connecting";
-      slots.message.textContent = "Reaching the daemon at " + state.host + ".";
+      slots.message.textContent = "Reaching the server at " + state.host + ".";
       slots.actions.replaceChildren();
       return;
     case "disconnected": {
-      slots.title.textContent = "Could not reach the daemon";
+      slots.title.textContent = "Could not reach the server";
       slots.message.textContent =
         "The console could not reach " +
         state.host +
@@ -85,8 +85,8 @@ export function renderConnectPrompt(
       slots.actions.replaceChildren(
         startWay("Start it if it is not running, then retry.", [
           ...(retry ? [wayButton("pf-m-primary", "Retry", retry)] : []),
-          wayButton("pf-m-secondary", "Change address", requestDaemonSettings),
-          daemonGuideLink(),
+          wayButton("pf-m-secondary", "Change address", requestServerSettings),
+          serverGuideLink(),
         ]),
         demoWay(),
       );
@@ -105,24 +105,24 @@ export function renderEmptyMessage(slots: EmptyStateSlots, title: string, messag
   slots.message.textContent = message;
 }
 
-// daemonGuideLink opens the daemon guide in a new tab. The URL is absolute because the console is
-// often served from the daemon's own origin, where a relative docs path does not exist.
-export function daemonGuideLink(): HTMLAnchorElement {
+// serverGuideLink opens the server guide in a new tab. The URL is absolute because the console is
+// often served from the server's own origin, where a relative docs path does not exist.
+export function serverGuideLink(): HTMLAnchorElement {
   const link = h("a", "pf-v6-c-button pf-m-link pf-m-inline", "Setup guide");
-  link.href = DAEMON_GUIDE_URL;
+  link.href = SERVER_GUIDE_URL;
   link.target = "_blank";
   link.rel = "noopener";
   return link;
 }
 
-function requestDaemonSettings(): void {
-  document.dispatchEvent(new CustomEvent(REQUEST_DAEMON_SETTINGS_EVENT));
+function requestServerSettings(): void {
+  document.dispatchEvent(new CustomEvent(REQUEST_SERVER_SETTINGS_EVENT));
 }
 
 function startWay(hint: string, controls: HTMLElement[]): HTMLElement {
   const way = h("div");
   way.dataset.emptyWay = "";
-  const label = h("span", undefined, "Start a daemon");
+  const label = h("span", undefined, "Start a server");
   label.dataset.emptyWayLabel = "";
   const command = h("pre");
   command.dataset.emptyCmd = "";
@@ -148,7 +148,7 @@ function demoWay(): HTMLElement {
 }
 
 // Exported for the launcher, whose demo way is not a connection prompt but says the same thing.
-export const DEMO_HINT = "Pick acme from the Workspace menu. Demo data, no daemon needed.";
+export const DEMO_HINT = "Pick acme from the Workspace menu. Demo data, no server needed.";
 
 function wayButton(modifier: string, label: string, onClick: () => void): HTMLButtonElement {
   const control = h("button", "pf-v6-c-button " + modifier, label);
@@ -157,25 +157,25 @@ function wayButton(modifier: string, label: string, onClick: () => void): HTMLBu
   return control;
 }
 
-// DaemonNeed is a surface registry entry's declaration that the surface has nothing to show without
-// a daemon. purpose is the sentence the connect page shows in its place.
-export interface DaemonNeed {
+// ServerNeed is a surface registry entry's declaration that the surface has nothing to show without
+// a server. purpose is the sentence the connect page shows in its place.
+export interface ServerNeed {
   purpose: string;
 }
 
-// requireDaemon wraps module so that activating it with no daemon address and no demo shows the
+// requireServer wraps module so that activating it with no server address and no demo shows the
 // shell's connect page instead, and the module is not activated. The surface opens once an address
 // is applied (Settings, or another tab) and its pane is not hidden, so a surface that measures its
 // DOM at init sees real dimensions. Nothing polls: an applied address is the only trigger. Once
 // open, the surface stays open whatever the connection does, and its own inline prompt answers a
 // drop. With need undefined, module is returned unchanged.
 //
-// With an address but NO TOKEN it shows the sign-in page instead: every daemon route needs a bearer
-// token, so an unauthenticated surface could only render empty. A daemon that refuses the token
-// later (AUTH_LOST_EVENT, raised by lib/daemon on a 401) tears the surface down and returns here.
-export function requireDaemon<S, Q>(
+// With an address but NO TOKEN it shows the sign-in page instead: every server route needs a bearer
+// token, so an unauthenticated surface could only render empty. A server that refuses the token
+// later (AUTH_LOST_EVENT, raised by lib/server on a 401) tears the surface down and returns here.
+export function requireServer<S, Q>(
   module: PageModule<S, Q>,
-  need: DaemonNeed | undefined,
+  need: ServerNeed | undefined,
 ): PageModule<S, Q> {
   if (!need) return module;
   return {
@@ -186,27 +186,27 @@ export function requireDaemon<S, Q>(
 }
 
 // The order the surfaces resolve their own source in, so the page never stands in front of a
-// surface that would have found a daemon.
-function daemonAvailable(): boolean {
-  return wantsDemo(parseHash()) || resolveDaemonHostOrRemembered() !== null;
+// surface that would have found a server.
+function serverAvailable(): boolean {
+  return wantsDemo(parseHash()) || resolveServerHostOrRemembered() !== null;
 }
 
-// signInRequired: a daemon is there, but nothing here can authenticate to it. Demo needs no daemon.
+// signInRequired: a server is there, but nothing here can authenticate to it. Demo needs no server.
 //
-// A page on a plain-http origin was served by a daemon: the hosted console is https, and the daemon
+// A page on a plain-http origin was served by a server: the hosted console is https, and the server
 // serves http only. Such a page opened from a tokenless link resolves no host (origin adoption needs
-// a token), so without this it read "No daemon connected" while standing on the daemon.
+// a token), so without this it read "No server connected" while standing on the server.
 export function signInRequired(): boolean {
   if (wantsDemo(parseHash()) || getLiveToken() !== null) return false;
-  return daemonAvailable() || location.protocol === "http:";
+  return serverAvailable() || location.protocol === "http:";
 }
 
 function ready(): boolean {
-  return daemonAvailable() && !signInRequired();
+  return serverAvailable() && !signInRequired();
 }
 
 // surfaceURL is the clean /console/<surface>/ address of this surface on the page's own origin,
-// keeping a #port= attach so the signed-in link reaches the same daemon.
+// keeping a #port= attach so the signed-in link reaches the same server.
 export function surfaceURL(surface: string): string {
   const path = location.pathname;
   const at = path.indexOf("/console/");
@@ -238,7 +238,7 @@ function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
 // that fixes it. notice says why a signed-in page came back here (a refused token).
 export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: string): void {
   delete slots.actions.dataset.connectPrompt;
-  slots.title.textContent = "Sign in to this daemon";
+  slots.title.textContent = "Sign in to this server";
   slots.message.textContent =
     (notice ? notice + " " : "") +
     "Every console route needs a token, and this page has none, so it cannot show anything true yet. Run this; it opens this page signed in. The token is read by your shell, never shown here.";
@@ -266,7 +266,7 @@ export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: s
         ),
     );
   });
-  row.append(copy, daemonGuideLink());
+  row.append(copy, serverGuideLink());
   way.append(label, command, row);
   slots.actions.replaceChildren(way, demoWay());
 }
@@ -274,7 +274,7 @@ export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: s
 function gatedPage<S, Q>(
   module: PageModule<S, Q>,
   host: HTMLElement,
-  need: DaemonNeed,
+  need: ServerNeed,
   openNow: boolean,
 ): PageController<S, Q> {
   let inner: PageController<S, Q> | null = null;
@@ -323,7 +323,7 @@ function gatedPage<S, Q>(
       inner = null;
       for (const fn of titleListeners) fn(null);
     }
-    showGate("The daemon refused this page's token: it expired or was revoked.");
+    showGate("The server refused this page's token: it expired or was revoked.");
   };
   document.addEventListener(AUTH_LOST_EVENT, onAuthLost);
 

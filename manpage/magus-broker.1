@@ -1,0 +1,100 @@
+.TH MAGUS-BROKER 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-broker \- The per\-user process holding this host's capacity and shared services
+.SH SYNOPSIS
+.B magus
+.RI "broker [status|stop] [flags]"
+.SH DESCRIPTION
+The broker holds this host's capacity: the concurrency slots and declared
+memory_mb every magus on it shares, and the services runs keep warm between
+them. Every run asks it before starting a step; a step that does not fit
+alongside what other invocations hold is refused with MGS3009 (exit 75).
+.PP
+A run starts a broker when none answers, and prints one line saying so. It
+loads no workspace, records no telemetry and listens on a unix socket only
+($XDG_RUNTIME_DIR/magus/broker.sock). It exits once it has held nothing (no
+claim, no service with a dependent) for ten minutes; a started broker logs to
+$XDG_STATE_HOME/magus/broker.log.
+.PP
+Each run holds one connection to it for its life, and every claim and service
+reference rides that connection, so a run killed outright releases what it
+held at once. When a broker dies with runs still going, they re\-assert their
+claims on the next one.
+.PP
+The broker setting in magus.yaml decides what a run does about it: required
+refuses a step when none answers (MGS3022, exit 69), best\-effort (the default)
+runs unarbitrated and says so once, off never starts or contacts one.
+.PP
+Run with no target, it serves in this process and logs to stderr.
+.SS broker stop options
+.RS
+.TP
+\fB\-\-services\fR
+Stop the broker's hosted services, leaving the broker running
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBstatus\fR
+The broker: its capacity, every claim holding it, and its services
+.TP
+\fBstop\fR
+Stop the broker, or with \-\-services only the services it hosts
+.RE
+.SH EXAMPLES
+\fIIs a broker up, and what holds capacity\fR
+.PP
+.EX
+magus broker status
+.EE
+.PP
+\fIStop the services it keeps warm\fR
+.PP
+.EX
+magus broker stop --services
+.EE
+.PP
+\fINever start or ask one, for this run\fR
+.PP
+.EX
+magus run test . --broker off
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-queue\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-job\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-spell\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

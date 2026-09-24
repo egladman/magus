@@ -6,7 +6,7 @@ import (
 	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
 )
 
-// ringCapacity bounds the utilization/activity history the daemon keeps for backfill:
+// ringCapacity bounds the utilization/activity history the server keeps for backfill:
 // 300 samples at the sampler's 1Hz tick is a 5-minute rolling window.
 const ringCapacity = 300
 

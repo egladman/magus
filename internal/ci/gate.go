@@ -64,11 +64,11 @@ type GateFacts struct {
 }
 
 // DecideGate is the decision matrix, pure so it is testable without a store, a
-// daemon, or a repository.
+// server, or a repository.
 //
 // Redundancy alone refuses; machine load is deliberately not an input. Gating the
 // refusal on load too made it unreachable, because the load reading comes from the
-// daemon and ordinary commands run without a persistent one.
+// server and ordinary commands run without a persistent one.
 func DecideGate(f GateFacts) GateDecision {
 	if f.Forced || !f.Redundant {
 		return GateRun

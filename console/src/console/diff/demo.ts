@@ -1,6 +1,6 @@
-// demo.ts - the Diff surface's daemon-free showcase (the shared #demo fragment).
+// demo.ts - the Diff surface's server-free showcase (the shared #demo fragment).
 //
-// It supplies the two things the daemon would have supplied - a parsed changeset and an
+// It supplies the two things the server would have supplied - a parsed changeset and an
 // annotated session - and nothing else changes: order(), buildRows(), the ranking, the
 // generated fold, the rail and the comment stream are all the production paths. So what a
 // reader meets at /console/diff/#demo is the real surface with fabricated input, not a
@@ -360,8 +360,8 @@ export function demoReview(): ReviewInfo {
         id: "th1",
         path: "libs/authkit/claims.go",
         line: 24,
-        // The placement the daemon would have computed, stated here because the showcase has no
-        // daemon - the same reason the fixture carries hunk digests rather than hashing them.
+        // The placement the server would have computed, stated here because the showcase has no
+        // server - the same reason the fixture carries hunk digests rather than hashing them.
         // Hunk 0 of claims.go covers new-side lines 14 to 27.
         hunk: 0,
         author: "priya",
@@ -442,7 +442,7 @@ export function applyDemoReply(
   return { ...review, threads };
 }
 
-// demoRun is the showcase's stand-in for the daemon's run route: pressing the verdict button has
+// demoRun is the showcase's stand-in for the server's run route: pressing the verdict button has
 // to actually run something, or the reader meets a control that does nothing and concludes the
 // feature is broken - the same rule applyDemoOp exists for.
 //
@@ -459,7 +459,7 @@ export function demoRun(): Promise<{ state: "passed"; duration_ms: number }> {
 // does not think it hung.
 export const DEMO_RUN_MS = 900;
 
-// applyDemoOp is the showcase's stand-in for the daemon's session store: the reader's writes
+// applyDemoOp is the showcase's stand-in for the server's session store: the reader's writes
 // land in memory instead of over HTTP.
 //
 // It exists so the showcase is the surface rather than a picture of it - marking a hunk read,
@@ -486,7 +486,7 @@ export function applyDemoOp(session: DiffReview, op: SessionOp): DiffReview {
       const comments = session.comments ?? [];
       return {
         ...session,
-        // Author is "unattributed" by construction, the same way the daemon stamps it from the
+        // Author is "unattributed" by construction, the same way the server stamps it from the
         // route: this op arrived from the console, and nothing in the payload can say
         // otherwise.
         comments: [

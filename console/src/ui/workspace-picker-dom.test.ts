@@ -41,13 +41,13 @@ describe("the workspace scope control", () => {
   // With one workspace loaded, scoped and unscoped show the same thing - the control would be a
   // permanent reminder of a decision with one possible answer.
   // It used to hide below two workspaces, because scope was not a question with one possible answer.
-  // It is the way into the demo now, and a console with no daemon has zero workspaces - so the old
+  // It is the way into the demo now, and a console with no server has zero workspaces - so the old
   // rule would have hidden the only control offering anything at all on a first visit.
   test("the control is present even with nothing loaded", () => {
     const { host, picker } = mount();
     const wrap = host.querySelector<HTMLElement>("#console-scope");
     assert.ok(wrap);
-    assert.equal(wrap.hidden, false, "the demo has to be reachable with no daemon");
+    assert.equal(wrap.hidden, false, "the demo has to be reachable with no server");
 
     picker.setWorkspaces(BOTH);
     assert.equal(wrap.hidden, false);
@@ -105,7 +105,7 @@ describe("the workspace scope control", () => {
     assert.ok(host.querySelector(".console-shell-scope__caret svg"));
   });
 
-  test("the menu offers the daemon-wide view first, then each workspace", () => {
+  test("the menu offers the server-wide view first, then each workspace", () => {
     const { host, picker, btn } = mount();
     picker.setWorkspaces(BOTH);
     btn.click();
