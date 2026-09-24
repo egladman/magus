@@ -1,0 +1,8 @@
+# A script's command is the test binary re-exec'd; Isolated's Run never runs there, so
+# the variables the script set reach it, MAGUS_* included.
+env MAGUS_CACHE_DIR=/scratch/magus
+env FOO=bar
+exec testkit-environ
+stdout '^MAGUS_CACHE_DIR=/scratch/magus$'
+stdout '^FOO=bar$'
+! stdout '^MAGUS_DAEMON_ENABLED='

@@ -313,7 +313,7 @@ func TestASiblingOfTheSameRunIsAwaited(t *testing.T) {
 			cacheDir := t.TempDir()
 			lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 			cmd := helperHold(t, cacheDir, "libs/shared", 400,
-				procrun.AncestorsEnvVar+"="+tc.holderRoot, "LOCKTEST_INV=inv-sibling-a")
+				"LOCKTEST_ANCESTORS="+tc.holderRoot, "LOCKTEST_INV=inv-sibling-a")
 			if err := cmd.Start(); err != nil {
 				t.Fatalf("start holder: %v", err)
 			}
@@ -395,8 +395,9 @@ func TestLockNamespaceIsPerWorkspace(t *testing.T) {
 // acquires the given project's exclusive lock, signals readiness, and holds for
 // holdMS milliseconds. Running in a separate process exercises the real OS lock.
 //
-// env is appended last, so it can hand the holder an ancestry (MAGUS_INVOCATION_ANCESTORS),
-// its own invocation id (LOCKTEST_INV), or gate status (LOCKTEST_GATE=1).
+// env is appended last, so it can hand the holder an ancestry (LOCKTEST_ANCESTORS), its
+// own invocation id (LOCKTEST_INV), or gate status (LOCKTEST_GATE=1). Every name is a
+// LOCKTEST_* one because TestMain keeps only that prefix.
 func helperHold(t *testing.T, cacheDir, project string, holdMS int, env ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=TestHelperHold")
@@ -405,7 +406,6 @@ func helperHold(t *testing.T, cacheDir, project string, holdMS int, env ...strin
 		"LOCKTEST_CACHE_DIR="+cacheDir,
 		"LOCKTEST_PROJECT="+project,
 		"LOCKTEST_HOLD_MS="+strconv.Itoa(holdMS),
-		procrun.AncestorsEnvVar+"=",
 	)
 	cmd.Env = append(cmd.Env, env...)
 	cmd.Stderr = os.Stderr
@@ -424,6 +424,7 @@ func TestHelperHold(t *testing.T) {
 	holdMS, _ := strconv.Atoi(os.Getenv("LOCKTEST_HOLD_MS"))
 
 	// Assembled the way a nested magus assembles it: the inherited ancestry, then its own id.
+	t.Setenv(procrun.AncestorsEnvVar, os.Getenv("LOCKTEST_ANCESTORS"))
 	ctx := types.WithInvocationAncestors(context.Background(), procrun.AncestorsFromEnv())
 	if inv := os.Getenv("LOCKTEST_INV"); inv != "" {
 		ctx = journal.WithInvocationID(types.AppendInvocationAncestor(ctx, os.Getpid(), inv), inv)

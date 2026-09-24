@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ func (p *spawnRuleProbe) rule() workspace.SpawnRule {
 // writes nothing a developer's checkout reads.
 func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	cacheDir = t.TempDir()
 	return WithLocation(t.Context(), cacheDir, root, root), cacheDir

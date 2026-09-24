@@ -31,6 +31,7 @@ import (
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
@@ -283,7 +284,7 @@ func matrixBearers(t *testing.T) map[string]bearer {
 // mounted patterns and the needs it recorded, and the buffer its log writes to.
 func bootConsoleDaemon(t *testing.T) (base string, patterns []string, needs map[string]types.Need, logs *syncBuffer, cacheDir string) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 	builtConsole(t)
 
@@ -302,7 +303,7 @@ func bootConsoleDaemon(t *testing.T) (base string, patterns []string, needs map[
 // bootUnloadedDaemon starts a daemon whose workspace failed to load.
 func bootUnloadedDaemon(t *testing.T) (base string, patterns []string, needs map[string]types.Need) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	builtConsole(t)
 	failure := &types.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
@@ -547,7 +548,7 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 // A non-loopback bind serves bearer tokens in cleartext, so without mcp.insecure_bind the
 // daemon refuses to start, before it mints or serves anything.
 func TestNonLoopbackBindWithoutOptInIsAnError(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	d := New(mcp.Options{Version: "test", HTTPAddr: netip.MustParseAddrPort("0.0.0.0:0")})
 	_, _, err := d.prepare(context.Background())
 	require.Error(t, err)

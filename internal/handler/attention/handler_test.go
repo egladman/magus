@@ -11,6 +11,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // plantStore points the per-repository session store at a temp directory and returns the
@@ -22,7 +23,7 @@ import (
 // failure a fake store could not catch.
 func plantStore(t *testing.T) (root, dir string) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root = t.TempDir()
 	dir, err := sessions.Dir(root)
 	if err != nil {

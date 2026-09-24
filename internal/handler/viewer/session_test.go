@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 )
@@ -23,7 +24,7 @@ import (
 // transport so the RPC sees a loopback peer the way the daemon's does.
 func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1connect.ViewerServiceClient {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)

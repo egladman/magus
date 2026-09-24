@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -701,26 +702,10 @@ func itoa(n int) string {
 
 // TestMain lets the test binary act as the `magus` command inside testscript
 // scripts: `exec magus ...` in a .txtar file runs the real CLI in process (via
-// run), so behavior tests exercise the actual command, not a mock.
+// run), so behavior tests exercise the actual command, not a mock. It keeps the one
+// variable a helper re-exec of this binary is instructed with.
 func TestMain(m *testing.M) {
-	// A lease in the caller's environment (an orchestrator exporting BAGGAGE for
-	// every magus command it runs) would reach the hook and journal tests, which
-	// assert an empty lease; the same leak MAGUS_LEVEL had.
-	if err := os.Unsetenv("BAGGAGE"); err != nil {
-		panic(err)
-	}
-	// The MAGUS_* configuration a job exports leaks the same way: the merge queue's gate
-	// sets MAGUS_CACHE_DIR per candidate, which moved every test's cache, attention
-	// store and journal into one shared directory. Not when this binary is a script's
-	// `exec magus`: that environment is the script's own, set on purpose.
-	if filepath.Base(os.Args[0]) != "magus" {
-		for _, v := range config.EnvVarDocs() {
-			if err := os.Unsetenv(v.EnvVar); err != nil {
-				panic(err)
-			}
-		}
-	}
-	testscript.Main(m, map[string]func(){
+	testscript.Main(testkit.Isolated(m, bootstrapExecIntoHelperTargetVar), map[string]func(){
 		"magus": func() { os.Exit(runCLI()) },
 	})
 }

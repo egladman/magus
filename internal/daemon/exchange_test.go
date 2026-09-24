@@ -14,13 +14,14 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
 // A console link's code is traded once for its token, and every other presentation of it is
 // refused as a wrong bearer would be: used, unknown, malformed, or sent by GET.
 func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	trailDir := t.TempDir()
 	dir, err := auth.StoreDir()
 	require.NoError(t, err)

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -733,7 +734,7 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 
 func TestCheckSessionLoadStates(t *testing.T) {
 	t.Run("never loaded", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		testkit.Isolate(t)
 
 		got := (&runner{root: t.TempDir()}).checkSessionLoad()
 
@@ -743,7 +744,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 	})
 
 	t.Run("stale", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		testkit.Isolate(t)
 		root := t.TempDir()
 		loadOneEvent(t, root, time.Now().Add(-30*24*time.Hour))
 
@@ -754,7 +755,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 	})
 
 	t.Run("current", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		testkit.Isolate(t)
 		root := t.TempDir()
 		loadOneEvent(t, root, time.Now().Add(-time.Hour))
 

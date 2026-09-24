@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/types"
@@ -55,7 +56,7 @@ func liveShare(id string) *fakeShare {
 
 func newIsolatedService(t *testing.T, view shareView) *Service {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	return &Service{share: view}
 }
 
@@ -220,7 +221,7 @@ func TestRevokeTakesNoPrefix(t *testing.T) {
 }
 
 func TestNilShareManagerConstructor(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	s := NewService((*share.Manager)(nil))
 	assert.Nil(t, s.share)
 	list, err := s.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
