@@ -44,6 +44,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // A source-level check over the Buzz this repository ships, in the spirit of
@@ -3491,4 +3492,167 @@ func (ix symbolIndex) addBuzzName(lit string) {
 			ix.host[member+namespaced] = true
 		}
 	}
+}
+
+// installCall matches a package-manager install run from a magusfile, directly, through an
+// install() helper, or through a spell's install op.
+var installCall = regexp.MustCompile(`\binstall\(\)|"(pnpm|npm|yarn)",\s*\["(install|ci)"|\["(pnpm-install|npm-ci|go-mod-download|uv-sync|cargo-fetch)"\]`)
+
+// exportedTarget matches the head of a target definition, capturing its name.
+var exportedTarget = regexp.MustCompile(`(?m)^export fun (\w+)\(`)
+
+// A target that installs packages must never replay. Its effect is node_modules, which no
+// cache entry records, so a hit on a fresh checkout (a restored CI store, a remote-tier
+// entry) restores nothing and the next target runs without its packages. That is how the
+// console shard of #268 failed: preflight hit, build ran, esbuild could not resolve
+// @connectrpc/connect.
+func TestPackageInstallTargetsNeverReplay(t *testing.T) {
+	var files []string
+	require.NoError(t, filepath.WalkDir(".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".magus", ".claude", ".agents", ".opencode", "node_modules", "gen", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == "magusfile.buzz" {
+			files = append(files, p)
+		}
+		return nil
+	}))
+	require.NotEmpty(t, files)
+
+	checked := 0
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		src := string(body)
+		for _, m := range exportedTarget.FindAllStringSubmatchIndex(src, -1) {
+			name := src[m[2]:m[3]]
+			if !installCall.MatchString(funBody(src, m[1])) {
+				continue
+			}
+			checked++
+			assert.Regexp(t, `"`+regexp.QuoteMeta(name)+`":\s*\{\s*"skip_cache"`, src,
+				"%s: target %q installs packages but may replay. Its effect is node_modules, which no\n"+
+					"cache entry records, so a hit on a fresh checkout restores nothing; declare\n"+
+					"\"%s\": {\"skip_cache\": \"<why>\"} in the project's targets.", path, name, name)
+		}
+	}
+	assert.Positive(t, checked, "no install target found; the pattern no longer matches how projects install")
+}
+
+// funBody returns the brace-balanced body starting at the first "{" at or after from.
+func funBody(src string, from int) string {
+	open := strings.IndexByte(src[from:], '{')
+	if open < 0 {
+		return ""
+	}
+	depth := 0
+	for i := from + open; i < len(src); i++ {
+		switch src[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return src[from+open : i+1]
+			}
+		}
+	}
+	return src[from+open:]
+}
+
+// actionStep is the part of a workflow or composite-action step these guards read.
+type actionStep struct {
+	ID   string            `yaml:"id"`
+	Name string            `yaml:"name"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	Run  string            `yaml:"run"`
+	With map[string]string `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
+}
+
+// setup-magus mints the merge queue's app token, and the rules around it are ones no
+// run exercises until a repository adds the app: a key is never an action input (the
+// calling step puts it in env, where it is masked and scoped to that step), half an app
+// fails the job before anything installs, the minting action is pinned by commit, and
+// the token leaves only as an output, never through $GITHUB_ENV, since this action also
+// runs in jobs that execute pull-request code.
+func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
+	var action struct {
+		Inputs map[string]struct {
+			Default string `yaml:"default"`
+		} `yaml:"inputs"`
+		Outputs map[string]struct {
+			Value string `yaml:"value"`
+		} `yaml:"outputs"`
+		Runs struct {
+			Steps []actionStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	raw, err := os.ReadFile(filepath.Join(".github", "actions", "setup-magus", "action.yml"))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &action))
+
+	for name := range action.Inputs {
+		assert.NotRegexp(t, `(?i)key|token|secret|password`, name, "a credential reaches setup-magus through the calling step's env, never an input")
+	}
+	id, ok := action.Inputs["queue-app-client-id"]
+	require.True(t, ok, "the queue app's client id is an input")
+	assert.Empty(t, id.Default, "no app unless the caller names one")
+
+	steps := action.Runs.Steps
+	require.NotEmpty(t, steps)
+	assert.Equal(t, "(inputs.queue-app-client-id == '') != (env.MAGUS_QUEUE_APP_PRIVATE_KEY == '')", steps[0].If,
+		"half an app is refused first, before anything installs")
+	assert.Contains(t, steps[0].Run, "exit 1")
+
+	var mint *actionStep
+	for i := range steps {
+		if strings.HasPrefix(steps[i].Uses, "actions/create-github-app-token@") {
+			mint = &steps[i]
+		}
+		assert.False(t, strings.Contains(steps[i].Run, "GITHUB_ENV") && strings.Contains(steps[i].Run, "queue"),
+			"step %q writes the queue app's credential to $GITHUB_ENV", steps[i].Name)
+	}
+	require.NotNil(t, mint, "setup-magus mints the queue app's token")
+	assert.Regexp(t, `@[0-9a-f]{40}$`, mint.Uses, "pinned by full commit")
+	assert.Equal(t, "inputs.queue-app-client-id != ''", mint.If)
+	assert.Equal(t, "${{ env.MAGUS_QUEUE_APP_PRIVATE_KEY }}", mint.With["private-key"])
+	assert.Equal(t, "${{ github.event.repository.name }}", mint.With["repositories"], "this repository alone")
+	for _, perm := range []string{"contents", "pull-requests", "statuses", "actions", "workflows"} {
+		assert.Equal(t, "write", mint.With["permission-"+perm], perm)
+	}
+	for _, out := range []string{"queue-token", "queue-committer", "queue-app-slug"} {
+		assert.Contains(t, action.Outputs, out)
+	}
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Environment string       `yaml:"environment"`
+			Steps       []actionStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	raw, err = os.ReadFile(filepath.Join(".github", "workflows", "queue-apply.yaml"))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &workflow))
+	apply := workflow.Jobs["apply"]
+	assert.Equal(t, "magus-queue", apply.Environment, "the key is released to main's runs alone")
+	var setup *actionStep
+	for i := range apply.Steps {
+		if apply.Steps[i].Uses == "./.github/actions/setup-magus" {
+			setup = &apply.Steps[i]
+		}
+	}
+	require.NotNil(t, setup)
+	assert.Equal(t, "${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}", setup.Env["MAGUS_QUEUE_APP_PRIVATE_KEY"])
+	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", setup.With["queue-app-client-id"])
+	assert.NotContains(t, string(raw), "github.token", "a workflow names the token as secrets.GITHUB_TOKEN")
+	assert.NotContains(t, string(raw), "GH_TOKEN", "gh reads GITHUB_TOKEN")
 }

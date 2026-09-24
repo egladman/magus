@@ -71,7 +71,7 @@ var spellMeta = map[string]spellInfo{
 	"typescript": {
 		dir: "typescript", language: "TypeScript",
 		description: "TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.",
-		intro:       "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). It is an opaque spell: `preflight` composes the individual checks into one target.",
+		intro:       "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). Each check is its own op; compose them into your own targets, such as `lint` over `tsc` and `eslint`.",
 		tags:        []string{"typescript", "node", "eslint", "vitest"},
 	},
 	"python": {

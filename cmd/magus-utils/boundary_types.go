@@ -17,10 +17,6 @@ import (
 // new mirror cannot silently describe a shape the runtime fails to produce.
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
-	// Manifest's fields are a str and a [str], so it references no other mirror and
-	// its position here is free, but it is kept beside Path because a spell authors
-	// the two together in mgs_listManifests, and Path is what Manifest replaced there.
-	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
@@ -30,6 +26,10 @@ var boundaryTypes = []boundaryType{
 	// and only on the round trip, which is how SymbolIndexer went missing from a handle
 	// while the decoder still demanded it.
 	{Name: "Command", Type: reflect.TypeFor[spells.Command](), RuntimeObject: true},
+	// Must follow Command (Install.command is one) and precede Manifest (Manifest.installs
+	// is {str: Install}).
+	{Name: "Install", Type: reflect.TypeFor[spells.Install]()},
+	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	// Must follow Command: SymbolIndexer.command is one.
 	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},
@@ -175,12 +175,17 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
 	{Name: "JobStatus", Type: reflect.TypeFor[types.JobStatus](), RuntimeObject: true},
 	{Name: "GateStatus", Type: reflect.TypeFor[types.GateStatus](), RuntimeObject: true},
-	// magus\guard.spawn's pair, after Job because SpawnRequest.lease is one. The guard
-	// hands a rule the request and the rule hands back the verdict, so both need encoders:
-	// allow/advise/deny build the verdict on the Go side.
+	// magus\guard.spawn's and magus\guard.command's requests, after Job because each
+	// request's lease is one, and the verdict both return. The guard hands a rule the
+	// request and the rule hands back the verdict, so all need encoders: allow/advise/deny
+	// build the verdict on the Go side.
 	{Name: "SpawnTarget", Type: reflect.TypeFor[types.SpawnTarget](), RuntimeObject: true},
 	{Name: "SpawnRequest", Type: reflect.TypeFor[types.SpawnRequest](), RuntimeObject: true},
-	{Name: "SpawnVerdict", Type: reflect.TypeFor[types.SpawnVerdict](), RuntimeObject: true},
+	{Name: "CommandInvocation", Type: reflect.TypeFor[types.CommandInvocation](), RuntimeObject: true},
+	{Name: "CheckoutState", Type: reflect.TypeFor[types.CheckoutState](), RuntimeObject: true},
+	{Name: "CommandRequest", Type: reflect.TypeFor[types.CommandRequest](), RuntimeObject: true},
+	{Name: "WriteRequest", Type: reflect.TypeFor[types.WriteRequest](), RuntimeObject: true},
+	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

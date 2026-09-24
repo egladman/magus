@@ -2,6 +2,7 @@ package cache
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -9,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,34 +19,46 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
 )
 
-// RemoteBackend is a pluggable remote backend for cache artifacts, keyed by (projectPath,
-// hash). The local cache consults it on a local miss (before building) and
-// populates it after a successful build. The artifact payload is an opaque byte
-// stream — its format is the cache's concern, not the store's — so an implementation
-// is effectively a content-addressed blob store. Implementations must be safe for
-// concurrent use.
+// RemoteBackend is the store behind the remote tier: an opaque blob store keyed by
+// (namespace, key). Build entries use the project path as the namespace and the cache
+// key as the key; output bundles and knowledge shards use reserved namespaces no
+// project can occupy. The payload's format is the cache's concern, not the store's.
+// Implementations must be safe for concurrent use.
 type RemoteBackend interface {
 	// Name identifies the backend to a human: the spell that provides it ("s3", "gha").
 	// It must not probe or dial: the run header calls it before any work, precisely so
 	// the header cannot be what makes a run hang.
 	Name() string
 	// Active reports whether the backend is usable in the current environment.
-	// The cache skips both fetch and push when it returns false, so a backend
-	// gated on its environment (e.g. one that only runs under a specific CI
-	// provider) costs nothing per build elsewhere. Implementations should make it
-	// cheap — the cache may call it once per build — and cache any probe.
+	// The cache skips every call when it returns false, so a backend gated on its
+	// environment (e.g. one that only runs under a specific CI provider) costs nothing
+	// per build elsewhere. Implementations should make it cheap and cache any probe.
 	Active(ctx context.Context) bool
-	// GetArtifact streams the stored artifact for (projectPath, hash). Returns (nil, nil)
-	// when no artifact is present.
-	GetArtifact(ctx context.Context, projectPath, hash string) (io.ReadCloser, error)
-	// PutArtifact stores the artifact bytes for (projectPath, hash) from r.
-	PutArtifact(ctx context.Context, projectPath, hash string, r io.Reader) error
+	// GetArtifact streams the stored bytes for (namespace, key). It returns
+	// [ErrRemoteMiss] when nothing is stored, and any other error when the store could
+	// not answer, which the cache counts as a failure rather than a miss.
+	GetArtifact(ctx context.Context, namespace, key string) (io.ReadCloser, error)
+	// PutArtifact stores r under (namespace, key). It returns [ErrRemoteExists] when
+	// the key is already stored or another writer is storing it: content addressing
+	// makes that the same bytes, so the cache counts it as neither an upload nor a
+	// failure.
+	PutArtifact(ctx context.Context, namespace, key string, r io.Reader) error
+	// HasArtifact reports whether (namespace, key) is stored, without transferring it.
+	// A backend that cannot answer returns [errors.ErrUnsupported]; the cache then
+	// skips backfilling the remote tier rather than uploading to find out.
+	HasArtifact(ctx context.Context, namespace, key string) (bool, error)
 }
+
+// ErrRemoteMiss is GetArtifact's answer when the store holds nothing for the key.
+var ErrRemoteMiss = errors.New("cache: not in the remote store")
+
+// ErrRemoteExists is PutArtifact's answer when the key is already stored, or is being
+// stored by another writer.
+var ErrRemoteExists = errors.New("cache: already in the remote store")
 
 // RetentionPolicy describes which remote cache artifacts a prune should evict. The
 // two bounds are independent and additive: an artifact is evicted if it is older than
@@ -67,9 +79,9 @@ type RemotePruner interface {
 	PruneArtifacts(ctx context.Context, policy RetentionPolicy) error
 }
 
-// WithRemoteBackend configures a remote backend that is consulted on local miss.
+// WithRemoteBackend configures the backend behind the remote tier.
 func WithRemoteBackend(t RemoteBackend) Option {
-	return func(c *Cache) { c.remote = t }
+	return func(c *Cache) { c.backend = t }
 }
 
 // PruneRemote evicts remote cache artifacts per policy. It errors when no remote
@@ -80,11 +92,11 @@ func (c *Cache) PruneRemote(ctx context.Context, policy RetentionPolicy) error {
 	if c.remote == nil {
 		return errors.New("cache: no remote backend configured")
 	}
-	pruner, ok := c.remote.(RemotePruner)
+	pruner, ok := c.remote.backend.(RemotePruner)
 	if !ok {
-		return fmt.Errorf("cache: remote backend %q does not support prune", c.remote.Name())
+		return fmt.Errorf("cache: remote backend %q does not support prune", c.remote.name())
 	}
-	if !c.remote.Active(ctx) {
+	if !c.remote.backend.Active(ctx) {
 		return errors.New("cache: remote backend is not active in this environment")
 	}
 	return pruner.PruneArtifacts(ctx, policy)
@@ -116,84 +128,32 @@ func OpenRemoteBackend(ctx context.Context, selector string) (RemoteBackend, err
 	return remoteBackendOpener(ctx, selector)
 }
 
-// fetchFromRemote pulls the artifact for (projectPath, hash) from the remote backend
-// into the local cache so the normal hit path can replay it. It returns true when
-// an artifact was imported. Errors are logged and treated as a miss — a remote
-// failure must never fail a build.
-//
-// It populates the local cache even when the cache is read-only (mutable=false):
-// read-only suppresses creating *new* artifacts from local builds, not restoring an
-// existing one from the shared store — which is exactly what a PR CI run wants
-// (read remote hits, but never publish).
-func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) bool {
-	if !c.remoteActive(ctx) {
-		return false
-	}
-	// Timed around the WHOLE fetch, not around GetArtifact alone: the call returns a
-	// stream, so the bytes actually move while importArtifact reads it. Timing the call
-	// would report a fast fetch for a slow download. Active() is excluded because a
-	// backend is asked to make it cheap and cache its probe.
-	start := time.Now()
-	defer func() { httpx.RecorderFrom(ctx).Add(time.Since(start)) }()
-
-	stats := remoteStatsFrom(ctx)
-	r, err := c.remote.GetArtifact(ctx, projectPath, hash)
-	if err != nil {
-		// Counted: a transport error is the case the summary exists for, and leaving it
-		// out let a dead remote end the run on "failures=0" at Info.
-		stats.failed(0)
-		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
-			fmt.Sprintf("remote get %s (%s): %v", projectPath, shortHash(hash), err)))
-		return false
-	}
-	if r == nil {
-		stats.miss()
-		return false
-	}
-	defer r.Close()
-	// Counted here rather than trusting the backend: an empty artifact and a 40MB one
-	// both "succeed". observability's wrapper counts the same bytes but only when
-	// telemetry is on, and this line has to be true either way.
-	counted := &countingReader{Reader: r}
-	if err := c.importArtifact(ctx, counted, projectPath, hash); err != nil {
-		stats.failed(counted.n)
-		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
-			fmt.Sprintf("remote import %s (%s): %v", projectPath, shortHash(hash), err)))
-		return false
-	}
-	stats.hit(counted.n)
-	// INFO because a reader asking "is the remote doing anything" has no reason to
-	// suspect a verbosity flag.
-	c.log.InfoContext(ctx, "cache.remote.hit",
-		slog.String("project", projectPath),
-		slog.String("hash", shortHash(hash)),
-		slog.Int64("bytes", counted.n),
-		slog.Duration("duration", time.Since(start)))
-	return true
-}
-
-// countingReader totals bytes actually read.
-type countingReader struct {
+// CountingReader totals the bytes actually read through it: what a remote transfer
+// moved, rather than what either end claims. Exported for the telemetry wrapper, which
+// meters the same streams.
+type CountingReader struct {
 	io.Reader
-	n int64
+	N int64
 }
 
-func (c *countingReader) Read(p []byte) (int, error) {
+func (c *CountingReader) Read(p []byte) (int, error) {
 	n, err := c.Reader.Read(p)
-	c.n += int64(n)
+	c.N += int64(n)
 	return n, err
 }
 
-// remoteStats totals what ONE RUN did with the remote cache.
+// remoteStats totals what ONE RUN did with the remote tier.
 //
 // Run-scoped and carried on the context, not held on Cache: the daemon reuses one
 // Cache per workspace across runs and can serve two adopted runs at once, so fields on
 // Cache would report the process's history and interleave concurrent runs. Same shape
 // and nil tolerance as httpx.Recorder, so uninstrumented paths need no guard.
 type remoteStats struct {
-	hits, misses, puts, fails atomic.Int64
-	down, up                  atomic.Int64
-	postureOnce, readonlyOnce sync.Once
+	hits, misses, stores, fails atomic.Int64
+	down, up                    atomic.Int64
+	degraded                    atomic.Bool // a transport failure: the rest of the run is local-only
+	postureOnce                 sync.Once
+	pending                     sync.WaitGroup // backfills still uploading
 }
 
 // Nil-safe METHODS rather than a nil-safe helper taking &s.field: the argument
@@ -212,9 +172,9 @@ func (s *remoteStats) miss() {
 	}
 }
 
-func (s *remoteStats) published(n int64) {
+func (s *remoteStats) stored(n int64) {
 	if s != nil {
-		s.puts.Add(1)
+		s.stores.Add(1)
 		s.up.Add(n)
 	}
 }
@@ -228,10 +188,18 @@ func (s *remoteStats) failed(downloaded int64) {
 	}
 }
 
+func (s *remoteStats) degrade() {
+	if s != nil {
+		s.degraded.Store(true)
+	}
+}
+
+func (s *remoteStats) isDegraded() bool { return s != nil && s.degraded.Load() }
+
 type remoteStatsKey struct{}
 
-// WithRemoteStats installs run-scoped remote-cache counters on ctx.
-func WithRemoteStats(ctx context.Context) context.Context {
+// ContextWithRemoteStats installs run-scoped remote-tier counters on ctx.
+func ContextWithRemoteStats(ctx context.Context) context.Context {
 	return context.WithValue(ctx, remoteStatsKey{}, &remoteStats{})
 }
 
@@ -240,102 +208,40 @@ func remoteStatsFrom(ctx context.Context) *remoteStats {
 	return s
 }
 
-// remoteActive reports whether the backend engaged, logging the posture once per run
-// as a side effect. The inactive case earns that line: in the header a dormant backend
-// and a working one are identical, and this is the probe LogCache refuses to make.
-func (c *Cache) remoteActive(ctx context.Context) bool {
-	active := c.remote.Active(ctx)
-	if s := remoteStatsFrom(ctx); s != nil {
-		s.postureOnce.Do(func() { c.logPosture(ctx, active) })
-	}
-	return active
-}
-
-func (c *Cache) logPosture(ctx context.Context, active bool) {
-	name := c.remote.Name()
-	if name == "" {
-		name = "remote"
-	}
-	c.log.InfoContext(ctx, "cache.remote.posture",
-		slog.String("backend", name),
-		slog.Bool("active", active),
-		slog.Bool("verify", c.verifier != nil),
-		slog.Bool("sign", c.signer != nil))
-}
-
-// pushToRemote exports the local artifact for (projectPath, hash) and uploads it.
-// Errors are logged but not returned: a failed push is not a build failure.
-func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
-	if !c.remoteActive(ctx) {
-		return // skip the export entirely when the backend is inactive
-	}
-	// Trust set configured but no signing key: an unsigned push would be rejected
-	// by every verifier, so don't publish. This is what stops a consumer-only
-	// machine (a laptop, a PR runner) from writing the shared store at all.
-	//
-	// Said out loud because it is also the half-finished CI setup: trust set declared,
-	// signing secret forgotten, store stays empty while every run reports success.
-	stats := remoteStatsFrom(ctx)
-	if c.verifier != nil && c.signer == nil {
-		if stats != nil {
-			stats.readonlyOnce.Do(func() { c.log.InfoContext(ctx, "cache.remote.readonly") })
-		}
-		return
-	}
-	pr, pw := io.Pipe()
-	errCh := make(chan error, 1)
-	go func() {
-		err := c.exportArtifact(ctx, s.ProjectPath, hash, pw)
-		_ = pw.CloseWithError(err)
-		errCh <- err
-	}()
-	putStart := time.Now()
-	// Counted on the read side: what exportArtifact wrote in would report a full
-	// upload for a transfer that died mid-stream.
-	counted := &countingReader{Reader: pr}
-	putErr := c.remote.PutArtifact(ctx, s.ProjectPath, hash, counted)
-	// The upload streams from the pipe, so PutArtifact spans the transfer and this is
-	// the real wait. Waiting to publish is still waiting.
-	httpx.RecorderFrom(ctx).Add(time.Since(putStart))
-	_ = pr.CloseWithError(putErr)
-	exportErr := <-errCh
-	if exportErr != nil || putErr != nil {
-		stats.failed(0)
-		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
-			fmt.Sprintf("remote push %s (%s): export=%v put=%v", s.ProjectPath, shortHash(hash), exportErr, putErr)))
-		return
-	}
-	stats.published(counted.n)
-	c.log.InfoContext(ctx, "cache.remote.push",
-		slog.String("project", s.ProjectPath),
-		slog.String("hash", shortHash(hash)),
-		slog.Int64("bytes", counted.n),
-		slog.Duration("duration", time.Since(putStart)))
-}
-
-// RemoteTally is what the remote cache did during one run. Its JSON is the body of the
+// RemoteTally is what the remote tier did during one run. Its JSON is the body of the
 // report stream's run.remote record.
 type RemoteTally struct {
 	Hits      int64 `json:"hits"`
 	Misses    int64 `json:"misses"`
-	Published int64 `json:"published"`
+	Stored    int64 `json:"stored"`
 	Failures  int64 `json:"failures"`
 	DownBytes int64 `json:"down_bytes"`
 	UpBytes   int64 `json:"up_bytes"`
 }
 
-// RemoteSummary reads the run-scoped remote counters off ctx. It reports false when no
-// remote is configured or ctx carries no counters (a caller outside Magus.Run); a
-// configured remote the run never touched reports true with every count zero.
+// RemoteSummary reads the run-scoped remote counters off ctx, after waiting for the
+// run's backfill uploads so they are counted. It reports false when no remote is
+// configured or ctx carries no counters (a caller outside Magus.Run); a configured
+// remote the run never touched reports true with every count zero. A cancelled ctx
+// stops the wait and reports what has finished.
 func (c *Cache) RemoteSummary(ctx context.Context) (RemoteTally, bool) {
 	stats := remoteStatsFrom(ctx)
 	if c.remote == nil || stats == nil {
 		return RemoteTally{}, false
 	}
+	waited := make(chan struct{})
+	go func() {
+		stats.pending.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+	case <-ctx.Done():
+	}
 	return RemoteTally{
 		Hits:      stats.hits.Load(),
 		Misses:    stats.misses.Load(),
-		Published: stats.puts.Load(),
+		Stored:    stats.stores.Load(),
 		Failures:  stats.fails.Load(),
 		DownBytes: stats.down.Load(),
 		UpBytes:   stats.up.Load(),
@@ -503,10 +409,12 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	return errors.Join(tw.Close(), gz.Close())
 }
 
-// importArtifact extracts a gzip-tar artifact (produced by exportArtifact) into the local
-// cache directory, verifying its integrity before any of it becomes usable.
+// importArtifact extracts a gzip-tar artifact (produced by exportArtifact) into the
+// store at root, verifying it before any of it becomes usable, and returns the
+// manifest it committed. root is the local store when this run may write it, else a
+// staging directory.
 //
-// The store is not trusted to return what it was given. Two checks enforce that:
+// The store is not trusted to return what it was given:
 //
 //   - Every CAS blob's bytes must hash to the name it is stored under, so a store
 //     serving content not matching its content-address is rejected.
@@ -515,22 +423,19 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 //     readable manifest behind — the import fails and the build runs locally.
 //
 // Authenticity (that a trusted producer made this artifact) is the signature gate
-// below; these checks only guarantee what lands on disk is internally consistent.
-// wantProject and wantHash are the (project, key) the artifact was REQUESTED for.
-// Every path it writes is checked against them, and the parsed manifest must name
-// them too, so a signed artifact fetched for one key can never file itself under
-// another: the check that makes a signature mean "this entry", not merely "some
-// trusted producer signed something".
-func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wantHash string) error {
+// below. wantProject and wantHash are the (project, key) the artifact was REQUESTED
+// for: every path it writes is checked against them and parseManifest requires the
+// manifest to name them, so a signed artifact fetched for one key can never file
+// itself under another.
+func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProject, wantHash string) (*Manifest, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return fmt.Errorf("importArtifact: gzip: %w", err)
+		return nil, fmt.Errorf("importArtifact: gzip: %w", err)
 	}
 	defer gz.Close()
 
 	var (
-		manifestTmp   string // staged manifest; renamed into place only on success
-		manifestFinal string
+		manifest      stagedMember // staged; renamed into place only on success
 		manifestBytes []byte
 		sigBytes      []byte                      // signature.json, buffered for verification (never persisted)
 		seenBlobs     = make(map[string]struct{}) // verified blob hashes present in the tar
@@ -539,20 +444,16 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 		// their final path during the scan: they are unauthenticated until the
 		// signature gate below, and a rejected artifact must leave nothing behind.
 		extras      []stagedMember
-		extraDigest = map[string]string{} // cache-relative path -> content sha256, for the signature
+		extraDigest = map[string]string{} // store-relative path -> content sha256, for the signature
 	)
-	// Drop the staged manifest and any staged extras on failure so a partial import
-	// is never usable and a rejected artifact leaves no trace.
 	defer func() {
 		if committed {
 			return
 		}
-		if manifestTmp != "" {
-			_ = os.Remove(manifestTmp)
+		if manifest.tmp != "" {
+			_ = os.Remove(manifest.tmp)
 		}
-		for _, e := range extras {
-			_ = os.Remove(e.tmp)
-		}
+		dropStagedExtras(extras)
 	}()
 
 	// The store is untrusted, so cap the whole archive — not each member — against a
@@ -561,38 +462,37 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 	// These writes happen before the signature gate, so the cap must be pre-auth.
 	budget := c.importLimit()
 	members := 0
+	manifestRel := path.Join("manifests", flattenPath(wantProject), wantHash+".json")
+	logRel := path.Join("logs", flattenPath(wantProject), wantHash+".log")
 
 	tr := tar.NewReader(gz)
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("importArtifact: tar: %w", err)
+			return nil, fmt.Errorf("importArtifact: tar: %w", err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
 		if members++; members > maxImportMembers {
-			return fmt.Errorf("importArtifact: artifact has too many members (>%d)", maxImportMembers)
+			return nil, fmt.Errorf("importArtifact: artifact has too many members (>%d)", maxImportMembers)
 		}
-		clean, err := c.safeCachePath(hdr.Name)
+		clean, err := safePathIn(root, hdr.Name)
 		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
-			return fmt.Errorf("importArtifact: mkdir: %w", err)
+			return nil, err
 		}
 		// Classify on the sanitized path, not the raw header name, so a crafted name
 		// (e.g. "manifests/../cas/x") can't be filed under one namespace while it
 		// writes to another.
-		rel, err := filepath.Rel(c.dir, clean)
+		rel, err := filepath.Rel(root, clean)
 		if err != nil {
-			return fmt.Errorf("importArtifact: rel: %w", err)
+			return nil, fmt.Errorf("importArtifact: rel: %w", err)
 		}
 		rel = filepath.ToSlash(rel)
 		switch {
@@ -600,84 +500,60 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			// Detached signature: buffer for verification, never persist to the cache.
 			// One per artifact — a duplicate is a malformed/hostile archive.
 			if sigBytes != nil {
-				return errors.New("importArtifact: artifact has more than one signature")
+				return nil, errors.New("importArtifact: artifact has more than one signature")
 			}
 			buf, err := readCapped(tr, &budget)
 			if err != nil {
-				return fmt.Errorf("importArtifact: read signature: %w", err)
+				return nil, fmt.Errorf("importArtifact: read signature: %w", err)
 			}
 			sigBytes = buf
 		case strings.HasPrefix(rel, "cas/"):
-			sum, err := c.writeCacheFile(tr, clean, path.Base(rel), &budget)
+			sum, err := writeCacheFile(tr, clean, path.Base(rel), &budget)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			seenBlobs[sum] = struct{}{}
-		case rel == path.Join("manifests", flattenPath(wantProject), wantHash+".json"):
-			// Buffer + stage the manifest; commit is deferred until its blobs verify.
-			// One per artifact — a duplicate would shadow the first (leaking its temp
-			// file) and muddy "one signature authenticates the whole artifact".
-			if manifestBytes != nil {
-				return errors.New("importArtifact: artifact has more than one manifest")
+		case rel == manifestRel:
+			// One per artifact — a duplicate would shadow the first and muddy "one
+			// signature authenticates the whole artifact". Buffered as it is staged:
+			// the signature covers these exact bytes.
+			if manifest.tmp != "" {
+				return nil, errors.New("importArtifact: artifact has more than one manifest")
 			}
-			buf, err := readCapped(tr, &budget)
+			var buf bytes.Buffer
+			tmp, _, err := stageCacheFile(io.TeeReader(tr, &buf), clean, "", &budget)
 			if err != nil {
-				return fmt.Errorf("importArtifact: read manifest: %w", err)
+				return nil, err
 			}
-			manifestBytes = buf
-			manifestFinal = clean
-			// Uniquely named: the cache is shared machine-wide, so two importers of
-			// this entry can be staging at once, and a fixed temp path would let one
-			// swap its bytes under the other's already-verified commit.
-			tmpf, err := os.CreateTemp(filepath.Dir(clean), filepath.Base(clean)+".import-*.tmp")
-			if err != nil {
-				return fmt.Errorf("importArtifact: stage manifest: %w", err)
-			}
-			manifestTmp = tmpf.Name()
-			if _, err := tmpf.Write(buf); err != nil {
-				_ = tmpf.Close()
-				return fmt.Errorf("importArtifact: stage manifest: %w", err)
-			}
-			if err := tmpf.Close(); err != nil {
-				return fmt.Errorf("importArtifact: stage manifest: %w", err)
-			}
-			// CreateTemp makes the file 0600; the committed manifest was always 0644.
-			if err := file.Chmod(manifestTmp, 0o644); err != nil {
-				return fmt.Errorf("importArtifact: stage manifest: %w", err)
-			}
-		case rel == path.Join("logs", flattenPath(wantProject), wantHash+".log") ||
-			strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
+			manifest = stagedMember{tmp: tmp, final: clean}
+			manifestBytes = buf.Bytes()
+		case rel == logRel || strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
 			// The build log and the portable-ref sidecars, both scoped to the entry
 			// being imported so an artifact cannot write over another key's records.
-			// Staged beside their final path and committed only after the signature
-			// covers them, so an unsigned or tampered extra never lands where a later
-			// run would read it. The temp name is unique per call, not derived from
-			// the member: the cache is shared machine-wide, and a fixed name would
-			// let a concurrent importer swap its bytes under this one's signature.
-			tmp, sum, err := c.stageCacheFile(tr, clean, "", &budget)
+			tmp, sum, err := stageCacheFile(tr, clean, "", &budget)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			extras = append(extras, stagedMember{tmp: tmp, final: clean})
 			extraDigest[rel] = sum
 		default:
-			return fmt.Errorf("importArtifact: artifact carries an out-of-scope member %q", rel)
+			return nil, fmt.Errorf("importArtifact: artifact carries an out-of-scope member %q", rel)
 		}
 	}
 
-	if manifestBytes == nil {
-		return errors.New("importArtifact: artifact has no manifest")
+	if manifest.tmp == "" {
+		return nil, errors.New("importArtifact: artifact has no manifest")
 	}
 	// Authenticity gate: with a trust set configured, refuse any artifact that isn't
 	// signed by a trusted key over this manifest — before committing it, so an
 	// unsigned/untrusted/tampered artifact degrades to a local build, never a replay.
 	if c.verifier != nil {
 		if sigBytes == nil {
-			return errors.New("importArtifact: artifact is unsigned; refusing (trust set configured)")
+			return nil, errors.New("importArtifact: artifact is unsigned; refusing (trust set configured)")
 		}
 		legacy, err := c.verifier.verify(domainArtifact, sigBytes, manifestBytes, extraDigest)
 		if err != nil {
-			return fmt.Errorf("importArtifact: %w", err)
+			return nil, fmt.Errorf("importArtifact: %w", err)
 		}
 		if legacy {
 			// compat: see sigAlg in signing.go. A pre-domain producer signed only the
@@ -694,36 +570,16 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 		dropStagedExtras(extras)
 		extras = nil
 	}
-	var m Manifest
-	if err := json.Unmarshal(manifestBytes, &m); err != nil {
-		return fmt.Errorf("importArtifact: parse manifest: %w", err)
-	}
-	// Bind the signed bytes to the identity they are being filed under. Without this
-	// a signature only says "a trusted key signed some JSON": an output bundle's
-	// metadata, re-tarred as a manifest, unmarshals to an all-zero Manifest with no
-	// outputs, passes every remaining check, and replays as a successful entry, so a
-	// published FAILING run would become a teammate's cached pass.
-	if m.ProjectPath != wantProject || m.Hash != wantHash {
-		return fmt.Errorf("importArtifact: manifest names %q/%s but was served for %q/%s",
-			m.ProjectPath, shortHash(m.Hash), wantProject, shortHash(wantHash))
-	}
-	// The remote store is shared across machines and CI is Linux while local dev
-	// may not be; src: lines are content hashes, so two platforms compute the
-	// SAME digest for the same commit, and this is the only gate stopping one
-	// platform's pass from being imported and replayed as a pass for code the
-	// importing platform never compiled. Same empty-matches-anything convention
-	// as readManifest, for the same reason: an artifact exported before this
-	// field existed should not be rejected outright.
-	if m.Platform != "" && m.Platform != c.platform {
-		return fmt.Errorf("importArtifact: manifest platform %q does not match running platform %q; refusing import",
-			m.Platform, c.platform)
+	m, err := c.parseManifest(manifestBytes, wantProject, wantHash)
+	if err != nil {
+		return nil, fmt.Errorf("importArtifact: %w", err)
 	}
 	for _, out := range m.Outputs {
 		if out.Blob == "" {
 			continue // symlink record carries no blob
 		}
 		if _, ok := seenBlobs[out.Blob]; !ok {
-			return fmt.Errorf("importArtifact: manifest references blob %s absent from artifact", shortHash(out.Blob))
+			return nil, fmt.Errorf("importArtifact: manifest references blob %s absent from artifact", shortHash(out.Blob))
 		}
 	}
 	// Commit the authenticated extras first, then the manifest: the manifest landing
@@ -731,20 +587,17 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 	// place. A failed extra rename is not fatal: the entry still replays, it just
 	// resolves under a locally-minted ref.
 	for _, e := range extras {
-		if err := os.MkdirAll(filepath.Dir(e.final), 0o755); err != nil {
-			continue
-		}
 		_ = os.Rename(e.tmp, e.final)
 	}
-	if err := os.Rename(manifestTmp, manifestFinal); err != nil {
-		return fmt.Errorf("importArtifact: commit manifest: %w", err)
+	if err := os.Rename(manifest.tmp, manifest.final); err != nil {
+		return nil, fmt.Errorf("importArtifact: commit manifest: %w", err)
 	}
 	committed = true
-	return nil
+	return m, nil
 }
 
-// stagedMember is an extra artifact file written to a temp path during the tar scan
-// and renamed into place only after the signature authenticates it.
+// stagedMember is an artifact file written to a temp path during the tar scan and
+// renamed into place only after the signature authenticates it.
 type stagedMember struct {
 	tmp   string // staged path
 	final string // where it belongs once authenticated
@@ -764,8 +617,8 @@ func dropStagedExtras(extras []stagedMember) {
 // signature + one blob per output + log).
 const maxImportMembers = 1 << 20
 
-// errImportTooLarge is returned when a remote artifact's total extracted size exceeds
-// the import limit — the decompression-bomb guard, applied across the whole archive.
+// errImportTooLarge is returned when an archive's extracted size exceeds the import
+// limit — the decompression-bomb guard.
 var errImportTooLarge = errors.New("importArtifact: artifact exceeds import size limit")
 
 // readCapped reads one tar member fully, drawing from the shared archive budget and
@@ -782,17 +635,11 @@ func readCapped(r io.Reader, budget *int64) ([]byte, error) {
 	return buf, nil
 }
 
-// writeCacheFile streams r to dst atomically (temp + rename), drawing from the
-// shared archive budget so the whole artifact — not each member — is bounded against a
-// decompression bomb. It returns the SHA-256 hex of the bytes written, which lets a
-// CAS blob be checked against the name it is stored under; the build log ignores it.
-//
-// wantSum, when non-empty, is that check and it happens BEFORE the rename: a blob whose
-// content does not hash to the name it claims never reaches dst, so a corrupt artifact
-// cannot destroy the valid CAS blob other manifests still reference. The temp file is
-// uniquely named, so two imports of the same entry cannot contend for it.
-func (c *Cache) writeCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, error) {
-	tmp, sum, err := c.stageCacheFile(r, dst, wantSum, budget)
+// writeCacheFile is stageCacheFile plus the commit: dst is replaced only once its
+// bytes passed the size cap and, when wantSum is set, the content-address check, so a
+// corrupt blob never destroys the valid one other manifests still reference.
+func writeCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, error) {
+	tmp, sum, err := stageCacheFile(r, dst, wantSum, budget)
 	if err != nil {
 		return "", err
 	}
@@ -803,39 +650,48 @@ func (c *Cache) writeCacheFile(r io.Reader, dst, wantSum string, budget *int64) 
 	return sum, nil
 }
 
-// stageCacheFile is writeCacheFile without the commit: it streams r to a uniquely
-// named temp file beside dst and returns that path for the caller to rename (or
-// remove) once dst's bytes are authenticated.
-func (c *Cache) stageCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, string, error) {
+// stageCacheFile streams r to a uniquely named temp file beside dst and returns that
+// path for the caller to rename (or remove) once dst's bytes are trusted, plus their
+// SHA-256 hex. It draws from budget, so a whole archive is bounded against a
+// decompression bomb, and refuses content that does not hash to wantSum when set.
+// The name is unique per call: the store is shared machine-wide, and a fixed name
+// would let a concurrent importer swap its bytes under this one's check.
+func stageCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, string, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return "", "", fmt.Errorf("importArtifact: mkdir: %w", err)
+		return "", "", fmt.Errorf("magus/cache: stage %s: %w", dst, err)
 	}
 	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".import-*.tmp")
 	if err != nil {
-		return "", "", fmt.Errorf("importArtifact: create: %w", err)
+		return "", "", fmt.Errorf("magus/cache: stage %s: %w", dst, err)
 	}
 	tmp := f.Name()
+	fail := func(err error) (string, string, error) {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return "", "", err
+	}
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(r, *budget+1))
 	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return "", "", fmt.Errorf("importArtifact: write: %w", err)
+		return fail(fmt.Errorf("magus/cache: stage %s: %w", dst, err))
 	}
 	if n > *budget {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return "", "", errImportTooLarge
+		return fail(errImportTooLarge)
 	}
 	*budget -= n
 	if err := f.Close(); err != nil {
 		_ = os.Remove(tmp)
 		return "", "", err
 	}
+	// CreateTemp makes the file 0600; everything in the store is 0644.
+	if err := file.Chmod(tmp, 0o644); err != nil {
+		_ = os.Remove(tmp)
+		return "", "", fmt.Errorf("magus/cache: stage %s: %w", dst, err)
+	}
 	sum := hex.EncodeToString(h.Sum(nil))
 	if wantSum != "" && sum != wantSum {
 		_ = os.Remove(tmp)
-		return "", "", fmt.Errorf("importArtifact: blob %s content hashes to %s", wantSum, sum)
+		return "", "", fmt.Errorf("magus/cache: blob %s content hashes to %s", wantSum, sum)
 	}
 	return tmp, sum, nil
 }

@@ -16,6 +16,10 @@ description: >
   read-only advisors never mutate the checkout: the conflict advisor merges in memory
   with `git merge-tree`, so there is no merge to abort and no half-merge to strand.
 
+  The pull request comes from the event that triggered the workflow; an event carrying
+  none leaves every advisor silent. The calling step must set GITHUB_TOKEN in its env
+  (see the note above `runs`).
+
 inputs:
   merge-conflicts:
     description: >
@@ -129,6 +133,25 @@ inputs:
       a regular contributor never sees it.
     required: false
     default: 'true'
+  merge-queue:
+    description: >
+      Name the label that queues an approved pull request, while it could join `magus
+      queue` and has not: open, approved, targeting `merge-queue-base`, not from a fork,
+      with neither auto-merge nor a queue label. The label and the merge methods come from
+      `magus queue describe`. Retracts once the pull request is queued, merged or closed.
+
+      OFF by default: it only makes sense where the queue runs, and it needs a workflow
+      that reruns on labels and reviews, which the other advisors do not.
+    required: false
+    default: 'false'
+  merge-queue-base:
+    description: The branch the merge queue merges into.
+    required: false
+    default: ${{ github.event.repository.default_branch }}
+  merge-queue-provider:
+    description: The `magus queue` provider, a built-in name or a .buzz file.
+    required: false
+    default: 'github'
   fix-generated-drift:
     description: >
       Regenerate drifted generated files and PUSH the result to the pull request branch.
@@ -187,243 +210,24 @@ inputs:
       what it did before a baseline was possible.
     required: false
     default: ''
-  pr-number:
-    description: The pull request to comment on.
-    required: false
-    default: ${{ github.event.pull_request.number }}
-  base-ref:
-    description: The branch to test the merge against.
-    required: false
-    default: ${{ github.event.pull_request.base.ref }}
-  head-sha:
-    description: >
-      The PR's head commit. Passed explicitly because actions/checkout resolves a
-      pull_request event to the ephemeral merge commit, which is the base already merged
-      with the head - testing that against the base would find nothing.
-    required: false
-    default: ${{ github.event.pull_request.head.sha }}
-  head-ref:
-    description: >
-      The PR's head BRANCH, which is what a fixer pushes to. Defaults to the pull_request
-      payload; a caller driven by any other event has to pass it, because the fixers refuse
-      to push when they cannot confirm the checkout is this PR's branch.
-    required: false
-    default: ${{ github.event.pull_request.head.ref }}
-  head-repo:
-    description: >
-      The repository owning `head-ref`, as owner/name. Compared against the base repository
-      to recognise a fork, which this token cannot push to.
-    required: false
-    default: ${{ github.event.pull_request.head.repo.full_name }}
-  token:
-    description: >
-      Token used to read and post the comment, and to push when fix-generated-drift is
-      on. Needs `pull-requests: write`, which the default GITHUB_TOKEN does NOT have on a
-      pull request from a fork - the comment step fails there, by design of the platform
-      rather than of this action.
-    required: false
-    default: ${{ github.token }}
 
+# The token is never an input. The calling step sets GITHUB_TOKEN in its env from the
+# workflow's secrets.GITHUB_TOKEN, and the step here inherits it; advise.buzz fails
+# naming that fix when it is missing. No expression spells it out here: a composite
+# action has no secrets context, and GitHub refuses to load one that names it.
+#
+# It reads and posts the comment, and pushes when a fixer is on, so it needs
+# `pull-requests: write`, which GitHub withholds on a pull request from a fork.
 runs:
   using: composite
   steps:
-    # BUZZ_INCLUDE_PATH is how each advisor finds advice.buzz beside it: the scripts run
+    # advise.buzz reads the pull request from the event payload and runs each enabled
+    # advisor. BUZZ_INCLUDE_PATH is how the scripts find advice.buzz beside them: they run
     # from the CALLER's checkout, so the action's own directory is not on the search path
     # unless it is named here.
-    - name: Advise on generated-file conflicts
-      if: inputs.merge-conflicts == 'true'
+    - name: Advise
       shell: bash
       env:
         BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-        FIX_LABEL_OFFER: ${{ inputs.offer-fix-label == 'true' && inputs.fix-label || '' }}
-      run: magus buzz "$GITHUB_ACTION_PATH/merge-conflict.buzz"
-
-    - name: Advise on hand-edited generated files
-      if: inputs.hand-edited-generated == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-      run: magus buzz "$GITHUB_ACTION_PATH/hand-edited-generated.buzz"
-
-    - name: Advise on targets that declare no outputs
-      if: inputs.target-outputs == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-      run: magus buzz "$GITHUB_ACTION_PATH/target-outputs.buzz"
-
-    - name: Report doctor findings
-      if: inputs.doctor == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-      run: magus buzz "$GITHUB_ACTION_PATH/doctor.buzz"
-
-    - name: Advise on a raised version floor
-      if: inputs.version-floor == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-      run: magus buzz "$GITHUB_ACTION_PATH/version-floor.buzz"
-
-    - name: Advise on unclaimed files
-      if: inputs.unclaimed == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-      run: magus buzz "$GITHUB_ACTION_PATH/unclaimed.buzz"
-
-    - name: Advise on the change's blast radius
-      if: inputs.blast-radius == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-        FANOUT_SHARE: ${{ inputs.fanout-share }}
-      run: magus buzz "$GITHUB_ACTION_PATH/blast-radius.buzz"
-
-    - name: Advise on a target opted out of the cache
-      if: inputs.skip-cache == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-      run: magus buzz "$GITHUB_ACTION_PATH/skip-cache.buzz"
-
-    - name: Advise on a target name that diverges from the workspace
-      if: inputs.conformance == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-        MIN_COHORT: ${{ inputs.conformance-min-cohort }}
-        MIN_SHARE: ${{ inputs.conformance-min-share }}
-      run: magus buzz "$GITHUB_ACTION_PATH/conformance.buzz"
-
-    - name: Advise on a project missing a target its peers have
-      if: inputs.missing-target == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-        MIN_COHORT: ${{ inputs.missing-target-min-cohort }}
-        MIN_SHARE: ${{ inputs.missing-target-min-share }}
-      run: magus buzz "$GITHUB_ACTION_PATH/missing-target.buzz"
-
-    - name: Advise on changed API surface
-      if: inputs.api-surface == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_SHA: ${{ inputs.head-sha }}
-        BASELINE: ${{ inputs.baseline }}
-      run: magus buzz "$GITHUB_ACTION_PATH/api-surface.buzz"
-
-    - name: Welcome a first-time contributor
-      if: inputs.first-contribution == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-      run: magus buzz "$GITHUB_ACTION_PATH/first-contribution.buzz"
-
-    # Last, and deliberately after the read-only advisors: these push, which moves the
-    # head every earlier advisor just reported on.
-    #
-    # The merge comes first: regenerating before the base is merged in measures drift
-    # against a tree that is about to change, and the merge would then conflict with the
-    # commit that measurement produced.
-    - name: Settle merge conflicts in generated files
-      if: inputs.fix-merge-conflict == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_REF: ${{ inputs.head-ref }}
-        PR_HEAD_REPO: ${{ inputs.head-repo }}
-        FIX_CONFLICTS: ${{ inputs.fix-merge-conflict }}
-        FIX_LABEL: ${{ inputs.fix-label }}
-      run: magus buzz "$GITHUB_ACTION_PATH/fix-merge-conflict.buzz"
-
-    - name: Fix generated drift
-      if: inputs.fix-generated-drift == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        PR_HEAD_REF: ${{ inputs.head-ref }}
-        PR_HEAD_REPO: ${{ inputs.head-repo }}
-        FIX_DRIFT: ${{ inputs.fix-generated-drift }}
-        FIX_LABEL: ${{ inputs.fix-label }}
-      run: magus buzz "$GITHUB_ACTION_PATH/fix-generated-drift.buzz"
-
+        ADVICE_INPUTS: ${{ toJSON(inputs) }}
+      run: magus buzz "$GITHUB_ACTION_PATH/advise.buzz"

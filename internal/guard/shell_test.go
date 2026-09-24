@@ -175,7 +175,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git add -A", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git add --all", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git add .", rule: denyRule{Name: denyRuleStageAll}},
+		// -u stages every TRACKED change across the whole tree, the same sweep as -A
+		// minus untracked files, and a target's declared outputs are ordinarily
+		// tracked already: measured, every real firing of this rule was -u, not -A.
 		{command: "git add -u", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add --update", rule: denyRule{Name: denyRuleStageAll}},
 		// The deny holds wherever the stage-everything call sits on the line. It used to
 		// be graded in the ADVISORY pass, so any earlier git command that advised answered
 		// first and the deny was never reached.
@@ -230,8 +234,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
-		// Still caught in every real command position.
-		{command: "cd /repo && go test ./...", rule: denyRule{Name: denyRuleCd}},
+		// The cd rule is about magus landing on the wrong project, not about cd itself:
+		// a cd ahead of ordinary, non-magus work falls through to whatever rule that
+		// work earns on its own (here, the raw-tool deny for `go test`).
+		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
 		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
@@ -359,17 +365,23 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Only run and affected carry the flag, so nothing else is advised toward it.
 		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
-		// A cd WITHIN the workspace is denied: name the project instead. A cd into
-		// a temp or scratchpad copy is the throwaway rule above (more specific).
+		// A cd WITHIN the workspace, ahead of a magus command, is denied: name the
+		// project instead. A cd into a temp or scratchpad copy is the throwaway rule
+		// above (more specific); "./magus" counts the same as "magus" on PATH.
 		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
 		// A cd alone on its line relocates nothing after it, and is how a session whose
 		// shell persists moves into its own checkout.
 		{command: "cd libs/diagnostics"},
 		{command: "cd /Users/someone/checkouts/guard-terms"},
 		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint .", rule: denyRule{Name: denyRuleCd}},
-		{command: "cd libs/diagnostics; ls", rule: denyRule{Name: denyRuleCd}},
-		{command: "bash -c 'cd /tmp && ls'", rule: denyRule{Name: denyRuleCd}},
-		{command: "(cd libs/diagnostics && ls)", rule: denyRule{Name: denyRuleCd}},
+		// A cd ahead of ordinary, non-magus work is not this rule's business: nothing
+		// after it lands on the wrong project, since nothing after it is magus.
+		{command: "cd libs/diagnostics; ls"},
+		{command: "bash -c 'cd /tmp && ls'"},
+		{command: "(cd libs/diagnostics && ls)"},
+		// A name merely ENDING in "magus" is not magus: the base name must match exactly,
+		// or a wrapper script called notmagus would earn another program's deny.
+		{command: "cd libs/foo && notmagus run test"},
 		// --root is the sanctioned way to mean a different workspace, and a temp
 		// path merely MENTIONED is not a relocation.
 		{command: "magus run test . --root /tmp/other-workspace"},
@@ -1194,6 +1206,20 @@ func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
 		"a symbol lookup still renders a structured record -o shapes; only --text is exempt")
 }
 
+// TestGuardExemptsQueryOutputBehindGlobalFlags pins the fix for the exemption
+// checking only Args[0]: magus accepts its global flags before the verb, so a
+// flag ahead of `query output` must not defeat the exemption.
+func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
+	assert.Empty(t, Evaluate(testDependencies(), "magus --root /tmp/ws query output ref1a2b3c | grep x").Deny,
+		"a valued global flag ahead of the verb still resolves to the exemption")
+	assert.Empty(t, Evaluate(testDependencies(), "magus -v query output ref1a2b3c | grep x").Deny,
+		"a value-less global flag ahead of the verb still resolves to the exemption")
+	assert.Empty(t, Evaluate(testDependencies(), "magus query output ref1a2b3c | grep x").Deny,
+		"the plain form stays allowed")
+	assert.NotEmpty(t, Evaluate(testDependencies(), "magus --root /tmp/ws run test . | grep x").Deny,
+		"a global flag does not widen the exemption to any other command")
+}
+
 // TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
 // denied in favour of. This assertion was inverted while the message argued there was
 // deliberately no `magus vcs` wrapper; by then `vcs add` had shipped as exactly that
@@ -1229,8 +1255,11 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
-	// A leading cd is refused on its own; the checkpoint advise is never reached.
-	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && git rev-parse HEAD").Rule.Name)
+	// A leading cd is not this rule's business, since nothing after it is magus: the
+	// checkpoint advise still fires.
+	v := Evaluate(testDependencies(), "cd libs/foo && git rev-parse HEAD")
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "magus vcs checkpoint")
 
 	for _, cmd := range []string{
 		"git rev-parse --show-toplevel",
@@ -1283,8 +1312,11 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
-	// A leading cd is refused on its own; the update advise is never reached.
-	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && pnpm add lodash").Rule.Name)
+	// A leading cd is not this rule's business, since nothing after it is magus: the
+	// update advise still fires.
+	v := Evaluate(testDependencies(), "cd libs/foo && pnpm add lodash")
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, ":update")
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
 	// spell op and a dependency refresh, and the deny answers first, so without this
@@ -1298,6 +1330,28 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	// command in a JS repo.
 	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
 		assert.NotContains(t, Evaluate(testDependencies(), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
+	}
+}
+
+// TestGuardAdvisesInstallOnRawInstalls: a raw install is correct work, only uncached, so
+// it earns advice toward the install op and never a deny. Naming packages is a
+// dependency edit, which the install op cannot run, so that spelling is left alone.
+func TestGuardAdvisesInstallOnRawInstalls(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"pnpm install",
+		"pnpm install -r --frozen-lockfile --prefer-offline",
+		"npm ci",
+		"uv sync",
+		"cargo fetch",
+		"go mod download",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "%q must advise, never deny", cmd)
+		assert.Equal(t, installGuardContext, v.Context, cmd)
+	}
+	for _, cmd := range []string{"pnpm install lodash", "go mod download golang.org/x/mod", "npm install", "mise install"} {
+		assert.Equal(t, ShellVerdict{}, Evaluate(testDependencies(), cmd), cmd)
 	}
 }
 
@@ -1415,7 +1469,45 @@ func TestGuardDeniesReadAck(t *testing.T) {
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "only a person can record one")
+		assert.Contains(t, v.Deny, "can record either")
+	}
+}
+
+// TestGuardDeniesSessionDispose is finding F1's fix: disposing an attention request
+// records that a PERSON answered it (docs/doctrine.md, "Manual on purpose"), and until
+// now nothing stopped an agent from closing any request, including one addressed to a
+// person. It folds into the same rule as TestGuardDeniesReadAck rather than a rule of
+// its own, since both are a person's act to record.
+func TestGuardDeniesSessionDispose(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus session dispose att-3f9a`,
+		`./magus session dispose att-3f9a --reason "done"`,
+		`cd /tmp && magus session dispose att-3f9a`,
+		// A GLOBAL FLAG before the verb is the same invocation, the same gap the
+		// anchored --ack pattern used to leave open.
+		`magus -o json session dispose att-3f9a`,
+		`magus --root . session dispose att-3f9a`,
+		// A line the parser cannot read still falls back to the pattern.
+		`magus session dispose att-3f9a && (`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "can record either")
+		assert.Contains(t, v.Deny, "session dispose")
+	}
+}
+
+// TestGuardAllowsSessionAttention is the negative half of TestGuardDeniesSessionDispose:
+// listing the queue is read-only and an agent raises the requests in the first place, so
+// only the verb that CLOSES one is denied.
+func TestGuardAllowsSessionAttention(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus session attention`,
+		`magus session attention -o json`,
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "unexpected deny for %q", cmd)
 	}
 }
 
@@ -1584,42 +1676,6 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		`cat gate.jsonl | jq -r .target`,
 	} {
 		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
-	}
-}
-
-// TestGuardDeniesWatchingCI pins the blocking forms. Measured 2026-09-07: four watches in
-// one session, every one green, each following a local gate that had already run the
-// identical command on the identical tree.
-func TestGuardDeniesWatchingCI(t *testing.T) {
-	for _, cmd := range []string{
-		`gh run watch 34069443069`,
-		`gh run watch 34069443069 --exit-status --interval 60`,
-		`gh pr checks 183 --watch`,
-		`gh run view 34069443069 --watch`,
-		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
-		// command, not the head of the line.
-		`GH_TOKEN=x gh run watch 123`,
-	} {
-		v := Evaluate(testDependencies(), cmd)
-		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
-		assert.Equal(t, denyRuleCIWatch, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "GREEN CHANGES NOTHING", cmd)
-	}
-}
-
-// Reading a result that already exists is the point of the tool and stays allowed; what
-// the rule refuses is the WAITING. `watch` also names a real unrelated program.
-func TestGuardAllowsReadingCIWithoutWaiting(t *testing.T) {
-	for _, cmd := range []string{
-		`gh pr list --state open --json number,mergeable,statusCheckRollup`,
-		`gh pr checks 183`,
-		`gh run view 34069443069 --log`,
-		`gh run list --branch main --limit 5`,
-		`gh run view 34069443069 --json status,conclusion`,
-		// Not gh at all.
-		`watch -n 5 free -m`,
-	} {
-		assert.NotEqual(t, denyRuleCIWatch, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

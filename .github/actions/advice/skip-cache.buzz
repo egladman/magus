@@ -4,8 +4,6 @@
 // forever. magus already requires a REASON for it, which makes the intent auditable -
 // this surfaces that reason at review time, when it can still be argued, instead of
 // leaving it to be discovered by whoever wonders why the cache never hits.
-//
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "proc";
 import "advice";
 import "std";
@@ -44,16 +42,17 @@ fun body(entries: [str]) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("skip-cache: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "skip-cache: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "skip-cache: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {

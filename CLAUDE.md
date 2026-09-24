@@ -130,31 +130,3 @@ round, while a red PR from a risk you knowingly deferred is the system working.
   only skills that loaded on their own were the two a hook demanded, and a rule
   that lives only in prose has roughly even odds. `internal/guard/dir.go` is the
   worked example.
-
-## Workflows
-
-Seven, in `.github/workflows/`. The trigger does not follow from the name, and
-the table that used to live here drifted twice. Read the files; this lists how
-each job builds magus:
-
-```sh
-awk '/^  [a-z][a-z0-9_-]*:$/{j=$1} /source-path:|git-ref:/{print j, $0}' .github/workflows/*.yaml
-```
-
-What that cannot show: `ci.yaml` also runs on a main push, which is not a publish
-step but what populates the shared cache and the run history a pull request may
-only read. `release-index.yaml` and `release.yaml` read `MAGUS_SIGNING_KEY`;
-`registry.yaml` signs with a SEPARATE `MAGUS_REGISTRY_KEY`, because its input is
-several hundred third-party HTTP responses, the last place the key that signs
-magus binaries should be reachable from. Neither pushes to main, so each opens a
-PR, and merging it is what publishes.
-
-Checking CI on a pull request: BATCH-POLL, do not watch.
-
-```sh
-gh pr list --state open --json number,mergeable,statusCheckRollup
-```
-
-`--watch` wakes the agent on every completion, and a third of those race CI
-startup and need relaunching. Green changes nothing anyway, since the human
-merges.

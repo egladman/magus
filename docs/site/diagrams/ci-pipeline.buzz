@@ -23,33 +23,30 @@ export fun ciPipelineDiagram() > Diagram {
             Node{ id = "cmd", label = "magus affected ci", role = "focal",
                   x = 392, y = 88, w = 176, h = 56 },
 
-            Node{ id = "preflight", label = "preflight", x = 32, y = 224, w = 176, h = 56 },
-            Node{ id = "generate", label = "generate", x = 272, y = 224, w = 176, h = 56 },
-            Node{ id = "format", label = "format", x = 512, y = 224, w = 176, h = 56 },
-            Node{ id = "lint", label = "lint", x = 752, y = 224, w = 176, h = 56 },
+            Node{ id = "generate", label = "generate", x = 92, y = 224, w = 176, h = 56 },
+            Node{ id = "format", label = "format", x = 332, y = 224, w = 176, h = 56 },
+            Node{ id = "lint", label = "lint", x = 572, y = 224, w = 176, h = 56 },
 
-            Node{ id = "build", label = "build", x = 152, y = 340, w = 176, h = 56 },
-            Node{ id = "test", label = "test", x = 392, y = 340, w = 176, h = 56 },
-            Node{ id = "security", label = "security", x = 632, y = 340, w = 176, h = 56 },
+            Node{ id = "build", label = "build", x = 212, y = 340, w = 176, h = 56 },
+            Node{ id = "test", label = "test", x = 452, y = 340, w = 176, h = 56 },
+            Node{ id = "security", label = "security", x = 692, y = 340, w = 176, h = 56 },
         ],
         // Slots run left to right across the trigger's lower edge, and the bends step
         // outward-first: the connector traveling furthest turns highest, so no descending
         // leg has to cross a bus segment belonging to a nearer one.
         edges = [
-            Edge{ src = "cmd", dst = "preflight", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 1, srcSlots = 7, bend = 156 },
-            Edge{ src = "cmd", dst = "build", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 2, srcSlots = 7, bend = 168 },
             Edge{ src = "cmd", dst = "generate", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 3, srcSlots = 7, bend = 180 },
-            Edge{ src = "cmd", dst = "test", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 4, srcSlots = 7, bend = 192 },
+                  srcSlot = 1, srcSlots = 6, bend = 156 },
+            Edge{ src = "cmd", dst = "build", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 2, srcSlots = 6, bend = 168 },
             Edge{ src = "cmd", dst = "format", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 5, srcSlots = 7, bend = 184 },
-            Edge{ src = "cmd", dst = "security", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 6, srcSlots = 7, bend = 172 },
+                  srcSlot = 3, srcSlots = 6, bend = 180 },
+            Edge{ src = "cmd", dst = "test", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 4, srcSlots = 6, bend = 180 },
             Edge{ src = "cmd", dst = "lint", srcSide = "bottom", dstSide = "top",
-                  srcSlot = 7, srcSlots = 7, bend = 160 },
+                  srcSlot = 5, srcSlots = 6, bend = 168 },
+            Edge{ src = "cmd", dst = "security", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 6, srcSlots = 6, bend = 156 },
         ],
     };
 }

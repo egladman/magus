@@ -280,6 +280,16 @@ func onlyReads(name, script string, args []string) bool {
 // another payload shrinks on every hop, so the bound is for a line built not to.
 const writeScanDepth = 4
 
+// genericWriteVerbs are the write-shaped commands with no dedicated case in
+// commandWriteCandidates, whose bare positional words are still worth offering as write
+// candidates: each takes a path directly, unlike a command such as rsync whose flags (`
+// --exclude PATTERN`) can consume the next word without writing it anywhere.
+var genericWriteVerbs = map[string]bool{
+	"rm": true, "rmdir": true, "mkdir": true, "touch": true, "truncate": true,
+	"chmod": true, "chown": true, "tee": true, "dd": true, "ln": true, "mv": true,
+	"find": true, "sort": true, "sed": true,
+}
+
 // writeTargetCandidates names every word the line's writes could be aimed at, in the order
 // the walk reaches them: each writing redirect's target, and the operands of every command
 // that is not a known reader.
@@ -351,17 +361,34 @@ func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	}
 	// An interpreter's whole program arrives as one argument, awk's included, so a path
 	// sits inside prose there: the program is offered whole for a boundary that can match
-	// inside it, and its quoted strings singly for one that has to resolve a path.
+	// inside it, and its quoted strings singly for one that has to resolve a path. Either
+	// one carrying whitespace is DATA the program writes, not a path it writes to: a
+	// literal like `"note: lives under .magus/ during a run"` is prose the same way an
+	// echo'd sentence is, and the plain branch below already draws that line.
 	if scriptedRewriteInterpreters[name] || name == "awk" {
 		var out []string
 		for _, w := range append(slices.Clone(words), heredoc) {
 			if w == "" {
 				continue
 			}
-			out = append(out, w)
-			out = append(out, quotedLiterals(w)...)
+			if !strings.ContainsAny(w, " \t\n") {
+				out = append(out, w)
+			}
+			for _, lit := range quotedLiterals(w) {
+				if !strings.ContainsAny(lit, " \t\n") {
+					out = append(out, lit)
+				}
+			}
 		}
 		return out
+	}
+	if name != "cp" && name != "install" && !genericWriteVerbs[name] {
+		// An unlisted command's bare words are not offered at all: unlike the verbs below
+		// (and cp/install, already narrowed to their destination above), nothing says
+		// WHICH word is a path rather than a flag's value, and `rsync --exclude .magus`
+		// names a pattern to skip, not a target to write. The verbs below all take a path
+		// as a plain positional operand, so every word remains worth checking.
+		return nil
 	}
 	var out []string
 	for _, w := range words {
@@ -805,27 +832,6 @@ func fileFindFires(cmds []hint.Invocation) bool {
 				len(operands(c.Args, fdValueFlags)) > 0
 		}
 		return false
-	})
-}
-
-// ciWatchFires reports a gh invocation that BLOCKS until a CI run reaches a terminal
-// state: `gh run watch`, and the --watch form of `gh run view` and `gh pr checks`.
-//
-// Reading a result that already exists (`gh run view --log`, a bare `gh pr checks`) is
-// untouched. The rule is about the WAITING.
-func ciWatchFires(cmds []hint.Invocation) bool {
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		if path.Base(c.Name) != "gh" {
-			return false
-		}
-		ops := operands(c.Args, "")
-		if len(ops) >= 2 && ops[0] == "run" && ops[1] == "watch" {
-			return true
-		}
-		if !hasFlag(c.Args, 0, "watch") {
-			return false
-		}
-		return len(ops) >= 2 && (ops[0] == "run" && ops[1] == "view" || ops[0] == "pr" && ops[1] == "checks")
 	})
 }
 

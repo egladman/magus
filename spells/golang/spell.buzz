@@ -112,8 +112,19 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir 
 // what gets compiled. go.sum holds hashes for module@version pairs, including ones
 // MVS did not select, which is why it is a lock CANDIDATE here rather than the
 // resolved dependency list - `go list -m all` is what answers that.
+//
+// The install downloads into the shared module cache, so there is no tree to seed and
+// no stamp to check, and it always runs; a warm cache makes that a verification pass.
+// Under update, `go get -u ./...` moves every dependency forward and rewrites go.mod
+// and go.sum; go-mod-tidy:update then drops what the build no longer needs.
 export fun mgs_listManifests() > [Manifest] {
-    return [Manifest{value = "go.mod", lockCandidates = ["go.sum"]}];
+    final args = ["mod", "download"];
+    return [Manifest{value = "go.mod", lockCandidates = ["go.sum"], installs = {"go.sum": Install{
+        name = "go-mod-download",
+        command = Command{bin = "go", args = args, charms = {
+            "update": Charm{ops = set(args, "mod", "get").ops + set(args, "download", "-u").ops + after(args, "download", ["./..."]).ops},
+        }},
+    }}}];
 }
 
 // GO_MOD_HINTS classify the two failures a Go build hits after someone else's merge, and

@@ -7,8 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"runtime/debug"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
@@ -100,6 +102,7 @@ var (
 	magusValue        *magus.Magus
 	magusErr          error
 	magusRootOverride string
+	magusLoaded       atomic.Bool
 
 	inspectOnce         sync.Once
 	inspectValue        types.WorkspaceRepository
@@ -125,12 +128,14 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 			return
 		}
 		stop := t.phase("magus.open")
+		defer relaxGC()()
 		opts := []magus.Option{magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
 		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
+		magusLoaded.Store(true)
 		stop()
 		if magusErr == nil && !skipMergeDriverRefresh(ctx) {
 			// Declared outputs are known only once the workspace is open, and they are
@@ -145,10 +150,58 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 	return magusValue, magusErr
 }
 
+// loadGCPercent is the GOGC a workspace load runs under. Evaluating every magusfile and
+// local spell allocates heavily and retains little: measured on this repository, 400
+// cut `magus ls` from 121ms to 110ms and its CPU by a quarter, for 37MB more peak RSS.
+const loadGCPercent = 400
+
+var (
+	gcRelaxMu    sync.Mutex
+	gcRelaxCount int
+	gcRelaxPrev  int
+)
+
+// relaxGC raises GOGC for a workspace load and returns the restore. An explicit GOGC in
+// the environment is the caller's choice and is left alone.
+//
+// Refcounted and shared across callers because loadMagus and inspectWorkspace can both
+// first-load concurrently (the daemon bootstraps both in parallel goroutines): a plain
+// save/restore pair races there, since either could observe the other's already-raised
+// GOGC as "the prior value" and restore to it instead of the true original, or one
+// restoring early could drop GOGC out from under the other's still-running load. Only
+// the caller that takes the count from 0 saves the prior value; only the one that takes
+// it back to 0 restores it.
+func relaxGC() func() {
+	if os.Getenv("GOGC") != "" {
+		return func() {}
+	}
+	gcRelaxMu.Lock()
+	if gcRelaxCount == 0 {
+		gcRelaxPrev = debug.SetGCPercent(loadGCPercent)
+	}
+	gcRelaxCount++
+	gcRelaxMu.Unlock()
+	return func() {
+		gcRelaxMu.Lock()
+		gcRelaxCount--
+		if gcRelaxCount == 0 {
+			debug.SetGCPercent(gcRelaxPrev)
+		}
+		gcRelaxMu.Unlock()
+	}
+}
+
 func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) {
 	t := traceFromContext(ctx)
 	inspectOnce.Do(func() {
 		inspectRootOverride = rootOverride
+		// startup already opened this workspace for most subcommands, and an open
+		// workspace answers everything an inspected one does; loading it twice doubled
+		// the cost of `magus ls`.
+		if magusLoaded.Load() && magusErr == nil && rootOverride == magusRootOverride {
+			inspectValue = magusValue
+			return
+		}
 		defer t.phase("workspace.find_root")()
 		root, err := magus.FindRoot(rootOverride)
 		if err != nil {
@@ -156,6 +209,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			return
 		}
 		stop := t.phase("workspace.inspect")
+		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
 			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		stop()

@@ -2,7 +2,7 @@ package interp
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // G505: git names objects with it; see GitBlobID
+	"crypto/sha1" //nolint:gosec // G505: a content fingerprint; see ContentID
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/internal/parsecache"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -49,7 +50,7 @@ const TargetContextGlobal = "__magus_target_context"
 // describe.Extract, which sees ctx-form declarations directly. Best-effort: a parse
 // failure yields nil, matching the extractor's never-error contract.
 func CtxFormTargetKeys(src string) map[string]bool {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil || prog == nil {
 		return nil
 	}
@@ -116,7 +117,7 @@ func RemovedAPINames() []string {
 // textual scan is the only thing left; it is reached only for a file that is already
 // failing, so at worst it re-explains a broken magusfile with the wrong migration.
 func RemovedAPICall(src string) (call, replacement string, ok bool) {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil || prog == nil {
 		for _, r := range removedMagusfileAPI {
 			if text := "magus." + strings.Join(r.path, "."); strings.Contains(src, text+"(") {
@@ -219,12 +220,11 @@ func sourceReaderFrom(ctx context.Context) func(path string) ([]byte, error) {
 	return read
 }
 
-// SourceFile is one file a magusfile load read, named by the git blob id of the bytes it
-// read. The id is computed from the bytes rather than asked of a VCS, so recording it
-// costs no process and names the same object git would.
+// SourceFile is one file a magusfile load read, named by the ContentID of the bytes it
+// read, which costs no process to record.
 type SourceFile struct {
-	Path   string
-	BlobID string
+	Path      string
+	ContentID string
 }
 
 // SourceLog collects every file a load reads: its magusfile sources and every Buzz file
@@ -240,7 +240,7 @@ func (l *SourceLog) Files() []SourceFile {
 	defer l.mu.Unlock()
 	out := make([]SourceFile, 0, len(l.files))
 	for path, id := range l.files {
-		out = append(out, SourceFile{Path: path, BlobID: id})
+		out = append(out, SourceFile{Path: path, ContentID: id})
 	}
 	slices.SortFunc(out, func(a, b SourceFile) int { return strings.Compare(a.Path, b.Path) })
 	return out
@@ -252,7 +252,7 @@ func (l *SourceLog) record(path string, data []byte) {
 	if l.files == nil {
 		l.files = map[string]string{}
 	}
-	l.files[path] = GitBlobID(data)
+	l.files[path] = ContentID(data)
 }
 
 type sourceLogCtxKey struct{}
@@ -262,9 +262,11 @@ func WithSourceLog(ctx context.Context, log *SourceLog) context.Context {
 	return context.WithValue(ctx, sourceLogCtxKey{}, log)
 }
 
-// GitBlobID is the object id git assigns data as a blob in a SHA-1 repository.
-func GitBlobID(data []byte) string {
-	h := sha1.New() //nolint:gosec // G401: git's object naming, not a security primitive
+// ContentID is a stable fingerprint of data, computed in-process without asking any VCS.
+// It uses git's SHA-1 blob formula, so the value is the one ids already recorded carry,
+// and equals the blob id a git checkout would give the same bytes.
+func ContentID(data []byte) string {
+	h := sha1.New() //nolint:gosec // G401: a content fingerprint, not a security primitive
 	fmt.Fprintf(h, "blob %d\x00", len(data))
 	_, _ = h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))
@@ -412,7 +414,7 @@ func spellImportNames(src string) []string {
 	if !strings.Contains(src, "magus/spell/") {
 		return nil
 	}
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return nil
 	}
@@ -438,7 +440,7 @@ func checkRemoteSpellImports(ctx context.Context, src string) error {
 	if !mentionsRemoteImport(src) {
 		return nil
 	}
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return nil //nolint:nilerr // Exec reports the syntax error
 	}
@@ -509,7 +511,7 @@ func (s *importErrors) take() error {
 // import (`as _`) binds no name; an alias binds itself; a plain import binds the path's
 // last segment. Returns nil on a parse error (Exec re-parses and reports it).
 func importBoundNames(src string) map[string]string {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return nil
 	}
@@ -692,7 +694,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
 	// replaces gopherbuzz's upstream default so a magusfile resolves siblings the same
 	// way regardless of the process cwd, and cannot escape via BUZZ_INCLUDE_PATH.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
@@ -879,7 +881,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	// (Parser.zig gates the same warning on `self.flavor != .Repl`): a REPL evaluates
 	// one statement at a time, so an import "unused so far" may just be used by a
 	// line not typed yet.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
 	buzzSess.SetIncludeDirs(nil)
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {

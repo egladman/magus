@@ -233,7 +233,9 @@ func resolveBuzzImport(path string, scanned map[string]bool) (string, bool) {
 }
 
 // findBuzzFiles returns every workspace .buzz source path (rel to root), sorted,
-// skipping ignore dirs (dot-dirs, vendor, ...) and testdata fixtures (not source).
+// skipping ignore dirs (dot-dirs, vendor, ...), testdata fixtures (not source), and
+// whatever the VCS ignores. MAGUS.md ranks file and function nodes, so an ignored build
+// output such as dist/ would otherwise reach a committed file.
 func findBuzzFiles(root string) []string {
 	var out []string
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -254,5 +256,5 @@ func findBuzzFiles(root string) []string {
 		return nil
 	})
 	slices.Sort(out)
-	return out
+	return dropVCSIgnored(root, out)
 }

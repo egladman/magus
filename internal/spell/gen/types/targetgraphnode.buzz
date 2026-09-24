@@ -12,6 +12,7 @@ export object TargetGraphNode {
     dependencies: [str] = [],
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
+    dispatchOnly: bool = false,
     crossDependencies: [CrossTargetRef] = [],
     chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/flock"
+
 	json "github.com/egladman/magus/internal/json"
 )
 
@@ -17,6 +19,40 @@ import (
 // would let one worktree delete history the others still expect to read. Wiring a
 // workspace-level setting is a decision to take once, not a knob to add ahead of it.
 const DefaultRetention = 30 * 24 * time.Hour
+
+// pruneInterval is how often [Open] prunes a store, tracked by the modification time
+// of pruneStamp inside it. The stamp carries no fileExt, so no reader sees an invocation.
+const (
+	pruneInterval = time.Hour
+	pruneStamp    = ".pruned"
+)
+
+// claimStalePruneStamp reports on and reacts to staleness under a lock: called only
+// after Open's own cheap Stat already suggested stamp looks stale, it takes an
+// exclusive, non-blocking file lock, re-checks under it, and if still stale, prunes dir
+// and refreshes stamp. That plain Stat-then-write pair on stamp is what let every
+// concurrent Open in the same window see the same stale stamp and each independently
+// decide to prune; TryLock is what makes the decision atomic instead of the staleness
+// READ that led to it. A caller that loses the race returns immediately, having never
+// blocked: the common "nothing to do" path never touches the lock at all, and a caller
+// that does contend skips pruning this round rather than waiting to prune again a
+// moment later, which "at most once per interval" already tolerates.
+func claimStalePruneStamp(dir, stamp, keep string) {
+	fl := flock.New(stamp + ".lock")
+	got, err := fl.TryLock()
+	if err != nil || !got {
+		return
+	}
+	defer func() { _ = fl.Unlock() }()
+	if fi, err := os.Stat(stamp); err == nil && time.Since(fi.ModTime()) < pruneInterval {
+		return // another caller already pruned and refreshed the stamp while this one waited
+	}
+	prune(dir, DefaultRetention, keep)
+	now := time.Now()
+	if os.Chtimes(stamp, now, now) != nil {
+		_ = os.WriteFile(stamp, nil, 0o644)
+	}
+}
 
 // Prune deletes whole invocation files whose newest fact is older than retain.
 //

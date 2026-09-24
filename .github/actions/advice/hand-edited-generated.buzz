@@ -5,8 +5,6 @@
 // overwrites the edit, and CI's drift gate fails in the meantime. The tell is a changed
 // file whose role is `output` while no `source` of any project that produces it changed
 // in the same PR - a regeneration always arrives with the change that caused it.
-//
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "proc";
 import "advice";
 import "magus";
@@ -72,16 +70,17 @@ fun body(files: [str]) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("hand-edited-generated: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "hand-edited-generated: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "hand-edited-generated: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {

@@ -195,7 +195,7 @@ func Record(cacheDir string, add []Receipt) error {
 // ReadStates reports each path as one of types.DiffReadUnread, DiffReadRead or
 // DiffReadStale, against the recorded receipts.
 //
-// One definition, because the CLI's preflight report and the console's review surface must
+// One definition, because the CLI's --impact report and the console's review surface must
 // agree on what "read" means; two callers deciding for themselves is how one surface comes
 // to call a file reviewed while the other calls it stale.
 //

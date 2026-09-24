@@ -58,10 +58,15 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json"],
     "targets": {
+        "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
+// install installs node_modules through the typescript spell's pnpm-install op. That
+// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
+// stamp, so an unchanged tree forks nothing and an interrupted one reinstalls.
+// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // Everything generate writes, project-relative because that is where this target runs.
 // The schema DIRECTORY rather than its files: drift\expand walks it, so a schema the SDK
@@ -140,27 +145,18 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // live and where host_schema_test.go reads them. Declared with writesFiles so the snapshot
 // covers it and a cross-project write is not a surprise.
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.writesFiles("../../../../testdata/hosts/cursor/gen/*.schema.json");
     proc\exec("pnpm", ["run", "cursor-schemas"], ".", {});
 }
 
-// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-// Always let pnpm validate the install. An interrupted install leaves a node_modules
-// that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
-// handing the missing packages straight to tsc/esbuild. Reached once per invocation
-// through preflight, which every target below already needs, so the unconditional
-// --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-}
 
 // lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus
 // Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors
 // libs/textsearch's rules so the whole workspace writes TypeScript the same way).
 // proc.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["run", "biome"], ".", {});
     // The shell templates are POSIX sh that users copy into their own hook config, so
@@ -224,7 +220,7 @@ fun checkBuzz() > void !> any {
 // testscript already gives them a real magus on PATH, which is exactly what a shell template
 // needs and what this project cannot offer.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     proc\exec("pnpm", ["run", "test"], ".", {});
 }
 
@@ -242,7 +238,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // nonzero. Successful workspaces are deleted unless MAGUS_HOST_E2E_KEEP=1; a
 // failure keeps its trace, config, and capped host logs for inspection.
 export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     var command = mut ["run", "e2e", "--"];
     foreach (arg in args) { command.append(arg); }
     proc\exec("pnpm", args: command, dir: ".", opts: {});
@@ -270,7 +266,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // descendant project (MGS3001). So the pages are formatted by the project that owns them,
 // which is the same rule every other project with Markdown follows.
 export fun format(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // Before dprint, so the page it formats is the one the template just produced. This is
     // also what puts the render inside `ci`, and so under the drift gate.
     ctx.needs(generate);

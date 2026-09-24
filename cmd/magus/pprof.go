@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"runtime/trace"
 	"strings"
 )
 
@@ -13,6 +14,7 @@ import (
 //
 //	MAGUS_PPROF=cpu:/tmp/magus.cpu.pprof   magus run site-generate docs
 //	MAGUS_PPROF=mem:/tmp/magus.mem.pprof   magus run site-generate docs
+//	MAGUS_PPROF=trace:/tmp/magus.trace     magus run site-generate docs
 //	MAGUS_PPROF=cpu:/tmp/c,mem:/tmp/m      both, comma separated
 //
 // Read straight from the environment rather than added to Config, and deliberately
@@ -26,7 +28,8 @@ import (
 // the interpreter runs in this process, which is what makes it the right tool for a
 // slow magusfile, not just for slow Go. A `mem` profile is the heap at exit, which is
 // what to reach for when a run's `sys` time is dominated by allocator churn rather
-// than by work.
+// than by work. A `trace` is the execution trace, for wall time a CPU profile cannot
+// see: a goroutine waiting on a child process or a lock samples nothing.
 //
 // Failures here are reported and then ignored: a mistyped profile spec must not fail
 // the build the developer was actually trying to measure.
@@ -106,8 +109,19 @@ func startOneProfile(kind, path string) func() {
 			}
 			f.Close()
 		}
+	case "trace":
+		if err := trace.Start(f); err != nil {
+			fmt.Fprintf(os.Stderr, "magus: %s: %v\n", pprofEnv, err)
+			f.Close()
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "magus: execution trace -> %s\n", path)
+		return func() {
+			trace.Stop()
+			f.Close()
+		}
 	default:
-		fmt.Fprintf(os.Stderr, "magus: %s: unknown profile %q (want cpu or mem)\n", pprofEnv, kind)
+		fmt.Fprintf(os.Stderr, "magus: %s: unknown profile %q (want cpu, mem or trace)\n", pprofEnv, kind)
 		f.Close()
 		return nil
 	}

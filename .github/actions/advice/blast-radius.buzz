@@ -18,7 +18,7 @@
 // set, where this used to run `magus affected --explain` once per project and parse the
 // output. The diagram follows, for the reader who wants the shape rather than the rows.
 //
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
+// Reads the `fanout-share` input.
 import "proc";
 import "advice";
 import "magus";
@@ -75,16 +75,17 @@ fun body(projects: [str], reasons: [str], total: int, diagram: str) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("blast-radius: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "blast-radius: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "blast-radius: the pull request's number, base and head sha must be set together";
     }
     if (advice\silenced(repo, pr: pr, name: section)) {
         // Retract rather than leave the last finding frozen on the page.
@@ -94,7 +95,7 @@ fun main() > void !> any {
     }
 
     var share = 0.5;
-    final configured = advice\env("FANOUT_SHARE");
+    final configured = advice\input("fanout-share");
     // parseDouble, not parseFloat: Buzz's floating type is `double` and there is no
     // parseFloat, so the guessed name was null at run time - which a test over the pure
     // functions could never catch, because only main() reads the input.

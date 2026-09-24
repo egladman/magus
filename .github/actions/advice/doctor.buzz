@@ -18,8 +18,6 @@
 // A FAILING check earns the interruption: it passed for somebody, so a change broke it.
 // Run `magus doctor` at the keyboard to see the advisory tier, with the detail this
 // comment has no room for.
-//
-// Reads REPO and PR_NUMBER.
 import "advice";
 import "magus";
 import "std";
@@ -42,8 +40,9 @@ export fun summarize(fails: [str]) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
     if (repo == "" or pr == "") {
         std\print("doctor: no PR context; nothing to advise");
         return;

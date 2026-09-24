@@ -30,7 +30,13 @@ import (
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
 // pre-tool-use hook uses. A person passes the command as an operand instead; both reach
 // the same evaluator, and the operand path has its own cases below.
+//
+// It judges by the built-in rules alone: these tests run inside magus's own checkout, whose
+// Buzz policy is not what they are about. guard_plumbing_test.go covers workspace rules.
 func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
+	saved := guardRoot
+	guardRoot = func() (string, error) { return "", errors.New("no workspace rules in this test") }
+	defer func() { guardRoot = saved }()
 	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
 }
 

@@ -123,6 +123,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.Wait && !rf.Detach {
 		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
 	}
+	preflight, err := parsePreflight(rf.Preflight)
+	if err != nil {
+		return usagef("magus run: %v", err)
+	}
+	if len(preflight) > 0 && (rf.Graph || targetName == "ls") {
+		return usagef("magus run: --preflight runs targets first; it does not apply to --graph or ls")
+	}
 	if len(skips.refs) > 0 && rf.Graph {
 		// Refused rather than ignored: --graph renders from the raw roots, so honoring
 		// the flag there would take a second subtraction, and accepting it silently is
@@ -308,6 +315,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
+	if len(preflight) > 0 {
+		runOpts = append(runOpts, magus.WithPreflight(preflight...))
+	}
 	runOpts = append(runOpts, magus.WithSink(sink))
 	if spellFilter != "" {
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
@@ -475,6 +485,33 @@ func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
 	}
 	fs.Var(skips, gen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error")
 	return rf
+}
+
+// parsePreflight splits a --preflight value into canonical target names. A preflight
+// runs under the invocation's own charms, so a charm-qualified name is refused rather
+// than silently dropped, as is an empty segment.
+func parsePreflight(value string) ([]string, error) {
+	if value == "" {
+		return nil, nil
+	}
+	var names []string
+	for _, ref := range strings.Split(value, ",") {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			return nil, errors.New("--preflight: empty target name")
+		}
+		t, err := types.ParseTarget(ref)
+		if err != nil {
+			return nil, fmt.Errorf("--preflight: %w", err)
+		}
+		if len(t.Charms) > 0 {
+			return nil, fmt.Errorf("--preflight %s: name the target alone; it runs under the invocation's charms", ref)
+		}
+		if name := canonicalTarget(t.Name); !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	return names, nil
 }
 
 // skipFlag accumulates repeated --skip values; satisfies flag.Value.

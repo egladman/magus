@@ -1167,15 +1167,15 @@ func stubAdviceDir(t *testing.T, stubs map[string]string) string {
 	return dir
 }
 
-// echoAdvisor publishes the local env contract back out, so a test can assert what
+// echoAdvisor publishes the local pull request back out, so a test can assert what
 // reached the advisor rather than what the driver believes it sent.
 const echoAdvisor = `import "advice";
 import "std";
 
 fun main() > void !> any {
     std\print("echo: looked at the tree");
-    advice\publish(advice\env("REPO"), pr: advice\env("PR_NUMBER"), name: "echo",
-        title: advice\env("PR_HEAD_SHA"), body: advice\env("PR_BASE"));
+    final pull = advice\pullRequest();
+    advice\publish(pull.repo, pr: pull.number, name: "echo", title: pull.headSha, body: pull.base);
 }
 `
 
@@ -1205,8 +1205,9 @@ fun main() > void !> any {
 const rangeAdvisor = `import "advice";
 
 fun main() > void !> any {
+    final pull = advice\pullRequest();
     advice\publish("", pr: "", name: "range", title: "Range",
-        body: advice\diffRange(advice\env("PR_BASE"), head: advice\env("PR_HEAD_SHA")));
+        body: advice\diffRange(pull.base, head: pull.headSha));
 }
 `
 
@@ -1227,7 +1228,7 @@ const staleBaseAdvisor = `import "advice";
 
 fun main() > void !> any {
     advice\fetchBase("magus-advice-no-such-base", refspec: true);
-    advice\publish("", pr: "", name: "stale", title: "Stale base", body: advice\env("PR_BASE"));
+    advice\publish("", pr: "", name: "stale", title: "Stale base", body: advice\pullRequest().base);
 }
 `
 
@@ -1250,15 +1251,15 @@ func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
 	if got.Name != "echo" {
 		t.Errorf("Name = %q, want %q", got.Name, "echo")
 	}
-	// The driver's base reaches the advisor as PR_BASE, which is the whole point of the
-	// shared env helper's local mode.
+	// The driver's base reaches the advisor as the pull request's base, which is the whole
+	// point of advice.buzz's local mode.
 	if got.Body != "main" {
 		t.Errorf("Body = %q, want the base %q", got.Body, "main")
 	}
-	// PR_HEAD_SHA is supplied rather than left empty; an empty one makes every advisor
-	// read the run as "not a pull request" and say nothing at all.
+	// headSha is supplied rather than left empty; an empty one makes every advisor read
+	// the run as "not a pull request" and say nothing at all.
 	if got.Title == "" {
-		t.Error("Title is empty: PR_HEAD_SHA was not supplied to the advisor")
+		t.Error("Title is empty: the head sha was not supplied to the advisor")
 	}
 }
 
@@ -1444,120 +1445,71 @@ func TestSetAdviceEnvRestoresAbsence(t *testing.T) {
 	}
 }
 
-// adviceLocalExclusions are read-only advisors action.yml runs that `magus diff`
+// adviceLocalExclusions are read-only advisors advise.buzz runs that `magus diff`
 // deliberately does not. The value is the reason, and carrying one is the point: leaving
 // an advisor out is a decision, and a decision with no reason recorded is indistinguishable
 // from having forgotten it.
 var adviceLocalExclusions = map[string]string{
-	"first-contribution.buzz": "reads the pull request's author through its own gh call " +
-		"rather than through advice.buzz, so local mode cannot intercept it, and a working " +
-		"tree has no first-time contributor to welcome",
+	"first-contribution.buzz": "asks the forge whether the author has merged before, and a " +
+		"working tree has no author and no first-time contributor to welcome",
+	"merge-queue.buzz": "reads the pull request's review state and labels through its own gh " +
+		"call, and a working tree has no pull request to queue",
 }
 
-// adviceStep is one step of the advice composite action, reduced to the two facts this
-// test needs: the advisor it runs, and the environment keys it sets.
-type adviceStep struct {
-	name    string
-	file    string
-	envKeys map[string]bool
-}
-
-// parseAdviceSteps reads the advice composite action and returns its advisor steps in the
-// order action.yml declares them.
+// adviseScripts returns the scripts one of advise.buzz's advisor lists names, in order.
 //
-// A LINE SCAN rather than a YAML decode, which is a judgment worth recording. Decoding
-// would mean modeling enough of the composite-action schema to reach `runs.steps[].env`
-// and `.run`, and `run` would still be a shell string this test has to pick a script path
-// out of by hand, so the schema buys nothing and the sub-parse remains either way. It
-// would also put a YAML dependency in package main to serve one test. The scan reads the
-// same two facts a human reads, off a file whose indentation the action schema fixes:
-// steps open at `    - name:`, step keys sit at six spaces, env keys at eight.
-//
-// The scan is allowed to be wrong in one direction only. A step it fails to recognize
-// drops out of the returned set and then surfaces as a mismatch against localAdvisors,
-// which is a red test naming the file, never a quietly shorter list.
-func parseAdviceSteps(t *testing.T) []adviceStep {
+// A LINE SCAN of the Buzz source rather than running it: the lists are literals of one
+// `Advisor{input = "...", script = "..."},` per line, so the scan reads what a human reads.
+// It is allowed to be wrong in one direction only: a line it cannot read fails the test
+// naming it, never a quietly shorter list.
+func adviseScripts(t *testing.T, src, list string) []string {
 	t.Helper()
-	src, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "action.yml"))
-	if err != nil {
-		t.Fatalf("read action.yml: %v", err)
+	_, body, ok := strings.Cut(src, "\nfinal "+list+" = [\n")
+	if !ok {
+		t.Fatalf("advise.buzz declares no %q list", list)
 	}
-
-	var steps []adviceStep
-	var cur *adviceStep
-	inEnv := false
-	flush := func() {
-		if cur != nil && cur.file != "" {
-			steps = append(steps, *cur)
+	body, _, ok = strings.Cut(body, "\n];")
+	if !ok {
+		t.Fatalf("advise.buzz's %q list is not closed by a line reading \"];\"", list)
+	}
+	var scripts []string
+	for _, line := range strings.Split(body, "\n") {
+		_, rest, ok := strings.Cut(line, `script = "`)
+		if !ok {
+			t.Errorf("advise.buzz's %q list carries a line the scan cannot read: %q", list, line)
+			continue
 		}
-		cur = nil
+		script, _, _ := strings.Cut(rest, `"`)
+		scripts = append(scripts, script)
 	}
-	for _, line := range strings.Split(string(src), "\n") {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(line, "    - name: "):
-			flush()
-			cur = &adviceStep{
-				name:    strings.TrimSpace(strings.TrimPrefix(line, "    - name: ")),
-				envKeys: map[string]bool{},
-			}
-			inEnv = false
-		case cur == nil:
-			// Everything ahead of the first step: the action's description and inputs.
-		case trimmed == "" || strings.HasPrefix(trimmed, "#"):
-			// Blank lines and comments say nothing about where the scan is.
-		case inEnv && strings.HasPrefix(line, "        "):
-			if key, _, ok := strings.Cut(trimmed, ":"); ok {
-				cur.envKeys[key] = true
-			}
-		case trimmed == "env:":
-			inEnv = true
-		case strings.HasPrefix(line, "      run: "):
-			inEnv = false
-			run := strings.TrimPrefix(line, "      run: ")
-			_, after, ok := strings.Cut(run, "$GITHUB_ACTION_PATH/")
-			if !ok {
-				// A step invoking an advisor some other way would evade the scan
-				// entirely, which is the one failure this design cannot absorb.
-				if strings.Contains(run, ".buzz") {
-					t.Errorf("step %q runs a .buzz script the scan cannot name: %q", cur.name, run)
-				}
-				continue
-			}
-			cur.file, _, _ = strings.Cut(after, `"`)
-		default:
-			inEnv = false
-		}
-	}
-	flush()
-	return steps
+	return scripts
 }
 
-// TestLocalAdvisorsMatchActionYML is the gate on localAdvisors restating action.yml by
+// TestLocalAdvisorsMatchAdviseBuzz is the gate on localAdvisors restating advise.buzz by
 // hand. A read-only advisor added to CI that never reaches `magus diff` is invisible
 // otherwise: both halves keep working, and the local command is simply quieter than the
 // pull request for no stated reason.
-func TestLocalAdvisorsMatchActionYML(t *testing.T) {
-	steps := parseAdviceSteps(t)
-
-	// A step carrying FIX_LABEL is a WRITER. That variable is the per-change consent the
-	// two fixers and the label-settler each read before touching the branch, so it is a
-	// structural signal action.yml already carries, rather than a second hand-kept list of
-	// writers that could drift exactly the way localAdvisors can. FIX_LABEL_OFFER (which
-	// the read-only merge-conflict advisor sets) is a different key and does not match.
-	var readOnly []string
-	writers := 0
-	for _, s := range steps {
-		if s.envKeys["FIX_LABEL"] {
-			writers++
-			continue
-		}
-		readOnly = append(readOnly, s.file)
-	}
-	if len(readOnly) == 0 || writers == 0 {
-		t.Fatalf("the scan found %d steps, %d read-only and %d writers: it is measuring "+
+func TestLocalAdvisorsMatchAdviseBuzz(t *testing.T) {
+	dir := filepath.Join("..", "..", adviceDirRel)
+	src, err := os.ReadFile(filepath.Join(dir, "advise.buzz"))
+	require.NoError(t, err)
+	readOnly := adviseScripts(t, string(src), "reading")
+	writers := adviseScripts(t, string(src), "writing")
+	if len(readOnly) == 0 || len(writers) == 0 {
+		t.Fatalf("the scan found %d read-only advisors and %d writers: it is measuring "+
 			"nothing, and every comparison below would pass on an empty file",
-			len(steps), len(readOnly), writers)
+			len(readOnly), len(writers))
+	}
+
+	// The lists are hand-kept, so the thing that makes an advisor a writer is checked
+	// against its source: a script that passes "push" to git belongs in writing, where it
+	// runs last and never reaches `magus diff`.
+	for _, file := range readOnly {
+		body, err := os.ReadFile(filepath.Join(dir, file))
+		require.NoError(t, err)
+		if strings.Contains(string(body), `"push"`) {
+			t.Errorf("%s pushes, so it belongs in advise.buzz's writing list, not reading", file)
+		}
 	}
 
 	want := make([]string, 0, len(readOnly))
@@ -1568,7 +1520,7 @@ func TestLocalAdvisorsMatchActionYML(t *testing.T) {
 	}
 	for file := range adviceLocalExclusions {
 		if !slices.Contains(readOnly, file) {
-			t.Errorf("adviceLocalExclusions names %q, which action.yml no longer runs as a "+
+			t.Errorf("adviceLocalExclusions names %q, which advise.buzz no longer runs as a "+
 				"read-only advisor: drop the entry, since the exclusion now protects nothing", file)
 		}
 	}
@@ -1580,24 +1532,23 @@ func TestLocalAdvisorsMatchActionYML(t *testing.T) {
 	for _, file := range want {
 		if !slices.Contains(localAdvisors, file) {
 			mismatched = true
-			t.Errorf("action.yml runs read-only advisor %q and `magus diff` does not. Add it "+
+			t.Errorf("advise.buzz runs read-only advisor %q and `magus diff` does not. Add it "+
 				"to localAdvisors, or name it in adviceLocalExclusions with the reason it has "+
-				"no local meaning. If it WRITES it belongs in neither: a writer is recognized "+
-				"here by the FIX_LABEL consent variable on its step, and one that pushes "+
-				"without reading that label is a bug in the advisor, not in this test.", file)
+				"no local meaning. If it WRITES it belongs in neither: move it to advise.buzz's "+
+				"writing list.", file)
 		}
 	}
 	for _, file := range localAdvisors {
 		if !slices.Contains(want, file) {
 			mismatched = true
-			t.Errorf("localAdvisors runs %q, which action.yml does not run as a read-only "+
+			t.Errorf("localAdvisors runs %q, which advise.buzz does not run as a read-only "+
 				"advisor: it was renamed, removed, or has become a writer.", file)
 		}
 	}
 	if !mismatched {
 		// Same members either way, so only the order moved. It is not cosmetic: a local
 		// reader gets the findings in the order CI chose to present them.
-		t.Errorf("localAdvisors = %v, want action.yml's order %v", localAdvisors, want)
+		t.Errorf("localAdvisors = %v, want advise.buzz's order %v", localAdvisors, want)
 	}
 }
 

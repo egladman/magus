@@ -1048,7 +1048,7 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorChe
 
 	var tracked types.TrackedFileReporter
 	if res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
-		tracked, _ = res.VCS.(types.TrackedFileReporter)
+		tracked = res.VCS
 	}
 
 	var details []string
@@ -1253,13 +1253,9 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Do
 	if err != nil || res.VCS == nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no VCS to enumerate committed files with"}
 	}
-	tracked, ok := res.VCS.(types.TrackedFileReporter)
-	if !ok {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: res.Name + " cannot report tracked files"}
-	}
 	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
 	// per candidate: the check has no candidate set until it has the file list.
-	files, err := tracked.TrackedFiles(r.runCtx(), r.root, []string{"."})
+	files, err := res.VCS.TrackedFiles(r.runCtx(), r.root, []string{"."})
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not list tracked files: " + err.Error()}
 	}
@@ -1396,8 +1392,8 @@ func declaredTargetNames(path string) []string {
 // omitted return arrows, non-optional fiber yields) and plain syntax errors.
 //
 // Every magusfile is parsed before returning, so one run reports everything wrong
-// rather than stopping at the first failure, what makes it useful in the CI
-// preflight target: one `magus doctor` surfaces all magusfile problems at once.
+// rather than stopping at the first failure, what makes it useful as a CI gate:
+// one `magus doctor` surfaces all magusfile problems at once.
 func (r *runner) checkMagusfileSyntax(projects []*types.Project) types.DoctorCheck {
 	const name = "magusfile-syntax"
 	var problems []string
@@ -2507,10 +2503,6 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Doctor
 	if err != nil || res.VCS == nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no VCS resolved; nothing to check"}
 	}
-	reporter, ok := res.VCS.(types.TrackedFileReporter)
-	if !ok {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
-	}
 	meta, err := res.VCS.Metadata(r.runCtx(), r.root)
 	if err != nil || meta.ID == "" {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no commit yet; nothing to check"}
@@ -2523,7 +2515,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Doctor
 		if len(rels) == 0 {
 			continue
 		}
-		tracked, err := reporter.TrackedFiles(r.runCtx(), p.Dir, rels)
+		tracked, err := res.VCS.TrackedFiles(r.runCtx(), p.Dir, rels)
 		if err != nil {
 			continue
 		}

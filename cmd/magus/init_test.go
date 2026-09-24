@@ -23,7 +23,7 @@ func TestWriteMagusfileStub(t *testing.T) {
 	for _, want := range []string{
 		`import "magus"`,
 		`magus\project`,
-		`export fun preflight`,
+		`export fun generate`,
 		`export fun test`,
 	} {
 		assert.Contains(t, body, want, "magusfile.buzz missing %q", want)

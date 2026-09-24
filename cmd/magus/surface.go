@@ -54,6 +54,7 @@ var subcommands = []subcommand{
 	{Group: groupChanges, Name: "memory", Short: "durable cross-session project memory (ls, get, put, delete, verify)"},
 	{Group: groupChanges, Name: "job", Short: "declare and act on jobs (fork, exec, exit, wait, run)"},
 	{Group: groupChanges, Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)"},
+	{Group: groupChanges, Name: "queue", Short: "merge approved changes through a speculative, partitioned merge queue (describe, ls, plan, validate, apply)"},
 
 	{Group: groupIntegrate, Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
 	{Group: groupIntegrate, Name: "events", Short: "stream workspace events as JSONL for an editor plugin or other integration"},
