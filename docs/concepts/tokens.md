@@ -106,6 +106,13 @@ own `mgl_` token and nothing else. The operator token is refused from any peer
 that is not loopback, judged by the TCP peer address, so even a server bound past
 loopback with `mcp.insecure_bind` serves only stored tokens to the network.
 
+One credential has no token and no prefix: `socket-peer`, the caller on the
+server's [MCP unix socket](../guides/integrations/mcp.md#mcp-over-the-unix-socket).
+The kernel names the uid of the process on the other end of each connection, and
+the server admits only its own, with `mcp=write` and nothing past it. Any other
+peer gets `403` [MGS9022](../reference/codes/auth/MGS9022.md). The trail records
+its calls with class `socket-peer`, a grant, and no id or name.
+
 The store holds every record to the rules a mint follows, at load: a record that
 holds `tokens=write`, expires more than 366 days after its creation, was created
 in the future, or names another file, is skipped with

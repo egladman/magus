@@ -280,6 +280,9 @@ const (
 	ListenerSocket ListenerKind = "socket"
 	// ListenerHTTP is the MCP endpoint and console.
 	ListenerHTTP ListenerKind = "http"
+	// ListenerMCPSocket is the MCP endpoint over a local unix socket, admitting only
+	// processes that run as the server's user.
+	ListenerMCPSocket ListenerKind = "mcp-socket"
 )
 
 // StatusListener is one address a server accepts connections on.

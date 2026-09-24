@@ -54,6 +54,14 @@ func ServerSocketName() string { return serverSocketName }
 // ServerDefaultAddr is where `magus server` listens when server.address sets nothing.
 func ServerDefaultAddr() string { return "unix://" + filepath.Join(SockDir(), serverSocketName) }
 
+// mcpSocketName is the unix socket `magus server` serves MCP on. Like the server's own, it
+// sits outside the magus-*.sock pattern.
+const mcpSocketName = "mcp.sock"
+
+// MCPSocketPath is where `magus server` serves MCP over a unix socket, whatever
+// server.address says.
+func MCPSocketPath() string { return filepath.Join(SockDir(), mcpSocketName) }
+
 // SocketLive reports whether a server is currently accepting on addr, which may be a
 // unix:// URL or a bare socket path. It is the shared liveness probe behind idempotent
 // `server start` (skip when one is already up) and `server stop` verification (confirm

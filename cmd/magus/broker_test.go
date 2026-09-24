@@ -129,11 +129,13 @@ func TestServerRowsNameEveryListener(t *testing.T) {
 		Listeners: []types.StatusListener{
 			{Kind: types.ListenerSocket, Address: "unix:///run/magus/server.sock"},
 			{Kind: types.ListenerHTTP, Address: "127.0.0.1:7391"},
+			{Kind: types.ListenerMCPSocket, Address: "/run/magus/mcp.sock"},
 		},
 		Watch: []string{"/repo"},
 	}, time.Now())
 	got := buf.String()
 	assert.Contains(t, got, "server  47001")
 	assert.Contains(t, got, "listen  47001  http 127.0.0.1:7391")
+	assert.Contains(t, got, "listen  47001  mcp-socket /run/magus/mcp.sock")
 	assert.Contains(t, got, "watch   47001  graph+symbols  /repo")
 }

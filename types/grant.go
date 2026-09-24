@@ -173,7 +173,7 @@ func (n Need) Validate() error {
 
 // CredentialClass is which kind of bearer a credential is. A bearer's class is carried in the
 // token string itself, as the prefix, so a verifier knows which store to consult before it
-// hashes anything. [ClassStdio] is the one class with no token.
+// hashes anything. [ClassStdio] and [ClassSocketPeer] are not bearers and have no token.
 type CredentialClass string
 
 const (
@@ -192,6 +192,10 @@ const (
 	// return it. The host started the process as the local user, the trust the CLI itself
 	// runs on.
 	ClassStdio CredentialClass = "stdio"
+	// ClassSocketPeer is a process connected to the server's MCP unix socket whose uid, as the
+	// kernel reports it for the connection, is the server's own. It presents no token, so no
+	// bearer verifier can return it.
+	ClassSocketPeer CredentialClass = "socket-peer"
 )
 
 // CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP surface and nothing
@@ -199,9 +203,14 @@ const (
 // process serves one caller.
 var CredentialStdio = Credential{Class: ClassStdio, Grant: GrantConnector}
 
-// Credential is what a request was admitted as, a bearer the server verified or
-// [CredentialStdio]: what it is, which one, what its owner called it, and what it may do.
-// The Grant is copied at verification, so a record stays
+// CredentialSocketPeer is what a request on the MCP unix socket is admitted as once its peer's
+// uid matches the server's: the MCP surface and nothing past it, the grant a connector token
+// holds. It has no ID because it has no secret.
+var CredentialSocketPeer = Credential{Class: ClassSocketPeer, Grant: GrantConnector}
+
+// Credential is what a request was admitted as, a bearer the server verified, [CredentialStdio]
+// or [CredentialSocketPeer]: what it is, which one, what its owner called it, and what it may
+// do. The Grant is copied at verification, so a record stays
 // self-contained after the token is revoked. It never holds a secret or a full hash.
 type Credential struct {
 	Class CredentialClass `json:"class,omitempty" yaml:"class,omitempty"`
@@ -227,6 +236,8 @@ func (c Credential) Phrase() string {
 		return strings.TrimSpace("link code " + c.ID)
 	case c.Class == ClassStdio:
 		return "stdio"
+	case c.Class == ClassSocketPeer:
+		return "the MCP socket's owner"
 	case c.Name != "" && c.ID != "":
 		return "token " + c.Name + " (" + c.ID + ")"
 	case c.Name != "":

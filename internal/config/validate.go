@@ -86,6 +86,7 @@ func Validate(cfg Config) error {
 	}
 	failures = append(failures, spellImportFailures(cfg.Spells.Imports)...)
 	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
+	failures = append(failures, mcpSocketFailures(cfg.MCP)...)
 	if !cfg.Broker.Valid() {
 		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
 			Param: strings.Join(cfg.Broker.Values(), " "), Value: string(cfg.Broker)})
@@ -167,6 +168,15 @@ func cacheWriteFailures(c Cache) []FieldFailure {
 	return []FieldFailure{{Field: "cache.remote.write.enabled", Tag: "cache_write_required", Value: "true"}}
 }
 
+// mcpSocketFailures refuses mcp.unix_socket: true beside mcp.enabled: false, which asks for
+// an MCP listener on a server serving no MCP at all.
+func mcpSocketFailures(m MCP) []FieldFailure {
+	if m.UnixSocket == nil || !*m.UnixSocket || m.Enabled == nil || *m.Enabled {
+		return nil
+	}
+	return []FieldFailure{{Field: "mcp.unix_socket", Tag: "mcp_socket_requires_mcp", Value: "true"}}
+}
+
 // ValidationError is the structured error type returned by Validate
 // when one or more fields fail their validate tags.
 type ValidationError struct {
@@ -235,6 +245,8 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be a directory inside the workspace, relative to magus.yaml (got %q)", f.Value)
 	case "cache_write_required":
 		return "cannot be true while cache.write.enabled is false: the remote cache tier is written from the local tier, so there would be nothing to write; enable cache.write.enabled or set this false"
+	case "mcp_socket_requires_mcp":
+		return "cannot be true while mcp.enabled is false: the socket serves MCP, which the server is told not to serve; enable mcp.enabled or set this false"
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:

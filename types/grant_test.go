@@ -153,4 +153,5 @@ func TestCredentialPhrase(t *testing.T) {
 	assert.Equal(t, "share link 9b2e04aa", Credential{Class: ClassShare, ID: "9b2e04aa"}.Phrase())
 	assert.Equal(t, "link code 51c0de00", Credential{Class: ClassExchange, ID: "51c0de00", Name: "console-1"}.Phrase())
 	assert.Equal(t, "stdio", CredentialStdio.Phrase())
+	assert.Equal(t, "the MCP socket's owner", CredentialSocketPeer.Phrase())
 }

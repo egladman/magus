@@ -538,6 +538,9 @@ const (
 	// TokenRequestInvalid is a mint or revoke that asks for something no token can be: an
 	// invalid or empty grant, or a name that is not a valid name or looks like an id.
 	TokenRequestInvalid DiagnosticCode = "MGS9021"
+	// SocketPeerNotOwner is a connection to the server's MCP unix socket from a process whose
+	// uid is not the server's, or whose uid the kernel did not report, answered 403.
+	SocketPeerNotOwner DiagnosticCode = "MGS9022"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -605,7 +608,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
-	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid,
+	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
@@ -710,4 +711,91 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 			t.Fatal("server did not shut down")
 		}
 	}
+}
+
+// mcpSocketPath is a socket path in a fresh short directory (t.TempDir's can exceed the unix
+// socket length limit on macOS), skipping where a peer's uid cannot be read.
+func mcpSocketPath(t *testing.T) string {
+	t.Helper()
+	if !httpx.PeerCredentialsSupported() {
+		t.Skip("no peer credentials on this platform")
+	}
+	dir, err := os.MkdirTemp("", "mcp")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return filepath.Join(dir, "mcp.sock")
+}
+
+// TestMCPSocketServesToolsWithoutABearer drives a real MCP session over the unix socket of a
+// loaded server: no token is sent, the call reaches the tool, and the trail records it as the
+// socket peer's. The loopback /mcp beside it still refuses the same tokenless request.
+func TestMCPSocketServesToolsWithoutABearer(t *testing.T) {
+	sock := mcpSocketPath(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	require.NoError(t, err)
+
+	d, addr := testServer(t, func(opts mcp.Options) *Server {
+		opts.Magus = m
+		return New(opts, WithMCPSocket(sock))
+	})
+	base, _, _ := serveMounted(t, d, addr)
+
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
+		},
+	}}
+	call := func(c *http.Client, url, session, body string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if session != "" {
+			req.Header.Set("Mcp-Session-Id", session)
+		}
+		resp, err := c.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		out, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp, string(out)
+	}
+
+	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"socket-test","version":"1"}}}`
+	resp, out := call(client, "http://localhost/mcp", "", initialize)
+	require.Equal(t, http.StatusOK, resp.StatusCode, out)
+	session := resp.Header.Get("Mcp-Session-Id")
+	require.NotEmpty(t, session)
+
+	resp, out = call(client, "http://localhost/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"magus_config_get","arguments":{}}}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, out)
+	assert.Contains(t, out, `"result"`)
+	assert.NotContains(t, out, `"isError":true`, "the socket peer's grant reaches every tool")
+
+	events, err := os.ReadFile(filepath.Join(m.CacheDir(), "activity", "events.jsonl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(events), `"action":"magus_config_get"`)
+	assert.Contains(t, string(events), `"class":"socket-peer"`, "the call is attributed to the socket peer")
+
+	resp, out = call(http.DefaultClient, base+"/mcp", "", initialize)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "loopback HTTP still needs a bearer: %s", out)
+}
+
+// A second server cannot take a socket a live one is serving; it fails before it serves.
+func TestMCPSocketHeldByALiveServerIsAnError(t *testing.T) {
+	sock := mcpSocketPath(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	loading := Unloaded{Root: root, Err: func() rpcerr.Error { return rpcerr.WorkspaceLoading(root) }}
+	first, addr := testServer(t, func(opts mcp.Options) *Server {
+		return NewUnloaded(opts, loading, WithMCPSocket(sock))
+	})
+	serveMounted(t, first, addr)
+
+	second, _ := testServer(t, func(opts mcp.Options) *Server {
+		return NewUnloaded(opts, loading, WithMCPSocket(sock))
+	})
+	assert.ErrorContains(t, second.Serve(t.Context()), "another process is serving this socket")
 }

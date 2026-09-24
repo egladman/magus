@@ -2,7 +2,8 @@
 // guard shared by magus's server-facing HTTP surfaces. The server binds
 // 127.0.0.1 exclusively: serving to a network interface is never allowed, so
 // the bind host is not configurable; only the port is taken from the caller's
-// address.
+// address. The one other listener it builds is a local unix socket
+// (NewUnixServer), which no network interface reaches either.
 package httpx
 
 import (
@@ -89,3 +90,7 @@ func (s *Server) Addr() netip.AddrPort {
 		uint16(tcp.Port),
 	)
 }
+
+// Close releases the listener of a server that will not Serve. A unix socket's file is
+// removed with it.
+func (s *Server) Close() error { return s.ln.Close() }

@@ -128,6 +128,11 @@ server** on `mcp.address` serves the clients that cannot reach a Unix socket: ag
 [MCP](mcp.md) at `/mcp`, and orchestrators or scripts at the `/livez`, `/readyz`, and
 `/healthz` probe routes.
 
+On Linux and macOS the server also serves `/mcp`, and nothing else, on a second Unix
+socket, `<sock-dir>/mcp.sock`, for a local MCP client that speaks HTTP over a socket. It
+takes no token: it admits a process running as the server's own user and refuses every
+other one. See [MCP over the unix socket](mcp.md#mcp-over-the-unix-socket).
+
 <!--diagram:server-socket-->
 
 <!--diagram:server-http-->
@@ -200,6 +205,7 @@ service   -      postgres-15  running  deps 2  ports 5432  since 13:58
 idle      -      exits after 10m0s holding nothing
 server  47001  up 2h0m  /Users/eli/src/magus-a/magus  unix:///run/user/501/magus/server.sock
 listen  47001  http 127.0.0.1:7391
+listen  47001  mcp-socket /run/user/501/magus/mcp.sock
 watch   47001  graph+symbols  /Users/eli/Repos/magus
 ```
 

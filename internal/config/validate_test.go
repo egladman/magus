@@ -190,6 +190,39 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 	}
 }
 
+// mcp.unix_socket: true asks for an MCP listener, so beside mcp.enabled: false it is refused
+// rather than quietly unhonored.
+func TestValidate_MCPUnixSocket(t *testing.T) {
+	on, off := boolPtr(true), boolPtr(false)
+	for name, tc := range map[string]struct {
+		enabled, socket *bool
+		wantFailures    []FieldFailure
+	}{
+		"defaults":                  {},
+		"socket on":                 {socket: on},
+		"socket off":                {socket: off},
+		"mcp off, socket unset":     {enabled: off},
+		"mcp off, socket off":       {enabled: off, socket: off},
+		"mcp on, socket on":         {enabled: on, socket: on},
+		"socket on without any mcp": {enabled: off, socket: on, wantFailures: []FieldFailure{{Field: "mcp.unix_socket", Tag: "mcp_socket_requires_mcp", Value: "true"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+			cfg.MCP.Enabled = tc.enabled
+			cfg.MCP.UnixSocket = tc.socket
+			err := Validate(cfg)
+			if tc.wantFailures == nil {
+				assert.NoError(t, err)
+				return
+			}
+			var ve *ValidationError
+			require.ErrorAs(t, err, &ve)
+			assert.Equal(t, tc.wantFailures, ve.Failures)
+			assert.Contains(t, ve.Error(), "cannot be true while mcp.enabled is false")
+		})
+	}
+}
+
 func TestSpellsConfigRegistry(t *testing.T) {
 	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}}}
 	got, ok := s.Registry("GHCR.IO")

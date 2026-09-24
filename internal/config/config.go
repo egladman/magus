@@ -432,6 +432,10 @@ type MCP struct {
 	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
 	// plaintext HTTP, so without it the server refuses to start rather than warn.
 	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
+	// UnixSocket also serves MCP on mcp.sock in the private runtime directory, to processes
+	// running as the server's user. Unset is on where magus reads a socket peer's uid (Linux,
+	// macOS) and off elsewhere; true where it cannot is an error at server start.
+	UnixSocket *bool `json:"unix_socket" yaml:"unix_socket"` // pointer distinguishes unset from explicit false
 }
 
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
@@ -807,6 +811,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server `magus server` starts"},
 		{"MAGUS_MCP_INSECURE_BIND", "mcp.insecure_bind", "false", "Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error"},
+		{"MAGUS_MCP_UNIX_SOCKET", "mcp.unix_socket", "true on Linux and macOS", "When 0 or false, serve MCP over loopback HTTP only, not also on mcp.sock in the private runtime directory; true where a socket peer's uid cannot be read is an error"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
 		{"MAGUS_VOLATILITY_ENABLED", "volatility.enabled", "true", "Master switch for volatility detection and auto-retry; false disables all retry logic"},
 		{"MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES", "volatility.bootstrap_samples", "20", "Number of outcomes below which all failures are retried once (bootstrap phase)"},
