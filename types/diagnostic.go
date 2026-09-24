@@ -421,7 +421,7 @@ const (
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
 	PreflightOutsideClosure DiagnosticCode = "MGS3021"
-	// SavedPlanRefused is a `magus run --plan` that cannot be run as asked: the document is
+	// SavedPlanRefused is a `magus run --stdin` plan that cannot be run as asked: the document is
 	// not a shard plan, or the invocation names a shard, target or shard count the plan
 	// does not have. Refused before anything loads, because running part of a plan, or a
 	// plan for another target, gates less than the caller asked for and still exits 0.

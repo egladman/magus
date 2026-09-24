@@ -540,7 +540,7 @@ cache, and turn a charm into a write switch, and it made the plan job's
 two magus invocations contend for one project lock. The CI plan step
 (`.github/workflows/ci.yaml`) is the worked example: it computes the plan
 once with `magus affected ci --plan`, renders it twice with `magus run
---plan <file> --dry-run -o 'template=...'`, and redirects each render.
+--stdin --dry-run -o 'template=...' < plan.json`, and redirects each render.
 magus never learns either file's name, so a port to another CI system
 rewrites the redirects and nothing else.
 

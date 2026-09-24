@@ -111,14 +111,14 @@ Validate this one `change`; the changes beneath it in its partition are merged u
 \fB\-\-parallel\fR \fIint\fR
 Candidates built or gated at once across every partition; 0 is one per CPU
 .TP
-\fB\-\-plan\fR \fIfile\fR
-The mergequeue.plan/v1 `file`
-.TP
 \fB\-\-regenerate\fR \fIcommand\fR
 `command` run in a candidate with the generated files to rewrite listed on stdin
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-stdin\fR
+Read the mergequeue.plan/v1 document from stdin; required
 .TP
 \fB\-\-target\fR \fItarget\fR (default: ci)
 magus `target` the affected set is computed for; not with \-\-facts
@@ -211,7 +211,7 @@ magus queue plan --provider github --out plan.json < changes.json
 \fIValidate every candidate\fR
 .PP
 .EX
-magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'
+magus queue validate --stdin --verdicts verdicts --gate 'magus affected ci' < plan.json
 .EE
 .PP
 \fIMerge the green ones as they arrive\fR

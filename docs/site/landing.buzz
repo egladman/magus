@@ -460,8 +460,8 @@ lint</code></pre>
   shell: bash
   run: |
     magus affected ci --plan &gt; "$RUNNER_TEMP/plan.json"
-    magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template=\{\{range .outputs\}\}\{\{.name\}\}=\{\{.value\}\}\{\{"&#92;n"\}\}\{\{end\}\}' &gt;&gt; "$GITHUB_OUTPUT"
-    magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template=\{\{.summary\}\}' &gt;&gt; "$GITHUB_STEP_SUMMARY"</code></pre>
+    magus run --stdin --dry-run -o 'template=\{\{range .outputs\}\}\{\{.name\}\}=\{\{.value\}\}\{\{"&#92;n"\}\}\{\{end\}\}' &lt; "$RUNNER_TEMP/plan.json" &gt;&gt; "$GITHUB_OUTPUT"
+    magus run --stdin --dry-run -o 'template=\{\{.summary\}\}' &lt; "$RUNNER_TEMP/plan.json" &gt;&gt; "$GITHUB_STEP_SUMMARY"</code></pre>
         </div>
         <div class="term term-plain">
           <div class="term-bar">

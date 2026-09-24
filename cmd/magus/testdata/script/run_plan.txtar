@@ -1,4 +1,4 @@
-# run --plan runs the shards of a saved `affected --plan` document: the plan names the
+# run --stdin runs the shards of a saved `affected --plan` document: the plan names the
 # target and the projects, --shard picks one shard, and anything that would make the run
 # cover something other than the plan is refused (MGS3026) before a target starts.
 #
@@ -10,71 +10,87 @@ exec magus affected build --plan
 stdout '"target": "build"'
 cp stdout affected.json
 stdin affected.json
-exec magus run --plan - --dry-run -o name
+exec magus run --stdin --dry-run -o name
 stdout '^a$'
 stdout '^b$'
 stdout '^c$'
 
 # One shard runs that shard's projects and nothing else.
-exec magus run --plan plan.json --shard 1
+stdin plan.json
+exec magus run --stdin --shard 1
 cmp log/c.build once
 ! exists log/a.build
 ! exists log/b.build
 
 # The target positional is optional, and adds charms when given.
-exec magus run build:rw --plan plan.json --shard 0 --dry-run
+stdin plan.json
+exec magus run build:rw --stdin --shard 0 --dry-run
 stderr '\[dry\] shard 0: magus run build:rw a b'
 
 # Without --shard every shard runs here; c replays from the run above.
-exec magus run --plan plan.json
+stdin plan.json
+exec magus run --stdin
 cmp log/a.build once
 cmp log/b.build once
 cmp log/c.build once
 
-# stdin, named explicitly with -.
+# --dry-run renders the saved plan through -o without running anything.
 stdin plan.json
-exec magus run --plan - --shard 0 --dry-run
-stderr '\[dry\] shard 0: magus run build a b'
-
-# --dry-run renders the saved plan through -o without loading or running anything.
-exec magus run --plan plan.json --dry-run -o 'template={{.target}} {{.count}} {{range .outputs}}{{.name}}={{.value}};{{end}}'
+exec magus run --stdin --dry-run -o 'template={{.target}} {{.count}} {{range .outputs}}{{.name}}={{.value}};{{end}}'
 stdout '^build 2 count=2;inherit=false;$'
 
+# Without --stdin, --shard stays a label and selects nothing.
+exec magus run build a --shard 7 --dry-run
+stderr 'projects: a'
+
 # Misconfiguration is refused before anything runs, and exits 2.
-! exec magus run --plan plan.json --shard 7
+stdin plan.json
+! exec magus run --stdin --shard 7
 stderr 'MGS3026'
 stderr '--shard 7: the plan has no such shard \(it has 0, 1\)'
-! exec magus run test --plan plan.json
+stdin plan.json
+! exec magus run test --stdin
 stderr 'MGS3026'
-stderr 'a plan for build, not test'
-! exec magus run --plan plan.json --n-shards 3
+stderr 'the plan is for build, not test'
+stdin plan.json
+! exec magus run --stdin --n-shards 3
 stderr 'MGS3026'
 stderr '--n-shards 3, but the plan has 2 shard'
-exec magus run --plan plan.json --n-shards 2 --shard 0 --dry-run
-! exec magus run --plan bad.json
+stdin plan.json
+exec magus run --stdin --n-shards 2 --shard 0 --dry-run
+stdin bad.json
+! exec magus run --stdin
 stderr 'MGS3026'
-stderr '--plan bad.json is not a shard plan'
-! exec magus run --plan old.json
+stderr 'the plan on stdin is not a shard plan'
+! exec magus run --stdin
+stderr 'the plan on stdin is not a shard plan'
+stdin old.json
+! exec magus run --stdin
 stderr 'MGS3026'
 stderr 'names no target'
-! exec magus run --plan miscount.json
+stdin miscount.json
+! exec magus run --stdin
 stderr 'states 3 shard\(s\) but lists 2'
-! exec magus run --plan dup.json
+stdin dup.json
+! exec magus run --stdin
 stderr 'lists shard 0 twice'
-! exec magus run --plan plan.json a
-stderr 'a plan for build, not a'
-! exec magus run build --plan plan.json a
-stderr '--plan names the projects'
-! exec magus run --plan plan.json --skip a
+stdin plan.json
+! exec magus run --stdin a
+stderr 'the plan is for build, not a'
+stdin plan.json
+! exec magus run build --stdin a
+stderr 'the plan on --stdin names the projects'
+stdin plan.json
+! exec magus run --stdin --skip a
 stderr '--skip does not apply'
-! exec magus run --plan missing.json
-stderr 'magus run --plan: open missing.json'
 
 # An inherited plan carries no shards: a whole-plan run has nothing to do, and a shard
 # of it does not exist.
-exec magus run --plan empty.json
+stdin empty.json
+exec magus run --stdin
 stderr 'the plan has no shards'
-! exec magus run --plan empty.json --shard 0
+stdin empty.json
+! exec magus run --stdin --shard 0
 stderr 'the plan has no shards, so there is nothing to select'
 
 -- once --

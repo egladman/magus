@@ -445,11 +445,14 @@ func queueScratch(prefix string) (string, func(), error) {
 // queueValidate takes no --provider: it runs the changes' code, so it never talks to
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
-	f, _, fs, err := queueParse(e, "validate", "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]", args, gen.BindQueueValidate)
+	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args, gen.BindQueueValidate)
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("validate", [2]string{"plan", f.Plan}, [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
+	if !f.Stdin {
+		return usagef("magus queue validate: --stdin is required; the plan is read from stdin (< plan.json)")
+	}
+	if err := queueRequired("validate", [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
 		return err
 	}
 	if f.Parallel < 0 {
@@ -462,9 +465,9 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if f.Only == "" {
 		defer func() { err = errors.Join(err, dir.MarkDone()) }()
 	}
-	pl, err := mergequeue.ReadPlanFile(e.path(f.Plan))
+	pl, err := mergequeue.ReadPlan(e.stdin)
 	if err != nil {
-		return err
+		return fmt.Errorf("magus queue validate: stdin: %w", err)
 	}
 	// Before any verdict, so apply following the directory can check each one.
 	if err := dir.WritePlan(pl); err != nil {

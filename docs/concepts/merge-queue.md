@@ -145,15 +145,15 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 | `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1` document with `-o json` | read                         |
 | `ls`       | the provider                                   | a `mergequeue.changes/v1` document                                     | read                         |
 | `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                                            | read                         |
-| `validate` | the plan                                       | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
+| `validate` | the plan (stdin, with `--stdin`)               | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
 | `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                            | write; runs no change's code |
 
 ```sh
 magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
-magus queue validate --plan plan.json --verdicts verdicts \
+magus queue validate --stdin --verdicts verdicts \
   --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
-  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
+  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' < plan.json
 magus queue apply --provider github \
   --regenerate 'MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS' verdicts
 ```

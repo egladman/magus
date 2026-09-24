@@ -453,7 +453,7 @@ func hasModeFlag(args []string, name string) bool {
 
 // planOutput is the provider-neutral JSON shape from `magus affected --plan`.
 type planOutput struct {
-	// Target is what every shard runs, so `magus run --plan` needs nothing beside the
+	// Target is what every shard runs, so `magus run --stdin` needs nothing beside the
 	// document to know what to run.
 	Target      string      `json:"target"`
 	Count       int         `json:"count"`
@@ -636,7 +636,7 @@ type shardAgents struct {
 // affectedPlan emits a provider-neutral JSON shard plan for the affected set of a
 // target (the --plan mode of `magus affected`). It does NOT execute the pipeline;
 // CI wrappers (e.g. GitHub Actions) translate the matrix into their own parallel-job
-// format, and `magus run --plan` runs its shards. The plan keys off the given target — exactly the set
+// format, and `magus run --stdin` runs its shards. The plan keys off the given target — exactly the set
 // `magus affected <target>` would run — which is required (no default). Adaptive
 // sharding is applied when runtime history is available.
 func affectedPlan(ctx context.Context, root string, args []string) error {

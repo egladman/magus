@@ -87,8 +87,9 @@ export fun private(line: str) > str {
 }
 
 // validateArgs keeps $MERGEQUEUE_ONTO literal: the queue sets it for each hook.
+// The plan arrives on stdin; validate() feeds it.
 export fun validateArgs(dir: str, change: str) > [str] {
-    return ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
+    return ["queue", "validate", "--stdin", "--only", change, "--verdicts", dir + "/verdicts",
         "--gate", private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`),
         "--regenerate", private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`)];
 }
@@ -197,7 +198,8 @@ fun plan(depth: str) > void !> any {
 }
 
 fun validate(change: str) > void !> any {
-    proc\exec("magus", args: validateArgs(queueDir(), change: change), opts: {});
+    final dir = queueDir();
+    proc\exec("magus", args: validateArgs(dir, change: change), opts: {"stdin": fs\readFile(dir + "/plan.json")});
 }
 
 // planned polls every 10s, one API request each, for as long as the validation run
@@ -317,9 +319,10 @@ test "outputs render a compact matrix and its count" {
 test "validation hooks see MERGEQUEUE_ONTO unexpanded and keep their caches private" {
     final args = validateArgs("/t/queue", change: "482");
     assert\equal(args[0], want: "queue", message: "magus queue");
-    assert\equal(args[5], want: "482", message: "--only names the change");
-    assert\equal(args[9], want: private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`), message: "gate");
-    assert\equal(args[11], want: private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`), message: "regenerate");
+    assert\equal(args[2], want: "--stdin", message: "the plan arrives on stdin");
+    assert\equal(args[4], want: "482", message: "--only names the change");
+    assert\equal(args[8], want: private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`), message: "gate");
+    assert\equal(args[10], want: private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`), message: "regenerate");
     assert\equal(private("x").startsWith(`MAGUS_CACHE_DIR="$MERGEQUEUE_SCRATCH/magus" `), want: true, message: "magus's cache is the candidate's own");
 }
 
