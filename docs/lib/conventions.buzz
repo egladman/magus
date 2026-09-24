@@ -555,11 +555,11 @@ test "pathReferences reads prose only, never a command block" {
 }
 
 test "pathReferences resolves a relative markdown link against its own file's directory" {
-    final md = "See [daemon.md](../guides/integrations/daemon.md) for the daemon.\n";
+    final md = "See [server.md](../guides/integrations/server.md) for the server.\n";
     final refs = pathReferences("docs/concepts/concurrency.md", md);
     assert\equal(refs.len(), 1, "one link finding");
     assert\equal(refs[0].rule, "missing-link", "rule name");
-    assert\equal(refs[0].path, "docs/guides/integrations/daemon.md", "resolved repo-root relative");
+    assert\equal(refs[0].path, "docs/guides/integrations/server.md", "resolved repo-root relative");
     assert\equal(refs[0].line, 1, "line number");
 }
 

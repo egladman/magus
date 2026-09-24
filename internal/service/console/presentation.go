@@ -38,7 +38,7 @@ func Present(host, surface, reason string) (Presentation, error) {
 		URL:     link,
 		Surface: surface,
 		Reason:  strings.TrimSpace(reason),
-		// The daemon answers this, so its own argv0 means nothing to the reader.
+		// The server answers this, so its own argv0 means nothing to the reader.
 		OpenCommand: OpenCommandAs(link, runtime.GOOS, hint.DefaultBinaryName),
 	}, nil
 }

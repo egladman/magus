@@ -36,7 +36,6 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -52,13 +51,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -93,7 +87,7 @@ func runCLI() int {
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
 	rootCtx = proc.WithLease(rootCtx, trail.LeaseFromEnv())
-	// The verbs that are another entry point (the hook, the daemon) restamp this.
+	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
@@ -186,11 +180,11 @@ type startupResult struct {
 // dispatchProfile describes which pre-dispatch phases a subcommand needs.
 type dispatchProfile struct {
 	needsConfig    bool // load magus.yaml + env vars
-	needsDaemonFwd bool // attempt forward to a running daemon
+	needsForward   bool // attempt forward to a running server
 	needsWorkspace bool // call loadMagus + start per-process proc server
 	// spawnsWork marks the invocations that will run targets, as opposed to answering a
 	// question about them. Only these pay for machine-wide admission: `magus ls` costs
-	// the same however loaded the machine is, and starting a daemon for one would make
+	// the same however loaded the machine is, and starting a server for one would make
 	// every read command spawn a background process.
 	spawnsWork bool
 }
@@ -284,7 +278,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	// config entry naming the running binary. A persona doing nothing but reading help
 	// found a dangling registration pointing at a throwaway path.
 	//
-	// The config tier stays: usage text reads it (daemonDefaultAddr in `server start -h`),
+	// The config tier stays: usage text reads it (server.address in `server -h`),
 	// and reading magus.yaml writes nothing.
 	if wantsUsage(subArgs) {
 		return dispatchProfile{needsConfig: true}
@@ -292,13 +286,13 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
 	case "help", "version":
 		// Neither reads a workspace or a config: one prints text compiled into the
-		// binary, the other a stamp. version dials the daemon for the server half, but
-		// must never FORWARD: a forwarded version would report the daemon's binary as
+		// binary, the other a stamp. version dials the server for the server half, but
+		// must never FORWARD: a forwarded version would report the server's binary as
 		// the client's, which is exactly the difference it exists to show.
 		return dispatchProfile{}
 	case "buzz":
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
-		// it needs no workspace RESOLUTION and is never forwarded to a daemon. It does
+		// it needs no workspace RESOLUTION and is never forwarded to a server. It does
 		// need the config: a script run inside a workspace gets that workspace on its
 		// context (see buzzCmd), and opening one reads magus.yaml and the MAGUS_* env,
 		// the remote cache's trust set among them. Listed as config-free while it opened
@@ -311,17 +305,17 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
-		// workspace resolution and must not forward to a daemon (the install is
+		// workspace resolution and must not forward to a server (the install is
 		// local to the caller's directory).
 		return dispatchProfile{needsConfig: true}
 	case "queue":
 		// Never forwarded, never preloaded. The queue works in the caller's checkout, a
-		// daemon serving another workspace must not act on it, and the verbs that need a
+		// server serving another workspace must not act on it, and the verbs that need a
 		// workspace open it themselves, on the base's declarations.
 		return dispatchProfile{needsConfig: true}
 	case "vcs":
 		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
-		// working tree, so a daemon serving another workspace must not adopt one.
+		// working tree, so a server serving another workspace must not adopt one.
 		//
 		// The preload matters as much. Opening a workspace refreshes the merge-driver
 		// registration, which writes the tracked .gitattributes, and both merge-facing
@@ -338,8 +332,8 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// what the last runs did, and an agent blocked on a person is exactly the state
 		// a half-finished edit produces. Never forwarded: the hook subverb is the LAST
 		// thing that should route through a remote process, notify must reach the local
-		// OS notifier rather than one on the daemon's host, and a listing is one
-		// directory read with no warm daemon state to reuse.
+		// OS notifier rather than one on the server's host, and a listing is one
+		// directory read with no warm server state to reuse.
 		return dispatchProfile{needsConfig: true}
 	case "shell":
 		// The guard an agent host calls before every tool call. It reads the root magusfile's
@@ -353,41 +347,50 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// not write .gitattributes.
 		return dispatchProfile{needsConfig: true}
 	case "status":
-		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
+		return dispatchProfile{needsConfig: true, needsForward: true}
 	case "job":
-		// `job run` submits one of the daemon's OWN jobs and is called from a VCS hook,
-		// where it promises to be a silent no-op when no daemon answers. Loading the
+		// `job run` submits one of the server's OWN jobs and is called from a VCS hook,
+		// where it promises to be a silent no-op when no server answers. Loading the
 		// workspace to make that promise is work nobody asked for, and it breaks the
 		// promise out loud: a checkout carrying one unparsable local spell logs the load
-		// error on every hook. It resolves the daemon socket itself, exactly as
+		// error on every hook. It resolves the server socket itself, exactly as
 		// `magus job run` did before this verb replaced it. Every other job verb reads the
 		// workspace and takes the default.
 		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
 			return dispatchProfile{needsConfig: true}
 		}
-		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
 	case "server":
-		// server subcommands manage the daemon directly and must never forward or host
-		// their own per-process proc server. start IS the daemon (special-cased in startup);
-		// stop and job resolve the real daemon socket explicitly (resolveDaemonAddr). The old
+		// server subcommands manage the server directly and must never forward or host
+		// their own per-process proc server. start IS the server (special-cased in startup);
+		// stop and job resolve the real server socket explicitly (resolveServerAddr). The old
 		// default profile made `server stop` forward, and on a version-mismatched forward
 		// (common across dev worktrees on one shared socket) it fell through to hosting its
-		// own throwaway proc server, then shut THAT down instead of the real daemon: a silent
+		// own throwaway proc server, then shut THAT down instead of the real server: a silent
 		// no-op stop. The rotate-* job workers that need a workspace load one themselves.
 		return dispatchProfile{needsConfig: true}
+	case "broker":
+		// The broker loads no workspace and forwards to nothing. The config tier is only
+		// for concurrency_profile, which sizes its memory reservation.
+		return dispatchProfile{needsConfig: true}
+	case "mcp":
+		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
+		// that adopted the call would serve its own. The preload opens the workspace the
+		// host launched it in and hosts the proc server the tools' runs share.
+		return dispatchProfile{needsConfig: true, needsWorkspace: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
-		// the only daemon-adoptable verbs, so forwarding one of these would run the
-		// usage path inside the daemon: usage lands on the daemon's stderr (invisible
+		// the only server-adoptable verbs, so forwarding one of these would run the
+		// usage path inside the server: usage lands on the server's stderr (invisible
 		// here) and the client is left with a bare, silent non-zero exit. Skip both the
 		// forward and the workspace load so the local dispatch prints usage directly.
 		if isUsageOnlyInvocation(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
 		// --detach is the client's job for exactly the reason usage above is. It SUBMITS
-		// the run to the daemon and reports the job id; forwarding it would have the
-		// daemon submit to itself, print the id onto its own log, and leave the caller
+		// the run to the server and reports the job id; forwarding it would have the
+		// server submit to itself, print the id onto its own log, and leave the caller
 		// with silence and exit 0 (observed before this guard existed). It needs no
 		// workspace either: it hands off an argv and returns.
 		if hasDetachFlag(subArgs) {
@@ -395,7 +398,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		}
 		// A forensic mode runs nothing, so there is no pool to share, and its report IS
 		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
-		// code and an error string and never output, so the daemon runs the mode in its
+		// code and an error string and never output, so the server runs the mode in its
 		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
 		// child (magus\affectedImpact forks `affected --impact -o json` and decodes it)
 		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
@@ -403,18 +406,18 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
-		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true, spawnsWork: true}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true, spawnsWork: true}
 	case "config":
 		// config history/cache need the workspace; view/set/help do not.
 		if len(subArgs) > 0 {
 			switch subArgs[0] {
 			case "view", "set", "help", "-h", "--help", "":
-				return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
+				return dispatchProfile{needsConfig: true, needsForward: true}
 			}
 		}
-		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
 	default:
-		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
 	}
 }
 
@@ -556,7 +559,7 @@ func peekSub(args []string) (sub string, subArgs []string) {
 	return "", nil
 }
 
-// startup runs all pre-dispatch steps (config, daemon forward, flag parse, workspace init, proc server).
+// startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
 // exitCode >= 0 means exit without dispatching; -1 means proceed.
 func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	trace := newStartupTracer(startupTraceEnabled(args))
@@ -608,11 +611,11 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
-	// The shared-daemon discovery below runs before the main flag parse, so peek the
-	// --daemon-enabled flag early (like --root/--quiet) to let it override yaml/env for
+	// The shared-server discovery below runs before the main flag parse, so peek the
+	// --server-enabled flag early (like --root/--quiet) to let it override yaml/env for
 	// this invocation. yaml/env already land via LoadWithRoot + ApplyEnv above.
-	if v, set := extractDaemonEnabledFlag(args); set {
-		globalCfg.Daemon.Enabled = v
+	if v, set := extractServerEnabledFlag(args); set {
+		globalCfg.Server.Enabled = v
 	}
 	// Hints default on when Hints.Enabled is nil.
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
@@ -631,71 +634,45 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		trace.start = time.Now()
 	}
 
-	// parentLive records whether a parent daemon is alive and reachable: true only
+	// parentLive records whether a parent proc server is alive and reachable: true only
 	// when a forward reached it but it did not adopt this subcommand (ErrNotAdoptable).
 	// It gates leaf behavior below: a nested process suppresses its own server
 	// only while it has a live parent to forward to.
 	parentLive := false
-	if profile.needsDaemonFwd {
-		stopSock := trace.phase("startup.daemon_socket_lookup")
-		sock := os.Getenv("MAGUS_DAEMON_SOCKET")
-		stableSock := false
+	if profile.needsForward {
+		stopSock := trace.phase("startup.socket_lookup")
+		sock := os.Getenv(proc.SocketEnv)
+		serverSock := false
 		// topLevel: no parent exported a socket, so this process is the head of its own
 		// tree rather than a magus a magusfile spawned.
 		topLevel := sock == ""
-		if sock == "" {
-			// daemon.enabled gates discovery of the SHARED, persistent daemon only.
-			// When off, this invocation never adopts the stable per-user daemon and
-			// runs self-contained. It does NOT disable recursion: a child with
-			// MAGUS_DAEMON_SOCKET already set (below) still forwards to its parent, and
-			// a top-level still stands up its own per-process pool for its children.
-			if globalCfg.Daemon.Enabled {
-				s, ok := proc.LookupStableSocket(rootCtx)
-				// A run needs the daemon whether or not one is up: it owns the machine's
-				// build budget, and nothing else can arbitrate it. Starting it is doing
-				// what was asked rather than a side effect, the same reading that lets
-				// `graph export --follow` start one for the console.
-				//
-				// admissionDaemonAddr, not the stable path: a configured daemon.address
-				// is where the daemon this run starts will actually bind, and looking for
-				// it anywhere else finds nothing however healthy it is.
-				if !ok && profile.spawnsWork {
-					s = ensureAdmissionDaemon(rootCtx, admissionDaemonAddr(globalCfg))
-					ok = s != ""
-				}
-				if ok {
-					sock = s
-					stableSock = true
-					// Propagate to child processes spawned by this invocation.
-					_ = os.Setenv("MAGUS_DAEMON_SOCKET", sock)
-				}
+		// A TOP-LEVEL run stays in this process. The server executes an adopted run in its
+		// own process, where the run's console output goes to the server's log and the
+		// caller's terminal shows nothing at all (measured, not theoretical). What a run
+		// needs from outside is the host's capacity, and the broker holds that. A NESTED
+		// call still forwards to the socket its parent exported, which is the parent's own
+		// process and prints where the parent does.
+		//
+		// server.enabled gates discovery of the server only. When off, this invocation
+		// never adopts it and runs self-contained. It does NOT disable recursion: a child
+		// with MAGUS_PROC_SOCKET already set still forwards to its parent, and a
+		// top-level still stands up its own per-process pool for its children.
+		if topLevel && !profile.spawnsWork && globalCfg.Server.Enabled {
+			if s, ok := proc.LookupServerSocket(rootCtx); ok {
+				sock = s
+				serverSock = true
+				// Propagate to child processes spawned by this invocation.
+				_ = os.Setenv(proc.SocketEnv, sock)
 			}
-		} else {
-			stableSock = strings.HasSuffix(sock, "/"+proc.StableSocketName())
+		} else if !topLevel {
+			serverSock = strings.HasSuffix(sock, "/"+proc.ServerSocketName())
 		}
 		stopSock()
-		// A TOP-LEVEL run stays in this process. The daemon executes an adopted run in
-		// its own process, where the run's console output goes to the daemon's log and
-		// the caller's terminal shows nothing at all (measured, not theoretical). That
-		// was tolerable while nobody started a daemon for an ordinary build; it is not,
-		// now that a run starts one for admission. The budget travels over the socket
-		// instead, which is what the daemon is for here: it arbitrates the machine, it
-		// does not take the work. A NESTED call still forwards to the socket its parent
-		// exported, which is the parent's own process and prints where the parent does.
-		// Its children stay here too, which is why the socket is cleared rather than
-		// kept: a child that adopted into the daemon would print into the daemon's log
-		// for the same reason. This process hosts its own pool, as it does when no
-		// daemon is running, and the machine budget is what keeps the two pools from
-		// oversubscribing the host.
-		if stableSock && topLevel && profile.spawnsWork {
-			sock = ""
-			_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
-		}
 		if sock != "" {
-			stopFwd := trace.phase("startup.daemon_forward")
-			// Skip client-side FindRoot when forwarding to the stable daemon; the daemon walks itself.
+			stopFwd := trace.phase("startup.forward")
+			// Skip client-side FindRoot when forwarding to the server; it walks itself.
 			var fwdRoot string
-			if !stableSock {
+			if !serverSock {
 				if r, err := magus.FindRoot(""); err == nil {
 					fwdRoot = r
 				}
@@ -705,31 +682,31 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
 			}
-			// A call the daemon did not adopt is the normal path here: run locally
-			// without alarming the user. The daemon does not adopt a subcommand that
+			// A call the server did not adopt is the normal path here: run locally
+			// without alarming the user. The server does not adopt a subcommand that
 			// never adopts (only run/affected do), nor a client whose build or protocol
-			// differs from its own (version/protocol mismatch); in every case the daemon
+			// differs from its own (version/protocol mismatch); in every case the server
 			// is alive and answered, it just will not take THIS call, and retrying it
 			// will not help. A version mismatch is common when multiple worktrees run
-			// different builds against one shared per-user daemon; it is not a failure,
+			// different builds against one shared per-user server; it is not a failure,
 			// so it must not warn. Reserve warn for a genuine forward failure (transport
-			// error, dead daemon). proc.NotAdopted owns the classification: the errors
+			// error, dead server). proc.NotAdopted owns the classification: the errors
 			// carry it (a NotAdopted() method).
 			if proc.NotAdopted(fwdErr) {
 				slog.Debug("proc forward not adopted; running locally", slog.String("error", fwdErr.Error()))
 			} else {
 				slog.Warn("proc forward failed; running locally", slog.String("error", fwdErr.Error()))
 			}
-			// parentLive is a narrower question than "not adopted": keep MAGUS_DAEMON_SOCKET
+			// parentLive is a narrower question than "not adopted": keep MAGUS_PROC_SOCKET
 			// pointed at the parent only when it is a usable pool for deeper adoptable
-			// calls. A not-adoptable subcommand leaves a live, same-version daemon worth
+			// calls. A not-adoptable subcommand leaves a live, same-version server worth
 			// forwarding to (nested adoptable calls hit the single top-level pool; probes
-			// like doctor's daemon check see the real daemon). A version/protocol mismatch
-			// (like a transport failure) leaves a daemon we cannot use: clear the
+			// like doctor's server check see the real server). A version/protocol mismatch
+			// (like a transport failure) leaves a server we cannot use: clear the
 			// pointer so nothing keeps dialing it, and fall through to hosting our own pool.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
-				_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
+				_ = os.Unsetenv(proc.SocketEnv)
 			}
 		}
 	}
@@ -774,7 +751,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
 	// of them were parsed, and the startup path below still reads it: for the watch
-	// ignores, the daemon address, and (worst) the bootstrap limiter's width. That
+	// ignores, the server address, and (worst) the bootstrap limiter's width. That
 	// limiter is INJECTED into the workspace and wins over m.cfg.Concurrency via
 	// limOnce, so sizing it from the pre-flag copy meant `--concurrency` never governed
 	// the pool from the command line in either position; only magus.yaml and
@@ -807,27 +784,32 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 
 	profile = resolveProfile(sub, subArgs) // re-resolve in case peekSub was approximate
 
-	if sub == "server" && len(subArgs) > 0 && subArgs[0] == "start" && cfg.Daemon.Address == "" {
-		cfg.Daemon.Address = "unix://" + filepath.Join(proc.SockDir(), "magus-daemon.sock")
+	// A run that executes steps here needs the broker for its host's capacity, and a run
+	// is the one thing that starts it. Only now, after the flag parse, so --broker off
+	// is honored and -o decides the notice's shape.
+	if profile.spawnsWork && globalCfg.Broker.Resolved() != types.BrokerOff {
+		stopBroker := trace.phase("startup.broker")
+		pid := ensureBroker(rootCtx)
+		stopBroker()
+		announceBroker(os.Stderr, pid, global.output, global.quiet || global.silent)
+	}
+
+	runsServer := sub == "server" && isServerRun(subArgs)
+	if runsServer && cfg.Server.Address == "" {
+		cfg.Server.Address = proc.ServerDefaultAddr()
 	}
 
 	var adoptCloser func()
 	switch {
-	case sub == "server" && len(subArgs) > 0 && subArgs[0] == "start":
-		// A help request must print usage and build no daemon, so it skips both the
-		// detach to the background and the in-process daemon and falls through to normal dispatch
-		// (serverStart's flag parse prints the usage). Without this guard `server start -h`
-		// would hit the idempotency check and report "already running" instead of help.
-		if !isServerStartHelp(subArgs) {
-			// By default `server start` auto-backgrounds: the parent re-execs a detached child
-			// and returns once it is accepting. done==true means we are that parent (or a daemon
-			// was already running, or spawning failed); only the foreground child falls through
-			// to actually build and run the daemon in this process.
-			if code, done := startDaemonBackground(rootCtx, cfg, subArgs); done {
-				return startupResult{cleanup: cleanup}, code
-			}
-			startMultiWorkspaceDaemon(rootCtx, cfg, rc)
+	case runsServer:
+		// By default `server start` auto-backgrounds: the parent spawns a detached
+		// `server --foreground` and returns once it is accepting. done==true means we are
+		// that parent (or a server was already running, or spawning failed); only a
+		// foreground server falls through to build and run it in this process.
+		if code, done := startServerBackground(rootCtx, cfg, subArgs); done {
+			return startupResult{cleanup: cleanup}, code
 		}
+		startServer(rootCtx, cfg, rc)
 	case !profile.needsWorkspace:
 		// skip loadMagus + proc server for subcommands that need no workspace
 	default:
@@ -846,14 +828,14 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			concurrency = clamped
 		}
 		lim := cache.NewLimiter(concurrency)
-		// Host our own proc server only when there's no live daemon to forward to.
-		// Any process (nested OR top-level) with a reachable daemon (parentLive)
-		// runs locally as a leaf and forwards adoptable calls to that single daemon,
+		// Host our own proc server only when there's no live server to forward to.
+		// Any process (nested OR top-level) with a reachable server (parentLive)
+		// runs locally as a leaf and forwards adoptable calls to that single server,
 		// rather than standing up a second socket that fragments the concurrency pool
-		// and trips doctor's `sockets` check ("multiple daemons running"). The earlier
+		// and trips doctor's `sockets` check ("multiple servers running"). The earlier
 		// `CurrentLevel() > 0` guard left a gap: a top-level non-adoptable command
-		// (describe, ls, watch, ...) still hosted its own daemon even when the stable
-		// `magus server start` daemon was alive. A process with no daemon to forward
+		// (describe, ls, watch, ...) still hosted its own proc server even when
+		// `magus server` was alive. A process with no server to forward
 		// to (parentLive == false: a true top-level, or an orphaned nested one whose
 		// parent is gone) hosts its own pool. loadMagus wires the limiter into the
 		// loaded workspace regardless, so a leaf still has its concurrency pool.
@@ -863,19 +845,21 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 				Handler: func(ctx context.Context, args []string) error {
 					return dispatchAdopted(ctx, root, rc, args)
 				},
+				// No Address: server.address is where the SERVER listens, and a per-process
+				// pool bound there would answer as the server for as long as this
+				// command ran.
 				Context: rootCtx,
 				Limiter: lim,
 				Version: version,
-				Address: cfg.Daemon.Address,
 			})
 			if err == nil {
-				_ = os.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+				_ = os.Setenv(proc.SocketEnv, srv.Addr())
 				err = srv.Start()
 			}
 			if err == nil {
 				adoptCloser = func() { srv.Close() }
 			} else {
-				_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
+				_ = os.Unsetenv(proc.SocketEnv)
 			}
 		}
 	}
@@ -955,8 +939,10 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return diffCmd(ctx, root, subArgs)
 	case "server":
 		return serverCmd(ctx, root, subArgs)
+	case "broker":
+		return brokerCmd(ctx, subArgs)
 	case "mcp":
-		return mcpCmd(ctx, subArgs)
+		return mcpCmd(ctx, root, subArgs)
 	case "completion":
 		return completion(subArgs)
 	case "man":
@@ -1078,7 +1064,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 // (dispatchAdopted, limited to run/affected), a job runs a maintenance command, but only one
 // whose worker argv the jobs registry recognizes, so the fire-and-forget job RPC can never be
 // used to run an arbitrary command. A recognized worker routes through the full dispatchSub
-// command set and reuses the daemon's warm workspace (withMagus is already on ctx). This is the
+// command set and reuses the server's warm workspace (withMagus is already on ctx). This is the
 // dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
 // as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
 func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
@@ -1111,191 +1097,6 @@ func isDeclaredRun(ctx context.Context, args []string) bool {
 		return false
 	}
 	return slices.Contains(m.ProjectTargets(ctx, project), target)
-}
-
-// daemonProvider is the single observability provider the daemon shares between its
-// per-workspace registry and its bridge Magus. startMultiWorkspaceDaemon builds it once
-// (it runs before the `server start` command handler); serverStart then hands it to
-// startMCPWithDaemon. Same process, sequential, so the write happens-before the read.
-var daemonProvider observability.Provider
-
-// daemonRegistry is the daemon's per-workspace registry (the wsRegistry built as reg in
-// startMultiWorkspaceDaemon). It is the single source of truth the WorkspaceLister reports,
-// so startMCPWithDaemon publishes the bridge workspace into it (reg.adoptBridge) and /readyz
-// sees the daemon's own MCP workspace as loaded, not just workspaces populated by adopted
-// runs. Same process, sequential, so the write happens-before the read.
-var daemonRegistry *wsRegistry
-
-// daemonServer is the running proc server for `magus server start`. startMultiWorkspaceDaemon
-// publishes it so serverStart's blocking loop can select on its Done channel: an RPC-driven
-// `server stop` closes the server, and without observing that the daemon process would keep
-// running after its listener was already gone. Same process, sequential, so the write
-// happens-before the read.
-var daemonServer *proc.Server
-
-// daemonRuns is the daemon's live-run registry: a capture handler folded into every adopted
-// dispatch's journal, tracking per-target execution state. startMultiWorkspaceDaemon builds
-// it and threads it onto each dispatch's context; startMCPWithDaemon hands its Snapshot to
-// the console service so the StatusService and the status SSE report active runs. Same process,
-// sequential, so the write happens-before the reads.
-var daemonRuns *console.RunRegistry
-
-// daemonServices is the daemon's shared-service registry. startMultiWorkspaceDaemon builds
-// it (as svcReg) and points this global at it so startMCPWithDaemon can hand its Snapshot to
-// the console service, surfacing hosted services on the StatusService alongside the pool and
-// runs. Same process, sequential, so the write happens-before the reads.
-var daemonServices *service.Registry
-
-// daemonTrailBase is the ONE daemon-wide activity-trail location: the bridge Magus's cache dir,
-// the same base the MCP handler writes to and the ActivityService reads from. startMCPWithDaemon
-// publishes it before the MCP gate, since the location is a cache dir rather than anything MCP
-// owns; the proc OnJobDone callback reads it so every producer (MCP calls, background jobs)
-// appends to a single trail, disambiguated by Event.Workspace rather than fragmented across
-// per-workspace directories. Empty only until daemon startup reaches that call, or where the
-// root does not resolve, so a job completing in that window is dropped best-effort.
-var daemonTrailBase string
-
-// startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.
-// When cfg.Daemon.Workspaces is non-empty it eagerly loads declared workspaces and applies landlock.
-func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
-	n := cfg.Concurrency
-	if n <= 0 {
-		n = cache.ProfileConcurrency(cfg.ConcurrencyProfile)
-	}
-	lim := cache.NewLimiter(n)
-	// The machine budget. One daemon per user means one of these per machine, which is
-	// the whole point: a limiter caps a process, this caps the host.
-	//
-	// Sized from HOST facts, never from the workspace that happened to start the daemon.
-	// The daemon is started by whichever run got there first, and its concurrency is
-	// that ONE tree's magus.yaml: a project setting `concurrency: 2` for its own reasons
-	// would have capped every other worktree on the machine at two slots between them,
-	// for as long as that daemon lived. Memory comes from what this process may commit,
-	// so a daemon inside a memory-limited container budgets the container rather than
-	// the machine it sits on; slots come from the cores, which is the same ceiling
-	// ClampConcurrency holds every individual run to. The profile that resolved n above
-	// also decides memory's reservation (a quarter, or aggressive's small fixed floor),
-	// so both axes of "claim the whole machine" agree.
-	machineBudget := cache.NewMachineBudget(
-		mem.BudgetMB(mem.UsableBytes(ctx), cfg.ConcurrencyProfile),
-		cache.MachineCeiling())
-
-	ttl := cfg.Daemon.IdleTTL
-	if ttl <= 0 {
-		ttl = defaultIdleTTL
-	}
-
-	// Build the ONE observability provider the whole daemon shares: every per-workspace
-	// registry Magus AND the bridge Magus (startMCPWithDaemon) adopt this same instance via
-	// WithProvider, so a build routed to any workspace records into the same instruments the
-	// /dashboard reads, and workspace eviction never discards accumulated counters. The
-	// provider is owned by the daemon process, not any workspace, and is never shut down
-	// (magus.Close does not touch it), so sharing it carries no double-shutdown hazard. On
-	// init failure fall back to a disabled provider so the daemon still starts.
-	telCfg := observability.ConfigFromTelemetry(cfg.Telemetry, version, "")
-	telCfg.LocalCollect = true
-	sharedTel, terr := otlp.New(ctx, telCfg)
-	if terr != nil {
-		slog.Warn("daemon: telemetry init failed; dashboard metrics disabled", slog.String("error", terr.Error()))
-		sharedTel, _ = otlp.New(ctx, observability.Config{})
-	}
-	daemonProvider = sharedTel
-
-	// The live-run registry taps every adopted dispatch (threaded onto its context below) and
-	// backs the dashboard's active-runs view via the console service.
-	daemonRuns = console.NewRunRegistry()
-
-	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
-	reg := newWSRegistry(ctx, lim, machineBudget, ttl, sharedTel)
-	reg.setDeclared(declared)
-	daemonRegistry = reg // publish so startMCPWithDaemon can adopt the bridge workspace into it
-
-	// The daemon hosts shared services so they stay warm across separate `magus run`
-	// invocations. Only the stable daemon does this (a per-process proc server leaves
-	// ServiceHost nil), which is why cross-invocation sharing needs the daemon. A
-	// journal records each hosted service's stop command so this daemon can reap
-	// orphans left by a previous one that crashed; sweep them before hosting anything.
-	svcJournal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
-	if jerr != nil {
-		slog.Warn("daemon service journal unavailable; crash reaping disabled", slog.String("error", jerr.Error()))
-	} else if res := svcJournal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
-		slog.Info("daemon reaped orphaned services from a previous run",
-			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
-	}
-	svcReg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(svcJournal))
-	daemonServices = svcReg // publish for startMCPWithDaemon's console wiring
-
-	if len(declared) > 0 {
-		if err := reg.preloadAndApplySandbox(ctx, declared); err != nil {
-			slog.Error("daemon workspace union setup failed", slog.String("error", err.Error()))
-			return
-		}
-		reg.warmInBackground(ctx, declared)
-	}
-
-	srv, err := proc.New(proc.Options{
-		Handler: func(hctx context.Context, args []string) error {
-			root := proc.RootFromContext(hctx)
-			if root == "" {
-				cwd := proc.CwdFromContext(hctx)
-				r, rerr := magus.FindRoot(cwd)
-				if rerr != nil {
-					return fmt.Errorf("proc: cannot locate workspace root from %s: %w", cwd, rerr)
-				}
-				root = r
-			}
-			// Fold this adopted run's journal into the live-run registry so the dashboard
-			// sees its per-target execution state. BeginInvocation (in run/affected) reads
-			// the sink off the context and attaches it as an extra capture handler.
-			hctx = console.WithRunSink(hctx, daemonRuns)
-			return reg.dispatch(hctx, root, rc, args)
-		},
-		OnJobDone:       recordJobActivity,
-		WorkspaceLister: reg.status,
-		ServiceLister:   func() []types.StatusService { return serviceStatuses(svcReg) },
-		ServiceHost:     serviceHost{svcReg},
-		ConfigReloader:  reg.evictAll,
-		Context:         ctx,
-		Limiter:         lim,
-		MachineBudget:   machineBudget,
-		Version:         version,
-		Address:         cfg.Daemon.Address,
-	})
-	if err != nil {
-		slog.Error("daemon server init failed", slog.String("error", err.Error()))
-		return
-	}
-	_ = os.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
-	if err := srv.Start(); err != nil {
-		_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
-		slog.Error("daemon server start failed", slog.String("error", err.Error()))
-		return
-	}
-	daemonServer = srv // publish so serverStart's blocking loop unblocks on an RPC shutdown
-	watchAdmissionIdle(ctx, srv)
-	go func() {
-		// Tear down on either path: a signal (ctx cancelled via NotifyContext) or an RPC
-		// `server stop` (which calls srv.Close, closing srv.Done). Waiting only on ctx.Done
-		// missed the RPC path (srv.Close cancels the listener's own context, not this one),
-		// so a stopped daemon leaked its hosted services and warm workspaces.
-		select {
-		case <-ctx.Done():
-		case <-srv.Done():
-		}
-		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
-		// workspace can't be closed under an in-flight build. Close is idempotent.
-		srv.Close()
-		// ctx may already be Done here (the signal path above), and Shutdown's wait
-		// for an in-flight service Start returns immediately once its ctx is done,
-		// so passing the cancelled ctx straight through would skip stopping anything
-		// still starting. context.WithoutCancel plus a fresh bound keeps teardown
-		// running (and still cancellable) instead of either hanging forever (the bug
-		// this fixes) or aborting outright (worse: leaks the process).
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
-		svcReg.Shutdown(shutdownCtx) // stop every hosted service on daemon teardown
-		cancel()
-		reg.close()
-	}()
 }
 
 // applyPreSubDisplayFlags binds the global display flags that appear BEFORE the
@@ -1397,19 +1198,19 @@ func extractSilentFlag(args []string) bool {
 	return false
 }
 
-// extractDaemonEnabledFlag peeks the --daemon-enabled bool flag before the main flag
-// parse, so it can gate the shared-daemon discovery that runs during early startup
+// extractServerEnabledFlag peeks the --server-enabled bool flag before the main flag
+// parse, so it can gate the shared-server discovery that runs during early startup
 // (mirrors extractRootFlag/extractQuietFlag). Returns the parsed value and whether the
-// flag was present; a bare --daemon-enabled means true (Go bool-flag convention).
-func extractDaemonEnabledFlag(args []string) (val, set bool) {
+// flag was present; a bare --server-enabled means true (Go bool-flag convention).
+func extractServerEnabledFlag(args []string) (val, set bool) {
 	for _, a := range args {
 		if a == "--" {
 			return false, false
 		}
 		switch {
-		case a == "-daemon-enabled" || a == "--daemon-enabled":
+		case a == "-server-enabled" || a == "--server-enabled":
 			return true, true
-		case strings.HasPrefix(a, "-daemon-enabled="), strings.HasPrefix(a, "--daemon-enabled="):
+		case strings.HasPrefix(a, "-server-enabled="), strings.HasPrefix(a, "--server-enabled="):
 			_, v, _ := strings.Cut(a, "=")
 			if b, err := strconv.ParseBool(v); err == nil {
 				return b, true

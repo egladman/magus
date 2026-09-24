@@ -91,7 +91,7 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 }
 
 // TestCurrentLevel pins the contract startup relies on to decide whether to stand
-// up its own daemon: absent/invalid means 0 (top-level, starts a server), > 0 means
+// up its own pool: absent/invalid means 0 (top-level, starts a server), > 0 means
 // nested (must not, to keep one socket / one pool). Mutates env; not parallel.
 func TestCurrentLevel(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
@@ -102,54 +102,54 @@ func TestCurrentLevel(t *testing.T) {
 	assert.Equal(t, 0, CurrentLevel(), "invalid CurrentLevel")
 }
 
-// TestExecWithholdsDaemonSocket pins the contract runMagus (std/magus.go) relies on: the
-// daemon/pool pointer MAGUS_DAEMON_SOCKET is magus-internal and must NOT reach an op
+// TestExecWithholdsProcSocket pins the contract runMagus (std/magus.go) relies on: the
+// server/pool pointer MAGUS_PROC_SOCKET is magus-internal and must NOT reach an op
 // subprocess, even with the sandbox off (the default), where childEnv takes the raw process
 // env. A leaked socket makes any program that links proc (magus's own test binaries) mistake
 // itself for "already adopted under a parent magus". An explicit Env override still wins, which
 // is how a legitimate nested magus re-injects it for forwarding. Mutates env; not parallel.
-func TestExecWithholdsDaemonSocket(t *testing.T) {
+func TestExecWithholdsProcSocket(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
 	read := func(t *testing.T, opts ExecOptions) string {
 		t.Helper()
 		opts.Capture = true
-		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_DAEMON_SOCKET"`}, opts)
+		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_PROC_SOCKET"`}, opts)
 		require.NoError(t, err)
 		return res.Stdout
 	}
 	// Set in the parent, as startup does when it hosts its own pool: the child must not see it.
-	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/magus-parent.sock")
-	assert.Empty(t, read(t, ExecOptions{}), "daemon socket must be withheld from an op child")
+	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/magus-parent.sock")
+	assert.Empty(t, read(t, ExecOptions{}), "the proc socket must be withheld from an op child")
 	// A nested magus re-injects it as an Env override, which layers last and wins.
 	assert.Equal(t, "unix:///tmp/child.sock",
-		read(t, ExecOptions{Env: []string{"MAGUS_DAEMON_SOCKET=unix:///tmp/child.sock"}}),
+		read(t, ExecOptions{Env: []string{"MAGUS_PROC_SOCKET=unix:///tmp/child.sock"}}),
 		"an explicit override re-injects the socket for legitimate recursion")
 }
 
-// TestChildEnvReportsWithheldDaemonVars pins the breadcrumb contract: childEnv reports which
-// daemon pointers it actually withheld from the child (present in the base, not re-added by an
+// TestChildEnvReportsWithheldProcVars pins the breadcrumb contract: childEnv reports which
+// magus socket pointers it actually withheld from the child (present in the base, not re-added by an
 // override), so Exec can log the answer to "the sandbox is off, why is my var missing?". Mutates
 // env; not parallel.
-func TestChildEnvReportsWithheldDaemonVars(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/p.sock")
-	t.Setenv("MAGUS_DAEMON_ADDRESS", "unix:///tmp/p.sock")
+func TestChildEnvReportsWithheldProcVars(t *testing.T) {
+	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/p.sock")
+	t.Setenv("MAGUS_SERVER_ADDRESS", "unix:///tmp/p.sock")
 	// Both present in the process env, no overrides: both are withheld from the child.
 	_, withheld := childEnv(context.Background(), nil, nil)
-	assert.ElementsMatch(t, DaemonForwardVars, withheld, "both daemon pointers withheld")
+	assert.ElementsMatch(t, ProcForwardVars, withheld, "both magus socket pointers withheld")
 	// An override that re-adds one (a nested magus forwarding) means it is NOT withheld.
-	_, withheld = childEnv(context.Background(), nil, []string{"MAGUS_DAEMON_SOCKET=unix:///tmp/child.sock"})
-	assert.Equal(t, []string{"MAGUS_DAEMON_ADDRESS"}, withheld, "re-injected var is not reported withheld")
+	_, withheld = childEnv(context.Background(), nil, []string{"MAGUS_PROC_SOCKET=unix:///tmp/child.sock"})
+	assert.Equal(t, []string{"MAGUS_SERVER_ADDRESS"}, withheld, "re-injected var is not reported withheld")
 }
 
 // TestChildEnvCarriesInvocationAncestry pins the ONLY carrier the ordinary nested case
-// has. A nested magus normally runs as its own process (childEnv withholds the daemon
+// has. A nested magus normally runs as its own process (childEnv withholds the proc
 // socket), so if this variable does not reach it, the child cannot recognize a lock its own
 // ancestor holds and the deadlock this machinery exists to refuse comes straight back.
 //
 // It also pins the drop: the value must come from ctx, never from this process's
-// environment, because under the daemon the process env belongs to no invocation at all.
+// environment, because under the server the process env belongs to no invocation at all.
 // Mutates env; not parallel.
 func TestChildEnvCarriesInvocationAncestry(t *testing.T) {
 	t.Setenv(AncestorsEnvVar, "9:inv-stale")

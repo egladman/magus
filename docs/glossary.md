@@ -93,10 +93,18 @@ reproducible and side-effect-free. See [sandbox.md](concepts/sandbox.md).
 A long-running or shared process magus manages across runs, distinct from a
 one-shot target. See [services.md](concepts/services.md).
 
-### Daemon
+### Broker
 
-The background magus host that owns shared state such as services and the warm
-knowledge graph. See [daemon.md](guides/integrations/daemon.md).
+The per-user background process that holds this host's capacity: the machine
+budget every run claims slots from, and the shared services runs keep warm. A
+run starts it on demand; `broker: off` in `magus.yaml` runs without one. See
+[server.md](guides/integrations/server.md).
+
+### Server
+
+The background process a person starts with `magus server start`. It serves MCP,
+the console, background jobs and the warm knowledge graph, and adopts nested
+`magus` calls into one pool. See [server.md](guides/integrations/server.md).
 
 ### CI
 
@@ -130,38 +138,38 @@ captured output. See [telemetry.md](concepts/telemetry.md).
 The concurrency pool: the shared set of slots that caps how many targets run in
 parallel on one machine. Its capacity defaults to `MAGUS_CONCURRENCY`, then 4 on
 GitHub-hosted runners, then `min(NumCPU, 8)`; `magus status` and the
-[dashboard](guides/integrations/daemon.md) report it live. See [daemon.md](guides/integrations/daemon.md).
+[dashboard](guides/integrations/server.md) report it live. See [server.md](guides/integrations/server.md).
 
 ### Slot
 
 One unit of the pool's capacity. A target acquires the slots it needs to run
 (most take one) and releases them when it finishes; the pool tracks capacity
 (total slots), running (acquired), and queued (blocked). See
-[daemon.md](guides/integrations/daemon.md).
+[server.md](guides/integrations/server.md).
 
 ### Concurrency
 
 How many targets run at once. It is bounded by the pool's capacity and set with
 `--concurrency`, `MAGUS_CONCURRENCY`, or the `concurrency` config key. See
-[daemon.md](guides/integrations/daemon.md).
+[server.md](guides/integrations/server.md).
 
 ### Queued
 
 A target that wants a slot while the pool is full; it blocks first-in-first-out
 until a slot frees. The dashboard colors a sample with queued > 0 accordingly.
-See [daemon.md](guides/integrations/daemon.md).
+See [server.md](guides/integrations/server.md).
 
 ### Pool mode
 
-Which pool a run uses: **daemon** (one shared pool the background daemon owns
-across every workspace and client) or **proc** (a per-process pool for a single
-one-off invocation). See [daemon.md](guides/integrations/daemon.md).
+Which pool a run uses: **server** (one shared pool the server owns across every
+workspace and client) or **proc** (a per-process pool for a single one-off
+invocation). See [server.md](guides/integrations/server.md).
 
 ### One-off
 
 A single `magus` invocation that runs a target and exits, using a per-process
-pool; the opposite of the long-lived daemon or a service. See
-[daemon.md](guides/integrations/daemon.md).
+pool; the opposite of the long-lived server or a service. See
+[server.md](guides/integrations/server.md).
 
 ### Remote cache
 
@@ -173,13 +181,13 @@ remote artifact must be signed by a trusted key. See
 ### Snapshot
 
 A point-in-time view of live state - the pool's occupancy or a tick of exported
-metrics - as opposed to accumulated history. See [daemon.md](guides/integrations/daemon.md).
+metrics - as opposed to accumulated history. See [server.md](guides/integrations/server.md).
 
 ### Backfill
 
-The recent history the daemon replays to a dashboard on connect, so its charts
+The recent history the server replays to a dashboard on connect, so its charts
 start populated instead of empty. It is served from a bounded ring buffer of the
-last few hundred samples. See [daemon.md](guides/integrations/daemon.md).
+last few hundred samples. See [server.md](guides/integrations/server.md).
 
 ## Telemetry and health
 
@@ -197,9 +205,9 @@ about. See [telemetry.md](concepts/telemetry.md).
 
 ### Health
 
-The at-a-glance daemon state derived from the pool: **healthy** when the pool is
+The at-a-glance server state derived from the pool: **healthy** when the pool is
 reporting, **degraded** when it reports an error, **down** when there is no pool.
-The dashboard color-codes each state. See [daemon.md](guides/integrations/daemon.md).
+The dashboard color-codes each state. See [server.md](guides/integrations/server.md).
 
 ### Volatility
 
@@ -317,12 +325,12 @@ a disposition answers a request; it does not merge anything.
 The unit of delegated work, and one row of the job store: what an orchestrating
 agent handed out, with its goal, the checkpoint it was cut against, the paths it
 may write or must not touch, and the one check it runs. A job's holder is either
-a session, for work an orchestrator handed out, or the daemon, for its own
+a session, for work an orchestrator handed out, or the server, for its own
 maintenance. The store records; the agent guard is what reads those facts back
 when grading a write. See [doctrine.md](doctrine.md).
 
 A job is not a run. `magus run build web` is a run, and no job exists for it. A
-job causes runs: its check executes as one, and a daemon job records the
+job causes runs: its check executes as one, and a server job records the
 invocation of its last one. Jobs are listed with `magus ls jobs` and in the
 console's Jobs view; runs are listed in the Runs view.
 
@@ -370,7 +378,7 @@ console's UI, so they are defined here rather than left to be inferred from it.
 
 The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon exposes a loopback API
+static app, not something the server serves - the server exposes a loopback API
 it calls: read-only views plus one bearer-gated job-control service for
 maintenance jobs. See [reference/console.md](reference/console.md).
 
@@ -409,10 +417,10 @@ chords dispatch the same commands it does. See [reference/console.md](reference/
 
 ### Live link
 
-The URL that points an app at a running daemon. The daemon serves the console
+The URL that points an app at a running server. The server serves the console
 from its own loopback origin, so the link is that origin plus the app path and
 a bearer token in the fragment (`http://127.0.0.1:7391/console/graph/#token=...`).
-The daemon prints it; the console consumes the token, stores it, and strips it from
+The server prints it; the console consumes the token, stores it, and strips it from
 the URL, so the secret never lingers in history or a copied link. The origin must be
 literal loopback - `localhost` and hostnames are rejected before any request.
 Without one, an app

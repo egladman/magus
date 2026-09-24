@@ -16,7 +16,7 @@ import (
 // file). Not safe for concurrent mutation: build it on one goroutine, then read.
 //
 // Reads ARE safe for concurrent use, including from many goroutines that have
-// never seen each other: the daemon's warm graph hands the same *Graph to
+// never seen each other: the server's warm graph hands the same *Graph to
 // concurrent HTTP/MCP requests once assembly finishes. The lazy indices below are
 // the one place a "read" still writes, so they coalesce concurrent first-builds
 // under a mutex rather than racing (see ensureAdj, projectPaths).
@@ -136,7 +136,7 @@ func (g *Graph) node(id string) (types.KnowledgeNode, bool) {
 // first use. Iterating Edges() keeps each adjacency list in deterministic order.
 //
 // Guarded by adjMu rather than a bare nil check: this runs on the query path, and
-// the daemon's warm graph publishes one *Graph to concurrent requests, so two
+// the server's warm graph publishes one *Graph to concurrent requests, so two
 // first-queries after a rebuild can call this at once. A bare nil check let both
 // goroutines write g.out/g.in together, a concurrent map write, which is an
 // unrecoverable Go runtime fatal, not a recoverable panic. The mutex makes the

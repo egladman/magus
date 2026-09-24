@@ -109,6 +109,7 @@ var commandsWithoutOutput = map[string]bool{
 	"buzz":                     true,
 	"clean":                    true,
 	"graph build":              true,
+	"mcp":                      true,
 	"notes capture":            true,
 	"notes edit":               true,
 	"notes promote":            true,
@@ -132,7 +133,7 @@ var commandsWithoutOutput = map[string]bool{
 // It asks the FlagSet whether -o was typed on THIS invocation rather than reading
 // global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
 // live global, so a value left there by an earlier dispatch on the same process (one
-// adopted run in the daemon, one testscript command) would otherwise fail the next
+// adopted run in the server, one testscript command) would otherwise fail the next
 // command for a flag nobody passed it.
 func checkOutputSupported(name string, fs *flag.FlagSet) error {
 	if !commandsWithoutOutput[name] {

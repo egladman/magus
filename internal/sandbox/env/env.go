@@ -27,7 +27,7 @@ var commonEnvAllow = []string{
 }
 
 // magusRuntimeEnv lists MAGUS_* vars passed to sandbox children.
-// MAGUS_DAEMON_SOCKET/ADDRESS are absent: they're unauthenticated and would let spells escape the sandbox.
+// MAGUS_PROC_SOCKET and MAGUS_SERVER_ADDRESS are absent: they're unauthenticated and would let spells escape the sandbox.
 var magusRuntimeEnv = []string{
 	"MAGUS_RUN_ID",
 }

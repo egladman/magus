@@ -4,7 +4,7 @@
 // is a second one, deliberately, and the distinction that makes that acceptable is narrow:
 // what it produces is fed to buildRows and compared against rendered output, never to a hunk
 // DIGEST and never to a read receipt. Digests are the identity a mark is keyed by, and two
-// implementations computing those independently is what let the console and the daemon
+// implementations computing those independently is what let the console and the server
 // disagree about the same session. Nothing here computes one.
 //
 // The render tests express their cases as patches because that is what a reader of those tests
@@ -57,7 +57,7 @@ export function patchFixture(patch: string): DiffFile[] {
     if (!cur || !head) return;
     cur.hunks.push({
       digest: "",
-      // Empty for the same reason digest is: the daemon parses it out of the header, and nothing
+      // Empty for the same reason digest is: the server parses it out of the header, and nothing
       // in the browser may mint one. fromWire defaults it the same way.
       declaration: "",
       index: cur.hunks.length,

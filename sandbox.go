@@ -45,8 +45,8 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 // binding-layer policy (MGS2011). It is a no-op (returns nil) when no root
 // requests kernel sandboxing.
 //
-// This is the multi-workspace (daemon) counterpart to the per-workspace sandbox
-// that Run applies. It lives in the library so callers — the CLI daemon in
+// This is the multi-workspace (server) counterpart to the per-workspace sandbox
+// that Run applies. It lives in the library so callers — the CLI server in
 // particular — never import internal/sandbox directly: policy assembly and
 // application stay behind one seam, so the two paths cannot drift.
 func ApplyUnionSandbox(ctx context.Context, roots []string) error {
@@ -78,7 +78,7 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 	if err != nil {
 		if errors.Is(err, sandbox.ErrUnsupported) {
 			slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
-				"kernel landlock unavailable; multi-workspace daemon running with interpreter-level checks only"),
+				"kernel landlock unavailable; multi-workspace server running with interpreter-level checks only"),
 				"reason", err.Error())
 			sandboxapply.MarkAppliedExternally(union.Fingerprint())
 			sandboxapply.RecordApply(ctx, secs, "unsupported", "union", union)
@@ -98,7 +98,7 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 // back to defaults when the file is absent — the resolution used for sandbox union.
 //
 // Absence is the only silent fallback, matching loadConfig: a MALFORMED magus.yaml read
-// as defaults would join a workspace that asked to be sandboxed to the daemon with no
+// as defaults would join a workspace that asked to be sandboxed to the server with no
 // sandbox at all, and say nothing about it.
 func loadWorkspaceConfig(root string) (config.Config, error) {
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)

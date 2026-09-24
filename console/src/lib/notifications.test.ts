@@ -6,10 +6,10 @@ import {
   matchAuthorMarker,
   estimateStorageBytes,
   humanBytes,
-  daemonCacheOverThreshold,
+  serverCacheOverThreshold,
   undeclaredSeedNotice,
   LOCALSTORAGE_WARN_BYTES,
-  DAEMON_CACHE_WARN_ABS_BYTES,
+  SERVER_CACHE_WARN_ABS_BYTES,
 } from "./notifications";
 
 // These pin the pure store: admission, dedupe, the error-only unseen-dot logic, and the mutators. The
@@ -212,16 +212,16 @@ test("estimateStorageBytes sums (key+value) as UTF-16 bytes", () => {
   assert.equal(estimateStorageBytes(store), 16);
 });
 
-test("daemonCacheOverThreshold: capped uses 85%, uncapped uses the absolute fallback", () => {
-  assert.equal(daemonCacheOverThreshold(0, 0), false, "unknown size never warns");
-  assert.equal(daemonCacheOverThreshold(90, 100), true, "90 of 100 is over 85%");
-  assert.equal(daemonCacheOverThreshold(80, 100), false, "80 of 100 is under 85%");
+test("serverCacheOverThreshold: capped uses 85%, uncapped uses the absolute fallback", () => {
+  assert.equal(serverCacheOverThreshold(0, 0), false, "unknown size never warns");
+  assert.equal(serverCacheOverThreshold(90, 100), true, "90 of 100 is over 85%");
+  assert.equal(serverCacheOverThreshold(80, 100), false, "80 of 100 is under 85%");
   assert.equal(
-    daemonCacheOverThreshold(DAEMON_CACHE_WARN_ABS_BYTES, 0),
+    serverCacheOverThreshold(SERVER_CACHE_WARN_ABS_BYTES, 0),
     true,
     "uncapped hits the absolute floor",
   );
-  assert.equal(daemonCacheOverThreshold(1024, 0), false, "small uncapped never warns");
+  assert.equal(serverCacheOverThreshold(1024, 0), false, "small uncapped never warns");
 });
 
 test("humanBytes and the localStorage threshold render sanely", () => {

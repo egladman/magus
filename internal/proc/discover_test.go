@@ -12,11 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStableSocketName(t *testing.T) {
-	assert.Equal(t, "magus-daemon.sock", StableSocketName())
+// TestServerSocketName pins the name outside the magus-*.sock scan, so discovery of
+// per-process pools never lists the server twice or mistakes it for one.
+func TestServerSocketName(t *testing.T) {
+	assert.Equal(t, "server.sock", ServerSocketName())
+	assert.NotContains(t, ServerSocketName(), "magus-")
 }
 
-// isolateSockDir points SockDir() at a fresh empty dir so a real daemon on the
+// isolateSockDir points SockDir() at a fresh empty dir so a real server on the
 // developer's machine can never leak into these tests.
 func isolateSockDir(t *testing.T) string {
 	t.Helper()
@@ -26,9 +29,9 @@ func isolateSockDir(t *testing.T) string {
 	return dir
 }
 
-func TestLookupStableSocket_AbsentWhenNoLiveSocket(t *testing.T) {
+func TestLookupServerSocket_AbsentWhenNoLiveSocket(t *testing.T) {
 	isolateSockDir(t)
-	addr, ok := LookupStableSocket(context.Background())
+	addr, ok := LookupServerSocket(context.Background())
 	assert.False(t, ok)
 	assert.Empty(t, addr)
 }
@@ -45,7 +48,7 @@ func TestDiscoverSocket_SkipsNonSocketsAndNonMatches(t *testing.T) {
 	// A plain file matching the magus-*.sock name is not a live socket: isSocketLive
 	// dials it and fails, so it is filtered out. A non-matching name and a stale stable
 	// socket file are skipped by the name filters. Net result: still "none found".
-	for _, name := range []string{"magus-stale.sock", "unrelated.txt", StableSocketName()} {
+	for _, name := range []string{"magus-stale.sock", "unrelated.txt", ServerSocketName()} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600))
 	}
 	_, err := DiscoverSocket(context.Background())

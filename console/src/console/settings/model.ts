@@ -17,8 +17,8 @@
 //   - dashboard-collapse-seeded  one-time bookkeeping. Carrying it to a new machine would tell
 //                                that console the default collapse had already been applied, so
 //                                it would come up with nothing collapsed and never self-correct.
-//   - workspace, dashboard-daemon  session state (open tabs, last daemon), not preferences. The
-//                                intentional daemon choice is already `settings.host`.
+//   - workspace, dashboard-server  session state (open tabs, last server), not preferences. The
+//                                intentional server choice is already `settings.host`.
 //   - t-* cells                  test fixtures.
 // The rule for adding one: export it if a person chose it on purpose and would want it on their
 // other machine.
@@ -37,7 +37,7 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 // One full snapshot of the browser-side console settings the surface can export and import.
 export interface Settings {
   poll: number; // insight/refresh poll interval, ms (settings.getPollMs)
-  host: string; // explicit default daemon host, "host:port" or "" (settings.getDefaultHost)
+  host: string; // explicit default server host, "host:port" or "" (settings.getDefaultHost)
   theme: ThemePref; // color theme override (theme.ts / localStorage "theme")
   focusRing: boolean; // always show the split-pane focus outline vs keyboard-only (settings.getFocusRing)
   motion: MotionPref; // "auto" honors prefers-reduced-motion; "reduced" stills it here regardless
@@ -257,7 +257,7 @@ export function importSettings(
 // it is saved or applied. One human-readable before -> after entry per changed field.
 export interface PendingChange {
   key: string; // stable id: "poll" | "host" | "theme" | "focusRing" | "keymap:<commandId>"
-  label: string; // "Refresh rate", "Theme", "Daemon host", "Focus ring", "Keybinding Close pane or tab"
+  label: string; // "Refresh rate", "Theme", "Server host", "Focus ring", "Keybinding Close pane or tab"
   before: string; // display value of the committed side, e.g. "20s"
   after: string; // display value of the draft side, e.g. "10s"
 }
@@ -298,7 +298,7 @@ export function computePendingChanges(
   if (committed.host !== draft.host) {
     changes.push({
       key: "host",
-      label: "Daemon host",
+      label: "Server host",
       before: ctx.hostLabel(committed.host),
       after: ctx.hostLabel(draft.host),
     });

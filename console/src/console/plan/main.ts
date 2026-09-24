@@ -1,13 +1,13 @@
-// main.ts - the console's Jobs view: the work this daemon knows about, drawn as the DAG it is.
+// main.ts - the console's Jobs view: the work this server knows about, drawn as the DAG it is.
 //
-// ONE KIND OF THING CALLED A JOB. The daemon's own maintenance routines and the work an
+// ONE KIND OF THING CALLED A JOB. The server's own maintenance routines and the work an
 // orchestrator hands out are the same shape - a job with a HOLDER - so they are ONE list here
 // (JobService.ListJobs returns both), told apart by the holder on the row rather than by living on
 // two different screens. A catalog job carries a description and the size of what it maintains and
 // can be RUN from its row; a session job carries its criteria, the lanes and the check it was given.
 // Neither is a different view.
 //
-// KIND AND GOALS ARE NEVER DRAWER-ONLY. The holder (daemon or session), the criteria, and the
+// KIND AND GOALS ARE NEVER DRAWER-ONLY. The holder (server or session), the criteria, and the
 // parent are on the row and the card, truncated where space is tight - the drawer is where the
 // FULL text and the declared completion gates and filed result live, never the only place any of
 // them appear.
@@ -15,11 +15,11 @@
 // TWO SOURCES, ONE GRAMMAR. The second tenant is not a job at all, and shares the stage, the
 // accessible twin list, the detail sheet, the state colors and the state marks:
 //
-//  - JOBS (jobs.ts) - what the daemon holds and what sessions hold, joined here to the live
+//  - JOBS (jobs.ts) - what the server holds and what sessions hold, joined here to the live
 //    activity feeds.
 //  - TARGETS (run.ts) - the target DAG the engine resolves for plain human work. Nobody declared
 //    it, so nothing about it can be stale the way a written-down job can, and it FOLLOWS the live
-//    run: the daemon picks the anchor and the overview line says which way it picked.
+//    run: the server picks the anchor and the overview line says which way it picked.
 //
 // Which one opens is decided by the data, not by a preference: jobs in hand means there is work to
 // look at, which is the more specific answer. Anything else - no jobs, no service, no answer -
@@ -46,14 +46,14 @@ import { ViewerService } from "@wire/viewer/v1alpha1/viewer_pb";
 import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
 import { JobHolder, type CompletionGate, type JobRelease } from "@wire/job/v1alpha1/job_pb";
 import {
-  adoptDaemonOrigin,
-  createDaemonTransport,
+  adoptServerOrigin,
+  createServerTransport,
   getLiveToken,
   logsLink,
   parseHash,
-  resolveDaemonHost,
+  resolveServerHost,
   wantsDemo,
-} from "../../lib/daemon";
+} from "../../lib/server";
 import { demoJobs, demoOverlaps } from "./demo";
 import { JobFeed } from "./feed";
 import { persisted } from "../../lib/persist";
@@ -286,10 +286,10 @@ interface DrawnNode {
   // recomputed every tick would change the signature and rebuild the list under the reader.
   readonly updated: number;
   readonly terminal: boolean;
-  // The resource name to submit, "" on anything that cannot be run from here. Only the daemon's own
+  // The resource name to submit, "" on anything that cannot be run from here. Only the server's own
   // catalog can: a session's job is held by that session, and magus never starts it.
   readonly runName: string;
-  // kind is the holder in words ("daemon"/"session"), "" for a target (it has no holder). Carried
+  // kind is the holder in words ("server"/"session"), "" for a target (it has no holder). Carried
   // on the node itself, not just folded into meta, because the card draws it and the card does
   // not read meta at all.
   readonly kind: string;
@@ -319,10 +319,10 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
   for (const id of treeOrder(model)) {
     const n = model.byId.get(id);
     if (!n) continue;
-    const daemon = n.holder === JobHolder.DAEMON;
+    const server = n.holder === JobHolder.SERVER;
     const meta = [HOLDER_LABEL[n.holder], STATE_LABEL[n.state]].filter(Boolean);
     if (n.readOnly) meta.push("read only");
-    if (daemon) {
+    if (server) {
       const size = sizeLine(n.job);
       if (size) meta.push(size);
       const last = lastRunLine(n.job, nowMs);
@@ -345,7 +345,7 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
       depth: Math.min(n.depth, 6),
       updated: Number(n.job.updated),
       terminal: isTerminal(n.state),
-      runName: daemon ? n.job.name : "",
+      runName: server ? n.job.name : "",
       kind: HOLDER_LABEL[n.holder],
       criteria: n.job.criteria,
       parentLabel: n.parent ?? n.danglingParent,
@@ -354,7 +354,7 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
   return { nodes, edges: model.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })) };
 }
 
-// targetsDrawn projects the resolved target plan. Served order is reading order - the daemon
+// targetsDrawn projects the resolved target plan. Served order is reading order - the server
 // resolved the DAG and the console has no better claim about which target to read first - and there
 // is no depth to indent by, because it is a dependency graph rather than a tree of jobs.
 function targetsDrawn(model: RunPlanModel): Drawn {
@@ -392,7 +392,7 @@ function targetsDrawn(model: RunPlanModel): Drawn {
 
 // deadline is the signal one read runs under: the read's own abort (a teardown, or a newer read
 // superseding this one) OR the cap above, whichever fires first. Both halves are needed - a timeout
-// alone keeps a torn-down pane talking to the daemon, and an abort alone lets a read that never
+// alone keeps a torn-down pane talking to the server, and an abort alone lets a read that never
 // answers hold the next tick's place forever.
 function deadline(signal: AbortSignal): AbortSignal {
   return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
@@ -408,7 +408,7 @@ function why(e: unknown): string {
 // Feeds is one tick of both activity feeds: the rows, and why they are short when a read failed.
 // The reason is carried rather than folded into an empty list because the detail sheet has to tell
 // "nothing is attributed to this job" apart from "the feeds it would be attributed FROM did not
-// answer" - the first is a fact about the work, the second is a fact about the daemon.
+// answer" - the first is a fact about the work, the second is a fact about the server.
 interface Feeds {
   readonly rows: ActivityRow[];
   readonly unread: string; // "" when both feeds answered
@@ -423,7 +423,7 @@ async function fetchStatus(
   signal: AbortSignal,
 ): Promise<{ status?: Status; failed: string }> {
   try {
-    const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+    const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
     const resp = await client.getStatus({}, { signal: deadline(signal) });
     return { status: resp.status, failed: "" };
   } catch (e) {
@@ -431,7 +431,7 @@ async function fetchStatus(
   }
 }
 
-// fetchRuns reads the daemon's retained run descriptors - the same feed the drawer's RECENT section
+// fetchRuns reads the server's retained run descriptors - the same feed the drawer's RECENT section
 // and the log viewer's run browser read - through the drawer's own parser, so a malformed row is
 // dropped here exactly as it is there. Null (not []) on failure, so "could not read" stays
 // distinguishable from "nothing has run".
@@ -440,7 +440,7 @@ async function fetchRuns(
   signal: AbortSignal,
 ): Promise<{ runs: RunDescriptor[] | null; failed: string }> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, getLiveToken()));
+    const client = createClient(ViewerService, createServerTransport(host, getLiveToken()));
     const resp = await client.listOutputs({}, { signal: deadline(signal) });
     return { runs: wireDescriptors(resp.outputs), failed: "" };
   } catch (e) {
@@ -491,7 +491,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   root.dataset.phase = "loading";
 
   // ONE LINE, said once, because this view sits beside Runs and the two are easy to conflate: a
-  // job is work someone OWNS (an orchestrator's declaration, or the daemon's own maintenance), and
+  // job is work someone OWNS (an orchestrator's declaration, or the server's own maintenance), and
   // a run is `magus run` actually executing - a job's check runs as one, but plenty of runs exist
   // for no job at all. See docs/glossary.md's Job and Run entries, which this line is a plain-words
   // echo of. The link is the same cross-surface navigation every other surface uses
@@ -499,7 +499,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const intro = h("p", "console-plan-intro");
   intro.append(
     document.createTextNode(
-      "Work someone owns: tasks an agent handed out, and the daemon's own maintenance. Target runs are in ",
+      "Work someone owns: tasks an agent handed out, and the server's own maintenance. Target runs are in ",
     ),
   );
   const runsLink = h(
@@ -531,7 +531,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     btn.dataset.source = s;
     btn.title =
       s === "jobs"
-        ? "Every job this daemon knows about, its own and the ones sessions hold"
+        ? "Every job this server knows about, its own and the ones sessions hold"
         : "The target DAG magus resolves, following the live run";
     btn.append(h("span", "pf-v6-c-toggle-group__text", SOURCE_LABEL[s]));
     item.append(btn);
@@ -549,7 +549,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
 
   // The target override. NOT the entry point and deliberately small: the target view follows the
   // live run, so naming a target is the exception - what to do when you want the plan for something
-  // that is not what just ran. Emptying it hands the anchor back to the daemon.
+  // that is not what just ran. Emptying it hands the anchor back to the server.
   const targetWrap = h("div", "console-plan-target");
   const targetLabel = h("label", "console-plan-target__label", "Target");
   const targetControl = h("span", "pf-v6-c-form-control");
@@ -568,7 +568,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   targetWrap.append(targetLabel, targetControl, targetList);
 
   // No Reload control. The view polls every POLL_MS and pauses while the tab is hidden, so what is
-  // on screen is already what the daemon has; a button that re-asks is chrome implying the view
+  // on screen is already what the server has; a button that re-asks is chrome implying the view
   // might be stale when it is not. `jobs.refresh` stays registered for the command bar and its
   // keybinding, which is where a deliberate re-read belongs.
   toolbar.append(sourceGroup, summary, note, targetWrap);
@@ -750,7 +750,7 @@ function shortDigest(digest: string): string {
 }
 
 // stamp renders a unix-second timestamp for the detail sheet, "" when nothing carries one. The
-// reader's own locale: this is a local daemon's clock being read on the same machine.
+// reader's own locale: this is a local server's clock being read on the same machine.
 function stamp(seconds: number): string {
   return seconds > 0 ? new Date(seconds * 1000).toLocaleString() : "";
 }
@@ -766,12 +766,12 @@ export interface JobsInstance {
 }
 
 export function activate(host: HTMLElement): JobsInstance {
-  // Per-bundle, not per-page: lib/daemon's origin-adoption flag is module state, so the shell having
+  // Per-bundle, not per-page: lib/server's origin-adoption flag is module state, so the shell having
   // adopted this origin does not make it adopted in here. Without it the view works only after some
   // other surface has persisted a host, which is the shape of bug that looks fine on the developer's
   // machine. Called ONCE per mount, per its own contract - it consumes the token out of the hash, so
   // a call per refresh would be asking a question that has already been answered.
-  adoptDaemonOrigin();
+  adoptServerOrigin();
 
   const markerBase = "console-plan-arrow-" + ++instanceSeq;
   const refs = buildScaffold(host, markerBase);
@@ -786,7 +786,7 @@ export function activate(host: HTMLElement): JobsInstance {
   // to Targets four seconds later, and again on every tick after that.
   let sourceDecided = false;
   // The shared #demo fragment, read once at mount. Polling is never started in the demo: there is
-  // no daemon to poll and the fixture does not move.
+  // no server to poll and the fixture does not move.
   const hash = parseHash();
   const demo = wantsDemo(hash);
   // The job a link asked for, read once at mount and cleared by the first read that could act
@@ -796,7 +796,7 @@ export function activate(host: HTMLElement): JobsInstance {
   let join: RunJoin = joinRuns(model, []);
   let runModel: RunPlanModel = emptyRunPlan();
   let drawn: Drawn = NOTHING_DRAWN;
-  // "" means FOLLOW: the read names no target and the daemon picks the anchor. A non-empty value is
+  // "" means FOLLOW: the read names no target and the server picks the anchor. A non-empty value is
   // the reader's override, and the only thing that puts ?target= on the wire.
   let targetOverride = "";
   // The host the last read resolved, kept so the detail can build a log-viewer deep link without
@@ -804,9 +804,9 @@ export function activate(host: HTMLElement): JobsInstance {
   let lastHost: string | null = null;
   // The live feed, built ONCE for the mount and re-pointed as the selection moves. One
   // subscription at a time, because a drawer shows one job: opening a stream per job the
-  // reader has ever clicked would leave the daemon writing to tabs nobody is looking at.
+  // reader has ever clicked would leave the server writing to tabs nobody is looking at.
   const feed = new JobFeed();
-  // One connection per host, reused by every read and every submit. Rebuilt when the daemon changes,
+  // One connection per host, reused by every read and every submit. Rebuilt when the server changes,
   // because a client carries the origin it was built for.
   let client: JobClient | null = null;
   let clientHost = "";
@@ -817,10 +817,10 @@ export function activate(host: HTMLElement): JobsInstance {
   let painted = ""; // the signature of what is currently on screen
   let paintedDetail = ""; // and of the detail sheet beside it
 
-  const clientFor = (daemonHost: string): JobClient => {
-    if (!client || clientHost !== daemonHost) {
-      clientHost = daemonHost;
-      client = jobClient(daemonHost);
+  const clientFor = (serverHost: string): JobClient => {
+    if (!client || clientHost !== serverHost) {
+      clientHost = serverHost;
+      client = jobClient(serverHost);
     }
     return client;
   };
@@ -878,8 +878,8 @@ export function activate(host: HTMLElement): JobsInstance {
     renderConnectPrompt(refs.emptySlots, state, {
       purpose:
         source === "jobs"
-          ? "Jobs come from a local daemon."
-          : "The target plan comes from a local daemon.",
+          ? "Jobs come from a local server."
+          : "The target plan comes from a local server.",
       onRetry: () => {
         void refresh();
         if (visible) startPolling();
@@ -1013,11 +1013,11 @@ export function activate(host: HTMLElement): JobsInstance {
     state: HTMLElement,
   ): Promise<void> => {
     if (btn.disabled) return;
-    const daemonHost = lastHost;
-    if (!daemonHost) return;
+    const serverHost = lastHost;
+    if (!serverHost) return;
     btn.disabled = true;
     state.textContent = "starting...";
-    const outcome = await submitJob(clientFor(daemonHost), node.runName, controller.signal);
+    const outcome = await submitJob(clientFor(serverHost), node.runName, controller.signal);
     if (disposed) return;
     if (outcome.kind === "refused") {
       // Only a real refusal lands here - an unknown name, no socket to submit to, a rejected token.
@@ -1060,7 +1060,7 @@ export function activate(host: HTMLElement): JobsInstance {
       btn.title = `${n.id}: ${n.label}`;
       li.append(btn);
       // The Run control is a SIBLING of the selecting button, not a child of it: a button inside a
-      // button is not markup a browser will honor. Only what the daemon holds gets one.
+      // button is not markup a browser will honor. Only what the server holds gets one.
       if (n.runName) {
         const runBtn = h(
           "button",
@@ -1241,7 +1241,7 @@ export function activate(host: HTMLElement): JobsInstance {
     if (n.readOnly) head.append(h("span", "console-plan-detail__ro", "read only"));
 
     const dl = h("dl", "console-plan-detail__fields");
-    // What the daemon's own catalog carries, and what a session's job carries, in that order. A job
+    // What the server's own catalog carries, and what a session's job carries, in that order. A job
     // fills one set or the other and the empty fields render nothing, which is what lets one sheet
     // serve both without asking which it has.
     field(dl, "What it does", n.job.description);
@@ -1259,7 +1259,7 @@ export function activate(host: HTMLElement): JobsInstance {
     if (n.danglingParent) {
       field(dl, "Parent", n.danglingParent + " (not in this listing)");
     }
-    // Only when the daemon said something this console does not know. A state it DOES know is
+    // Only when the server said something this console does not know. A state it DOES know is
     // already the word in the header, and repeating it would just be noise.
     if (n.rawState && n.rawState !== n.state) {
       field(dl, "Served state", n.rawState + " (unrecognized, shown as declared)");
@@ -1297,7 +1297,7 @@ export function activate(host: HTMLElement): JobsInstance {
       // Two different facts, and only one of them is about the work. The feeds not answering means
       // nothing can be attributed to ANY job right now; the feeds answering with nothing means the
       // attribution itself does not exist yet. Reporting the first as the second would blame the
-      // job for a daemon that is not talking.
+      // job for a server that is not talking.
       runsBox.append(
         h(
           "p",
@@ -1351,7 +1351,7 @@ export function activate(host: HTMLElement): JobsInstance {
     const dl = h("dl", "console-plan-detail__fields");
     field(dl, "Project", n.project);
     field(dl, "Target", n.target);
-    // Only when the daemon said something this console does not know. A state it DOES know is
+    // Only when the server said something this console does not know. A state it DOES know is
     // already the word in the header, and repeating it would just be noise.
     if (n.rawState && n.rawState !== n.state) {
       field(dl, "Served state", n.rawState + " (unrecognized, shown as idle)");
@@ -1363,8 +1363,8 @@ export function activate(host: HTMLElement): JobsInstance {
       field(dl, "Last output ref", n.ref);
       dl.append(h("dt", "console-plan-detail__label", "Last output"));
       const dd = h("dd", "console-plan-detail__value");
-      // The same deep link the dashboard hands out for a ref (logsLink): it carries the daemon's
-      // port so the viewer re-attaches to THIS daemon rather than whatever the reader last used.
+      // The same deep link the dashboard hands out for a ref (logsLink): it carries the server's
+      // port so the viewer re-attaches to THIS server rather than whatever the reader last used.
       const a = h("a", "pf-v6-c-button pf-m-link pf-m-inline") as HTMLAnchorElement;
       a.href = logsLink(lastHost, { ref: n.ref });
       a.title = "The most recent captured output for this target";
@@ -1475,7 +1475,7 @@ export function activate(host: HTMLElement): JobsInstance {
     return stale
       ? stale +
           (stale === 1 ? " run names a job" : " runs name jobs") +
-          " this daemon did not list, so what is on screen is older than the work."
+          " this server did not list, so what is on screen is older than the work."
       : "";
   };
 
@@ -1483,7 +1483,7 @@ export function activate(host: HTMLElement): JobsInstance {
 
   // Every read is stamped with the generation it opened in and the source it was opened FOR, and it
   // may paint only while BOTH still hold. The pair is the guard: the generation catches a poll that
-  // has been overtaken - a four-second cadence over a slow daemon answers out of order - and the
+  // has been overtaken - a four-second cadence over a slow server answers out of order - and the
   // source catches a reader who switched tenants while a read was in flight. Without the second, a
   // job listing that answers after the switch to Targets repaints the target view with jobs, which
   // is exactly how a no_return, the one state a target plan can never have, would arrive on one.
@@ -1499,7 +1499,7 @@ export function activate(host: HTMLElement): JobsInstance {
   // stopReading retires whatever is in flight: the abort ends the request, and the bumped generation
   // means a response already on its way in can no longer paint. The abort is not tidiness - switching
   // source or naming a target starts a read that must win, and leaving the old one running has the
-  // daemon answering a question nobody is waiting for while the answer that matters queues behind it.
+  // server answering a question nobody is waiting for while the answer that matters queues behind it.
   const stopReading = (): void => {
     generation++;
     reading?.abort();
@@ -1550,22 +1550,22 @@ export function activate(host: HTMLElement): JobsInstance {
     return true;
   };
 
-  const refreshJobs = async (daemonHost: string): Promise<void> => {
+  const refreshJobs = async (serverHost: string): Promise<void> => {
     const token = beginRead("jobs");
     const [read, feeds] = await Promise.all([
-      listJobs(clientFor(daemonHost), deadline(token.signal)),
-      activityRows(daemonHost, token.signal),
+      listJobs(clientFor(serverHost), deadline(token.signal)),
+      activityRows(serverHost, token.signal),
     ]);
     if (!fresh(token)) return;
     feedsUnread = feeds.unread;
     if (read.kind === "denied") {
-      if (settleSource(false)) return refreshTargets(daemonHost);
+      if (settleSource(false)) return refreshTargets(serverHost);
       blank();
       showEmpty(
         "Jobs are not served here",
-        "This daemon declined the job service (" +
+        "This server declined the job service (" +
           read.detail +
-          "). That is the service saying no, not a daemon that is missing: every other console surface still reads this one.",
+          "). That is the service saying no, not a server that is missing: every other console surface still reads this one.",
       );
       setSummary("Jobs are not served here.");
       return;
@@ -1574,25 +1574,25 @@ export function activate(host: HTMLElement): JobsInstance {
       // The prompt promises nothing retries behind it, so the poll stops until Retry.
       stopPolling();
       blank();
-      showConnectPrompt({ connection: "disconnected", host: daemonHost, reason: read.detail });
-      setSummary("Not connected to a daemon.");
+      showConnectPrompt({ connection: "disconnected", host: serverHost, reason: read.detail });
+      setSummary("Not connected to a server.");
       return;
     }
     if (read.kind === "unreadable") {
-      if (settleSource(false)) return refreshTargets(daemonHost);
+      if (settleSource(false)) return refreshTargets(serverHost);
       blank();
       showEmpty("Could not read the jobs", "The job service did not answer (" + read.detail + ").");
       setSummary("Could not read the jobs.");
       return;
     }
-    if (settleSource(read.jobs.length > 0)) return refreshTargets(daemonHost);
+    if (settleSource(read.jobs.length > 0)) return refreshTargets(serverHost);
     model = buildJobTree(read.jobs, read.overlaps);
     join = joinRuns(model, feeds.rows);
     if (!model.nodes.length) {
       blank();
       showEmpty(
         "No jobs",
-        "The daemon serves jobs and has none: nothing is running here, and nothing has been handed out.",
+        "The server serves jobs and has none: nothing is running here, and nothing has been handed out.",
       );
       setSummary(overviewLine(model));
       return;
@@ -1603,7 +1603,7 @@ export function activate(host: HTMLElement): JobsInstance {
     // It is what the link every CLI verb prints leads to (internal/service/console.JobLink),
     // so a person handed a URL lands on that job's sheet with its feed already running
     // instead of on a list they have to find it in. Retired whether or not the job was
-    // there: a link to a job this daemon does not carry must not keep reselecting on every
+    // there: a link to a job this server does not carry must not keep reselecting on every
     // poll and fighting whatever the reader picks instead.
     if (wantedJob) {
       if (model.byId.has(wantedJob)) selected = wantedJob;
@@ -1612,26 +1612,26 @@ export function activate(host: HTMLElement): JobsInstance {
     render(overviewLine(model), staleNote());
   };
 
-  const refreshTargets = async (daemonHost: string): Promise<void> => {
+  const refreshTargets = async (serverHost: string): Promise<void> => {
     const token = beginRead("targets");
-    const read = await loadRunPlan(daemonHost, targetOverride, deadline(token.signal));
+    const read = await loadRunPlan(serverHost, targetOverride, deadline(token.signal));
     if (!fresh(token)) return;
     if (read.kind === "absent") {
       blank();
       showEmpty(
         "No target plan endpoint",
-        "No target plan endpoint; this view lights up when the daemon serves /api/v1/plan.",
+        "No target plan endpoint; this view lights up when the server serves /api/v1/plan.",
       );
       setSummary("No target plan endpoint.");
       return;
     }
-    // The daemon knows the workspace's targets and this console does not, so its sentence is the
+    // The server knows the workspace's targets and this console does not, so its sentence is the
     // one that can be acted on. It is shown verbatim rather than restated.
     if (read.kind === "unknown-target") {
       blank();
       showEmpty(
         "Unknown target",
-        read.detail || "The daemon does not know a target named " + targetOverride + ".",
+        read.detail || "The server does not know a target named " + targetOverride + ".",
       );
       setSummary("Unknown target: " + targetOverride + ".");
       return;
@@ -1641,10 +1641,10 @@ export function activate(host: HTMLElement): JobsInstance {
       showEmpty(
         "Could not read the target plan",
         "GET " +
-          runPlanUrl(daemonHost, targetOverride) +
+          runPlanUrl(serverHost, targetOverride) +
           " did not answer (" +
           read.detail +
-          "). If this daemon predates the target plan the route is not there yet; this view lights up when the daemon serves /api/v1/plan.",
+          "). If this server predates the target plan the route is not there yet; this view lights up when the server serves /api/v1/plan.",
       );
       setSummary("Could not read the target plan.");
       return;
@@ -1653,7 +1653,7 @@ export function activate(host: HTMLElement): JobsInstance {
     renderTargetOptions();
     if (!runModel.nodes.length) {
       blank();
-      // Two different facts. With no target named, an empty plan means the daemon had nothing to
+      // Two different facts. With no target named, an empty plan means the server had nothing to
       // anchor to - nothing has run. With one named, it means that target resolved to nothing here.
       if (targetOverride) {
         showEmpty("No plan for that target", "No targets answer to " + targetOverride + " here.");
@@ -1672,10 +1672,10 @@ export function activate(host: HTMLElement): JobsInstance {
     render(runOverviewLine(runModel), "");
   };
 
-  // The showcase joins the pipeline one step in, with the listing the daemon would have returned.
+  // The showcase joins the pipeline one step in, with the listing the server would have returned.
   // Everything below buildJobTree() is the production path, so what it shows off is the view itself
   // rather than a rendering of it. No request is issued at all, which is what makes #demo work with
-  // no daemon, no workspace and offline.
+  // no server, no workspace and offline.
   const showDemo = (): void => {
     stopReading();
     source = "jobs";
@@ -1693,19 +1693,19 @@ export function activate(host: HTMLElement): JobsInstance {
       showDemo();
       return;
     }
-    const daemonHost = resolveDaemonHost();
-    lastHost = daemonHost;
-    if (!daemonHost) {
-      // No read to start, and any read still out belongs to the daemon that just went away: retiring
+    const serverHost = resolveServerHost();
+    lastHost = serverHost;
+    if (!serverHost) {
+      // No read to start, and any read still out belongs to the server that just went away: retiring
       // it here is what stops it painting over "not connected".
       stopReading();
       blank();
       showConnectPrompt({ connection: "none" });
-      setSummary("Not connected to a daemon.");
+      setSummary("Not connected to a server.");
       return;
     }
-    if (source === "targets") return refreshTargets(daemonHost);
-    return refreshJobs(daemonHost);
+    if (source === "targets") return refreshTargets(serverHost);
+    return refreshJobs(serverHost);
   };
 
   const startPolling = (): void => {
@@ -1915,7 +1915,7 @@ export function activate(host: HTMLElement): JobsInstance {
   }
 
   // change, not input: a target name is a whole word, and refetching per keystroke would ask the
-  // daemon to resolve a DAG for every prefix of it. Emptying the field hands the anchor back.
+  // server to resolve a DAG for every prefix of it. Emptying the field hands the anchor back.
   refs.targetInput.addEventListener(
     "change",
     () => {
@@ -1974,7 +1974,7 @@ export function activate(host: HTMLElement): JobsInstance {
   return {
     // setVisible is the console's own contract (page.ts): true when THIS pane is the focused one in
     // the active tab, false when it is backgrounded. A backgrounded view stops polling - work
-    // nobody is looking at is not a reason to talk to the daemon - and refreshes immediately when it
+    // nobody is looking at is not a reason to talk to the server - and refreshes immediately when it
     // comes back, so what returns to the screen is never the picture from before it was hidden.
     setVisible(v: boolean): void {
       // Recorded before the early return: a pane that mounts already focused is told setVisible(true)

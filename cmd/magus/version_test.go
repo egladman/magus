@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,66 +20,62 @@ func TestUnknownVersionMatchesWardDevVersion(t *testing.T) {
 	assert.Equal(t, ward.DevVersion, unknownVersion)
 }
 
-func TestDaemonLine(t *testing.T) {
+func TestServerLine(t *testing.T) {
 	cases := []struct {
 		name   string
-		probe  daemonProbe
+		probe  serverProbe
 		client string
 		want   string
 	}{
-		{"no daemon answered", daemonProbe{}, "v1.2.3", "daemon: not running"},
-		{"same build on both ends", daemonProbe{version: "v1.2.3"}, "v1.2.3", "daemon: v1.2.3"},
+		{"no server answered", serverProbe{}, "v1.2.3", "server: not running"},
+		{"same build on both ends", serverProbe{version: "v1.2.3"}, "v1.2.3", "server: v1.2.3"},
 		{
-			"a daemon left running across an upgrade",
-			daemonProbe{version: "v1.2.0"}, "v1.2.3",
-			"daemon: v1.2.0 (differs from this client)",
+			"a server left running across an upgrade",
+			serverProbe{version: "v1.2.0"}, "v1.2.3",
+			"server: v1.2.0 (differs from this client)",
 		},
 		{
 			// The case a plain comparison got wrong: an unstamped client reports the same
-			// sentinel, so "daemon: unknown" read as two matching builds.
-			"a daemon that did not report a version, against an unstamped client",
-			daemonProbe{version: unknownVersion}, unknownVersion,
-			"daemon: running, version not reported",
-		},
-		{
-			"several servers is not none",
-			daemonProbe{several: true}, "v1.2.3",
-			"daemon: several proc servers are running; set MAGUS_DAEMON_SOCKET to pick one",
+			// sentinel, so "server: unknown" read as two matching builds.
+			"a server that did not report a version, against an unstamped client",
+			serverProbe{version: unknownVersion}, unknownVersion,
+			"server: running, version not reported",
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, daemonLine(c.probe, c.client))
+			assert.Equal(t, c.want, serverLine(c.probe, c.client))
 		})
 	}
 }
 
-// TestProbeDaemonVersionWithNoDaemon pins the graceful half of the feature: an address
+// TestProbeServerVersionWithNoServer pins the graceful half of the feature: an address
 // nothing listens on yields an empty version and no error, fast enough that `magus
 // version` stays a command a script can call in a loop.
-func TestProbeDaemonVersionWithNoDaemon(t *testing.T) {
+func TestProbeServerVersionWithNoServer(t *testing.T) {
 	defer snapshotGlobals()()
-	globalCfg.Daemon.Address = "unix://" + proc.SockDir() + "/magus-version-absent-test.sock"
+	globalCfg.Server.Address = "unix://" + proc.SockDir() + "/magus-version-absent-test.sock"
 
 	start := time.Now()
-	assert.Equal(t, daemonProbe{}, probeDaemonVersion(context.Background()))
-	assert.Less(t, time.Since(start), 2*daemonProbeTimeout, "a dead socket must fail fast, not wait out the status deadline")
+	assert.Equal(t, serverProbe{}, probeServerVersion(context.Background()))
+	assert.Less(t, time.Since(start), 2*serverProbeTimeout, "a dead socket must fail fast, not wait out the status deadline")
 }
 
-// TestProbeDaemonVersionReportsALiveDaemon drives the probe against a real proc server,
+// TestProbeServerVersionReportsALiveServer drives the probe against a real proc server,
 // the same path `magus status` takes, so the wiring is exercised rather than mocked.
-func TestProbeDaemonVersionReportsALiveDaemon(t *testing.T) {
+func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 	defer snapshotGlobals()()
 	// Let proc pick a socket under SockDir; a t.TempDir() path can exceed the unix
 	// socket path length limit on macOS.
 	srv, err := proc.New(proc.Options{
 		Version: "v9.9.9",
 		Handler: func(context.Context, []string) error { return nil },
+		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
 	require.NoError(t, srv.Start())
-	globalCfg.Daemon.Address = srv.Addr()
+	globalCfg.Server.Address = srv.Addr()
 
-	assert.Equal(t, daemonProbe{version: "v9.9.9"}, probeDaemonVersion(context.Background()))
+	assert.Equal(t, serverProbe{version: "v9.9.9"}, probeServerVersion(context.Background()))
 }

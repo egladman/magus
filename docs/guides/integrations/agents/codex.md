@@ -42,7 +42,7 @@ new task after changing any of them.
 
 ## MCP
 
-Register the daemon in your user-level `~/.codex/config.toml`, never in the
+Register the server in your user-level `~/.codex/config.toml`, never in the
 repository. `magus agent harness apply --id codex` prints the fragment to paste
 (secret ref `MAGUS_MCP_TOKEN`); Magus does not write that file:
 

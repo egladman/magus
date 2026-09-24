@@ -4,7 +4,7 @@
 //
 // Two rules keep it from being a way up. A mint and a revoke are checked against the caller's
 // own grant, read from the credential the bearer guard verified (auth.Store refuses anything
-// wider), so the daemon's tokens=write mount is defense in depth rather than the rule. And it
+// wider), so the server's tokens=write mount is defense in depth rather than the rule. And it
 // mints console grants only: a browser has no business minting an /mcp token, and the operator
 // token lives in a file this handler never opens, so it can be neither listed nor revoked here
 // and the management UI cannot lock the operator out.
@@ -35,7 +35,7 @@ type shareView interface {
 }
 
 // Service implements tokenv1alpha1connect.TokenServiceHandler over the token store and the
-// daemon's share manager.
+// server's share manager.
 type Service struct {
 	share shareView
 }

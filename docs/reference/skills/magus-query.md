@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `ac8b91008c52` |
+| `skill-content` | `e4ec3e242888` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -66,7 +66,7 @@ say so and then fall back - falling back silently hides the gap.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a
 generated index for humans, true only as of its last regeneration. Last resort
-only: no daemon AND no CLI, or a human asking what the committed index says.
+only: no server AND no CLI, or a human asking what the committed index says.
 
 ## Act in this order
 
@@ -299,7 +299,7 @@ HUMAN reading the repo, and it is only as true as its last regeneration - a
 workspace whose generate target has not run since the last change describes a
 tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
-workspace. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
+workspace. Read it as a LAST RESORT: when no server is reachable and the CLI is
 unavailable too, or when a human explicitly asks what the committed index says.
 
 ## Act in this order
@@ -314,7 +314,7 @@ unavailable too, or when a human explicitly asks what the committed index says.
    MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
    the user once that `magus server start` restores the full agent surface, then
    use the CLI equivalent from the same row below. Do not stop or grep. CLI
-   fallback remains correct, but has no tool discovery or warm daemon graph.
+   fallback remains correct, but has no tool discovery or warm server graph.
 
    | question                                      | MCP tool        | CLI                                |
    | --------------------------------------------- | --------------- | ---------------------------------- |

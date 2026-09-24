@@ -1,0 +1,51 @@
+# One magus reading another's output in the same project, the CI plan step's shape:
+# `affected --plan --preflight` locks the project for its pass and prints the plan once
+# it has released it. The reader takes no lock until the writer is done with the
+# project, so neither stage is refused, whichever reaches the lock first.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
+
+exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms | magus run consume .'
+stderr 'magus: waiting for pid [0-9]+ \(.*affected ci --plan --preflight generate'
+! stderr 'locked by another magus process'
+grep '"matrix"' consumed
+
+# Nothing is left behind: no held lock, no waiter.
+exec magus status -o json
+! stdout '"locks"'
+! stdout '"pipe_waits"'
+
+# Both orders, repeatedly. Which stage reaches the lock first is a race; before the
+# deferral one of the two was refused in either order.
+exec bash -c 'set -o pipefail; for i in 1 2 3 4 5; do rm -f consumed; magus affected ci --plan --preflight generate --no-default-charms | magus run consume . || exit 1; grep -q matrix consumed || exit 1; done'
+! stderr 'locked by another magus process'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "fs";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "generate": {"skip_cache": "holds the lock long enough to meet the reader"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sleep", ["1"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    final input = io\stdin.readAll();
+    fs\writeFile("consumed", input);
+}

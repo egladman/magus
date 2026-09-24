@@ -614,10 +614,10 @@ could ever match.
 ## Watch it: the console Jobs view
 
 The [console](../../../reference/console.md) draws one Jobs view, because a job
-is ONE KIND OF THING however it was created. The daemon holds its own
+is ONE KIND OF THING however it was created. The server holds its own
 maintenance jobs (graph sync, trail rotation, the review check) and a session
 holds the ones an orchestrator handed out; both list together, and a HOLDER
-column reading `daemon` or `session` is what separates them. `magus ls jobs`
+column reading `server` or `session` is what separates them. `magus ls jobs`
 prints the same two sets, with the same column, as a tree with parents above the
 jobs they forked.
 
@@ -627,12 +627,12 @@ detail beside the row. No row transitions itself: every state was written by an
 agent or a person, which is why a row that has gone quiet is a job YOU decide is
 possibly dead.
 
-The service behind it is `magus.job.v1alpha1.JobService`, the daemon's one
+The service behind it is `magus.job.v1alpha1.JobService`, the server's one
 mutating console surface, mounted behind the same loopback bind and bearer token
 as everything else. Start it with `magus server start`; see
-[the daemon](../daemon.md). `magus server status` prints the mcp and console
-URLs, and says so explicitly when the daemon predates the tree, because every
-call through an older daemon is answered by the older build.
+[the server](../server.md). `magus server status` prints the mcp and console
+URLs, and says so explicitly when the server predates the tree, because every
+call through an older server is answered by the older build.
 
 ## The spawn is recorded, never judged
 

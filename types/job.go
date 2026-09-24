@@ -51,13 +51,13 @@ func JobStates() []JobState {
 func ValidJobState(s JobState) bool { return slices.Contains(JobStates(), s) }
 
 // JobHolder is who runs a job. One store holds both kinds, so a reader can tell the
-// daemon's own housekeeping from work a session was handed without asking a second door.
+// server's own housekeeping from work a session was handed without asking a second door.
 type JobHolder string
 
 const (
-	// HolderDaemon is a job from the daemon's maintenance catalog: the daemon declares it,
+	// HolderServer is a job from the server's maintenance catalog: the server declares it,
 	// submits it, and runs it itself.
-	HolderDaemon JobHolder = "daemon"
+	HolderServer JobHolder = "server"
 	// HolderSession is work an orchestrator declared for somebody else to hold.
 	HolderSession JobHolder = "session"
 )

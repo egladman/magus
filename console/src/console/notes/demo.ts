@@ -1,4 +1,4 @@
-// demo.ts - sample notes for the Notes surface, so it can be seen without a daemon.
+// demo.ts - sample notes for the Notes surface, so it can be seen without a server.
 //
 // These are INVENTED, and the surface says so out loud - loadDemo raises the shell's "demo
 // data" tag in the status bar, beside the connection state, for as long as they are on screen.
@@ -66,7 +66,7 @@ interface NoteSpec {
 }
 
 // KIND_SLUG spells a node id the way the graph does. AnchorKind is a protobuf enum, so it is a
-// NUMBER at runtime: building an id by concatenating it produced "3:." where a real daemon sends
+// NUMBER at runtime: building an id by concatenating it produced "3:." where a real server sends
 // "project:.", which reads as a broken id rather than as sample data.
 const KIND_SLUG: Record<number, string> = {
   [AnchorKind.SYMBOL]: "symbol",
@@ -238,7 +238,7 @@ const STORES: { scope: Scope; path: string; issues: string[] }[] = [
 export interface DemoNotes {
   stores: StoreStatus[];
   notes: Note[];
-  // body resolves the prose the reading pane shows, with no daemon behind it.
+  // body resolves the prose the reading pane shows, with no server behind it.
   body(name: string): string;
 }
 

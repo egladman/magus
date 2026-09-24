@@ -1,4 +1,4 @@
-// pulse.test.ts - how the rail's pool read handles a daemon that will not answer. The RPC itself is
+// pulse.test.ts - how the rail's pool read handles a server that will not answer. The RPC itself is
 // injected; what is under test is the classification, because the two failure classes have opposite
 // correct responses and telling them apart is the whole reason this file has any logic in it.
 
@@ -21,10 +21,10 @@ test("a pool reading passes straight through", async () => {
   assert.deepEqual(got, { running: 2, queued: 1, workspaces: [], cache: null });
 });
 
-// Verified against a real v0.2.0 daemon, which 404s the route entirely: GetStatus is newer than the
+// Verified against a real v0.2.0 server, which 404s the route entirely: GetStatus is newer than the
 // shipped releases. Retrying a route that cannot appear, every 15s for the life of the page, is the
-// console-spam lib/daemon.ts's readiness probe goes out of its way to avoid.
-test("a daemon that does not serve the route is not asked twice", async () => {
+// console-spam lib/server.ts's readiness probe goes out of its way to avoid.
+test("a server that does not serve the route is not asked twice", async () => {
   let calls = 0;
   const denied = async (): Promise<never> => {
     calls++;
@@ -35,7 +35,7 @@ test("a daemon that does not serve the route is not asked twice", async () => {
   assert.equal(calls, 1, "the second poll should never have left the browser");
 });
 
-// The opposite case, and the one that must NOT latch: a daemon coming back is normal, and latching on
+// The opposite case, and the one that must NOT latch: a server coming back is normal, and latching on
 // a blip would leave the rail blank for the rest of the session over one dropped request.
 test("an outage keeps being retried", async () => {
   let calls = 0;
@@ -97,7 +97,7 @@ test("a permission denial keeps being retried", async () => {
   assert.equal(calls, 2);
 });
 
-// The other spelling of an absent route: a daemon that answers NotFound rather than Unimplemented.
+// The other spelling of an absent route: a server that answers NotFound rather than Unimplemented.
 test("a route answered NotFound latches like Unimplemented", async () => {
   let calls = 0;
   const missing = async (): Promise<never> => {
@@ -111,7 +111,7 @@ test("a route answered NotFound latches like Unimplemented", async () => {
 
 // A non-ConnectError (a raw TypeError from a blocked cross-origin fetch, which is exactly what a
 // browser hands back) is an outage, not a denial - the browser blocked it before any status came back,
-// so it says nothing about what the daemon serves.
+// so it says nothing about what the server serves.
 test("a blocked fetch is an outage, not a denial", async () => {
   let calls = 0;
   const blocked = async (): Promise<never> => {
@@ -123,9 +123,9 @@ test("a blocked fetch is an outage, not a denial", async () => {
   assert.equal(calls, 2);
 });
 
-// The latch is per-host so that pointing the console at a different daemon probes it properly rather
+// The latch is per-host so that pointing the console at a different server probes it properly rather
 // than inheriting the verdict on the one before it.
-test("the latch does not spread to another daemon", async () => {
+test("the latch does not spread to another server", async () => {
   await fetchPulse(HOST, async () => {
     throw new ConnectError("no such method", Code.Unimplemented);
   });

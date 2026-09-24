@@ -3,7 +3,7 @@
 //
 // It is NOT part of the staged-config model the rest of the General tab uses. Installing is an act on the
 // BROWSER, not a console preference: there is nothing to persist, nothing to diff, and nothing a Reset
-// could undo. So it applies immediately, like the daemon-facing Access and Memory sections.
+// could undo. So it applies immediately, like the server-facing Access and Memory sections.
 //
 // The offer itself is captured at shell boot (lib/install.ts) - by the time this section mounts the
 // browser's one `beforeinstallprompt` has long fired. This only renders whatever state the store is in
@@ -40,7 +40,7 @@ function statusText(state: InstallState, hint: string): string {
       // origin - the browser's own menu is not, and Safari's Share sheet route is a bookmark that is not
       // gated at all. So the operator who arrived here over a LAN share still has a way through, and
       // this must not read as a dead end.
-      return "Your browser has not offered to install the console from this address. The automatic prompt needs a secure origin: the loopback address the daemon prints, or an https:// URL. A plain http:// address on the local network never qualifies. Your browser's own menu may still offer Add to Home Screen.";
+      return "Your browser has not offered to install the console from this address. The automatic prompt needs a secure origin: the loopback address the server prints, or an https:// URL. A plain http:// address on the local network never qualifies. Your browser's own menu may still offer Add to Home Screen.";
   }
 }
 

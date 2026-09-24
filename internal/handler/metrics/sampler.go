@@ -55,7 +55,7 @@ func (s *Service) sampleOnce(ctx context.Context) {
 		smp.Queued = proto.Int32(int32(rep.Pool.Queued))
 	}
 	// The generation these cumulative counters belong to. Left unset when the report
-	// carries no start instant (a non-daemon status), which reads downstream as "unknown
+	// carries no start instant (a non-server status), which reads downstream as "unknown
 	// generation" and breaks the series rather than silently joining two processes.
 	if !rep.ObservingSince.IsZero() {
 		smp.ObserveStartTime = timestamppb.New(rep.ObservingSince)

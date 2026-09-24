@@ -41,10 +41,10 @@ func (t *statusTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells
 var _ spells.Driver = (*statusTool)(nil)
 
 func resolveStatusAddr(ctx context.Context, opts Options) (string, error) {
-	if v := opts.Config.Daemon.Address; v != "" {
+	if v := opts.Config.Server.Address; v != "" {
 		return v, nil
 	}
-	if v := os.Getenv("MAGUS_DAEMON_SOCKET"); v != "" {
+	if v := os.Getenv(proc.SocketEnv); v != "" {
 		return v, nil
 	}
 	return proc.DiscoverSocket(ctx)

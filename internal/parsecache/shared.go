@@ -4,7 +4,7 @@ package parsecache
 import buzz "github.com/egladman/magus/libs/gopherbuzz"
 
 // shared is sized for a process that loads a whole workspace: every .buzz file in
-// this repo lexed to about 18 MB on 2026-09-23, and the daemon may hold several
+// this repo lexed to about 18 MB on 2026-09-23, and the server may hold several
 // revisions of each alongside the host declaration sources.
 var shared = buzz.NewParseCache(64 << 20)
 

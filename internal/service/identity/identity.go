@@ -16,7 +16,7 @@
 //     surfaced to a human via [NearDuplicates].
 //
 //   - InstanceKey: [Fingerprint] namespaced to one workspace, which is the key a
-//     RUNNING instance may actually be shared under. The daemon hosts services for
+//     RUNNING instance may actually be shared under. The broker hosts services for
 //     every workspace on the machine, so config identity alone would let two
 //     checkouts share one container.
 //
@@ -62,7 +62,7 @@ func (i Identity) IsContainer() bool { return i.Image != "" }
 //
 // The two must not be collapsed. Fingerprint asks "is this the same service config",
 // which is workspace-independent. This asks "may these two acquisitions share one
-// running process", which never spans workspaces: the daemon serves every workspace on
+// running process", which never spans workspaces: the broker serves every workspace on
 // the machine, so a bare fingerprint would hand two checkouts declaring the same
 // postgres:16 the SAME container, and one workspace's test data would land in the
 // other's database.

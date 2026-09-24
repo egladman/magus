@@ -67,7 +67,7 @@ describe("the connect screen", () => {
   test("two workspaces and no scope yet is the one case that asks", () => {
     maybeAskWorkspace(BOTH);
     assert.ok(screen(), "the screen should be up");
-    // The daemon-wide view is a row like any other, first, matching the title bar's own menu.
+    // The server-wide view is a row like any other, first, matching the title bar's own menu.
     assert.equal(choices().length, 3);
     assert.equal(choices()[0].dataset.root, "");
   });
@@ -123,7 +123,7 @@ describe("the connect screen", () => {
     assert.equal(screen(), null);
     assert.equal(sessionStorage.getItem(ASKED_KEY), "1");
 
-    // Even back at the daemon-wide scope, which is what dismissing leaves behind.
+    // Even back at the server-wide scope, which is what dismissing leaves behind.
     sessionStorage.removeItem(SCOPE_KEY);
     maybeAskWorkspace(BOTH);
     assert.equal(screen(), null, "a status tick must not reopen the screen");
@@ -142,7 +142,7 @@ describe("the connect screen", () => {
   });
 
   // Escape has to land somewhere, and the honest destination is the scope that hides nothing.
-  test("Escape lands on the daemon-wide scope", () => {
+  test("Escape lands on the server-wide scope", () => {
     maybeAskWorkspace(BOTH);
     dismiss("Escape");
     assert.equal(screen(), null);
@@ -206,16 +206,16 @@ describe("the connect screen", () => {
     assert.ok(!shown.includes(token), "the whole token must never reach the DOM");
   });
 
-  // Two earlier versions of this line claimed a tokenless daemon. There is no such thing: every
+  // Two earlier versions of this line claimed a tokenless server. There is no such thing: every
   // console route is behind BearerGuard and httpx.guard 401s a request carrying no token, so an
   // authenticated call must have produced the list this screen is offering. No token means the list
-  // did not come from a daemon, which is an anomaly and is marked as one.
-  test("no credential reads as an anomaly, not as a tokenless daemon", () => {
+  // did not come from a server, which is an anomaly and is marked as one.
+  test("no credential reads as an anomaly, not as a tokenless server", () => {
     maybeAskWorkspace(BOTH);
     const shown = screen()?.textContent ?? "";
-    assert.ok(shown.includes("Nothing here came from an authenticated daemon"));
-    assert.ok(!shown.includes("open on loopback"), "the daemon is never open");
-    assert.ok(!shown.includes("without asking for one"), "the daemon never stops asking");
+    assert.ok(shown.includes("Nothing here came from an authenticated server"));
+    assert.ok(!shown.includes("open on loopback"), "the server is never open");
+    assert.ok(!shown.includes("without asking for one"), "the server never stops asking");
     const cred = [...document.querySelectorAll<HTMLElement>(".console-shell-signin__value")].find(
       (e) => e.dataset.anomaly !== undefined && e.tagName !== "CODE",
     );

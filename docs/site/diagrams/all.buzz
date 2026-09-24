@@ -7,10 +7,10 @@ namespace diagrams;
 import "assert";
 import "fs";
 import "../libs/diagram/diagram" as _;
-import "site/diagrams/daemon-http" as _;
-import "site/diagrams/daemon-socket" as _;
-import "site/diagrams/daemon-jobs" as _;
-import "site/diagrams/daemon-share" as _;
+import "site/diagrams/server-http" as _;
+import "site/diagrams/server-socket" as _;
+import "site/diagrams/server-jobs" as _;
+import "site/diagrams/server-share" as _;
 import "site/diagrams/ci-pipeline" as _;
 import "site/diagrams/ci-providers" as _;
 import "site/diagrams/image-build" as _;
@@ -22,10 +22,10 @@ import "site/diagrams/lease-loop" as _;
 
 export fun allDiagrams() > [Diagram] {
     return [
-        daemonHttpDiagram(),
-        daemonSocketDiagram(),
-        daemonJobsDiagram(),
-        daemonShareDiagram(),
+        serverHttpDiagram(),
+        serverSocketDiagram(),
+        serverJobsDiagram(),
+        serverShareDiagram(),
         ciPipelineDiagram(),
         ciProvidersDiagram(),
         imageBuildDiagram(),
@@ -113,7 +113,7 @@ export fun inlinePageDiagrams(html: str) > str !> any {
 
 // BackrefMarker is the token a source file uses to point back at a diagram, as in
 //
-//     // magus:diagram daemon-http - this is the box the figure calls "Guard".
+//     // magus:diagram server-http - this is the box the figure calls "Guard".
 //
 // Deliberately NOT parsed as a comment. The marker is unique enough to find with a plain
 // substring scan, so this works identically in Go, Buzz, TypeScript, YAML or anything

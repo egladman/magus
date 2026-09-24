@@ -37,7 +37,7 @@ func accountOf(uid int, lookupID func(string) (*user.User, error), current func(
 type entryPointKey struct{}
 
 // ContextWithEntryPoint returns ctx recording e as where work under it entered magus. The
-// innermost call wins, so a daemon handling an RPC call stamps rpc over daemon.
+// innermost call wins, so a server handling an RPC call stamps rpc over server.
 func ContextWithEntryPoint(ctx context.Context, e types.EntryPoint) context.Context {
 	return context.WithValue(ctx, entryPointKey{}, e)
 }

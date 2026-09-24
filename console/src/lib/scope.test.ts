@@ -10,7 +10,7 @@ const MAGUS = "/Users/eli/Repos/magus";
 
 // The default. Nothing is hidden until someone chooses a scope, so a fresh console can never be
 // silently showing a subset - the "where is my stuff" failure needs an unasked-for filter to happen.
-test("the daemon-wide scope admits everything", () => {
+test("the server-wide scope admits everything", () => {
   assert.equal(inScope(ACME, ALL_WORKSPACES), true);
   assert.equal(inScope(MAGUS, ALL_WORKSPACES), true);
   assert.equal(inScope("", ALL_WORKSPACES), true);
@@ -21,9 +21,9 @@ test("a workspace scope admits its own records and refuses another's", () => {
   assert.equal(inScope(MAGUS, ACME), false);
 });
 
-// activity.proto: a record with no workspace is a daemon-wide action (an MCP call) rather than a
+// activity.proto: a record with no workspace is a server-wide action (an MCP call) rather than a
 // record whose workspace is unknown. Hiding it under a scope would claim it belongs somewhere else,
-// so it shows everywhere - the same reasoning that keeps pool and cache readings daemon-wide.
+// so it shows everywhere - the same reasoning that keeps pool and cache readings server-wide.
 test("an unattributed record shows in every scope", () => {
   assert.equal(inScope("", ACME), true);
   assert.equal(inScope("", MAGUS), true);

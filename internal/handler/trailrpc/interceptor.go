@@ -1,4 +1,4 @@
-// Package trailrpc is the audit interceptor for the daemon's Connect services: a connect.Interceptor
+// Package trailrpc is the audit interceptor for the server's Connect services: a connect.Interceptor
 // that records MUTATING unary RPCs to the activity trail by construction, so auditing a state change is a
 // structural default of the mount rather than a per-handler line a developer must remember to add.
 //

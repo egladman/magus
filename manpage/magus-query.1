@@ -34,7 +34,7 @@ output <ref>       One target run's captured output, by the output ref
                      credential reads \- which references the run reached for and
                      through which provider, never the value \- which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
-                     by the daemon's RotateLogs job, so this answers for recent runs
+                     by the server's RotateLogs job, so this answers for recent runs
                      rather than forever.
 .PP
 The graph is cache\-backed under <cache>/knowledge and only shards whose sources
@@ -148,6 +148,7 @@ magus query invocation invmsm3vcou1 --secrets
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-broker\fR(1),
 \fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

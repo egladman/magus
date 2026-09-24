@@ -195,10 +195,10 @@ func realGofmtList(ctx context.Context, root string, files []string) ([]string, 
 	return strings.Split(trimmed, "\n"), nil
 }
 
-// noteJobDesktop raises a best-effort desktop notification from the daemon job
+// noteJobDesktop raises a best-effort desktop notification from the server job
 // jobName, carrying the same notice already printed to stderr. The stderr line is the durable, testable record (job output
 // a dashboard or run log shows); the desktop alert is what makes "at the moment it
-// happens" true for a job the daemon runs out of band, matching how `magus session
+// happens" true for a job the server runs out of band, matching how `magus session
 // notify --desktop` already tells a person something without touching their terminal.
 // Never fails the job: a missing notifier (no osascript, no notify-send) is exactly the
 // case raiseDesktopNotification already swallows.

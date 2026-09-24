@@ -247,8 +247,8 @@ func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 // so passing "" means the PROCESS cwd, a different place. resolveVCS already picks the
 // driver from EffectiveCwd.
 //
-// Harmless while both sit in the same repository. Not harmless in the daemon, where the
-// process cwd belongs to the daemon and the context cwd comes from the request.
+// Harmless while both sit in the same repository. Not harmless in the server, where the
+// process cwd belongs to the server and the context cwd comes from the request.
 func vcsDir(ctx context.Context) string {
 	dir, err := EffectiveCwd(ctx)
 	if err != nil {

@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, memoryservice]
 
 MemoryService lists, upserts, and deletes memory records, plus reads/overwrites the singleton cursor snapshot.
 
-Package `magus.memory.v1alpha1`, defined in `proto/magus/memory/v1alpha1/memory.proto`. Source: [memory.proto:31](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L31). Part of the [daemon API](../../index.md).
+Package `magus.memory.v1alpha1`, defined in `proto/magus/memory/v1alpha1/memory.proto`. Source: [memory.proto:31](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L31). Part of the [server API](../../index.md).
 
 ## Methods
 

@@ -37,7 +37,7 @@ func TestRegistry_AllParamsHaveNames(t *testing.T) {
 
 // TestRegistry_EveryToolHasADriver walks the REAL catalog against the REAL driver
 // set, both directions. registerTools panics on either mismatch, but only when a
-// server is actually built, which no unit test does and which a daemon does once at
+// server is actually built, which no unit test does and which a server does once at
 // startup: the catalog is generated now, so a descriptor edit that adds a tool with
 // no handler behind it should fail here rather than at somebody's first run.
 func TestRegistry_EveryToolHasADriver(t *testing.T) {

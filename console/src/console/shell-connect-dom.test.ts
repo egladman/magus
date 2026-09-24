@@ -1,18 +1,18 @@
-// shell-connect-dom.test.ts - the shell's connect page. A surface declared as needing a daemon does
+// shell-connect-dom.test.ts - the shell's connect page. A surface declared as needing a server does
 // not activate with no address: the shell shows one connect page in its place, and the surface opens
 // once the reader applies an address. Driven through a real tile, the way a launcher pick, a restored
 // layout and a deep link all mount.
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { requireDaemon } from "./connectPrompt";
-import { signalAuthLost } from "../lib/daemon";
+import { requireServer } from "./connectPrompt";
+import { signalAuthLost } from "../lib/server";
 import type { PageController, PageModule } from "./page";
 import { createTileView, type TileView } from "./tileView";
 import { rememberHost, setDefaultHost } from "../lib/settings";
 
 const HOST = "127.0.0.1:7391";
-const PURPOSE = "Stub reads a running daemon.";
+const PURPOSE = "Stub reads a running server.";
 
 const settle = async (turns = 6): Promise<void> => {
   for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
@@ -93,23 +93,23 @@ describe("the shell connect page", () => {
     sessionStorage.clear();
   });
 
-  test("a daemon surface opened with no address shows the page, not the surface", async () => {
+  test("a server surface opened with no address shows the page, not the surface", async () => {
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     assert.equal(stub.activations, 0, "the surface module must not activate");
     const page = pane().querySelector<HTMLElement>("[data-connect-page]");
     assert.ok(page, "the connect page stands in the surface's place");
     assert.equal(page.dataset.connectPage, "runs");
-    assert.match(page.textContent ?? "", /No daemon connected/);
+    assert.match(page.textContent ?? "", /No server connected/);
     assert.match(page.textContent ?? "", new RegExp(PURPOSE));
     assert.equal(pane().querySelector("[data-stub-surface]"), null);
   });
 
   test("applying an address opens the pending surface, once", async () => {
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     setDefaultHost(HOST);
@@ -125,7 +125,7 @@ describe("the shell connect page", () => {
 
   test("an address applied while the pane is hidden waits until it is revealed", async () => {
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     tile.el.hidden = true;
@@ -143,17 +143,17 @@ describe("the shell connect page", () => {
   test("with an address already applied the surface opens directly", async () => {
     setDefaultHost(HOST);
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     assert.equal(stub.activations, 1);
     assert.equal(pane().querySelector("[data-connect-page]"), null);
   });
 
-  test("demo mode opens a daemon surface directly", async () => {
+  test("demo mode opens a server surface directly", async () => {
     location.hash = "#demo";
     const stub = stubSurface("dashboard");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "dashboard");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "dashboard");
     tiles.push(tile);
     await settle();
     assert.equal(stub.activations, 1);
@@ -162,7 +162,7 @@ describe("the shell connect page", () => {
 
   test("a surface with no declared need is not wrapped and opens offline", async () => {
     const stub = stubSurface("logs");
-    const wrapped = requireDaemon(stub.module, undefined);
+    const wrapped = requireServer(stub.module, undefined);
     assert.equal(wrapped, stub.module);
     const { tile, pane } = tileFor([wrapped], "logs");
     tiles.push(tile);
@@ -171,10 +171,10 @@ describe("the shell connect page", () => {
     assert.equal(pane().querySelector("[data-connect-page]"), null);
   });
 
-  test("a daemon that drops mid-session keeps the open surface and its data", async () => {
+  test("a server that drops mid-session keeps the open surface and its data", async () => {
     setDefaultHost(HOST);
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     setDefaultHost("");
@@ -186,7 +186,7 @@ describe("the shell connect page", () => {
 
   test("closing the pane before connecting leaves nothing to open later", async () => {
     const stub = stubSurface("runs");
-    const { tile } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tile.deactivate();
     tile.el.remove();
     await settle();
@@ -196,8 +196,8 @@ describe("the shell connect page", () => {
   });
 });
 
-// Every daemon route needs a bearer token, so a page with an address and no token can show nothing
-// true. It shows one sign-in state naming the command that fixes it, and a token the daemon later
+// Every server route needs a bearer token, so a page with an address and no token can show nothing
+// true. It shows one sign-in state naming the command that fixes it, and a token the server later
 // refuses brings it back there.
 describe("the shell sign-in gate", () => {
   const tiles: TileView[] = [];
@@ -216,13 +216,13 @@ describe("the shell sign-in gate", () => {
   test("an address with no token shows the sign-in state, not the surface", async () => {
     setDefaultHost(HOST);
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     assert.equal(stub.activations, 0, "an unauthenticated surface must not activate");
     const page = pane().querySelector<HTMLElement>("[data-connect-page]");
     assert.ok(page);
-    assert.match(page.textContent ?? "", /Sign in to this daemon/);
+    assert.match(page.textContent ?? "", /Sign in to this server/);
     const cmd = page.querySelector("[data-sign-in-command]")?.textContent ?? "";
     assert.match(
       cmd,
@@ -234,7 +234,7 @@ describe("the shell sign-in gate", () => {
   test("demo needs no token", async () => {
     location.hash = "#demo";
     const stub = stubSurface("runs");
-    const { tile } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     assert.equal(stub.activations, 1);
@@ -244,7 +244,7 @@ describe("the shell sign-in gate", () => {
     setDefaultHost(HOST);
     sessionStorage.setItem(TOKEN_KEY, "test-token");
     const stub = stubSurface("runs");
-    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
     assert.equal(stub.activations, 1);
@@ -254,7 +254,7 @@ describe("the shell sign-in gate", () => {
     assert.equal(stub.deactivations, 1, "the surface is torn down");
     assert.equal(sessionStorage.getItem(TOKEN_KEY), null, "the refused token is forgotten");
     const text = pane().querySelector("[data-connect-page]")?.textContent ?? "";
-    assert.match(text, /Sign in to this daemon/);
+    assert.match(text, /Sign in to this server/);
     assert.match(text, /expired or was revoked/);
   });
 });

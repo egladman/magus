@@ -22,7 +22,7 @@ type Config struct {
 	SampleRatio    float64           // head-based trace sampling ratio [0,1]
 	WorkspaceRoot  string            // stamped as magus.workspace.root when set
 	// LocalCollect builds an always-on in-process metrics collector even when Enabled is false
-	// (no external export), so the daemon can serve OTLP snapshots to the /dashboard. The CLI
+	// (no external export), so the server can serve OTLP snapshots to the /dashboard. The CLI
 	// leaves this false to keep one-shot invocations a true no-op.
 	LocalCollect bool
 }

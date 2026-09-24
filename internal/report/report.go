@@ -53,6 +53,7 @@ const (
 	TypeRunDetach             = "run.detach"
 	TypeLockSuperseded        = "lock.superseded"
 	TypeLockSupersedeRefused  = "lock.supersede_refused"
+	TypeLockPipeWait          = "lock.pipe_wait"
 	TypeNotice                = "run.notice"
 )
 
@@ -226,7 +227,7 @@ type RunRemote = cache.RemoteTally
 // run.summary with dry set closes it.
 type RunDry struct{}
 
-// RunDetach is where an invocation handed to the daemon with --detach stands. State is
+// RunDetach is where an invocation handed to the server with --detach stands. State is
 // "coalesced" (an identical one was already running, so none was queued), "queued"
 // (handed over, not waited on), "running" (handed over and waited on), "unwatched"
 // (the wait stopped; the run continues), "passed" or "failed".
@@ -263,6 +264,13 @@ type LockSupersedeRefused struct {
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
 	BoundMs   int64  `json:"bound_ms"`
+}
+
+// LockPipeWait reports that this run is waiting, before taking any project lock, for
+// the magus upstream of it in a shell pipe to release or settle the projects it needs.
+type LockPipeWait struct {
+	UpstreamPID int    `json:"upstream_pid"`
+	Command     string `json:"command,omitempty"`
 }
 
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
@@ -342,6 +350,7 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
 	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
 	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
+	reflect.TypeOf(LockPipeWait{}):          TypeLockPipeWait,
 	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }

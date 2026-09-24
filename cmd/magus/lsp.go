@@ -24,7 +24,7 @@ import (
 // time. It lives under `buzz` (the Buzz-language tooling group, not a top-level
 // `magus lsp`) so serving other languages later needs no new subcommand contract.
 // It speaks JSON-RPC 2.0 over the LSP base protocol (Content-Length framed) on
-// stdin/stdout and needs no workspace, config, or daemon: every request is
+// stdin/stdout and needs no workspace, config, or server: every request is
 // answered from the document text the editor sends.
 func lspCmd(_ context.Context, args []string) error {
 	fs := flag.NewFlagSet("buzz lsp", flag.ContinueOnError)

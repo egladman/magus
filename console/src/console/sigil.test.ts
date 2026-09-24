@@ -1,5 +1,5 @@
 // sigil.test.ts - three properties carry this: the mark never changes for a workspace, it is always
-// symmetric (which is what keeps it from reading as noise), and no two workspaces a daemon has loaded
+// symmetric (which is what keeps it from reading as noise), and no two workspaces a server has loaded
 // can ever draw the same picture.
 
 import assert from "node:assert/strict";
@@ -71,9 +71,9 @@ test("the figure closes", () => {
 });
 
 // Uniqueness cannot be guaranteed against arbitrary inputs - finitely many pictures, unboundedly many
-// paths. It CAN be guaranteed across the set a daemon has loaded, which is the only place a collision
+// paths. It CAN be guaranteed across the set a server has loaded, which is the only place a collision
 // would ever be seen.
-test("no two workspaces on one daemon can draw the same mark", () => {
+test("no two workspaces on one server can draw the same mark", () => {
   const roots = Array.from({ length: 200 }, (_, i) => "/Users/eli/Repos/ws" + i);
   const specs = assignSigils(roots);
   assert.equal(specs.size, roots.length);
@@ -81,9 +81,9 @@ test("no two workspaces on one daemon can draw the same mark", () => {
   assert.equal(keys.size, roots.length, "collisions: " + (roots.length - keys.size));
 });
 
-// Which of a colliding pair moves must not depend on the order the daemon happened to list them, or
+// Which of a colliding pair moves must not depend on the order the server happened to list them, or
 // the same workspace would change mark between reloads.
-test("assignment does not depend on the order the daemon lists them", () => {
+test("assignment does not depend on the order the server lists them", () => {
   const roots = ["/r/a", "/r/b", "/r/c", "/r/d", "/r/e", "/r/f"];
   const forward = assignSigils(roots);
   const backward = assignSigils([...roots].reverse());

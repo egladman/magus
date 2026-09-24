@@ -166,7 +166,7 @@ it never talks to one. `plan` requires one, since it checks approval. `--remote`
 remote configured in the checkout (`origin` unless given); a URL is refused. `--vcs`
 names the backend (`git` unless given); the queue reads neither `MAGUS_VCS_ENABLED` nor
 `MAGUS_VCS_NAME`, which configure magus's own use of version control. `magus queue` never
-runs through the daemon: it acts on the caller's checkout.
+runs through the server: it acts on the caller's checkout.
 
 `plan` checks each change's approval at the commit a review of its head covers, finds
 which changes are stacked on which, drops what conflicts with main on its own (kicked

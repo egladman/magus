@@ -37,28 +37,36 @@ func TestPrintStatusCompact(t *testing.T) {
 		})
 	}
 
-	assertCompact("no parent",
+	server := &types.StatusServer{PID: 1}
+	assertCompact("nothing running",
 		types.StatusSnapshot{PoolError: "no running magus proc server found"},
-		"daemon: off\n")
+		"no broker · no server\n")
 
-	assertCompact("daemon idle",
-		types.StatusSnapshot{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 8, Running: 0,
-		}},
-		"daemon · 0/8 idle\n")
+	// Off is the setting, not an absence: a run under it never starts one.
+	assertCompact("the broker policy is off",
+		types.StatusSnapshot{BrokerPolicy: types.BrokerOff},
+		"broker off · no server\n")
 
-	assertCompact("proc-server label",
+	assertCompact("a broker that measured the host shows its seated slots",
+		types.StatusSnapshot{Broker: &types.StatusBroker{Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 3}}},
+		"broker 3/8 slots · no server\n")
+
+	assertCompact("server idle",
+		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{Capacity: 8, Running: 0}},
+		"no broker · server up · pool 0/8 idle\n")
+
+	assertCompact("a per-process pool without a server",
 		types.StatusSnapshot{Pool: &types.StatusOutput{
-			Mode: "proc", Capacity: 8, Running: 1,
+			Capacity: 8, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "web"}, Workspace: "/w", StartedAt: at(400 * time.Millisecond)},
 			},
 		}},
-		"pool · 1/8 running · web:test(0.4s)\n")
+		"no broker · no server · pool 1/8 running · web:test(0.4s)\n")
 
-	assertCompact("daemon running with targets, sorted oldest first",
-		types.StatusSnapshot{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 8, Running: 3,
+	assertCompact("running with targets, sorted oldest first",
+		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+			Capacity: 8, Running: 3,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(500 * time.Millisecond)},
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(2100 * time.Millisecond)},
@@ -66,11 +74,11 @@ func TestPrintStatusCompact(t *testing.T) {
 			},
 			Workspaces: []types.StatusWorkspace{{Root: "/w", LastAccess: now}},
 		}},
-		"daemon · 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 ws\n")
+		"no broker · server up · pool 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 workspace\n")
 
-	assertCompact("daemon queued and overflow running",
-		types.StatusSnapshot{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 8, Running: 8, Queued: 2,
+	assertCompact("queued and overflow running",
+		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+			Capacity: 8, Running: 8, Queued: 2,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(15 * time.Second)},
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(4 * time.Second)},
@@ -83,34 +91,35 @@ func TestPrintStatusCompact(t *testing.T) {
 				{Root: "/w2", LastAccess: now},
 			},
 		}},
-		"daemon · 8/8 running · +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 ws\n")
+		"no broker · server up · pool 8/8 running +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 workspaces\n")
 
 	assertCompact("multi-workspace running prefixes ws",
-		types.StatusSnapshot{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 4, Running: 2,
+		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+			Capacity: 4, Running: 2,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/srv/alpha", StartedAt: at(1 * time.Second)},
 				{Args: []string{"test", "ui"}, Workspace: "/srv/beta", StartedAt: at(500 * time.Millisecond)},
 			},
 		}},
-		"daemon · 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
+		"no broker · server up · pool 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
 
-	assertCompact("shared services report activity and dependents",
+	assertCompact("the broker's services report activity and dependents",
 		types.StatusSnapshot{
-			Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4},
-			Services: []types.StatusService{
+			Server: server,
+			Pool:   &types.StatusOutput{Capacity: 4},
+			Broker: &types.StatusBroker{Services: []types.StatusService{
 				{State: "running", Dependents: 2},
 				{State: "idle", Dependents: 0},
-			},
+			}},
 		},
-		"daemon · 0/4 idle · services 1/2 active, 2 dependents\n")
+		"broker up · server up · pool 0/4 idle · services 1/2 active, 2 dependents\n")
 
 	assertCompact("unparsable args fall back to ?:?",
-		types.StatusSnapshot{Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 4, Running: 1,
+		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+			Capacity: 4, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
-		"daemon · 1/4 running · ?:?(0.1s)\n")
+		"no broker · server up · pool 1/4 running · ?:?(0.1s)\n")
 }
 
 func TestClampStatusWatch(t *testing.T) {
@@ -136,7 +145,7 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)
 	r := types.StatusSnapshot{Pool: &types.StatusOutput{
-		Mode: "daemon", Capacity: 4, Running: 1,
+		Capacity: 4, Running: 1,
 		RunningTargets: []types.StatusRunningTarget{{
 			Args:      []string{"build", long},
 			Workspace: "/w",
@@ -167,12 +176,12 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 // the usage text IS what was asked for, and conflating the two is the easy mistake:
 // both reach this branch with no subcommand left to run.
 func TestStartupNoSubcommandExitsUsage(t *testing.T) {
-	// Isolate socket discovery from the host: clearing MAGUS_DAEMON_SOCKET is not
-	// enough, because startup still scans proc.SockDir() for the stable daemon
+	// Isolate socket discovery from the host: clearing MAGUS_PROC_SOCKET is not
+	// enough, because startup still scans proc.SockDir() for the stable server
 	// socket. Point that dir (XDG_RUNTIME_DIR/magus) at an empty temp dir so a real
-	// `magus server start` daemon running on the developer's machine is not found
+	// `magus server start` server running on the developer's machine is not found
 	// and forwarded to; otherwise its exit code, not this path's, is returned.
-	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+	t.Setenv("MAGUS_PROC_SOCKET", "")
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
 	res, code := startup(context.Background(), nil)
@@ -187,7 +196,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	// the caller asked for.
 	for _, flagName := range []string{"-h", "--help"} {
 		t.Run(flagName, func(t *testing.T) {
-			t.Setenv("MAGUS_DAEMON_SOCKET", "")
+			t.Setenv("MAGUS_PROC_SOCKET", "")
 			t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 			res, code := startup(context.Background(), []string{flagName})
 			if res.cleanup != nil {
@@ -309,38 +318,41 @@ func TestDrawRunningTreeSingleWorkspaceCollapses(t *testing.T) {
 	assert.Contains(t, out, "test")
 }
 
-// TestPrintMachineStatusNamesEveryClaim covers the question the section exists to
-// answer: WHERE the machine's budget went. One daemon serves every worktree, so a pid
-// alone does not say which tree to go and look at.
-func TestPrintMachineStatusNamesEveryClaim(t *testing.T) {
+// TestBrokerRowsNameEveryClaim covers the question the rows exist to answer: WHERE the
+// host's capacity went. One broker serves every worktree, so a pid alone does not say
+// which tree to go and look at; and each row leads with its record type and pid, so awk
+// works on it.
+func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	var buf bytes.Buffer
-	printMachineStatus(&buf, &types.MachineSnapshot{
-		BudgetMB: 48 << 10, HeldMB: 10 << 10, BudgetSlots: 8, HeldSlots: 6,
-		Holders: []types.MachineClaimant{
-			{Project: ".", Target: "test", PID: 41221, MemoryMB: 10 << 10, Dir: "/tree/polish", Since: time.Now().Add(-90 * time.Second)},
-			{Project: "docs", Target: "ci", PID: 41999, Dir: "/tree/hardening"},
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 48213,
+		Capacity: types.MachineSnapshot{
+			BudgetMB: 48 << 10, HeldMB: 10 << 10, BudgetSlots: 8, HeldSlots: 6,
+			Holders: []types.MachineClaimant{
+				{Project: ".", Target: "test", PID: 41221, MemoryMB: 10 << 10, Slots: 4, Dir: "/tree/polish", Command: "magus affected ci", Since: time.Now().Add(-90 * time.Second)},
+				{Project: "docs", Target: "ci", PID: 41999, Slots: 2, Dir: "/tree/hardening"},
+			},
 		},
-	})
-	out := buf.String()
-	assert.Contains(t, out, "memory  10.0 GiB of 48.0 GiB held")
-	assert.Contains(t, out, "slots   6 of 8 held")
-	assert.Contains(t, out, "held  . test  pid 41221  10.0 GiB")
-	assert.Contains(t, out, "in /tree/polish")
-	assert.Contains(t, out, "held  docs ci  pid 41999")
-	assert.Contains(t, out, "in /tree/hardening")
+		Services: []types.StatusService{{Label: "postgres-15", State: types.ServiceRunning, Dependents: 2, Ports: []string{"5432"}}},
+	}, types.BrokerRequired, time.Now())
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 5)
+	assert.True(t, strings.HasPrefix(lines[0], "broker    48213"), lines[0])
+	assert.Contains(t, lines[1], "slots 6/8  mem 10.0 GiB/48.0 GiB  broker: required")
+	assert.True(t, strings.HasPrefix(lines[2], "held      41221"), lines[2])
+	assert.Contains(t, lines[2], "slots 4  mem 10.0 GiB  (root) test  /tree/polish  magus affected ci")
+	assert.True(t, strings.HasPrefix(lines[3], "held      41999"), lines[3])
+	assert.Contains(t, lines[3], "docs ci  /tree/hardening")
+	assert.Contains(t, lines[4], "service   -      postgres-15  running  deps 2  ports 5432")
 }
 
-// An idle budget still prints. "Nothing is held" is the answer to the question people
-// open this section to ask, and a silent section reads as a missing feature.
-func TestPrintMachineStatusIdleAndAbsent(t *testing.T) {
+// An idle broker still prints its capacity: "nothing is held" is the answer to the
+// question people open status to ask, and a silent section reads as a missing feature.
+func TestBrokerRowsIdle(t *testing.T) {
 	var idle bytes.Buffer
-	printMachineStatus(&idle, &types.MachineSnapshot{BudgetMB: 48 << 10, BudgetSlots: 8})
-	assert.Contains(t, idle.String(), "nothing is holding the machine budget")
-
-	// No daemon answered, so there is no machine budget to report on.
-	var absent bytes.Buffer
-	printMachineStatus(&absent, nil)
-	assert.Empty(t, absent.String())
+	printBrokerRows(&idle, types.StatusBroker{PID: 7, Capacity: types.MachineSnapshot{BudgetMB: 48 << 10, BudgetSlots: 8}}, "", time.Now())
+	assert.Contains(t, idle.String(), "slots 0/8  mem 0 MiB/48.0 GiB  broker: best-effort")
+	assert.NotContains(t, idle.String(), "held")
 }
 
 // readyzServer stands up an httptest server whose /readyz returns code, and returns
@@ -367,7 +379,7 @@ func TestProbeMCPReadiness(t *testing.T) {
 		assert.Equal(t, http.StatusServiceUnavailable, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusServiceUnavailable)))
 	})
 	t.Run("answered-other-status-reads-as-ok", func(t *testing.T) {
-		// An older daemon without /readyz still proves a listener is up: any answered
+		// An older server without /readyz still proves a listener is up: any answered
 		// status collapses to OK so the endpoint reads as reachable.
 		assert.Equal(t, http.StatusOK, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusTeapot)))
 	})
@@ -450,7 +462,7 @@ func TestPrintMCPEndpointStatus(t *testing.T) {
 		assert.Contains(t, out, "serving")
 	})
 	t.Run("unreachable-shows-note", func(t *testing.T) {
-		out := render(&types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the daemon: magus server start"})
+		out := render(&types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the server: magus server start"})
 		assert.Contains(t, out, "unreachable")
 		assert.Contains(t, out, "magus server start")
 	})
@@ -524,12 +536,12 @@ func TestEvaluateMCPHealth(t *testing.T) {
 		assert.Contains(t, reason, "serving")
 	})
 	t.Run("not-ready-passes", func(t *testing.T) {
-		// The endpoint is up; a liveness/ensure check should not restart the daemon.
+		// The endpoint is up; a liveness/ensure check should not restart the server.
 		ok, _ := evaluateMCPHealth(&types.MCPEndpointStatus{Reachable: true, State: "not-ready", URL: "http://127.0.0.1:7391/mcp"})
 		assert.True(t, ok)
 	})
 	t.Run("unreachable-fails-with-note", func(t *testing.T) {
-		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "unreachable", Note: "start the daemon: magus server start"})
+		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "unreachable", Note: "start the server: magus server start"})
 		assert.False(t, ok)
 		assert.Contains(t, reason, "magus server start")
 	})
@@ -550,7 +562,7 @@ func TestEvaluateMCPHealth(t *testing.T) {
 }
 
 // recordingStatus is a statusFunc that counts calls and returns a fixed snapshot/err, so
-// tests can assert how many times (if at all) the daemon socket was dialed.
+// tests can assert how many times (if at all) the server socket was dialed.
 func recordingStatus(calls *int, out *types.StatusOutput, err error) statusFunc {
 	return func(context.Context) (*types.StatusOutput, error) {
 		*calls++
@@ -560,24 +572,24 @@ func recordingStatus(calls *int, out *types.StatusOutput, err error) statusFunc 
 
 func TestEvaluateProbes(t *testing.T) {
 	ctx := context.Background()
-	aliveDaemon := &types.StatusOutput{ParentPID: 42, Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/ws"}}}
+	aliveServer := &types.StatusOutput{ParentPID: 42, Workspaces: []types.StatusWorkspace{{Root: "/ws"}}}
 
 	t.Run("liveness-alone-passes-and-dials-once", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveDaemon, nil), config.MCP{}, []probeKind{probeLiveness}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness}, "")
 		require.Len(t, res, 1)
 		assert.True(t, res[0].ok)
 		assert.Equal(t, 1, calls)
 	})
 	t.Run("two-socket-probes-dial-once", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveDaemon, nil), config.MCP{}, []probeKind{probeLiveness, probeReadiness}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness, probeReadiness}, "")
 		require.Len(t, res, 2)
 		assert.True(t, res[0].ok)
 		assert.True(t, res[1].ok)
-		assert.Equal(t, 1, calls, "the daemon snapshot is fetched once and reused")
+		assert.Equal(t, 1, calls, "the server snapshot is fetched once and reused")
 	})
-	t.Run("mcp-only-never-dials-the-daemon", func(t *testing.T) {
+	t.Run("mcp-only-never-dials-the-server", func(t *testing.T) {
 		calls := 0
 		res := evaluateProbes(ctx, recordingStatus(&calls, nil, errors.New("must not be called")), mcpServing(t, http.StatusOK), []probeKind{probeMCP}, "")
 		require.Len(t, res, 1)
@@ -586,9 +598,9 @@ func TestEvaluateProbes(t *testing.T) {
 	})
 	t.Run("combined-liveness-and-mcp-both-evaluated", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveDaemon, nil), mcpUnreachable(), []probeKind{probeLiveness, probeMCP}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), mcpUnreachable(), []probeKind{probeLiveness, probeMCP}, "")
 		require.Len(t, res, 2)
-		assert.True(t, res[0].ok, "daemon is alive")
+		assert.True(t, res[0].ok, "server is alive")
 		assert.False(t, res[1].ok, "mcp endpoint is down")
 		assert.Equal(t, probeMCP, res[1].kind)
 	})
@@ -617,9 +629,9 @@ func TestRenderProbeResults(t *testing.T) {
 	}
 
 	t.Run("single-pass-no-label", func(t *testing.T) {
-		out, errb, ok := render([]probeResult{{kind: probeLiveness, ok: true, reason: "daemon pid 42 is alive"}})
+		out, errb, ok := render([]probeResult{{kind: probeLiveness, ok: true, reason: "server pid 42 is alive"}})
 		assert.True(t, ok)
-		assert.Equal(t, "ok: daemon pid 42 is alive\n", out)
+		assert.Equal(t, "ok: server pid 42 is alive\n", out)
 		assert.Empty(t, errb)
 	})
 	t.Run("single-fail-exit-signal", func(t *testing.T) {
@@ -654,7 +666,6 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	r := types.StatusSnapshot{
 		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
-		Services:    []types.StatusService{{ID: "service-1", Label: "postgres", Command: "docker run postgres", Ports: []string{"5432"}, State: "running", Dependents: 2}},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -668,7 +679,8 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 
 // TestPrintStatusTextFullSnapshot exercises printStatusText's populated branches (telemetry
 // note, a running-pool with targets and workspaces, the mcp endpoint block) in one render,
-// confirming the mcp block coexists with the daemon block rather than replacing it.
+// confirming the mcp block coexists with the broker and server rows rather than replacing
+// them.
 func TestPrintStatusTextFullSnapshot(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
@@ -676,32 +688,50 @@ func TestPrintStatusTextFullSnapshot(t *testing.T) {
 		Telemetry: types.TelemetryStatus{Note: "telemetry is disabled."},
 		Cache:     types.CacheStatus{Dir: "/cache", SizeMB: 10},
 		Pool: &types.StatusOutput{
-			ParentPID: 4242, Mode: "daemon", Capacity: 8, Running: 1,
+			ParentPID: 4242, Capacity: 8, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "web"}, Workspace: "/repo"}},
 			Workspaces:     []types.StatusWorkspace{{Root: "/repo"}},
 		},
-		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
-		Services:    []types.StatusService{{ID: "service-1", Label: "postgres", State: "running", Dependents: 2}},
+		MCPEndpoint:  &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
+		BrokerPolicy: types.BrokerBestEffort,
+		Broker: &types.StatusBroker{PID: 48213, Services: []types.StatusService{
+			{ID: "service-1", Label: "postgres", State: "running", Dependents: 2},
+		}},
+		Server: &types.StatusServer{PID: 4242},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
 	body, err := os.ReadFile(f.Name())
 	require.NoError(t, err)
 	out := string(body)
-	assert.Contains(t, out, "daemon pid 4242", "the daemon block still renders")
+	assert.Contains(t, out, "broker    48213")
+	assert.Contains(t, out, "server  4242")
+	assert.Contains(t, out, "pool pid 4242", "the pool block still renders")
 	assert.Contains(t, out, "workspaces (")
-	assert.Contains(t, out, "mcp endpoint", "the mcp block renders alongside the daemon block")
+	assert.Contains(t, out, "mcp endpoint", "the mcp block renders alongside the rows")
 	assert.Contains(t, out, "serving")
 	assert.Contains(t, out, "telemetry is disabled.")
-	assert.Contains(t, out, "shared services (1)")
-	assert.Contains(t, out, "2 dependents")
+	assert.Contains(t, out, "postgres  running  deps 2")
+}
+
+// TestPrintStatusTextNamesWhatIsNotRunning pins the down rows: each process says it is
+// not running and what would start it, and the broker row names the policy in force.
+func TestPrintStatusTextNamesWhatIsNotRunning(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "status-*")
+	require.NoError(t, err)
+	printStatusText(f, types.StatusSnapshot{BrokerPolicy: types.BrokerRequired}, false, 0)
+	require.NoError(t, f.Close())
+	body, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "broker   -      not running (a run starts one; broker: required)")
+	assert.Contains(t, string(body), "server   -      not running")
 }
 
 func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
 	printStatusText(f, types.StatusSnapshot{Pool: &types.StatusOutput{
-		Mode: "proc", Capacity: 8, Running: 1,
+		Capacity: 8, Running: 1,
 	}}, false, 0)
 	require.NoError(t, f.Close())
 	body, err := os.ReadFile(f.Name())
@@ -727,9 +757,8 @@ func TestApplyStatusPools(t *testing.T) {
 	ctx := context.Background()
 	const sockA, sockB = "unix:///run/magus-111.sock", "unix:///run/magus-222.sock"
 	servers := map[string]*proc.StatusReply{
-		sockA: {ParentPID: 111, Mode: "proc", Capacity: 8, Running: 3,
-			Services: []types.StatusService{{ID: "service-1", State: "running", Dependents: 3}}},
-		sockB: {ParentPID: 222, Mode: "proc", Capacity: 4, Running: 4},
+		sockA: {ParentPID: 111, Capacity: 8, Running: 3},
+		sockB: {ParentPID: 222, Capacity: 4, Running: 4, Server: &types.StatusServer{PID: 222}},
 	}
 
 	t.Run("one server fills pool and leaves the list empty", func(t *testing.T) {
@@ -743,10 +772,15 @@ func TestApplyStatusPools(t *testing.T) {
 		assert.Empty(t, snapshot.PoolError)
 	})
 
-	t.Run("carries the shared services of the first server", func(t *testing.T) {
+	t.Run("the reply that reports itself as the server fills the server section", func(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
 		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, fakeProcServers(servers))
-		assert.Equal(t, servers[sockA].Services, snapshot.Services)
+		require.NotNil(t, snapshot.Server)
+		assert.Equal(t, 222, snapshot.Server.PID)
+
+		alone := types.StatusSnapshot{}
+		applyStatusPools(ctx, &alone, []string{sockA}, fakeProcServers(servers))
+		assert.Nil(t, alone.Server, "a per-process pool is never reported as the server")
 	})
 
 	t.Run("two servers report as two entries, never an error", func(t *testing.T) {
@@ -784,21 +818,21 @@ func TestResolveStatusSocketsNarrowing(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("--socket narrows to one", func(t *testing.T) {
-		t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///run/magus-env.sock")
+		t.Setenv("MAGUS_PROC_SOCKET", "unix:///run/magus-env.sock")
 		addrs, err := resolveStatusSockets(ctx, "unix:///run/magus-flag.sock")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"unix:///run/magus-flag.sock"}, addrs, "the flag wins over the env")
 	})
 
 	t.Run("env pins one", func(t *testing.T) {
-		t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///run/magus-env.sock")
+		t.Setenv("MAGUS_PROC_SOCKET", "unix:///run/magus-env.sock")
 		addrs, err := resolveStatusSockets(ctx, "")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"unix:///run/magus-env.sock"}, addrs)
 	})
 
 	t.Run("unpinned discovers, and says so when there is nothing", func(t *testing.T) {
-		t.Setenv("MAGUS_DAEMON_SOCKET", "")
+		t.Setenv("MAGUS_PROC_SOCKET", "")
 		t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 		_, err := resolveStatusSockets(ctx, "")
 		require.Error(t, err)
@@ -838,8 +872,8 @@ func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
 	pools := []types.StatusOutput{
-		{ParentPID: 111, Mode: "proc", Socket: "unix:///run/magus-111.sock", Capacity: 8, Running: 3, Available: 5},
-		{ParentPID: 222, Mode: "proc", Socket: "unix:///run/magus-222.sock", Capacity: 4, Running: 4},
+		{ParentPID: 111, Socket: "unix:///run/magus-111.sock", Capacity: 8, Running: 3, Available: 5},
+		{ParentPID: 222, Socket: "unix:///run/magus-222.sock", Capacity: 4, Running: 4},
 	}
 	printStatusText(f, types.StatusSnapshot{Pool: &pools[0], Pools: pools}, false, 0)
 	require.NoError(t, f.Close())
@@ -864,7 +898,7 @@ func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	r := types.StatusSnapshot{
 		Config: types.StatusConfig{Concurrency: types.StatusConcurrency{Effective: 8}},
-		Pool:   &types.StatusOutput{ParentPID: 4242, Mode: "daemon", Capacity: 8, Running: 2, Available: 6},
+		Pool:   &types.StatusOutput{ParentPID: 4242, Capacity: 8, Running: 2, Available: 6},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -908,13 +942,12 @@ func statusFixture(now time.Time) types.StatusSnapshot {
 			DefaultCharms: []string{"rw"},
 		},
 		Pool: &types.StatusOutput{
-			ParentPID:     4242,
-			DaemonVersion: "v1.2.3",
-			Mode:          "daemon",
-			Capacity:      4,
-			Running:       2,
-			Available:     2,
-			Queued:        3,
+			ParentPID: 4242,
+			Version:   "v1.2.3",
+			Capacity:  4,
+			Running:   2,
+			Available: 2,
+			Queued:    3,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"run", "build", "web"}, Workspace: "/repos/alpha", StartedAt: now.Add(-90 * time.Second), Step: "tsc --noEmit"},
 				{Args: []string{"run", "test", "api"}, Workspace: "/repos/beta", StartedAt: now.Add(-3 * time.Second)},
@@ -926,9 +959,20 @@ func statusFixture(now time.Time) types.StatusSnapshot {
 			{ParentPID: 4242, Capacity: 4, Running: 2, Available: 2, Socket: "unix:///tmp/a.sock"},
 			{ParentPID: 5353, Capacity: 2, Running: 0, Available: 2, Socket: "unix:///tmp/b.sock"},
 		},
-		Services: []types.StatusService{
-			{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: types.ServiceRunning, Dependents: 2},
-			{ID: "svc-bare"},
+		BrokerPolicy: types.BrokerBestEffort,
+		Broker: &types.StatusBroker{
+			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/broker.sock", StartTime: now.Add(-time.Hour),
+			Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2, BudgetMB: 4096, HeldMB: 1024},
+			Services: []types.StatusService{
+				{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: types.ServiceRunning, Dependents: 2},
+				{ID: "svc-bare"},
+			},
+			IdleExitSeconds: 600,
+		},
+		Server: &types.StatusServer{
+			PID: 4242, Socket: "unix:///run/magus/server.sock", StartTime: now.Add(-2 * time.Hour),
+			Listeners: []types.StatusListener{{Kind: types.ListenerHTTP, Address: "127.0.0.1:7777"}},
+			Watch:     []string{"/repos/alpha"},
 		},
 		SymbolIndexes: []types.SymbolIndexStatus{
 			{Project: types.ProjectRef{Path: "web"}, Language: "typescript", Freshness: types.SymbolIndexFresh},
@@ -960,8 +1004,18 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 	assert.Contains(t, out, "512")
 	assert.Contains(t, out, "concurrency")
 
-	assert.Contains(t, out, "daemon pid 4242")
-	assert.Contains(t, out, "capacity: 4   running: 2   available: 2   queued: 3")
+	assert.Contains(t, out, "broker    48213  up 1h0m  proto 1  unix:///run/magus/broker.sock")
+	assert.Contains(t, out, "slots 2/8  mem 1.0 GiB/4.0 GiB  broker: best-effort")
+	assert.Contains(t, out, "service   -      postgres  running  deps 2  ports 5432")
+	// A service with no label falls back to its id.
+	assert.Contains(t, out, "service   -      svc-bare  deps 0")
+	assert.Contains(t, out, "idle      -      exits after 10m0s holding nothing")
+	assert.Contains(t, out, "server  4242  up 2h0m  unix:///run/magus/server.sock")
+	assert.Contains(t, out, "listen  4242  http 127.0.0.1:7777")
+	assert.Contains(t, out, "watch   4242  graph+symbols  /repos/alpha")
+
+	assert.Contains(t, out, "pool pid 4242")
+	assert.Contains(t, out, "width: 4   running: 2   available: 2   queued: 3")
 	assert.Contains(t, out, "/repos/alpha")
 	assert.Contains(t, out, "run build web")
 	assert.Contains(t, out, "workspaces (1)")
@@ -971,17 +1025,6 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 
 	assert.Contains(t, out, "mcp endpoint")
 	assert.Contains(t, out, "http://127.0.0.1:7777/mcp")
-
-	assert.Contains(t, out, "shared services (2)")
-	assert.Contains(t, out, "postgres")
-	assert.Contains(t, out, "2 dependents")
-	assert.Contains(t, out, "ports 5432")
-	assert.Contains(t, out, "docker compose up db")
-	// A service with no label falls back to its id, and no state renders as "unknown"
-	// rather than as an empty column that reads like a healthy blank.
-	assert.Contains(t, out, "svc-bare")
-	assert.Contains(t, out, "unknown")
-	assert.Contains(t, out, "0 dependents")
 
 	assert.Contains(t, out, "symbol indexes (2)")
 	assert.Contains(t, out, "up-to-date")
@@ -999,9 +1042,10 @@ func TestPrintStatusTextOmitsWhatWasNotMeasured(t *testing.T) {
 	printStatusText(&buf, types.StatusSnapshot{}, false, 0)
 	out := buf.String()
 
-	assert.Contains(t, out, "daemon: off")
+	assert.Contains(t, out, "broker   -      not running")
+	assert.Contains(t, out, "server   -      not running")
 	assert.NotContains(t, out, "proc servers")
-	assert.NotContains(t, out, "shared services")
+	assert.NotContains(t, out, "service ")
 	assert.NotContains(t, out, "symbol indexes")
 	assert.NotContains(t, out, "locks held")
 	assert.NotContains(t, out, "mcp endpoint")
@@ -1049,11 +1093,11 @@ func TestPrintStatusTextVerboseAddsTheBuildBlock(t *testing.T) {
 func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 	t.Run("oversubscribed pool", func(t *testing.T) {
 		var buf bytes.Buffer
-		pool := &types.StatusOutput{Mode: "daemon", ParentPID: 7, DaemonVersion: "v9", Capacity: 12, Running: 2, Available: 10, Queued: 1}
+		pool := &types.StatusOutput{ParentPID: 7, Version: "v9", Capacity: 12, Running: 2, Available: 10, Queued: 1}
 		drawPoolGrid(&buf, pool, 4, 0)
 		out := buf.String()
 
-		assert.Contains(t, out, "daemon")
+		assert.Contains(t, out, "pool")
 		assert.Contains(t, out, "pid 7")
 		assert.Contains(t, out, "v9")
 		assert.Contains(t, out, "2/12 running")
@@ -1108,8 +1152,7 @@ func TestPoolHeader(t *testing.T) {
 	assert.Contains(t, plain, "4 cpu")
 	assert.NotContains(t, plain, "queued")
 
-	busy := poolHeader(&types.StatusOutput{Mode: "daemon", ParentPID: 1, DaemonVersion: "v1", Queued: 5}, 4)
-	assert.Contains(t, busy, "daemon")
+	busy := poolHeader(&types.StatusOutput{ParentPID: 1, Version: "v1", Queued: 5}, 4)
 	assert.Contains(t, busy, "v1")
 	assert.Contains(t, busy, "(+5 queued)")
 }
@@ -1119,10 +1162,10 @@ func TestPoolHeader(t *testing.T) {
 func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 	now := time.Now()
 
-	t.Run("no daemon", func(t *testing.T) {
+	t.Run("nothing running", func(t *testing.T) {
 		var buf bytes.Buffer
 		printStatusCompact(&buf, types.StatusSnapshot{}, now)
-		assert.Equal(t, "daemon: off\n", buf.String())
+		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 
 	t.Run("a full snapshot", func(t *testing.T) {
@@ -1132,10 +1175,8 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 		require.Equal(t, 1, strings.Count(out, "\n"))
 		assert.NotContains(t, out, "\x1b")
-		assert.Contains(t, out, "daemon")
-		assert.Contains(t, out, "2/4 running")
-		assert.Contains(t, out, "+3 queued")
-		assert.Contains(t, out, "1 ws")
+		assert.True(t, strings.HasPrefix(out, "broker 2/8 slots · server up · pool 2/4 running +3 queued"), out)
+		assert.Contains(t, out, "1 workspace")
 		assert.Contains(t, out, "services 1/2 active, 2 dependents")
 		// Two workspaces are in flight, so each entry is qualified by its own.
 		assert.Contains(t, out, "alpha/web:build")
@@ -1247,7 +1288,7 @@ func TestWriteStatusStructuredFormats(t *testing.T) {
 	t.Run("compact wins over the text frame", func(t *testing.T) {
 		var buf bytes.Buffer
 		require.NoError(t, writeStatus(&buf, r, OutputOptions{Format: outputText}, 0, true))
-		assert.Equal(t, "daemon: off\n", buf.String())
+		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 }
 

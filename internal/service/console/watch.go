@@ -27,7 +27,7 @@ func isGraphRelevant(paths []string) bool {
 	return false
 }
 
-// JobFeed turns the daemon's one file watcher into a feed any number of readers can
+// JobFeed turns the server's one file watcher into a feed any number of readers can
 // subscribe to, with each changed path already attributed to the job whose declared write
 // paths cover it.
 //
@@ -53,7 +53,7 @@ type JobFeed struct {
 }
 
 // NewJobFeed starts the fan-out over w and returns it. rows is read at each batch rather
-// than captured: jobs are declared, released and ended while the daemon runs, and a plan
+// than captured: jobs are declared, released and ended while the server runs, and a plan
 // taken at mount time would attribute against one that stopped being true.
 //
 // The goroutine exits when ctx is cancelled or the watcher closes its channel, and closes

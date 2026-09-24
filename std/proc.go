@@ -58,7 +58,7 @@ var Proc = Module{
 		},
 		{
 			Name: "with_slots",
-			Doc:  "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.",
+			Doc:  "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make, a test runner) that magus can't see, so the global budget is not oversubscribed. Commands callback starts share a GNU make jobserver of n slots, so make run without -j, and cargo, stay within them.",
 			Args: []Arg{
 				{Name: "n", Type: TypeInt},
 				{Name: "callback", Type: TypeFunc},

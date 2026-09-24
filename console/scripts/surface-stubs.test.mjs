@@ -4,14 +4,14 @@ import test from "node:test";
 
 // The console's deep-linkable surfaces are named in THREE hand-maintained lists, in two languages:
 //
-//   internal/service/console/url.go   KnownSurfaces        the daemon's SPA fallback
+//   internal/service/console/url.go   KnownSurfaces        the server's SPA fallback
 //   console/scripts/surface-stubs.mjs SURFACES             the hosted static stubs
 //   console/src/console/main.ts       CLEAN_PATH_SURFACES  the boot router
 //
 // Each carries a comment telling the next person to keep it in step with the others, and until now
 // that comment was the only thing enforcing it. The failure it guards against is quiet and
 // asymmetric: a surface missing from the stubs 404s on the hosted site while working perfectly on a
-// daemon, and one missing from the router serves the shell and then opens nothing.
+// server, and one missing from the router serves the shell and then opens nothing.
 //
 // Parsed out of the sources as TEXT rather than imported, because two of the three are not
 // JavaScript this test could load - which is the same reason the drift was possible.
@@ -34,23 +34,23 @@ function arrayLiteral(path, name) {
   return [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 }
 
-test("the daemon's surface list and the hosted stubs name exactly the same surfaces", () => {
+test("the server's surface list and the hosted stubs name exactly the same surfaces", () => {
   const known = arrayLiteral(GO, "KnownSurfaces");
   const stubs = arrayLiteral(STUBS, "SURFACES");
   assert.ok(known.length > 0, "KnownSurfaces parsed empty");
   // Both sides serve the shell for every surface path, so neither may carry one the other lacks: a
-  // stub without a daemon route is a page the daemon 404s, and a route without a stub is a page the
+  // stub without a server route is a page the server 404s, and a route without a stub is a page the
   // hosted site 404s.
   assert.deepEqual([...stubs].sort(), [...known].sort());
 });
 
-test("every clean-path surface the console routes is one the daemon serves", () => {
+test("every clean-path surface the console routes is one the server serves", () => {
   const known = new Set(arrayLiteral(GO, "KnownSurfaces"));
   const routed = arrayLiteral(SHELL, "CLEAN_PATH_SURFACES");
   assert.ok(routed.length > 0, "CLEAN_PATH_SURFACES parsed empty");
   // A SUBSET, not an equality: "plan" is a dashboard mode with a served path and no surface of its
   // own, so the boot router routes it apart (JOBS_PATH) rather than listing it here. The direction
-  // that matters is this one - the router must never name a path the daemon will not serve the
+  // that matters is this one - the router must never name a path the server will not serve the
   // shell for.
   for (const surface of routed) {
     assert.ok(known.has(surface), `CLEAN_PATH_SURFACES has ${surface}, KnownSurfaces does not`);
