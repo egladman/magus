@@ -311,8 +311,8 @@ trusted pushes rather than `true`: unset, the remote tier is written whenever th
 signing key is present and a failing store degrades the run; `true` makes every
 remote write required, so an outage fails the build. To write neither tier, set
 `MAGUS_CACHE_WRITE_ENABLED=false` instead; `true` for the remote tier with the local
-tier off is a config error. See the
-[supply-chain note in the README](../../../README.md#shared-cache-trust-signing-and-read-only-refs).
+tier off is a config error. See
+[Why a pull request cannot poison the default branch](#why-a-pull-request-cannot-poison-the-default-branch).
 
 A remote-tier lookup that finds nothing prints
 `<project> not in the remote cache (out...)`, naming the ref the producing run
@@ -320,6 +320,37 @@ printed for that key; a hit prints `(cached from <backend>, <size>, ...)`; and t
 end-of-run line counts restored, missed, stored and failed. At `-v` the miss also
 carries one digest per key-input class, masked as stored key inputs are, so two
 machines that should share an entry show which class differs.
+
+## Why a pull request cannot poison the default branch
+
+In the 2026 TanStack compromise, a `pull_request_target` workflow ran a fork's code
+with the base repository's cache scope.[^tanstack-2026] That code saved a pnpm store
+under the key the default branch's release workflow computes. The release workflow
+restored it and published 84 malicious packages.
+
+The attack needed untrusted code that can write a cache entry, a trusted ref that
+restores it, and a restore that never checks the writer. This repository's CI denies
+each one:
+
+<!--diagram:cache-trust-->
+
+- **Pull requests do not write the remote tier.** `ci.yaml` sets
+  `MAGUS_CACHE_REMOTE_WRITE_ENABLED=false` on `pull_request` events and hands
+  `MAGUS_CACHE_SIGNING_KEY` only to runs on the default branch.
+- **A pull request's local tier stays with it.** The workflow saves `.magus/` on
+  `pull_request` events only, and GitHub scopes that save to the pull request's ref,
+  out of the default branch's reach. No workflow uses `pull_request_target`, and the
+  default-branch job that checks out pull request code saves no cache.
+- **Every remote read verifies a signature.** An entry that reached the store any
+  other way carries no signature from `cache.remote.trusted_keys`, so the consumer
+  rejects it and rebuilds.
+
+The first two are workflow configuration. The third lives in magus and holds whatever
+the workflow says, unless you turn on [insecure mode](#insecure-mode-no-signing).
+
+[^tanstack-2026]: TanStack, "Postmortem: TanStack npm supply-chain compromise",
+    <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>. `bundle-size.yml`
+    saved the poisoned entry on 2026-05-11 and `release.yml` restored it the same day.
 
 ## Observability
 

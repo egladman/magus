@@ -1,0 +1,56 @@
+// site/diagrams/cache-trust.buzz - who may write which cache tier in CI. The argument is
+// in the connectors that are missing: no pull request run writes the remote tier, and
+// nothing carries a pull request's local tier to the default branch.
+namespace cacheTrust;
+
+import "../libs/diagram/diagram" as _;
+
+export fun cacheTrustDiagram() > Diagram {
+    return Diagram{
+        id = "cache-trust",
+        eyebrow = "remote cache",
+        title = "A pull request reads the shared cache and never writes it",
+        desc = "A pull request run reads the signed remote tier and reads and writes a "
+            + "local tier scoped to its own ref. Only a run on the default branch holds "
+            + "the signing key, so only the default branch writes the remote tier. "
+            + "Every read checks the signature "
+            + "and rebuilds the target on an unsigned entry.",
+        width = 960,
+        height = 520,
+        zones = [
+            Zone{ label = "pull request, untrusted code", x = 32, y = 88, w = 280, h = 352 },
+            Zone{ label = "default branch, trusted", x = 648, y = 88, w = 280, h = 352 },
+        ],
+        nodes = [
+            Node{ id = "pr", anchor = ".github/workflows/ci.yaml", label = "PR run",
+                  sub = "no signing key", tag = "pull_request",
+                  x = 56, y = 128, w = 232, h = 64 },
+            Node{ id = "local", anchor = ".github/workflows/ci.yaml", label = "Local tier",
+                  sub = "Actions cache, PR ref", role = "store",
+                  x = 56, y = 344, w = 232, h = 64 },
+            Node{ id = "remote", anchor = "internal/cache/signing.go", label = "Remote tier",
+                  sub = "verified on every read", tag = "ed25519", role = "focal",
+                  x = 376, y = 232, w = 208, h = 64 },
+            Node{ id = "default", anchor = ".github/workflows/ci.yaml", label = "Default branch run",
+                  sub = "holds the signing key", tag = "push",
+                  x = 672, y = 128, w = 232, h = 64 },
+            Node{ id = "reject", label = "Unsigned entry", sub = "rejected, then rebuilt",
+                  role = "optional", x = 672, y = 344, w = 232, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "pr", dst = "local", label = "read + write",
+                  srcSide = "bottom", dstSide = "top" },
+            Edge{ src = "remote", dst = "pr", label = "read only",
+                  srcSide = "left", dstSide = "right", bend = 332 },
+            Edge{ src = "default", dst = "remote", label = "sign + put", kind = "accent",
+                  srcSide = "left", dstSide = "right", dstSlot = 1, dstSlots = 2, bend = 628 },
+            Edge{ src = "remote", dst = "reject", label = "no signature", dashed = true,
+                  srcSide = "right", srcSlot = 2, srcSlots = 2, dstSide = "left", bend = 612 },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "the one shared store" },
+            LegendItem{ role = "store", label = "one pull request only" },
+            LegendItem{ role = "optional", label = "never replayed" },
+        ],
+    };
+}
