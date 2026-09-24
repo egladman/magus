@@ -1,7 +1,6 @@
 ### Changed
 
-- **The merge queue refuses a change whose regenerated outputs it could never merge, before
-  its gate runs.** Validation commits a regeneration only where `magus queue apply` can
-  reproduce it with the base's own generators. A change to generator code whose committed
-  outputs are stale on top of the base is kicked back, naming the stale files and what to do.
-  If its outputs are fresh, it merges as validated.
+- **The merge queue kicks back stale generated files before its gate runs.** A change
+  that edits generator code must commit outputs that are current on top of the base. If
+  they are stale, the kick-back names the stale files and says how to fix them. If they are
+  current, the change merges.
