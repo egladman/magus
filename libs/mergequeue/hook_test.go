@@ -319,3 +319,59 @@ func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	_, err = CommandFacts(script(`echo '{"units": []}'`), dir, nil).AllUnits(ctx)
 	require.EqualError(t, err, "all hook named no unit", "no arguments would leave what runs to the tool's default")
 }
+
+// A hook runs the changes' code, so nothing in its environment may steer a later step:
+// before, GITHUB_ENV and GITHUB_PATH reached it, and a line appended there set the
+// environment and PATH of every step after the gate.
+func TestHooksNeverSeeWhatSteersALaterStep(t *testing.T) {
+	for _, name := range scrubbed {
+		t.Setenv(name, "/set/"+name)
+	}
+	t.Setenv("GITHUB_SHA", "kept")
+	dir := t.TempDir()
+	_, err := CommandGate(script(`env > seen`), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	require.NoError(t, err)
+	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+	require.NoError(t, err)
+	for _, name := range append([]string{"GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT", "GITHUB_STATE", "GITHUB_STEP_SUMMARY"}, scrubbed...) {
+		assert.NotContains(t, string(seen), name+"=", "%s reaches the hook", name)
+	}
+	assert.Contains(t, string(seen), "GITHUB_SHA=kept\n", "a fact about the run stays")
+}
+
+// The queue appends units after the hook's own words with no "--" between, so a unit
+// a hook could read as an option never reaches it.
+func TestAUnitAHookCouldReadAsAnOptionIsNeverAppended(t *testing.T) {
+	for _, unit := range []string{"-x", "--gate=sh", ""} {
+		dir := t.TempDir()
+		_, err := CommandGate(script(`touch ran`), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, []string{"app", unit})
+		require.ErrorContains(t, err, "which a hook would read as an option", "%q", unit)
+		assert.NoFileExists(t, filepath.Join(dir, "ran"), "%q", unit)
+	}
+}
+
+// Paths reach a hook's stdin one per line, and git allows a line break in a path, which
+// would read as two paths: such a path is never written.
+func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
+	ctx := context.Background()
+	for _, broken := range []string{"gen/a\napp/main.go", "gen/a\r"} {
+		dir := t.TempDir()
+		err := CommandRegenerate(script(`cat > got`), nil, nil)(ctx, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"gen/ok", broken}, Units: hookUnits})
+		var refused *types.RefusedError
+		require.ErrorAs(t, err, &refused, "%q", broken)
+		assert.Equal(t, []string{broken}, refused.Paths)
+		assert.NoFileExists(t, filepath.Join(dir, "got"), "the regeneration never ran")
+
+		got, unboundedBy, err := CommandFacts(script(`exit 9`), dir, nil).Affected(ctx, hookChange, []string{"app/x.go", broken})
+		require.NoError(t, err, "the hook is not asked")
+		assert.Nil(t, got)
+		assert.Contains(t, unboundedBy, "holds a line break", "every unit is gated instead")
+
+		writes, err := CommandFacts(script(`cat > asked; echo '{"outputs": ["gen/ok"]}'`), dir, nil).Classify(ctx, []string{"gen/ok", broken})
+		require.NoError(t, err)
+		assert.Equal(t, map[string]types.Writes{"gen/ok": {Output: true}}, writes, "left unclassified, which is source")
+		asked, err := os.ReadFile(filepath.Join(dir, "asked"))
+		require.NoError(t, err)
+		assert.Equal(t, "gen/ok\n", string(asked))
+	}
+}

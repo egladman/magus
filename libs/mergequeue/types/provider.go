@@ -310,24 +310,34 @@ type PinnedChange struct {
 
 // Kick is what a kick-back tells the author and the provider: a closed Code a provider
 // can act on, the rendered Report, and the facts the report was rendered from.
+//
+// Only Report, Source and Reproduce are the queue's own words. Claim, Paths and With
+// can come from a verdict, which a job running the change's code wrote, and a file name
+// is the author's to choose: a provider shows them as literal text only ([CodeSpan],
+// [CodeBlock]), never as markup.
 type Kick struct {
-	Code            Code
-	Report          string
+	Code Code
+	// Report is Markdown; every file name in it is a [CodeSpan].
+	Report string
+	// Claim is what the verdict behind the kick said went wrong, at most [MaxClaim]
+	// bytes; empty when the queue decided it itself.
+	Claim           string
 	Paths           []string // the files at issue: conflicting, or outside what may differ
 	With            []string // base-branch commits touching Paths ("abc123 subject")
 	CandidateCommit string   // the candidate it was validated in, when one was built
 	// Source is the validation run apply followed, as the provider names it
 	// ("acme/widgets/runs/7"); empty when apply read a directory.
 	Source string
-	// Reproduce is how to run what validation ran on the change's candidate again; nil
-	// when validation did not decide the kick-back, as for a conflict planning found.
+	// Reproduce is how to run what validation ran on the change's candidate again, from
+	// apply's own configuration; nil when validation did not decide the kick-back, as
+	// for a conflict planning found, or apply was given no hook lines.
 	Reproduce *Reproduction
 	// Flag is the flag the change shows for the reason it was kicked back, for the report
 	// to name; empty when none explains it.
 	Flag Flag
 }
 
-// Reproduction is the hook command lines validation ran on a candidate, as given to
+// Reproduction is the hook command lines validation runs on a candidate, as given to
 // `magus queue validate`: run with its --gate and --regenerate, and --only the change,
 // they build and gate that candidate again.
 type Reproduction struct {

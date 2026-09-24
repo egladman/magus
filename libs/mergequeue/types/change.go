@@ -178,6 +178,17 @@ func CheckID(id string) error {
 	return nil
 }
 
+// CheckUnit accepts a unit a hook can take as an argument: not empty, and not starting
+// with '-'. The queue appends units after the hook's own arguments with no "--" between
+// (magus reads what follows "--" as a tool's arguments, not projects), so a unit a
+// change's author named "-x" or "--gate=..." would read as an option.
+func CheckUnit(u string) error {
+	if u == "" || u[0] == '-' {
+		return fmt.Errorf("unit %q is empty or starts with '-', which a hook would read as an option", u)
+	}
+	return nil
+}
+
 func idByte(b byte) bool {
 	return 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9' || b == '.' || b == '_' || b == '-'
 }

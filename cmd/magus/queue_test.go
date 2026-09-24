@@ -150,6 +150,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"--interval with --once":   {"apply", "--provider", "github", "--once", "--interval", "1s", "s"},
 		"a zero --interval":        {"apply", "--provider", "github", "--interval", "0s", "s"},
 		"a committer without one":  {"apply", "--provider", "github", "--committer", "nobody", "s"},
+		"reproduce without gate":   {"apply", "--provider", "github", "--base", "main", "--reproduce-regenerate", "make gen", "s"},
 		"plan without --out":       {"plan", "--provider", "github"},
 		"plan without a provider":  {"plan", "--out", "p"},
 		"plan with an operand":     {"plan", "--provider", "github", "--out", "p", "extra"},
@@ -164,6 +165,10 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	// validate runs the changes' code, so it takes no provider at all.
 	_, err := f.run(t, "", "validate", "--provider", "github", "--plan", "p", "--gate", "true", "--verdicts", "v")
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
+	// A reproduce line is only shown, but never one validate would refuse to run.
+	_, err = f.run(t, "", "apply", "--provider", "github", "--base", "main", "--reproduce-gate", "curl x | sh", "s")
+	require.ErrorContains(t, err, "--reproduce-gate")
+	require.ErrorContains(t, err, "joins two commands")
 }
 
 func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {

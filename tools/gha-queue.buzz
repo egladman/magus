@@ -93,12 +93,16 @@ export fun planArgs(dir: str, depth: str) > [str] {
 final SCRATCH = ["--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
     "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"];
 
+// GATE and REGENERATE are validation's hook lines. Apply shows them on a kick-back from
+// its own flags: a verdict is written by a job that ran the change's code.
+final GATE = "magus run ci --no-default-charms";
+final REGENERATE = "magus run generate:rw";
+
 // validateArgs names no project: the queue appends the change's affected projects to
 // each hook line, or "/" when that set is no proof.
 export fun validateArgs(dir: str, change: str) > [str] {
     final args = mut ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
-        "--gate", "magus run ci --no-default-charms",
-        "--regenerate", "magus run generate:rw"];
+        "--gate", GATE, "--regenerate", REGENERATE];
     foreach (a in SCRATCH) {
         args.append(a);
     }
@@ -114,7 +118,8 @@ export fun validateArgs(dir: str, change: str) > [str] {
 export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", "--provider", "github", "--base", base, "--workflow", WORKFLOW,
         "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", "magus --sandbox-enabled run generate:rw"];
+        "--regenerate", "magus --sandbox-enabled run generate:rw",
+        "--reproduce-gate", GATE, "--reproduce-regenerate", REGENERATE];
     foreach (a in SCRATCH) {
         args.append(a);
     }
@@ -360,18 +365,19 @@ test "apply follows the validation run as its source, pinned to the base and que
     assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "", app: ""), want: ["queue", "apply", "--provider", "github",
         "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
         "--regenerate", "magus --sandbox-enabled run generate:rw",
+        "--reproduce-gate", "magus run ci --no-default-charms", "--reproduce-regenerate", "magus run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache", "run:o/r/runs/99"], message: "argv");
 }
 
 test "with the queue app, apply commits as its bot and checks the status is pinned to it" {
     final args = applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q");
-    assert\equal(args.len(), want: 27, message: "two flags more");
-    assert\equal(args[22], want: "--committer", message: "the committer flag");
-    assert\equal(args[23], want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "one argument, spaces and all");
-    assert\equal(args[24], want: "--app", message: "the app flag");
-    assert\equal(args[25], want: "q", message: "the app's slug");
-    assert\equal(args[26], want: "run:o/r/runs/99", message: "the source stays last");
+    assert\equal(args.len(), want: 31, message: "two flags more");
+    assert\equal(args[26], want: "--committer", message: "the committer flag");
+    assert\equal(args[27], want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "one argument, spaces and all");
+    assert\equal(args[28], want: "--app", message: "the app flag");
+    assert\equal(args[29], want: "q", message: "the app's slug");
+    assert\equal(args[30], want: "run:o/r/runs/99", message: "the source stays last");
 }
 
 test "apply takes the queue app's slug and committer together or neither" {

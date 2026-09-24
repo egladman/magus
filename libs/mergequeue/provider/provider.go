@@ -462,6 +462,7 @@ func (p *Script) KickBack(ctx context.Context, c types.Change, commit string, k 
 	params["commit"] = commit
 	params["code"] = string(k.Code)
 	params["report"] = k.Report
+	params["claim"] = k.Claim
 	params["paths"] = k.Paths
 	params["with"] = k.With
 	params["candidate_commit"] = k.CandidateCommit

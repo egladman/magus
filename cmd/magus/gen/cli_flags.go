@@ -413,6 +413,10 @@ const (
 	FlagQueueApplyRegenerate = "regenerate"
 	// queue apply: --remote
 	FlagQueueApplyRemote = "remote"
+	// queue apply: --reproduce-gate
+	FlagQueueApplyReproduceGate = "reproduce-gate"
+	// queue apply: --reproduce-regenerate
+	FlagQueueApplyReproduceRegenerate = "reproduce-regenerate"
 	// queue apply: --scratch-env
 	FlagQueueApplyScratchEnv = "scratch-env"
 	// queue apply: --status-context
@@ -1376,19 +1380,21 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 // It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type QueueApplyFlags struct {
-	Provider      string        // --provider
-	Base          string        // --base
-	Workflow      string        // --workflow
-	StatusContext string        // --status-context
-	Once          bool          // --once
-	Interval      time.Duration // --interval
-	Committer     string        // --committer
-	App           string        // --app
-	Regenerate    string        // --regenerate
-	Facts         string        // --facts
-	Target        string        // --target
-	Remote        string        // --remote
-	VCS           string        // --vcs
+	Provider            string        // --provider
+	Base                string        // --base
+	Workflow            string        // --workflow
+	StatusContext       string        // --status-context
+	Once                bool          // --once
+	Interval            time.Duration // --interval
+	Committer           string        // --committer
+	App                 string        // --app
+	Regenerate          string        // --regenerate
+	ReproduceGate       string        // --reproduce-gate
+	ReproduceRegenerate string        // --reproduce-regenerate
+	Facts               string        // --facts
+	Target              string        // --target
+	Remote              string        // --remote
+	VCS                 string        // --vcs
 }
 
 // BindQueueApply registers `magus queue apply`'s flags on fs and returns the destination.
@@ -1403,6 +1409,8 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
 	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it")
+	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
+	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")
 	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueApplyRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")

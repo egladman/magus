@@ -65,7 +65,12 @@ type Applier struct {
 	// Source names the validation run the verdicts come from, as the provider names it,
 	// for each kick-back to point at; empty when they come from a directory.
 	Source string
-	Events *Events
+	// Reproduce is the hook lines validation runs, shown on each kick-back validation
+	// decided so its author can run it again; an Applier runs neither. It is never read
+	// from a verdict, which a job running the change's code wrote. A zero Reproduction
+	// shows none.
+	Reproduce types.Reproduction
+	Events    *Events
 
 	vcs      types.PushVCS
 	clone    Clone
@@ -355,9 +360,10 @@ func (r *applyRun) settle(ctx context.Context, v types.Verdict) error {
 		r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: c.Head, Reason: v.Reason})
 		return nil
 	case types.DecisionKick:
-		k := kickOf(v)
-		if v.Gate != "" {
-			k.Reproduce = &types.Reproduction{Gate: v.Gate, Regenerate: v.Regenerate}
+		k := kickOf(r.plan.Base, v)
+		// An admitted change's kick is validation's, so its hooks reproduce it.
+		if _, _, admitted := find(r.plan, c.ID); admitted && r.Reproduce.Gate != "" {
+			k.Reproduce = &types.Reproduction{Gate: r.Reproduce.Gate, Regenerate: r.Reproduce.Regenerate}
 		}
 		return r.kick(ctx, c, k)
 	case types.DecisionWait:
@@ -1069,7 +1075,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	case errors.Is(err, magustypes.ErrStaleLease):
 		return "", &waitError{code: types.CodeWaitBranchMoved, reason: "its branch moved or was deleted since validation"}
 	case errors.As(err, &rejected):
-		return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs an update commit, and its branch refused it: " + rejected.Reason,
+		return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs an update commit, and its branch refused it: " + types.CodeSpan(rejected.Reason),
 			Remedy: r.mergeBaseIn()}
 	}
 	return update, err

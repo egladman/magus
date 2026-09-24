@@ -274,7 +274,7 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 
 	got := recorded(t, dir)
 	assert.Equal(t, types.CodeWaitConflictAhead, got["2"].Code)
-	assert.Equal(t, "conflicts with #1 ahead of it in a/x.go; retried once it merges", got["2"].Reason)
+	assert.Equal(t, "conflicts with #1 ahead of it in `a/x.go`; retried once it merges", got["2"].Reason)
 	assert.Equal(t, []string{"a/x.go"}, got["2"].Paths)
 	assert.Equal(t, "1", got["3"].After, "stacked past the change that waits")
 	assert.Equal(t, types.DecisionMerge, got["3"].Decision)

@@ -584,6 +584,18 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 			return err
 		}
 	}
+	if f.ReproduceRegenerate != "" && f.ReproduceGate == "" {
+		return usagef("magus queue apply: --reproduce-regenerate needs --reproduce-gate")
+	}
+	// Shown, never run; parsed so a kick-back never shows a line validate would refuse.
+	for _, hook := range [][2]string{{"--reproduce-gate", f.ReproduceGate}, {"--reproduce-regenerate", f.ReproduceRegenerate}} {
+		if hook[1] == "" {
+			continue
+		}
+		if _, err := mergequeue.ParseCommand(hook[0], hook[1]); err != nil {
+			return err
+		}
+	}
 	p, err := e.openProvider(ctx, f.Provider)
 	if err != nil {
 		return err
@@ -645,6 +657,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	}
 	a.Base, a.RemoteURL = f.Base, remoteURL
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
+	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
 		a.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, mergequeue.NewHookLog(e.stderr))
 	}
