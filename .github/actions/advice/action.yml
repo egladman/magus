@@ -163,6 +163,11 @@ inputs:
       change. Needs `contents: write` on the job, and cannot work on a fork PR (the
       token has no write access to the fork) - it says so in the comment rather than
       failing.
+
+      It runs the pull request's own generators with that token in the job, so the pull
+      request's code can push anything the token can. Enable it only where every
+      same-repository branch comes from someone you would hand that token; magus's own CI
+      does not.
     required: false
     default: 'false'
   offer-fix-label:
@@ -187,7 +192,8 @@ inputs:
       OFF by default, for the same reason as fix-generated-drift: it writes. Same two-party
       consent - this input plus the `fix-label` label. Needs `contents: write`, and the
       job must check out the PR HEAD BRANCH by name, not the default ephemeral merge ref;
-      the advisor refuses rather than pushing the wrong commit.
+      the advisor refuses rather than pushing the wrong commit. It regenerates with the
+      pull request's code beside the write token, as fix-generated-drift does.
     required: false
     default: 'false'
   fix-label:

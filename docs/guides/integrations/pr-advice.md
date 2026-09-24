@@ -246,9 +246,14 @@ the keyboard.
 
 ## What it costs
 
-The advisors run after your checks and never gate them. `fix-generated-drift` is the
-only one that writes anything, and it needs both the input and a label on the pull
-request before it will.
+The advisors run after your checks and never gate them. `fix-generated-drift` and
+`fix-merge-conflict` are the only ones that write anything, and each needs both the input
+and a label on the pull request before it will.
+
+Both regenerate with the pull request's own code while the job holds `contents: write`,
+so that code can push anything the token can. Turn them on only where you would hand
+that token to everyone who can push a branch here. magus's own CI leaves them off and
+lets the [merge queue](../../concepts/merge-queue.md) regenerate from main's code instead.
 
 ## See also
 
