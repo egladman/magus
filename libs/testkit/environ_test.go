@@ -62,8 +62,35 @@ func TestEnvironKeepsOnlyTheAllowlist(t *testing.T) {
 	assert.Equal(t, "-mod=mod", got["GOFLAGS"])
 	assert.Equal(t, "jsonv2", got["GOEXPERIMENT"])
 	assert.Equal(t, "local", got["GOTOOLCHAIN"])
-	assert.Equal(t, "false", got["MAGUS_DAEMON_ENABLED"])
 	assert.Equal(t, "1", got["GIT_CONFIG_NOSYSTEM"])
+}
+
+// TestEnvironPinsTheBrokerAndServerOff: dropping the person's MAGUS_BROKER is not
+// enough, since unset means the default; off is stated.
+func TestEnvironPinsTheBrokerAndServerOff(t *testing.T) {
+	t.Setenv("MAGUS_BROKER", "on")
+	t.Setenv("MAGUS_SERVER_ENABLED", "true")
+	t.Setenv("MAGUS_SERVER_ADDRESS", "unix:///run/user/1000/magus/server.sock")
+	t.Setenv("MAGUS_PROC_SOCKET", "/run/user/1000/magus/magus-1-00.sock")
+	environ, err := Environ(t.TempDir(), "MAGUS_*")
+	require.NoError(t, err)
+	got := environMap(t, environ)
+
+	assert.Equal(t, "off", got["MAGUS_BROKER"], "a keep cannot turn the broker back on")
+	assert.Equal(t, "false", got["MAGUS_SERVER_ENABLED"])
+	environ, err = Environ(t.TempDir())
+	require.NoError(t, err)
+	got = environMap(t, environ)
+	assert.NotContains(t, got, "MAGUS_SERVER_ADDRESS")
+	assert.NotContains(t, got, "MAGUS_PROC_SOCKET")
+}
+
+// TestIsolateLeavesRoomForASocket: magus's longest socket name adds 32 bytes below
+// XDG_RUNTIME_DIR, and macOS caps a unix socket path near 104.
+func TestIsolateLeavesRoomForASocket(t *testing.T) {
+	Isolate(t)
+	sock := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "magus", "magus-99999-0123abcd.sock")
+	assert.Less(t, len(sock), 104, sock)
 }
 
 func TestEnvironKeepAddsToTheAllowlist(t *testing.T) {
@@ -165,7 +192,7 @@ func TestIsolateRestoresTheEnvironment(t *testing.T) {
 		_, ok := os.LookupEnv("FOO")
 		assert.False(t, ok, "FOO survived Isolate")
 		assert.Equal(t, filepath.Join(root, "home"), os.Getenv("HOME"))
-		assert.Equal(t, "false", os.Getenv("MAGUS_DAEMON_ENABLED"))
+		assert.Equal(t, "off", os.Getenv("MAGUS_BROKER"))
 	})
 	assert.Equal(t, "bar", os.Getenv("FOO"))
 	assert.Equal(t, home, os.Getenv("HOME"))
@@ -182,7 +209,7 @@ func TestIsolateRefusesAParallelTest(t *testing.T) {
 // TestIsolatedMRanThisBinary: TestMain wraps m in Isolated, so this binary's own
 // environment is the isolated one.
 func TestIsolatedMRanThisBinary(t *testing.T) {
-	assert.Equal(t, "false", os.Getenv("MAGUS_DAEMON_ENABLED"))
+	assert.Equal(t, "off", os.Getenv("MAGUS_BROKER"))
 	assert.Equal(t, "home", filepath.Base(os.Getenv("HOME")))
 	assert.Equal(t, filepath.Dir(os.Getenv("HOME")), filepath.Dir(os.Getenv("XDG_STATE_HOME")))
 }

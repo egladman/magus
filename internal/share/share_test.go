@@ -24,6 +24,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func TestMain(m *testing.M) { testkit.Main(m) }
+
 func addr(s string) netip.Addr { return netip.MustParseAddr(s) }
 
 func TestPickLANIPv4(t *testing.T) {

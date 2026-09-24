@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestVerifySockDirRejectsWorldWritable guards S-2: os.MkdirAll(dir, 0o700) is
 // a silent no-op when dir already exists, so it neither chmods nor checks

@@ -5,4 +5,4 @@ env FOO=bar
 exec testkit-environ
 stdout '^MAGUS_CACHE_DIR=/scratch/magus$'
 stdout '^FOO=bar$'
-! stdout '^MAGUS_DAEMON_ENABLED='
+! stdout '^MAGUS_BROKER='

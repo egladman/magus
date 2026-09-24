@@ -29,6 +29,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func TestMain(m *testing.M) { testkit.Main(m) }
+
 // fakeShare stands in for *share.Manager: a fixed active share (or none), recording whether
 // CloseIf fired and with what id.
 type fakeShare struct {

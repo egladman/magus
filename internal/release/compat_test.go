@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) { testkit.Main(m) }
+
 func TestBumpString(t *testing.T) {
 	assert.Equal(t, []string{"patch", "minor", "major", "Bump(7)"},
 		[]string{BumpPatch.String(), BumpMinor.String(), BumpMajor.String(), Bump(7).String()})

@@ -43,10 +43,13 @@ var goSettings = []string{
 var goDirs = []string{"GOCACHE", "GOENV", "GOMODCACHE", "GOPATH"}
 
 // redirects maps each variable Environ points into root to its directory there.
-// TMPDIR is absent on purpose: macOS's per-user TMPDIR is already long, and nesting it
-// under a test's root pushes a unix socket under os.MkdirTemp past the 104-byte path
-// limit. XDG_RUNTIME_DIR covers the one piece of shared state magus finds through
-// TMPDIR, the socket directory's fallback.
+//
+// A unix socket path is capped near 104 bytes on macOS, and magus's longest one is
+// 32 bytes below XDG_RUNTIME_DIR, so a root must be short: Main and Isolate make it
+// with os.MkdirTemp("", "tk") rather than t.TempDir, whose path carries the test's
+// name. TMPDIR is absent for the same reason: nesting it under root would push a
+// socket a test makes with os.MkdirTemp past the cap. XDG_RUNTIME_DIR covers the one
+// piece of shared state magus finds through TMPDIR, the socket directory's fallback.
 var redirects = map[string]string{
 	"HOME":            "home",
 	"XDG_CACHE_HOME":  "cache",
@@ -74,7 +77,9 @@ var redirects = map[string]string{
 // go is not on PATH), and mise's data, state and config directories, which its shims
 // on PATH need to find installed tools and trusted configs once HOME has moved.
 //
-// Set: MAGUS_DAEMON_ENABLED=false, so no test reaches a shared daemon, and
+// Set: MAGUS_BROKER=off and MAGUS_SERVER_ENABLED=false, so no test claims capacity
+// from or binds beside a broker or server the person running it has up (a test that
+// wants a broker starts one and passes it with magus.WithBroker); and
 // GIT_CONFIG_NOSYSTEM=1, so the machine's system gitconfig (credential helpers,
 // signing) stays out. Git has no identity; a test that commits passes one.
 //
@@ -114,7 +119,8 @@ func Environ(root string, keep ...string) ([]string, error) {
 	for k, v := range miseDirs() {
 		vars[k] = v
 	}
-	vars["MAGUS_DAEMON_ENABLED"] = "false"
+	vars["MAGUS_BROKER"] = "off"
+	vars["MAGUS_SERVER_ENABLED"] = "false"
 	vars["GIT_CONFIG_NOSYSTEM"] = "1"
 
 	out := make([]string, 0, len(vars))
@@ -176,13 +182,13 @@ func miseDirs() map[string]string {
 	return dirs
 }
 
-// Isolate replaces the process environment with Environ(tb.TempDir()) for the rest of
-// the test and returns that root. The original environment is restored when the test
-// ends. Like tb.Setenv it changes process-wide state, so it fails a test that is, or
-// later becomes, parallel.
+// Isolate replaces the process environment with Environ over a fresh short root for
+// the rest of the test and returns that root. The original environment is restored and
+// the root removed when the test ends. Like tb.Setenv it changes process-wide state, so
+// it fails a test that is, or later becomes, parallel.
 func Isolate(tb testing.TB) string {
 	tb.Helper()
-	root := tb.TempDir()
+	root := shortRoot(tb)
 	environ, err := Environ(root)
 	if err != nil {
 		tb.Fatal(err)
@@ -203,6 +209,18 @@ func Isolate(tb testing.TB) string {
 		}
 		tb.Cleanup(func() { _ = os.Setenv(k, v) })
 	}
+	return root
+}
+
+// shortRoot is a per-test root short enough for a socket under XDG_RUNTIME_DIR; see
+// redirects.
+func shortRoot(tb testing.TB) string {
+	tb.Helper()
+	root, err := os.MkdirTemp("", "tk")
+	if err != nil {
+		tb.Fatalf("testkit: %v", err)
+	}
+	tb.Cleanup(func() { _ = os.RemoveAll(root) })
 	return root
 }
 
@@ -227,7 +245,7 @@ func Isolated(m *testing.M, keep ...string) IsolatedM { return IsolatedM{m: m, k
 // Run applies the environment, runs the tests, and returns m.Run's exit code. It
 // returns 1 without running any test when the environment cannot be built.
 func (i IsolatedM) Run() int {
-	root, err := os.MkdirTemp("", "testkit")
+	root, err := os.MkdirTemp("", "tk")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "testkit:", err)
 		return 1

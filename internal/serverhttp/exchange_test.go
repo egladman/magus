@@ -18,6 +18,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func TestMain(m *testing.M) { testkit.Main(m) }
+
 // A console link's code is traded once for its token, and every other presentation of it is
 // refused as a wrong bearer would be: used, unknown, malformed, or sent by GET.
 func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {

@@ -31,8 +31,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// TestMain keeps LOCKTEST_*, the variables helperHold instructs its holder process with.
-func TestMain(m *testing.M) { testkit.Main(m, "LOCKTEST_*") }
+// TestMain keeps the variables helper processes are instructed with: LOCKTEST_* for
+// helperHold's holder and PIPETEST_* for pipeStage's stages.
+func TestMain(m *testing.M) { testkit.Main(m, "LOCKTEST_*", "PIPETEST_*") }
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
 // affected --stdin streaming flow.
