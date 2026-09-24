@@ -1595,6 +1595,32 @@ func ObjectJob(v types.Job) vm.Value {
 	return out
 }
 
+func ObjectChangedRegion(v types.ChangedRegion) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("side", vm.StrValue(string(v.Side)))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	out.MapSet("declaration", vm.StrValue(v.Declaration))
+	out.MapSet("driver", vm.StrValue(v.Driver))
+	return out
+}
+
+func ObjectJobOverlapFootprint(v types.JobOverlapFootprint) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("verdict", vm.StrValue(v.Verdict))
+	itemsShared := make([]vm.Value, len(v.Shared))
+	for indexShared := range v.Shared {
+		itemsShared[indexShared] = vm.StrValue(v.Shared[indexShared])
+	}
+	out.MapSet("shared", vm.ListValue(itemsShared))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
 func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("jobA", vm.StrValue(v.JobA))
@@ -1609,6 +1635,11 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 		itemsPathsB[indexPathsB] = vm.StrValue(v.PathsB[indexPathsB])
 	}
 	out.MapSet("pathsB", vm.ListValue(itemsPathsB))
+	optFootprint := vm.Null
+	if v.Footprint != nil {
+		optFootprint = ObjectJobOverlapFootprint((*v.Footprint))
+	}
+	out.MapSet("footprint", optFootprint)
 	return out
 }
 
@@ -1693,6 +1724,13 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])
 	}
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
+	itemsFootprint := make([]vm.Value, len(v.Footprint))
+	for indexFootprint := range v.Footprint {
+		itemsFootprint[indexFootprint] = ObjectChangedRegion(v.Footprint[indexFootprint])
+	}
+	out.MapSet("footprint", vm.ListValue(itemsFootprint))
+	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))
+	out.MapSet("footprintReason", vm.StrValue(v.FootprintReason))
 	return out
 }
 

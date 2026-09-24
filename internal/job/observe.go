@@ -2,6 +2,8 @@ package job
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -33,34 +35,223 @@ type SymbolReader func(ctx context.Context, name string) (SymbolFact, bool)
 // a re-run; certifying on an unread diff is the attestation the gate replaced.
 func CheckpointObserver(root string, symbols SymbolReader) Observer {
 	return func(ctx context.Context, row types.Job) (Observed, error) {
-		seen := Observed{}
-		seen.Changed, seen.ChangedFrom, seen.ChangedKnown = changedSince(ctx, root, row.Checkpoint)
+		var driver types.VCSDriver
+		unresolved := ""
+		if checkpointRevision(row.Checkpoint) != "" {
+			driver, unresolved = resolveDriver(ctx, root)
+		}
+		seen := changedSince(ctx, driver, unresolved, root, row.Checkpoint)
 		seen.Present, seen.PresentKnown = presentIn(root, row)
 		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
 		return seen, nil
 	}
 }
 
-// changedSince asks the VCS what differs from the revision half of a checkpoint token.
+// resolveDriver is the VCS answering for root, or nil and why none is.
+func resolveDriver(ctx context.Context, root string) (types.VCSDriver, string) {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	switch {
+	case err != nil:
+		return nil, fmt.Sprintf("no version control answered in %s: %v", root, err)
+	case res.Source == types.VCSSourceDisabled:
+		return nil, "version control is disabled here"
+	case res.VCS == nil:
+		return nil, fmt.Sprintf("no version control answered in %s", root)
+	}
+	return res.VCS, ""
+}
+
+// checkpointRevision is the revision half of a checkpoint token.
 //
 // The token is `<revision>` or `<revision>+<patch digest>`; only the revision half is
 // something a VCS can diff against, so the digest is cut. That digest still matters to a
 // reader deciding whether the worker saw the same tree, and it is on the row for exactly
 // that; it is not a revision, and asking a backend to resolve one would fail.
-func changedSince(ctx context.Context, root, checkpoint string) ([]string, string, bool) {
+func checkpointRevision(checkpoint string) string {
 	revision, _, _ := strings.Cut(checkpoint, "+")
-	if revision = strings.TrimSpace(revision); revision == "" {
-		return nil, "", false
+	return strings.TrimSpace(revision)
+}
+
+// changedSince asks driver what differs from the checkpoint's revision, and which
+// declarations those lines land in. A nil driver is one that did not resolve, and
+// unresolved says why.
+//
+// The regions are read only when the paths were, and only for them: a region outside the
+// diff a gate grades would be a footprint of something else.
+func changedSince(ctx context.Context, driver types.VCSDriver, unresolved, root, checkpoint string) Observed {
+	revision := checkpointRevision(checkpoint)
+	if revision == "" {
+		return Observed{RegionsReason: "the job was declared without a checkpoint, so there is no revision to diff against"}
 	}
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
-		return nil, revision, false
+	seen := Observed{ChangedFrom: revision}
+	if driver == nil {
+		seen.RegionsReason = unresolved
+		return seen
 	}
-	changed, err := res.VCS.ChangedFiles(ctx, root, revision)
+	changed, err := driver.ChangedFiles(ctx, root, revision)
 	if err != nil {
-		return nil, revision, false
+		seen.RegionsReason = fmt.Sprintf("the diff since %s could not be read: %v", revision, err)
+		return seen
 	}
-	return changed, revision, true
+	seen.Changed, seen.ChangedKnown = changed, true
+	if len(changed) == 0 {
+		// An empty filter is no filter to ChangedRegions, which would answer for the
+		// whole tree; nothing changed, so nothing is in the footprint.
+		seen.RegionsKnown = true
+		return seen
+	}
+	seen.Regions, seen.RegionsKnown, seen.RegionsReason = regionsSince(ctx, driver, root, revision, changed)
+	return seen
+}
+
+// regionsSince is ChangedRegions with its failure turned into the reason a reader is
+// shown. A backend declining the capability is named as that, since it is the one
+// failure nobody can fix by re-running.
+func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, paths []string) ([]types.ChangedRegion, bool, string) {
+	regions, err := driver.ChangedRegions(ctx, root, revision, paths)
+	var declined *types.VCSUnsupportedError
+	switch {
+	case errors.As(err, &declined):
+		return nil, false, fmt.Sprintf("%s does not report changed regions (%s)", declined.VCS, declined.Capability)
+	case err != nil:
+		return nil, false, fmt.Sprintf("the regions changed since %s could not be read: %v", revision, err)
+	}
+	return regions, true, ""
+}
+
+// OverlapFootprints fills each overlap's Footprint: whether the two jobs' diffs, each
+// taken in the checkout bound to that job against its own checkpoint, touch a common
+// declaration. It returns a copy and never fails; every question it cannot answer is a
+// FootprintUnknown verdict naming why.
+//
+// A job's checkout is the one whose binding marker names it, found by listing root and
+// every other checkout driver knows. cacheDirOf maps a checkout root to the cache dir its
+// markers live in. A nil driver is version control that did not resolve.
+//
+// Only the working tree's side is compared. Two jobs deleting lines from one declaration
+// each leave it somewhere else, and the new side is where a later merge conflicts.
+func OverlapFootprints(ctx context.Context, driver types.VCSDriver, root string, cacheDirOf func(string) (string, error), rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+	if len(overlaps) == 0 {
+		return overlaps
+	}
+	bound, listed := boundCheckouts(driver, root, cacheDirOf)
+	footprints := map[string]footprint{}
+	footprintOf := func(id string) footprint {
+		fp, ok := footprints[id]
+		if !ok {
+			fp = readFootprint(ctx, driver, rows, bound, listed, id)
+			footprints[id] = fp
+		}
+		return fp
+	}
+	out := slices.Clone(overlaps)
+	for i := range out {
+		verdict := compareFootprints(out[i].JobA, footprintOf(out[i].JobA), out[i].JobB, footprintOf(out[i].JobB))
+		out[i].Footprint = &verdict
+	}
+	return out
+}
+
+// footprint is one job's regions, or why they are not known.
+type footprint struct {
+	regions []types.ChangedRegion
+	known   bool
+	reason  string
+}
+
+// boundCheckouts maps each lease bound anywhere in the repository to its checkout root.
+// A lease two checkouts both claim maps to "", which readFootprint reports rather than
+// guessing: checkouts sharing one cache dir do exactly that, and picking the first would
+// diff the wrong tree. listed is "" when the checkouts were listed, else why not.
+func boundCheckouts(driver types.VCSDriver, root string, cacheDirOf func(string) (string, error)) (map[string]string, string) {
+	if driver == nil {
+		return nil, "no version control answered here"
+	}
+	others, err := driver.OtherCheckouts(root)
+	if err != nil {
+		return nil, fmt.Sprintf("the checkouts of this repository could not be listed: %v", err)
+	}
+	bound := map[string]string{}
+	for _, dir := range append([]string{root}, others...) {
+		cacheDir, err := cacheDirOf(dir)
+		if err != nil {
+			continue // its markers cannot be found, so it binds nobody this can see
+		}
+		for _, id := range BoundLeases(cacheDir) {
+			if prior, ok := bound[id]; ok && prior != dir {
+				bound[id] = ""
+				continue
+			}
+			bound[id] = dir
+		}
+	}
+	return bound, ""
+}
+
+func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job, bound map[string]string, listed, id string) footprint {
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return footprint{reason: fmt.Sprintf("no job %s is declared", id)}
+	}
+	revision := checkpointRevision(rows[i].Checkpoint)
+	if revision == "" {
+		return footprint{reason: fmt.Sprintf("%s was declared without a checkpoint", id)}
+	}
+	if listed != "" {
+		return footprint{reason: listed}
+	}
+	dir, ok := bound[id]
+	switch {
+	case !ok:
+		return footprint{reason: fmt.Sprintf("no checkout of this repository is bound to %s", id)}
+	case dir == "":
+		return footprint{reason: fmt.Sprintf("more than one checkout is bound to %s", id)}
+	}
+	regions, known, reason := regionsSince(ctx, driver, dir, revision, nil)
+	return footprint{regions: regions, known: known, reason: reason}
+}
+
+// compareFootprints intersects two footprints by path and declaration.
+func compareFootprints(idA string, a footprint, idB string, b footprint) types.JobOverlapFootprint {
+	var unknown []string
+	for _, side := range []struct {
+		id string
+		fp footprint
+	}{{idA, a}, {idB, b}} {
+		if !side.fp.known {
+			unknown = append(unknown, side.id+": "+side.fp.reason)
+		}
+	}
+	if len(unknown) > 0 {
+		return types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: strings.Join(unknown, "; ")}
+	}
+	inA := map[string]bool{}
+	for _, r := range a.regions {
+		if r.Side == types.RegionNew {
+			inA[RegionLabel(r)] = true
+		}
+	}
+	var shared []string
+	for _, r := range b.regions {
+		if label := RegionLabel(r); r.Side == types.RegionNew && inA[label] && !slices.Contains(shared, label) {
+			shared = append(shared, label)
+		}
+	}
+	if len(shared) == 0 {
+		return types.JobOverlapFootprint{Verdict: types.FootprintDisjoint}
+	}
+	slices.Sort(shared)
+	return types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: shared}
+}
+
+// RegionLabel names the declaration a region lands in as `<path>#<declaration>`, or the
+// bare path when no declaration encloses it: without one, the file is the finest thing two
+// footprints can be compared by.
+func RegionLabel(r types.ChangedRegion) string {
+	if r.Declaration == "" {
+		return r.Path
+	}
+	return r.Path + "#" + r.Declaration
 }
 
 // presentIn reports which of the paths the row's gates NAME are in the tree.

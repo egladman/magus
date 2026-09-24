@@ -221,6 +221,9 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if opts.Format != outputName {
+		list.Overlaps = overlapFootprints(context.Background(), root, list.Jobs, list.Overlaps)
+	}
 	switch opts.Format {
 	case outputName:
 		ids := make([]string, len(list.Jobs))
@@ -295,7 +298,42 @@ func printJobTree(out io.Writer, report types.JobList) {
 		fmt.Fprintf(out, "  %s and %s claim common ground\n", o.JobA, o.JobB)
 		fmt.Fprintf(out, "    %s: %s\n", o.JobA, strings.Join(o.PathsA, ", "))
 		fmt.Fprintf(out, "    %s: %s\n", o.JobB, strings.Join(o.PathsB, ", "))
+		if line := overlapFootprintLine(o.Footprint); line != "" {
+			fmt.Fprintf(out, "    %s\n", line)
+		}
 	}
+}
+
+// overlapFootprints compares what each overlapping pair has actually changed. Only the
+// overlaps pay for it: a plan with none reads no VCS at all.
+func overlapFootprints(ctx context.Context, root string, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+	if len(overlaps) == 0 {
+		return overlaps
+	}
+	var driver types.VCSDriver
+	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.Source != types.VCSSourceDisabled {
+		driver = res.VCS
+	}
+	return job.OverlapFootprints(ctx, driver, root, func(dir string) (string, error) {
+		if dir == root {
+			return magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+		}
+		return magus.ResolveCacheDir(dir)
+	}, rows, overlaps)
+}
+
+// overlapFootprintLine is the footprint verdict under an overlapping pair, or "" when
+// nobody computed one.
+func overlapFootprintLine(f *types.JobOverlapFootprint) string {
+	switch {
+	case f == nil:
+		return ""
+	case f.Verdict == types.FootprintShared:
+		return "footprints: shared (" + strings.Join(f.Shared, ", ") + ")"
+	case f.Verdict == types.FootprintUnknown:
+		return "footprints: unknown (" + f.Reason + ")"
+	}
+	return "footprints: " + f.Verdict
 }
 
 // jobTreeLine is one printed line: the row plus how deep its parent chain runs.
@@ -1241,11 +1279,43 @@ func printJobStatus(out io.Writer, s job.Status) {
 			fmt.Fprintf(out, "  %s\n", hint.QueryOutput.With(gate.OutputRef))
 		}
 	}
+	printJobFootprint(out, s)
 	if len(s.Risks) > 0 {
 		fmt.Fprintln(out, "unresolved risks its holder reported")
 		for _, risk := range s.Risks {
 			fmt.Fprintf(out, "  %s\n", risk)
 		}
+	}
+}
+
+// printJobFootprint writes the declarations the job's diff landed in, one line each. An
+// unknown footprint says why in one line: silence would read as a job that touched nothing.
+func printJobFootprint(out io.Writer, s job.Status) {
+	const heading = "footprint, reported and never graded"
+	if !s.FootprintKnown {
+		reason := s.FootprintReason
+		if reason == "" {
+			reason = "nothing observed the tree"
+		}
+		fmt.Fprintf(out, "%s: not known, %s\n", heading, reason)
+		return
+	}
+	if len(s.Footprint) == 0 {
+		fmt.Fprintf(out, "%s: no line changed since the checkpoint\n", heading)
+		return
+	}
+	fmt.Fprintf(out, "%s: where its diff since the checkpoint landed\n", heading)
+	var printed []string
+	for _, r := range s.Footprint {
+		line := job.RegionLabel(r)
+		if r.Declaration == "" {
+			line = fmt.Sprintf("%s:%d-%d", r.Path, r.Lines[0], r.Lines[1])
+		}
+		if slices.Contains(printed, line) {
+			continue
+		}
+		printed = append(printed, line)
+		fmt.Fprintf(out, "  %s\n", line)
 	}
 }
 

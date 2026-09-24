@@ -500,6 +500,14 @@ type JobStatus struct {
 	// StaleIndexes are the projects whose symbol index was older than their sources when
 	// symbol gates were graded, so a symbol verdict may be drawn from missing facts.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
+	// Footprint is the declaration each changed line of the job's diff since its checkpoint
+	// lands in. A REPORT and never a violation until its precision is measured: nothing
+	// here decides Verified. FootprintKnown says the regions were computed, so an empty
+	// Footprint means "touched no declaration" rather than "nobody looked", and
+	// FootprintReason says why they were not.
+	Footprint       []ChangedRegion `json:"footprint,omitempty" yaml:"footprint,omitempty"`
+	FootprintKnown  bool            `json:"footprint_known" yaml:"footprint_known"`
+	FootprintReason string          `json:"footprint_reason,omitempty" yaml:"footprint_reason,omitempty"`
 }
 
 // GateStatus reports verification of one completion gate.
@@ -1157,6 +1165,31 @@ type JobOverlap struct {
 	// tell which lease claimed which, which is the only thing they can act on.
 	PathsA []string `json:"paths_a" yaml:"paths_a"`
 	PathsB []string `json:"paths_b" yaml:"paths_b"`
+	// Footprint compares what the two jobs have actually changed, declaration by
+	// declaration. Nil when no reader computed it: it needs each job's checkout and a VCS,
+	// and deriving an overlap needs neither.
+	Footprint *JobOverlapFootprint `json:"footprint,omitempty" yaml:"footprint,omitempty"`
+}
+
+// The verdicts a JobOverlapFootprint reaches.
+const (
+	FootprintDisjoint = "disjoint"
+	FootprintShared   = "shared"
+	FootprintUnknown  = "unknown"
+)
+
+// JobOverlapFootprint is whether two overlapping jobs' diffs touch the same declaration.
+// Like the overlap it hangs off, a report: two jobs sharing a function may have been
+// planned that way.
+type JobOverlapFootprint struct {
+	// Verdict is FootprintDisjoint, FootprintShared or FootprintUnknown.
+	Verdict string `json:"verdict" yaml:"verdict"`
+	// Shared are the `<path>#<declaration>` both footprints touch on the working tree's
+	// side, sorted. A changed line above a file's first declaration, or in a file with no
+	// diff driver, is the bare path.
+	Shared []string `json:"shared,omitempty" yaml:"shared,omitempty"`
+	// Reason says why the verdict is FootprintUnknown.
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 }
 
 // JobList is what a reader of the ledger is served: the recorded rows, plus

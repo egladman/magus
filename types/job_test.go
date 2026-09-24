@@ -423,3 +423,26 @@ func TestJobListNamesWhyAJobOwnsNothing(t *testing.T) {
 		assert.Contains(t, string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
 	})
 }
+
+// A footprint that is not known still says so on the wire: footprint_known is never
+// omitted, so a reader cannot take a missing footprint for an empty one.
+func TestFootprintsCrossJSON(t *testing.T) {
+	t.Parallel()
+
+	status, err := json.Marshal(JobStatus{Job: "a", FootprintReason: "git does not report changed regions (RegionReporter)"})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)"}`, string(status))
+
+	status, err = json.Marshal(JobStatus{Job: "a", FootprintKnown: true, Footprint: []ChangedRegion{
+		{Path: "a.go", Side: RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
+	}})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
+		`{"path":"a.go","side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}]}`, string(status))
+
+	overlap, err := json.Marshal(JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
+		Footprint: &JobOverlapFootprint{Verdict: FootprintShared, Shared: []string{"x/a.go#func X() {"}}})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"job_a":"a","job_b":"b","paths_a":["x"],"paths_b":["x"],`+
+		`"footprint":{"verdict":"shared","shared":["x/a.go#func X() {"]}}`, string(overlap))
+}
