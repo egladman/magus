@@ -42,6 +42,38 @@ signal, an OOM kill included, is that change's red. Only what the queue can prov
 machine's (a hook that could not start, the queue's own cancellation) stops a partition
 and leaves the change queued.
 
+## Using it
+
+On GitHub, queuing a pull request is enabling auto-merge on it, with the merge method
+you want it to land with:
+
+```sh
+gh pr merge 482 --auto --squash
+```
+
+or "Enable auto-merge" on the pull request's page. Nothing else changes for the author:
+push fixes as usual, and a push to a queued pull request has it validated again. Once
+the queue's `merge-queue` status is main's required check, auto-merge cannot fire on its
+own: GitHub waits for that status, and the queue sets it to `success` only when it is
+about to see that pull request merged.
+
+| To                            | Do                                                          |
+| ----------------------------- | ----------------------------------------------------------- |
+| queue a pull request          | `gh pr merge <n> --auto --squash` (or `--rebase`)           |
+| queue a stack                 | label its top pull request `queue: squash`                  |
+| take it out                   | `gh pr merge <n> --disable-auto`, or remove the label       |
+| list what is queued           | `magus queue ls --provider github --base main`              |
+| see why one is waiting        | its `merge-queue` status, which reads `waiting: <why>`      |
+| land it past the queue        | `gh pr merge <n> --admin`: an admin's bypass, see below     |
+
+A pull request the queue kicks back gets a comment naming what to fix, and its
+auto-merge or label is removed; fix it and queue it again. One that waits (for a review,
+for the change beneath it, for main to settle) stays queued and needs nothing.
+
+An admin merge skips validation and ordering both. The queue notices on its next run
+that main moved without it and plans again from the new tip, so nothing breaks, but
+nothing checked the combination either. Keep it for when the queue itself is down.
+
 ## Trust model
 
 Bytes produced by running a change's code are as untrusted as code its author typed.
@@ -384,7 +416,13 @@ verdicts pass between them one change at a time:
    main's definition with a write-scoped Actions token, and downloads each verdict
    artifact as it appears, while validation is still running: `apply` with the run as its
    source merges each change whose predecessors have merged, and stops once the
-   validation run completes.
+   validation run completes. A first job waits only to see whether validation's plan job
+   runs at all; on a pull request event with no merge intent it is skipped, and so is
+   apply.
+
+The apply job runs in the `magus-queue` environment, which holds the app's key when
+there is one, so every apply run is listed under the repository's Deployments as a
+deployment to `magus-queue`. That list is the queue's run history, not a release.
 
 The apply token is the job's own unless the repository adds the queue's own GitHub App
 (see [Setting it up on GitHub](#setting-it-up-on-github)), so by default no long-lived

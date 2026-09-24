@@ -56,8 +56,40 @@ env:
   GOEXPERIMENT: jsonv2
 
 jobs:
+  # Queue's plan job is skipped on every pull request event that carries no merge intent,
+  # which is most of them. Apply is skipped with it, outside the magus-queue environment,
+  # so such a run records no deployment.
+  planned:
+    name: queue planned
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ran: ${{ steps.plan.outputs.ran }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - id: plan
+        name: Wait for validation's plan to run or be skipped
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: magus buzz tools/gha-queue.buzz -- planned --run "$RUN"
+
   apply:
     name: queue apply
+    needs: planned
+    if: needs.planned.outputs.ran == 'true'
     runs-on: ubuntu-latest
     environment: magus-queue
     # Validation's own ceiling plus the plan job's.
@@ -104,12 +136,10 @@ jobs:
       # itself, even when applying then failed.
       - name: Merge each change as it goes green
         env:
-          QUEUE_STEP: apply
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
-          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
-          APP: ${{ steps.magus.outputs.queue-app-slug }}
-          DISPATCH: ${{ steps.magus.outputs.queue-token == '' }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: magus buzz tools/gha-queue.buzz
+          APP: ${{ steps.magus.outputs.queue-app-slug }}
+          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
+        run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
