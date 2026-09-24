@@ -156,6 +156,7 @@ type VCSDriver interface {
 	ChurnReporter
 	BranchChangeReporter
 	RangeReporter
+	RegionReporter
 	AncestryReporter
 	ConflictResolver
 	RevisionFileReader
@@ -386,6 +387,7 @@ const (
 	CapChurnReporter         VCSCapability = "ChurnReporter"
 	CapBranchChangeReporter  VCSCapability = "BranchChangeReporter"
 	CapRangeReporter         VCSCapability = "RangeReporter"
+	CapRegionReporter        VCSCapability = "RegionReporter"
 	CapAncestryReporter      VCSCapability = "AncestryReporter"
 	CapConflictResolver      VCSCapability = "ConflictResolver"
 	CapRevisionFileReader    VCSCapability = "RevisionFileReader"
@@ -731,6 +733,49 @@ type RangeReporter interface {
 	// changed one of those literal repository-relative paths.
 	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
 }
+
+// RegionReporter is the capability to say where inside each file a change landed: the
+// declaration (a function, a type, a doc heading, a target) enclosing every changed line,
+// as the file's diff driver names it. It is the footprint two concurrent changes are
+// compared by, finer than a path and computed from the edits themselves, never guessed.
+type RegionReporter interface {
+	// ChangedRegions compares the working tree with base and returns one region per
+	// declaration each hunk touches, ordered by path, then side, then line. Deleted lines
+	// are placed through base's version of the file and added or modified lines through the
+	// working tree's, so a new declaration is named as itself, never as the one above it.
+	//
+	// paths, when non-empty, keeps only those literal repository-relative paths (a
+	// directory keeps what is under it). A path with no diff driver still yields its
+	// regions, with Driver and Declaration empty: which lines changed is known even when
+	// what encloses them is not. An unresolvable base is an error, not an empty answer.
+	ChangedRegions(ctx context.Context, root, base string, paths []string) ([]ChangedRegion, error)
+}
+
+// ChangedRegion is the lines of one hunk that fall inside one declaration.
+type ChangedRegion struct {
+	// Path is repository-relative with forward slashes.
+	Path string `json:"path"`
+	// Side is RegionOld for lines only base's version has (a deletion) and RegionNew for
+	// lines in the working tree's.
+	Side RegionSide `json:"side"`
+	// Lines is the first and last line on Side, 1-based and inclusive.
+	Lines [2]int `json:"lines"`
+	// Declaration is the enclosing declaration's line as the diff driver matched it,
+	// trimmed (`func (m *Magus) executeStages(ctx context.Context) error {`). Empty for
+	// lines above the file's first declaration, or when the path has no driver.
+	Declaration string `json:"declaration,omitempty"`
+	// Driver is the diff driver that named Declaration (`golang`, `markdown`, `buzz`),
+	// empty when the path has none and the region says only which lines changed.
+	Driver string `json:"driver,omitempty"`
+}
+
+// RegionSide says which version of a file a ChangedRegion's lines are numbered in.
+type RegionSide string
+
+const (
+	RegionOld RegionSide = "old"
+	RegionNew RegionSide = "new"
+)
 
 // AncestryReporter is the capability to answer whether one revision is reachable from
 // another. PushStatusReporter answers it only against the upstream; this asks it of any

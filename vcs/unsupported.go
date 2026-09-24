@@ -136,6 +136,10 @@ func (declines[N]) RangeCommits(context.Context, string, string, string, []strin
 	return nil, decline[N](types.CapRangeReporter)
 }
 
+func (declines[N]) ChangedRegions(context.Context, string, string, []string) ([]types.ChangedRegion, error) {
+	return nil, decline[N](types.CapRegionReporter)
+}
+
 func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {
 	return false, decline[N](types.CapAncestryReporter)
 }
