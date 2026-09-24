@@ -166,7 +166,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	assert.Equal(t, trail.OutcomeError, tel.calls[0].Outcome, "the metric must also see error")
 }
 
-// A daemon whose workspace failed to load keeps every tool listed, so an agent's tool list
+// A server whose workspace failed to load keeps every tool listed, so an agent's tool list
 // does not change shape, and each call answers the diagnostic as a tool error.
 func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	srv := server.NewMCPServer("magus", "test")

@@ -29,13 +29,13 @@ type Workspace struct {
 	VCSOptions VCSOptions
 
 	// graphObs is the default observer for Graph calls. Use ContextWithGraphObserver
-	// for concurrent callers (daemon) — SetGraphObserver is only safe for a sole owner.
+	// for concurrent callers (the server) — SetGraphObserver is only safe for a sole owner.
 	graphObsMu sync.RWMutex
 	graphObs   Observer
 }
 
 // SetGraphObserver installs a default graph observer. Pass nil to clear.
-// For concurrent callers (daemon) use ContextWithGraphObserver instead.
+// For concurrent callers (the server) use ContextWithGraphObserver instead.
 func (w *Workspace) SetGraphObserver(o Observer) {
 	w.graphObsMu.Lock()
 	w.graphObs = o

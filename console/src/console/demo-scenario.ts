@@ -1,7 +1,7 @@
 import { must } from "../lib/guards";
 // demo-scenario.ts - the ONE fabricated workspace every console surface's demo derives from.
 //
-// The console's daemon-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
+// The console's server-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
 // diff, notes) each used to invent their own disjoint fixture. A reader who opened two of them side
 // by side saw contradictions - a Linux-kernel build in the log viewer, unrelated runs in the tree, a
 // third cast of MCP calls in the activity trail, and notes about magus's own cache in a workspace
@@ -10,7 +10,7 @@ import { must } from "../lib/guards";
 // corroborate each other the way a real workspace would.
 //
 // This fixture does the product's FIRST-IMPRESSION work: #demo and the empty state's "See the demo"
-// button are what someone with no daemon running meets first. So it is written to survive being read
+// button are what someone with no server running meets first. So it is written to survive being read
 // closely. The workspace is not a four-project placeholder: it is a twelve-project service monorepo,
 // its captured output is what the real tools actually print (go test package lines, tsc diagnostics
 // with file:line:col, a vite summary replayed out of the cache), and its story holds together when a
@@ -19,7 +19,7 @@ import { must } from "../lib/guards";
 // THE STORY, in the order it happened - one shared-library contract change and its blast radius:
 //   1. ~3h ago   `magus affected ci` sweeps green on main, mostly out of cache. The baseline: this
 //                is what the repo looks like when nothing is wrong.
-//   2. ~100m     an agent asks the graph what services/identity declares; the daemon then reindexes
+//   2. ~100m     an agent asks the graph what services/identity declares; the server then reindexes
 //                symbols after a branch switch - the developer has just checked out the branch
 //                carrying an edit to libs/authkit, the shared token library.
 //   3. ~92m      the agent runs services/identity:test. It FAILS: authkit's claims type stopped
@@ -59,7 +59,7 @@ export const WORKSPACE = "acme";
 export const WORKSPACE_ROOT = "~/Repos/acme";
 
 // Every workspace the demo publishes, in menu order. Two, not one: with a single entry the scope
-// control is a question with one answer, and nothing about scoping is demonstrable without a daemon.
+// control is a question with one answer, and nothing about scoping is demonstrable without a server.
 // The second is magus's own repo because the Graph surface's demo is a committed export of it - the
 // one demo path whose data is real rather than fabricated, so a workspace list omitting it would
 // leave that graph belonging to nothing on screen.
@@ -507,7 +507,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     },
     {
       kind: "job",
-      actor: "daemon",
+      actor: "server",
       action: "symbol-reindex",
       ok: true,
       timeMs: at(96),
@@ -541,7 +541,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
     },
     {
       kind: "token",
-      actor: "daemon",
+      actor: "server",
       action: "cli token issued",
       ok: true,
       timeMs: at(155),

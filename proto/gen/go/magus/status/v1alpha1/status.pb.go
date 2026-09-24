@@ -149,7 +149,7 @@ func (TargetRun_State) EnumDescriptor() ([]byte, []int) {
 	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{9, 0}
 }
 
-// State is where the daemon's copy of this workspace sits. Output only; values may be added.
+// State is where the server's copy of this workspace sits. Output only; values may be added.
 type Workspace_State int32
 
 const (
@@ -832,7 +832,7 @@ func (x *Lock) GetStaleAfterSeconds() int32 {
 
 // BuildInfo identifies the running magus binary: the version tag, the commit it was built
 // from, the build date, and the full human fingerprint (what `magus --version` prints).
-// Reported so a dashboard shows exactly which daemon it is talking to. All fields are
+// Reported so a dashboard shows exactly which server it is talking to. All fields are
 // "unknown" for an unstamped dev build.
 type BuildInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -902,7 +902,7 @@ func (x *BuildInfo) GetFingerprint() string {
 	return ""
 }
 
-// Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
+// Run is one in-flight invocation the server has adopted - a `magus run`/`affected`
 // dispatch, keyed by its invocation id. It carries the per-target execution state a
 // dashboard renders as a live run row, so the SAME status stream that shows the pool
 // also shows what each run's targets are doing.
@@ -1069,7 +1069,7 @@ func (x *TargetRun) GetDurationMs() int64 {
 	return 0
 }
 
-// Service is one long-running shared service the daemon is hosting right now, kept warm
+// Service is one long-running shared service the server is hosting right now, kept warm
 // across invocations. It carries the derived identity (id/label/command/ports), the live
 // state a dashboard renders, and how many targets currently depend on it.
 type Service struct {
@@ -1168,7 +1168,7 @@ func (x *Service) GetStartTime() *timestamppb.Timestamp {
 type Pool struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ParentPid      int32                  `protobuf:"varint,1,opt,name=parent_pid,json=parentPid,proto3" json:"parent_pid,omitempty"`
-	DaemonVersion  string                 `protobuf:"bytes,2,opt,name=daemon_version,json=daemonVersion,proto3" json:"daemon_version,omitempty"`    // the pool owner's build
+	OwnerVersion   string                 `protobuf:"bytes,11,opt,name=owner_version,json=ownerVersion,proto3" json:"owner_version,omitempty"`      // the build of the process that owns the pool
 	Capacity       int32                  `protobuf:"varint,4,opt,name=capacity,proto3" json:"capacity,omitempty"`                                  // total concurrency slots (0 = unlimited)
 	Running        int32                  `protobuf:"varint,5,opt,name=running,proto3" json:"running,omitempty"`                                    // slots currently running
 	Queued         int32                  `protobuf:"varint,6,opt,name=queued,proto3" json:"queued,omitempty"`                                      // targets queued for a slot
@@ -1217,9 +1217,9 @@ func (x *Pool) GetParentPid() int32 {
 	return 0
 }
 
-func (x *Pool) GetDaemonVersion() string {
+func (x *Pool) GetOwnerVersion() string {
 	if x != nil {
-		return x.DaemonVersion
+		return x.OwnerVersion
 	}
 	return ""
 }
@@ -1350,7 +1350,7 @@ func (x *RunningTarget) GetInvocation() string {
 	return ""
 }
 
-// Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
+// Workspace is one workspace the server holds: loading, loaded, or failed to load.
 type Workspace struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Root           string                 `protobuf:"bytes,1,opt,name=root,proto3" json:"root,omitempty"`
@@ -1469,7 +1469,7 @@ type Cache struct {
 	//
 	// It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded
 	// counts toward hits and adds nothing here, so a reader must not present this as the cache's
-	// lifetime saving - it is what this daemon has saved since it started.
+	// lifetime saving - it is what this server has saved since it started.
 	SavedMs       int64 `protobuf:"varint,6,opt,name=saved_ms,json=savedMs,proto3" json:"saved_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1587,11 +1587,11 @@ type GetStatusResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Status *Status                `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	// observe_start_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
-	// are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
+	// are static per server session (Status stays "what is happening right now"), so a dashboard reads them
 	// once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
 	// the deprecated JSON /api/v1/status route used to carry.
-	ObserveStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observe_start_time,json=observeStartTime,proto3" json:"observe_start_time,omitempty"` // when this daemon began observing (its start)
-	Config           *Config                `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`                                               // the daemon's resolved, read-only configuration
+	ObserveStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observe_start_time,json=observeStartTime,proto3" json:"observe_start_time,omitempty"` // when this server began observing (its start)
+	Config           *Config                `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`                                               // the server's resolved, read-only configuration
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1647,8 +1647,8 @@ func (x *GetStatusResponse) GetConfig() *Config {
 	return nil
 }
 
-// Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
-// the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
+// Config is the server's resolved, read-only configuration a dashboard shows so an operator can see what
+// the server is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
 // (the one-shot), never the live Status frame.
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1895,11 +1895,11 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"dependents\x18\x06 \x01(\x05R\n" +
 	"dependents\x129\n" +
 	"\n" +
-	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"\x87\x03\n" +
+	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"\x9b\x03\n" +
 	"\x04Pool\x12\x1d\n" +
 	"\n" +
-	"parent_pid\x18\x01 \x01(\x05R\tparentPid\x12%\n" +
-	"\x0edaemon_version\x18\x02 \x01(\tR\rdaemonVersion\x12\x1a\n" +
+	"parent_pid\x18\x01 \x01(\x05R\tparentPid\x12#\n" +
+	"\rowner_version\x18\v \x01(\tR\fownerVersion\x12\x1a\n" +
 	"\bcapacity\x18\x04 \x01(\x05R\bcapacity\x12\x18\n" +
 	"\arunning\x18\x05 \x01(\x05R\arunning\x12\x16\n" +
 	"\x06queued\x18\x06 \x01(\x05R\x06queued\x12M\n" +
@@ -1909,7 +1909,7 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"workspaces\x12\x1a\n" +
 	"\baffected\x18\t \x03(\tR\baffected\x122\n" +
 	"\x05cache\x18\n" +
-	" \x01(\v2\x1c.magus.status.v1alpha1.CacheR\x05cacheJ\x04\b\x03\x10\x04R\x04mode\"\xb0\x01\n" +
+	" \x01(\v2\x1c.magus.status.v1alpha1.CacheR\x05cacheJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\x0edaemon_versionR\x04mode\"\xb0\x01\n" +
 	"\rRunningTarget\x12\x12\n" +
 	"\x04args\x18\x01 \x03(\tR\x04args\x12\x1c\n" +
 	"\tworkspace\x18\x02 \x01(\tR\tworkspace\x129\n" +

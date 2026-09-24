@@ -11,7 +11,7 @@
 //     magus, and not in project either (the watch-ignore constructors need
 //     internal/file/watch, which already imports project).
 //   - Surface: Load and WithLimiter carry internal types (*config.Config,
-//     *cache.Limiter). Keeping them here lets the daemon inject a shared limiter
+//     *cache.Limiter). Keeping them here lets the server inject a shared limiter
 //     without those internals leaking onto the public magus API.
 package workspace
 
@@ -30,8 +30,10 @@ type Load struct {
 	Limiter    *cache.Limiter
 	Registry   *WorkspaceRegistry
 	// Broker is a broker client the caller shares across Open calls; nil lets Open make
-	// its own. It is ignored when the resolved policy is off.
-	Broker *broker.Client
+	// its own. BrokerGiven records that the caller passed one, so Open can refuse a nil
+	// client, and any client under a resolved policy of off, instead of ignoring it.
+	Broker      *broker.Client
+	BrokerGiven bool
 	// BrokerPolicy overrides the config's broker setting; empty keeps the config's.
 	BrokerPolicy   types.BrokerPolicy
 	MetricsCollect bool // build an always-on local metrics collector (server dashboard feed)
@@ -41,7 +43,7 @@ type Load struct {
 	Provider observability.Provider
 	// Version is the running build's version, used only to check the workspace's
 	// required_version floor. Empty disables the check, which is the same escape
-	// hatch the daemon adoption gate uses (see internal/proc/identity.go): a bare
+	// hatch the server adoption gate uses (see internal/proc/identity.go): a bare
 	// library caller that never set a version has no version to be too old.
 	Version string
 	// SkipWorkspaceProviders opens the workspace without running its wired workspace
@@ -57,22 +59,22 @@ func WithLoadedConfig(cfg config.Config) Option {
 	return func(o *Load) { o.Preloaded = &cfg }
 }
 
-// WithLimiter injects a pre-built concurrency limiter (e.g. shared across daemon workspaces).
+// WithLimiter injects a pre-built concurrency limiter (e.g. shared across server workspaces).
 func WithLimiter(lim *cache.Limiter) Option {
 	return func(o *Load) { o.Limiter = lim }
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace so
-// its OTel instruments record even when telemetry export is off, and the daemon can serve OTLP
+// its OTel instruments record even when telemetry export is off, and the server can serve OTLP
 // snapshots to the /dashboard. The CLI leaves it unset to keep one-shot runs a true no-op.
 func WithMetricsCollection() Option {
 	return func(o *Load) { o.MetricsCollect = true }
 }
 
 // WithTelemetryProvider injects an already-constructed observability provider so several
-// Magus instances (a daemon's bridge plus each of its per-workspace registry Magus) share
+// Magus instances (a server's bridge plus each of its per-workspace registry Magus) share
 // ONE set of OTel instruments and one metrics collector. The provider is owned by the
-// caller (the daemon process), not by any single workspace, so workspace eviction never
+// caller (the server process), not by any single workspace, so workspace eviction never
 // discards accumulated metrics. It supersedes WithMetricsCollection: Open adopts the
 // injected provider instead of constructing its own.
 //

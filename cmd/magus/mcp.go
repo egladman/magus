@@ -15,11 +15,12 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/daemon"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/internal/serverhttp"
 	"github.com/egladman/magus/types"
 )
 
@@ -42,7 +43,7 @@ func mcpAddrPort() (netip.AddrPort, error) {
 }
 
 // mcpAddrString returns the configured MCP address as a host:port string, falling back
-// to the default. Used by buildDaemonInfo so the bridge doctor check knows which
+// to the default. Used by buildServerInfo so the bridge doctor check knows which
 // address to probe.
 func mcpAddrString() string {
 	return mcpAddress(globalCfg.MCP)
@@ -121,7 +122,7 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 	}, in, wire)
 }
 
-// publishDaemonTrailBase resolves the daemon-wide activity-trail base and publishes it, so
+// publishServerTrailBase resolves the server-wide activity-trail base and publishes it, so
 // background-job recording and the maintenance scheduler land in the same trail the MCP
 // handler writes and the ActivityService reads.
 //
@@ -174,7 +175,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	if tel != nil {
 		opts[0] = magus.WithProvider(tel)
 	}
-	if serverRegistry != nil && serverRegistry.broker != nil {
+	if serverRegistry != nil && serverRegistry.broker != nil && globalCfg.Broker.Resolved() != types.BrokerOff {
 		opts = append(opts, magus.WithBroker(serverRegistry.broker))
 	}
 	m, err := loadMagus(ctx, "", opts...)
@@ -225,14 +226,14 @@ func startWatch(ctx context.Context, m *magus.Magus) {
 	watching(m.Root())
 }
 
-// serveUnloadedBridge serves the daemon's surface for a workspace that failed to load
+// serveUnloadedBridge serves the server's surface for a workspace that failed to load
 // until the registry reports it ACTIVE, then hands the listener to the full surface over
 // that workspace.
 func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root string, addr netip.AddrPort) {
-	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
+	status := serverSnapshot(os.Getenv(proc.SocketEnv))
 	srvCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	d := daemon.NewUnloaded(internalmcp.Options{
+	d := serverhttp.NewUnloaded(internalmcp.Options{
 		Logger:     slog.Default(),
 		Version:    version,
 		Build:      types.BuildInfo{Version: version, Commit: commit, Date: buildDate},
@@ -242,10 +243,10 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 		HealthRoutes: healthRoutes(status, readinessExtras{
 			services: bridgeServices,
 		}),
-	}, daemon.Unloaded{
+	}, serverhttp.Unloaded{
 		Root: root,
 		Err:  func() rpcerr.Error { return serverRegistry.unavailable(root) },
-	}, bridgeDaemonOptions()...)
+	}, bridgeServerOptions()...)
 	done := make(chan error, 1)
 	go func() { done <- d.Serve(srvCtx) }()
 	active := make(chan *magus.Magus, 1)
@@ -253,7 +254,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 	select {
 	case err := <-done:
 		if err != nil && ctx.Err() == nil {
-			slog.Error("[AGENT] MCP HTTP server failed; initiating daemon shutdown", slog.String("error", err.Error()))
+			slog.Error("[AGENT] MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
 			cancel()
 		}
 	case m := <-active:
@@ -289,7 +290,7 @@ func bridgeBroker() *types.StatusBroker {
 	return &st
 }
 
-// healthRoutes are the k8s probes the daemon serves beside MCP, on the same port.
+// healthRoutes are the k8s probes the server serves beside MCP, on the same port.
 // /healthz aliases /livez (liveness): a liveness probe must not depend on warm-up state,
 // or it would crash-loop pods. /readyz is the workspace-loaded readiness gate, and carries
 // component-level detail so the console dashboard can render per-subsystem health.
@@ -301,24 +302,24 @@ func healthRoutes(status statusFunc, extras readinessExtras) map[string]http.Han
 	}
 }
 
-// bridgeDaemonOptions wires the daemon-wide registries (runs, hosted services, every
-// workspace's activity) into the bridge's daemon. Each is nil for a bridge started without
-// the multi-workspace daemon, and the option is then left unset.
-func bridgeDaemonOptions() []daemon.Option {
-	var opts []daemon.Option
+// bridgeServerOptions wires the server-wide registries (runs, hosted services, every
+// workspace's activity) into the bridge's HTTP server. Each is nil for a bridge started without
+// the multi-workspace server, and the option is then left unset.
+func bridgeServerOptions() []serverhttp.Option {
+	var opts []serverhttp.Option
 	// The live-run registry (built by startServer) backs the dashboard's runs view;
 	// without it the status report simply omits runs.
 	if serverRuns != nil {
-		opts = append(opts, daemon.WithRuns(serverRuns.Snapshot))
+		opts = append(opts, serverhttp.WithRuns(serverRuns.Snapshot))
 	}
 	// The broker's status backs the dashboard's capacity and services views the same way.
-	opts = append(opts, daemon.WithBroker(bridgeBroker))
-	// The activity view is daemon-wide, so it reads every loaded workspace's trail, not just this
-	// bridge's: an agent hook runs as a short-lived client outside the daemon and writes to ITS
+	opts = append(opts, serverhttp.WithBrokerStatus(bridgeBroker))
+	// The activity view is server-wide, so it reads every loaded workspace's trail, not just this
+	// bridge's: an agent hook runs as a short-lived client outside the server and writes to ITS
 	// workspace's cache dir, so a bridge-only view misses every other workspace's agent activity.
 	// Same registry the WorkspaceLister reports from.
 	if serverRegistry != nil {
-		opts = append(opts, daemon.WithActivityWorkspaces(serverRegistry.activityWorkspaces))
+		opts = append(opts, serverhttp.WithActivityWorkspaces(serverRegistry.activityWorkspaces))
 	}
 	return opts
 }
@@ -328,8 +329,8 @@ func bridgeDaemonOptions() []daemon.Option {
 func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus, addr netip.AddrPort) {
 	// Capture the server's own socket now (set by startServer) so the health handlers
 	// query this server, not whatever a per-request discovery scan happens to find.
-	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
-	m.SetDaemon(daemon.New(internalmcp.Options{
+	status := serverSnapshot(os.Getenv(proc.SocketEnv))
+	m.SetServer(serverhttp.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,
@@ -337,12 +338,12 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 		Config:     globalCfg,
 		HTTPAddr:   addr,
 		StatusBase: buildStatusBase(),
-		// ONE diff-session store for the whole daemon, constructed here because this is
-		// where the daemon's dependencies are assembled. The console's /api/v1/diff routes
+		// ONE diff-session store for the whole server, constructed here because this is
+		// where the server's dependencies are assembled. The console's /api/v1/diff routes
 		// and the magus_diff MCP tool both read it, and that sharing IS the pairing: a
 		// person opens a diff, an agent joins the session they started.
 		DiffSessions: changeset.NewStore(m.CacheDir()),
-		// The same store the OnJobDone callback completes rows in, so the daemon's own
+		// The same store the OnJobDone callback completes rows in, so the server's own
 		// jobs and the delegated ones are one book with one lock.
 		Jobs: serverJobStore,
 		// Health endpoints share this HTTP server so k8s probes hit the
@@ -353,15 +354,15 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 			services:       bridgeServices,
 			knowledgeGraph: m.KnowledgeGraphHealthy,
 		}),
-	}, bridgeDaemonOptions()...))
+	}, bridgeServerOptions()...))
 	go func() {
-		err := m.ServeDaemon(ctx)
+		err := m.Serve(ctx)
 		if err != nil && ctx.Err() == nil {
-			// ServeDaemon exiting due to ctx cancellation is normal shutdown.
-			// Any other error means MCP is gone while the daemon is still up —
-			// clients would receive no response indefinitely. Cancel the daemon
+			// Serve exiting due to ctx cancellation is normal shutdown.
+			// Any other error means MCP is gone while the server is still up —
+			// clients would receive no response indefinitely. Cancel the server
 			// context to trigger a clean restart by the process supervisor.
-			slog.Error("[AGENT] MCP HTTP server failed; initiating daemon shutdown", slog.String("error", err.Error()))
+			slog.Error("[AGENT] MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
 			cancel()
 		}
 	}()

@@ -36,7 +36,7 @@ func TestTakesProjectLocks(t *testing.T) {
 	}
 }
 
-// TestAdoptedRunGetsNoProcessStdio: the daemon's stdin is nobody's pipe.
+// TestAdoptedRunGetsNoProcessStdio: the server's stdin is nobody's pipe.
 func TestAdoptedRunGetsNoProcessStdio(t *testing.T) {
 	if got := processStdioOption(context.Background()); len(got) != 1 {
 		t.Fatalf("local run: %d options, want 1", len(got))

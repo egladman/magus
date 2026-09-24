@@ -108,7 +108,7 @@ func TestStatusProtoCarriesAFailedWorkspace(t *testing.T) {
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED, s.GetHealth())
 	ws := s.GetPool().GetWorkspaces()
 	require.Len(t, ws, 3)
-	assert.Equal(t, statusv1.Workspace_STATE_ACTIVE, ws[0].GetState(), "an older daemon's workspace is loaded")
+	assert.Equal(t, statusv1.Workspace_STATE_ACTIVE, ws[0].GetState(), "an older server's workspace is loaded")
 	assert.Nil(t, ws[0].GetError())
 	assert.Equal(t, statusv1.Workspace_STATE_LOADING, ws[1].GetState())
 	assert.Nil(t, ws[1].GetError())
@@ -153,7 +153,7 @@ func TestEncodeStatusEventRoundTrip(t *testing.T) {
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, got.GetHealth())
 }
 
-// TestStatusProtoMapsRuns maps the daemon's live runs and their per-target execution
+// TestStatusProtoMapsRuns maps the server's live runs and their per-target execution
 // state onto the wire message's runs, the same status frame that carries the pool.
 func TestStatusProtoMapsRuns(t *testing.T) {
 	started := time.UnixMilli(1_000)
@@ -273,7 +273,7 @@ func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 // TestStatusProtoCarriesTheStaleLockThreshold pins the half of a lock row that decides how it
 // is READ. The holder's age is meaningless on its own; the threshold is what separates a peer
 // mid-run from a process nobody remembers starting, and it is on the wire so every renderer
-// shares the daemon's judgment instead of picking its own constant.
+// shares the server's judgment instead of picking its own constant.
 func TestStatusProtoCarriesTheStaleLockThreshold(t *testing.T) {
 	held := time.UnixMilli(1700)
 	r := types.StatusSnapshot{Locks: []types.StatusLock{{

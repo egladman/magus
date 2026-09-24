@@ -1,10 +1,10 @@
-// demo.ts - a daemon-free showcase mode for the dashboard.
+// demo.ts - a server-free showcase mode for the dashboard.
 //
-// The dashboard normally streams a live magus daemon (transport.ts). This module is
+// The dashboard normally streams a live magus server (transport.ts). This module is
 // the "show it off with nothing running" path: it never opens a socket, never talks
-// protobuf, and never touches the daemon module. It just SYNTHESIZES the same plain
+// protobuf, and never touches the server module. It just SYNTHESIZES the same plain
 // view-model the tiles already read (DashboardState in state.ts) and pushes it into
-// the store on a ~1s tick, so every tile renders as if a busy daemon were attached.
+// the store on a ~1s tick, so every tile renders as if a busy server were attached.
 //
 // Because the tile <-> store boundary is pure view-model (no wire types below it),
 // the fixture here is a normal typed object: `pnpm run typecheck` verifies it against
@@ -150,7 +150,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
 
   // planned holds each target's intended duration and whether it is allowed to fail. It is a side
   // map rather than extra fields on TargetRunView because that type is the WIRE-derived view model
-  // the tiles read - the demo must not invent fields on it that a real daemon never sends, or a tile
+  // the tiles read - the demo must not invent fields on it that a real server never sends, or a tile
   // could quietly come to depend on something only the showcase provides.
   const planned = new WeakMap<TargetRunView, { durMs: number; flaky: boolean }>();
 
@@ -195,7 +195,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     return run;
   }
 
-  // countRunning is over ALL runs, not one: the pool is daemon-wide, so two invocations in flight
+  // countRunning is over ALL runs, not one: the pool is server-wide, so two invocations in flight
   // share its slots and the board has to reflect that.
   function countRunning(): number {
     let n = 0;
@@ -655,7 +655,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       cache: { hits, misses, errors, hitRate: total > 0 ? hits / total : null, sizeBytes },
       runningTargets,
       runs: runs.map((r) => ({ ...r, targets: r.targets.slice() })),
-      // acme (the scenario's monorepo) is the busy workspace the daemon is serving; magus (the
+      // acme (the scenario's monorepo) is the busy workspace the server is serving; magus (the
       // tool itself) sits idle beside it. So the workspaces tile names the same root the rest of the
       // board describes.
       workspaces: [
@@ -720,10 +720,48 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           startedAt: timestampFromMs(now - 88_000),
         },
       ],
-      // 0.0.0, matching the status bar: the demo has no daemon, so any real-looking
+      // 0.0.0, matching the status bar: the demo has no server, so any real-looking
       // version here is a fact the showcase invented, and one that goes stale.
       magusVersion: "0.0.0",
-      daemonVersion: "0.0.0",
+      ownerVersion: "0.0.0",
+      // The broker holds the host for both workspaces: the scenario's running work is what it has
+      // seated, and the long-running holder is the same stale lock the locks tile shows.
+      broker: {
+        pid: 48101,
+        version: "0.0.0",
+        protocol: 1,
+        socket: "/run/user/501/magus/broker.sock",
+        executable: "/usr/local/bin/magus",
+        startTime: timestampFromMs(now - 3_600_000),
+        budgetSlots: CAPACITY,
+        heldSlots: running,
+        budgetMb: 16_384,
+        heldMb: running * 512,
+        holders: runningTargets.map((t, i) => ({
+          project: t.args[2] || ".",
+          target: t.args[1] || "",
+          pid: 48210 + i,
+          slots: 1,
+          memoryMb: 512,
+          dir: "/Users/eli/Repos/acme",
+          command: "magus " + t.args.join(" "),
+          startTime: t.startTime,
+        })),
+        idleExitSeconds: 600,
+      },
+      server: {
+        pid: 48100,
+        version: "0.0.0",
+        socket: "/run/user/501/magus/server.sock",
+        executable: "/usr/local/bin/magus",
+        startTime: timestampFromMs(now - 7_200_000),
+        listeners: [
+          { kind: "socket", address: "/run/user/501/magus/server.sock" },
+          { kind: "http", address: "127.0.0.1:7391" },
+        ],
+        watch: [WORKSPACE_ROOT, "~/Repos/magus"],
+      },
+      brokerPolicy: "best-effort",
     };
   }
 

@@ -712,7 +712,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			slog.String("ref", ref),
 			// The captured log's path on disk, carried so the pretty handler can make the
 			// ref a real hyperlink without resolving anything: a file:// link needs no
-			// daemon running, so it cannot be dead.
+			// server running, so it cannot be dead.
 			slog.String("log", lp),
 		)
 		if rc.onError != nil {

@@ -13,7 +13,7 @@ import (
 
 // unknownVersion is the unstamped-build default, and the dev-build sentinel the proc
 // adoption gate keys on to fingerprint one (proc.devVersionSentinel); keep the two in
-// sync. Named because a daemon reports it too, and the two must not be compared.
+// sync. Named because a server reports it too, and the two must not be compared.
 const unknownVersion = "unknown"
 
 // version, commit, and buildDate are injected by the linker at build time:
@@ -54,17 +54,17 @@ type versionOutput struct {
 	ServerVersion *string `json:"server,omitzero" yaml:"server,omitempty"`
 }
 
-// daemonProbe is the server half of `magus version`: what, if anything, the server said
+// serverProbe is the server half of `magus version`: what, if anything, the server said
 // when asked.
-type daemonProbe struct {
+type serverProbe struct {
 	// version is what it reported, "" when nothing answered.
 	version string
 }
 
-// daemonProbeTimeout bounds the whole server half. Far under proc's own 5s status
+// serverProbeTimeout bounds the whole server half. Far under proc's own 5s status
 // deadline because `magus version` is a scriptable command: an absent or wedged server
 // must cost a blink, not seconds.
-const daemonProbeTimeout = 500 * time.Millisecond
+const serverProbeTimeout = 500 * time.Millisecond
 
 func runVersion(ctx context.Context, args []string) error {
 	var vf *gen.VersionFlags
@@ -92,10 +92,10 @@ func runVersion(ctx context.Context, args []string) error {
 	// -o name prints the bare version and nothing else, so the round-trip would be paid
 	// for a field nothing renders, and that form is what a CI step compares against a
 	// pin, which is exactly where a server that is slow to answer must not be felt.
-	var probe daemonProbe
+	var probe serverProbe
 	probed := !vf.Client && opts.Format != outputName
 	if probed {
-		probe = probeDaemonVersion(ctx)
+		probe = probeServerVersion(ctx)
 		out.ServerVersion = &probe.version
 	}
 
@@ -113,7 +113,7 @@ func runVersion(ctx context.Context, args []string) error {
 		fmt.Printf("built by: %s\n", out.BuiltBy)
 	}
 	if probed {
-		fmt.Println(daemonLine(probe, out.Version))
+		fmt.Println(serverLine(probe, out.Version))
 	}
 	if hasVerboseFlag(args) {
 		fmt.Printf("engine: %s\n", out.Engine)
@@ -121,36 +121,36 @@ func runVersion(ctx context.Context, args []string) error {
 	return nil
 }
 
-// probeDaemonVersion asks the server for its version. Failures are silent: a missing
+// probeServerVersion asks the server for its version. Failures are silent: a missing
 // server is the normal case, and the build stamp this command exists to print does not
 // depend on one.
 //
 // Only the server's own socket is asked, never a scanned per-process proc server: one of
 // those belongs to whatever invocation spawned it (very possibly an unrelated checkout's
 // in-flight run), and reporting it as the server would state something false.
-func probeDaemonVersion(ctx context.Context) daemonProbe {
-	ctx, cancel := context.WithTimeout(ctx, daemonProbeTimeout)
+func probeServerVersion(ctx context.Context) serverProbe {
+	ctx, cancel := context.WithTimeout(ctx, serverProbeTimeout)
 	defer cancel()
 
 	reply, err := proc.QueryStatus(ctx, resolveServerAddr(""))
 	if err != nil {
-		return daemonProbe{}
+		return serverProbe{}
 	}
 	if reply.Version == "" {
 		// A server predating the field still answered, so it is running and did not say
 		// which version it is. Kept distinct from the client's own "unknown" sentinel by
-		// daemonLine, which never compares this case against the client.
-		return daemonProbe{version: unknownVersion}
+		// serverLine, which never compares this case against the client.
+		return serverProbe{version: unknownVersion}
 	}
-	return daemonProbe{version: reply.Version}
+	return serverProbe{version: reply.Version}
 }
 
-// daemonLine renders the server half of the text form, against the client's own version.
+// serverLine renders the server half of the text form, against the client's own version.
 //
 // The unknown case is its own line rather than a comparison: an unstamped client also
 // reports "unknown", so an unstamped client talking to an unstamped server would have
 // read as "server: unknown", the same line two matching stamped builds print.
-func daemonLine(p daemonProbe, client string) string {
+func serverLine(p serverProbe, client string) string {
 	switch {
 	case p.version == "":
 		return "server: not running"

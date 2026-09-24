@@ -134,7 +134,7 @@ import (
 //
 // Regenerate with: cd magus && go generate ./cmd/magus/...
 func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
-	var errs []error
+	errs := []error{config.RetiredEnv(getenv)}
 {{- range .}}
 {{- if eq .Kind "string"}}
 	if v := getenv("{{.EnvVar}}"); v != "" {

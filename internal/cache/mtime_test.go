@@ -109,7 +109,7 @@ func TestMtimeStoreLoadCancelledCtx(t *testing.T) {
 
 // TestMtimeStoreLoadRetriesAfterCancellation: load is memoized, so latching before the
 // disk read means one cancelled load leaves the store permanently empty and every
-// subsequent file re-hashes for the life of the process (the daemon's, not one run's).
+// subsequent file re-hashes for the life of the process (the server's, not one run's).
 func TestMtimeStoreLoadRetriesAfterCancellation(t *testing.T) {
 	dir := t.TempDir()
 	seed := newMtimeStore(dir, nil)

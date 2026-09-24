@@ -161,7 +161,7 @@ func reportProvidedCollision(ctx context.Context, spellName, rel, owner string) 
 	case "":
 		// slog, not stderr: the fold runs on every open (cache hit included), so a raw
 		// stderr line would nag on every command and shell completion, and would land in
-		// the daemon's log as unstructured text among structured records.
+		// the server's log as unstructured text among structured records.
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.ProviderProjectShadowed,
 			fmt.Sprintf("workspace provider %q reported %q, which already has a magusfile; the magusfile wins and the provider's configuration for it is ignored", spellName, rel)))
 	case spellName:

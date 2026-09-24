@@ -122,7 +122,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 			Idle:      tgt.Service.Idle,
 			Distinct:  tgt.Service.Distinct,
 		}
-		// Scoped to the workspace: the daemon hosts services for every workspace on
+		// Scoped to the workspace: the broker hosts services for every workspace on
 		// the machine, so a bare fingerprint would share one instance across them.
 		var root string
 		if ws := types.WorkspaceFromContext(ctx); ws != nil {

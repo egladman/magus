@@ -25,7 +25,7 @@ import type {
   Sample as ProtoSample,
 } from "@wire/metrics/v1alpha1/metrics_pb";
 import type { Insight } from "@wire/insight/v1alpha1/insight_pb";
-import type { ConnState } from "../../lib/daemon";
+import type { ConnState } from "../../lib/server";
 
 // ---- formatters ------------------------------------------------------------
 
@@ -91,9 +91,9 @@ export function clock(ms: number): string {
 // ---- connection ------------------------------------------------------------
 
 export interface ConnView {
-  // "none" (never connected, nothing pending) and "demo" (the daemon-free showcase
+  // "none" (never connected, nothing pending) and "demo" (the server-free showcase
   // fed by demo.ts, no real connection at all) are dashboard-only states layered on
-  // top of the daemon module's connecting/connected/disconnected.
+  // top of the server module's connecting/connected/disconnected.
   state: ConnState | "none" | "demo";
   detail?: string;
 }
@@ -130,8 +130,8 @@ export interface RunningTargetView {
   invocation: string;
   // Which workspace this unit of work belongs to. The wire has carried it all along; the mapping
   // dropped it, which is why nothing downstream could be scoped to a workspace. Running targets and
-  // activity events are the ONLY two things the daemon attributes - runs, pool counts and every
-  // metric family are daemon-wide by construction, one pool and one cache behind every workspace.
+  // activity events are the ONLY two things the server attributes - runs, pool counts and every
+  // metric family are server-wide by construction, one pool and one cache behind every workspace.
   workspace: string;
 }
 export interface WorkspaceView {
@@ -165,7 +165,7 @@ export interface LockView {
   command: string;
   dir: string;
   acquireTime?: Timestamp;
-  // Supplied by the daemon so this renderer cannot drift from the CLI's judgment.
+  // Supplied by the server so this renderer cannot drift from the CLI's judgment.
   staleAfterSeconds: number;
 }
 export interface ConfigView {
@@ -173,6 +173,51 @@ export interface ConfigView {
   concurrency: number;
   sandbox: boolean;
 }
+
+// ClaimView is one step holding a share of the host's capacity at the broker.
+export interface ClaimView {
+  project: string;
+  target: string;
+  pid: number;
+  slots: number;
+  memoryMb: number;
+  dir: string;
+  command: string;
+  startTime?: Timestamp;
+}
+
+// BrokerView is the per-user process holding this host's slots, declared memory and shared
+// services. A zero budget means the broker has not measured that resource.
+export interface BrokerView {
+  pid: number;
+  version: string;
+  protocol: number;
+  socket: string;
+  executable: string;
+  startTime?: Timestamp;
+  budgetSlots: number;
+  heldSlots: number;
+  budgetMb: number;
+  heldMb: number;
+  holders: ClaimView[];
+  idleExitSeconds: number;
+}
+
+// ServerView is `magus server`: the person-started process serving MCP, the console, the APIs and
+// background jobs. The console is always talking to one, so this reports which.
+export interface ServerView {
+  pid: number;
+  version: string;
+  socket: string;
+  executable: string;
+  startTime?: Timestamp;
+  listeners: { kind: string; address: string }[];
+  watch: string[];
+}
+
+// BrokerPolicy is the `broker` setting the status was reported under. It decides what a missing
+// broker means, so it rides beside a null broker rather than being folded into it.
+export type BrokerPolicy = "required" | "best-effort" | "off";
 
 // A target's lifecycle state, as plain view-model strings that double as the gantt
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
@@ -210,13 +255,34 @@ export interface StatusView {
   runningTargets: RunningTargetView[];
   runs: RunView[];
   workspaces: WorkspaceView[];
-  // Shared services the daemon is hosting right now (deduped across the whole daemon, kept warm
+  // Shared services the server is hosting right now (deduped across the whole server, kept warm
   // between runs). Empty when none are held.
   services: ServiceView[];
   // Workspace locks held right now. Empty when nothing is mutating a project.
   locks: LockView[];
-  magusVersion: string; // the daemon binary's version (status BuildInfo.version)
-  daemonVersion: string;
+  magusVersion: string; // the reporting binary's version (status BuildInfo.version)
+  ownerVersion: string; // the build of the process that owns the pool
+  // Null when that process is not running.
+  broker: BrokerView | null;
+  server: ServerView | null;
+  brokerPolicy: BrokerPolicy;
+}
+
+// brokerPolicyOf reads the wire's policy string, which is empty from a report that predates it and
+// otherwise one of the three names. Empty is the default, best-effort.
+function brokerPolicyOf(s: string): BrokerPolicy {
+  return s === "required" || s === "off" ? s : "best-effort";
+}
+
+// processSummary is the dashboard's one-line account of the two processes behind it, the same
+// tokens `magus status --compact` prints: "broker off" is the setting, "no broker" is one a run
+// would start, and a broker that measured the host shows the slots it has seated.
+export function processSummary(st: Pick<StatusView, "broker" | "server" | "brokerPolicy">): string {
+  let broker = "broker up";
+  if (!st.broker) broker = st.brokerPolicy === "off" ? "broker off" : "no broker";
+  else if (st.broker.budgetSlots > 0)
+    broker = "broker " + st.broker.heldSlots + "/" + st.broker.budgetSlots + " slots";
+  return broker + " · " + (st.server ? "server up" : "no server");
 }
 
 const TARGET_STATE: Record<number, TargetState> = {
@@ -309,7 +375,51 @@ export function mapStatus(st: Status): StatusView {
       staleAfterSeconds: l.staleAfterSeconds || 0,
     })),
     magusVersion: st.build?.version || "",
-    daemonVersion: (pool && pool.daemonVersion) || "",
+    ownerVersion: (pool && pool.ownerVersion) || "",
+    broker: mapBroker(st.broker),
+    server: mapServer(st.server),
+    brokerPolicy: brokerPolicyOf(st.brokerPolicy || ""),
+  };
+}
+
+function mapBroker(b: Status["broker"]): BrokerView | null {
+  if (!b) return null;
+  const cap = b.capacity;
+  return {
+    pid: b.pid || 0,
+    version: b.version || "",
+    protocol: b.protocol || 0,
+    socket: b.socket || "",
+    executable: b.executable || "",
+    startTime: b.startTime,
+    budgetSlots: cap?.budgetSlots || 0,
+    heldSlots: cap?.heldSlots || 0,
+    budgetMb: cap?.budgetMb || 0,
+    heldMb: cap?.heldMb || 0,
+    holders: (cap?.holders || []).map((c) => ({
+      project: c.project || "",
+      target: c.target || "",
+      pid: c.pid || 0,
+      slots: c.slots || 0,
+      memoryMb: c.memoryMb || 0,
+      dir: c.dir || "",
+      command: c.command || "",
+      startTime: c.startTime,
+    })),
+    idleExitSeconds: b.idleExitSeconds || 0,
+  };
+}
+
+function mapServer(s: Status["server"]): ServerView | null {
+  if (!s) return null;
+  return {
+    pid: s.pid || 0,
+    version: s.version || "",
+    socket: s.socket || "",
+    executable: s.executable || "",
+    startTime: s.startTime,
+    listeners: (s.listeners || []).map((l) => ({ kind: l.kind || "", address: l.address || "" })),
+    watch: s.watch || [],
   };
 }
 
@@ -553,7 +663,7 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 
 export type CacheSrc = "metrics" | "status";
 
-// A null field is UNMEASURED: the daemon's pool read or metric collection failed on that
+// A null field is UNMEASURED: the server's pool read or metric collection failed on that
 // tick. It is not zero, and a renderer must not draw it as one - an idle-looking square and
 // a square nobody measured are different facts. The live status feed always measures, so
 // nulls only ever arrive on the backfill.
@@ -565,7 +675,7 @@ export interface SampleView {
   cacheHits: number | null;
   cacheMisses: number | null;
   cacheSrc: CacheSrc; // baseline source of cacheHits/cacheMisses
-  // generation is the daemon's observing-since in ms: the identity of the process whose
+  // generation is the server's observing-since in ms: the identity of the process whose
   // cumulative counters these are. Two samples from different generations cannot be
   // differenced - the counters restarted at zero in between - so the rate chart breaks the
   // series instead. null means unknown, which breaks it too: joining an unknown generation
@@ -810,7 +920,7 @@ export interface AgentActivityView {
 }
 
 // How many recent calls the view retains. Enough to fill the tile at Big Picture scale without
-// keeping an unbounded slice of a busy daemon's trail in the store.
+// keeping an unbounded slice of a busy server's trail in the store.
 const RECENT_CAP = 12;
 
 // The wire shape the poll hands over: the fields of magus.activity.v1alpha1.ActivityEvent this reads,
@@ -885,7 +995,7 @@ export function mapAgentActivity(events: AgentEventWire[], now: number): AgentAc
   }
 
   // Newest first, then denials and advisories promoted ahead of passes. The cap is small enough
-  // that a busy daemon would otherwise fill it entirely with routine passes and bury the one denial
+  // that a busy server would otherwise fill it entirely with routine passes and bury the one denial
   // in the window - which is the single entry the tile exists to surface.
   recent.sort((a, b) => b.atMs - a.atMs);
   const rank = (d: string): number => (d === "deny" ? 0 : d === "advise" ? 1 : 2);
@@ -919,7 +1029,7 @@ export interface DashboardState {
   samples: SampleView[];
   insight: InsightView | null;
   // Why the insight lenses have no data, or null when they do. A tile with `insight === null` cannot
-  // tell "the daemon has not answered yet" from "it answered and the window is empty", and the two
+  // tell "the server has not answered yet" from "it answered and the window is empty", and the two
   // want opposite copy: the first is unknown, the second is a measured absence.
   // "Note" and not "Error": most of its values are not errors. It carries not-connected, reading,
   // and failed alike - whatever the reason there is nothing to show. transport.ts owns every
@@ -930,20 +1040,20 @@ export interface DashboardState {
   insightUpdatedAt: number | null;
   tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
-  // produced a frame, or when the daemon serves no trail.
+  // produced a frame, or when the server serves no trail.
   agents: AgentActivityView | null;
   // logLines is a rolling buffer of raw captured-output lines for the live-activity
   // preview. Only the demo feed (demo.ts) synthesizes it; live mode leaves it empty,
-  // because the daemon's status SSE carries pool/health frames, not a raw-output
+  // because the server's status SSE carries pool/health frames, not a raw-output
   // journal - a real live tail would need a journal SSE consumer (see activity.ts).
   logLines: string[];
-  // config is the daemon's resolved read-only configuration (default charms, concurrency cap,
+  // config is the server's resolved read-only configuration (default charms, concurrency cap,
   // sandbox), read once from the JSON status endpoint alongside observingSince. null until known.
   config: ConfigView | null;
-  // observingSince is when the daemon began collecting the telemetry/cache counters (epoch ms),
+  // observingSince is when the server began collecting the telemetry/cache counters (epoch ms),
   // read once from the JSON status endpoint (it is static per session and not on the proto event
   // stream). null until known. Surfaced so the board can be transparent that the numbers are
-  // cumulative since then and are NOT persisted across daemon restarts. The demo synthesizes one.
+  // cumulative since then and are NOT persisted across server restarts. The demo synthesizes one.
   observingSince: number | null;
 }
 
@@ -955,7 +1065,7 @@ export function initialState(): DashboardState {
     metrics: null,
     samples: [],
     insight: null,
-    // Not "Reading history..." - at construction no daemon is attached and nothing is reading.
+    // Not "Reading history..." - at construction no server is attached and nothing is reading.
     // startInsight sets that once a poll actually begins.
     insightNote: "Not connected.",
     insightUpdatedAt: null,

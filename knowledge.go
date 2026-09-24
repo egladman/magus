@@ -1281,7 +1281,7 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 	return m.warmGraph
 }
 
-// KnowledgeGraph returns the workspace knowledge graph. In the daemon, once
+// KnowledgeGraph returns the workspace knowledge graph. In the server, once
 // WatchKnowledgeGraph is running, this answers from a warm in-memory graph without
 // re-parsing magusfiles; otherwise (and on refresh) it rebuilds cache-first. It is
 // always fresh: the warm graph is served only while a watcher can invalidate it.
@@ -1323,8 +1323,8 @@ func (m *Magus) KnowledgeGraphWithSymbolsForRef(ctx context.Context, ref string)
 }
 
 // WatchKnowledgeGraph starts a file watcher that keeps the warm knowledge graph
-// fresh, so daemon MCP calls answer from memory. It returns a stop function; the
-// long-lived daemon calls it once at startup. A one-shot CLI never calls it and
+// fresh, so server MCP calls answer from memory. It returns a stop function; the
+// long-lived server calls it once at startup. A one-shot CLI never calls it and
 // pays the cache-first rebuild per command (equally fresh, just not warm).
 func (m *Magus) WatchKnowledgeGraph(ctx context.Context) (func(), error) {
 	return m.warmKnowledgeGraph().watch(ctx, m.Root())

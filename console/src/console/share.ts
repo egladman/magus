@@ -13,27 +13,27 @@
 //      paste onto any other device on the network, and when it expires. "New link"
 //      returns to the picker (a fresh mint supersedes the old token).
 //
-// The daemon does the real work (mint token, open the LAN listener); this module is
+// The server does the real work (mint token, open the LAN listener); this module is
 // presentation plus one authenticated POST that carries the chosen ttl_seconds (the
-// daemon refuses one out of range). Every failure is surfaced as a toast, never a silent no-op.
+// server refuses one out of range). Every failure is surfaced as a toast, never a silent no-op.
 //
 // It is a loopback-console affordance only: a read-only viewer over the LAN never
-// mounts the panel, and the daemon would reject the share trigger anyway (it is
+// mounts the panel, and the server would reject the share trigger anyway (it is
 // loopback + bearer guarded).
 
 import {
-  resolveDaemonHost,
+  resolveServerHost,
   authHeaders,
   getLiveToken,
   parseRefusal,
   reportHttpStatus,
   type Refusal,
-} from "../lib/daemon";
+} from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
 import { encodeToCanvas } from "../lib/qr";
 
-// The lifetimes the operator picks before minting, in seconds (sent as ttl_seconds). The daemon
+// The lifetimes the operator picks before minting, in seconds (sent as ttl_seconds). The server
 // refuses anything outside [1 minute, 24 hours] (auth.MinShareTTL, auth.MaxShareTTL) rather than
 // shortening it, so every entry here must sit inside that range; the default is the first entry.
 //
@@ -246,11 +246,11 @@ export function mountSharePanel(): SharePanel {
   // result, or toasts why it could not. The Generate button is disabled while the
   // request is in flight so a double click cannot mint twice.
   async function generate(trigger: HTMLButtonElement): Promise<void> {
-    const host = resolveDaemonHost();
+    const host = resolveServerHost();
     if (!host) {
       showToast(
         "Share",
-        "No daemon is connected, so there is nothing to share. Set the daemon address in Settings first.",
+        "No server is connected, so there is nothing to share. Set the server address in Settings first.",
         "error",
       );
       return;
@@ -258,7 +258,7 @@ export function mountSharePanel(): SharePanel {
     if (!getLiveToken()) {
       showToast(
         "Share",
-        "The daemon needs an auth token to share. Open the console via a live link with a token.",
+        "The server needs an auth token to share. Open the console via a live link with a token.",
         "error",
       );
       return;
@@ -278,7 +278,7 @@ export function mountSharePanel(): SharePanel {
       trigger.disabled = false;
       showToast(
         "Share",
-        "Could not reach the daemon to start a share. Is it still running?",
+        "Could not reach the server to start a share. Is it still running?",
         "error",
       );
       return;
@@ -311,12 +311,12 @@ export function mountSharePanel(): SharePanel {
     } catch {
       // reported: the toast below
       trigger.disabled = false;
-      showToast("Share", "The daemon returned an unreadable share response.", "error");
+      showToast("Share", "The server returned an unreadable share response.", "error");
       return;
     }
     if (!data.url) {
       trigger.disabled = false;
-      showToast("Share", "The daemon returned an empty share URL.", "error");
+      showToast("Share", "The server returned an empty share URL.", "error");
       return;
     }
     renderResult(data.url, data.expires_at ?? "", data.superseded === true);

@@ -19,7 +19,7 @@ func TestServerSocketName(t *testing.T) {
 	assert.NotContains(t, ServerSocketName(), "magus-")
 }
 
-// isolateSockDir points SockDir() at a fresh empty dir so a real daemon on the
+// isolateSockDir points SockDir() at a fresh empty dir so a real server on the
 // developer's machine can never leak into these tests.
 func isolateSockDir(t *testing.T) string {
 	t.Helper()

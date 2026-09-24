@@ -123,7 +123,7 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) typ
 }
 
 // admit verifies presented, and refuses the operator token from a peer that is not loopback,
-// judged by the TCP peer address and never a header. A daemon bound beyond loopback
+// judged by the TCP peer address and never a header. A server bound beyond loopback
 // (mcp.insecure_bind) serves stored tokens to the network; the operator token stays local.
 func admit(verify Verifier, presented string, r *http.Request) (types.Credential, bool) {
 	cred, ok := verify(presented)
@@ -187,7 +187,7 @@ var (
 	bearerRejected = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerRejected,
-		Message: "the daemon rejected the bearer token: it is wrong, expired, or revoked. Mint one with: magus config mcp connector create, or magus config console token create",
+		Message: "the server rejected the bearer token: it is wrong, expired, or revoked. Mint one with: magus config mcp connector create, or magus config console token create",
 	}
 )
 

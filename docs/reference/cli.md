@@ -195,7 +195,7 @@ driver for generated outputs.
 
 ## Long-running processes
 
-`magus server start` backgrounds the daemon, which keeps the knowledge graph
+`magus server start` backgrounds the server, which keeps the knowledge graph
 warm and serves MCP. Starting one when it is already running is a no-op that
 still exits 0, so it chains safely in scripts. `magus server stop` exits
 non-zero when it found nothing to stop.

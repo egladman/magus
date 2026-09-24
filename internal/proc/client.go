@@ -14,21 +14,21 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// statusQueryTimeout caps the QueryStatus round-trip; prevents hung daemons from blocking forever.
+// statusQueryTimeout caps the QueryStatus round-trip; prevents hung servers from blocking forever.
 const statusQueryTimeout = 5 * time.Second
 
-// Forward dials MAGUS_DAEMON_SOCKET, delegates args, and returns the exit code.
+// Forward dials [SocketEnv], delegates args, and returns the exit code.
 // On any transport error callers should fall back to running locally.
-// Pass "" for root when unknown; the daemon resolves it from Cwd.
+// Pass "" for root when unknown; the server resolves it from Cwd.
 func Forward(ctx context.Context, args []string, version, root string) (int, error) {
-	raw := os.Getenv("MAGUS_DAEMON_SOCKET")
+	raw := os.Getenv(SocketEnv)
 	if raw == "" {
-		return 0, fmt.Errorf("proc: forward: MAGUS_DAEMON_SOCKET not set")
+		return 0, fmt.Errorf("proc: forward: %s not set", SocketEnv)
 	}
 
 	ep, err := endpoint.Parse(raw)
 	if err != nil {
-		return 0, fmt.Errorf("proc: forward: invalid MAGUS_DAEMON_SOCKET: %w", err)
+		return 0, fmt.Errorf("proc: forward: invalid %s: %w", SocketEnv, err)
 	}
 
 	conn, err := ep.Dial(ctx)
@@ -39,14 +39,14 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 
 	cwd, _ := os.Getwd()
 	// Send the adoption identity, not the raw display version: a dev build is fingerprinted
-	// from its VCS stamp so it never matches a differently-built dev daemon (see
-	// adoptionIdentity). A stale pre-fix daemon compares this against its stored "unknown"
-	// and mismatches, so the fix fails closed against old daemons too.
-	// The ancestry travels with the request because the daemon, not this process, is what
-	// takes the project locks for an adopted run: without it the daemon cannot tell a
+	// from its VCS stamp so it never matches a differently-built dev server (see
+	// adoptionIdentity). A stale pre-fix server compares this against its stored "unknown"
+	// and mismatches, so the fix fails closed against old servers too.
+	// The ancestry travels with the request because the server, not this process, is what
+	// takes the project locks for an adopted run: without it the server cannot tell a
 	// lock held for THIS client's parent from one held for an unrelated client.
-	// The lease travels for the same reason in the other direction: the daemon runs the
-	// work, so it would otherwise attribute it to the daemon's environment (which is
+	// The lease travels for the same reason in the other direction: the server runs the
+	// work, so it would otherwise attribute it to the server's environment (which is
 	// nobody's lease) and the session journal would show adopted runs unattributed.
 	// Read through trail.LeaseFromEnv rather than the raw variable so a malformed
 	// value is dropped here, once, by the same rule every other channel applies.
@@ -102,14 +102,14 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 }
 
 // SubmitJob dials the proc server at addr and submits a fire-and-forget background job:
-// the daemon runs `magus <args>` asynchronously and this returns as soon as it is
+// the server runs `magus <args>` asynchronously and this returns as soon as it is
 // accepted, with the job's invocation id (a Dashboard deep-link). It scopes the job to
 // the caller's working directory (computed here, like Forward, so there is no
-// transposition-prone dir argument); the daemon walks up from it to the workspace root.
+// transposition-prone dir argument); the server walks up from it to the workspace root.
 // Used by the VCS refresh hook, which must not block a checkout. addr accepts a unix://
 // URL or a path. version is the caller's build version; it is sent as an adoption identity
 // (see adoptionIdentity) so a background job is version-gated exactly like a forwarded run
-// - a stale dev daemon will not silently run a fresh client's job with the wrong code.
+// - a stale dev server will not silently run a fresh client's job with the wrong code.
 func SubmitJob(ctx context.Context, addr string, args []string, version string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {

@@ -780,7 +780,7 @@ func (h *PrettyHandler) Print(ctx context.Context, text string) error {
 
 // BeginRun clears what the band shows about the previous run. This handler is
 // per-process and the band per-run, so a process that outlives one run (a TUI left
-// open, the daemon) would otherwise report the sum of every run it has seen.
+// open, the server) would otherwise report the sum of every run it has seen.
 func (h *PrettyHandler) BeginRun() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1682,8 +1682,8 @@ func (h *PrettyHandler) releaseBand() error {
 // linkify makes text a hyperlink to the captured log at path, or returns it
 // unchanged when there is no path or the terminal cannot render one.
 //
-// file:// rather than the daemon's output viewer, which renders the same log
-// far better: the viewer is only reachable while the daemon is running, and a
+// file:// rather than the server's output viewer, which renders the same log
+// far better: the viewer is only reachable while the server is running, and a
 // link that is dead half the time is worse than no link. The log file is
 // written before the failure is ever printed, so locally this one cannot be.
 //

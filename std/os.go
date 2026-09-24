@@ -87,7 +87,7 @@ var Os = Module{
 		},
 		{
 			Name:    "exit",
-			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.",
+			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.",
 			Args:    []Arg{{Name: "code", Type: TypeInt}},
 			Returns: nil,
 			Raises:  true,
@@ -223,9 +223,9 @@ func OsSleep(ctx context.Context, ms float64) error {
 }
 
 // OsExit aborts the current run by returning a types.ExitError carrying code. It
-// deliberately does not call os.Exit: a target may run inside a daemon serving
+// deliberately does not call os.Exit: a target may run inside a server serving
 // other workspaces, where os.Exit would kill unrelated work. The error propagates
-// to the CLI (and daemon), which translate it into the process exit status. It
+// to the CLI (and server), which translate it into the process exit status. It
 // also records the code on ctx (types.CaptureExit) so it survives when the engine
 // stringifies the error type away; the interpreter reads it back. See types.ExitError.
 func OsExit(ctx context.Context, code int) error {
@@ -416,7 +416,7 @@ func shellFlag(shell string) string {
 type withEnvKey struct{}
 
 // OsWithEnv injects extra env vars for subprocesses spawned during the
-// callback without mutating the daemon's process-global environment.
+// callback without mutating the server's process-global environment.
 // Overrides are propagated via ctx and merged at exec time in applySandboxPolicy.
 func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 	// Merge with any outer with_env overrides already on ctx.

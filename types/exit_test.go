@@ -27,7 +27,7 @@ func TestExitError(t *testing.T) {
 	var err error = ExitError{Code: 3}
 	assert.Equal(t, "exit 3", err.Error())
 
-	// Must be recoverable via errors.As so the CLI/daemon can read the code
+	// Must be recoverable via errors.As so the CLI/server can read the code
 	// after it propagates wrapped up from a target.
 	wrapped := errors.Join(errors.New("magusfile: target ci"), ExitError{Code: 2})
 	var ex ExitError

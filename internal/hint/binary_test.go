@@ -76,7 +76,7 @@ func TestBinaryNameIgnoresEveryOtherProgram(t *testing.T) {
 	}
 }
 
-// The MCP surface renders the PATH spelling. The daemon resolved its own argv0 once at
+// The MCP surface renders the PATH spelling. The server resolved its own argv0 once at
 // startup, and a client rooted elsewhere cannot run the `./magus` that answered it.
 func TestOnPathRespellsForAReaderElsewhere(t *testing.T) {
 	keepBinaryName(t)

@@ -9,7 +9,7 @@ import (
 
 // processStdioOption hands a run this process's standard streams, so it can defer to a
 // magus upstream of it in a shell pipe (see magus.ProcessStdio). An adopted run gets
-// none: it executes inside the daemon, whose stdin belongs to nobody's pipe.
+// none: it executes inside the server, whose stdin belongs to nobody's pipe.
 func processStdioOption(ctx context.Context) []magus.RunOption {
 	if _, adopted := magusFromContext(ctx); adopted {
 		return nil

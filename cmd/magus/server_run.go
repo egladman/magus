@@ -94,7 +94,7 @@ func serverInfo(sock string) *types.StatusServer {
 }
 
 // startServer builds the server's proc listener, the per-workspace registry and the
-// shared telemetry provider for `magus server`. When cfg.Daemon.Workspaces is non-empty it
+// shared telemetry provider for `magus server`. When cfg.Server.Workspaces is non-empty it
 // eagerly loads the declared workspaces and applies landlock.
 //
 // The server holds no host capacity and hosts no services: it is a broker client like any
@@ -108,7 +108,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	}
 	lim := cache.NewLimiter(n)
 
-	ttl := cfg.Daemon.IdleTTL
+	ttl := cfg.Server.IdleTTL
 	if ttl <= 0 {
 		ttl = defaultIdleTTL
 	}
@@ -134,7 +134,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	serverRuns = console.NewRunRegistry()
 
 	brokerClient := newBrokerClient(false)
-	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
+	declared := resolveDeclaredWorkspaces(cfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
 	reg := newWSRegistry(ctx, lim, brokerClient, ttl, sharedTel)
 	reg.setDeclared(declared)
 	serverRegistry = reg // publish so startBridge can adopt the bridge workspace into it
@@ -172,16 +172,16 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		Context:         ctx,
 		Limiter:         lim,
 		Version:         version,
-		Address:         cfg.Daemon.Address,
+		Address:         cfg.Server.Address,
 	})
 	if err != nil {
 		slog.Error("server: init failed", slog.String("error", err.Error()))
 		return
 	}
 	addr = srv.Addr()
-	_ = os.Setenv("MAGUS_DAEMON_SOCKET", addr)
+	_ = os.Setenv(proc.SocketEnv, addr)
 	if err := srv.Start(); err != nil {
-		_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
+		_ = os.Unsetenv(proc.SocketEnv)
 		slog.Error("server: start failed", slog.String("error", err.Error()))
 		return
 	}

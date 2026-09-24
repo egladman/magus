@@ -46,7 +46,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : With --graph: cap displayed depth (0 = unlimited)
 
 **--detach**
-: Hand the run to the daemon and return immediately; follow it with magus status --watch
+: Hand the run to the server and return immediately; follow it with magus status --watch
 
 **--graph**
 : Render the dependency graph for the selected scope instead of executing

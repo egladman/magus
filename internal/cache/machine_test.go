@@ -336,7 +336,7 @@ func requireWaits(t *testing.T, done <-chan error, free func()) {
 	}
 }
 
-// TestMachineGateWaitsOnClaimsOfItsOwnProcess is the daemon shape: two unrelated
+// TestMachineGateWaitsOnClaimsOfItsOwnProcess is the server shape: two unrelated
 // invocations in ONE process, and the budget is full of the first one's claim. Nothing
 // here is another magus process, so the second queues rather than exiting 75.
 func TestMachineGateWaitsOnClaimsOfItsOwnProcess(t *testing.T) {
@@ -585,7 +585,7 @@ func TestAncestryFallsBackToTheEnvironmentForAnUnstampedCaller(t *testing.T) {
 	assert.False(t, blindToOwnAncestry(context.Background()),
 		"a consumer that CAN name its ancestors is not blind, whatever stamped ctx")
 
-	// ctx still wins when something upstream stamped it: under the daemon the process
+	// ctx still wins when something upstream stamped it: under the server the process
 	// environment belongs to no invocation, and the ancestry on ctx is the run's own.
 	ctx := types.WithInvocationAncestors(context.Background(), []string{"55:inv-adopted"})
 	assert.Equal(t, []string{"55:inv-adopted"}, ancestorInvocations(ctx),
@@ -655,10 +655,10 @@ func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
 	assert.Equal(t, "nothing else holds a claim", describeMachineHolders(nil))
 }
 
-// TestMachineRefusalStatesItsExitCode pins the method the DAEMON reads. exitCodeOf
+// TestMachineRefusalStatesItsExitCode pins the method the SERVER reads. exitCodeOf
 // sees the concrete error and could go on matching the diagnostic code; a run the
-// daemon executes for an adopted client cannot, because the type does not survive the
-// socket. Without the method the refusal exits 75 alone and 1 under a daemon, which is
+// server executes for an adopted client cannot, because the type does not survive the
+// socket. Without the method the refusal exits 75 alone and 1 under a server, which is
 // the exact split proc.ExitCode exists to close.
 func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)

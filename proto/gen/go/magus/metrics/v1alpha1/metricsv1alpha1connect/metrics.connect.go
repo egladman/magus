@@ -5,7 +5,7 @@
 // Package magus.metrics.v1alpha1 is the versioned wire contract for the DERIVED dashboard
 // metrics: magus's OTel instrument families rolled up into the numbers a developer reads
 // to judge health - operation counts, cache hit-rates, and latency percentiles - plus a
-// rolling time-series the daemon backfills so the utilization grid shows history from
+// rolling time-series the server backfills so the utilization grid shows history from
 // before the page opened. A sibling of magus.status.v1alpha1 (which carries the live pool/health
 // snapshot); the dashboard streams both. Served by MetricsService over ConnectRPC (one
 // endpoint speaks Connect, gRPC, and gRPC-Web): StreamMetrics sends one Backfill (the Sample

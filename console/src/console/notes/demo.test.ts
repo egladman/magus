@@ -1,4 +1,4 @@
-// demo.test.ts - the sample notes the Notes surface shows without a daemon. demoNotes is pure
+// demo.test.ts - the sample notes the Notes surface shows without a server. demoNotes is pure
 // and DOM-free, so it runs directly under node. Run: `pnpm run test`.
 
 import { test } from "node:test";

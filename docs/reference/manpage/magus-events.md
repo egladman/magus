@@ -20,7 +20,7 @@ third-party integrations build against: an Emacs or Vim plugin, a status bar,
 a notifier.
 
 Every magus process in the workspace feeds the stream, so a run started in
-another terminal shows up here. It needs no daemon, no token, and no loadable
+another terminal shows up here. It needs no server, no token, and no loadable
 magusfile - an editor can attach to a repository whose magusfile is mid-edit.
 
 The stream is outbound only. Nothing a subscriber does can change a magus

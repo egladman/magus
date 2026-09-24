@@ -16,24 +16,24 @@
 //
 //   RUNNING - the live pool's running targets, plus the workspace locks held right now. Both come
 //             from one Status frame (StatusService.GetStatus - the same message the dashboard reads
-//             over its SSE), and both are needed: a running target is work the daemon's own pool is
+//             over its SSE), and both are needed: a running target is work the server's own pool is
 //             executing, while a lock holder is a separate magus PROCESS mutating a project, which
 //             is what a run started from a terminal looks like and which the pool cannot see at all.
-//             Showing only the first would report an idle daemon during someone else's build.
-//   RECENT  - the daemon's retained run descriptors (GET /api/v1/outputs), newest first, each with
+//             Showing only the first would report an idle server during someone else's build.
+//   RECENT  - the server's retained run descriptors (GET /api/v1/outputs), newest first, each with
 //             the outcome it finished with. This is the same read-only feed the log viewer's run
 //             browser paints its tree from.
 //
 // Polled, not streamed, following the dashboard's activity-tile idiom (setInterval around a unary
 // read): the shell owns no SSE of its own, and opening a second status stream alongside the
 // dashboard's would buy nothing a four-second poll does not. The timer runs only while the panel is
-// OPEN - a closed drawer is not a reason to talk to the daemon.
+// OPEN - a closed drawer is not a reason to talk to the server.
 
 import { createClient } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
 import { ViewerService, type Output } from "@wire/viewer/v1alpha1/viewer_pb";
-import { authHeaders, createDaemonTransport, getLiveToken, resolveDaemonHost } from "../lib/daemon";
+import { authHeaders, createServerTransport, getLiveToken, resolveServerHost } from "../lib/server";
 
 // The refresh cadence, and the deadline each read inside one refresh gets. Deliberately NOT the
 // operator's configured refresh rate (lib/settings getPollMs, default 20s): that rate governs how
@@ -69,7 +69,7 @@ export interface ActivityRow {
   unit?: string;
 }
 
-// RunDescriptor mirrors one row of the daemon's GET /api/v1/outputs JSON. It is the same wire DTO
+// RunDescriptor mirrors one row of the server's GET /api/v1/outputs JSON. It is the same wire DTO
 // the log viewer's run browser reads (logs/runtree.ts's RunSummary), redeclared rather than imported:
 // each console surface is its own bundle, and reaching across for an eight-field interface would pull
 // the run browser's module into the shell to get it. timestamp_ms is when the run FINISHED (the cache
@@ -112,7 +112,7 @@ export function wireDescriptors(outputs: readonly Output[]): RunDescriptor[] {
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or 0 when the field is absent. It is
 // the null-ish variant on purpose (compare dashboard/state.ts's tsMillisOrNow, which substitutes NOW):
-// a running target whose start time the daemon did not report must not render as "0s", which reads as
+// a running target whose start time the server did not report must not render as "0s", which reads as
 // "just started" and is indistinguishable from the truth.
 function tsMillis(ts: Timestamp | undefined): number {
   if (!ts) return 0;
@@ -251,11 +251,11 @@ export function mountActivityDrawer(): ActivityDrawer {
   let destroyed = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   // The generation a read is stamped with. A read that resolves after a newer one started - or after
-  // the panel shut - is dropped rather than painted: the poll is four seconds and a slow daemon
+  // the panel shut - is dropped rather than painted: the poll is four seconds and a slow server
   // answers out of order, so without this the tick before last can repaint over the newest rows.
   let generation = 0;
   // The reads in flight, so shutting the panel stops them. A closed drawer is not a reason to keep
-  // the daemon answering, and it is the same rule the timer already follows.
+  // the server answering, and it is the same rule the timer already follows.
   let reading: AbortController | null = null;
   // Every listener this drawer installs, the two on document included, removed together by
   // destroy(). Not by close(): a hidden drawer still has to hear the button that reopens it.
@@ -317,13 +317,13 @@ export function mountActivityDrawer(): ActivityDrawer {
   // so each section keeps its own honest empty state rather than sharing one "something went wrong".
   async function refresh(): Promise<void> {
     // This tick supersedes whatever the last one is still waiting for - including when there is
-    // nothing to read, or a read still out from the daemon that just went away would paint rows
+    // nothing to read, or a read still out from the server that just went away would paint rows
     // over "not connected".
     stopReading();
-    const host = resolveDaemonHost();
+    const host = resolveServerHost();
     if (!host) {
-      running.render([], "Not connected to a daemon.");
-      recent.render([], "Not connected to a daemon.");
+      running.render([], "Not connected to a server.");
+      recent.render([], "Not connected to a server.");
       setSummary(0, 0);
       return;
     }
@@ -338,14 +338,14 @@ export function mountActivityDrawer(): ActivityDrawer {
     const now = Date.now();
     const runningList = runningRows(status.kind === "ok" ? status.status : undefined, now);
     const recentList = runs.kind === "ok" ? recentRows(runs.runs, now) : [];
-    // The reason rides the empty line rather than being dropped: "could not read the daemon's
-    // status" is the same sentence whether the daemon went away, the token went stale, or the read
+    // The reason rides the empty line rather than being dropped: "could not read the server's
+    // status" is the same sentence whether the server went away, the token went stale, or the read
     // ran out of time, and only the last of those is worth waiting through.
     running.render(
       runningList,
       status.kind === "ok"
         ? "Nothing is running."
-        : "Could not read the daemon's status: " + status.detail,
+        : "Could not read the server's status: " + status.detail,
     );
     recent.render(
       recentList,
@@ -470,7 +470,7 @@ function why(e: unknown): string {
 
 // deadline is the signal one read runs under: the panel's own abort (a close, a destroy) OR the
 // four-second cap, whichever fires first. Both halves are needed - a timeout alone keeps a shut
-// drawer talking to the daemon, and an abort alone lets a read that never answers hold the poll's
+// drawer talking to the server, and an abort alone lets a read that never answers hold the poll's
 // place forever.
 function deadline(signal: AbortSignal): AbortSignal {
   return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
@@ -481,7 +481,7 @@ function deadline(signal: AbortSignal): AbortSignal {
 // failure instead of throwing into the poll timer.
 async function fetchStatus(host: string, signal: AbortSignal): Promise<StatusRead> {
   try {
-    const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+    const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
     const resp = await client.getStatus({}, { signal: deadline(signal) });
     return { kind: "ok", status: resp.status };
   } catch (e) {
@@ -489,12 +489,12 @@ async function fetchStatus(host: string, signal: AbortSignal): Promise<StatusRea
   }
 }
 
-// fetchRuns reads the daemon's retained run descriptors. "Could not read the history" stays
+// fetchRuns reads the server's retained run descriptors. "Could not read the history" stays
 // distinguishable from "the history is empty"; the two mean very different things to someone
 // wondering why the panel is blank.
 async function fetchRuns(host: string, signal: AbortSignal): Promise<RunsRead> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, getLiveToken()));
+    const client = createClient(ViewerService, createServerTransport(host, getLiveToken()));
     const resp = await client.listOutputs({}, { signal: deadline(signal) });
     return { kind: "ok", runs: wireDescriptors(resp.outputs) };
   } catch (e) {

@@ -23,8 +23,8 @@ import (
 type probeKind int
 
 const (
-	probeLiveness  probeKind = iota // daemon answers the status RPC
-	probeReadiness                  // daemon answers AND target workspace is loaded
+	probeLiveness  probeKind = iota // server answers the status RPC
+	probeReadiness                  // server answers AND target workspace is loaded
 	probeMCP                        // the MCP HTTP endpoint an agent host connects to is reachable
 )
 
@@ -82,7 +82,7 @@ func probeName(kind probeKind) string {
 	}
 }
 
-// evaluateHealth reports whether the daemon is healthy. root, if non-empty, pins readiness to a specific workspace.
+// evaluateHealth reports whether the server is healthy. root, if non-empty, pins readiness to a specific workspace.
 func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root string) (ok bool, reason string) {
 	if err != nil || status == nil {
 		if err != nil {
@@ -148,12 +148,12 @@ type probeResult struct {
 // evaluateProbes runs each requested probe and returns a result per kind, in order. It is
 // the decision half of runProbes, kept pure of output and process exit so the exit-code
 // contract (which K8s and shell guards depend on) is unit-testable. statusOf supplies the
-// daemon snapshot for socket-based probes and is called at most once, and only when a
+// server snapshot for socket-based probes and is called at most once, and only when a
 // non-mcp probe needs it: an mcp-only invocation makes no proc RPC at all. mcp holds the
 // endpoint config the mcp probe reads, passed in so this stays free of package globals.
 func evaluateProbes(ctx context.Context, statusOf statusFunc, mcp config.MCP, kinds []probeKind, root string) []probeResult {
-	var daemonSnap *types.StatusOutput
-	var daemonErr error
+	var serverSnap *types.StatusOutput
+	var serverErr error
 	dialed := false
 
 	results := make([]probeResult, 0, len(kinds))
@@ -164,10 +164,10 @@ func evaluateProbes(ctx context.Context, statusOf statusFunc, mcp config.MCP, ki
 			ok, reason = evaluateMCPHealth(buildMCPEndpointStatus(ctx, mcp))
 		} else {
 			if !dialed {
-				daemonSnap, daemonErr = statusOf(ctx)
+				serverSnap, serverErr = statusOf(ctx)
 				dialed = true
 			}
-			ok, reason = evaluateHealth(daemonSnap, daemonErr, kind, root)
+			ok, reason = evaluateHealth(serverSnap, serverErr, kind, root)
 		}
 		results = append(results, probeResult{kind: kind, ok: ok, reason: reason})
 	}
@@ -175,14 +175,14 @@ func evaluateProbes(ctx context.Context, statusOf statusFunc, mcp config.MCP, ki
 }
 
 // runProbes evaluates every requested probe and exits non-zero if ANY is unhealthy, so
-// `--probe=liveness,mcp` fails when either the daemon or the MCP endpoint is down. Each
+// `--probe=liveness,mcp` fails when either the server or the MCP endpoint is down. Each
 // result prints on its own line ("ok: <reason>" on stdout, the reason on stderr for a
 // failure); with more than one probe each line is prefixed with its kind so the caller
 // can tell which dimension failed. The mcp probe targets the HTTP endpoint an agent host
 // connects to (not the proc socket the liveness/readiness probes dial), so it fails
-// exactly when the tools are unreachable even if the daemon itself answers.
+// exactly when the tools are unreachable even if the server itself answers.
 func runProbes(ctx context.Context, socket string, mcp config.MCP, kinds []probeKind, root string) error {
-	results := evaluateProbes(ctx, daemonStatus(socket), mcp, kinds, root)
+	results := evaluateProbes(ctx, serverSnapshot(socket), mcp, kinds, root)
 	if renderProbeResults(os.Stdout, os.Stderr, results) {
 		return nil
 	}
@@ -211,7 +211,7 @@ func renderProbeResults(stdout, stderr io.Writer, results []probeResult) (allOK 
 
 // evaluateMCPHealth reports whether the MCP endpoint is reachable, with a reason. A
 // reachable endpoint (serving or listening-but-not-ready) passes: for an ensure/liveness
-// check the daemon is up either way. Unreachable and disabled both fail, carrying the
+// check the server is up either way. Unreachable and disabled both fail, carrying the
 // status note (which points at `magus server start`, or names the disabling config).
 func evaluateMCPHealth(m *types.MCPEndpointStatus) (ok bool, reason string) {
 	if m == nil {
@@ -233,17 +233,17 @@ type statusFunc func(ctx context.Context) (*types.StatusOutput, error)
 // errNotServer is a health probe that reached a per-process proc server. It answers a
 // socket and loads no workspace, so reporting its empty workspace list as "no
 // workspaces loaded" would be a misleading readiness verdict.
-var errNotServer = errors.New("a per-process pool answered, not the server; readiness requires `" + hint.ServerStart.String() + "`")
+var errNotServer = errors.New("a per-process pool answered, not the server; the probes ask `" + hint.ServerStart.String() + "`")
 
-// daemonStatus dials socket (auto-discovered when empty) for a live status snapshot of
-// the server.
-func daemonStatus(socket string) statusFunc {
+// serverSnapshot asks the server for a live status snapshot: at socket when one is named,
+// otherwise at the server's own address (resolveServerAddr).
+//
+// It never consults MAGUS_PROC_SOCKET or scans the socket directory. Inside a run the
+// variable names that run's per-process pool, and a scan only finds more pools, none of
+// them the server; the server's address is the only place its answer can come from.
+func serverSnapshot(socket string) statusFunc {
 	return func(ctx context.Context) (*types.StatusOutput, error) {
-		addr, err := resolveStatusSocket(ctx, socket)
-		if err != nil {
-			return nil, err
-		}
-		reply, err := proc.QueryStatus(ctx, addr)
+		reply, err := proc.QueryStatus(ctx, resolveServerAddr(socket))
 		if err != nil {
 			return nil, err
 		}
@@ -298,7 +298,7 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 // buildConsoleStatus reports where the console is served and whether it is really there.
 //
 // It takes the MCP endpoint's already-probed health rather than probing again, because the
-// daemon serves both from ONE listener: a second probe could only ever disagree with the
+// server serves both from ONE listener: a second probe could only ever disagree with the
 // first, and a status block that contradicts the block above it is worse than no block.
 func buildConsoleStatus(cfg config.Console, mcp *types.MCPEndpointStatus) *types.ConsoleStatus {
 	if cfg.Enabled != nil && !*cfg.Enabled {
@@ -339,7 +339,7 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 		return 0
 	}
 	defer resp.Body.Close()
-	// An answered status other than 200/503 (e.g. an older daemon without /readyz)
+	// An answered status other than 200/503 (e.g. an older server without /readyz)
 	// still proves a listener is up; report OK so the endpoint reads as reachable.
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusServiceUnavailable:
@@ -357,8 +357,8 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 // The body is a fixed generic token ("ok"/"unavailable"), NOT evaluateHealth's reason.
 // These routes are served unguarded (no bearer token, no DNS-rebind check) so a container
 // orchestrator can probe them, which means anyone who can reach the port reads the body;
-// and evaluateHealth's reason embeds the daemon PID on the healthy path and, on the
-// unreachable path, a proc-dial error that carries the daemon socket path. A liveness probe
+// and evaluateHealth's reason embeds the server PID on the healthy path and, on the
+// unreachable path, a proc-dial error that carries the server socket path. A liveness probe
 // only needs UP/DOWN, which the status code already carries (a kubelet reads only the code),
 // so the body is redacted to leak neither. The CLI probe path (runProbes) keeps the rich
 // reason: it is a local terminal, not this networked surface.
@@ -415,8 +415,8 @@ func readinessHTTPHandler(status statusFunc, extra readinessExtras) http.Handler
 // already evaluated with evaluateHealth (unchanged by this function); Components are
 // purely informational: a kubelet ignores them, but the console dashboard renders them
 // as per-subsystem health. Each component degrades independently of the others: a nil
-// source in extra (e.g. no hosted-services registry on this daemon) reads as "disabled",
-// never an error, and a nil snapshot (daemon unreachable) is handled the same way.
+// source in extra (e.g. no hosted-services registry on this server) reads as "disabled",
+// never an error, and a nil snapshot (server unreachable) is handled the same way.
 func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.StatusOutput, extra readinessExtras) types.ReadinessReport {
 	report := types.ReadinessReport{Ready: ready}
 	report.Components = append(report.Components, workspacesComponent(snapshot))
@@ -502,7 +502,7 @@ func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComp
 
 // servicesComponent summarizes hosted long-running services: ok when none have failed,
 // degraded when some have failed but others are still up, down when every service has
-// failed, disabled when the daemon hosts no services at all.
+// failed, disabled when the broker hosts no services at all.
 func servicesComponent(services []types.StatusService) types.ReadinessComponent {
 	c := types.ReadinessComponent{Name: types.ReadinessServices}
 	if len(services) == 0 {

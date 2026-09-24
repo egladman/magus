@@ -190,7 +190,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
-		WithBroker(broker.NewClient(addr)))
+		WithBroker(broker.NewClient(addr)), WithBrokerPolicy(types.BrokerBestEffort))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -201,7 +201,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	require.NoError(t, sink.Close(), "flush the stream before reading it")
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	var stated interface{ ExitCode() int }
-	require.ErrorAs(t, err, &stated, "the CLI and the daemon read the exit status off the error")
+	require.ErrorAs(t, err, &stated, "the CLI and the server read the exit status off the error")
 	assert.Equal(t, cache.ExitCodeMachineBusy, stated.ExitCode())
 
 	holder := fmt.Sprintf("held by pid %d (root) ci, in /elsewhere/checkout", holderPID)

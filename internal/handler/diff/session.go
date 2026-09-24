@@ -64,7 +64,7 @@ type Handler struct {
 
 // NewHandler returns the GET /api/v1/diff handler reading from src. sessions and root
 // may be nil/empty, which serves a session-less review: the shape is identical, so a client
-// needs no branch for a daemon that is not pairing.
+// needs no branch for a server that is not pairing.
 func NewHandler(src diffSource, sessions *changeset.Store, root string, log *slog.Logger) *Handler {
 	h := &Handler{src: src, sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
@@ -270,7 +270,7 @@ func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
 // a console that cannot tell those apart renders "no changes" over a bug.
 type diffResponse struct {
 	// Files is the changeset already parsed. The console renders from this and does not read
-	// Patch at all; see PatchHandler for why the daemon parses rather than the browser.
+	// Patch at all; see PatchHandler for why the server parses rather than the browser.
 	Files []changeset.File `json:"files"`
 	// Patch is the same changeset as raw text, kept for a caller that wants the interchange
 	// format itself: a script piping it onward, or a reader diffing it against another tool's.
@@ -334,7 +334,7 @@ type ReviewHandler struct {
 	ReviewOptions
 }
 
-// ReviewOptions is what both review routes need from the daemon.
+// ReviewOptions is what both review routes need from the server.
 //
 // A struct because the alternative was five positional arguments with Root and CacheDir
 // adjacent and both string.
@@ -350,7 +350,7 @@ type ReviewOptions struct {
 	Telemetry observability.Provider
 }
 
-// reviewSource is what the review routes read. The daemon answers it, never the client: a
+// reviewSource is what the review routes read. The server answers it, never the client: a
 // browser knows the paths it is reviewing and nothing about remotes, and one that supplied a
 // remote could aim a review at another repository.
 type reviewSource interface {
@@ -380,7 +380,7 @@ type reviewSessionRequest struct {
 	// cannot supply one and cannot get it wrong.
 	Body string `json:"body,omitempty"`
 	// publish: the summary heading the review. The branch and remote are NOT here: the
-	// daemon resolves those itself, so a client cannot aim a review at another repository.
+	// server resolves those itself, so a client cannot aim a review at another repository.
 	Summary string `json:"summary,omitempty"`
 	// Line is the position an inline comment anchors to on the new side. A hunk index cannot
 	// serve: it means nothing outside the session that produced it.
@@ -389,7 +389,7 @@ type reviewSessionRequest struct {
 	// question (which one) and never asked together.
 	ID string `json:"id,omitempty"`
 	// Verdict is what the published review should SAY: "comment" (the default), "approve", or
-	// "request_changes". It is a REQUEST, not a decision: the daemon resolves it against who
+	// "request_changes". It is a REQUEST, not a decision: the server resolves it against who
 	// opened the review, and a self-review is always a comment however this is set.
 	Verdict string `json:"verdict,omitempty"`
 	// seen: the review threads the surface has just put in front of the reader.
@@ -494,7 +494,7 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 // the reader to different places.
 func (h *ReviewHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
 	if h.Workspace == nil {
-		return types.ReviewTarget{}, errors.New("this daemon has no workspace to publish from")
+		return types.ReviewTarget{}, errors.New("this server has no workspace to publish from")
 	}
 	from := h.Workspace.ReviewOrigin(ctx)
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
@@ -653,7 +653,7 @@ func (h *ReviewHandler) mintReceipt(ctx context.Context, path string) {
 type ReviewLookupHandler struct {
 	handler.Base
 	workspace reviewSource
-	// Sessions and Root are OPTIONAL, set by the daemon wiring after construction: with them the
+	// Sessions and Root are OPTIONAL, set by the server wiring after construction: with them the
 	// handler can say which threads the reader has not seen before, and without them it serves
 	// the conversation unmarked. A caller that has no session store is not a caller with an
 	// empty one, so the marking is skipped rather than every thread being called new.
@@ -662,7 +662,7 @@ type ReviewLookupHandler struct {
 }
 
 // NewReviewLookupHandler returns the review-lookup handler. A nil workspace reports no
-// review, which is what a daemon with no workspace has.
+// review, which is what a server with no workspace has.
 func NewReviewLookupHandler(workspace reviewSource, log *slog.Logger) *ReviewLookupHandler {
 	h := &ReviewLookupHandler{workspace: workspace}
 	h.Base = handler.New(h.serve, log)
@@ -703,7 +703,7 @@ type diffReviewResponse struct {
 	// Verdicts are the verdicts this reviewer may publish, and VerdictLimit says why when the
 	// set is only remarks.
 	//
-	// The daemon sends the ANSWER rather than the author and viewer names, so a surface renders
+	// The server sends the ANSWER rather than the author and viewer names, so a surface renders
 	// the choices magus allows and has no rule of its own to get wrong. Always populated, so an
 	// absent field is a magus too old to have an opinion rather than a review nobody may remark
 	// on.
@@ -825,11 +825,11 @@ type BranchesHandler struct {
 // branchLimit caps how many branches are examined, and so how many forks one request costs.
 // Production `magus affected ci` spends about 31 forks in total, so a bound here is not
 // decoration: an unbounded version would make a diff surface the most expensive thing in the
-// daemon on a repository with a hundred stale branches.
+// server on a repository with a hundred stale branches.
 const branchLimit = 20
 
 // NewBranchesHandler returns the branch-overlap handler. A nil workspace reports none, which
-// is what a daemon with no workspace has.
+// is what a server with no workspace has.
 func NewBranchesHandler(workspace branchSource, log *slog.Logger) *BranchesHandler {
 	h := &BranchesHandler{workspace: workspace}
 	h.Base = handler.New(h.serve, log)

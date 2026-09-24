@@ -164,7 +164,7 @@ func brokerUnavailableError(c types.MachineClaim, err error) error {
 // nothing leaves its PARENT's ref last, and dropping that would put the parent back in
 // the competing set.
 //
-// The CLI and the daemon stamp ancestry onto ctx at their own entry points; a LIBRARY
+// The CLI and the server stamp ancestry onto ctx at their own entry points; a LIBRARY
 // caller does not, and admission is the THIRD entry point to need this: the project
 // lock hit it first and fixed it the same way (see acquireLocks). Without the fallback
 // a Go test driving magus in-process reads an empty ancestry however deep inside a
@@ -207,7 +207,7 @@ func workingDir() string {
 	return dir
 }
 
-// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the daemon
+// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the server
 // side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
@@ -248,7 +248,7 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 // has nothing to check.
 //
 // This no longer names a fixed percentage: mem.BudgetMB reserves a share of memory that
-// depends on the profile the daemon started under (a quarter, under balanced or
+// depends on the profile the broker started under (a quarter, under balanced or
 // conservative; a small fixed floor, under aggressive), and the budget here carries no
 // record of which one applied. Naming one number would be right for one profile and a
 // lie for the other.

@@ -1,12 +1,12 @@
 // main-dom.test.ts - the Dashboard's connect prompt. document/window are registered globally by
 // test-setup.mjs (node --import), so this runs under node:test like the other *-dom tests.
 //
-// What is pinned HERE is the connection lifecycle a reader sees when the daemon is not there:
+// What is pinned HERE is the connection lifecycle a reader sees when the server is not there:
 //
 //   - A REOPEN STARTS FROM NOTHING. The module outlives the console tab, so a dashboard that was
-//     connected once and is reopened against a daemon that has since stopped must show the prompt,
+//     connected once and is reopened against a server that has since stopped must show the prompt,
 //     not a blank board waiting on a connection it believes it already has.
-//   - NOTHING RETRIES ON ITS OWN. Once the prompt says the daemon could not be reached, the status
+//   - NOTHING RETRIES ON ITS OWN. Once the prompt says the server could not be reached, the status
 //     stream stays closed until the reader clicks Retry, and Retry asks exactly once.
 
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 // A connected dashboard remembers its host in a module cell that localStorage.clear() does not
-// reach, and every daemon surface in this process falls back to it, so it is reset with the default.
+// reach, and every server surface in this process falls back to it, so it is reset with the default.
 afterEach(() => {
   deactivate();
   setDefaultHost("");
@@ -73,39 +73,39 @@ function retryButton(): HTMLButtonElement | undefined {
   );
 }
 
-test("a dashboard reopened after its daemon stopped shows the prompt", async () => {
+test("a dashboard reopened after its server stopped shows the prompt", async () => {
   serve(true);
   mount();
   await settle();
-  assert.notEqual(title(), "Could not reach the daemon");
+  assert.notEqual(title(), "Could not reach the server");
 
   deactivate();
   serve(false);
   mount();
   await settle();
 
-  assert.equal(title(), "Could not reach the daemon");
+  assert.equal(title(), "Could not reach the server");
   assert.ok(retryButton(), "the prompt offers Retry");
 });
 
-test("an unreachable daemon is asked once, and again only on Retry", async () => {
+test("an unreachable server is asked once, and again only on Retry", async () => {
   serve(false);
   mount();
   await settle();
-  assert.equal(title(), "Could not reach the daemon");
+  assert.equal(title(), "Could not reach the server");
   assert.equal(statusRequests, 1);
 
   retryButton()?.click();
   await settle();
   assert.equal(statusRequests, 2);
-  assert.equal(title(), "Could not reach the daemon");
+  assert.equal(title(), "Could not reach the server");
 });
 
-// The console served BY the daemon carries no #port and, on first use, no Settings address. The
-// shell adopts the page's origin as the daemon, but that flag is per-bundle, so the dashboard has to
-// adopt it itself; before it did, a signed-in dashboard on http://localhost:7391 sat on "No daemon
-// connected" while the daemon streamed status to every other surface.
-test("a signed-in dashboard on the daemon's own origin connects to that origin", async () => {
+// The console served BY the server carries no #port and, on first use, no Settings address. The
+// shell adopts the page's origin as the server, but that flag is per-bundle, so the dashboard has to
+// adopt it itself; before it did, a signed-in dashboard on http://localhost:7391 sat on "No server
+// connected" while the server streamed status to every other surface.
+test("a signed-in dashboard on the server's own origin connects to that origin", async () => {
   const dom = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
   const before = location.href;
   dom.setURL("http://localhost:7391/console/dashboard/");
@@ -125,7 +125,7 @@ test("a signed-in dashboard on the daemon's own origin connects to that origin",
       asked.includes("http://localhost:7391/api/v1/events"),
       "the status stream is opened against the page's own origin",
     );
-    assert.notEqual(title(), "No daemon connected");
+    assert.notEqual(title(), "No server connected");
   } finally {
     sessionStorage.clear();
     dom.setURL(before);

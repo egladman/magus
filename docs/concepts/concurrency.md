@@ -39,7 +39,7 @@ runs targets concurrently where the graph allows. `magus\needs` edges order the 
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
 much of it runs at once ([targets](targets.md)). Nested `magus` invocations a magusfile
 spawns adopt into this same pool rather than standing up their own
-([the broker and the server](../guides/integrations/daemon.md)).
+([the broker and the server](../guides/integrations/server.md)).
 
 All of this lives inside one process. It orders nothing in a _second_ `magus` you
 start in another terminal: the two invocations have separate graphs and separate
@@ -190,7 +190,7 @@ load average 13.7, and tests failing because they were starved rather than wrong
 
 So before a step starts, magus takes its concurrency slots and its declared
 `memory_mb` from a budget shared by every magus on the machine: the host's capacity.
-It lives in the [broker](../guides/integrations/daemon.md) - one broker per user means
+It lives in the [broker](../guides/integrations/server.md) - one broker per user means
 one budget per machine - and a run starts one if none is up.
 
 Key properties:
@@ -231,7 +231,7 @@ worktree on the machine.
 
 ## Relationship to the broker and the server
 
-The [broker](../guides/integrations/daemon.md) is the per-user process that holds the host's
+The [broker](../guides/integrations/server.md) is the per-user process that holds the host's
 capacity and the shared services runs keep warm. It is the natural single point that
 knows what is running everywhere, which is why the budget lives there and why a run
 starts one. The server, which a person starts for MCP and the console, asks the broker
@@ -250,6 +250,6 @@ three compose - ordering inside a run, exclusion per project, capacity per machi
 
 - [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
-- [The broker and the server](../guides/integrations/daemon.md): the process that owns the machine budget, and the one a person starts.
+- [The broker and the server](../guides/integrations/server.md): the process that owns the machine budget, and the one a person starts.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
 - [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, and the two ways it refuses.

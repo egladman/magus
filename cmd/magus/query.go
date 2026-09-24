@@ -490,7 +490,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// Aged out is the ordinary case, not a typo, so say which it might be. The cap is
-			// the daemon's RotateLogs job; a missing log is indistinguishable from a bad id.
+			// the server's RotateLogs job; a missing log is indistinguishable from a bad id.
 			fmt.Fprintf(os.Stderr, "magus query invocation: no run log for %q; it may have aged out of the cache, or the id is mistyped\n", inv)
 			return errSilent{exitCode: 2}
 		}
@@ -836,12 +836,12 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	// blast view (the console's own analogue of `magus explain`). Symbol nodes are
 	// excluded from the live full graph the explorer loads, so a link to one would
 	// open to an empty focus; omit it. The link is always printed for other kinds;
-	// the daemon may not be up when the browser opens it, hence the hint.
+	// the server may not be up when the browser opens it, hence the hint.
 	if out.Node.Kind != types.KindSymbol {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})
 		fmt.Printf("\nView in Graph Explorer: %s\n", link)
 		fmt.Printf("%s\n", authHint(link))
-		fmt.Printf("(start the magus daemon if the graph does not load)\n")
+		fmt.Printf("(start the magus server if the graph does not load)\n")
 	}
 	printNext(os.Stdout, nx, next)
 	// explain's output carries no answer record, so the found branch builds the one every

@@ -60,7 +60,7 @@ json_escape() {
     local s=$1
     s=${s//\\/\\\\}
     s=${s//\"/\\\"}
-    # A value can span lines: `magus --version` adds a second one when the daemon it
+    # A value can span lines: `magus --version` adds a second one when the server it
     # found was built from a different commit.
     s=${s//$'\n'/\\n}
     s=${s//$'\t'/\\t}
