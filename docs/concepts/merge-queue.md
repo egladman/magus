@@ -657,7 +657,7 @@ lives: its own auto-merge, its own label, and the label on its stack's top. Last
 minimizes as outdated its own earlier kick-back comments on the pull request; a failure
 there is printed to the apply job's log and does not fail the kick-back. Its `mark` manages
 two labels, `merge-queue: queued` and `merge-queue: rejected`, creating either with a
-description the first time a repository needs it; neither starts with `queue: `, so
+description the first time a repository needs it; neither starts with `"queue: "`, so
 neither reads as merge intent. Its `describe` reports the label
 prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
