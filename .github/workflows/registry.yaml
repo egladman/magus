@@ -75,7 +75,7 @@ jobs:
       # produces no commit and no pull request.
       - name: Open a pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           BASE_SHA: ${{ github.sha }}
         run: |

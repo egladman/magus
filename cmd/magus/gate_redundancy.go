@@ -261,9 +261,9 @@ func (g *gateRedundancy) classifier() internalci.ChangeClassifier {
 			return string(b), err
 		},
 	}
-	if reader, ok := g.drv.(types.RevisionFileReader); ok {
+	if g.drv != nil {
 		c.At = func(ctx context.Context, rev, p string) (string, error) {
-			return reader.ReadFileAt(ctx, g.root, rev, p)
+			return g.drv.ReadFileAt(ctx, g.root, rev, p)
 		}
 	}
 	return c

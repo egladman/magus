@@ -1,8 +1,6 @@
 package release
 
 import (
-	"archive/tar"
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -142,40 +140,7 @@ func TestCheckCompat_UnknownTagIsAnError(t *testing.T) {
 	repo := t.TempDir()
 	git(t, repo, "init", "-q")
 	_, err := CheckCompat(t.Context(), repo, "v9.9.9")
-	assert.ErrorContains(t, err, "release: git archive v9.9.9")
-}
-
-// TestUntar_RefusesEntriesThatEscape pins both escapes: a name climbing out, and a
-// file written through a symlink an earlier entry pointed outside.
-func TestUntar_RefusesEntriesThatEscape(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		entries []tar.Header
-	}{
-		{"parent name", []tar.Header{{Name: "../escaped", Typeflag: tar.TypeReg, Mode: 0o644, Size: 1}}},
-		{"through a symlink", []tar.Header{
-			{Name: "link", Typeflag: tar.TypeSymlink, Linkname: ".."},
-			{Name: "link/escaped", Typeflag: tar.TypeReg, Mode: 0o644, Size: 1},
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			tw := tar.NewWriter(&buf)
-			for _, h := range tc.entries {
-				require.NoError(t, tw.WriteHeader(&h))
-				if h.Size > 0 {
-					_, err := tw.Write([]byte("x"))
-					require.NoError(t, err)
-				}
-			}
-			require.NoError(t, tw.Close())
-
-			parent := t.TempDir()
-			err := untar(&buf, filepath.Join(parent, "tree"))
-			assert.ErrorContains(t, err, "release: extract ")
-			assert.NoFileExists(t, filepath.Join(parent, "escaped"))
-		})
-	}
+	assert.ErrorContains(t, err, "release: export v9.9.9")
 }
 
 func write(t *testing.T, root, rel, body string) {

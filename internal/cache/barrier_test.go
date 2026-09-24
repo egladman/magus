@@ -59,7 +59,7 @@ func openCache(t *testing.T, opts ...Option) (root string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir, append([]Option{WithMutable(true)}, opts...)...)
+	c, err := Open(t.Context(), cdir, append([]Option{WithLocalWrite(true)}, opts...)...)
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }

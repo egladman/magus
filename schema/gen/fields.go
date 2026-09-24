@@ -69,6 +69,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CACHE_REMOTE_INSECURE_REASON: InsecureReason is the prose behind Insecure, required whenever it is true.",
 	},
 	{
+		GoPath:   "Cache.Remote.Write.Enabled",
+		YamlPath: "cache.remote.write.enabled",
+		EnvVar:   "MAGUS_CACHE_REMOTE_WRITE_ENABLED",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindBoolPtr,
+		Usage:    "MAGUS_CACHE_REMOTE_WRITE_ENABLED",
+	},
+	{
 		GoPath:   "CI.MaxShards",
 		YamlPath: "ci.max_shards",
 		EnvVar:   "MAGUS_CI_MAX_SHARDS",
