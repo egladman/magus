@@ -124,6 +124,9 @@ apply report what would merge and call nothing on the provider.
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
 
+**--scratch-env** *NAME=DIR*
+: \`NAME=DIR\` sets NAME to $MERGEQUEUE_SCRATCH/DIR for every hook, so the cache it names is the candidate's own; repeatable
+
 **--stdin**
 : Read the mergequeue.plan/v1 document from stdin; required
 
@@ -161,6 +164,9 @@ apply report what would merge and call nothing on the provider.
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
+
+**--scratch-env** *NAME=DIR*
+: \`NAME=DIR\` sets NAME to $MERGEQUEUE_SCRATCH/DIR for the regeneration, so the cache it names is that rebuild's own; repeatable
 
 **--status-context** *string* (default: merge-queue)
 : Commit status the queue posts; branch protection requires it

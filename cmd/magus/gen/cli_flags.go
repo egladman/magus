@@ -411,6 +411,8 @@ const (
 	FlagQueueApplyRegenerate = "regenerate"
 	// queue apply: --remote
 	FlagQueueApplyRemote = "remote"
+	// queue apply: --scratch-env
+	FlagQueueApplyScratchEnv = "scratch-env"
 	// queue apply: --status-context
 	FlagQueueApplyStatusContext = "status-context"
 	// queue apply: --target
@@ -467,6 +469,8 @@ const (
 	FlagQueueValidateRegenerate = "regenerate"
 	// queue validate: --remote
 	FlagQueueValidateRemote = "remote"
+	// queue validate: --scratch-env
+	FlagQueueValidateScratchEnv = "scratch-env"
 	// queue validate: --stdin
 	FlagQueueValidateStdin = "stdin"
 	// queue validate: --target
@@ -1335,6 +1339,9 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 }
 
 // QueueValidateFlags are the flags declared for `magus queue validate`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueValidateFlags struct {
 	Stdin      bool   // --stdin
 	Gate       string // --gate
@@ -1365,6 +1372,9 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 }
 
 // QueueApplyFlags are the flags declared for `magus queue apply`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueApplyFlags struct {
 	Provider      string        // --provider
 	StatusContext string        // --status-context

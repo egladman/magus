@@ -117,6 +117,9 @@ Candidates built or gated at once across every partition; 0 is one per CPU
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
 .TP
+\fB\-\-scratch\-env\fR \fINAME=DIR\fR
+`NAME=DIR` sets NAME to $MERGEQUEUE_SCRATCH/DIR for every hook, so the cache it names is the candidate's own; repeatable
+.TP
 \fB\-\-stdin\fR
 Read the mergequeue.plan/v1 document from stdin; required
 .TP
@@ -155,6 +158,9 @@ The base's own regeneration `command`, run with the generated files to rewrite o
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-scratch\-env\fR \fINAME=DIR\fR
+`NAME=DIR` sets NAME to $MERGEQUEUE_SCRATCH/DIR for the regeneration, so the cache it names is that rebuild's own; repeatable
 .TP
 \fB\-\-status\-context\fR \fIstring\fR (default: merge\-queue)
 Commit status the queue posts; branch protection requires it
