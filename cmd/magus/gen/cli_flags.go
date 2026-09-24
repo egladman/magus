@@ -385,6 +385,8 @@ const (
 	FlagQuerySecrets = "secrets"
 	// query: --url
 	FlagQueryURL = "url"
+	// queue apply: --app
+	FlagQueueApplyApp = "app"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -405,12 +407,16 @@ const (
 	FlagQueueApplyTarget = "target"
 	// queue apply: --vcs
 	FlagQueueApplyVCS = "vcs"
+	// queue describe: --app
+	FlagQueueDescribeApp = "app"
 	// queue describe: --base
 	FlagQueueDescribeBase = "base"
 	// queue describe: --provider
 	FlagQueueDescribeProvider = "provider"
 	// queue describe: --remote
 	FlagQueueDescribeRemote = "remote"
+	// queue describe: --status-context
+	FlagQueueDescribeStatusContext = "status-context"
 	// queue describe: --vcs
 	FlagQueueDescribeVCS = "vcs"
 	// queue ls: --base
@@ -1236,10 +1242,12 @@ func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 
 // QueueDescribeFlags are the flags declared for `magus queue describe`.
 type QueueDescribeFlags struct {
-	Provider string // --provider
-	Base     string // --base
-	Remote   string // --remote
-	VCS      string // --vcs
+	Provider      string // --provider
+	Base          string // --base
+	StatusContext string // --status-context
+	App           string // --app
+	Remote        string // --remote
+	VCS           string // --vcs
 }
 
 // BindQueueDescribe registers `magus queue describe`'s flags on fs and returns the destination.
@@ -1247,6 +1255,8 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	var f QueueDescribeFlags
 	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
+	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
@@ -1335,6 +1345,7 @@ type QueueApplyFlags struct {
 	Once          bool          // --once
 	Interval      time.Duration // --interval
 	Committer     string        // --committer
+	App           string        // --app
 	Regenerate    string        // --regenerate
 	Facts         string        // --facts
 	Target        string        // --target
@@ -1350,6 +1361,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it")
 	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")

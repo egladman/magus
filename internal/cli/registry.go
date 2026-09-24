@@ -1607,11 +1607,25 @@ apply report what would merge and call nothing on the provider.`,
 	Children: []Command{
 		{
 			Name:  "describe",
-			Short: "Ask the provider what it supports on a base: its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document",
+			Short: "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json",
+			Long: `Ask the provider what it supports on a base, its merge methods and how a change
+is queued, and read how the queue is wired there: the status the base requires
+and which integration it is pinned to, the repository settings the queue depends
+on, and the required checks a queue push would leave unreported. It prints the
+commands that finish the wiring; magus never runs them, a person does.
+
+--app names the app whose credential apply will write with (github: a GitHub
+App's slug), and the steps become that app's: install it, store its credential,
+and pin the status to its id. Every read goes to the provider over the network,
+with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
+
+-o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
 			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
 			Flags: append([]Flag{
 				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
+				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential"},
 			}, queueCheckout...),
 		},
 		{
@@ -1658,12 +1672,14 @@ apply report what would merge and call nothing on the provider.`,
 				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it"},
 			}, queueFacts...), queueCheckout...),
 		},
 	},
 	Examples: []Example{
-		{"See the merge methods and the queue label", "magus queue describe --provider github --base main"},
+		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
+		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'"},

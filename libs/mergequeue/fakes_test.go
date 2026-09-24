@@ -125,12 +125,20 @@ var (
 	author = magustypes.Person{Name: "author", Email: "author@example.com"}
 )
 
-// caps describes a provider merging one change per call with methods, committing as bot.
+// Planning asks Describe for the base alone; an Applier also asks for the setup of its
+// status, on the default credential.
+var (
+	planQuery  = types.ListQuery{Base: "main"}
+	applyQuery = types.ListQuery{Base: "main", StatusContext: DefaultStatusContext}
+)
+
+// caps describes a provider merging one change per call with methods, committing as bot,
+// to a planner or an applier.
 func (d doubles) caps(methods ...types.MergeMethod) {
 	if len(methods) == 0 {
 		methods = []types.MergeMethod{types.MethodSquash}
 	}
-	d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
+	d.provider.EXPECT().Describe(mock.Anything, mock.MatchedBy(func(q types.ListQuery) bool { return q == planQuery || q == applyQuery })).
 		Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: methods, Committer: bot}, nil)
 }
 
