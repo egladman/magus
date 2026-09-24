@@ -62,7 +62,7 @@ func (rt *Runtime) TrackProject(project, target string, outputDirs []string, fn 
 func (rt *Runtime) Flush(ctx context.Context, w *report.Writer) error {
 	rt.rec.close()
 
-	filter := newGitFilter(rt.root)
+	filter := newTrackedFilter(ctx, rt.root)
 	findings := detect(rt.rec.snapshot(), filter)
 
 	for _, f := range findings {

@@ -57,6 +57,7 @@ import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
 import "project/libs/coldread";
 import "project/libs/testlayout";
+import "project/libs/mergequeue";
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -138,8 +139,8 @@ magus\project({
     // non-input only makes an unrelated edit invalidate a cache. Four groups:
     //
     //   - Nothing reads them: .gitignore, NOTICE, .github/actions/*/action.yml (GitHub
-    //     reads those, no target does), and the nested internal/spell/gen/.gitattributes,
-    //     which only git reads.
+    //     reads those; `test` declares setup-magus's, which its suite reads), and the nested
+    //     internal/spell/gen/.gitattributes, which only git reads.
     //   - LICENSE, read only by release-build, which is skip_cache: declaring it would
     //     invalidate build/test/lint to key nothing.
     //   - The benchmark corpora under benchmarks/ (fixtures, task meta.json, manifests,
@@ -446,7 +447,9 @@ fun ld_flags() > str !> any {
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(gopherbuzz\build);
+    // The merge queue is compiled in as `magus queue`, and its sources are a project of
+    // their own, which this target's globs stop at.
+    ctx.needs(gopherbuzz\build, mergequeue\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
     // spells/**/*.buzz is a project source, so editing a spell does invalidate this
@@ -2740,6 +2743,13 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
+    // libs/mergequeue likewise: a project, and packages of this module that magus
+    // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
+    // test inputs.
+    ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
+    // The setup action and the queue's apply workflow: the release trust anchor and the
+    // queue app's credential rules are asserted against them.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/queue-apply.yaml");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2991,8 +3001,8 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
-    // registry.buzz is the only one invoked bare, so it is the only one that has to
-    // survive strict; advisories, drift and toolchain-policy are magusfile imports and
+    // registry.buzz and gha-queue.buzz are invoked bare by workflows, so they are the ones
+    // that have to survive strict; advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
     // red for a defect that does not exist. (toolchain.buzz has no importer and no
@@ -3001,7 +3011,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         cover_for(mod.value, ["--embedded"], {});
     }
     foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz") {
+        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz") {
             cover_for(mod.value, [], {});
         } else {
             cover_for(mod.value, ["--embedded"], {});
@@ -3146,7 +3156,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/coldread/**/*.go",
                    // A project, so the tree globs below stop at its directory, but also a
                    // package of this module that golangci-lint and go vet both compile.
-                   "libs/pricing/**/*.go", "libs/pricing/pricing.json");
+                   "libs/pricing/**/*.go", "libs/pricing/pricing.json",
+                   "libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this

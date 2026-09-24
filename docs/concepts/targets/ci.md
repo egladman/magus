@@ -177,12 +177,12 @@ What legitimately differs between them is **scope and permission, not steps**:
   carries `rw` and writes; CI strips the default charm and the same target becomes a
   drift gate. That is one target with two intents, rather than two pipelines that
   happen to share a name.
-- **Trust** is a variable, not a workflow. Gate cache writes on the event, and PRs
-  replay the shared cache without publishing to it - while running exactly the same
-  steps:
+- **Trust** is a variable, not a workflow. Gate remote-tier writes on the event, and
+  PRs replay the remote tier and write only their local tier - while running exactly
+  the same steps:
 
   ```yaml
-  MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+  MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name == 'pull_request' && 'false' || '' }}
   ```
 
 Keep delivery in its own job, gated on the merge, and let it depend on the same
@@ -251,11 +251,11 @@ cache:
       - "<base64 Ed25519 public key>" # magus config cache key generate
 ```
 
-A complementary defense is to open the cache **read-only on untrusted refs**: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and volatility detector read it): restore always, save only from trusted pushes.
+A complementary defense is to **never write the remote cache tier from untrusted refs**: replay hits and write the local tier, but never the remote tier. Gate it on the event so only trusted pushes write the remote tier, and apply the same rule to any persisted run history (the forecaster and volatility detector read it): restore always, save only from trusted pushes.
 
 ```yaml
-# PRs replay the cache and see main's history, but write neither
-MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+# PRs replay the remote tier and see main's history, but write neither
+MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name == 'pull_request' && 'false' || '' }}
 ```
 
 To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own provider) and generate signing keys, see [Remote caching](../cache/remote.md).

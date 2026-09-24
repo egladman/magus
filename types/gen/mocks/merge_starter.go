@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/egladman/magus/types"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -95,16 +96,16 @@ func (_c *MockMergeStarter_AbortMerge_Call) RunAndReturn(run func(ctx context.Co
 }
 
 // StartMerge provides a mock function for the type MockMergeStarter
-func (_mock *MockMergeStarter) StartMerge(ctx context.Context, root string, ref string) error {
-	ret := _mock.Called(ctx, root, ref)
+func (_mock *MockMergeStarter) StartMerge(ctx context.Context, root string, ref string, as types.Person) error {
+	ret := _mock.Called(ctx, root, ref, as)
 
 	if len(ret) == 0 {
 		panic("no return value specified for StartMerge")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, root, ref)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, types.Person) error); ok {
+		r0 = returnFunc(ctx, root, ref, as)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -120,11 +121,12 @@ type MockMergeStarter_StartMerge_Call struct {
 //   - ctx context.Context
 //   - root string
 //   - ref string
-func (_e *MockMergeStarter_Expecter) StartMerge(ctx interface{}, root interface{}, ref interface{}) *MockMergeStarter_StartMerge_Call {
-	return &MockMergeStarter_StartMerge_Call{Call: _e.mock.On("StartMerge", ctx, root, ref)}
+//   - as types.Person
+func (_e *MockMergeStarter_Expecter) StartMerge(ctx interface{}, root interface{}, ref interface{}, as interface{}) *MockMergeStarter_StartMerge_Call {
+	return &MockMergeStarter_StartMerge_Call{Call: _e.mock.On("StartMerge", ctx, root, ref, as)}
 }
 
-func (_c *MockMergeStarter_StartMerge_Call) Run(run func(ctx context.Context, root string, ref string)) *MockMergeStarter_StartMerge_Call {
+func (_c *MockMergeStarter_StartMerge_Call) Run(run func(ctx context.Context, root string, ref string, as types.Person)) *MockMergeStarter_StartMerge_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -138,10 +140,15 @@ func (_c *MockMergeStarter_StartMerge_Call) Run(run func(ctx context.Context, ro
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 types.Person
+		if args[3] != nil {
+			arg3 = args[3].(types.Person)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -152,7 +159,7 @@ func (_c *MockMergeStarter_StartMerge_Call) Return(err error) *MockMergeStarter_
 	return _c
 }
 
-func (_c *MockMergeStarter_StartMerge_Call) RunAndReturn(run func(ctx context.Context, root string, ref string) error) *MockMergeStarter_StartMerge_Call {
+func (_c *MockMergeStarter_StartMerge_Call) RunAndReturn(run func(ctx context.Context, root string, ref string, as types.Person) error) *MockMergeStarter_StartMerge_Call {
 	_c.Call.Return(run)
 	return _c
 }

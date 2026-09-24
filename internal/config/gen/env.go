@@ -23,16 +23,25 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.Cache.Dir = v
 	}
 	if v := getenv("MAGUS_CACHE_WRITE_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.Cache.Write.Enabled != nil && *cfg.Cache.Write.Enabled)
-		cfg.Cache.Write.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CACHE_WRITE_ENABLED: %w", err))
+		} else {
+			cfg.Cache.Write.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_CACHE_INCLUDE_OS_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.Cache.Include.OS.Enabled != nil && *cfg.Cache.Include.OS.Enabled)
-		cfg.Cache.Include.OS.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CACHE_INCLUDE_OS_ENABLED: %w", err))
+		} else {
+			cfg.Cache.Include.OS.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_CACHE_INCLUDE_ARCH_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.Cache.Include.Arch.Enabled != nil && *cfg.Cache.Include.Arch.Enabled)
-		cfg.Cache.Include.Arch.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CACHE_INCLUDE_ARCH_ENABLED: %w", err))
+		} else {
+			cfg.Cache.Include.Arch.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_CACHE_SIZE_MB"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
@@ -52,10 +61,21 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.Cache.Remote.TrustedKeys = out
 	}
 	if v := getenv("MAGUS_CACHE_REMOTE_INSECURE"); v != "" {
-		cfg.Cache.Remote.Insecure = parseBoolEnv(v, cfg.Cache.Remote.Insecure)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CACHE_REMOTE_INSECURE: %w", err))
+		} else {
+			cfg.Cache.Remote.Insecure = b
+		}
 	}
 	if v := getenv("MAGUS_CACHE_REMOTE_INSECURE_REASON"); v != "" {
 		cfg.Cache.Remote.InsecureReason = v
+	}
+	if v := getenv("MAGUS_CACHE_REMOTE_WRITE_ENABLED"); v != "" {
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CACHE_REMOTE_WRITE_ENABLED: %w", err))
+		} else {
+			cfg.Cache.Remote.Write.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_CI_MAX_SHARDS"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
@@ -72,10 +92,18 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_CI_RECORD_RUNS"); v != "" {
-		cfg.CI.RecordRuns = parseBoolEnv(v, cfg.CI.RecordRuns)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CI_RECORD_RUNS: %w", err))
+		} else {
+			cfg.CI.RecordRuns = b
+		}
 	}
 	if v := getenv("MAGUS_VOLATILITY_ENABLED"); v != "" {
-		cfg.Volatility.Enabled = parseBoolEnv(v, cfg.Volatility.Enabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_VOLATILITY_ENABLED: %w", err))
+		} else {
+			cfg.Volatility.Enabled = b
+		}
 	}
 	if v := getenv("MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
@@ -99,10 +127,18 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_VOLATILITY_ANNOTATE_GHA"); v != "" {
-		cfg.Volatility.AnnotateGHA = parseBoolEnv(v, cfg.Volatility.AnnotateGHA)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_VOLATILITY_ANNOTATE_GHA: %w", err))
+		} else {
+			cfg.Volatility.AnnotateGHA = b
+		}
 	}
 	if v := getenv("MAGUS_TELEMETRY_ENABLED"); v != "" {
-		cfg.Telemetry.Enabled = parseBoolEnv(v, cfg.Telemetry.Enabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_TELEMETRY_ENABLED: %w", err))
+		} else {
+			cfg.Telemetry.Enabled = b
+		}
 	}
 	if v := getenv("MAGUS_TELEMETRY_ENDPOINT"); v != "" {
 		cfg.Telemetry.Endpoint = v
@@ -111,7 +147,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.Telemetry.Protocol = v
 	}
 	if v := getenv("MAGUS_TELEMETRY_INSECURE"); v != "" {
-		cfg.Telemetry.Insecure = parseBoolEnv(v, cfg.Telemetry.Insecure)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_TELEMETRY_INSECURE: %w", err))
+		} else {
+			cfg.Telemetry.Insecure = b
+		}
 	}
 	if v := getenv("MAGUS_TELEMETRY_SERVICE_NAME"); v != "" {
 		cfg.Telemetry.ServiceName = v
@@ -124,7 +164,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_DAEMON_ENABLED"); v != "" {
-		cfg.Daemon.Enabled = parseBoolEnv(v, cfg.Daemon.Enabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_ENABLED: %w", err))
+		} else {
+			cfg.Daemon.Enabled = b
+		}
 	}
 	if v := getenv("MAGUS_DAEMON_ADDRESS"); v != "" {
 		cfg.Daemon.Address = v
@@ -182,8 +226,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_VCS_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.VCS.Enabled != nil && *cfg.VCS.Enabled)
-		cfg.VCS.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_VCS_ENABLED: %w", err))
+		} else {
+			cfg.VCS.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_VCS_NAME"); v != "" {
 		cfg.VCS.Name = v
@@ -192,15 +239,21 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.VCS.BaseRef = v
 	}
 	if v := getenv("MAGUS_MCP_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.MCP.Enabled != nil && *cfg.MCP.Enabled)
-		cfg.MCP.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_MCP_ENABLED: %w", err))
+		} else {
+			cfg.MCP.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_MCP_ADDRESS"); v != "" {
 		cfg.MCP.Address = v
 	}
 	if v := getenv("MAGUS_CONSOLE_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.Console.Enabled != nil && *cfg.Console.Enabled)
-		cfg.Console.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_ENABLED: %w", err))
+		} else {
+			cfg.Console.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_REPORT_FILTER"); v != "" {
 		parts := strings.Split(v, ",")
@@ -219,16 +272,25 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.Log.Level = v
 	}
 	if v := getenv("MAGUS_LOG_SILENT"); v != "" {
-		b := parseBoolEnv(v, cfg.Log.Silent != nil && *cfg.Log.Silent)
-		cfg.Log.Silent = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_LOG_SILENT: %w", err))
+		} else {
+			cfg.Log.Silent = &b
+		}
 	}
 	if v := getenv("MAGUS_LOG_STREAM"); v != "" {
-		b := parseBoolEnv(v, cfg.Log.Stream != nil && *cfg.Log.Stream)
-		cfg.Log.Stream = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_LOG_STREAM: %w", err))
+		} else {
+			cfg.Log.Stream = &b
+		}
 	}
 	if v := getenv("MAGUS_HINTS_ENABLED"); v != "" {
-		b := parseBoolEnv(v, cfg.Hints.Enabled != nil && *cfg.Hints.Enabled)
-		cfg.Hints.Enabled = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_HINTS_ENABLED: %w", err))
+		} else {
+			cfg.Hints.Enabled = &b
+		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_WORKSPACES"); v != "" {
 		parts := strings.Split(v, ",")
@@ -251,7 +313,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_VCS_ENABLED"); v != "" {
-		cfg.Knowledge.VCS.Enabled = parseBoolEnv(v, cfg.Knowledge.VCS.Enabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_KNOWLEDGE_VCS_ENABLED: %w", err))
+		} else {
+			cfg.Knowledge.VCS.Enabled = b
+		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_VCS_MAX_COMMITS"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
@@ -261,11 +327,18 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_VCS_AUTHORSHIP"); v != "" {
-		b := parseBoolEnv(v, cfg.Knowledge.VCS.Authorship != nil && *cfg.Knowledge.VCS.Authorship)
-		cfg.Knowledge.VCS.Authorship = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_KNOWLEDGE_VCS_AUTHORSHIP: %w", err))
+		} else {
+			cfg.Knowledge.VCS.Authorship = &b
+		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED"); v != "" {
-		cfg.Knowledge.SymbolIndexing.Disabled = parseBoolEnv(v, cfg.Knowledge.SymbolIndexing.Disabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: %w", err))
+		} else {
+			cfg.Knowledge.SymbolIndexing.Disabled = b
+		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
@@ -310,10 +383,18 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS"); v != "" {
-		cfg.Knowledge.Duplication.IncludeTests = parseBoolEnv(v, cfg.Knowledge.Duplication.IncludeTests)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS: %w", err))
+		} else {
+			cfg.Knowledge.Duplication.IncludeTests = b
+		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_SESSIONS_DISABLED"); v != "" {
-		cfg.Knowledge.Sessions.Disabled = parseBoolEnv(v, cfg.Knowledge.Sessions.Disabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_KNOWLEDGE_SESSIONS_DISABLED: %w", err))
+		} else {
+			cfg.Knowledge.Sessions.Disabled = b
+		}
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_NOTES_SHARED"); v != "" {
 		cfg.Knowledge.Notes.Shared = v
@@ -336,8 +417,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		}
 	}
 	if v := getenv("MAGUS_DIFF_TUI"); v != "" {
-		b := parseBoolEnv(v, cfg.Diff.Tui != nil && *cfg.Diff.Tui)
-		cfg.Diff.Tui = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DIFF_TUI: %w", err))
+		} else {
+			cfg.Diff.Tui = &b
+		}
 	}
 	if v := getenv("MAGUS_JOBS_MAX_DEPTH"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
@@ -404,7 +488,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.HistoryPath = v
 	}
 	if v := getenv("MAGUS_DRY_RUN"); v != "" {
-		cfg.DryRun = parseBoolEnv(v, cfg.DryRun)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_DRY_RUN: %w", err))
+		} else {
+			cfg.DryRun = b
+		}
 	}
 	if v := getenv("MAGUS_DEFAULT_CHARMS"); v != "" {
 		parts := strings.Split(v, ",")
@@ -417,7 +505,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.DefaultCharms = out
 	}
 	if v := getenv("MAGUS_SANDBOX_ENABLED"); v != "" {
-		cfg.Sandbox.Enabled = parseBoolEnv(v, cfg.Sandbox.Enabled)
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_SANDBOX_ENABLED: %w", err))
+		} else {
+			cfg.Sandbox.Enabled = b
+		}
 	}
 	if v := getenv("MAGUS_SANDBOX_ENV_PASSTHROUGH"); v != "" {
 		parts := strings.Split(v, ",")
@@ -432,14 +524,15 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	return errors.Join(errs...)
 }
 
-// parseBoolEnv mirrors the helper in package config so this generated file
-// has no back-import into config (which would create a cycle).
-func parseBoolEnv(v string, fallback bool) bool {
+// parseBoolEnv accepts true/1/yes and false/0/no in any case. Anything else is an
+// error rather than the previous value: a typo like "ture" silently keeping a
+// default is the misconfiguration nobody notices.
+func parseBoolEnv(v string) (bool, error) {
 	switch strings.ToLower(v) {
 	case "true", "1", "yes":
-		return true
+		return true, nil
 	case "false", "0", "no":
-		return false
+		return false, nil
 	}
-	return fallback
+	return false, fmt.Errorf("%q is not a boolean; use true or false", v)
 }

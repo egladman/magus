@@ -162,8 +162,8 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "shared-content")
-	// Distinct CreatedAt: evictLRU sorts by it, and a same-nanosecond
-	// pair would make the test order-dependent on map iteration.
+	// Distinct manifest mtimes: eviction orders by last use, and a same-instant
+	// pair would make the test order-dependent on walk order.
 	time.Sleep(5 * time.Millisecond)
 	runForProject(t, c, root, "b", "shared-content")
 

@@ -15,17 +15,22 @@ import (
 // that on the path before the first line of output, where a slow probe stalls the run
 // with nothing on screen to explain the pause. Presence and name are known without
 // asking; whether the backend engages is the run's business, not the header's.
+//
+// Both strings derive from the write gates Open decided, so the header cannot disagree
+// with what the run does. They stay strings rather than a per-tier struct: they are the
+// run.cache record's schema, and a structured form would break its readers for no
+// behavior the header lacks.
 func (c *Cache) Description() (tier, mode string) {
 	tier = "local"
 	if c.remote != nil {
-		name := c.remote.Name()
-		if name == "" {
-			name = "remote"
-		}
-		tier = name + " + local"
+		tier = c.remote.name() + " + local"
 	}
-	mode = "read-only"
-	if c.mutable {
+	switch {
+	case !c.local.writes():
+		mode = "read-only"
+	case c.remote != nil && !c.remote.writes():
+		mode = "read+write local, read-only remote; " + c.remote.off
+	default:
 		mode = "read+write"
 	}
 	return tier, mode

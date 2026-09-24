@@ -129,11 +129,7 @@ func buildSpell(ctx context.Context, root, dir, source string) (oci.Content, spe
 	if source != "" {
 		prov.Source = source
 	}
-	reporter, ok := driver.(types.TrackedFileReporter)
-	if !ok {
-		return oci.Content{}, spellBuildResult{}, fmt.Errorf("%s is under a VCS that cannot report tracked files", abs)
-	}
-	content, err := remotespell.Build(ctx, abs, reporter, prov)
+	content, err := remotespell.Build(ctx, abs, driver, prov)
 	if err != nil {
 		return oci.Content{}, spellBuildResult{}, err
 	}
