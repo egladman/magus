@@ -67,9 +67,24 @@ type Dependencies struct {
 	// magusfile a second time, which only a spawn is worth. Nil when the workspace has no
 	// approval authority wired.
 	ApprovedSpawnRule func(ctx context.Context) (workspace.SpawnRule, error)
+	// CommandRule is the working tree's magus\guard.command rule, nil when none is
+	// registered. It is called on every shell command the built-in rules let through and
+	// can only add to their verdict.
+	CommandRule workspace.CommandRule
+	// ApprovedCommandRule is ApprovedSpawnRule for the command rule, resolved per command.
+	ApprovedCommandRule func(ctx context.Context) (workspace.CommandRule, error)
+	// WriteRule is the working tree's magus\guard.write rule, nil when none is registered.
+	// It is called on every file write the built-in rules let through.
+	WriteRule workspace.WriteRule
+	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
+	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
+	// CheckoutState reads the checkout holding dir for a command rule judging a push, nil
+	// when its version control cannot report it.
+	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
 	// LoadFailure is why the working tree's workspace did not load, nil when it loaded or
-	// there is none. SpawnRule is then nil because nothing could be read, not because no
-	// rule is registered, and the failure is reported beside the verdict.
+	// there is none. SpawnRule, CommandRule and WriteRule are then nil because nothing could
+	// be read, not because no rule is registered, and the failure is reported beside the
+	// verdict.
 	LoadFailure error
 	// Policy describes the effective workspace rules for the lineage the trail keeps,
 	// nil when the caller cannot say. See RecordPolicy.
@@ -228,6 +243,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
 	// there to pin a location.
 	callDir := ""
+	description := ""
+	var write writeFields
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -266,6 +283,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		input = env.Value
+		description = env.Description
+		write = env.Write
 		hasInput = input != ""
 		if env.IsPath {
 			isPath = true
@@ -319,6 +338,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
 	// advisory fires on it, and the role-scoped rules stand down. The workspace-wide
 	// denies do not, and they are the ones whose reasons say why (see internal/guard/preauth.go).
+	var ruleRecord workspaceRuleRecord
 	preauth := ""
 	if hasInput && !req.Observe && !isPath {
 		preauth = servedNextPreauthorizes(markers, input)
@@ -460,6 +480,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Context = advice
 			verdict.Rule = string(adviceKind)
 		}
+		// The workspace's magus\guard.write rule, last because it may only add.
+		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, location)
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != "deny" {
 			drift.record()
@@ -573,6 +595,29 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Rule = string(advisoryGraphStale)
 			}
 		}
+		// The SPLIT-RUN rule's cross-call shape: the same target run again on a different
+		// project set, as a separate command rather than chained on one line (that shape is
+		// splitRunLineAdvice's, inside Evaluate). gradeSplitRun records this call's
+		// invocation on the SESSION's facts either way, so it must run whenever nothing
+		// louder already spoke, not only when it turns out to have something to say.
+		if verdict.Decision == "pass" && preauth == "" {
+			if text, matched := gradeSplitRun(facts, input); matched {
+				if held := markers.Once(advisorySplitRun, text); held != "" {
+					verdict.Decision = "advise"
+					verdict.Context = held
+					verdict.Rule = string(advisorySplitRun)
+				}
+			}
+		}
+		// The workspace's magus\guard.command rule, last because it may only add to what
+		// every rule above said.
+		verdict, ruleRecord = gradeWorkspaceCommand(ctx, deps, verdict, commandRuleInput{
+			command:     input,
+			description: description,
+			dialect:     shellD,
+			preauth:     preauth,
+			lease:       actingLease,
+		}, who, location)
 	}
 	// The two notices about the acting lease ITSELF: a row that has finished and an id
 	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look
@@ -642,7 +687,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record)
+	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
 	return verdict
 }
 
@@ -785,10 +830,18 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = renderMCPCall(tool, env.ToolInput)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
+		req.Description = envelopeString(env.ToolInput, "description")
 	case env.Command != "":
 		req.Value = env.Command
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
+		// Read by shape, like the path: a whole-file write carries its content, an edit the
+		// text it replaces and the replacement. Another shape leaves all three empty.
+		req.Write = writeFields{
+			Content: envelopeString(env.ToolInput, "content"),
+			OldText: envelopeString(env.ToolInput, "old_string"),
+			NewText: envelopeString(env.ToolInput, "new_string"),
+		}
 	case envelopeString(env.ToolInput, "skill") != "":
 		// A skill load carries nothing to judge; it is recorded so a later spawn can ask
 		// whether the session read the brief. The FIELD name is magus's contract with the
@@ -903,6 +956,10 @@ func HostAttribution(raw string) (session, transcript string) {
 type hookRequest struct {
 	Value  string
 	IsPath bool
+	// Description is the label the caller wrote for a shell command, "" when it wrote none.
+	Description string
+	// Write is the text a file write carries, each field empty when the host sent none.
+	Write writeFields
 	// Cwd is where the host says the call runs; "" when the envelope carried none.
 	Cwd string
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
@@ -1045,13 +1102,17 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 // preauth is the `next` template that had already served this command, and it is recorded
 // because a clearance nobody counts is a clearance nobody can audit: uptake per template is
 // the number that decides whether a breadcrumb is reworded or deleted.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict) {
+//
+// rule is how the workspace command or write rule judged, which alone knows whether its answer came
+// from the approved side or the working tree.
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}
 	command := trail.AgentCommand{
 		PolicyDigest:    policyDigest,
-		DecidedBy:       decidedBy(verdict),
+		DecidedBy:       cmp.Or(rule.decidedBy, decidedBy(verdict)),
+		RuleFailures:    rule.failures,
 		Actor:           "agent",
 		Workspace:       location.workspace,
 		Host:            who.Host,
@@ -1082,7 +1143,7 @@ type spawnVerdictRecord struct {
 	// target is the agent a continuation addresses, resolved to its id when magus knows it.
 	target string
 	// ruleFailures are the workspace spawn rules that judged nothing, and why.
-	ruleFailures []trail.SpawnRuleFailure
+	ruleFailures []trail.RuleFailure
 }
 
 // appendHookSpawn records a spawn or a continuation into the same trail, so a person

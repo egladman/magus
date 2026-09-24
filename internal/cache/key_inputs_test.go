@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,6 +71,28 @@ func TestPersistKeyInputsStoresNoEnvValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Regexp(t, `^env:TOKEN=sha256:[0-9a-f]{12}$`, got[0])
+}
+
+// TestPersistKeyInputsSkipsAnIdenticalRewrite: every attempt of a key carries the same
+// lines, so a repeat leaves the sidecar untouched, while changed lines replace it.
+func TestPersistKeyInputsSkipsAnIdenticalRewrite(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	const key = "cafebabecafebabe"
+	path := filepath.Join(dir, "outputs", key, keyInputsName)
+	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:a"}))
+	past := time.Now().Add(-time.Hour).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(path, past, past))
+
+	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:a"}))
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.True(t, fi.ModTime().Equal(past), "identical lines must not rewrite the sidecar")
+
+	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:b"}))
+	got, err := s.KeyInputsByKey(key)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"projectPath:b"}, got)
 }
 
 // TestKeyInputsRoundTripByRef persists key inputs beside a step's attempts and reads

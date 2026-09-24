@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-type hgVCS struct{}
+type hgVCS struct{ declines[hgName] }
 
 func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
@@ -196,7 +196,7 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	return out, nil
 }
 
-// RangeDiff implements types.RangeDiffReporter via `hg diff -r "ancestor(base,head)" -r
+// RangeDiff implements types.RangeReporter via `hg diff -r "ancestor(base,head)" -r
 // head`. Mercurial's ancestor() revset function is the two revisions' merge base, so
 // diffing FROM there TO head is the symmetric difference the interface promises: what head
 // added since it diverged, never base's own changes since the fork. Verified against
@@ -210,10 +210,7 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	// checkRevsetRef, not checkRef: both refs are interpolated INTO the ancestor()
 	// expression below, where a comma or a paren rewrites it rather than naming a revision.
-	if err := checkRevsetRef(base); err != nil {
-		return "", err
-	}
-	if err := checkRevsetRef(head); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
 	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
@@ -411,6 +408,11 @@ func (v hgVCS) writeMergeDriver(ctx context.Context, root string, outputGlobs []
 	return lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
 		return writeHgFamilyMergeDriverSection(hgrcPath(root), outputGlobs)
 	})
+}
+
+// MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
+func (v hgVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
+	return hgFamilyMergeDriverCommand(ctx, "hg", root)
 }
 
 // CheckMergeDriver reports whether .hg/hgrc holds the magus merge-driver section. A torn
@@ -675,47 +677,29 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 	return ignored, nil
 }
 
-// The capability ladder below brings hg level with git and sl. Every command was verified
+// The capabilities below bring hg level with git and sl. Every command was verified
 // against Mercurial 7.x rather than ported from sapling.go on the assumption that a fork
 // keeps its parent's behavior: Sapling and Mercurial diverge in both directions, and the
-// notes on the individual methods say where.
-//
-// BranchChangeReporter is the one optional capability hg does not implement. It is not a
-// technical wall the way jj's gaps are (see vcs/jj.go): a bookmark could stand in for git's
-// "other branch", and ChangedFiles already shows how to diff one hg revision against
-// another. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
-// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason, so an
-// hg repository is told the report is missing rather than shown an empty one.
-//
-// Every assertion below is compile-time on purpose: each interface is reached by type
-// assertion at its call site, so dropping a method would not fail the build, it would
-// silently demote hg to whatever the caller's fallback answers.
-var (
-	_ types.MergeDriverInstaller = hgVCS{}
-	_ types.RefreshHookInstaller = hgVCS{}
-	_ types.DriftHookInstaller   = hgVCS{}
-	_ types.RemoteReporter       = hgVCS{}
-	_ types.DefaultRefReporter   = hgVCS{}
-	_ types.PushStatusReporter   = hgVCS{}
-	_ types.RevTimeReporter      = hgVCS{}
-	_ types.TrackedFileReporter  = hgVCS{}
-	_ types.IgnoredFileReporter  = hgVCS{}
-	_ types.ChurnReporter        = hgVCS{}
-	_ types.RangeDiffReporter    = hgVCS{}
-	_ types.RevisionExporter     = hgVCS{}
-	_ types.RevisionFileReader   = hgVCS{}
-	_ types.MergeStarter         = hgVCS{}
-)
+// notes on the individual methods say where. What hg declines is in unsupported.go.
 
-// RemoteURL implements types.RemoteReporter. `hg paths default` prints the default
-// pull/push URL; a repository with none exits non-zero with "not found!" on stderr, which
-// is the ErrVCSUnsupported case callers degrade on rather than a failure to report.
-func (v hgVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
-	out, err := vcsOutput(ctx, dir, "hg", "paths", "default")
-	if err != nil || out == "" {
-		return "", types.ErrVCSUnsupported
-	}
-	return out, nil
+// RemoteURL implements types.RemoteReporter; see hgFamilyRemoteURL.
+func (v hgVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	return hgFamilyRemoteURL(ctx, "hg", dir, name)
+}
+
+// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles.
+func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
+	return hgFamilyRangeFiles(ctx, "hg", dir, base, head, paths)
+}
+
+// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
+func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
+	return hgFamilyRangeCommits(ctx, v, "hg", dir, base, head, paths)
+}
+
+// IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
+func (v hgVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
+	return hgFamilyIsAncestor(ctx, "hg", dir, ancestor, descendant)
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
@@ -738,8 +722,13 @@ func (v hgVCS) ConfiguredRemote(dir string) (string, error) {
 // have no revision on default, and answering with a ref that resolves to nothing would put
 // a dead link in a committed artifact.
 func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
-	if _, err := vcsOutput(ctx, dir, "hg", "log", "-r", "default", "-l", "1", "--template", "{node}"); err != nil {
+	_, err := vcsOutput(ctx, dir, "hg", "log", "-r", "default", "-l", "1", "--template", "{node}")
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && strings.Contains(string(ee.Stderr), "unknown revision") {
 		return "", types.ErrVCSUnsupported
+	}
+	if err != nil {
+		return "", fmt.Errorf("hg log -r default: %w", err)
 	}
 	return "default", nil
 }
@@ -755,6 +744,9 @@ func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 // branch gives in a fresh clone, not a probe failure. The one error left is a date hg
 // printed that did not parse.
 func (v hgVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return time.Time{}, false, err
+	}
 	out, _ := vcsOutput(ctx, dir, "hg", "log", "-r", rev, "--template", "{date|rfc3339date}")
 	if out == "" {
 		return time.Time{}, false, nil
@@ -884,8 +876,12 @@ func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 // A merge already underway is refused BEFORE starting, because it cannot be detected
 // afterwards: the leftover merge's own conflicts would satisfy any "did conflicts appear"
 // test, and the caller would resolve against a merge of a ref it never asked for.
-func (v hgVCS) StartMerge(ctx context.Context, root, ref string) error {
+func (v hgVCS) StartMerge(ctx context.Context, root, ref string, as types.Person) error {
 	if err := checkRef(ref); err != nil {
+		return err
+	}
+	username, err := hgUsername(as)
+	if err != nil {
 		return err
 	}
 	if underway, err := v.mergeInProgress(ctx, root); err != nil {
@@ -893,7 +889,7 @@ func (v hgVCS) StartMerge(ctx context.Context, root, ref string) error {
 	} else if underway {
 		return fmt.Errorf("hg merge %s: a merge is already in progress; conclude or abandon it first", ref)
 	}
-	cmd := vcsExec(ctx, "hg", "--noninteractive", "merge", "--tool", "internal:merge", ref)
+	cmd := vcsExec(ctx, "hg", append(username, "--noninteractive", "merge", "--tool", "internal:merge", ref)...)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err == nil {

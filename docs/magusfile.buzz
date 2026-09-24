@@ -118,6 +118,7 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
+        "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         // index-generate renders `magus describe graph -o markdown`, so its output is a
         // function of the WHOLE knowledge graph - every source file in the workspace and
@@ -168,20 +169,14 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
-
+// install installs node_modules through the typescript spell's pnpm-install op. That
+// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
+// stamp, so an unchanged tree forks nothing and a canceled install, which leaves a
+// node_modules that EXISTS but is incomplete, reinstalls. Reached once per invocation
+// through install, so the fan-out of build-* targets below does not race several
+// installs in the same directory.
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-// Always let pnpm validate the install. A canceled or interrupted install leaves a
-// node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))`
-// guard this replaced read that tree as ready and handed the missing packages to
-// esbuild instead - surfacing as `Could not resolve "@codemirror/view"` from
-// build-playground-editor, which reads like a source bug rather than a half-installed
-// tree. On a warm tree --frozen-lockfile is about a second and changes nothing.
-// Reached once per invocation through preflight, so the fan-out of build-* targets
-// below does not race several installs in the same directory.
-fun install() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-}
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
@@ -406,7 +401,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
 // full 536-page render to gate bytes that are not tracked.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs generate refreshes the committed derived content; `magus run build docs` renders the site itself, and `magus run render docs` is the fast docs/blog preview");
-    ctx.needs(preflight);
+    ctx.needs(install);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
         "reference/rules", "reference/api", "changelog.md"];
@@ -516,7 +511,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
 }
 // lint runs the client-side TypeScript gates: tsc for type errors and Biome for the
 // banned patterns (no `any`, no non-null assertions - see biome.json). Both need
-// node_modules, which it reaches through format -> generate -> preflight; proc.exec raises
+// node_modules, which it reaches through format -> generate -> install; proc.exec raises
 // on a non-zero exit, so either gate fails lint.
 //
 // Markdown formatting is dprint, run once from the root project (its scope is
@@ -569,7 +564,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
 // pnpm-workspace.yaml cooling period is the stronger half of this.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     advisories\audit();
 }
 
@@ -601,7 +596,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // than a second one, and full reflection means std/validate_wasm.go's no-op stub -
 // there because TinyGo's wasm reflect omits NumIn/NumOut - can go.
 export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.needs(gopherbuzz\build);
     ctx.writesFiles("gen/playground/buzz.wasm", "gen/playground/wasm_exec.js");
     fs\mkdirAll("gen/playground");
@@ -657,7 +652,7 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
 // works offline without any CDN. Bump the version in package.json and the next generate picks
 // it up; gen/ is not committed, so generate runs this as one of its stages.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
     proc\exec("pnpm", ["run", "build-hljs"], ".", {});
@@ -670,7 +665,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
 // every published byte needs a target CI can run - a script nothing invokes would have
 // shipped a playground with no editor.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
     proc\exec("pnpm", ["run", "build-editor"], ".", {});

@@ -487,6 +487,7 @@ export object TargetGraphNode {
     dependencies: [str] = [],
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
+    dispatchOnly: bool = false,
     crossDependencies: [CrossTargetRef] = [],
     chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],
@@ -512,7 +513,7 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
-export object SpawnVerdict {
+export object GuardVerdict {
     decision: str = "",
     reason: str = "",
 }
@@ -654,6 +655,42 @@ export object SpawnRequest {
     target: SpawnTarget? = null,
 }
 
+export object CommandInvocation {
+    program: str = "",
+    args: [str] = [],
+    repeats: bool = false,
+}
+
+export object CheckoutState {
+    branch: str = "",
+    remoteBranches: [str] = [],
+}
+
+export object CommandRequest {
+    host: str = "",
+    session: str = "",
+    command: str = "",
+    description: str = "",
+    commands: [CommandInvocation] = [],
+    parent: str = "",
+    role: str = "",
+    lease: Job? = null,
+    checkout: CheckoutState? = null,
+}
+
+export object WriteRequest {
+    host: str = "",
+    session: str = "",
+    parent: str = "",
+    role: str = "",
+    lease: Job? = null,
+    path: str = "",
+    workspace: str = "",
+    content: str = "",
+    oldText: str = "",
+    newText: str = "",
+}
+
 export object JobOverlap {
     jobA: str = "",
     jobB: str = "",
@@ -737,14 +774,16 @@ export object ci {
 
 // Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.
 export object guard {
-    static extern fun advise(text: str) > SpawnVerdict;
-    static extern fun allow() > SpawnVerdict;
+    static extern fun advise(text: str) > GuardVerdict;
+    static extern fun allow() > GuardVerdict;
     static extern fun bash(rule: {str: any}) > void;
+    static extern fun command(rule: Function) > void;
     static extern fun count(key: str) > int;
-    static extern fun deny(text: str) > SpawnVerdict;
+    static extern fun deny(text: str) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: Function) > void;
+    static extern fun write(rule: Function) > void;
 }
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.

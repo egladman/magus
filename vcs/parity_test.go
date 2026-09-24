@@ -3,9 +3,12 @@
 package vcs
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -121,8 +124,7 @@ func eachBackend(t *testing.T, fn func(t *testing.T, b parityBackend)) {
 // it would parse as badly as the file on disk.
 func TestParityReadFileAtReturnsCommittedContent(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reader, ok := b.drv.(types.RevisionFileReader)
-		require.Truef(t, ok, "%s does not implement RevisionFileReader", b.name)
+		reader := b.drv
 
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"magusfile.buzz": "committed\n"})
@@ -140,8 +142,7 @@ func TestParityReadFileAtReturnsCommittedContent(t *testing.T) {
 // the revision holds, and this is the capability whose whole promise is that it is.
 func TestParityReadFileAtDoesNotTrim(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reader, ok := b.drv.(types.RevisionFileReader)
-		require.Truef(t, ok, "%s does not implement RevisionFileReader", b.name)
+		reader := b.drv
 
 		dir := t.TempDir()
 		const body = "  leading\n\ntrailing blank line\n\n"
@@ -158,8 +159,7 @@ func TestParityReadFileAtDoesNotTrim(t *testing.T) {
 // projects rather than a file it could not read.
 func TestParityReadFileAtMissingPathErrors(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reader, ok := b.drv.(types.RevisionFileReader)
-		require.Truef(t, ok, "%s does not implement RevisionFileReader", b.name)
+		reader := b.drv
 
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "one\n"})
@@ -302,10 +302,7 @@ func TestParityDirtyAgreesWithDirtyFiles(t *testing.T) {
 // the call is batched, getting it wrong fails only for some inputs.
 func TestParityTrackedFilesAnswersWhenNoneAreTracked(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reporter, ok := b.drv.(types.TrackedFileReporter)
-		if !ok {
-			t.Skipf("%s does not implement TrackedFileReporter", b.name)
-		}
+		reporter := b.drv
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "one\n"})
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("x\n"), 0o644))
@@ -325,10 +322,8 @@ func TestParityTrackedFilesAnswersWhenNoneAreTracked(t *testing.T) {
 // a directory it asked about is silently reported as not ignored.
 func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reporter, ok := b.drv.(types.IgnoredFileReporter)
-		if !ok {
-			t.Skipf("%s does not implement IgnoredFileReporter", b.name)
-		}
+		skipUnsupported(t, b, types.CapIgnoredFileReporter)
+		reporter := b.drv
 		dir := t.TempDir()
 		name, body := ignoreRule(b, "build/")
 		b.init(t, dir, map[string]string{"a.txt": "one\n", name: body})
@@ -349,14 +344,8 @@ func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 // the only thing that catches it.
 func TestParityIgnoreReportersAgree(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reporter, ok := b.drv.(types.IgnoredFileReporter)
-		if !ok {
-			t.Skipf("%s does not implement IgnoredFileReporter", b.name)
-		}
-		resolver, ok := b.drv.(types.ConflictResolver)
-		if !ok {
-			t.Skipf("%s does not implement ConflictResolver", b.name)
-		}
+		skipUnsupported(t, b, types.CapIgnoredFileReporter)
+		reporter, resolver := b.drv, b.drv
 		// keep.log is TRACKED and matches an ignore rule: the case the two disagreed on.
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"keep.log": "x\n"})
@@ -400,10 +389,7 @@ func ignoreRule(b parityBackend, pattern string) (name, body string) {
 // discards the developer's uncommitted work.
 func TestParityAbortMergeRefusesWithNoMergeInProgress(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		starter, ok := b.drv.(types.MergeStarter)
-		if !ok {
-			t.Skipf("%s does not implement MergeStarter", b.name)
-		}
+		starter := b.drv
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "one\n"})
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("UNCOMMITTED\n"), 0o644))
@@ -538,10 +524,7 @@ func TestParityGlobPathspecMatches(t *testing.T) {
 // that when git's format gained the status column.
 func TestParityChangesByCommitReportsStatus(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		reporter, ok := b.drv.(types.ChurnReporter)
-		if !ok {
-			t.Skipf("%s does not implement ChurnReporter", b.name)
-		}
+		reporter := b.drv
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"keep.txt": "one\n", "gone.txt": "two\n"})
 		writeRepoFile(t, dir, "keep.txt", "EDITED\n")
@@ -965,8 +948,7 @@ func TestParityReviewCommandIsTheBackendsOwn(t *testing.T) {
 // backends implement it as of this test.
 func TestParityRevTimeReportsCommitDate(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		timer, ok := b.drv.(types.RevTimeReporter)
-		require.Truef(t, ok, "%s does not implement RevTimeReporter", b.name)
+		timer := b.drv
 
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "one\n"})
@@ -988,8 +970,7 @@ func TestParityRevTimeReportsCommitDate(t *testing.T) {
 // backend is broken".
 func TestParityRevTimeUnresolvableRevisionIsNotFoundNotError(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		timer, ok := b.drv.(types.RevTimeReporter)
-		require.Truef(t, ok, "%s does not implement RevTimeReporter", b.name)
+		timer := b.drv
 
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "one\n"})
@@ -1041,10 +1022,7 @@ func initialCommitID(t *testing.T, b parityBackend, dir string) string {
 // endpoint alone, gives the right answer.
 func TestParityRangeDiffIsSymmetricDifference(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		differ, ok := b.drv.(types.RangeDiffReporter)
-		if !ok {
-			t.Skipf("%s does not implement RangeDiffReporter", b.name)
-		}
+		differ := b.drv
 
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"root.txt": "r\n"})
@@ -1077,10 +1055,7 @@ func TestParityRangeDiffIsSymmetricDifference(t *testing.T) {
 // patch it already asked to be narrowed.
 func TestParityRangeDiffScopesToPaths(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		differ, ok := b.drv.(types.RangeDiffReporter)
-		if !ok {
-			t.Skipf("%s does not implement RangeDiffReporter", b.name)
-		}
+		differ := b.drv
 
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"root.txt": "r\n"})
@@ -1099,5 +1074,371 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 		require.NoErrorf(t, err, "%s scoped RangeDiff", b.name)
 		assert.Containsf(t, diff, "keep.txt", "%s scoped RangeDiff dropped the requested path", b.name)
 		assert.NotContainsf(t, diff, "drop.txt", "%s scoped RangeDiff did not narrow to the given path", b.name)
+	})
+}
+
+// A fresh repository with no remote reports its checkout without error and no remote
+// branches, whichever backend answers.
+func TestParityCheckoutStateWithoutARemote(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		skipUnsupported(t, b, types.CapCheckoutStateReporter)
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+
+		got, err := b.drv.CheckoutState(t.Context(), dir)
+		require.NoErrorf(t, err, "%s CheckoutState", b.name)
+		assert.Emptyf(t, got.RemoteBranches, "%s has no remote to report", b.name)
+	})
+}
+
+// capabilityMatrix is deliberate: adding a backend to a row is an implementation, removing
+// one is a regression, and neither happens by accident. Every backend DECLARES every
+// capability, so this matrix, not the compiler, is where support is written down.
+var capabilityMatrix = map[types.VCSCapability]map[string]bool{
+	types.CapBisector:              {"git": true, "hg": true, "sl": true},
+	types.CapMergeDriverInstaller:  {"git": true, "hg": true, "sl": true},
+	types.CapRefreshHookInstaller:  {"git": true, "hg": true, "sl": true},
+	types.CapDriftHookInstaller:    {"git": true, "hg": true, "sl": true},
+	types.CapRegenHookInstaller:    {"git": true},
+	types.CapRemoteReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRemoteConfigReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapDefaultRefReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapCheckoutStateReporter: {"git": true},
+	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
+	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true},
+	types.CapChurnReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapBranchChangeReporter:  {"git": true},
+	types.CapRangeReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapAncestryReporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapConflictResolver:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRevisionFileReader:    {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRevisionExporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapMergeStarter:          {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapCommitWriter:          {"git": true},
+	types.CapTreeReporter:          {"git": true},
+	types.CapTreeMerger:            {"git": true},
+	types.CapGeneratedPathReporter: {"git": true},
+	types.CapCheckoutProvisioner:   {"git": true},
+	types.CapCheckoutLister:        {"git": true},
+	types.CapRevisionFetcher:       {"git": true},
+	types.CapPusher:                {"git": true},
+	types.CapBundler:               {"git": true},
+}
+
+// capabilityProbe calls one method. The arguments make a real implementation fail fast
+// and touch nothing outside dir (an invalid revision, remote or path wherever the method
+// validates one), so only a decline can come back as a *VCSUnsupportedError.
+type capabilityProbe struct {
+	capability types.VCSCapability
+	method     string
+	call       func(d types.VCSDriver, dir string) error
+}
+
+func capabilityProbes(t *testing.T) []capabilityProbe {
+	ctx := t.Context()
+	id := strings.Repeat("a", 40)
+	errOf := func(_ any, err error) error { return err }
+	return []capabilityProbe{
+		{types.CapBisector, "Bisect", func(d types.VCSDriver, dir string) error {
+			return errOf(d.Bisect(ctx, dir, types.BisectOptions{Good: "-x"}))
+		}},
+		{types.CapMergeDriverInstaller, "InstallMergeDriver", func(d types.VCSDriver, dir string) error { return d.InstallMergeDriver(ctx, dir, nil) }},
+		{types.CapMergeDriverInstaller, "CheckMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.CheckMergeDriver(ctx, dir)) }},
+		{types.CapMergeDriverInstaller, "EnsureMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.EnsureMergeDriver(ctx, dir, nil)) }},
+		{types.CapMergeDriverInstaller, "MergeDriverCommand", func(d types.VCSDriver, dir string) error { return errOf(d.MergeDriverCommand(ctx, dir)) }},
+		{types.CapRefreshHookInstaller, "InstallRefreshHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRefreshHook(ctx, dir, "true")) }},
+		{types.CapDriftHookInstaller, "InstallDriftHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallDriftHook(ctx, dir, "true")) }},
+		{types.CapRegenHookInstaller, "InstallRegenHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRegenHook(ctx, dir, "true")) }},
+		{types.CapRemoteReporter, "RemoteURL", func(d types.VCSDriver, dir string) error { return errOf(d.RemoteURL(ctx, dir, "-x")) }},
+		{types.CapRemoteConfigReporter, "ConfiguredRemote", func(d types.VCSDriver, dir string) error { return errOf(d.ConfiguredRemote(dir)) }},
+		{types.CapDefaultRefReporter, "DefaultRef", func(d types.VCSDriver, dir string) error { return errOf(d.DefaultRef(ctx, dir)) }},
+		{types.CapCheckoutStateReporter, "CheckoutState", func(d types.VCSDriver, dir string) error { return errOf(d.CheckoutState(ctx, dir)) }},
+		{types.CapPushStatusReporter, "CommitPushed", func(d types.VCSDriver, dir string) error {
+			_, _, err := d.CommitPushed(ctx, dir, "-x")
+			return err
+		}},
+		{types.CapRevTimeReporter, "RevTime", func(d types.VCSDriver, dir string) error {
+			_, _, err := d.RevTime(ctx, dir, "-x")
+			return err
+		}},
+		{types.CapTrackedFileReporter, "TrackedFiles", func(d types.VCSDriver, dir string) error { return errOf(d.TrackedFiles(ctx, dir, nil)) }},
+		{types.CapIgnoredFileReporter, "IgnoredFiles", func(d types.VCSDriver, dir string) error { return errOf(d.IgnoredFiles(ctx, dir, nil)) }},
+		{types.CapChurnReporter, "ChangesByCommit", func(d types.VCSDriver, dir string) error { return errOf(d.ChangesByCommit(ctx, dir, 1, "-x")) }},
+		{types.CapBranchChangeReporter, "BranchChanges", func(d types.VCSDriver, dir string) error { return errOf(d.BranchChanges(ctx, dir, "-x", 1)) }},
+		{types.CapRangeReporter, "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapRangeReporter, "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
+		{types.CapConflictResolver, "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
+		{types.CapConflictResolver, "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},
+		{types.CapConflictResolver, "MarkResolved", func(d types.VCSDriver, dir string) error { return d.MarkResolved(ctx, dir, nil) }},
+		{types.CapConflictResolver, "RemoveConflicts", func(d types.VCSDriver, dir string) error { return d.RemoveConflicts(ctx, dir, nil) }},
+		{types.CapConflictResolver, "IgnoredPaths", func(d types.VCSDriver, dir string) error { return errOf(d.IgnoredPaths(ctx, dir, nil)) }},
+		{types.CapRevisionFileReader, "ReadFileAt", func(d types.VCSDriver, dir string) error { return errOf(d.ReadFileAt(ctx, dir, "-x", "a")) }},
+		{types.CapRevisionExporter, "ExportRevision", func(d types.VCSDriver, dir string) error {
+			return d.ExportRevision(ctx, dir, "-x", filepath.Join(dir, "out"))
+		}},
+		{types.CapMergeStarter, "StartMerge", func(d types.VCSDriver, dir string) error { return d.StartMerge(ctx, dir, "-x", types.Person{}) }},
+		{types.CapMergeStarter, "AbortMerge", func(d types.VCSDriver, dir string) error { return d.AbortMerge(ctx, dir) }},
+		{types.CapCommitWriter, "Commit", func(d types.VCSDriver, dir string) error { return errOf(d.Commit(ctx, dir, types.CheckoutCommit{})) }},
+		{types.CapCommitWriter, "CommitTree", func(d types.VCSDriver, dir string) error { return errOf(d.CommitTree(ctx, dir, types.TreeCommit{})) }},
+		{types.CapTreeReporter, "TreeID", func(d types.VCSDriver, dir string) error { return errOf(d.TreeID(ctx, dir, "-x")) }},
+		{types.CapTreeReporter, "DiffTrees", func(d types.VCSDriver, dir string) error { return errOf(d.DiffTrees(ctx, dir, "-x", "-x")) }},
+		{types.CapTreeMerger, "MergeTrees", func(d types.VCSDriver, dir string) error {
+			return errOf(d.MergeTrees(ctx, dir, types.TreeMerge{Ours: "-x", Theirs: "-x"}))
+		}},
+		{types.CapGeneratedPathReporter, "GeneratedPaths", func(d types.VCSDriver, dir string) error {
+			return errOf(d.GeneratedPaths(ctx, dir, "-x", []string{"a"}))
+		}},
+		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
+		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
+		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
+		{types.CapCheckoutLister, "OtherCheckouts", func(d types.VCSDriver, dir string) error { return errOf(d.OtherCheckouts(dir)) }},
+		{types.CapRevisionFetcher, "FetchRef", func(d types.VCSDriver, dir string) error { return errOf(d.FetchRef(ctx, dir, "-x", "refs/heads/main")) }},
+		{types.CapRevisionFetcher, "FetchCommit", func(d types.VCSDriver, dir string) error { return d.FetchCommit(ctx, dir, "-x", id) }},
+		{types.CapPusher, "Push", func(d types.VCSDriver, dir string) error {
+			return d.Push(ctx, dir, types.PushLease{Remote: "-x", Ref: "refs/heads/main", To: id, Expected: id})
+		}},
+		{types.CapBundler, "Bundle", func(d types.VCSDriver, dir string) error {
+			return d.Bundle(ctx, dir, "rel", types.BundleRange{Head: "-x"})
+		}},
+		{types.CapBundler, "Unbundle", func(d types.VCSDriver, dir string) error { return d.Unbundle(ctx, dir, "rel") }},
+	}
+}
+
+// Every method of every capability either answers or refuses with a *VCSUnsupportedError
+// naming the backend and the capability, matching the matrix. Needs no VCS binary: a stub
+// refuses before running anything, and a real implementation's failure to run is not a
+// refusal.
+func TestParityCapabilityMatrix(t *testing.T) {
+	probes := capabilityProbes(t)
+	probed := map[types.VCSCapability]bool{}
+	for _, p := range probes {
+		probed[p.capability] = true
+	}
+	for capability := range capabilityMatrix {
+		assert.Truef(t, probed[capability], "%s is in the matrix but no probe calls it", capability)
+	}
+	for _, b := range parityBackends() {
+		for _, p := range probes {
+			t.Run(b.name+"/"+p.method, func(t *testing.T) {
+				row, ok := capabilityMatrix[p.capability]
+				require.Truef(t, ok, "%s has a probe but no row in the matrix", p.capability)
+				err := p.call(b.drv, t.TempDir())
+				var declined *types.VCSUnsupportedError
+				if !row[b.name] {
+					require.ErrorAsf(t, err, &declined, "the matrix says %s declines %s", b.name, p.capability)
+					assert.Equal(t, &types.VCSUnsupportedError{VCS: b.name, Capability: p.capability}, declined)
+					assert.ErrorIs(t, err, types.ErrVCSUnsupported)
+					assert.ErrorIs(t, err, errors.ErrUnsupported)
+					return
+				}
+				assert.Falsef(t, errors.As(err, &declined), "%s implements %s per the matrix, but %s refused: %v", b.name, p.capability, p.method, err)
+			})
+		}
+	}
+}
+
+// MergeDriverCommand reads back what InstallMergeDriver registered, and nothing before it.
+func TestParityMergeDriverCommandReadsTheRegistration(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		skipUnsupported(t, b, types.CapMergeDriverInstaller)
+		isolateGitConfig(t)
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "a\n"})
+		ctx := t.Context()
+
+		got, err := b.drv.MergeDriverCommand(ctx, dir)
+		require.NoErrorf(t, err, "%s before install", b.name)
+		assert.Emptyf(t, got, "%s reported a driver nothing registered", b.name)
+
+		require.NoError(t, b.drv.InstallMergeDriver(ctx, dir, []string{"gen/**"}))
+		got, err = b.drv.MergeDriverCommand(ctx, dir)
+		require.NoErrorf(t, err, "%s after install", b.name)
+		assert.Containsf(t, got, "vcs merge-driver", "%s", b.name)
+	})
+}
+
+// skipUnsupported skips a parity test for a backend the matrix says declines capability.
+func skipUnsupported(t *testing.T, b parityBackend, capability types.VCSCapability) {
+	t.Helper()
+	if !capabilityMatrix[capability][b.name] {
+		t.Skipf("%s declines %s", b.name, capability)
+	}
+}
+
+// forkedRange builds root, then a base line adding base-only.txt, then a head line from
+// root that edits root.txt and adds head-only.txt in two commits. It returns root, base
+// and head ids.
+func forkedRange(t *testing.T, b parityBackend) (dir, root, base, head string) {
+	t.Helper()
+	dir = t.TempDir()
+	b.init(t, dir, map[string]string{"root.txt": "r\n"})
+	root = initialCommitID(t, b, dir)
+
+	writeRepoFile(t, dir, "base-only.txt", "base\n")
+	addPath(t, b, dir, "base-only.txt")
+	commitAll(t, b, dir, "base moves on")
+	c, err := b.drv.FindCommit(t.Context(), dir, "")
+	require.NoErrorf(t, err, "%s FindCommit(base)", b.name)
+	base = c.ID
+
+	checkoutRev(t, b, dir, root)
+	writeRepoFile(t, dir, "root.txt", "r\nedited\n")
+	commitAll(t, b, dir, "head edits root")
+	if b.name == "jj" {
+		vcsTestRun(t, dir, "jj", "new")
+	}
+	writeRepoFile(t, dir, "head-only.txt", "head\n")
+	addPath(t, b, dir, "head-only.txt")
+	commitAll(t, b, dir, "head adds a file")
+	c, err = b.drv.FindCommit(t.Context(), dir, "")
+	require.NoErrorf(t, err, "%s FindCommit(head)", b.name)
+	return dir, root, base, c.ID
+}
+
+// Both refusals come from the check, before the backend runs: an empty base would read as
+// the whole history on one backend and as a revset parse error on another.
+func TestParityRefusesEmptyAndOptionShapedRevisions(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "a\n"})
+		head := initialCommitID(t, b, dir)
+
+		_, err := b.drv.RangeDiff(t.Context(), dir, "", head, nil)
+		assert.ErrorContainsf(t, err, "a revision is required", "%s RangeDiff with an empty base", b.name)
+		_, _, err = b.drv.RevTime(t.Context(), dir, "-x")
+		assert.ErrorContainsf(t, err, "looks like a flag", "%s RevTime with an option-shaped revision", b.name)
+	})
+}
+
+// RangeFiles is RangeDiff's name list: exactly the files the diff shows, from the merge
+// base, so base's own change never appears.
+func TestParityRangeFilesMatchesRangeDiff(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir, _, base, head := forkedRange(t, b)
+
+		files, err := b.drv.RangeFiles(t.Context(), dir, base, head, nil)
+		require.NoErrorf(t, err, "%s RangeFiles", b.name)
+		slices.Sort(files)
+		assert.Equalf(t, []string{"head-only.txt", "root.txt"}, files, "%s", b.name)
+
+		diff, err := b.drv.RangeDiff(t.Context(), dir, base, head, nil)
+		require.NoError(t, err)
+		for _, f := range files {
+			assert.Containsf(t, diff, f, "%s RangeFiles named %s, which RangeDiff does not show", b.name, f)
+		}
+
+		_, err = b.drv.RangeFiles(t.Context(), dir, base, "no-such-revision", nil)
+		assert.Errorf(t, err, "%s: an unresolvable revision is an error, not an empty list", b.name)
+
+		scoped, err := b.drv.RangeFiles(t.Context(), dir, base, head, []string{"root.txt"})
+		require.NoErrorf(t, err, "%s scoped RangeFiles", b.name)
+		assert.Equalf(t, []string{"root.txt"}, scoped, "%s: paths did not narrow the files", b.name)
+
+		// Empty is not a revision: it would read as the whole history on one backend and as
+		// an error on another.
+		_, err = b.drv.RangeFiles(t.Context(), dir, "", head, nil)
+		assert.Errorf(t, err, "%s: an empty base", b.name)
+		_, err = b.drv.RangeCommits(t.Context(), dir, "", head, nil)
+		assert.Errorf(t, err, "%s: an empty base", b.name)
+		_, _, err = b.drv.RevTime(t.Context(), dir, "-x")
+		assert.Errorf(t, err, "%s: an option-shaped revision", b.name)
+	})
+}
+
+// RangeCommits lists head's own commits newest first, each with its parents, and narrows
+// to the commits touching the given paths.
+func TestParityRangeCommitsNewestFirstWithParents(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir, _, base, head := forkedRange(t, b)
+
+		commits, err := b.drv.RangeCommits(t.Context(), dir, base, head, nil)
+		require.NoErrorf(t, err, "%s RangeCommits", b.name)
+		subjects := make([]string, len(commits))
+		for i, c := range commits {
+			subjects[i] = c.Subject
+			assert.Lenf(t, c.Parents, 1, "%s: %q is a linear commit", b.name, c.Subject)
+		}
+		assert.Equalf(t, []string{"head adds a file", "head edits root"}, subjects, "%s", b.name)
+		assert.Equal(t, head, commits[0].ID)
+
+		scoped, err := b.drv.RangeCommits(t.Context(), dir, base, head, []string{"root.txt"})
+		require.NoErrorf(t, err, "%s scoped RangeCommits", b.name)
+		require.Lenf(t, scoped, 1, "%s: paths did not narrow the commits", b.name)
+		assert.Equal(t, "head edits root", scoped[0].Subject)
+	})
+}
+
+func TestParityIsAncestor(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir, root, base, head := forkedRange(t, b)
+		ctx := t.Context()
+		for _, c := range []struct {
+			ancestor, descendant string
+			want                 bool
+		}{
+			{root, head, true},
+			{head, head, true},
+			{head, root, false},
+			{base, head, false},
+		} {
+			got, err := b.drv.IsAncestor(ctx, dir, c.ancestor, c.descendant)
+			require.NoErrorf(t, err, "%s IsAncestor", b.name)
+			assert.Equalf(t, c.want, got, "%s IsAncestor(%s, %s)", b.name, c.ancestor, c.descendant)
+		}
+		_, err := b.drv.IsAncestor(ctx, dir, "no-such-revision", head)
+		assert.Errorf(t, err, "%s: an unresolvable revision is an error, not false", b.name)
+	})
+}
+
+// RemoteURL reads the default remote under "" and a named one by name, and an unknown
+// name is ErrVCSUnsupported, the answer every caller degrades on.
+func TestParityRemoteURLByName(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "a\n"})
+		const primary, secondary = "https://example.com/primary.git", "https://example.com/upstream.git"
+		switch b.name {
+		case "git":
+			gitRun(t, dir, "remote", "add", "origin", primary)
+			gitRun(t, dir, "remote", "add", "upstream", secondary)
+		case "hg":
+			appendRepoFile(t, dir, ".hg/hgrc", "\n[paths]\ndefault = "+primary+"\nupstream = "+secondary+"\n")
+		case "sl":
+			appendRepoFile(t, dir, ".sl/config", "\n[paths]\ndefault = "+primary+"\nupstream = "+secondary+"\n")
+		case "jj":
+			vcsTestRun(t, dir, "jj", "git", "remote", "add", "origin", primary)
+			vcsTestRun(t, dir, "jj", "git", "remote", "add", "upstream", secondary)
+		}
+		ctx := t.Context()
+
+		got, err := b.drv.RemoteURL(ctx, dir, "")
+		require.NoErrorf(t, err, "%s default remote", b.name)
+		assert.Equal(t, primary, got)
+		got, err = b.drv.RemoteURL(ctx, dir, "upstream")
+		require.NoErrorf(t, err, "%s named remote", b.name)
+		assert.Equal(t, secondary, got)
+
+		_, err = b.drv.RemoteURL(ctx, dir, "nope")
+		assert.ErrorIsf(t, err, types.ErrVCSUnsupported, "%s unknown remote", b.name)
+		_, err = b.drv.RemoteURL(ctx, dir, "--upload-pack=x")
+		require.Error(t, err)
+		assert.NotErrorIsf(t, err, types.ErrVCSUnsupported, "%s: an option-shaped name is refused, not reported absent", b.name)
+
+		// A lookup that could not run is not "no remote": callers degrade on the sentinel,
+		// and a cancelled read must not turn into a missing link.
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		_, err = b.drv.RemoteURL(cancelled, dir, "")
+		require.Errorf(t, err, "%s cancelled", b.name)
+		assert.NotErrorIsf(t, err, types.ErrVCSUnsupported, "%s: a cancelled read reported no remote", b.name)
+		if b.name == "hg" {
+			_, err = b.drv.DefaultRef(cancelled, dir)
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, types.ErrVCSUnsupported, "hg: a cancelled read reported no default branch")
+		}
 	})
 }

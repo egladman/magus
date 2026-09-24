@@ -18,4 +18,14 @@ type ShardPlan struct {
 	// runner that runs out of memory disappears and reports "cancelled" with no
 	// diagnostics, so this is the only warning there is.
 	OverBudget []string
+	// Affected is every project the change set reaches, sorted: the closure the shards
+	// were cut from, before any sharding or filtering.
+	Affected []string
+	// UnboundedBy, when set, says why Affected is not a proof: the change set edits a
+	// file that can move the graph's edges or every project's build (a declaration, a
+	// dependency manifest, a toolchain pin), touches a file no project claims, or the
+	// VCS could not diff and the plan fell back to every project. A consumer that relies
+	// on two closures being disjoint (a merge queue) must treat it as overlapping
+	// everything.
+	UnboundedBy string
 }

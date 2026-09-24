@@ -24,12 +24,12 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`buzz`](spells/buzz.md)             | Buzz           | 0   | Buzz language identity: the .buzz extension and the comment and string syntax magus reads source with. |
 | [`cosign`](spells/cosign.md)         | -              | 3   | Cosign spell: keyless sign, attest, and verify for container artifacts.                                |
 | [`docker`](spells/docker.md)         | Docker         | 6   | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.                       |
-| [`go`](spells/go.md)                 | Go             | 13  | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.      |
+| [`go`](spells/go.md)                 | Go             | 14  | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.      |
 | [`markdown`](spells/markdown.md)     | Markdown       | 4   | Markdown docs spell: markdownlint and prettier for linting and formatting prose.                       |
 | [`podman`](spells/podman.md)         | OCI containers | 4   | Podman spell: image build, push, manifest assembly, and run for the podman runtime.                    |
-| [`python`](spells/python.md)         | Python         | 6   | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.                    |
-| [`rust`](spells/rust.md)             | Rust           | 6   | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.                          |
-| [`typescript`](spells/typescript.md) | TypeScript     | 11  | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
+| [`python`](spells/python.md)         | Python         | 7   | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.                    |
+| [`rust`](spells/rust.md)             | Rust           | 7   | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.                          |
+| [`typescript`](spells/typescript.md) | TypeScript     | 12  | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
 <!-- END SPELL LIST -->
 
 ## Spells vs Targets
@@ -40,7 +40,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 | ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | **What it is**          | a library of tool-native operations (+ cache metadata)                               | an addressable unit of work you run                                                     |
 | **Answers**             | _how_ a tool performs an operation                                                   | _what_ operation runs on _which_ project                                                |
-| **Vocabulary**          | the tool's own CLI command (`go-vet`, `cargo-clippy`, `tsc`, `eslint`, `ruff-check`) | magus's lifecycle (`build`, `test`, `lint`, `format`, `clean`, `generate`, `preflight`) |
+| **Vocabulary**          | the tool's own CLI command (`go-vet`, `cargo-clippy`, `tsc`, `eslint`, `ruff-check`) | magus's lifecycle (`build`, `test`, `lint`, `format`, `clean`, `generate`)              |
 | **Who declares it**     | a built-in or a spell file (`spells/*.buzz`)                                         | an exported function in your magusfile                                                  |
 | **How it enters a run** | **bound** to a project via `magus\project.register`                                  | **invoked** via `magus run <name>`                                                      |
 | **Runs on its own?**    | **No**: it only contributes ops + cache inputs                                       | **Yes**: it is the entry point                                                          |
@@ -197,7 +197,7 @@ Naming the op `golangci-lint` (not `lint`) and `go-fmt` (not `fmt`) says exactly
 
 **Handler: the same command in lowerCamelCase, with Go-style initialisms** (`go-fmt` → `goFmt`, `golangci-lint` → `golangCILint`, `ruff-check` → `ruffCheck`). The handler name is invisible to magus; it exists to tell the reader the exact binary.
 
-**Not every op is a CLI command.** A no-op marker (typescript's `preflight`) or a cache-provider verb (github/s3 `get-entry`) is not a tool invocation, so keep a descriptive name.
+**Not every op is a CLI command.** A cache-provider verb (github/s3 `get-entry`) is not a tool invocation, so keep a descriptive name.
 
 **Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `go["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context - the `ctx` the target function received - and any options follow it: `go["go-build"](ctx, { "cwd": "." })`.
 

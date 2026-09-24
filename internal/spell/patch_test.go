@@ -344,11 +344,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			Directives: []string{"go:", "nolint", "export", "line ", "+build", "sys", "extern"},
 		},
 		IgnoreDirs: []string{"vendor"},
-		Manifests:  []spells.Manifest{{Value: "go.mod", LockCandidates: []string{"go.sum"}}},
+		Manifests:  goldenGoManifests,
 		Ops: map[string]spells.Op{
-			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints}},
-			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
-			"go-generate": {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
+			"go-mod-download": installOp("go", goldenGoInstallManifests, goldenGoInstall),
+			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints}},
+			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
+			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}, Capture: true},
@@ -440,12 +441,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			Directives: []string{"type:", "noqa"},
 		},
 		IgnoreDirs: []string{"__pycache__"},
-		Manifests: []spells.Manifest{
-			{Value: "pyproject.toml", LockCandidates: []string{"uv.lock", "poetry.lock", "pdm.lock", "Pipfile.lock"}},
-			{Value: "setup.py"},
-			{Value: "setup.cfg"},
-		},
+		Manifests:  goldenPythonManifests,
 		Ops: map[string]spells.Op{
+			"uv-sync":  installOp("python", goldenPythonInstallManifests, goldenUVSync),
 			"uv-build": {Command: spells.Command{Bin: "uv", Args: []string{"build"}}},
 			"uv-clean": {Command: spells.Command{Bin: "uv", Args: []string{"clean"}}},
 			"pytest": {Command: spells.Command{Bin: "uv", Args: []string{"run", "pytest"}, Charms: map[string]spells.Charm{
@@ -481,8 +479,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			},
 		},
 		IgnoreDirs: []string{"target"},
-		Manifests:  []spells.Manifest{{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}}},
+		Manifests:  goldenRustManifests,
 		Ops: map[string]spells.Op{
+			"cargo-fetch":  installOp("rust", goldenRustManifests, goldenCargoFetch),
 			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
 			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}, Hints: goldenRustupHints}},
@@ -521,10 +520,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			Directives: []string{"@ts-", "eslint-", "<reference"},
 		},
 		IgnoreDirs: []string{"node_modules", ".testcache", ".turbo", ".pnpm-store"},
-		Manifests: []spells.Manifest{
-			{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"}},
-		},
+		Manifests:  goldenTypescriptManifests,
 		Ops: map[string]spells.Op{
+			"pnpm-install": installOp("typescript", goldenPnpmInstallManifests, goldenPnpmInstall),
+			"npm-ci":       installOp("typescript", goldenNpmCiManifests, goldenNpmInstall),
 			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
@@ -536,7 +535,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 			}}},
-			"preflight": {},
 			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
@@ -555,6 +553,81 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 	},
 }
+
+// installOp is the op Decode synthesizes from a spell's manifest installs: the first
+// declared install's command, carrying every manifest so the runner can pick by lock.
+func installOp(spell string, manifests []spells.Manifest, first spells.Install) spells.Op {
+	return spells.Op{Kind: spells.OpKindInstall, Command: first.Command,
+		Install: &spells.InstallSpec{Spell: spell, Manifests: manifests}}
+}
+
+var (
+	goldenGoInstall = spells.Install{Name: "go-mod-download", Command: spells.Command{Bin: "go", Args: []string{"mod", "download"}, Charms: map[string]spells.Charm{
+		"update": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "get"}, {Op: "replace", Path: "/1", Value: "-u"}, {Op: "add", Path: "/2", Value: "./..."}}},
+	}}}
+	goldenGoManifests = []spells.Manifest{{Value: "go.mod", LockCandidates: []string{"go.sum"},
+		Installs: map[string]spells.Install{"go.sum": goldenGoInstall}}}
+	// goldenGoInstallManifests is the op-scoped manifest synthesizeInstall builds: just
+	// the one Name's own lock candidate, not every candidate the spell declares.
+	goldenGoInstallManifests = []spells.Manifest{{Value: "go.mod", LockCandidates: []string{"go.sum"},
+		Installs: map[string]spells.Install{"go.sum": goldenGoInstall}}}
+
+	goldenUVSync = spells.Install{Name: "uv-sync", Command: spells.Command{Bin: "uv", Args: []string{"sync", "--locked"}, Charms: map[string]spells.Charm{
+		"update": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "--upgrade"}}},
+	}}, Dir: ".venv"}
+	goldenPythonManifests = []spells.Manifest{
+		{Value: "pyproject.toml", LockCandidates: []string{"uv.lock", "poetry.lock", "pdm.lock", "Pipfile.lock"},
+			Installs: map[string]spells.Install{"uv.lock": goldenUVSync}},
+		{Value: "setup.py"},
+		{Value: "setup.cfg"},
+	}
+	goldenPythonInstallManifests = []spells.Manifest{{Value: "pyproject.toml", LockCandidates: []string{"uv.lock"},
+		Installs: map[string]spells.Install{"uv.lock": goldenUVSync}}}
+
+	goldenCargoFetch = spells.Install{Name: "cargo-fetch", Command: spells.Command{Bin: "cargo", Args: []string{"fetch", "--locked"}, Charms: map[string]spells.Charm{
+		"update": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "update"}, {Op: "remove", Path: "/1"}}},
+	}}}
+	goldenRustManifests = []spells.Manifest{{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"},
+		Installs: map[string]spells.Install{"Cargo.lock": goldenCargoFetch}}}
+
+	goldenPnpmInstall = spells.Install{
+		Name: "pnpm-install",
+		Command: spells.Command{Bin: "pnpm", Args: []string{"install", "--frozen-lockfile", "--prefer-offline"}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
+			"update": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "update"}, {Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
+		}},
+		Dir:         "node_modules",
+		Relocatable: true,
+		Stamps:      []string{"node_modules/.pnpm/lock.yaml", "node_modules/.modules.yaml"},
+		Inputs:      []string{".npmrc", "pnpm-workspace.yaml"},
+		Tools:       []string{"node", "pnpm"},
+	}
+	goldenNpmInstall = spells.Install{
+		Name: "npm-ci",
+		Command: spells.Command{Bin: "npm", Args: []string{"ci", "--prefer-offline"}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
+			"update": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "update"}, {Op: "remove", Path: "/1"}}},
+		}},
+		Dir:    "node_modules",
+		Stamps: []string{"node_modules/.package-lock.json"},
+		Inputs: []string{".npmrc"},
+		Tools:  []string{"node"},
+	}
+	goldenTypescriptManifests = []spells.Manifest{{
+		Value:          "package.json",
+		LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
+		Installs: map[string]spells.Install{
+			"pnpm-lock.yaml":      goldenPnpmInstall,
+			"package-lock.json":   goldenNpmInstall,
+			"npm-shrinkwrap.json": goldenNpmInstall,
+		},
+	}}
+	// goldenPnpmInstallManifests / goldenNpmCiManifests are the op-scoped manifests
+	// synthesizeInstall builds: pnpm-install and npm-ci each see only their own lock
+	// candidates, not the other's or the lockless yarn/bun ones.
+	goldenPnpmInstallManifests = []spells.Manifest{{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml"},
+		Installs: map[string]spells.Install{"pnpm-lock.yaml": goldenPnpmInstall}}}
+	goldenNpmCiManifests = []spells.Manifest{{Value: "package.json", LockCandidates: []string{"package-lock.json", "npm-shrinkwrap.json"},
+		Installs: map[string]spells.Install{"package-lock.json": goldenNpmInstall, "npm-shrinkwrap.json": goldenNpmInstall}}}
+)
 
 func TestBuiltinsMatchGolden(t *testing.T) {
 	got := Builtins()

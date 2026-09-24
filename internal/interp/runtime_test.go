@@ -44,12 +44,12 @@ func TestReadSourcePrecedence(t *testing.T) {
 	assert.Equal(t, "overlay", string(got))
 }
 
-// The id must be the one git itself assigns, or the trail's blob ids name nothing a
-// reader can `git cat-file`.
-func TestGitBlobIDMatchesGit(t *testing.T) {
+// The formula must not change, or every id already on the trail stops naming the bytes it
+// was recorded for. These are the ids git gives the same bytes.
+func TestContentIDMatchesGit(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "ce013625030ba8dba906f756967f9e9ca394464a", GitBlobID([]byte("hello\n")))
-	assert.Equal(t, "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", GitBlobID(nil))
+	assert.Equal(t, "ce013625030ba8dba906f756967f9e9ca394464a", ContentID([]byte("hello\n")))
+	assert.Equal(t, "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", ContentID(nil))
 }
 
 // A load's log records what the reader actually returned, so a revision's bytes are
@@ -63,13 +63,13 @@ func TestSourceLogRecordsWhatTheLoadRead(t *testing.T) {
 	var log SourceLog
 	_, err := readSource(WithSourceLog(context.Background(), &log), path)
 	require.NoError(t, err)
-	assert.Equal(t, []SourceFile{{Path: path, BlobID: "ce013625030ba8dba906f756967f9e9ca394464a"}}, log.Files())
+	assert.Equal(t, []SourceFile{{Path: path, ContentID: "ce013625030ba8dba906f756967f9e9ca394464a"}}, log.Files())
 
 	var revised SourceLog
 	ctx := WithSourceLog(WithSourceReader(context.Background(), func(string) ([]byte, error) { return nil, nil }), &revised)
 	_, err = readSource(ctx, path)
 	require.NoError(t, err)
-	assert.Equal(t, []SourceFile{{Path: path, BlobID: "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"}}, revised.Files())
+	assert.Equal(t, []SourceFile{{Path: path, ContentID: "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"}}, revised.Files())
 }
 
 func TestMagusSearchPaths(t *testing.T) {

@@ -45,7 +45,10 @@ func providerFrom(ctx context.Context) observability.Provider {
 // mgs_getName) rather than a malformed one. Speculative discovery (a local import
 // tried as a spell before falling back to a plain module) treats this as a quiet
 // "not a spell, move on"; an explicit spell load still surfaces it as an error.
-var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun mgs_getName`")
+var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun " + NameFunc + "`")
+
+// NameFunc is the export that makes a Buzz module a spell.
+const NameFunc = "mgs_getName"
 
 // Resolve calls a Buzz spell module's exported mgs_ functions once and assembles the
 // definition map the shared decoder reads (keyed by the decoder's field names),
@@ -71,7 +74,7 @@ func Resolve(ctx context.Context, sess *buzz.Session) (spells.Descriptor, error)
 func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, error) {
 	ex := sess.Exports()
 
-	nameFn, ok := ex["mgs_getName"]
+	nameFn, ok := ex[NameFunc]
 	if !ok {
 		return spells.Descriptor{}, ErrNotASpell
 	}

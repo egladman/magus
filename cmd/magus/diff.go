@@ -1907,15 +1907,11 @@ func impactAdvisorBaseOf(ctx context.Context, m *magus.Magus, base string) *impa
 	if err != nil || res.VCS == nil {
 		return nil
 	}
-	timer, ok := res.VCS.(types.RevTimeReporter)
-	if !ok {
-		return nil
-	}
 	// "origin/" + base is the spelling the advisors themselves use, not a normalization of
 	// it: the line exists so a reader can run the same comparison by hand, and a ref that
 	// reads differently here than in advice.buzz would send them at the wrong one.
 	ref := "origin/" + base
-	tip, found, err := timer.RevTime(ctx, m.Root(), ref)
+	tip, found, err := res.VCS.RevTime(ctx, m.Root(), ref)
 	if err != nil {
 		return nil
 	}
@@ -2481,8 +2477,9 @@ type adviceSection struct {
 // the only place their answers are useful.
 var adviceDirRel = filepath.Join(".github", "actions", "advice")
 
-// localAdvisors is every advisor a local run may execute, in the order action.yml runs
-// them. action.yml is the source of truth for that set; this list restates it.
+// localAdvisors is every advisor a local run may execute, in the order the action's entry
+// script (advise.buzz) runs them. advise.buzz is the source of truth for that set; this
+// list restates it.
 //
 // Restating it rather than reading the directory is deliberate, and the deciding reason
 // is safety. Three of the scripts in that directory PUSH to a branch, and nothing about a
@@ -2491,15 +2488,16 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 // sweep of *.buzz would therefore enroll a writer into a local command the moment someone
 // added one, and the failure mode of getting that wrong is a `magus diff` that pushes.
 //
-// Two lesser reasons: the directory also holds `advice.buzz`, which is the shared library
-// and not an advisor at all. And filename order is not the order action.yml chose.
+// Two lesser reasons: the directory also holds `advice.buzz` and `advise.buzz`, the shared
+// library and the entry script, neither an advisor. And filename order is not the order
+// advise.buzz chose.
 //
-// first-contribution.buzz is the one read-only advisor deliberately left out: it asks the
-// forge who opened the pull request, through its own `gh` call rather than through
-// advice.buzz, so local mode cannot intercept it. It also has no local meaning.
+// first-contribution.buzz and merge-queue.buzz are the read-only advisors deliberately left
+// out: each asks the forge about the pull request through its own `gh` call, and neither
+// has a local meaning. adviceLocalExclusions in the test records why.
 //
-// Restating is not the same as drifting, and TestLocalAdvisorsMatchActionYML is what keeps
-// the two apart: it reads the steps back out of action.yml and fails naming any advisor
+// Restating is not the same as drifting, and TestLocalAdvisorsMatchAdviseBuzz is what keeps
+// the two apart: it reads the lists back out of advise.buzz and fails naming any advisor
 // that is in one list and not the other. Adding a read-only advisor to CI without adding
 // it here is the failure that gate exists for.
 var localAdvisors = []string{
@@ -2520,7 +2518,7 @@ var localAdvisors = []string{
 // their sections in localAdvisors order, plus a note per advisor that failed.
 //
 // base is a BRANCH name, not a rev: the advisors compare against `origin/<base>`, the
-// same way they use PR_BASE in CI.
+// same way they use the pull request's base branch in CI.
 //
 // An advisor that raises produces a note and never an error: one broken advisor must not
 // take the other nine down, because the caller is showing a reader what magus knows and

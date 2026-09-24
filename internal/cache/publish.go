@@ -67,13 +67,18 @@ const bundleOutputName = "output.log"
 // PublishOutput uploads the run behind ref as a signed output bundle, so another
 // machine can resolve that exact ref. Passing runs already travel with the cache
 // artifact; this is what makes a FAILING run shareable, and it is always explicit.
-// It errors when no remote backend is configured, when the backend is inactive, or
-// when the cache holds no signing key (an unsigned bundle no consumer would accept).
+// It errors when no remote backend is configured, when this run may not write the
+// remote tier (a bundle is a remote write like any other, so remote writes off means
+// off for this verb too), when the backend is inactive, or when the cache holds no
+// signing key (an unsigned bundle no consumer would accept).
 func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 	if c.remote == nil {
 		return "", errors.New("cache: no remote backend configured")
 	}
-	if !c.remote.Active(ctx) {
+	if !c.remote.writes() {
+		return "", fmt.Errorf("cache: publishing writes the remote tier, which this run may not write (%s)", c.remote.off)
+	}
+	if !c.remote.backend.Active(ctx) {
 		return "", errors.New("cache: remote backend is not active in this environment")
 	}
 	if c.signer == nil {
@@ -99,25 +104,26 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 	pr, pw := io.Pipe()
 	errCh := make(chan error, 1)
 	go func() {
-		err := writeBundle(c.signer, pw, secret.Redact(ctx, meta), secret.Redact(ctx, data))
+		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, secret.Redact(ctx, meta), bundleOutputName, secret.Redact(ctx, data))
 		_ = pw.CloseWithError(err)
 		errCh <- err
 	}()
-	putErr := c.remote.PutArtifact(ctx, bundleProject, desc.Ref, pr)
+	putErr := c.remote.backend.PutArtifact(ctx, bundleProject, desc.Ref, pr)
 	_ = pr.CloseWithError(putErr)
 	if writeErr := <-errCh; writeErr != nil {
 		return "", writeErr
 	}
-	if putErr != nil {
+	// Already present is the same bundle: a ref names one execution.
+	if putErr != nil && !errors.Is(putErr, ErrRemoteExists) {
 		return "", putErr
 	}
 	return desc.Ref, nil
 }
 
-// writeBundle streams a signed gzip-tar bundle: metadata, output bytes, signature.
-// The signature covers both members through the same envelope artifacts use, so a
-// bundle is authenticated exactly as strictly.
-func writeBundle(s *signer, w io.Writer, meta, output []byte) error {
+// writeSignedPair streams a gzip-tar of two members, a metadata document and a
+// payload, then a signature over both under domain. With no signer the pair goes
+// unsigned, which only an explicitly insecure remote accepts.
+func writeSignedPair(s *signer, w io.Writer, domain, metaName string, meta []byte, payloadName string, payload []byte) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
 	add := func(name string, data []byte) error {
@@ -129,52 +135,37 @@ func writeBundle(s *signer, w io.Writer, meta, output []byte) error {
 		_, err := tw.Write(data)
 		return err
 	}
-	if err := add(bundleManifestName, meta); err != nil {
+	if err := add(metaName, meta); err != nil {
 		return err
 	}
-	if err := add(bundleOutputName, output); err != nil {
+	if err := add(payloadName, payload); err != nil {
 		return err
 	}
-	sum := sha256.Sum256(output)
-	sig, err := s.sign(domainBundle, meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])})
-	if err != nil {
-		return err
-	}
-	if err := add(sigFileName, sig); err != nil {
-		return err
+	if s != nil {
+		sum := sha256.Sum256(payload)
+		sig, err := s.sign(domain, meta, map[string]string{payloadName: hex.EncodeToString(sum[:])})
+		if err != nil {
+			return err
+		}
+		if err := add(sigFileName, sig); err != nil {
+			return err
+		}
 	}
 	return errors.Join(tw.Close(), gz.Close())
 }
 
-// fetchBundle resolves a ref against the remote bundle namespace, verifying the
-// signature before returning anything. It is the remote half of ByRef: consulted only
-// when the local store has no such ref. A ref must be exact here: a remote store
-// cannot be scanned for prefixes the way a local directory can.
-func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputBundle, error) {
-	if c.remote == nil || !c.remote.Active(ctx) {
-		return nil, OutputBundle{}, fs.ErrNotExist
-	}
-	r, err := c.remote.GetArtifact(ctx, bundleProject, ref)
-	if err != nil {
-		return nil, OutputBundle{}, err
-	}
-	if r == nil {
-		return nil, OutputBundle{}, fs.ErrNotExist
-	}
-	defer r.Close()
-	return c.readBundle(r)
-}
-
-// readBundle parses and authenticates a bundle stream. Nothing is returned unless the
-// signature verifies against the trust set and covers the output bytes received.
-func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
+// readSignedPair parses a stream writeSignedPair produced and returns its two members
+// only once the signature verifies against the trust set and covers the payload
+// received. With no trust set (an explicitly insecure remote) nothing is verified,
+// unless requireTrust refuses that outright.
+func (c *Cache) readSignedPair(r io.Reader, domain, metaName, payloadName string, requireTrust bool) (meta, payload []byte, err error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return nil, OutputBundle{}, fmt.Errorf("output bundle: gzip: %w", err)
+		return nil, nil, fmt.Errorf("gzip: %w", err)
 	}
 	defer gz.Close()
 
-	var meta, output, sigBytes []byte
+	var sigBytes []byte
 	budget := c.importLimit()
 	members := 0
 	tr := tar.NewReader(gz)
@@ -184,7 +175,7 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 			break
 		}
 		if err != nil {
-			return nil, OutputBundle{}, fmt.Errorf("output bundle: tar: %w", err)
+			return nil, nil, fmt.Errorf("tar: %w", err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
@@ -192,41 +183,72 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 		// Zero-byte members draw nothing from the byte budget, so cap the COUNT too:
 		// the store is untrusted and this loop runs before the signature gate.
 		if members++; members > maxImportMembers {
-			return nil, OutputBundle{}, fmt.Errorf("output bundle: too many members (>%d)", maxImportMembers)
+			return nil, nil, fmt.Errorf("too many members (>%d)", maxImportMembers)
 		}
 		buf, err := readCapped(tr, &budget)
 		if err != nil {
-			return nil, OutputBundle{}, err
+			return nil, nil, err
 		}
 		switch path.Clean(hdr.Name) {
-		case bundleManifestName:
+		case metaName:
 			meta = buf
-		case bundleOutputName:
-			output = buf
+		case payloadName:
+			payload = buf
 		case sigFileName:
 			sigBytes = buf
 		}
 	}
 	if meta == nil {
-		return nil, OutputBundle{}, errors.New("output bundle: no metadata member")
+		return nil, nil, errors.New("no metadata member")
 	}
 	if c.verifier == nil {
-		return nil, OutputBundle{}, errors.New("output bundle: no trust set configured; refusing to read an unauthenticated bundle")
+		if requireTrust {
+			return nil, nil, errors.New("no trust set configured; refusing to read an unauthenticated object")
+		}
+		return meta, payload, nil
 	}
 	if sigBytes == nil {
-		return nil, OutputBundle{}, errors.New("output bundle: unsigned; refusing to import an unauthenticated bundle - ask the publisher to set MAGUS_CACHE_SIGNING_KEY and republish")
+		return nil, nil, errors.New("unsigned; refusing an unauthenticated object - ask the publisher to set MAGUS_CACHE_SIGNING_KEY and republish")
 	}
-	sum := sha256.Sum256(output)
-	legacy, err := c.verifier.verify(domainBundle, sigBytes, meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])})
+	sum := sha256.Sum256(payload)
+	legacy, err := c.verifier.verify(domain, sigBytes, meta, map[string]string{payloadName: hex.EncodeToString(sum[:])})
 	if err != nil {
-		return nil, OutputBundle{}, fmt.Errorf("output bundle: %w", err)
+		return nil, nil, err
 	}
 	if legacy {
-		// A pre-domain envelope covers only the metadata, leaving the captured bytes
-		// unauthenticated, and the bytes are the entire point of a bundle. There are
-		// no such bundles in the wild (the format is new), so refuse rather than
-		// invent a degraded mode.
-		return nil, OutputBundle{}, errors.New("output bundle: signature predates domain separation; refusing - ask the publisher to republish with a current magus (no legacy output bundles are supported)")
+		// A pre-domain envelope covers only the metadata, leaving the payload
+		// unauthenticated, and the payload is the point. No such objects exist (the
+		// formats postdate domain separation), so refuse rather than degrade.
+		return nil, nil, errors.New("signature predates domain separation; refusing - ask the publisher to republish with a current magus")
+	}
+	return meta, payload, nil
+}
+
+// fetchBundle resolves a ref against the remote bundle namespace, verifying the
+// signature before returning anything. It is the remote half of ByRef: consulted only
+// when the local store has no such ref. A ref must be exact here: a remote store
+// cannot be scanned for prefixes the way a local directory can.
+func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputBundle, error) {
+	if c.remote == nil || !c.remote.backend.Active(ctx) {
+		return nil, OutputBundle{}, fs.ErrNotExist
+	}
+	r, err := c.remote.backend.GetArtifact(ctx, bundleProject, ref)
+	if errors.Is(err, ErrRemoteMiss) {
+		return nil, OutputBundle{}, fs.ErrNotExist
+	}
+	if err != nil {
+		return nil, OutputBundle{}, err
+	}
+	defer r.Close()
+	return c.readBundle(r)
+}
+
+// readBundle parses and authenticates a bundle stream. Nothing is returned unless the
+// signature verifies against the trust set and covers the output bytes received.
+func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
+	meta, output, err := c.readSignedPair(r, domainBundle, bundleManifestName, bundleOutputName, true)
+	if err != nil {
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: %w", err)
 	}
 	var b OutputBundle
 	if err := json.Unmarshal(meta, &b); err != nil {

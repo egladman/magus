@@ -3,6 +3,7 @@ package spell
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -71,9 +72,127 @@ func decodeManifests(src obj) ([]spells.Manifest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("manifests[%q]: %w", value, err)
 		}
-		out = append(out, spells.Manifest{Value: value, LockCandidates: locks})
+		var installs map[string]spells.Install
+		if src, ok := o.Obj("installs"); ok {
+			if installs, err = decodeInstalls(value, locks, src); err != nil {
+				return nil, err
+			}
+		}
+		if len(installs) == 0 {
+			installs = nil
+		}
+		out = append(out, spells.Manifest{Value: value, LockCandidates: locks, Installs: installs})
 	}
 	return out, nil
+}
+
+// decodeInstalls reads one manifest's installs map. Every rule here is a declaration
+// bug knowable at load, so each is an error rather than an install that misbehaves in
+// one project later.
+func decodeInstalls(manifest string, locks []string, src obj) (map[string]spells.Install, error) {
+	out := map[string]spells.Install{}
+	for _, lock := range src.Keys() {
+		rec, ok := src.Obj(lock)
+		if !ok {
+			continue
+		}
+		where := fmt.Sprintf("manifests[%q].installs[%q]", manifest, lock)
+		if !slices.Contains(locks, lock) {
+			return nil, fmt.Errorf("%s: %q is not one of this manifest's lockCandidates %v, so no project could ever select it", where, lock, locks)
+		}
+		name, _ := rec.Str("name")
+		if name == "" {
+			return nil, fmt.Errorf("%s: name is required, the op magus registers this install under", where)
+		}
+		if err := types.ValidateTargetName(name); err != nil {
+			return nil, fmt.Errorf("%s: name %q: %w", where, name, err)
+		}
+		name = types.Normalize(name)
+		cmdObj, ok := rec.Obj("command")
+		if !ok {
+			return nil, fmt.Errorf("%s: command is required", where)
+		}
+		cmd, err := decodeCommand("", name, cmdObj)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", where, err)
+		}
+		if cmd.Bin == "" {
+			return nil, fmt.Errorf("%s: command has no bin", where)
+		}
+		in := spells.Install{Name: name, Command: cmd, Relocatable: rec.Bool("relocatable")}
+		in.Dir, _ = rec.Str("dir")
+		if in.Stamps, err = rec.Strs("stamps"); err != nil {
+			return nil, fmt.Errorf("%s: %w", where, err)
+		}
+		if in.Inputs, err = rec.Strs("inputs"); err != nil {
+			return nil, fmt.Errorf("%s: %w", where, err)
+		}
+		if in.Tools, err = rec.Strs("tools"); err != nil {
+			return nil, fmt.Errorf("%s: %w", where, err)
+		}
+		if in.Relocatable && in.Dir == "" {
+			return nil, fmt.Errorf("%s: relocatable names no dir to seed", where)
+		}
+		for _, p := range slices.Concat([]string{in.Dir}, in.Stamps, in.Inputs) {
+			if p != "" && !filepath.IsLocal(p) {
+				return nil, fmt.Errorf("%s: %q must be a path inside the project", where, p)
+			}
+		}
+		out[lock] = in
+	}
+	return out, nil
+}
+
+// synthesizeInstall registers one install op per Name a spell's manifests declare,
+// after checking each install's tools against the ones the spell declares. Entries
+// sharing a Name (typescript's package-lock.json and npm-shrinkwrap.json both run
+// npm-ci) register as ONE op, scoped to just their own manifest and lock candidates,
+// so resolving it requires that op's own lockfile rather than any of the spell's.
+func synthesizeInstall(m *spells.Descriptor) error {
+	var order []string
+	byName := map[string]*spells.Manifest{}
+	for _, man := range m.Manifests {
+		for _, lock := range man.LockCandidates {
+			in, ok := man.Installs[lock]
+			if !ok {
+				continue
+			}
+			for _, tool := range in.Tools {
+				if _, ok := m.Tools[tool]; !ok {
+					return fmt.Errorf("spell %q manifests[%q].installs[%q]: tool %q is not declared in mgs_getTools", m.Name, man.Value, lock, tool)
+				}
+			}
+			fm, ok := byName[in.Name]
+			if !ok {
+				fm = &spells.Manifest{Value: man.Value, Installs: map[string]spells.Install{}}
+				byName[in.Name] = fm
+				order = append(order, in.Name)
+			}
+			fm.LockCandidates = append(fm.LockCandidates, lock)
+			fm.Installs[lock] = in
+		}
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	for _, name := range order {
+		if _, authored := m.Ops[name]; authored {
+			return fmt.Errorf("spell %q declares an op named %q and manifest installs; magus registers the installs under that name, so drop the op", m.Name, name)
+		}
+	}
+	if m.Ops == nil {
+		m.Ops = map[string]spells.Op{}
+	}
+	for _, name := range order {
+		fm := byName[name]
+		first := fm.Installs[fm.LockCandidates[0]]
+		m.Ops[name] = spells.Op{
+			Kind:    spells.OpKindInstall,
+			Command: first.Command,
+			Install: &spells.InstallSpec{Spell: m.Name, Manifests: []spells.Manifest{*fm}},
+		}
+	}
+	return nil
 }
 
 // Decode marshals a spell definition record into the canonical spells.Descriptor,
@@ -286,6 +405,9 @@ func Decode(src obj) (spells.Descriptor, error) {
 		// the indexer as an ordinary command op while the spell declares it once, by
 		// name. The kind is what the runner matches on; nothing keys on the op's name.
 		m.Ops[spells.SymbolIndexOp] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+	}
+	if err := synthesizeInstall(&m); err != nil {
+		return spells.Descriptor{}, err
 	}
 	// Checked here rather than at probe time: an unusable component is a declaration
 	// bug knowable without running anything, and discovering it from a cache that

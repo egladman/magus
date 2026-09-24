@@ -237,3 +237,69 @@ func (_c *MockMergeDriverInstaller_InstallMergeDriver_Call) RunAndReturn(run fun
 	_c.Call.Return(run)
 	return _c
 }
+
+// MergeDriverCommand provides a mock function for the type MockMergeDriverInstaller
+func (_mock *MockMergeDriverInstaller) MergeDriverCommand(ctx context.Context, root string) (string, error) {
+	ret := _mock.Called(ctx, root)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MergeDriverCommand")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, error)); ok {
+		return returnFunc(ctx, root)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = returnFunc(ctx, root)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, root)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockMergeDriverInstaller_MergeDriverCommand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MergeDriverCommand'
+type MockMergeDriverInstaller_MergeDriverCommand_Call struct {
+	*mock.Call
+}
+
+// MergeDriverCommand is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+func (_e *MockMergeDriverInstaller_Expecter) MergeDriverCommand(ctx interface{}, root interface{}) *MockMergeDriverInstaller_MergeDriverCommand_Call {
+	return &MockMergeDriverInstaller_MergeDriverCommand_Call{Call: _e.mock.On("MergeDriverCommand", ctx, root)}
+}
+
+func (_c *MockMergeDriverInstaller_MergeDriverCommand_Call) Run(run func(ctx context.Context, root string)) *MockMergeDriverInstaller_MergeDriverCommand_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockMergeDriverInstaller_MergeDriverCommand_Call) Return(s string, err error) *MockMergeDriverInstaller_MergeDriverCommand_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockMergeDriverInstaller_MergeDriverCommand_Call) RunAndReturn(run func(ctx context.Context, root string) (string, error)) *MockMergeDriverInstaller_MergeDriverCommand_Call {
+	_c.Call.Return(run)
+	return _c
+}

@@ -1,0 +1,617 @@
+// This repository's rules for the coding agents that work on it, registered from the root
+// magusfile with magus\guard.command, magus\guard.spawn and magus\guard.write. They are this
+// repository's preference, not a magus default: nothing here is compiled into or shipped
+// with magus. Copy them as a reference for your own repository's policy.
+//
+// Edits apply at once when they tighten a rule. A loosening waits until it is committed,
+// because the guard runs the committed copy of this file beside the working tree's and keeps
+// the stricter answer.
+//
+// Rules, each keyed on facts the guard hands over (parsed programs, titles, paths), never
+// on prose:
+//   ci-watch (deny): a gh invocation that blocks until CI or the merge queue finishes.
+//   ci-batch-poll (advise once per session): one pull request's CI read piecemeal.
+//   queue-poll (advise once per session): the merge queue's state read through GitHub.
+//   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
+//   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
+//     to a branch the checkout does not know the remote has.
+//   change-role-spawn-not-isolated (deny, spawn): a code-changing worker sharing a checkout.
+//   changelog-unreleased-edit (deny, write): a hand edit adding to CHANGELOG.md's
+//     [Unreleased] section, once changes/unreleased/ exists.
+namespace agentpolicy;
+
+import "std";
+import "magus";
+import "fs";
+
+// The one command that answers CI for every open pull request.
+final board = "gh pr list --state open --json number,mergeable,statusCheckRollup";
+
+final ciWatchDenial = "Ask for the board once, when you need the answer:\n"
+    + "  {board}\n"
+    + "Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: "
+    + "the human merges, not you. Poll that command instead while you are acting on a RED run.\n"
+    + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
+    + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
+
+final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole board at once:\n"
+    + "  {board}\n"
+    + "One call answers every open pull request, and green changes nothing: the human merges.";
+
+final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
+    + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
+
+final gateDenial = "The gate runs once per branch, by the orchestrator or by a worker spawned as "
+    + "`<parent>/integrate <job>`, never by a worker mid-change. Finish with the narrow validation "
+    + "your brief names and report; the gate runs once your branch is integrated. "
+    + "`magus affected ci --plan` stays open to you: it runs nothing.";
+
+final isolationDenial = "A worker that changes code gets its own checkout: spawn it with "
+    + "`isolation: \"worktree\"`, and have it detach onto its branch (`git switch --detach <branch>`) "
+    + "as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
+    + "orchestrator's tree, and no isolated writer's did. Thinking roles (plan, review, research, "
+    + "scout, integrate) may share it.";
+
+final changelogDenial = "This checkout collects changelog entries as fragments, so CHANGELOG.md's "
+    + "[Unreleased] section is assembled, not edited: add your entry as "
+    + "`changes/unreleased/<branch>.md`, in the same shape (a `### Added` or `### Fixed` heading and "
+    + "a bullet). A fix to a released version's section is untouched by this rule.";
+
+// The roles a spawn title names for work that changes the tree: the conventional commit types.
+final changeRoles = ["feat", "fix", "refactor", "perf", "docs", "test", "chore"];
+
+// judge is the command rule the root magusfile registers.
+export fun judge(req: CommandRequest) > GuardVerdict {
+    final programs = mut [<Program>];
+    foreach (c in req.commands) {
+        programs.append(Program{ name = c.program, args = c.args, repeats = c.repeats });
+    }
+    var checkout: Checkout? = null;
+    if (req.checkout != null) {
+        checkout = Checkout{ detached = req.checkout!.branch == "", remoteBranches = req.checkout!.remoteBranches };
+    }
+    return decide(programs, caller: Caller{ role = req.role, title = req.parent }, checkout: checkout, once: fun (key: str) > bool {
+        return magus\guard.once(key);
+    });
+}
+
+// judgeSpawn is the spawn rule the root magusfile registers.
+export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
+    return decideSpawn(req.kind, title: req.description, isolated: req.isolated);
+}
+
+// judgeWrite is the write rule the root magusfile registers. The two facts it reads from
+// disk, whether this checkout collects fragments and what CHANGELOG.md holds now, are read
+// only for a write to CHANGELOG.md.
+export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
+    if (req.workspace == "" or req.path != req.workspace + "/CHANGELOG.md") {
+        return magus\guard.allow();
+    }
+    final fragments = fs\exists(req.workspace + "/changes/unreleased");
+    var current = "";
+    if (fs\exists(req.path)) {
+        current = fs\readFile(req.path);
+    }
+    return decideChangelog(fragments, current: current, content: req.content, oldText: req.oldText, newText: req.newText);
+}
+
+// Program is one program a command runs, copied out of the request because a Buzz test
+// cannot build the host's CommandInvocation.
+object Program {
+    name: str,
+    args: [str],
+    repeats: bool,
+}
+
+// Caller is who runs a command: role is root or worker (a lease binds it), and title is
+// the description it was itself spawned with, empty for a person or the orchestrator.
+object Caller {
+    role: str,
+    title: str,
+}
+
+// Checkout is the git state a push leaves from, handed over only for a line that pushes.
+object Checkout {
+    detached: bool,
+    remoteBranches: [str],
+}
+
+// decide is judge over plain records, with the once-per-session gate passed in so the tests
+// below can count firings without a guard session.
+export fun decide(programs: [Program], caller: Caller, checkout: Checkout?, once: fun (key: str) > bool) > GuardVerdict {
+    if (runsGate(programs) and !mayGate(caller)) {
+        return magus\guard.deny(gateDenial);
+    }
+    if (checkout != null) {
+        final denial = unqualifiedPush(programs, checkout: checkout!);
+        if (denial != "") {
+            return magus\guard.deny(denial);
+        }
+    }
+    final calls = ghCalls(programs);
+    foreach (call in calls) {
+        if (blocksOnCI(call)) {
+            return magus\guard.deny(ciWatchDenial);
+        }
+    }
+    foreach (call in calls) {
+        if (pollsQueue(call)) {
+            if (once("queue-poll")) { return magus\guard.advise(queuePollAdvice); }
+            return magus\guard.allow();
+        }
+    }
+    foreach (call in calls) {
+        if (readsOneCI(call)) {
+            if (once("ci-batch-poll")) { return magus\guard.advise(ciBatchAdvice); }
+            return magus\guard.allow();
+        }
+    }
+    return magus\guard.allow();
+}
+
+// decideSpawn denies a new code-changing worker that would share the spawning checkout. A
+// continue starts nothing, and a title in no known form names no role, so both pass.
+export fun decideSpawn(kind: str, title: str, isolated: bool) > GuardVerdict {
+    if (kind == "spawn" and !isolated and changeRoles.indexOf(titleRole(title)) != null) {
+        return magus\guard.deny(isolationDenial);
+    }
+    return magus\guard.allow();
+}
+
+// decideChangelog denies a CHANGELOG.md write that adds a line to [Unreleased] while the
+// checkout collects fragments. A write whose text the host did not describe is unknown,
+// not empty, and passes.
+export fun decideChangelog(fragments: bool, current: str, content: str, oldText: str, newText: str) > GuardVerdict {
+    if (!fragments) {
+        return magus\guard.allow();
+    }
+    var after = content;
+    if (after == "") {
+        if (oldText == "") {
+            return magus\guard.allow();
+        }
+        final at = current.indexOf(oldText);
+        if (at == null) {
+            return magus\guard.allow();
+        }
+        after = current.sub(0, len: at!) + newText + current.sub(at! + oldText.len());
+    }
+    final before = unreleasedLines(current);
+    foreach (line in unreleasedLines(after)) {
+        if (before.indexOf(line) == null) {
+            return magus\guard.deny(changelogDenial);
+        }
+    }
+    return magus\guard.allow();
+}
+
+// unreleasedLines are the non-blank lines of text's `## [Unreleased]` section.
+fun unreleasedLines(text: str) > [str] {
+    final lines = mut [<str>];
+    var inside = false;
+    foreach (line in text.split("\n")) {
+        if (line.startsWith("## ")) {
+            inside = line.startsWith("## [Unreleased]");
+        } else if (inside and line.trim() != "") {
+            lines.append(line);
+        }
+    }
+    return lines;
+}
+
+// titleRole is the role a `<parent>/<role> <job>` title names, "" for any other form.
+fun titleRole(title: str) > str {
+    final words = title.split(" ");
+    if (words.len() != 2) {
+        return "";
+    }
+    final head = words[0].split("/");
+    if (head.len() < 2) {
+        return "";
+    }
+    return head[head.len() - 1];
+}
+
+// mayGate: a person or the orchestrator (no lease, no spawn title), or an integrate worker.
+fun mayGate(caller: Caller) > bool {
+    if (caller.role != "worker" and caller.title == "") {
+        return true;
+    }
+    return titleRole(caller.title) == "integrate";
+}
+
+// The magus flags that take the next word as their value.
+final magusValueFlags = [
+    "-o", "--output", "--tee", "-j", "--concurrency", "--concurrency-profile", "--root",
+    "--skip", "--timeout", "--target-timeout", "--stall-timeout", "--shard", "--n-shards",
+    "--log-level", "--log-format", "--cache-dir", "--max-failures", "--race", "--depth",
+];
+
+// runsGate: `magus affected ci` or `magus run ci`, with or without a charm, and not the
+// --plan form, which runs nothing.
+fun runsGate(programs: [Program]) > bool {
+    foreach (p in programs) {
+        if (p.name == "magus") {
+            final ops = operandsOf(p.args, valueFlags: magusValueFlags);
+            if (ops.len() > 1 and (ops[0] == "affected" or ops[0] == "run")
+                and (ops[1] == "ci" or ops[1].startsWith("ci:"))
+                and !hasFlag(p.args, long: "--plan")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The git push flags that take the next word as their value.
+final pushValueFlags = ["-C", "-o", "--push-option", "--repo", "--receive-pack", "--exec"];
+
+// unqualifiedPush names what is wrong with a `git push <remote> HEAD:<name>` from a detached
+// HEAD whose <name> the checkout has no remote-tracking branch for, "" when nothing is. Git
+// refuses that push: with no branch behind HEAD it cannot tell a branch from a tag.
+fun unqualifiedPush(programs: [Program], checkout: Checkout) > str {
+    if (!checkout.detached) {
+        return "";
+    }
+    foreach (p in programs) {
+        if (p.name == "git") {
+            final ops = operandsOf(p.args, valueFlags: pushValueFlags);
+            if (ops.len() > 2 and ops[0] == "push") {
+                final remote = ops[1];
+                foreach (spec in ops.sub(2)) {
+                    var ref = spec;
+                    if (ref.startsWith("+")) { ref = ref.sub(1); }
+                    if (ref.startsWith("HEAD:")) {
+                        final name = ref.sub(5);
+                        if (!name.startsWith("refs/") and checkout.remoteBranches.indexOf("{remote}/{name}") == null) {
+                            return "HEAD is detached and {remote} has no branch `{name}` this checkout knows of, so git "
+                                + "cannot tell a branch from a tag and refuses the push; a `;` or a background run hides "
+                                + "that. Name the branch in full: `git push {remote} HEAD:refs/heads/{name}`.";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return "";
+}
+
+// GhCall is one gh invocation: its arguments, and whether something runs it again and
+// again (a while or until loop, or the watch program).
+object GhCall {
+    args: [str],
+    repeats: bool,
+}
+
+fun ghCalls(programs: [Program]) > [GhCall] {
+    final calls = mut [<GhCall>];
+    foreach (c in programs) {
+        if (c.name == "gh") {
+            calls.append(GhCall{ args = c.args, repeats = c.repeats });
+        } else if (c.name == "watch") {
+            // `watch [flags] gh ...` reruns gh every interval.
+            foreach (i, arg in c.args) {
+                if (arg == "gh") {
+                    calls.append(GhCall{ args = c.args.sub(i + 1), repeats = true });
+                    break;
+                }
+            }
+        }
+    }
+    return calls;
+}
+
+// blocksOnCI: `gh run watch`, the --watch form of `gh run view` and `gh pr checks`, and any
+// CI or queue read a loop or watch repeats. Reading a result that already exists is left
+// to the advisories: the rule is about the WAITING.
+fun blocksOnCI(call: GhCall) > bool {
+    if (runs(call, first: "run", second: "watch")) {
+        return true;
+    }
+    if (hasFlag(call.args, long: "--watch") and (runs(call, first: "run", second: "view") or runs(call, first: "pr", second: "checks"))) {
+        return true;
+    }
+    return call.repeats and (readsOneCI(call) or pollsQueue(call));
+}
+
+// readsOneCI: one pull request's or one commit's checks, where the board answers them all.
+fun readsOneCI(call: GhCall) > bool {
+    if (runs(call, first: "pr", second: "checks")) {
+        return true;
+    }
+    if (runs(call, first: "pr", second: "view") and jsonFields(call.args).indexOf("statusCheckRollup") != null) {
+        return true;
+    }
+    final ops = operandsOf(call.args, valueFlags: ghValueFlags);
+    if (ops.len() > 1 and ops[0] == "api") {
+        foreach (suffix in ["/check-runs", "/check-suites", "/status", "/statuses"]) {
+            if (ops[1].endsWith(suffix)) { return true; }
+        }
+    }
+    return false;
+}
+
+// pollsQueue: the merge queue's runs or its marks on a pull request, read through GitHub.
+fun pollsQueue(call: GhCall) > bool {
+    if (runs(call, first: "run", second: "list") or runs(call, first: "run", second: "view")) {
+        return isQueueWorkflow(flagValue(call.args, long: "--workflow", short: "-w") ?? "");
+    }
+    if (runs(call, first: "pr", second: "view") or runs(call, first: "pr", second: "checks")) {
+        var aimed = false;
+        foreach (arg in call.args) {
+            if (arg.indexOf("queue") != null) { aimed = true; }
+        }
+        if (!aimed) { return false; }
+        final fields = jsonFields(call.args);
+        return runs(call, first: "pr", second: "checks")
+            or fields.indexOf("labels") != null
+            or fields.indexOf("statusCheckRollup") != null;
+    }
+    return false;
+}
+
+fun isQueueWorkflow(name: str) > bool {
+    return name.startsWith("queue") and (name.endsWith(".yaml") or name.endsWith(".yml"));
+}
+
+// runs reports whether call's first two operands are first and second: `gh pr checks`.
+fun runs(call: GhCall, first: str, second: str) > bool {
+    final ops = operandsOf(call.args, valueFlags: ghValueFlags);
+    return ops.len() > 1 and ops[0] == first and ops[1] == second;
+}
+
+// The gh flags that take the next word as their value, so it is not read as an operand.
+final ghValueFlags = [
+    "-R", "--repo", "-w", "--workflow", "-b", "--branch", "-L", "--limit", "-q", "--jq",
+    "--json", "-i", "--interval", "-t", "--template", "-u", "--user", "-s", "--state",
+    "-e", "--event", "-c", "--commit", "-X", "--method", "-H", "--header", "-f", "-F",
+    "--field", "--raw-field",
+];
+
+// operandsOf are args with every flag, and the value of each flag in valueFlags, left out.
+fun operandsOf(args: [str], valueFlags: [str]) > [str] {
+    final ops = mut [<str>];
+    var skip = false;
+    foreach (arg in args) {
+        if (skip) {
+            skip = false;
+        } else if (arg.startsWith("-")) {
+            skip = arg.indexOf("=") == null and valueFlags.indexOf(arg) != null;
+        } else {
+            ops.append(arg);
+        }
+    }
+    return ops;
+}
+
+fun hasFlag(args: [str], long: str) > bool {
+    foreach (arg in args) {
+        if (arg == long or arg.startsWith(long + "=")) { return true; }
+    }
+    return false;
+}
+
+// flagValue is the value given to a flag spelled long or short ("" when it has no short
+// form), or null when the flag is absent.
+fun flagValue(args: [str], long: str, short: str) > str? {
+    foreach (i, arg in args) {
+        if ((arg == long or (short != "" and arg == short)) and i + 1 < args.len()) {
+            return args[i + 1];
+        }
+        if (arg.startsWith(long + "=")) {
+            return arg.sub(long.len() + 1);
+        }
+    }
+    return null;
+}
+
+// jsonFields lists the fields a --json flag asks for.
+fun jsonFields(args: [str]) > [str] {
+    final value = flagValue(args, long: "--json", short: "") ?? "";
+    if (value == "") { return [<str>]; }
+    return value.split(",");
+}
+
+// request is the programs a command runs, each spelled as its argv. A leading "loop:" marks
+// the program as repeated by a while loop.
+fun request(argvs: [[str]]) > [Program] {
+    final programs = mut [<Program>];
+    foreach (argv in argvs) {
+        var words = argv;
+        var repeats = false;
+        if (words[0] == "loop:") {
+            repeats = true;
+            words = words.sub(1);
+        }
+        programs.append(Program{ name = words[0], args = words.sub(1), repeats = repeats });
+    }
+    return programs;
+}
+
+// counter is a fresh once-per-session gate.
+fun counter() > fun (key: str) > bool {
+    final seen = mut {<str: bool>};
+    return fun (key: str) > bool {
+        if (seen[key] ?? false) { return false; }
+        seen[key] = true;
+        return true;
+    };
+}
+
+// person is an unattributed caller: no lease binds it and no spawn titled it.
+fun person() > Caller {
+    return Caller{ role = "root", title = "" };
+}
+
+// ask runs one command as a person with no push facts and a fresh gate.
+fun ask(argv: [str]) > GuardVerdict {
+    return decide(request([argv]), caller: person(), checkout: null, once: counter());
+}
+
+test "a gh call that blocks until CI finishes is denied" {
+    foreach (argv in [
+        ["gh", "run", "watch", "34069443069"],
+        ["gh", "run", "watch", "34069443069", "--exit-status", "--interval", "60"],
+        ["gh", "pr", "checks", "183", "--watch"],
+        ["gh", "run", "view", "34069443069", "--watch"],
+        ["gh", "--repo", "egladman/magus", "pr", "checks", "183", "--watch=true"],
+    ]) {
+        final v = ask(argv);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("GREEN CHANGES NOTHING") != null, message: "keeps the reason");
+        std\assert(v.reason.indexOf(board) != null, message: "names the board");
+    }
+}
+
+test "a CI read that a loop or watch repeats is a watch too" {
+    final looped = decide(request([["loop:", "gh", "pr", "checks", "183"], ["loop:", "sleep", "30"]]), caller: person(), checkout: null, once: counter());
+    std\assert(looped.decision == "deny", message: "a while loop over gh pr checks");
+    std\assert(ask(["watch", "-n", "30", "gh", "pr", "view", "183", "--json", "statusCheckRollup"]).decision == "deny", message: "the watch program over gh pr view");
+}
+
+test "watching the merge queue's runs is denied, naming the queue" {
+    foreach (argv in [
+        ["loop:", "gh", "run", "list", "--workflow", "queue.yaml"],
+        ["watch", "gh", "run", "list", "--workflow=queue-apply.yaml"],
+        ["loop:", "gh", "run", "view", "--workflow", "queue-apply.yaml"],
+    ]) {
+        final v = ask(argv);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's own answer");
+    }
+}
+
+test "reading one pull request's CI is advised once per session" {
+    final once = counter();
+    foreach (argv in [
+        ["gh", "pr", "checks", "183"],
+        ["gh", "pr", "view", "183", "--json", "state,statusCheckRollup"],
+        ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs"],
+    ]) {
+        std\assert(ask(argv).decision == "advise", message: argv.join(" "));
+    }
+    final first = decide(request([["gh", "pr", "checks", "183"]]), caller: person(), checkout: null, once: once);
+    std\assert(first.decision == "advise", message: "the first read is advised");
+    std\assert(first.reason.indexOf(board) != null, message: "names the board");
+    std\assert(decide(request([["gh", "pr", "checks", "184"]]), caller: person(), checkout: null, once: once).decision == "allow", message: "and only once");
+}
+
+test "polling the merge queue through GitHub is advised once per session" {
+    final once = counter();
+    foreach (argv in [
+        ["gh", "run", "list", "--workflow", "queue.yaml"],
+        ["gh", "run", "list", "-w", "queue-apply.yaml", "--limit", "5"],
+        ["gh", "pr", "view", "212", "--json", "labels", "--jq", ".labels[] | select(.name == \"queue\")"],
+        ["gh", "pr", "view", "212", "--json", "statusCheckRollup", "--jq", ".statusCheckRollup[] | select(.context == \"magus/queue\")"],
+    ]) {
+        final v = ask(argv);
+        std\assert(v.decision == "advise", message: argv.join(" "));
+        std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's answer, not the board");
+    }
+    final poll = request([["gh", "run", "list", "--workflow", "queue.yaml"]]);
+    std\assert(decide(poll, caller: person(), checkout: null, once: once).decision == "advise", message: "first");
+    std\assert(decide(poll, caller: person(), checkout: null, once: once).decision == "allow", message: "only once");
+}
+
+test "the board itself, an unrelated gh run list, and other programs stay silent" {
+    foreach (argv in [
+        ["gh", "pr", "list", "--state", "open", "--json", "number,mergeable,statusCheckRollup"],
+        ["gh", "run", "list", "--branch", "main", "--limit", "5"],
+        ["gh", "run", "list", "--workflow", "ci.yaml"],
+        ["gh", "run", "view", "34069443069", "--log"],
+        ["gh", "pr", "view", "183", "--json", "labels"],
+        ["watch", "-n", "5", "free", "-m"],
+        ["git", "status"],
+    ]) {
+        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "a worker whose role is not integrate may not run the gate" {
+    final gate = request([["magus", "affected", "ci", "--no-default-charms"]]);
+    foreach (caller in [
+        Caller{ role = "worker", title = "orchestrator/feat guard-command" },
+        Caller{ role = "root", title = "v050-prep/fix naming-advisory" },
+        Caller{ role = "worker", title = "" },
+    ]) {
+        final v = decide(gate, caller: caller, checkout: null, once: counter());
+        std\assert(v.decision == "deny", message: "{caller.role} {caller.title}");
+        std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
+    }
+    final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
+    foreach (argv in [
+        ["magus", "run", "ci", "."],
+        ["magus", "affected", "ci:rw"],
+        ["magus", "-j", "4", "affected", "ci"],
+    ]) {
+        std\assert(decide(request([argv]), caller: worker, checkout: null, once: counter()).decision == "deny", message: argv.join(" "));
+    }
+}
+
+test "the orchestrator, a person, an integrate worker and the plan form may gate" {
+    final gate = request([["magus", "affected", "ci", "--no-default-charms"]]);
+    std\assert(decide(gate, caller: person(), checkout: null, once: counter()).decision == "allow", message: "an unattributed caller");
+    final integrator = Caller{ role = "worker", title = "orchestrator/integrate local-command-policy" };
+    std\assert(decide(gate, caller: integrator, checkout: null, once: counter()).decision == "allow", message: "an integrate worker");
+    final worker = Caller{ role = "worker", title = "orchestrator/feat guard-command" };
+    final plan = request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
+    std\assert(decide(plan, caller: worker, checkout: null, once: counter()).decision == "allow", message: "the plan runs nothing");
+    final narrow = request([["magus", "run", "go::go-test", ".", "--", "-run", "Guard"]]);
+    std\assert(decide(narrow, caller: worker, checkout: null, once: counter()).decision == "allow", message: "narrow validation");
+}
+
+test "a detached push to a branch the remote lacks is denied, naming the full ref" {
+    final detached = Checkout{ detached = true, remoteBranches = ["origin/main", "origin/naming-advisory"] };
+    final v = decide(request([["git", "push", "origin", "HEAD:local-command-policy"]]), caller: person(), checkout: detached, once: counter());
+    std\assert(v.decision == "deny", message: "an unknown branch");
+    std\assert(v.reason.indexOf("git push origin HEAD:refs/heads/local-command-policy") != null, message: "names the fix");
+    final forced = decide(request([["git", "-C", "../wt", "push", "-u", "origin", "+HEAD:topic"]]), caller: person(), checkout: detached, once: counter());
+    std\assert(forced.decision == "deny", message: "a forced push, a -C and a flag");
+}
+
+test "a push the remote can place stays silent" {
+    final detached = Checkout{ detached = true, remoteBranches = ["origin/main", "origin/naming-advisory"] };
+    foreach (argv in [
+        ["git", "push", "-q", "origin", "HEAD:naming-advisory"],
+        ["git", "push", "origin", "HEAD:refs/heads/x"],
+        ["git", "push", "origin", "main"],
+    ]) {
+        std\assert(decide(request([argv]), caller: person(), checkout: detached, once: counter()).decision == "allow", message: argv.join(" "));
+    }
+    final onBranch = Checkout{ detached = false, remoteBranches = [<str>] };
+    std\assert(decide(request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch, once: counter()).decision == "allow", message: "HEAD names a branch");
+}
+
+test "a code-changing spawn without its own checkout is denied" {
+    foreach (title in ["orchestrator/feat guard-command", "v050-prep/fix naming-advisory", "orchestrator/docs changelog-fragments"]) {
+        final v = decideSpawn("spawn", title: title, isolated: false);
+        std\assert(v.decision == "deny", message: title);
+        std\assert(v.reason.indexOf("isolation: \"worktree\"") != null, message: "names the fix");
+    }
+}
+
+test "a thinking role, an isolated worker, a continue and an untitled spawn pass" {
+    std\assert(decideSpawn("spawn", title: "v050-prep/review naming-advisory", isolated: false).decision == "allow", message: "a review");
+    std\assert(decideSpawn("spawn", title: "orchestrator/feat guard-command", isolated: true).decision == "allow", message: "isolated");
+    std\assert(decideSpawn("continue", title: "", isolated: false).decision == "allow", message: "a continue");
+    std\assert(decideSpawn("spawn", title: "audit the store", isolated: false).decision == "allow", message: "no title grammar");
+}
+
+// A CHANGELOG.md as it stands on main: an [Unreleased] section above a released one.
+final changelog = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **An entry.** Text.\n\n## [v0.4.3] - 2026-09-06\n\n### Fixed\n\n- **A fix.** Text.\n";
+
+test "adding to [Unreleased] by hand is denied once fragments exist" {
+    final edit = decideChangelog(true, current: changelog, content: "", oldText: "- **An entry.** Text.\n", newText: "- **An entry.** Text.\n- **Mine.** More.\n");
+    std\assert(edit.decision == "deny", message: "an edit");
+    std\assert(edit.reason.indexOf("changes/unreleased/") != null, message: "names the fragment path");
+    final write = decideChangelog(true, current: changelog, content: changelog.replace("### Added\n", "### Added\n\n- **Mine.**\n"), oldText: "", newText: "");
+    std\assert(write.decision == "deny", message: "a whole-file write");
+}
+
+test "a released section's fix, a checkout without fragments and an unknown edit pass" {
+    std\assert(decideChangelog(true, current: changelog, content: "", oldText: "- **A fix.** Text.", newText: "- **A fix.** Text, corrected.").decision == "allow", message: "a past release");
+    std\assert(decideChangelog(false, current: changelog, content: "", oldText: "- **An entry.** Text.\n", newText: "- **Mine.**\n").decision == "allow", message: "no fragments yet");
+    std\assert(decideChangelog(true, current: changelog, content: "", oldText: "", newText: "").decision == "allow", message: "a shape magus does not read");
+    final cut = changelog.replace("## [Unreleased]\n\n### Added\n\n- **An entry.** Text.\n\n", "## [Unreleased]\n\n## [v0.5.0] - 2026-09-24\n\n### Added\n\n- **An entry.** Text.\n\n");
+    std\assert(decideChangelog(true, current: changelog, content: cut, oldText: "", newText: "").decision == "allow", message: "a release cut moves lines out");
+}

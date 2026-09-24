@@ -1,0 +1,118 @@
+// Name the label that queues an approved pull request, while it could join the merge
+// queue and has not: open, approved, targeting the queue's base, from this repository,
+// with neither auto-merge nor a queue label on it. Retracted in every other state.
+//
+// The label's prefix and the merge methods come from `magus queue describe`, so the
+// advice names what the provider accepts rather than what this file assumes.
+//
+// Reads the `merge-queue-provider` and `merge-queue-base` inputs.
+import "proc";
+import "advice";
+import "magus";
+import "serialize";
+import "std";
+
+final section = "merge-queue";
+
+// queueable reports whether a pull request in this state could join the queue and has
+// not. An empty prefix means the provider queues nothing by label.
+export fun queueable(state: str, review: str, base: str, queueBase: str, labels: [str], fork: bool,
+    autoMerge: bool, prefix: str) > bool {
+    if (state != "OPEN" or review != "APPROVED" or base != queueBase or fork or autoMerge or prefix == "") {
+        return false;
+    }
+    foreach (label in labels) {
+        if (label.startsWith(prefix)) { return false; }
+    }
+    return true;
+}
+
+// suggestion is the advice: one label per method the repository allows.
+export fun suggestion(base: str, prefix: str, methods: [str]) > str {
+    final names = mut [<str>];
+    foreach (m in methods) { names.append("`" + prefix + m + "`"); }
+    var choice = names.join(", ");
+    if (names.len() > 1) {
+        choice = names.sub(0, len: names.len() - 1).join(", ") + " or " + names[names.len() - 1];
+    }
+    return "This pull request is approved and targets `" + base + "`, so it can join the merge queue. "
+        + "Add the label " + choice + " to queue it with that merge method.\n";
+}
+
+fun main() > void !> any {
+    if (advice\collecting()) { return; }
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final provider = advice\input("merge-queue-provider");
+    final queueBase = advice\input("merge-queue-base");
+    if (repo == "" or pr == "" or provider == "" or queueBase == "") {
+        std\print("merge-queue: no pull request or queue to advise on");
+        return;
+    }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("merge-queue: silenced by label");
+        return;
+    }
+    final viewed = proc\exec("gh", args: ["pr", "view", pr, "--repo", repo, "--json",
+        "state,reviewDecision,baseRefName,labels,isCrossRepository,autoMergeRequest"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    final described = magus\cmd("queue", args: ["describe", "-o", "json", "--status-context", "", "--provider", provider, "--base", queueBase],
+        opts: {"quiet": true, "allow_failure": true});
+    if (!viewed.ok or !described.ok) {
+        // Unknown is not queueable: retract rather than leave an answer nobody checked.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("merge-queue: could not read the pull request or the provider");
+        return;
+    }
+    final p = serialize\jsonDecode(viewed.stdout);
+    final caps = serialize\jsonDecode(described.stdout);
+    final labels = mut [<str>];
+    foreach (l in p.q("labels").listValue()) { labels.append(l.q("name").stringValue()); }
+    final prefix = caps.q("queue_label").stringValue();
+    var body = "";
+    if (queueable(p.q("state").stringValue(), review: p.q("reviewDecision").stringValue(),
+        base: p.q("baseRefName").stringValue(), queueBase: queueBase, labels: labels,
+        fork: p.q("isCrossRepository").booleanValue(), autoMerge: p.q("autoMergeRequest").map() != null,
+        prefix: prefix)) {
+        final methods = mut [<str>];
+        foreach (m in caps.q("methods").listValue()) { methods.append(m.stringValue()); }
+        body = suggestion(queueBase, prefix: prefix, methods: methods);
+    }
+    advice\publish(repo, pr: pr, name: section, title: "Ready for the merge queue", body: body);
+    std\print("merge-queue: advised {body != ""}");
+}
+
+test "an approved pull request on the queue's base with no intent is queueable" {
+    std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["bug"], fork: false,
+        autoMerge: false, prefix: "queue: "), message: "shown");
+}
+
+test "every other state retracts" {
+    std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["queue: squash"],
+        fork: false, autoMerge: false, prefix: "queue: "), message: "already labeled");
+    std\assert(!queueable("MERGED", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
+        fork: false, autoMerge: false, prefix: "queue: "), message: "merged");
+    std\assert(!queueable("CLOSED", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
+        fork: false, autoMerge: false, prefix: "queue: "), message: "closed");
+    std\assert(!queueable("OPEN", review: "REVIEW_REQUIRED", base: "main", queueBase: "main", labels: [<str>],
+        fork: false, autoMerge: false, prefix: "queue: "), message: "not approved");
+    std\assert(!queueable("OPEN", review: "APPROVED", base: "feature", queueBase: "main", labels: [<str>],
+        fork: false, autoMerge: false, prefix: "queue: "), message: "another base");
+    std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
+        fork: true, autoMerge: false, prefix: "queue: "), message: "a fork");
+    std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
+        fork: false, autoMerge: true, prefix: "queue: "), message: "auto-merge is already intent");
+    std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
+        fork: false, autoMerge: false, prefix: ""), message: "a provider that queues by no label");
+}
+
+test "the advice names a label for each allowed method, with the provider's prefix" {
+    final body = suggestion("main", prefix: "merge: ", methods: ["merge", "squash", "rebase"]);
+    std\assert(body.indexOf("`merge: merge`, `merge: squash` or `merge: rebase`") != null, message: "all three");
+    std\assert(body.indexOf("`main`") != null, message: "names the base");
+    std\assert(body.indexOf("http") == null, message: "no links");
+    std\assert(suggestion("main", prefix: "queue: ", methods: ["squash"]).indexOf("label `queue: squash` to") != null,
+        message: "one method");
+}

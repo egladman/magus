@@ -20,7 +20,7 @@ const expiringSoon = 14 * 24 * time.Hour
 // connector tokens, flagging any that are expired or expiring within
 // expiringSoon. It is informational (always types.CheckOK): an absent cli token is
 // normal (the daemon mints one on start) and a stale connector entry is harmless
-// (it simply stops authenticating), so neither should fail the CI preflight. The
+// (it simply stops authenticating), so neither should fail a CI gate. The
 // check exists to make credential state and upcoming expiries visible.
 func (*runner) checkMCPTokens() types.Check {
 	const name = "mcp-tokens"

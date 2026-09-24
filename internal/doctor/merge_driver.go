@@ -66,17 +66,19 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 		Message: "the registered merge driver loads this workspace"}
 }
 
-// registeredMergeDriver returns the effective merge.magus.driver for this worktree, or ""
-// when none is set. Effective, not --local: a worktree override is the whole point of
-// install-dogfood, and reading the shared scope would report the wrong one.
+// registeredMergeDriver returns the merge driver the workspace's VCS would run, or "" when
+// none is registered or the backend registers none. It is the effective registration, so a
+// worktree override, which is the whole point of install-dogfood, is the one reported.
 func (r *runner) registeredMergeDriver() string {
-	cmd := exec.Command("git", "config", "merge.magus.driver")
-	cmd.Dir = r.ws.Root()
-	out, err := cmd.Output()
+	res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return ""
+	}
+	cmd, err := res.VCS.MergeDriverCommand(r.runCtx(), r.ws.Root())
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return cmd
 }
 
 // driverExecutable pulls the program out of a registered driver command, unwrapping the

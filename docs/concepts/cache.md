@@ -492,15 +492,16 @@ _stale_. Staleness has a declaration now.
 
 ### Opting out and busting
 
-Four controls, at four different scopes:
+Six controls, at different scopes:
 
-| Control                                             | Scope                       | Semantics                                                                                                                                                                                                                               |
-| --------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache` target policy                          | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
-| `magus run <target> --no-cache`                     | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
-| `magus\bust_cache(path?)`                           | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
-| `magus clean --cache`                               | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
-| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`) | whole cache, whole run      | When false, replays hits, but a miss runs the target and does **not** write a new manifest - locally or to a remote. Restoring still populates the local cache.                                                                         |
+| Control                                                           | Scope                       | Semantics                                                                                                                                                                                                                               |
+| ----------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip_cache` target policy                                        | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
+| `magus run <target> --no-cache`                                   | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
+| `magus\bust_cache(path?)`                                         | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus clean --cache`                                             | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
+| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`)               | local tier, whole run       | When false, replays hits, but a miss runs the target and writes **no** new manifest to either tier. Restoring from the remote tier still populates the local tier.                                                                      |
+| `cache.remote.write.enabled` (`MAGUS_CACHE_REMOTE_WRITE_ENABLED`) | remote tier, whole run      | When false, a miss still writes the local tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required; see [Cache tiers](#cache-tiers).       |
 
 `skip_cache` states that **replaying this target would be wrong**: it signs a
 fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
@@ -874,6 +875,50 @@ set before it is allowed to replay, and an unsigned or untrusted one falls back 
 local build. That trust boundary, the provider contract, and CI wiring are covered
 in full in [remote-cache.md](cache/remote.md); this page's model is what it builds
 on.
+
+### Cache tiers
+
+The cache is two tiers: the **local tier** (L1, `.magus/`) and, once a remote backend
+is wired, the **remote tier** (L2). The run header names them, `cache: local
+(read+write)` or `cache: github-actions + local (read+write)`. They follow standard
+two-tier semantics:
+
+1. **Priority.** Reads go L1, then L2. An L1 hit never reads L2.
+2. **Read-through with promotion.** An L2 hit is verified, promoted into L1, and
+   replayed from L1, so the next run is an L1 hit. Promotion obeys the local write
+   gate: with local writes off, an L2 hit replays from a staging directory that is
+   discarded afterwards and never persisted.
+3. **Write-through.** A built entry is stored in L1, then L2, each under its own
+   gate. L2 is never written without L1.
+4. **Backfill.** On a run that may write L2, an L1 hit whose key L2 lacks is stored
+   in L2 in the background; the run does not wait for it. The run asks the backend
+   whether it holds the key (`has_artifact`, a lookup without a download) first, and
+   a backend that cannot answer is not backfilled.
+5. **Failure isolation.** An L2 that is unreachable or failing degrades the run to L1
+   only: the first failure is reported and counted as failed, never as missed, and
+   the rest of the run stops asking. It fails a step only when remote writes were
+   declared required (`cache.remote.write.enabled: true`).
+6. **No invalidation.** Keys are content-addressed, so an entry is never stale; each
+   tier evicts on its own, L1 by `cache.size_mb`, least recently used first (every
+   hit, a promotion included, marks its entry used), L2 by the backend's retention
+   (`magus config cache prune --remote`).
+
+Each tier's write gate is decided once, when the cache opens:
+
+| Setting                      | Tier   | Unset                                                    |
+| ---------------------------- | ------ | -------------------------------------------------------- |
+| `cache.write.enabled`        | local  | `true`                                                   |
+| `cache.remote.write.enabled` | remote | written when the local tier is and a signing key is held |
+
+Declaring `cache.remote.write.enabled: true` makes remote writes required: it is a
+config error with local writes off, and an error at startup when a trust set is
+declared but no signing key is held. Declared `false`, the remote tier is only read,
+which is what a pull request in CI runs with; the header then says why, for example
+`(read+write local, read-only remote; remote writes are off)`.
+
+Knowledge-graph shards and published output bundles ride the remote tier too, under
+their own namespaces and the same gates: signed on the way out, verified on the way
+in, and never written by a run that may not write the remote tier.
 
 ## Glossary
 
