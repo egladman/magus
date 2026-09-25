@@ -1360,12 +1360,12 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
 	out := opts.out(m)
-	// Ahead of the dry-run branch, not after it: a dry run evaluates the same
-	// target bodies under a tracing context, so without the forwarded args here
-	// it printed the op's own command and silently omitted them, under-reporting
-	// the very command it exists to show.
-	if len(opts.ExtraArgs) > 0 {
-		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
+	// `--` args reach only the named stages' handlers, never this ctx: the preflight
+	// pass, the skip_cache gates run ahead of a replay, and the derived-order settle
+	// all dispatch other targets from it, and an op there with no explicit args would
+	// append the forwarded ones (`go mod edit -json -run X`).
+	namedCtx := func(ctx context.Context) context.Context {
+		return project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
 
 	// Every dispatch funnels through here, which is why the return sink is installed
@@ -1431,7 +1431,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		dryStart := time.Now()
 		out.emit(ctx, report.RunDry{})
 		planned := 0
-		for _, st := range append(slices.Clone(opts.preflight), stages...) {
+		for i, st := range append(slices.Clone(opts.preflight), stages...) {
+			stageCtx := recCtx
+			// The forwarded args are shown on the named target's command, where a
+			// real run appends them, and nowhere else.
+			if i >= len(opts.preflight) {
+				stageCtx = namedCtx(recCtx)
+			}
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
@@ -1443,7 +1449,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				})
 				// Fresh memo per target so a shared dependency (e.g. format -> generate)
 				// records once, matching the real run's pool dedup.
-				stepCtx := buzz.WithTargetMemo(recCtx, buzz.NewTargetMemo())
+				stepCtx := buzz.WithTargetMemo(stageCtx, buzz.NewTargetMemo())
 				if err := st.handler(stepCtx, p); err != nil {
 					slog.WarnContext(ctx, "dry-run: target evaluation stopped early",
 						slog.String("project", label), slog.String("target", st.target), slog.String("error", err.Error()))
@@ -1842,6 +1848,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// within one target's inline dispatch run shared deps exactly once. A
 			// target the preflight pass already passed starts out done.
 			ctx = buzz.WithTargetMemo(ctx, interp.NewTargetMemoDone(preflightDoneFrom(ctx).targets(s.ProjectPath)...))
+			// The step's own args, which are nil for a preflight step: only a named
+			// target's step carries the forwarded ones, and they key it too.
+			ctx = project.WithExtraArgs(ctx, s.ExtraArgs)
 
 			p := projects[s.ProjectPath]
 			handler := handlers[s.Target]
@@ -1937,7 +1946,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.RaceReplay && runErr == nil {
 		// Every stage replays; a caller who asked for the check wants the whole list.
 		for _, st := range stages {
-			if err := runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, out); err != nil && runErr == nil {
+			if err := runReplay(namedCtx(ctx), m.ws, st.projects, st.target, byPath, st.handler, out); err != nil && runErr == nil {
 				runErr = err
 			}
 		}
