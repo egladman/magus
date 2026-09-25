@@ -21,6 +21,14 @@ rm calls.txt
 exec magus run pinned -- -run TestNarrow
 grep '^-race ./\.\.\.$' calls.txt
 ! grep 'TestNarrow' calls.txt
+rm calls.txt
+
+# A target reached through ctx.needs gets an empty list, never null, and none of the
+# args forwarded to the target that composes it.
+exec magus run gate -- -run TestNarrow
+grep '^forwarded: 0$' calls.txt
+grep '^-race ./\.\.\.$' calls.txt
+! grep 'TestNarrow' calls.txt
 
 -- magus.yaml --
 concurrency: 2
@@ -33,6 +41,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     acme.test(ctx, {"args": ["-race", "./..."] + args});
 }
 export fun pinned(ctx: magus\Context, args: [str]) > void { acme.test(ctx, {"args": ["-race", "./..."]}); }
+export fun gate(ctx: magus\Context, args: [str]) > void { ctx.needs(check); }
 -- spells/acme/spell.buzz --
 import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
