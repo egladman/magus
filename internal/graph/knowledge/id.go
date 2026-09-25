@@ -359,6 +359,25 @@ const (
 	AttrBodyDigest = "body_digest"
 )
 
+// AttrLines and AttrBytes size a file node: its line count as an editor numbers lines, and
+// its length in bytes. Counted only by an extractor that already reads the file, so a file
+// node minted from paths alone (git history, a reference-only SCIP document) omits both
+// rather than costing a second read.
+const (
+	AttrLines = "lines"
+	AttrBytes = "bytes"
+)
+
+// fileSizeAttrs returns attrs with AttrLines and AttrBytes set, allocating when attrs is nil.
+func fileSizeAttrs(attrs map[string]string, lines, size int) map[string]string {
+	if attrs == nil {
+		attrs = map[string]string{}
+	}
+	attrs[AttrLines] = strconv.Itoa(lines)
+	attrs[AttrBytes] = strconv.Itoa(size)
+	return attrs
+}
+
 // attrLanguage and attrSymbolKind are the attrs a symbol (and, for language, a file) node
 // carries from its index. Named because they are read from four places across two files
 // and a mistyped literal would silently match nothing rather than fail.

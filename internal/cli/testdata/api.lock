@@ -167,10 +167,12 @@ flag query/publish
 flag query/refresh
 flag query/secrets
 flag query/url
+flag refs/definition
 flag refs/limit
 flag refs/no-generated
 flag refs/occurrences
 flag refs/refresh
+flag refs/source
 flag refs/text
 flag run/depth
 flag run/detach

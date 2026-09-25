@@ -1,7 +1,6 @@
 package symbols
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -49,14 +48,19 @@ func IndexPath(cacheDir, projectAbsDir string) string {
 }
 
 // FingerprintBodies sets each symbol's BodyDigest from the definition lines under root,
-// reading every defining file once. A symbol whose file or lines cannot be read keeps an
-// empty digest, which a comparison must read as unknown rather than as unchanged.
+// reading every defining file once, and sizes that file into SourceLines and SourceBytes
+// from the same read. A symbol whose file or lines cannot be read keeps an empty digest,
+// which a comparison must read as unknown rather than as unchanged.
 //
 // It reads the working tree, not the index, so an index built before the file was edited
 // fingerprints lines that may no longer hold the symbol. That is the staleness the index
 // already carries for Source, and `magus graph build` clears both at once.
 func FingerprintBodies(root string, syms []types.KnowledgeSymbol) {
-	lines := map[string][][]byte{}
+	type sourceFile struct {
+		lines        [][]byte
+		nLines, size int
+	}
+	files := map[string]sourceFile{}
 	for i := range syms {
 		path, lineStr, ok := strings.Cut(syms[i].Source, ":")
 		if !ok {
@@ -66,19 +70,20 @@ func FingerprintBodies(root string, syms []types.KnowledgeSymbol) {
 		if err != nil || start < 1 {
 			continue
 		}
-		file, seen := lines[path]
+		file, seen := files[path]
 		if !seen {
 			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 			if err == nil {
-				file = bytes.Split(data, []byte("\n"))
+				file = sourceFile{lines: types.SplitSourceLines(data), nLines: types.CountLines(data), size: len(data)}
 			}
-			lines[path] = file
+			files[path] = file
 		}
-		end := max(start, syms[i].DefEndLine)
-		if end > len(file) {
+		if file.lines == nil {
 			continue
 		}
-		sum := sha256.Sum256(bytes.Join(file[start-1:end], []byte("\n")))
-		syms[i].BodyDigest = hex.EncodeToString(sum[:8])
+		syms[i].SourceLines, syms[i].SourceBytes = file.nLines, file.size
+		if digest, ok := types.BodyDigest(file.lines, start, max(start, syms[i].DefEndLine)); ok {
+			syms[i].BodyDigest = digest
+		}
 	}
 }
