@@ -94,6 +94,7 @@ var serverInstructions = strings.Join([]string{
 	toolLine(hint.ToolRunAffected, "run a target on only VCS-changed projects"),
 	toolLine(hint.ToolAffectedPlan, "emit a CI shard plan for the affected set"),
 	toolLine(hint.ToolAffectedExplain, "explain why a project is affected by VCS changes"),
+	toolLine(hint.ToolBuzz, "run a Buzz script over another tool's output (stdin) instead of a shell one-liner"),
 	"",
 	"Inspect:",
 	toolLine(hint.ToolDoctor, "validate the workspace health"),

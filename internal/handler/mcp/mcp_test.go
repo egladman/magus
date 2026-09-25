@@ -24,7 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+// TestMain keeps the variable that re-executes this binary as buzz_test.go's stand-in.
+func TestMain(m *testing.M) { testkit.Main(m, buzzStandInEnv) }
 
 // fakeTel records MCP calls for assertions. It embeds the wide Provider
 // interface so only RecordMCPCall needs an implementation; wrap touches no
