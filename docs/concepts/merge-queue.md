@@ -7,7 +7,7 @@ tags: [merge-queue, queue, magus queue, pull-request, auto-merge, speculation, s
 # Merge queue
 
 `magus queue` is a speculative, partitioned merge queue, compiled into magus the way
-`magus buzz` is: one binary holds what it needs. Its code is `libs/mergequeue`, a
+`magus buzz` is: one binary holds what it needs. Its code is `internal/queue`, a
 package tree of the magus module. The queue takes magus's version control capability
 interfaces as they are, narrowed per step, and its `client` package wires magus in: the
 version control backend the checkout names (git today; jj, Mercurial and Sapling refuse
@@ -900,15 +900,16 @@ the repository settings and every active ruleset rule targeting the base branch 
 allow, dropping `merge` when one of those rules requires a linear history, and errors
 when nothing is left in common.
 
-## The library
+## The packages
 
-The queue's packages are usable from Go. Its contract lives in
-`github.com/egladman/magus/libs/mergequeue/types`, a near-leaf package importing only the
+The queue's packages are internal to magus: the command line and its documents are the
+interface, and no Go API outside the module is promised. Its contract lives in
+`internal/queue/types`, a near-leaf package importing only the
 standard library and magus's `types`: the documents (`Changes`, `Plan`, `Verdict`), the
 codes, `Provider`, `ArtifactLister`, `Gate`, `BuildFacts`, `VerdictSource`, and the
 version control each step gets. Its generated testify mocks are in
-`libs/mergequeue/types/gen/mocks`; magus's `types/gen/mocks.MockVCSDriver` stands in for
-the version control. The root package, `mergequeue`, holds the three steps (`Planner`,
+`internal/queue/types/gen/mocks`; magus's `types/gen/mocks.MockVCSDriver` stands in for
+the version control. The root package, `queue`, holds the three steps (`Planner`,
 `Validator`, `Applier`, each built with its required dependencies by its constructor and
 run with `Run`), the pure decisions they share (stack detection, partitioning, approval
 carry-over), the document codecs, the verdict directory, the artifact follower and the

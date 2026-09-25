@@ -52,7 +52,7 @@ final METHODS = ["squash", "merge", "rebase"];
 
 // SENSITIVE holds the paths where a mistake is a security or queue-integrity bug, so a
 // change touching one never goes to a mechanical model.
-final SENSITIVE = ["libs/mergequeue/", "internal/guard/", ".github/", "internal/auth/", "internal/sandbox/",
+final SENSITIVE = ["internal/queue/", "internal/guard/", ".github/", "internal/auth/", "internal/sandbox/",
     "internal/secret/", "internal/handler/token/", "internal/selfupdate/", "spells/cosign/",
     "spells/onepassword/", "spells/system-keychain/", "guard_policy.go", "guard_rules.go",
     "tools/gha-queue.buzz", "tools/policy/"];
@@ -1306,7 +1306,7 @@ test "a conflict is list-shaped only when every conflicting line is an entry" {
 test "a base merge goes to sonnet only when regeneration or keeping both sides settles it" {
     assert\equal(conflictModel([Conflict{ path = "MAGUS.md", generated = true }, Conflict{ path = "go.go", listShaped = true }], sensitive: [<str>]), want: "sonnet", message: "mechanical");
     assert\equal(conflictModel([Conflict{ path = "go.go" }], sensitive: [<str>]), want: "opus", message: "source");
-    assert\equal(conflictModel([Conflict{ path = "libs/mergequeue/MAGUS.md", generated = true }], sensitive: [<str>]), want: "opus", message: "a sensitive path");
+    assert\equal(conflictModel([Conflict{ path = "internal/queue/types/gen/mocks/gate.go", generated = true }], sensitive: [<str>]), want: "opus", message: "a sensitive path");
     assert\equal(conflictModel([Conflict{ path = "MAGUS.md", generated = true }], sensitive: ["internal/guard/dir.go"]), want: "opus", message: "a sensitive change");
     assert\equal(conflictModel([<Conflict>], sensitive: [<str>]), want: "opus", message: "paths unknown");
 }
@@ -1363,7 +1363,7 @@ test "PR 330's exact MGS4006 throw is mechanical: regenerate and commit the path
 // The live shape #330 actually failed with: `ci gate` is the aggregate that fails
 // whenever a shard or `magus plan` does, and carries no annotation of its own. It must
 // follow the drift verdict, the same as it follows any other explained failure. The PR
-// also touches libs/mergequeue source files for real reasons unrelated to this red;
+// also touches internal/queue source files for real reasons unrelated to this red;
 // that sensitive touch is not this failure's doing, so it does not escalate it.
 test "the live PR 330 shape: a drift throw plus ci gate's bare aggregate is still sonnet" {
     final message = "generate failed in magus: buzz: uncaught error: MGS4006: generate: "
@@ -1372,7 +1372,7 @@ test "the live PR 330 shape: a drift throw plus ci gate's bare aggregate is stil
         + "first: MAGUS.md";
     final plan = red("magus plan", conclusion: "FAILURE", job: "7");
     final gate = red("ci gate", conclusion: "FAILURE", job: "8");
-    final p = Pull{ number = 330, files = ["MAGUS.md", "libs/mergequeue/apply.go"], checks = [plan, gate] };
+    final p = Pull{ number = 330, files = ["MAGUS.md", "internal/queue/apply.go"], checks = [plan, gate] };
     // job "8" has no entry: ci gate carries no annotation of its own.
     final facts = Facts{ annotations = {"7": [Annotation{ path = ".", message = message }]} };
     final r = classify(p, open: [p], facts: facts);
@@ -1395,17 +1395,17 @@ test "a drift throw beside a real failing check still needs opus" {
 // Decision: a red where every failing check is drift (or a bare aggregate) stays
 // mechanical no matter which sensitive paths the PR touches, even a path the drift
 // message never names. The fix is regenerating and committing what the drift names;
-// nothing about libs/mergequeue's own hand-written logic is implicated by that failure,
+// nothing about internal/queue's own hand-written logic is implicated by that failure,
 // so SENSITIVE has nothing to escalate. It escalates only when a failing check carries
 // its OWN non-drift annotation - see "a drift throw beside a real failing check still
 // needs opus" above, where the second check's own annotation is what forces opus.
-test "drift under libs/mergequeue stays mechanical even when the drift names a different path" {
+test "drift under internal/queue stays mechanical even when the drift names a different path" {
     final message = "MGS4006: generate: regeneration changed generated files; first: MAGUS.md";
-    final p = Pull{ number = 9, files = ["libs/mergequeue/apply.go"], checks = [red("magus plan", conclusion: "FAILURE", job: "7")] };
+    final p = Pull{ number = 9, files = ["internal/queue/apply.go"], checks = [red("magus plan", conclusion: "FAILURE", job: "7")] };
     final facts = Facts{ annotations = {"7": [Annotation{ path = ".", message = message }]} };
     final r = classify(p, open: [p], facts: facts);
     assert\equal([r.state, r.action, r.model], want: ["red", "fix", "sonnet"], message: r.reason);
-    assert\equal(r.evidence.sensitive, want: ["libs/mergequeue/apply.go"], message: "the sensitive path is still recorded as evidence");
+    assert\equal(r.evidence.sensitive, want: ["internal/queue/apply.go"], message: "the sensitive path is still recorded as evidence");
     assert\equal(r.evidence.drifted, want: ["MAGUS.md"], message: "the drift's own paths, regardless of the sensitive touch");
 }
 
@@ -1555,6 +1555,6 @@ test "selection is the requested numbers or the author's pull requests" {
     };
     assert\equal(numbers(selected(open, prs: [<int>], author: "eli")), want: [1, 3], message: "by author");
     assert\equal(numbers(selected(open, prs: [2, 3], author: "")), want: [2, 3], message: "by number");
-    assert\equal(sensitivePaths(["libs/mergequeue/plan.go", "internal/cache/key.go", ".github/workflows/ci.yaml"]),
-        want: ["libs/mergequeue/plan.go", ".github/workflows/ci.yaml"], message: "sensitive paths");
+    assert\equal(sensitivePaths(["internal/queue/plan.go", "internal/cache/key.go", ".github/workflows/ci.yaml"]),
+        want: ["internal/queue/plan.go", ".github/workflows/ci.yaml"], message: "sensitive paths");
 }

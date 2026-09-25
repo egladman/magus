@@ -21,8 +21,8 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/mergequeue"
-	"github.com/egladman/magus/libs/mergequeue/types"
+	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/internal/queue/types"
 	magustypes "github.com/egladman/magus/types"
 	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
@@ -100,12 +100,12 @@ func (f *queueFixture) run(t *testing.T, stdin string, args ...string) ([]byte, 
 	return stdout.Bytes(), err
 }
 
-func queueEvents(t *testing.T, out []byte) []mergequeue.Event {
+func queueEvents(t *testing.T, out []byte) []queue.Event {
 	t.Helper()
-	var evs []mergequeue.Event
+	var evs []queue.Event
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
-		var e mergequeue.Event
+		var e queue.Event
 		require.NoError(t, json.Unmarshal(sc.Bytes(), &e), "stdout is JSONL only: %q", sc.Text())
 		evs = append(evs, e)
 	}
@@ -249,7 +249,7 @@ func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
 	out, err := f.run(t, "", "ls", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
 	require.Equal(t, 1, bytes.Count(out, []byte("\n")))
-	got, err := mergequeue.ReadChanges(bytes.NewReader(out))
+	got, err := queue.ReadChanges(bytes.NewReader(out))
 	require.NoError(t, err)
 	require.Len(t, got.Changes, 1)
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.Changes[0].Repo, "the provider names the repository from the remote's URL")
@@ -400,7 +400,7 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
 	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil)
 	var changes bytes.Buffer
-	require.NoError(t, mergequeue.WriteChanges(&changes, types.Changes{Base: "main"}))
+	require.NoError(t, queue.WriteChanges(&changes, types.Changes{Base: "main"}))
 
 	out, err := f.run(t, changes.String(), "plan", "--provider", "local.buzz", "--out", "plan.json", "--facts", "true")
 	require.NoError(t, err)
@@ -411,8 +411,8 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 
 	_, err = f.run(t, "", "validate", "--plan", "plan.json", "--verdicts", "verdicts", "--gate", "true", "--facts", "true")
 	require.NoError(t, err)
-	assert.FileExists(t, filepath.Join(f.root, "verdicts", mergequeue.PlanFile))
-	assert.FileExists(t, filepath.Join(f.root, "verdicts", mergequeue.DoneFile))
+	assert.FileExists(t, filepath.Join(f.root, "verdicts", queue.PlanFile))
+	assert.FileExists(t, filepath.Join(f.root, "verdicts", queue.DoneFile))
 
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
 	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--facts", "true", "--once", "verdicts")
@@ -424,7 +424,7 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 func validated(t *testing.T, dir string) {
 	t.Helper()
 	c := types.Change{ID: "1", Head: queueHead("1"), Base: "main", Method: types.MethodSquash, Affected: []string{"app"}}
-	vd := &mergequeue.VerdictDir{Path: dir}
+	vd := &queue.VerdictDir{Path: dir}
 	require.NoError(t, vd.WritePlan(types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: queueBase, CommitDate: queueDate, Depth: 1, Partitions: [][]types.Change{{c}}}))
 	require.NoError(t, vd.Record(types.Verdict{BaseCommit: queueBase, Change: c, Decision: types.DecisionMerge, Onto: queueBase,
 		CandidateCommit: strings.Repeat("c", 40), Method: types.MethodSquash, Depth: 1}))
@@ -449,7 +449,7 @@ func TestQueueApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) 
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "dry run: would merge candidate cccccccccccc")
 
-	require.NoError(t, os.Remove(filepath.Join(f.root, "verdicts", mergequeue.PlanFile)))
+	require.NoError(t, os.Remove(filepath.Join(f.root, "verdicts", queue.PlanFile)))
 	for _, mode := range [][]string{{"--once"}, {"--interval", "10ms"}} {
 		args := append(append([]string{"apply", "--provider", "local.buzz", "--base", "main", "--facts", "true"}, mode...), "verdicts")
 		_, err = f.run(t, "", args...)
@@ -495,10 +495,10 @@ func TestQueueApplyFollowsARun(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "verdicts")
 	validated(t, dir)
 	planDir := t.TempDir()
-	require.NoError(t, os.Rename(filepath.Join(dir, mergequeue.PlanFile), filepath.Join(planDir, mergequeue.PlanFile)))
+	require.NoError(t, os.Rename(filepath.Join(dir, queue.PlanFile), filepath.Join(planDir, queue.PlanFile)))
 	run := artifactRun(t, map[string]string{
-		mergequeue.PlanArtifact:                planDir,
-		mergequeue.VerdictArtifactPrefix + "1": filepath.Join(dir, "1"),
+		queue.PlanArtifact:                planDir,
+		queue.VerdictArtifactPrefix + "1": filepath.Join(dir, "1"),
 	})
 	f := newQueueFixture(t, "", run)
 	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil)
@@ -516,7 +516,7 @@ func TestQueueApplyFromARunThatPlannedNothingMergesNothing(t *testing.T) {
 	require.NoError(t, err)
 	evs := queueEvents(t, out)
 	require.Len(t, evs, 1)
-	assert.Equal(t, mergequeue.EventNotice, evs[0].Kind)
+	assert.Equal(t, queue.EventNotice, evs[0].Kind)
 	assert.Equal(t, "run acme/widgets/runs/7 completed without a plan; nothing to apply", evs[0].Reason)
 }
 
@@ -598,12 +598,12 @@ func TestQueuePlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 	require.NoError(t, err)
 	var parts [][]string
 	for _, e := range queueEvents(t, out) {
-		if e.Kind == mergequeue.EventPartition {
+		if e.Kind == queue.EventPartition {
 			parts = append(parts, e.Changes)
 		}
 	}
 	assert.Equal(t, [][]string{{"1"}, {"2"}}, parts, "app and lib are disjoint projects")
-	pl, err := mergequeue.ReadPlanFile(filepath.Join(f.root, "plan.json"))
+	pl, err := queue.ReadPlanFile(filepath.Join(f.root, "plan.json"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"app"}, pl.Partitions[0][0].Affected)
 }
