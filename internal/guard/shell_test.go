@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -234,7 +235,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// splitting the line into segments does, which is why peeling substitutes.
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
-		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
+		{command: "grep -rn 'go test' docs/"},
 		// The cd rule is about magus landing on the wrong project, not about cd itself:
 		// a cd ahead of ordinary, non-magus work falls through to whatever rule that
 		// work earns on its own (here, the raw-tool deny for `go test`).
@@ -299,10 +300,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "find . -type d -execdir go build ./... ;", rule: rawTool(`go build ./...`)},
 		{command: "find . -type d -exec sh -c 'go vet ./...' {} ;", rule: rawTool(`go vet ./...`)},
 		// find with no -exec, and a benign exec payload, are not the finding.
-		{command: `find . -name "*.go"`, context: "magus refs"},
-		// Predicates between the path and -name are the common form and must still advise.
-		{command: "find . -type f -name '*.go'", context: "magus refs"},
-		{command: "find . -name '*.tmp' -exec rm {} +", context: "magus refs"},
+		{command: `find . -name "*.go"`},
+		{command: "find . -type f -name '*.go'"},
+		{command: "find . -name '*.tmp' -exec rm {} +"},
 		// Stacked wrappers reduce all the way down.
 		{command: "env FOO=1 timeout 60 mise exec -- env -u GOROOT go test ./...", rule: rawTool(`go test ./...`)},
 		// The wrapper is never the finding. Peeling exists so the payload can be
@@ -340,6 +340,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "magus affected ci 2>&1 | tail -30", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "/tmp/magus run test | head -5", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "MAGUS_X=1 magus query foo | grep bar", rule: denyRule{Name: denyRuleOutputPipe}},
+		// A MAGUS_* name this magus does not read is a setting that never took effect.
+		{command: "MAGUS_NO_WAIT=1 ./magus run test .", rule: denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_NO_WAIT"}},
+		{command: "MAGUS_CACHE_DIR=/tmp/c ./magus run test ."},
+		// Every spelling of an exit-status echo that ends the line.
+		{command: `./check.sh; rc=$?; echo "rc=$rc"`, rule: denyRule{Name: denyRuleExitStatusEcho}},
+		{command: `./check.sh; rc=$?; echo "rc=$rc"; exit $rc`},
 		{command: "magus describe targets | wc -l", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "magus run test -s | grep -i fail | head -3", rule: denyRule{Name: denyRuleOutputPipe}},
 		// Running magus from a COPY of the workspace in temp/scratchpad. Denied: the
@@ -423,43 +429,28 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cat x | magus buzz -"},
 		// jq composes with -o json rather than fighting it.
 		{command: "magus graph export -o json | jq ."},
-		// Repo-wide code search: the graph answers from declared sources. Narrow on
-		// purpose: reading one file with grep is not a structural question.
-		// Denied, not advised: a repo-wide text search is the habit that keeps the
-		// graph unused, and an advisory is scrolled past. The reason must ROUTE:
-		// refs for code symbols, query for domain entities, because an agent that
-		// tries `magus query someFunc`, gets 0, and gives up is the failure mode.
-		// The advisory TRANSLATES: it echoes the searched identifier back as the exact command,
-		// so the reader gets `magus refs funcName` to run, not just "consider refs".
+		// A precedent hunt for one distinctive name TRANSLATES: it echoes the identifier back
+		// as the exact command, so the reader gets `magus refs funcName` to run.
 		{command: `grep -rn "funcName" .`, context: "magus refs funcName"},
 		{command: "rg symbolName", context: "magus refs symbolName"},
-		// A multi-word pattern is not a symbol, so it routes to a free-text query, quoted verbatim.
-		{command: `grep -rn "go test" docs/`, context: `magus query "go test"`},
-		// refs is compiled-language symbols only, so shapes it cannot answer route to query: a
-		// diagnostic code and a Buzz op both have graph answers refs would miss.
-		{command: "grep -rn MGS2011 docs/", context: "magus query MGS2011"},
-		{command: "grep -rn mgs_listManifests spells/", context: "magus query mgs_listManifests"},
-		{command: `find . -name "*.go"`, context: "magus refs"},
-		// A find/fd gets a translated lead too: the -name glob converts to a
-		// file-node query, on top of the generic reason above. The regex is
-		// single-quoted so its backslash survives the paste.
-		{command: `find . -name "*.go"`, context: `magus query kind=file 'id=~\.go$'`},
-		// fd's translation shipped unreachable: hint modelled it while the gate
-		// admitted no fd line, so every fd test passed through hint.Suggest and
-		// none through the guard. These go end to end on purpose.
-		{command: "fd -e go", context: `magus query kind=file 'id=~\.go$'`},
-		{command: "fd -g '*.yaml'", context: `magus query kind=file 'id=~\.yaml$'`},
-		{command: "fd guard_ cmd/magus", context: `magus query kind=file id=~guard_`},
-		// A type filter is a tree listing, not a name question: the same reason
-		// `find . -type d` carries no -name and stays silent.
-		{command: "fd -t d"},
-		// egrep and fgrep are the grep family hint already models; the word
-		// boundary in `\bgrep` had been excluding both.
-		{command: "egrep -rn Foo .", context: "magus refs Foo"},
-		{command: `fgrep -rn 'a.b' .`, context: `magus query "a.b"`},
-		// A find feeding a grep is a CONTENT question, so the search-family
-		// suggestion leads, not the file listing.
-		{command: `find . -name '*.go' | xargs grep -l HandleFoo`, context: "magus refs HandleFoo"},
+		// The generic code-search and doc-search advisories are deleted: 0.9% and 2.5%
+		// uptake over 6,075 and 812 servings. A search the graph cannot answer exactly,
+		// and cannot name one symbol for, passes silently.
+		{command: `grep -rn "go test" docs/`},
+		{command: "grep -rn mgs_listManifests spells/"},
+		{command: "fd -e go"},
+		{command: "fd guard_ cmd/magus"},
+		{command: "egrep -rn Foo ."},
+		{command: `fgrep -rn 'a.b' .`},
+		{command: `find . -name '*.go' | xargs grep -l HandleFoo`},
+		// A registered diagnostic code has a graph node, so explain answers it exactly.
+		{command: "grep -rn MGS2011 docs/", rule: denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011"}},
+		{command: `rg 'MGS2011|MGS3010'`, rule: denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011,diagnostic:MGS3010"}},
+		// A code nothing registers, and a gopherbuzz code, have no node to route to.
+		{command: "grep -rn MGS9999 docs/"},
+		{command: "grep -rn BZZ1008 libs/"},
+		// A search of another tree has no answer in this workspace's graph.
+		{command: "grep -rn MGS2011 /tmp/elsewhere"},
 		// magus is CWD-relative, so cd-then-magus is denied: the project is an
 		// argument; only a different WORKSPACE needs --root.
 		{command: "cd libs/diagnostics && magus run test", rule: denyRule{Name: denyRuleCd}},
@@ -491,15 +482,18 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// --abbrev-ref takes HEAD and answers with the BRANCH NAME, which a
 		// checkpoint does not replace.
 		{command: "git rev-parse --abbrev-ref HEAD"},
-		// Reading or searching markdown for content routes to the doc-section layer:
-		// prose is queryable, not just greppable. Matches on ".md" so it fires in any repo.
-		{command: "cat docs/doctrine.md", context: "docsection"},
-		{command: "grep host docs/doctrine.md", context: "docsection"},
-		{command: "rg wiring notes.md", context: "docsection"},
-		{command: "head -50 README.md", context: "docsection"},
-		// A code file is not prose; the doc-section advisory must not fire on it.
-		// An unbounded source dump routes to SCIP/refs instead.
+		// Reading or searching markdown advises nothing.
+		{command: "cat docs/doctrine.md"},
+		{command: "grep host docs/doctrine.md"},
+		{command: "rg wiring notes.md"},
+		{command: "head -50 README.md"},
+		// An unbounded source dump routes to SCIP/refs.
 		{command: "cat cmd/magus/main.go", context: "refs"},
+		// Unless every path it reads lies outside the workspace: a scratch or temp file is
+		// not this workspace's to advise on.
+		{command: "cat /tmp/x/main.go"},
+		{command: "head -50 /private/tmp/claude-501/x/scratchpad/p.go"},
+		{command: "cat cmd/magus/main.go /tmp/x/main.go", context: "refs"},
 		{command: "head -50 internal/guard/shell.go", context: "refs"},
 		// A line-bounded read already has a range; refs is not the next step.
 		{command: "sed -n '10,40p' cmd/magus/main.go"},
@@ -605,130 +599,6 @@ func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 	v := Evaluate(testDependencies(), `grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
 	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
-}
-
-// TestSearchAdvisoryLeadPrefersTheContentQuestion pins the lead's ordering on a
-// line carrying both a find and a search: the search answers the content
-// question, so its suggestion must outrank the file listing even though the
-// find comes first on the line, and the piped grep counts as repo-wide, since
-// the find is what feeds it the tree.
-func TestSearchAdvisoryLeadPrefersTheContentQuestion(t *testing.T) {
-	v := Evaluate(testDependencies(), `find . -name '*.go' | xargs grep -l HandleFoo`)
-	assert.Empty(t, v.Deny)
-	assert.Contains(t, v.Context, "magus refs HandleFoo", "the content question leads")
-	assert.NotContains(t, v.Context, "kind=file", "the file listing must not outrank it")
-}
-
-// TestRenderAdvisoryLead pins the Confidence -> verb mapping, which nothing else
-// asserted: rendering every lead as "Maybe try" passed the whole suite. The
-// suggestions are literal rather than translated, so a change in hint's routing
-// cannot make this test agree with the renderer by accident.
-func TestRenderAdvisoryLead(t *testing.T) {
-	one := func(c hint.Confidence) []hint.Suggestion {
-		return []hint.Suggestion{{Run: "magus refs HandleFoo", Why: "refs answers with verified occurrences", Confidence: c, Hedge: "An empty result means it was text."}}
-	}
-	for _, tt := range []struct {
-		name        string
-		suggestions []hint.Suggestion
-		want        string
-	}{
-		{
-			name:        "high confidence",
-			suggestions: one(hint.ConfidenceHigh),
-			want:        "Run `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
-		},
-		{
-			name:        "medium confidence",
-			suggestions: one(hint.ConfidenceMedium),
-			want:        "Try `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
-		},
-		{
-			name:        "low confidence",
-			suggestions: one(hint.ConfidenceLow),
-			want:        "Maybe try `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
-		},
-		{
-			// The verb and the hedge both come from the FIRST suggestion; the rest
-			// contribute a run and a why and nothing else.
-			name: "two suggestions",
-			suggestions: []hint.Suggestion{
-				{Run: "magus refs A", Why: "why A", Confidence: hint.ConfidenceHigh, Hedge: "hedge A"},
-				{Run: "magus query B", Why: "why B", Confidence: hint.ConfidenceLow, Hedge: "hedge B"},
-			},
-			want: "Run `magus refs A` - why A. Or `magus query B` - why B. hedge A\n\n",
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, renderAdvisoryLead(tt.suggestions))
-		})
-	}
-}
-
-// TestDocSearchAdviceCarriesTheReadersOwnTerms: the doc rule is matched before the one
-// that renders a suggestion, so nothing asserted the notice was runnable as printed and
-// a `<terms>` placeholder passed the whole suite. The repeat arm is pinned too: it is
-// the text a session meets on every firing after the first.
-func TestDocSearchAdviceCarriesTheReadersOwnTerms(t *testing.T) {
-	v := Evaluate(testDependencies(), `grep -rn "cache key" docs/concepts/cache.md`)
-	assert.Empty(t, v.Deny)
-	assert.Equal(t, advisoryDocSearch, v.Kind)
-	assert.Contains(t, v.Context, `magus query kind=docsection "cache key"`, "the lead is runnable as printed")
-	assert.Contains(t, v.Brief, `magus query kind=docsection "cache key"`, "so is the repeat")
-	assert.Contains(t, v.Context, "Load the magus-query skill", "the standing advice still ships under the lead")
-}
-
-// A read carries no pattern to query with, so hint abstains and the placeholder
-// wording is what is left to say. Naming a concrete query there would be inventing
-// terms the reader never typed.
-func TestDocReadKeepsThePlaceholderAdvice(t *testing.T) {
-	v := Evaluate(testDependencies(), "cat docs/doctrine.md")
-	assert.Equal(t, advisoryDocSearch, v.Kind)
-	assert.Equal(t, docSearchBrief, v.Brief)
-	assert.Equal(t, docSearchAdvice, v.Context)
-}
-
-// A prose notice must never lead with a code lookup: the markdown read is what fired
-// it, and the grep beside it asks a different question.
-func TestProseSuggestionIgnoresACodeSearchOnTheSameLine(t *testing.T) {
-	cmds := []hint.Invocation{
-		{Name: "cat", Args: []string{"docs/doctrine.md"}},
-		{Name: "rg", Args: []string{"HandleFoo", "internal/"}},
-	}
-	require.Nil(t, proseSuggestion(cmds, searchHints))
-}
-
-// TestSearchAdvisoryLeadAbstains: with nothing hint recognizes on the line there is
-// no lead, and the generic reason ships alone rather than with an empty paragraph.
-func TestSearchAdvisoryLeadAbstains(t *testing.T) {
-	cmds := []hint.Invocation{{Name: "ls", Args: []string{"-la"}}, {Name: "echo", Args: []string{"hi"}}}
-	require.Empty(t, searchAdvisoryLead(cmds, searchHints))
-}
-
-// TestSearchAdvisoryLeadRanksSearchOverFileFind is the unit-level half of the
-// ranking rule. Both commands here suggest something on their own argv, so unlike
-// the piped end-to-end case nothing rests on the recursive re-ask: the find leads
-// the slice and must still lose to the content question.
-func TestSearchAdvisoryLeadRanksSearchOverFileFind(t *testing.T) {
-	search := hint.Invocation{Name: "rg", Args: []string{"HandleFoo"}}
-	want := renderAdvisoryLead(searchHints.Suggest(search))
-	require.Contains(t, want, "magus refs HandleFoo", "the expectation is only meaningful while the search still routes to refs")
-
-	cmds := []hint.Invocation{
-		{Name: "find", Args: []string{".", "-name", "*.go"}},
-		{Name: "rg", Args: search.Args},
-	}
-	require.Equal(t, want, searchAdvisoryLead(cmds, searchHints), "the lead is what the search alone renders: the find contributed nothing")
-}
-
-// TestEvaluateBashGuardWithScopedTranslator exercises the injected-translator seam
-// directly. The point of the parameter is that the verdict is a pure function of
-// what it is handed, so this proves the scoping path with no hook, manifest, or
-// cache directory in the way.
-func TestEvaluateBashGuardWithScopedTranslator(t *testing.T) {
-	v := evaluateWith(testDependencies(), "grep -rn Foo docs/", hint.NewTranslator(hint.WithProjects([]string{"docs"})))
-	require.Empty(t, v.Deny)
-	require.Equal(t, advisoryCodeSearch, v.Kind)
-	require.Contains(t, v.Context, `magus query Foo 'project=~^docs(/|$)'`)
 }
 
 // TestParseGuardCommands pins the resolution itself, separately from the
@@ -1436,6 +1306,45 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 	}
 }
 
+// TestScriptedRewriteLeavesPathsOutsideTheWorkspace keeps the refusal's own promise that a
+// scratch path is untouched: a script whose every named path lies outside the workspace is
+// not this rule's business, and one that names a path inside still is.
+func TestScriptedRewriteLeavesPathsOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
+	heredoc := func(paths ...string) string {
+		body := ""
+		for i, p := range paths {
+			body += fmt.Sprintf("p%d = '%s'\nopen(p%d, 'w').write(open(p%d).read().replace('a', 'b'))\n", i, p, i, i)
+		}
+		return "python3 - <<'PY'\n" + body + "PY"
+	}
+	rooted := Dependencies{scope: workspaceScope{root: "/work/repo", home: "/home/me"}}
+	for _, tt := range []struct {
+		deps    Dependencies
+		command string
+		denied  bool
+	}{
+		{Dependencies{}, heredoc("/private/tmp/claude-501/x/scratchpad/notes.md"), false},
+		{Dependencies{}, heredoc("/tmp/x/plan.md"), false},
+		{Dependencies{}, `perl -pi -e 's/a/b/' /tmp/x/f.txt`, false},
+		{rooted, heredoc("/work/other/f.md"), false},
+		{rooted, heredoc("~/notes/f.md"), false},
+		{Dependencies{}, heredoc("internal/guard/shell.go"), true},
+		{Dependencies{}, heredoc("/tmp/x/plan.md", "internal/guard/shell.go"), true},
+		{Dependencies{}, `perl -pi -e 's/a/b/' f.go`, true},
+		{rooted, heredoc("/work/repo/f.go"), true},
+		// A path the script computes proves nothing about where it lands.
+		{Dependencies{}, "python3 - <<'PY'\nopen(p,'w').write(open(p).read().replace('a','b'))\nPY", true},
+	} {
+		v := Evaluate(tt.deps, tt.command)
+		if tt.denied {
+			assert.Equal(t, denyRuleScriptedRewrite, v.Rule.Name, tt.command)
+		} else {
+			assert.Empty(t, v.Deny, tt.command)
+		}
+	}
+}
+
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
 // agent trusts the graph at all. `magus refs` answers "unknown, not absent" when a project
 // is not indexed, and an agent that reads that as "no matches" falls back to a text match,
@@ -1748,10 +1657,9 @@ func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
 func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
 	assert.NotEmpty(t, Evaluate(testDependencies(), `sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
 	assert.NotEmpty(t, Evaluate(testDependencies(), `sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
-	assert.NotEmpty(t, Evaluate(testDependencies(), `grep -rn "Foo" .`).Context, "a recursive grep")
-	assert.NotEmpty(t, Evaluate(testDependencies(), `rg Foo`).Context, "ripgrep is repo-wide")
-	assert.NotEmpty(t, Evaluate(testDependencies(), `find . -name "*.go"`).Context, "a name query")
-	assert.NotEmpty(t, Evaluate(testDependencies(), `cat docs/guide.md`).Context, "reading prose")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `grep -rn "HandleRequest" .`).Context, "a recursive grep")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `rg HandleRequest`).Context, "ripgrep is repo-wide")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `cat cmd/magus/main.go`).Context, "reading source")
 	assert.NotEmpty(t, Evaluate(testDependencies(), `perl -i -pe 's/a/b/' f`).Deny, "perl -i")
 }
 
@@ -1789,12 +1697,29 @@ func TestGuardDeniesExitStatusEcho(t *testing.T) {
 		// $? is the chain's status, and the echo still exits 0 over it.
 		`./check.sh && ./lint.sh; echo $?`,
 		`if ./check.sh; then true; fi; echo $?`,
+		// Every other spelling of the same ending: 508 lines passed the bare-echo rule in
+		// the 2026-09-24 audit, against 2 denies.
+		`./check.sh; rc=$?; echo "rc=$rc"`,
+		`./check.sh; rc=$?; echo $rc`,
+		`./check.sh; rc=$?; code=$?; echo "rc=$rc code=${code}"`,
+		`./check.sh; echo "EXIT $?" >&2`,
+		`./check.sh; echo "EXIT $?" 1>&2`,
+		// The echo runs exactly when check.sh failed, and replaces its status with 0.
+		`./check.sh || echo "FAILED $?"`,
+		`./check.sh && ./lint.sh || echo "failed: $?"`,
+		`./check.sh | tail -5; echo "${PIPESTATUS[0]}"`,
+		`./check.sh | tail -5; echo "$? $PIPESTATUS"`,
+		`./check.sh | tail -5; echo "${PIPESTATUS[@]}"`,
+		`./check.sh | tail -5; ps=${PIPESTATUS[0]}; echo "first stage: $ps"`,
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleExitStatusEcho, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "exits 0", "the masked failure is the fact a reader cannot see: %s", cmd)
 	}
+	// PIPESTATUS asks for a failure the pipe already discarded, so the answer is to keep it.
+	v := Evaluate(testDependencies(), `./check.sh | tail -5; echo "${PIPESTATUS[0]}"`)
+	assert.Contains(t, v.Deny, "set -o pipefail")
 }
 
 // Every command the guard judges came from an agent, and an agent holds the token it was given:
@@ -1882,14 +1807,23 @@ func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 func TestGuardAllowsExitStatusThatFeedsLogic(t *testing.T) {
 	for _, cmd := range []string{
 		`./check.sh; rc=$?`,
-		`./check.sh; rc=$?; echo "rc=$rc"`,
+		// The captured status is the line's exit after all.
+		`./check.sh; rc=$?; echo "rc=$rc"; exit $rc`,
+		// A variable that did not capture a status prints something else.
+		`./check.sh; x=$?; echo "$y"`,
+		`./check.sh; rc=$(cat rc.txt); echo "$rc"`,
+		// A block that goes on to fail keeps the failure.
+		`./check.sh || { echo "failed: $?"; exit 1; }`,
+		`./check.sh || echo failed`,
+		`set -o pipefail; ./check.sh | tail -5`,
+		// A numbered descriptor other than stderr is somewhere the reader is not looking.
+		`./check.sh; echo $? >&3`,
 		`./check.sh; if [ $? -ne 0 ]; then echo failed; fi`,
 		`./check.sh; [ $? -eq 0 ] || exit 1`,
 		`./check.sh; exit $?`,
 		`./check.sh; echo $?; ./lint.sh`,
 		"./check.sh\necho $?\n./lint.sh",
 		`./check.sh && echo $?`,
-		`./check.sh || echo "failed: $?"`,
 		`./check.sh; echo $? > rc.txt`,
 		`./check.sh; echo $? >> rc.log`,
 		`./check.sh; printf -v rc '%s' "$?"`,
@@ -1898,9 +1832,8 @@ func TestGuardAllowsExitStatusThatFeedsLogic(t *testing.T) {
 		`./check.sh; (echo $?)`,
 		`./check.sh; { echo $?; }`,
 		// Something besides the status is printed.
-		`./check.sh; echo "$? $PIPESTATUS"`,
-		`./check.sh; echo "${PIPESTATUS[@]}"`,
 		`./check.sh; echo "$(date) $?"`,
+		`./check.sh; echo "${#PIPESTATUS[@]}"`,
 		`./check.sh; echo $? *`,
 		// Single quotes print the two characters, not the status.
 		`./check.sh; echo '$?'`,

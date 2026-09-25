@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -223,4 +224,20 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
 	assert.Equal(t, types.GuardDeny, got.Decision)
+}
+
+// TestWithinBudgetReturnsOnTime pins the hook's latency bound: a lookup that cannot be
+// cancelled still hands back a non-definitive answer at the budget, not when it finishes.
+func TestWithinBudgetReturnsOnTime(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	start := time.Now()
+	v, ok := withinBudget(20*time.Millisecond, func() int { <-release; return 1 })
+	assert.False(t, ok)
+	assert.Zero(t, v)
+	assert.Less(t, time.Since(start), time.Second)
+
+	v, ok = withinBudget(time.Second, func() int { return 7 })
+	assert.True(t, ok)
+	assert.Equal(t, 7, v)
 }

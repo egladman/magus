@@ -367,7 +367,15 @@ derived data buys nothing (`export` exists for teams that want a snapshot).
 .magus/knowledge/
   manifest.json        per-shard fingerprints and counts (the routing index)
   shards/<name>.json   one file per shard; SHARDS ARE AUTHORITATIVE
+  guard.idx            what the agent guard asks the graph (see below)
 ```
+
+`guard.idx` is written by `magus graph build` and after each run of the server's
+background symbol indexer. It lists the ids the guard's search rules check a pattern
+against (symbol names, doc sections, targets, diagnostics) and a stamp of every source
+they came from. The guard hook reads this one file instead of loading the graph, and
+treats any stamp that no longer matches the tree as "unknown", so a rule that needs the
+graph stays silent until the next build. Every lookup is capped at 150 ms.
 
 There is no continuously maintained merged `graph.json`: at scale, rewriting a
 merged file on every edit is an O(graph) write. Merging happens in memory at load

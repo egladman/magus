@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
@@ -50,6 +53,7 @@ func guardDependencies() guard.Dependencies {
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
 		Revision:         revisionForGuard,
+		GraphIDs:         graphIDsForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
 	}
@@ -202,26 +206,82 @@ func checkoutStateForGuard(ctx context.Context, dir string) *types.CheckoutState
 	return &state
 }
 
-// symbolDefinedForGuard answers the one question that lets the guard deny a symbol
-// search: does refs return the same sites this grep is reaching for.
-//
-// Definitive only when no project's index is older than its sources. A stale index
-// makes refs answer "unknown, not absent", and a deny resting on that would take grep
-// away on the strength of a lookup that admits it may be wrong.
-//
-// Reached only after precedentIdent has already matched, which the transcript mining
-// tuned to fire rarely, so the graph load stays off the path of an ordinary tool call.
-// The empty rootOverride is load-bearing: inspectWorkspace is memoized per process and
-// panics when a second call names a different root, and every other hook dependency
-// resolves through the same empty spelling.
-func symbolDefinedForGuard(ident string) (defined, definitive bool) {
-	ctx := context.Background()
-	g, err := loadKnowledgeGraphForRefs(ctx, "", false, ident)
-	if err != nil {
-		return false, false
+// guardLookupBudget bounds every graph-backed guard answer. The hook runs before every
+// agent command under a host timeout that fails open, so an answer that arrives late is
+// worth less than none: past the budget the lookup is non-definitive and the rule stays
+// silent.
+const guardLookupBudget = 150 * time.Millisecond
+
+// withinBudget runs lookup and gives up on it after budget. The lookup cannot be
+// cancelled (it stats the tree), so it is left to finish on its own goroutine, which the
+// hook process's exit reclaims.
+func withinBudget[T any](budget time.Duration, lookup func() T) (T, bool) {
+	done := make(chan T, 1)
+	go func() { done <- lookup() }()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case v := <-done:
+		return v, true
+	case <-timer.C:
+		var zero T
+		return zero, false
 	}
-	_, ok := g.Refs(ident)
-	return ok, staleGraphAdvice(ctx) == ""
+}
+
+// guardIndex is the index `magus graph build` wrote for this workspace, read once per
+// process, or nil when there is none. The graph itself is never loaded here: that costs
+// seconds, and the index answers the guard's questions from one file.
+var guardIndex = sync.OnceValue(func() *knowledge.GuardIndex {
+	root, err := guardRoot()
+	if err != nil {
+		return nil
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nil
+	}
+	idx, err := knowledge.ReadGuardIndex(cacheDir, root)
+	if err != nil {
+		return nil
+	}
+	return idx
+})
+
+// symbolDefinedForGuard answers the one question that lets the guard deny a symbol
+// search: does refs return the same sites this grep is reaching for. Definitive only when
+// the index's symbols were fresh when it was written and no source has moved since; a
+// deny resting on anything less would take grep away on a lookup that may be wrong.
+func symbolDefinedForGuard(ident string) (defined, definitive bool) {
+	type answer struct{ defined, definitive bool }
+	a, ok := withinBudget(guardLookupBudget, func() answer {
+		idx := guardIndex()
+		if idx == nil {
+			return answer{}
+		}
+		return answer{idx.Has(knowledge.GuardSymbol, ident), idx.Fresh(knowledge.GuardSymbol)}
+	})
+	return a.defined, ok && a.definitive
+}
+
+// graphIDsForGuard lists kind's ids from the guard index, definitive only while the
+// sources they came from are unchanged.
+func graphIDsForGuard(_ context.Context, kind string) ([]string, bool) {
+	type answer struct {
+		ids   []string
+		fresh bool
+	}
+	a, ok := withinBudget(guardLookupBudget, func() answer {
+		idx := guardIndex()
+		if idx == nil {
+			return answer{}
+		}
+		return answer{idx.IDs(kind), idx.Fresh(kind)}
+	})
+	if !ok || !a.fresh {
+		return nil, false
+	}
+	return a.ids, true
 }
 
 // loadWorkspaceShellRules returns additive rules the root magusfile declared via

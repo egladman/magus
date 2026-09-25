@@ -213,6 +213,9 @@ type writeGrade struct {
 	// empty for the job-store advisories that report a live collision: those describe THIS
 	// write against a boundary that moves, so the second one is a second fact.
 	Kind hint.MarkerKind
+	// Key is the marker Kind is held under when that is narrower than the kind itself, as
+	// leasedPathKey is; empty holds it under Kind.
+	Key hint.MarkerKind
 }
 
 // gradeLeasedWrite judges a file write against the job store's declared write
@@ -244,6 +247,12 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	if location.cacheDir == "" {
 		return writeGrade{}
 	}
+	// The store's paths are workspace-relative, so a write outside the workspace has
+	// nothing to be graded against, and nothing to be told about the store either.
+	rel, inside := workspaceRelative(location.workspace, writePath)
+	if !inside {
+		return writeGrade{}
+	}
 	leases, err := leaseRows(ctx, location)
 	if err != nil {
 		// An ABSENT store is not this branch: it reads as an empty one, which
@@ -258,12 +267,6 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	live := liveLeases(leases)
 	if len(live) == 0 {
 		return adviseUnleasedWorker(actingLease)
-	}
-	rel, inside := workspaceRelative(location.workspace, writePath)
-	if !inside {
-		// The store's paths are workspace-relative, so a write outside the workspace has
-		// nothing to be graded against.
-		return writeGrade{}
 	}
 
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
@@ -295,7 +298,9 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		// fails open and a store that would not accept a note must not cost somebody a save.
 		_ = job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).
 			RecordUnattributedWrite(ctx, owner.ID, rel)
-		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
+		// Held once per session per lease: the second write into the same lease's paths
+		// repeats a fact the writer already has, while a different lease is a new one.
+		return writeGrade{Decision: "advise", Kind: advisoryLeasedPath, Key: leasedPathKey(owner.ID), Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
 			owner.ID, envHookLease, owner.ID, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State)}
