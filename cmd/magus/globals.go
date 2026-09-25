@@ -234,8 +234,6 @@ func outputOptionsOrDefault() (OutputOptions, error) {
 // A hand-rolled scanner only accepts the spellings its author happened to write,
 // and the resulting gap is invisible until someone types the missing one:
 //
-//   - `--then outputs export -path=out` was rejected as a bad value, not a bad
-//     syntax, because chainPathFlag handled three of the four.
 //   - `magus affected -explain .` did not error on the flag at all. The scanner
 //     matched only `--explain`, so `-explain` fell through and `.` was read as a
 //     TARGET, producing "target name \".\": must contain only letters, digits..."

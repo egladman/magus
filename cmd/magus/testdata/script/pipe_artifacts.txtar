@@ -1,0 +1,157 @@
+# What a target produced is reached from the stage after it: pipe.outputs lists the
+# files its run declared, pipe.exportTo copies one, and pipe.history and pipe.diff read
+# the content-addressed store, which already holds every past run's artifacts.
+[windows] skip 'no kernel API proves the peers of an anonymous pipe'
+
+exec magus run bundle:rw
+grep 'PRECIOUS-ARTIFACT-DATA' dist/a.txt
+
+# outputs lists what the target declared and produced, workspace-relative.
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz outputs.buzz'
+stdout '^\. dist/a\.txt dist/\*\.txt$'
+
+# export copies every artifact under a directory, keeping the tree.
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz export.buzz -- copy'
+stdout '^copy/dist/a\.txt$'
+grep 'PRECIOUS-ARTIFACT-DATA' copy/dist/a.txt
+
+# Exporting in place wrote the destination before reading it, which emptied every
+# artifact while exiting 0. The artifact survives being exported onto itself.
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz export.buzz -- .'
+grep 'PRECIOUS-ARTIFACT-DATA' dist/a.txt
+
+# A symlink at the destination is replaced, never written through: following it writes
+# the artifact somewhere the caller never named.
+mkdir sym/dist
+symlink sym/dist/a.txt -> ../../outside.txt
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz export.buzz -- sym'
+grep 'DO-NOT-OVERWRITE' outside.txt
+grep 'PRECIOUS-ARTIFACT-DATA' sym/dist/a.txt
+
+# The source's mode is applied over an existing destination, and no temp file is left.
+mkdir mode/dist
+cp stale.txt mode/dist/a.txt
+chmod 0600 mode/dist/a.txt
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz export.buzz -- mode'
+exec test -x mode/dist/a.txt
+exec sh -c 'ls -a mode/dist | grep -c magus-export || true'
+stdout '^0$'
+
+# One version exists, and it is the file on disk: nothing to diff, said so.
+chmod 0755 stub-diff
+env MAGUS_DIFFTOOL=$WORK/stub-diff
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz history.buzz'
+stdout -count=1 'bundle'
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz diff.buzz'
+stdout 'nothing to diff'
+
+# Change what the target emits: now two versions exist, and diff hands the cached one
+# and the working copy to the difftool rather than rendering anything itself.
+cp changed.buzz magusfile.buzz
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz history.buzz'
+stdout -count=2 'bundle'
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz diff.buzz'
+stdout 'vs the working tree'
+stdout 'stub-diff saw 2 paths'
+
+# The newest version's blob is the sha256 of the file on disk: the store's key and
+# crypto.sha256_file compare.
+exec bash -c 'set -o pipefail; magus run bundle:rw | magus buzz hash.buzz'
+stdout '^same$'
+
+-- outputs.buzz --
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                std\print("{a.project} {a.path} {a.glob}");
+            }
+        }
+    }
+}
+-- export.buzz --
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                std\print(pipe\exportTo(a, dest: "{args[0]}/{a.path}"));
+            }
+        }
+    }
+}
+-- history.buzz --
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                foreach (v in pipe\history(a)) {
+                    std\print("{v.created} {v.short} {v.size} {v.target}");
+                }
+            }
+        }
+    }
+}
+-- diff.buzz --
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                pipe\diff(a);
+            }
+        }
+    }
+}
+-- hash.buzz --
+import "std";
+import "crypto";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                if (pipe\history(a)[0].blob == crypto\sha256File(a.path)) {
+                    std\print("same");
+                } else {
+                    std\print("different");
+                }
+            }
+        }
+    }
+}
+-- outside.txt --
+DO-NOT-OVERWRITE
+-- stale.txt --
+stale
+-- stub-diff --
+#!/bin/sh
+echo "stub-diff saw $# paths"
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("dist/*.txt");
+    // Executable on purpose: the +x is what the mode case asserts survives an export
+    // over an existing, non-executable destination.
+    proc\exec("sh", ["-c", "mkdir -p dist && echo PRECIOUS-ARTIFACT-DATA > dist/a.txt && chmod 755 dist/a.txt"]);
+}
+-- changed.buzz --
+import "magus";
+import "proc";
+export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("dist/*.txt");
+    proc\exec("sh", ["-c", "mkdir -p dist && echo changed > dist/a.txt && chmod 755 dist/a.txt"]);
+}

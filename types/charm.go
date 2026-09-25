@@ -50,11 +50,23 @@ const CharmGHA = "gha"
 // during an unrelated build. Stripped from ci alongside rw (see RunCI).
 const CharmUpdate = "update"
 
+// CharmExtended is a reserved built-in charm: the extended test suite, which adds to the
+// default one the tests that need more of the host than every gate should require (a C
+// toolchain, a docker daemon, more time or network). A test target keeps its default tier
+// and reads has_charm("extended") to need the rest; it pairs with test and ci (magus run
+// ci:extended). The ci gate does not strip it, and a target it pulls in fails on a missing
+// tool rather than skipping, since asking for the extended suite asked for that test.
+//
+// Chosen over full, which six persona consults read as a cold, uncached rebuild of every
+// project, and over test kinds (e2e, integration), which name what a test is rather than
+// what it needs, so the same tier would need several charms.
+const CharmExtended = "extended"
+
 // reservedCharms are the built-in charm names magus recognizes without any target
 // declaring them. Listed once here so the typo guard (IsReservedCharm) and the
 // doctor name-collision check (ReservedCharms) cannot drift. The entries are
 // already in canonical (normalized) form.
-var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA, CharmUpdate}
+var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA, CharmUpdate, CharmExtended}
 
 // renamedCharms maps a retired built-in charm name to the name that replaced it. Keys
 // are canonical (normalized) form.
@@ -106,6 +118,8 @@ func ReservedCharmDoc(name string) string {
 		return "GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci"
 	case CharmUpdate:
 		return "move pinned upstream state forward (a lockfile, a scanner database) instead of verifying it; stripped from ci"
+	case CharmExtended:
+		return "the extended test suite: add the tests that need more of the host (a C toolchain, docker) than the default gate; survives into ci"
 	default:
 		return ""
 	}

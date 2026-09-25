@@ -80,6 +80,13 @@ func (cn *conn) call(ctx context.Context, id uint64, typ string, body any, late 
 	case f := <-ch:
 		return f, nil
 	case <-cn.dead:
+		// read delivers a reply before it closes dead, and select picks between ready
+		// cases at random, so a reply that beat the close may still be waiting here.
+		select {
+		case f := <-ch:
+			return f, nil
+		default:
+		}
 		return frame{}, fmt.Errorf("%w: connection closed during %s", ErrUnavailable, typ)
 	case <-ctx.Done():
 		if late != nil {

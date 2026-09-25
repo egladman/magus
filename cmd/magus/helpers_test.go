@@ -104,46 +104,6 @@ func TestSplitOnDashDash(t *testing.T) {
 	assert.Equal(t, []string{}, after)
 }
 
-// TestSplitOnThen pins the two things the chain grammar exists to keep straight: "--" is
-// split off FIRST so a spell can receive the literal word "--then", and an absent separator
-// is distinguishable from one with nothing after it.
-func TestSplitOnThen(t *testing.T) {
-	t.Run("absent", func(t *testing.T) {
-		before, after, found := splitOnThen([]string{"build", "web"})
-		assert.False(t, found)
-		assert.Equal(t, []string{"build", "web"}, before)
-		assert.Nil(t, after)
-	})
-
-	t.Run("present with a verb", func(t *testing.T) {
-		before, after, found := splitOnThen([]string{"build", "web", "--then", "outputs"})
-		assert.True(t, found)
-		assert.Equal(t, []string{"build", "web"}, before)
-		assert.Equal(t, []string{"outputs"}, after)
-	})
-
-	t.Run("present with no verb is still found", func(t *testing.T) {
-		before, after, found := splitOnThen([]string{"build", "--then"})
-		assert.True(t, found)
-		assert.Equal(t, []string{"build"}, before)
-		assert.Empty(t, after)
-	})
-
-	t.Run("a forwarded --then belongs to the spell", func(t *testing.T) {
-		before, after, found := splitOnThen([]string{"test", "--", "--then"})
-		assert.False(t, found, "everything after -- is the spell's argv, not the chain grammar's")
-		assert.Equal(t, []string{"test", "--", "--then"}, before)
-		assert.Nil(t, after)
-	})
-
-	t.Run("the forwarded argv is re-attached", func(t *testing.T) {
-		before, after, found := splitOnThen([]string{"test", "--then", "value", "--", "-run", "TestX"})
-		assert.True(t, found)
-		assert.Equal(t, []string{"test", "--", "-run", "TestX"}, before)
-		assert.Equal(t, []string{"value"}, after)
-	})
-}
-
 func TestListTargetsPrintsOnlyPaths(t *testing.T) {
 	out := captureStdout(t, func() {
 		listTargets("affected", []types.Target{{Path: "web"}, {Path: "api"}}, "vcs")

@@ -1081,6 +1081,43 @@ func ObjectDriftResult(v types.DriftResult) vm.Value {
 	return out
 }
 
+func ObjectPipeRecord(v types.PipeRecord) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("schema", vm.IntValue(int64(v.Schema)))
+	out.MapSet("type", vm.StrValue(v.Type))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("status", vm.StrValue(v.Status))
+	out.MapSet("error", vm.StrValue(v.Error))
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	itemsProjects := make([]vm.Value, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = vm.StrValue(v.Projects[indexProjects])
+	}
+	out.MapSet("projects", vm.ListValue(itemsProjects))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectTargetArtifact(v types.TargetArtifact) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	out.MapSet("project", vm.StrValue(v.ProjectPath))
+	return out
+}
+
+func ObjectArtifactVersion(v types.ArtifactVersion) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("blob", vm.StrValue(v.Blob))
+	out.MapSet("short", vm.StrValue(v.Short))
+	out.MapSet("size", vm.IntValue(int64(v.Size)))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("created", vm.StrValue(v.Created))
+	out.MapSet("entry", vm.StrValue(v.Entry))
+	return out
+}
+
 func ObjectShellCommand(v types.ShellCommand) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("bin", vm.StrValue(v.Bin))
@@ -1597,6 +1634,40 @@ func ObjectJob(v types.Job) vm.Value {
 	return out
 }
 
+func ObjectFileChange(v types.FileChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("prevPath", vm.StrValue(v.PrevPath))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	return out
+}
+
+func ObjectRegionChange(v types.RegionChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", ObjectFileChange(v.File))
+	out.MapSet("side", vm.StrValue(string(v.Side)))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	out.MapSet("declaration", vm.StrValue(v.Declaration))
+	out.MapSet("driver", vm.StrValue(v.Driver))
+	return out
+}
+
+func ObjectJobOverlapFootprint(v types.JobOverlapFootprint) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("verdict", vm.StrValue(v.Verdict))
+	itemsShared := make([]vm.Value, len(v.Shared))
+	for indexShared := range v.Shared {
+		itemsShared[indexShared] = vm.StrValue(v.Shared[indexShared])
+	}
+	out.MapSet("shared", vm.ListValue(itemsShared))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
 func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("jobA", vm.StrValue(v.JobA))
@@ -1611,6 +1682,11 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 		itemsPathsB[indexPathsB] = vm.StrValue(v.PathsB[indexPathsB])
 	}
 	out.MapSet("pathsB", vm.ListValue(itemsPathsB))
+	optFootprint := vm.Null
+	if v.Footprint != nil {
+		optFootprint = ObjectJobOverlapFootprint((*v.Footprint))
+	}
+	out.MapSet("footprint", optFootprint)
 	return out
 }
 
@@ -1695,6 +1771,13 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])
 	}
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
+	itemsFootprint := make([]vm.Value, len(v.Footprint))
+	for indexFootprint := range v.Footprint {
+		itemsFootprint[indexFootprint] = ObjectRegionChange(v.Footprint[indexFootprint])
+	}
+	out.MapSet("footprint", vm.ListValue(itemsFootprint))
+	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))
+	out.MapSet("footprintReason", vm.StrValue(v.FootprintReason))
 	return out
 }
 

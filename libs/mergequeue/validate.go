@@ -74,7 +74,8 @@ func (v *Validator) Run(ctx context.Context, plan types.Plan) error {
 	if n == 0 {
 		n = runtime.NumCPU()
 	}
-	r := &validation{Validator: v, plan: plan, slots: make(chan struct{}, n)}
+	r := &validation{Validator: v, plan: plan, slots: make(chan struct{}, n), bases: map[string]*baseGate{},
+		allUnits: sync.OnceValues(func() ([]string, error) { return v.facts.AllUnits(ctx) })}
 	defer func() {
 		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), v.vcs, v.clone.Root, v.scratch); err != nil {
 			v.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + v.scratch + ": " + err.Error()})
@@ -94,8 +95,33 @@ func (v *Validator) Run(ctx context.Context, plan types.Plan) error {
 
 type validation struct {
 	*Validator
-	plan  types.Plan
-	slots chan struct{} // one per candidate being built or gated
+	plan     types.Plan
+	slots    chan struct{} // one per candidate being built or gated
+	allUnits func() ([]string, error)
+
+	mu    sync.Mutex
+	bases map[string]*baseGate // by onto and units
+}
+
+// baseGate is the gate on the commit red candidates were built onto, run once for every
+// change it answers.
+type baseGate struct {
+	once sync.Once
+	red  bool
+	err  error
+}
+
+// units is what the hooks run on c's candidate take: its affected set when that is a
+// proof, else every unit.
+func (r *validation) units(c types.Change) ([]string, error) {
+	if proven(c) {
+		return c.Affected, nil
+	}
+	all, err := r.allUnits()
+	if err != nil {
+		return nil, fmt.Errorf("every unit: %w", err)
+	}
+	return all, nil
 }
 
 type flight struct {
@@ -129,9 +155,10 @@ func waitingBelow(id string) stackHold {
 // pipeline runs one partition's speculative candidates. Up to Depth are in flight, each
 // built onto the one below; their gates run concurrently and are consumed in order.
 // When the lowest is green its change is decided and the window slides up; when it is
-// red its change is the culprit (everything beneath it validated), so it is kicked back
-// and every candidate above, all built onto it, is rebuilt onto what did validate. A
-// refused candidate is red the same way, and is attributed only once it is lowest. A
+// red its change is kicked back (everything beneath it validated), or waits when what
+// it was built onto is red as well, and every candidate above, all built onto it, is
+// rebuilt onto what did validate. A refused candidate is red the same way, and is
+// attributed only once it is lowest. A
 // change stacked on one that is not green this run, or whose candidate did not build,
 // waits, and is never built onto what lacks the change beneath it.
 func (r *validation) pipeline(ctx context.Context, group int, pending []types.Change) error {
@@ -185,12 +212,16 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []types.Ch
 		if out.err != nil {
 			return fmt.Errorf("gate %s: %w", head.change.Label(), out.err)
 		}
-		green, err := r.verdict(head, out, true)
+		decision, err := r.verdict(ctx, head, out, true)
 		if err != nil {
 			return err
 		}
-		if !green {
+		green := decision == types.DecisionMerge
+		switch decision {
+		case types.DecisionKick:
 			held[head.change.ID] = stackHold{code: types.CodeWaitBelowKicked, reason: kickedBelow(head.change.ID)}
+		case types.DecisionWait:
+			held[head.change.ID] = waitingBelow(head.change.ID)
 		}
 		if !green && head.cand.Commit == "" {
 			continue // nothing above was built onto a refused candidate
@@ -302,7 +333,7 @@ func (r *validation) only(ctx context.Context) error {
 			}
 			var refused *types.RefusedError
 			if errors.As(err, &refused) {
-				_, err := r.verdict(f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
+				_, err := r.verdict(ctx, f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
 				return err
 			}
 			return r.hold(f, err)
@@ -322,7 +353,7 @@ func (r *validation) only(ctx context.Context) error {
 		if out.err != nil {
 			return fmt.Errorf("gate %s: %w", c.Label(), out.err)
 		}
-		_, err = r.verdict(f, out, f.depth == 1)
+		_, err = r.verdict(ctx, f, out, f.depth == 1)
 		return err
 	}
 	return nil
@@ -356,7 +387,11 @@ func (r *validation) regenerate(ctx context.Context, s candidateSpec, b built) (
 	if err != nil {
 		return "", err
 	}
-	keep, err := regenerateWrites(ctx, r.vcs, s, b, r.Regenerate, regen, nil)
+	units, err := r.units(s.change)
+	if err != nil {
+		return "", err
+	}
+	keep, err := regenerateWrites(ctx, r.vcs, s, b, r.Regenerate, regen, units)
 	if err != nil || len(keep) == 0 {
 		return b.Commit, err
 	}
@@ -394,15 +429,58 @@ func (r *validation) start(ctx context.Context, group int, f *flight) {
 	go func() {
 		defer r.release()
 		start := time.Now()
-		res, err := r.gate.Validate(fctx, f.cand, f.onto, f.change)
+		res, err := r.validate(fctx, f.cand, f.change)
 		f.done <- outcome{green: res.Green, summary: res.Summary, err: err, took: time.Since(start)}
 	}()
 }
 
-// verdict decides a gated or refused change and reports whether it was green.
-// attributable says everything beneath the candidate is validated, so a red is the
-// change's own.
-func (r *validation) verdict(f *flight, out outcome, attributable bool) (bool, error) {
+// validate gates c's units in cand. A change that reaches no unit has nothing to gate.
+func (r *validation) validate(ctx context.Context, cand types.Candidate, c types.Change) (types.GateResult, error) {
+	units, err := r.units(c)
+	if err != nil || len(units) == 0 {
+		return types.GateResult{Green: err == nil}, err
+	}
+	return r.gate.Validate(ctx, cand, units)
+}
+
+// baseRed reports whether the gate is red on onto itself for c: a red there is not c's to
+// fix. Each onto and set of units is gated once a run, however many changes ask.
+func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (bool, error) {
+	units, err := r.units(c)
+	if err != nil {
+		return false, err
+	}
+	key := onto + "\x00" + strings.Join(units, "\x00")
+	r.mu.Lock()
+	b, ok := r.bases[key]
+	if !ok {
+		b = &baseGate{}
+		r.bases[key] = b
+	}
+	r.mu.Unlock()
+	b.once.Do(func() {
+		if b.err = r.acquire(ctx); b.err != nil {
+			return
+		}
+		defer r.release()
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Commit: onto,
+			Reason: "gating " + short(onto) + " without #" + c.ID + " to tell whether its red is its own"})
+		cand, err := checkout(ctx, r.vcs, r.clone.Root, r.scratch, "base", onto)
+		if err != nil {
+			b.err = fmt.Errorf("check out %s: %w", short(onto), err)
+			return
+		}
+		defer r.discard(ctx, cand)
+		res, err := r.gate.Validate(ctx, cand, units)
+		b.red, b.err = !res.Green, err
+	})
+	return b.red, b.err
+}
+
+// verdict decides a gated or refused change. attributable says everything beneath the
+// candidate is validated, so a red is the change's own unless the gate is red on what the
+// candidate was built onto as well.
+func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attributable bool) (types.Decision, error) {
 	v := types.Verdict{Change: f.change, After: f.after, Onto: f.onto, CandidateCommit: f.cand.Commit, Method: f.change.Method,
 		Depth: f.depth, DurationMS: out.took.Milliseconds()}
 	if !out.green {
@@ -414,7 +492,18 @@ func (r *validation) verdict(f *flight, out outcome, attributable bool) (bool, e
 		if !attributable {
 			v.Decision, v.Code, v.Paths = types.DecisionWait, types.CodeWaitBehind, nil
 			v.Reason = what + " on top of #" + f.after + ", which this run did not validate; retried once it is"
-			return false, r.decide(v)
+			return v.Decision, r.decide(v)
+		}
+		if out.refused == nil {
+			red, err := r.baseRed(ctx, f.onto, f.change)
+			if err != nil {
+				return "", fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+			}
+			if red {
+				v.Decision, v.Code = types.DecisionWait, types.CodeWaitBaseRed
+				v.Reason = "the gate failed on it and on " + ontoName(r.plan.Base, f.onto, f.after) + " without it; retried once that is green"
+				return v.Decision, r.decide(v)
+			}
 		}
 		v.Decision = types.DecisionKick
 		v.Reason = what + ": " + out.summary
@@ -425,10 +514,10 @@ func (r *validation) verdict(f *flight, out outcome, attributable bool) (bool, e
 			v.Reason = out.summary
 		}
 		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
-		return false, r.decide(v)
+		return v.Decision, r.decide(v)
 	}
 	v.Decision = types.DecisionMerge
-	return true, r.decide(v)
+	return v.Decision, r.decide(v)
 }
 
 // ground stops a flight's gate, waits for it, and removes its checkout.
@@ -470,15 +559,20 @@ func conflictAhead(after string, conf sourceConflict) string {
 // failureReport says what failed on which commits. How to run it again, the files at
 // issue and how to queue the change again are the provider's to render from the kick.
 func failureReport(base, head, onto, after, failed, remedy string) string {
-	on := "`" + base + "` at `" + short(onto) + "`"
-	if after != "" {
-		on = "the candidate of #" + after + " (`" + short(onto) + "`)"
-	}
-	report := fmt.Sprintf("The merge queue built this change at `%s` onto %s, and %s.\n", short(head), on, failed)
+	report := fmt.Sprintf("The merge queue built this change at `%s` onto %s, and %s.\n", short(head), ontoName(base, onto, after), failed)
 	if remedy != "" {
 		report += "\n" + remedy + "\n"
 	}
 	return report
+}
+
+// ontoName names the commit a candidate was built onto: the base's, or the candidate of
+// the change validated beneath it.
+func ontoName(base, onto, after string) string {
+	if after != "" {
+		return "the candidate of #" + after + " (`" + short(onto) + "`)"
+	}
+	return "`" + base + "` at `" + short(onto) + "`"
 }
 
 func joinPaths(paths []string) string {

@@ -30,6 +30,10 @@ import (
 // `vcs merge-driver` perfectly and still be unable to read this magusfile, and that is
 // exactly the shape this exists to name: EnsureMergeDriver accepts a driver on the
 // strength of the first probe alone.
+//
+// The diff drivers are installed with the merge driver, so a registration missing any of
+// them fails here too. It is read before the probe: the probe runs a magus against this
+// workspace, and that load rewires whatever it finds missing.
 func (r *runner) checkMergeDriverLoads() types.Check {
 	const name = "merge-driver-loads-workspace"
 
@@ -42,6 +46,10 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 	if exe == "" {
 		return types.Check{Name: name, Status: types.CheckFail,
 			Message: "the registered merge driver names no executable: " + registered}
+	}
+	missing, err := vcs.MissingDiffDrivers(r.runCtx(), r.ws.Root())
+	if err != nil {
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
 
 	// The workspace this doctor is inspecting, so the answer is about the tree in front of
@@ -60,6 +68,17 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 				"point it at a magus that can read this tree: " + hint.Run.With("dogfood", ".") +
 					", then ./hack/install-dogfood.sh",
 			},
+		}
+	}
+	if len(missing) > 0 {
+		return types.Check{
+			Name:   name,
+			Status: types.CheckFail,
+			Message: "the merge driver is registered without the diff drivers installed beside it, so " +
+				"hunk headers name no declaration and a footprint cannot say what a change touched",
+			Details: append(missing,
+				"rewire them with `"+hint.Ls.String()+"`: any command that opens the workspace does, "+
+					"and logs `merge-driver: could not refresh registration` with the cause when it cannot"),
 		}
 	}
 	return types.Check{Name: name, Status: types.CheckOK,

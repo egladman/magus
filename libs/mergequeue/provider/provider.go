@@ -10,8 +10,9 @@
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
 //	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
-//	kick_back(change + {commit, code, report, paths, with, candidate_commit}) > bool
+//	kick_back(change + {commit, code, report, paths, with, candidate_commit, flag}) > bool
 //	mark(change + {mark})                          > bool
+//	flag(change + {flag, on})                      > bool
 //	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
 //
 // Every op but list_artifacts is required; list_artifacts is required of a provider
@@ -70,13 +71,14 @@ const (
 	opMergeChange   = "merge_change"
 	opKickBack      = "kick_back"
 	opMark          = "mark"
+	opFlag          = "flag"
 	opListArtifacts = "list_artifacts"
 )
 
 // Every op but list_artifacts is required: branch protection requires the queue's status
 // once it is wired, so a provider that can list changes but not merge them would hold
 // every change forever.
-var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark}
+var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark, opFlag}
 
 // Script is a [types.Provider] backed by a Buzz script, and a
 // [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
@@ -464,6 +466,7 @@ func (p *Script) KickBack(ctx context.Context, c types.Change, commit string, k 
 	params["with"] = k.With
 	params["candidate_commit"] = k.CandidateCommit
 	params["source"] = k.Source
+	params["flag"] = string(k.Flag)
 	if k.Reproduce != nil {
 		params["reproduce"] = map[string]string{"gate": k.Reproduce.Gate, "regenerate": k.Reproduce.Regenerate}
 	}
@@ -478,6 +481,17 @@ func (p *Script) Mark(ctx context.Context, c types.Change, m types.Mark) error {
 	params := changeParams(c)
 	params["mark"] = string(m)
 	return p.acknowledged(ctx, opMark, params)
+}
+
+// Flag calls flag. A flag the queue does not know is refused before the script sees it.
+func (p *Script) Flag(ctx context.Context, c types.Change, f types.Flag, on bool) error {
+	if !f.Valid() {
+		return fmt.Errorf("%s: flag %q, want %s", p.where(opFlag), f, types.FlagChangesGenerator)
+	}
+	params := changeParams(c)
+	params["flag"] = string(f)
+	params["on"] = on
+	return p.acknowledged(ctx, opFlag, params)
 }
 
 // ListArtifacts calls list_artifacts.

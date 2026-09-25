@@ -13,10 +13,13 @@ import (
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestBuzzEngine_Registered(t *testing.T) {
 	e := engine.Lookup("buzz")

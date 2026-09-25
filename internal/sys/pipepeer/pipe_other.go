@@ -8,6 +8,15 @@ import "os"
 // anonymous pipe needs the undocumented NtQuerySystemInformation handle table.
 func ReadEnd(_, _ int) (Pipe, error) { return Pipe{}, ErrUnsupported }
 
+// WriteEnd always fails with ErrUnsupported here.
+func WriteEnd(_, _ int) (Pipe, error) { return Pipe{}, ErrUnsupported }
+
+// Readers always fails with ErrUnsupported here.
+func (Pipe) Readers() ([]int, error) { return nil, ErrUnsupported }
+
+// ReadBy is always false here.
+func (Pipe) ReadBy(_ int) bool { return false }
+
 // Writers always fails with ErrUnsupported here.
 func (Pipe) Writers() ([]int, error) { return nil, ErrUnsupported }
 
