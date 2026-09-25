@@ -115,12 +115,16 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 }
 
 // takeRunLocks is one invocation's whole acquisition: wait out a pipe upstream (see
-// awaitUpstream), take every lock, then publish the set for the stage downstream. The
+// awaitUpstream), refuse if an upstream stage has already failed (MGS3030), take every
+// lock, then publish the set for the stage downstream. The
 // spool is non-nil when stdin was held back and is now relayed from it.
 func (l *projectLocker) takeRunLocks(ctx context.Context, paths []string) (func(), *stdinSpool, error) {
 	sp, ups, err := l.awaitUpstream(ctx, paths)
 	if err != nil {
 		return nil, nil, err
+	}
+	if err := l.redUpstream(ups); err != nil {
+		return nil, sp, err
 	}
 	unlock, err := l.acquireAll(ctx, paths)
 	// An upstream that has stopped writing is exiting, and the kernel closes its pipe

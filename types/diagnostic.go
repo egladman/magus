@@ -448,7 +448,11 @@ const (
 	// itself: another base or remote, a base commit the base does not carry, or a stack
 	// base that is not the reviewed head of the change beneath. Apply stops before it
 	// merges anything that rests on it.
-	QueuePlanUnverified       DiagnosticCode = "MGS3028"
+	QueuePlanUnverified DiagnosticCode = "MGS3028"
+	// PipeUpstreamFailed is a magus stage upstream of a run in a shell pipe that exited
+	// non-zero. A run that sees it before taking its locks starts nothing; the last stage
+	// of a pipeline that succeeded exits with it, so the pipeline fails without pipefail.
+	PipeUpstreamFailed        DiagnosticCode = "MGS3030"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -616,6 +620,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
 	QueueRunUntrusted, QueuePlanUnverified,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated,
+	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

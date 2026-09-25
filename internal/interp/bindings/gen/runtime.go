@@ -128,22 +128,15 @@ func StrMap(args []vm.Value, n int) map[string]string {
 	return out
 }
 
-// AnyMap reads arg n as map[string]any, nil if absent or not a map.
+// AnyMap reads arg n as map[string]any, nil if absent or neither a map nor an object
+// instance. An object a script builds for an Object argument (PipeRecord{...}) arrives
+// as its {field: value} map, as a map literal does.
 func AnyMap(args []vm.Value, n int) map[string]any {
 	if n >= len(args) {
 		return nil
 	}
-	v := args[n]
-	if !v.IsMap() {
-		return nil
-	}
-	out := map[string]any{}
-	for _, k := range v.MapKeys() {
-		if mv, ok := v.MapGet(k); ok {
-			out[k] = valToAny(mv)
-		}
-	}
-	return out
+	m, _ := valToAny(args[n]).(map[string]any)
+	return m
 }
 
 // Any reads arg n as a plain Go value, nil if absent.
