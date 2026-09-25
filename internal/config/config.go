@@ -819,8 +819,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CI_MAX_SHARDS", "ci.max_shards", "8", "Maximum number of parallel CI shards; -1 means unlimited"},
 		{"MAGUS_CI_RUNNER_POOL_BUDGET", "ci.runner_pool_budget", "0", "Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited"},
 		{"MAGUS_CI_RECORD_RUNS", "ci.record_runs", "true", "Keep the per-branch run log (which commit a branch passed or failed at) in the history file"},
-		{"MAGUS_CI_RISK_MIN_RUNS", "ci.risk_min_runs", "50", "Passing recorded runs inside ci.risk_window a (project, target) needs before `magus affected --risk` drops it from a scoped or full gate; 0 turns pruning off"},
-		{"MAGUS_CI_RISK_WINDOW", "ci.risk_window", "720h", "How far back ci.risk_min_runs counts recorded runs; must be positive while pruning is on"},
 		{"MAGUS_SHARD", "", "", "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
 		{"MAGUS_N_SHARDS", "", "", "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
 		{"MAGUS_TELEMETRY_ENABLED", "telemetry.enabled", "false", "Turn OTLP export on; magus connects to telemetry.endpoint when true"},

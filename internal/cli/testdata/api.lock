@@ -10,8 +10,6 @@ config cache.size_mb
 config cache.write.enabled
 config ci.max_shards
 config ci.record_runs
-config ci.risk_min_runs
-config ci.risk_window
 config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
@@ -107,7 +105,6 @@ flag affected/open
 flag affected/plan
 flag affected/preflight
 flag affected/race
-flag affected/risk
 flag affected/stdin
 flag affected/step
 flag affected/target

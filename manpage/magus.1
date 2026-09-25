@@ -244,12 +244,6 @@ Cross\-shard concurrency cap at the GHA matrix level; 0 means unlimited (default
 \fBMAGUS_CI_RECORD_RUNS\fR
 Keep the per\-branch run log (which commit a branch passed or failed at) in the history file (default: true). Equivalent magus.yaml key: \fBci.record_runs\fR.
 .TP
-\fBMAGUS_CI_RISK_MIN_RUNS\fR
-Passing recorded runs inside ci.risk_window a (project, target) needs before `magus affected \-\-risk` drops it from a scoped or full gate; 0 turns pruning off (default: 50). Equivalent magus.yaml key: \fBci.risk_min_runs\fR.
-.TP
-\fBMAGUS_CI_RISK_WINDOW\fR
-How far back ci.risk_min_runs counts recorded runs; must be positive while pruning is on (default: 720h). Equivalent magus.yaml key: \fBci.risk_window\fR.
-.TP
 \fBMAGUS_SHARD\fR
 CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github/actions/magus
 .TP

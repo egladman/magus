@@ -98,20 +98,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.CI.RecordRuns = b
 		}
 	}
-	if v := getenv("MAGUS_CI_RISK_MIN_RUNS"); v != "" {
-		if n, err := strconv.Atoi(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_CI_RISK_MIN_RUNS: %w", err))
-		} else {
-			cfg.CI.RiskMinRuns = n
-		}
-	}
-	if v := getenv("MAGUS_CI_RISK_WINDOW"); v != "" {
-		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_CI_RISK_WINDOW: %w", err))
-		} else {
-			cfg.CI.RiskWindow = d
-		}
-	}
 	if v := getenv("MAGUS_VOLATILITY_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_VOLATILITY_ENABLED: %w", err))

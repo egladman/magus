@@ -255,12 +255,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CI_RECORD_RUNS**
 : Keep the per-branch run log (which commit a branch passed or failed at) in the history file (default: true). Equivalent magus.yaml key: **ci.record_runs**.
 
-**MAGUS_CI_RISK_MIN_RUNS**
-: Passing recorded runs inside ci.risk_window a (project, target) needs before \`magus affected --risk\` drops it from a scoped or full gate; 0 turns pruning off (default: 50). Equivalent magus.yaml key: **ci.risk_min_runs**.
-
-**MAGUS_CI_RISK_WINDOW**
-: How far back ci.risk_min_runs counts recorded runs; must be positive while pruning is on (default: 720h). Equivalent magus.yaml key: **ci.risk_window**.
-
 **MAGUS_SHARD**
 : CI matrix shard ID (e.g. "0"); equivalent to magus run --shard; set by .github/actions/magus
 

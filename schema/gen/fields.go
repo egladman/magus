@@ -101,22 +101,6 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a ...",
 	},
 	{
-		GoPath:   "CI.RiskMinRuns",
-		YamlPath: "ci.risk_min_runs",
-		EnvVar:   "MAGUS_CI_RISK_MIN_RUNS",
-		Flag:     fieldtype.FlagNames{Long: "ci-risk-min-runs"},
-		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_CI_RISK_MIN_RUNS: RiskMinRuns is how many recorded affected runs a (project, target) needs, every one of them passing inside RiskWindow...",
-	},
-	{
-		GoPath:   "CI.RiskWindow",
-		YamlPath: "ci.risk_window",
-		EnvVar:   "MAGUS_CI_RISK_WINDOW",
-		Flag:     fieldtype.FlagNames{Long: "ci-risk-window"},
-		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_CI_RISK_WINDOW: RiskWindow is how far back RiskMinRuns counts recorded runs, as a duration (720h is thirty days).",
-	},
-	{
 		GoPath:   "Volatility.Enabled",
 		YamlPath: "volatility.enabled",
 		EnvVar:   "MAGUS_VOLATILITY_ENABLED",
