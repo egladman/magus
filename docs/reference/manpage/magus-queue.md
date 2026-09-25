@@ -127,6 +127,9 @@ apply report what would merge and call nothing on the provider.
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
 
+**--remote-cache-read**
+: Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
+
 **--scratch-env** *NAME=DIR*
 : \`NAME=DIR\` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
 
@@ -167,6 +170,12 @@ apply report what would merge and call nothing on the provider.
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
+
+**--reproduce-gate** *command*
+: The \`command\` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict
+
+**--reproduce-regenerate** *command*
+: The \`command\` validate's --regenerate is given, shown beside --reproduce-gate
 
 **--scratch-env** *NAME=DIR*
 : \`NAME=DIR\` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable

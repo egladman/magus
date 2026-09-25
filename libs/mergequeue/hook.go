@@ -32,11 +32,29 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
-// scrubbed are credentials no hook sees: a gate runs the changes' code, and a token in
-// its environment is a token handed to every author in the queue.
+// scrubbed are the variables no hook sees, since a hook runs the changes' code:
+//
+//   - credentials: a token in a hook's environment is handed to every author in the
+//     queue. The Actions runtime and cache URLs go with the runtime token they serve.
+//   - GitHub Actions' file commands: a line a hook appends to GITHUB_ENV, GITHUB_PATH,
+//     GITHUB_OUTPUT, GITHUB_STATE or GITHUB_STEP_SUMMARY sets a later step's
+//     environment, PATH, outputs or summary. GITHUB_EVENT_PATH is the event a later
+//     action reads as its context.
+//   - where the runner keeps what later steps trust: RUNNER_TEMP holds the file
+//     commands' files, RUNNER_TOOL_CACHE the toolchains setup actions hand later steps,
+//     GITHUB_ACTION_PATH the running action's own files, GITHUB_WORKSPACE the job's
+//     checkout, which a later step uploads from. A hook works in its candidate's.
+//
+// Every other variable GitHub documents is a fact about the run (GITHUB_SHA,
+// GITHUB_REPOSITORY, RUNNER_OS, CI) and stays. Removing a path only unnames it: a hook
+// runs as the runner's user and can find it, so the job running hooks is trusted for
+// nothing after them.
 var scrubbed = []string{
-	"MERGEQUEUE_TOKEN", "GITHUB_TOKEN", "GH_TOKEN",
-	"ACTIONS_RUNTIME_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL",
+	"MERGEQUEUE_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
+	"ACTIONS_RUNTIME_TOKEN", "ACTIONS_RUNTIME_URL", "ACTIONS_RESULTS_URL", "ACTIONS_CACHE_URL",
+	"ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL",
+	"GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT", "GITHUB_STATE", "GITHUB_STEP_SUMMARY", "GITHUB_EVENT_PATH",
+	"RUNNER_TEMP", "RUNNER_TOOL_CACHE", "GITHUB_ACTION_PATH", "GITHUB_WORKSPACE",
 }
 
 // ExitTempFail is EX_TEMPFAIL from sysexits.h: the hook could not run right now (a build
@@ -176,10 +194,16 @@ type hookCommand struct {
 // is killed interruptGrace later. Whatever of the group outlives the hook is killed
 // before Run returns, so no process a hook started runs on into the next hook or past
 // the verdict it led to. A process that left the group itself (setsid) escapes this,
-// and only the machine's own boundary, a CI job's, ends it.
+// and only the machine's own boundary, a CI job's, ends it. An argument
+// [types.CheckUnit] refuses is an error, since Args follow Command's own.
 func (c hookCommand) Run(ctx context.Context) error {
 	if len(c.Command) == 0 {
 		return errors.New("empty command hook")
+	}
+	for _, a := range c.Args {
+		if err := types.CheckUnit(a); err != nil {
+			return fmt.Errorf("%s hook: %w", c.Command[0], err)
+		}
 	}
 	cmd := exec.CommandContext(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args)...)
 	cmd.Dir = c.Dir
@@ -193,10 +217,11 @@ func (c hookCommand) Run(ctx context.Context) error {
 		return err
 	}
 	isolate(cmd)
+	g := &group{cmd: cmd}
 	var killer *time.Timer
 	cmd.Cancel = func() error {
-		killer = time.AfterFunc(interruptGrace, func() { kill(cmd) })
-		return interrupt(cmd)
+		killer = time.AfterFunc(interruptGrace, func() { _ = g.signal(true) })
+		return g.signal(false)
 	}
 	cmd.WaitDelay = interruptGrace + time.Second
 	if err := cmd.Start(); err != nil {
@@ -204,14 +229,32 @@ func (c hookCommand) Run(ctx context.Context) error {
 		return err
 	}
 	out.started()
-	err = cmd.Wait()
+	err = g.wait()
 	if killer != nil {
 		killer.Stop()
 	}
-	// The hook is reaped, but its group id stays taken while any member lives.
-	kill(cmd)
 	out.drain()
 	return err
+}
+
+// group is a started hook's process group, whose id is its leader's process id. Once
+// the leader is reaped that id is free for another process, and a new group, a
+// parallel hook's say, can take it; so no signal is sent to it from then on. wait,
+// per platform, reaps the leader.
+type group struct {
+	cmd    *exec.Cmd
+	mu     sync.Mutex
+	reaped bool
+}
+
+// signal interrupts the group, or kills it, unless its leader is reaped.
+func (g *group) signal(kill bool) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.reaped {
+		return os.ErrProcessDone
+	}
+	return signalGroup(g.cmd, kill)
 }
 
 // hookOutput copies a hook's stdout and stderr to their writers through pipes.
@@ -285,6 +328,24 @@ func (o *hookOutput) drain() {
 	case <-time.After(time.Second):
 	}
 	o.close()
+}
+
+// pathLines is paths one per line, as a hook reads them on stdin. Git allows a line
+// break in a path, which that protocol would read as two paths, so such paths are
+// returned as refused and left out rather than carried.
+func pathLines(paths []string) (lines string, refused []string) {
+	kept := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if strings.ContainsAny(p, "\n\r") {
+			refused = append(refused, p)
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if len(kept) == 0 {
+		return "", refused
+	}
+	return strings.Join(kept, "\n") + "\n", refused
 }
 
 func hookEnviron() []string {
@@ -367,36 +428,46 @@ func isEnvName(s string) bool {
 	return s != ""
 }
 
-// scratchEnv creates each of vars under scratch and returns their assignments.
-func scratchEnv(scratch string, vars []ScratchVar) ([]string, error) {
-	env := make([]string, 0, len(vars))
-	for _, v := range vars {
+// HookEnv is what the queue adds to a gate's or a regeneration's environment.
+type HookEnv struct {
+	// Scratch are pointed into each candidate's scratch directory.
+	Scratch []ScratchVar
+	// Set are NAME=VALUE assignments every hook takes as given. One may name a scrubbed
+	// variable: the runner's value still reaches no hook, and the queue's own, such as a
+	// [CacheReadProxy]'s, is the queue's decision.
+	Set []string
+}
+
+// of creates each scratch variable under scratch and returns every assignment.
+func (e HookEnv) of(scratch string) ([]string, error) {
+	env := make([]string, 0, len(e.Scratch)+len(e.Set))
+	for _, v := range e.Scratch {
 		dir := filepath.Join(scratch, v.Dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
 		env = append(env, v.Name+"="+dir)
 	}
-	return env, nil
+	return append(env, e.Set...), nil
 }
 
 // CommandGate is a [types.Gate] running cmd in a checkout with the units appended as
-// arguments, and vars pointed into the checkout's scratch directory. Exit status 0 is
-// green; anything else the hook's processes do is red. Its output goes to log, each
-// line tagged with the commit gated and its change, or "base" for a commit gated as it
-// stands; a nil log discards it.
-func CommandGate(cmd Command, vars []ScratchVar, log *HookLog) types.Gate {
-	return commandGate{cmd: cmd, vars: vars, log: log}
+// arguments and env added to its environment. Exit status 0 is green; anything else the
+// hook's processes do is red. Its output goes to log, each line tagged with the commit
+// gated and its change, or "base" for a commit gated as it stands; a nil log discards
+// it.
+func CommandGate(cmd Command, env HookEnv, log *HookLog) types.Gate {
+	return commandGate{cmd: cmd, env: env, log: log}
 }
 
 type commandGate struct {
-	cmd  Command
-	vars []ScratchVar
-	log  *HookLog
+	cmd Command
+	env HookEnv
+	log *HookLog
 }
 
 func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
-	env, err := scratchEnv(cand.Scratch, g.vars)
+	env, err := g.env.of(cand.Scratch)
 	if err != nil {
 		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
@@ -418,14 +489,19 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 }
 
 // CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the
-// units appended as arguments, the generated paths on stdin, one per line, and vars
-// pointed into the checkout's scratch directory. A failure of the hook's processes is a
-// *[types.RefusedError] naming the paths: the change did not regenerate.
-func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
+// units appended as arguments, the generated paths on stdin, one per line, and hookEnv
+// added to its environment. A failure of the hook's processes is a
+// *[types.RefusedError] naming the paths: the change did not regenerate. So is a path
+// holding a line break, which the hook is never run for.
+func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
-		env, err := scratchEnv(r.Scratch, vars)
+		env, err := hookEnv.of(r.Scratch)
 		if err != nil {
 			return fmt.Errorf("regenerate %s: %w", r.Change.Label(), err)
+		}
+		stdin, refused := pathLines(r.Paths)
+		if len(refused) > 0 {
+			return &types.RefusedError{Reason: "the regeneration reads one path per line, and " + joinPaths(refused) + " holds a line break", Paths: refused}
 		}
 		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
 		defer out.Close()
@@ -434,7 +510,7 @@ func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.Regen
 			Args:    r.Units,
 			Dir:     r.Dir,
 			Env:     env,
-			Stdin:   strings.NewReader(strings.Join(r.Paths, "\n") + "\n"),
+			Stdin:   strings.NewReader(stdin),
 			Stdout:  out,
 			Stderr:  out,
 		})
@@ -462,6 +538,9 @@ func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.Regen
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
 //	all         stdin: empty
 //	            prints {"units": [unit]}: how the build tool names every unit
+//
+// A path holding a line break is never written: affected answers unbounded for it, and
+// outputs leaves it unclassified, which is source.
 //
 // A failing command is an error, since the hook reads only the base, never the change's
 // code.
@@ -500,11 +579,15 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 	if len(paths) == 0 {
 		return []string{}, "", nil
 	}
+	stdin, refused := pathLines(paths)
+	if len(refused) > 0 {
+		return nil, "the affected hook reads one path per line, and " + joinPaths(refused) + " holds a line break", nil
+	}
 	var ans struct {
 		Affected    []string `json:"affected"`
 		UnboundedBy string   `json:"unbounded_by"`
 	}
-	if err := f.ask(ctx, "affected", "affected #"+c.ID, strings.Join(paths, "\n")+"\n", &ans); err != nil {
+	if err := f.ask(ctx, "affected", "affected #"+c.ID, stdin, &ans); err != nil {
 		return nil, "", err
 	}
 	if ans.Affected == nil && ans.UnboundedBy == "" {
@@ -515,7 +598,10 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 
 func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
 	out := map[string]types.Writes{}
-	if len(paths) == 0 {
+	// A path the hook cannot be asked about stays unclassified, which is source: its
+	// conflicts are the author's, and a review sees it.
+	stdin, _ := pathLines(paths)
+	if stdin == "" {
 		return out, nil
 	}
 	var ans struct {
@@ -523,7 +609,7 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 		Updated    []string `json:"updated"`
 		Maintained []string `json:"maintained"`
 	}
-	if err := f.ask(ctx, "outputs", "outputs", strings.Join(paths, "\n")+"\n", &ans); err != nil {
+	if err := f.ask(ctx, "outputs", "outputs", stdin, &ans); err != nil {
 		return nil, err
 	}
 	mark := func(answered []string, set func(*types.Writes)) {

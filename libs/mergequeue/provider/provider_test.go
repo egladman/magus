@@ -96,7 +96,7 @@ export fun merge_change(io: {str: any}) > any {
 export fun kick_back(io: {str: any}) > bool {
     final paths = io["paths"] ?? [<str>];
     final repro = serialize\Boxed.init(io["reproduce"]);
-    return io["report"] == "report" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c"
+    return io["report"] == "report" and io["claim"] == "exit 1" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c"
         and io["source"] == "o/r/runs/7" and repro.q("gate").stringValue() == "make test" and repro.q("regenerate").stringValue() == ""
         and io["flag"] == "";
 }
@@ -301,7 +301,7 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	assert.Equal(t, types.MergeResult{ByProvider: true}, merged)
 	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other"})
 	require.ErrorContains(t, err, "not merged: head moved")
-	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c",
+	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Claim: "exit 1", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c",
 		Source: "o/r/runs/7", Reproduce: &types.Reproduction{Gate: "make test"}}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))
 	noRepro := kick
