@@ -1222,7 +1222,7 @@ func TestCursorGuardAnnouncesAMissingJq(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 
-	cmd := exec.Command("sh", script)
+	cmd := exec.Command("sh", script, "--agent-name", "cursor")
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"PATH=" + bin, "TMPDIR=" + t.TempDir()}
 	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeShellExecution","command":"rm -rf /","cwd":"/ws"}`)
@@ -2193,6 +2193,246 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 		{`filepath.Join(root, ".claude", "settings.json"),`, false},
 	} {
 		assert.Equal(t, tc.want, hostSpecificLine(tc.line), "hostSpecificLine(%q)", tc.line)
+	}
+}
+
+// environmentDetectionVars are the variables that say WHERE magus runs: which CI system,
+// which runner, which hosting platform or agent host. Reading one to change WHAT magus does
+// (a default, a result, which provider or feature is on) is sniffing; docs/doctrine.md,
+// "Told, never guessed", is the rule.
+//
+// Terminal and interaction variables (TERM, TERM_SESSION_ID, WINDOWID, SSH_TTY and the like)
+// are deliberately absent. They describe the terminal in front of the person, and adapting
+// how magus talks to that terminal (color, links, hover, which prompt it can show, which
+// window a once-only notice belongs to) is the interaction the doctrine keeps. A variable a
+// person sets to state what they want (NO_COLOR, MAGUS_*) is configuration, not detection.
+var environmentDetectionVars = []string{
+	"CI", "GITHUB_ACTIONS", "GITHUB_WORKFLOW_REF", "RUNNER_ENVIRONMENT", "RUNNER_OS",
+	"GITLAB_CI", "BUILDKITE", "CIRCLECI", "TRAVIS", "JENKINS_URL", "JENKINS_HOME",
+	"TEAMCITY_VERSION", "TF_BUILD", "BITBUCKET_BUILD_NUMBER", "CODEBUILD_BUILD_ID", "DRONE",
+	"APPVEYOR", "KUBERNETES_SERVICE_HOST", "container",
+	"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CURSOR_TRACE_ID", "CODEX_SANDBOX",
+}
+
+// environmentDetectionAllowed maps "<path>:<variable>" to why that read is not sniffing.
+// Each entry reads a listed variable as INPUT, after the caller already chose the code that
+// reads it, and switches nothing on it.
+var environmentDetectionAllowed = map[string]string{
+	"spells/github/actions/spell.buzz:GITHUB_WORKFLOW_REF": "input, not detection: the Actions provider, wired only when the workflow asks, reads which workflow's runs last_green_run should search",
+}
+
+// environmentDetectionSkipDirs are trees the rule does not govern: generated output,
+// vendored code, fixtures, and history. docs is scanned, because the agent glue and every
+// example a reader copies live there.
+var environmentDetectionSkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "gen": true, "testdata": true, "blog": true, "releases": true,
+	"manpage": true, "schema": true,
+}
+
+var (
+	environmentDetectionNames = strings.Join(environmentDetectionVars, "|")
+	// A call whose callee spells env or lookup (os.Getenv, os.LookupEnv, os\env, env\get,
+	// a local getenv or envOr) with a listed name as its first argument.
+	environmentDetectionCall = regexp.MustCompile(
+		`(?i:env|lookup)[\w\\]*\s*\(\s*"(` + environmentDetectionNames + `)"\s*[,)]`)
+	environmentDetectionProcessEnv = regexp.MustCompile(
+		`process\.env(?:\.|\[\s*["'])(` + environmentDetectionNames + `)\b`)
+	environmentDetectionShell = regexp.MustCompile(`\$\{?(` + environmentDetectionNames + `)\b`)
+)
+
+// environmentDetectionReads returns every listed variable one line reads.
+func environmentDetectionReads(path, line string) []string {
+	matchers := []*regexp.Regexp{environmentDetectionCall, environmentDetectionProcessEnv}
+	if strings.HasSuffix(path, ".sh") {
+		matchers = append(matchers, environmentDetectionShell)
+	}
+	var names []string
+	for _, re := range matchers {
+		for _, m := range re.FindAllStringSubmatch(line, -1) {
+			names = append(names, m[1])
+		}
+	}
+	return names
+}
+
+// TestNoEnvironmentSniffing fails on any read of a known environment-detection variable
+// outside environmentDetectionAllowed, in Go, Buzz, shell, TypeScript and the docs a reader
+// copies from. Test files are exempt, since a test sets these to prove they are ignored.
+func TestNoEnvironmentSniffing(t *testing.T) {
+	t.Parallel()
+
+	var files []string
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if environmentDetectionSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".test.ts") ||
+			path == "CHANGELOG.md" || path == filepath.Join("docs", "changelog.md") {
+			return nil
+		}
+		switch filepath.Ext(path) {
+		case ".go", ".buzz", ".sh", ".ts", ".js", ".mjs", ".md":
+			files = append(files, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	found := make([][]string, len(files))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, path := range files {
+		g.Go(func() error {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			slashed := filepath.ToSlash(path)
+			for n, line := range strings.Split(string(data), "\n") {
+				for _, name := range environmentDetectionReads(path, line) {
+					if _, ok := environmentDetectionAllowed[slashed+":"+name]; ok {
+						continue
+					}
+					found[i] = append(found[i], fmt.Sprintf("%s:%d: reads %s: %s",
+						slashed, n+1, name, strings.TrimSpace(line)))
+				}
+			}
+			return nil
+		})
+	}
+	require.NoError(t, g.Wait())
+	var violations []string
+	for _, lines := range found {
+		violations = append(violations, lines...)
+	}
+
+	assert.Empty(t, violations,
+		"magus must not detect where it runs (docs/doctrine.md, \"Told, never guessed\").\n"+
+			"Reading one of these variables to pick a default, an output or a provider makes the same\n"+
+			"command behave differently on a laptop, a runner and inside an agent's shell, and nobody\n"+
+			"can see why. Take a flag, a charm or a magus.yaml key instead, and have the caller pass\n"+
+			"it: a workflow sets the variable or passes the flag on purpose. Code that reads one as\n"+
+			"input after the caller chose it, switching nothing on it, goes in\n"+
+			"environmentDetectionAllowed with its reason.\n\nviolations:\n%s",
+		strings.Join(violations, "\n"))
+}
+
+// harnessSpellName reads the one identity a harness spell declares, its mgs_getName().
+func harnessSpellName(t *testing.T, id string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("spells", "harness", id, "spell.buzz"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`export fun mgs_getName\(\) > str \{ return "([^"]+)"; \}`).FindSubmatch(body)
+	require.NotNil(t, m, "spells/harness/%s declares no mgs_getName", id)
+	return string(m[1])
+}
+
+// namedGlue matches a hook command that reaches glue which reads its host from the argv.
+// rehydrate reads none, and is left out on purpose.
+var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.(sh|buzz)|cursor-hook\.sh`)
+
+// hookCommands collects every "command" string in a host's hook config.
+func hookCommands(t *testing.T, path string) []string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var doc any
+	require.NoError(t, json.Unmarshal(body, &doc), "parse %s", path)
+	var out []string
+	var walk func(any)
+	walk = func(node any) {
+		switch v := node.(type) {
+		case map[string]any:
+			if cmd, ok := v["command"].(string); ok {
+				out = append(out, cmd)
+			}
+			for _, child := range v {
+				walk(child)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child)
+			}
+		}
+	}
+	walk(doc)
+	return out
+}
+
+// TestShippedHostConfigsNameTheirHost pins the host name onto every glue command a shipped
+// config carries, as the harness spell's own mgs_getName() renders it. The glue reads the
+// host from that argument and nowhere else, and refuses a call without it (MGS3024), so a
+// config that lost it would refuse every call; one naming another host would answer in
+// that host's dialect. docs/doctrine.md, "Told, never guessed".
+func TestShippedHostConfigsNameTheirHost(t *testing.T) {
+	for _, tc := range []struct{ id, config string }{
+		{"claude-code", filepath.Join(".claude", "settings.json")},
+		{"codex", filepath.Join(".codex", "hooks.json")},
+		{"codex", filepath.Join(hookTemplateDir, "codex-hooks.json")},
+		{"cursor", filepath.Join(".cursor", "hooks.json")},
+	} {
+		want := "--agent-name " + harnessSpellName(t, tc.id)
+		var glue int
+		for _, cmd := range hookCommands(t, tc.config) {
+			if !namedGlue.MatchString(cmd) {
+				continue
+			}
+			glue++
+			assert.Contains(t, cmd, want, "%s: a glue command must name its host", tc.config)
+			assert.Equal(t, 1, strings.Count(cmd, "--agent-name"), "%s: one host per command: %s", tc.config, cmd)
+			assert.NotContains(t, cmd, "AGENT_NAME=", "%s: the host rides on argv, never in the environment", tc.config)
+		}
+		assert.NotZero(t, glue, "%s wires no glue this test recognizes; the matcher stopped matching", tc.config)
+	}
+}
+
+// TestOpenCodePluginNamesTheSpellsHost ties the one host name magus writes by hand, the
+// OpenCode plugin's, to the harness spell that declares it. The plugin is TypeScript that
+// magus does not render, so this is what keeps the two from drifting apart.
+func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
+	name := harnessSpellName(t, "opencode")
+	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
+	require.NoError(t, err)
+	named := regexp.MustCompile(`"--agent-name",\s*"([^"]*)"`).FindAllStringSubmatch(string(body), -1)
+	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
+	for _, m := range named {
+		assert.Equal(t, name, m[1], "opencode-plugin.ts names a host its harness spell does not declare")
+	}
+}
+
+// TestEnvironmentDetectionMatcher grades the matcher against lines, because a tree scan
+// that finds nothing is equally consistent with a matcher that matches nothing.
+func TestEnvironmentDetectionMatcher(t *testing.T) {
+	for _, tc := range []struct {
+		path, line string
+		want       []string
+	}{
+		{"a.go", `if os.Getenv("GITHUB_ACTIONS") == "true" {`, []string{"GITHUB_ACTIONS"}},
+		{"a.go", `v, ok := os.LookupEnv("CI")`, []string{"CI"}},
+		{"a.go", `return getenv("GITHUB_ACTIONS") == "" && getenv("RUNNER_ENVIRONMENT") == ""`, []string{"GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"}},
+		{"a.buzz", `fun in_ci() > bool { return os\env("GITLAB_CI") == "true"; }`, []string{"GITLAB_CI"}},
+		{"a.buzz", `final host = env\get("CLAUDECODE") catch "";`, []string{"CLAUDECODE"}},
+		{"a.ts", `if (process.env.CI) {`, []string{"CI"}},
+		{"a.sh", `[ -n "${CI:-}" ] && exit 0`, []string{"CI"}},
+
+		// The terminal in front of the person is not where magus runs.
+		{"a.go", `return os.Getenv("SSH_TTY") == ""`, nil},
+		{"a.go", `if os.Getenv("TERM") != "dumb" {`, nil},
+		{"a.go", `"ci": "CI", "json": "JSON",`, nil},
+		{"a.go", `os.Getenv("CI_PROVIDER")`, nil},
+		{"a.buzz", `final path = os\env("GITHUB_STEP_SUMMARY");`, nil},
+		{"a.go", `tags: []string{"docker", "container", "image"},`, nil},
+		{"a.buzz", `echo "$CI"`, nil},
+	} {
+		assert.Equal(t, tc.want, environmentDetectionReads(tc.path, tc.line),
+			"environmentDetectionReads(%q, %q)", tc.path, tc.line)
 	}
 }
 

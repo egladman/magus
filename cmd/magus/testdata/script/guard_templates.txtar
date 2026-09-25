@@ -38,7 +38,9 @@
 [!exec:jq] skip 'the guard templates pipe events through jq, which is not installed'
 [windows] skip 'POSIX sh templates; Windows hosts wire the same verdict differently'
 
-env __MAGUS_AGENT_NAME=testscript
+# The host every case below names on its argv, through parity.sh, unless it says
+# otherwise. The name is opaque to magus; codex is the one the templates read.
+env HOST_NAME=testscript
 
 # The shared templates serve these two hosts with the same documented envelope
 # fields and reply dialect. Keep the hosts explicit: TestShellTransportCasesCover-
@@ -230,7 +232,7 @@ env HOST_EVENT_RAW=
 # anyway. A misconfigured entry must not block work, and must not be silent: both halves are
 # asserted below, because either one alone is a shape somebody would settle for.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --not-a-flag
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --not-a-flag
 stderr 'magus-command.buzz: unsupported argument "--not-a-flag"'
 stderr 'judged WITHOUT it'
 stderr 'Supported: --observes-skill-loads'
@@ -242,7 +244,7 @@ stdout 'whole-tree git stash'
 # The remedy line is the only one a misconfigured reader gets, and unquoted it read
 # "unsupported argument ;" with no subject at all.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- ''
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript ''
 stderr 'magus-command.buzz: unsupported argument ""'
 stdout '"permissionDecision":"deny"'
 
@@ -251,7 +253,7 @@ stdout '"permissionDecision":"deny"'
 # Forwarded twice it reached `magus shell` as a repeated flag; deduped, the verdict is the
 # one the single-flag case above already pins.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --observes-skill-loads --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --observes-skill-loads --observes-skill-loads
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 
@@ -331,7 +333,7 @@ cd $WORK
 
 # case: command/deny
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"deny"'
 stdout '"agent_message":"Verify in place'
 stdout 'whole-tree git stash'
@@ -339,25 +341,34 @@ stdout 'whole-tree git stash'
 # case: command/pass
 # Cursor is the one host that must answer on an allow rather than stay silent.
 stdin cursor-shell-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
+
+# case: command/deny
+# The same call under an entry that names no host is refused on the gating event rather
+# than allowed, and says why on both channels (MGS3024).
+stdin cursor-shell-pass.json
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+stdout '"permission":"deny"'
+stdout 'MGS3024'
+stderr 'MGS3024'
 
 # case: command/advise
 # The gating event allows and says nothing, which is all it can do; the same call's
 # postToolUse is what carries the explanation.
 stdin cursor-shell-advise.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'additional_context'
 
 stdin cursor-post-command.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"additional_context":"'
 
 # A postToolUse on a command the rules pass renders a reply Cursor can parse and
 # nothing else. An empty stdout would be a second thing for the host to interpret.
 stdin cursor-post-command-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '\{\}'
 ! stdout 'additional_context'
 
@@ -366,25 +377,25 @@ stdout '\{\}'
 # verdict arrives before the file changes, so a deny is a block rather than a report.
 cd notes-ws
 stdin $WORK/cursor-pre-write-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"deny"'
 stdout 'NOTES store'
 cd $WORK
 
 # case: path/pass
 stdin cursor-pre-write-pass.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 
 # case: path/advise
 # The declared-output rule advises rather than denies, so the gate lets it through
 # and postToolUse delivers the explanation to the model.
 stdin cursor-pre-write-advise.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 
 stdin cursor-post-write.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"additional_context":"'
 stdout 'magus memory put'
 
@@ -392,20 +403,20 @@ stdout 'magus memory put'
 # anything. Cursor's preToolUse fires for every tool, and the shell tool in
 # particular is beforeShellExecution's to judge, and twice would record two verdicts.
 stdin cursor-pre-other.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 
 # sessionEnd records where the work stopped and says nothing at all. A checkpoint
 # is not a verdict, so any reply here would be one the host has to interpret.
 stdin cursor-session-end.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 ! stdout .
 
 # subagentStart records the handed work and always allows. A lease prompt is prose,
 # so nothing judges it; the reshape is what makes Cursor's `task` field legible as
 # the spawn magus records.
 stdin cursor-subagent.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'deny'
 
@@ -442,6 +453,17 @@ exec sh $WORK/parity.sh observe
 ! stdout .
 ! stderr .
 
+# An entry that names no host records nothing and says why, coded, in both forms. Run
+# directly rather than through parity.sh, which refuses any stderr from the Buzz form.
+stdin observe-read.json
+exec sh $__MAGUS_TEMPLATES/magus-observe.sh
+! stdout .
+stderr 'MGS3024'
+stdin observe-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz
+! stdout .
+stderr 'MGS3024'
+
 # --- the two lifecycle wrappers: a stop record and a post-compaction brief ----
 #
 # They carry no verdict either, so the contract gate owes them no case and, until this
@@ -473,6 +495,16 @@ stdin $WORK/observe-garbage.json
 exec sh $WORK/parity.sh checkpoint
 ! stdout .
 ! stderr .
+
+# An entry that names no host records no checkpoint and says why, coded, in both forms.
+stdin $WORK/stop-event.json
+exec sh $__MAGUS_TEMPLATES/magus-checkpoint.sh
+! stdout .
+stderr 'MGS3024'
+stdin $WORK/stop-event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz
+! stdout .
+stderr 'MGS3024'
 
 # It reached magus rather than being silent because it resolved nothing: the checkpoints
 # both forms just recorded are in the session the wrapper named.
@@ -561,7 +593,7 @@ exec sh $WORK/parity.sh path
 # Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
 # pretending otherwise would give false assurance.
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 
 # --- found, but cannot judge: the notice carries its own evidence -------------
@@ -592,7 +624,7 @@ stdout 'unknown subcommand'
 # Cursor's template is self-contained, so it carries the same evidence or none at all.
 env TMPDIR=$WORK/n-stale-cursor
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"allow"'
 stderr 'stale-magus'
 stderr 'v0.0.1-stale'
@@ -643,10 +675,10 @@ env __MAGUS_BIN=$WORK/stale-magus
 # Cursor holds its own notices the same way, on the stderr channel it uses.
 env TMPDIR=$WORK/n-once-cursor
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stderr 'magus guard is NOT running'
 stdin cursor-shell-deny.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 ! stderr 'magus guard is NOT running'
 
 # --- a DENY never goes quiet, whatever any marker says -----------------------
@@ -725,7 +757,7 @@ stdout 'predates approval prompts'
 env HOST_RESPONSE=
 
 # hosts: codex
-env __MAGUS_AGENT_NAME=codex
+env HOST_NAME=codex
 
 # case: command/ask
 # Codex parses a hook ask, marks the hook failed and runs the call, so this file never
@@ -770,19 +802,26 @@ exec sh $WORK/parity.sh command
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 
 # case: command/ask
-# A wiring that forgot __MAGUS_AGENT_NAME, judged on its event's turn_id alone. It still
-# never receives permissionDecision "ask", which Codex would run unasked, and it does NOT
-# get the context arm either: a field test over an untyped envelope is a guess, and the
-# guess that is wrong on Claude Code turns an ask into a note nobody has to act on. An
-# inferred host gets the refusal instead, which is wrong in the direction a person can see.
-env __MAGUS_AGENT_NAME=
+# The payload never overrides the name. The same Codex-shaped event, turn_id and all, under
+# an entry that names a different host gets THAT host's arm: the Claude Code ask. The host
+# is what the configuration says, never what the event looks like.
+env HOST_NAME=testscript
 stdin $WORK/push-command-turn.json
 exec sh $WORK/parity.sh command
-! stdout '"permissionDecision":"ask"'
+stdout '"permissionDecision":"ask"'
 ! stdout '"additionalContext":"pushing'
+
+# case: command/deny
+# An entry that names no host is refused with MGS3024, never defaulted to one host and never
+# inferred from the event. Both forms agree on the reply, so it goes through parity.sh.
+env HOST_NAME=
+stdin $WORK/push-command-turn.json
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
-stdout 'the wiring never said so'
-env __MAGUS_AGENT_NAME=codex
+stdout 'MGS3024'
+stdout 'magus agent harness apply'
+! stdout '"permissionDecision":"ask"'
+env HOST_NAME=codex
 
 # case: command/pass
 # A request magus did not configure is never approved on the guard's say-so.
@@ -843,7 +882,7 @@ stdout '"behavior":"deny"'
 stdout 'workers do not publish'
 
 # hosts: claude-code
-env __MAGUS_AGENT_NAME=testscript
+env HOST_NAME=testscript
 
 # case: command/deny
 # A leased worker runs as its own session, so this refusal is its first and explains itself
@@ -857,7 +896,7 @@ stdout 'workers do not publish'
 
 # case: command/deny
 stdin $WORK/cursor-push.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"deny"'
 stdout 'workers do not publish'
 rm $WORK/home/state/magus/checkouts
@@ -866,7 +905,7 @@ env XDG_STATE_HOME=
 
 # case: command/ask
 stdin $WORK/cursor-push.json
-exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh --agent-name cursor
 stdout '"permission":"ask"'
 stdout 'Approving publishes'
 cd $WORK
@@ -903,11 +942,19 @@ sh_tmp=${TMPDIR:-/tmp}/parity-sh
 bz_tmp=${TMPDIR:-/tmp}/parity-buzz
 mkdir -p "$sh_tmp" "$bz_tmp"
 
+# The host is named on the argv of both forms, as a host config writes it: HOST_NAME is
+# this archive's stand-in for the harness spell's own name. rehydrate reads no host, and
+# the Buzz port would report the argument as unsupported, so it gets none.
+host_args=
+if [ "$surface" != rehydrate ] && [ -n "$HOST_NAME" ]; then
+  host_args="--agent-name $HOST_NAME"
+fi
+
 # Both forms answer the same event, session included, and each declares its own
 # --transport. magus keeps a deny's full text per host, transport and session, so the
 # two are two callers and each hears a rule in full the first time, as two forms wired
 # into one real session would.
-printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/$stem.sh" \
+printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/$stem.sh" $host_args \
   >"$sh_tmp/out" 2>"$sh_tmp/err"
 sh_status=$?
 
@@ -920,7 +967,7 @@ sh_status=$?
 # with an empty tail.
 printf '%s' "$event" |
   TMPDIR=$bz_tmp HOST_EVENT_RAW= __MAGUS_SHELL_FLAGS= \
-  magus buzz -s "$__MAGUS_TEMPLATES/$stem.buzz" -- $__MAGUS_SHELL_FLAGS \
+  magus buzz -s "$__MAGUS_TEMPLATES/$stem.buzz" -- $host_args $__MAGUS_SHELL_FLAGS \
   >"$bz_tmp/out" 2>"$bz_tmp/err"
 bz_status=$?
 

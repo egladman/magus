@@ -44,7 +44,7 @@ contract: functions the remote-cache subsystem detects by name and invokes:
 
 | function                   | when                              | returns                                                        |
 | -------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| `enabled(target, cb)`      | once, before any other call       | is the provider active here? (gates everything)                |
+| `enabled(target, cb)`      | once, before any other call       | is the provider configured? (gates everything)                 |
 | `get_artifact(target, cb)` | on a local-tier miss              | download into `dest`; `true` = hit, `false` = not stored       |
 | `put_artifact(target, cb)` | after a build, and for a backfill | upload `src`; `true` = stored, `false` = already stored        |
 | `has_artifact(target, cb)` | before a backfill (optional)      | is it stored? without downloading; absent = cannot say         |
@@ -66,8 +66,10 @@ Wiring has two parts: the magusfile binds the provider (a spell, i.e. code), and
 `magus.yaml` declares the trust set that secures it (`cache.remote.trusted_keys`, i.e.
 data). The split is deliberate. A trust anchor is declarative config, not build
 logic, so it lives in YAML where it can't branch or compute itself. The spell
-**self-gates** via `enabled()`, so the provider is a no-op anywhere it isn't
-configured (e.g. a developer machine with no credentials):
+**self-gates** via `enabled()` on the configuration it was given, so the provider is a
+no-op anywhere it isn't configured (e.g. a developer machine with no credentials). It
+never gates on detecting where it runs; see
+[Told, never guessed](../../doctrine.md#told-never-guessed):
 
 ```buzz
 // magusfile.buzz
@@ -98,17 +100,17 @@ import "spells/github/actions" as github;
 magus\cache.remote(github);
 ```
 
-It reads everything it needs from the runner environment, all provided
-automatically inside a GitHub Actions job:
+It reads everything it needs from two variables the runner hands to a JavaScript action,
+which the workflow re-exports to its steps
+([how](../../guides/integrations/github-actions.md#remote-caching)):
 
-| variable                | provided by | purpose                                     |
-| ----------------------- | ----------- | ------------------------------------------- |
-| `GITHUB_ACTIONS`        | the runner  | gates the provider (`"true"` only in a job) |
-| `ACTIONS_RESULTS_URL`   | the runner  | cache service (v2) base URL                 |
-| `ACTIONS_RUNTIME_TOKEN` | the runner  | bearer token for the cache service          |
+| variable                | provided by       | purpose                            |
+| ----------------------- | ----------------- | ---------------------------------- |
+| `ACTIONS_RESULTS_URL`   | the workflow step | cache service (v2) base URL        |
+| `ACTIONS_RUNTIME_TOKEN` | the workflow step | bearer token for the cache service |
 
-There is no transport to configure: bind it, and it activates in CI and stays
-dormant locally. You still declare a trust set and set the signing secret as for
+There is no transport to configure: a job that exports them uses the cache, and a job or a
+laptop that does not misses every read and stores nothing. You still declare a trust set and set the signing secret as for
 any provider (see [Signing is required](#signing-is-required-trust-model)). GitHub
 evicts old artifacts on its own (7-day idle / repo size cap).
 

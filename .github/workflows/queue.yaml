@@ -53,6 +53,9 @@ env:
   # PR-controlled mise.toml must not execute config hooks or plugins.
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
+  # Wires the github-actions CI provider in magusfile.buzz (job-log groups and
+  # annotations). magus is told it runs under Actions, never detects it.
+  CI_PROVIDER: github-actions
 
 jobs:
   # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether

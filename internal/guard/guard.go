@@ -198,7 +198,8 @@ type Request struct {
 	Observe bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
-	// The attribution the caller knows about itself. No verdict reads any of it.
+	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
+	// reads only whether installed glue (a non-empty Form) named a Host at all.
 	Host string
 	// Form is the form of the installed hook that called, such as sh or buzz, as that form
 	// declares it (`magus shell --transport`). Two forms wired into one session are two
@@ -259,12 +260,35 @@ type Verdict struct {
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
 }
 
+// hostUnnamed refuses a call from installed hook glue that did not say which agent host
+// it answers. The glue picks the reply its host can parse from that name, so a call
+// without it cannot be answered correctly for any host, and defaulting to one would
+// hand another host a reply it drops, which on some hosts runs the call unguarded.
+//
+// The reason names no form, so the sh and Buzz forms of one template reply alike.
+func hostUnnamed() Verdict {
+	return Verdict{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      "deny",
+		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
+			"this hook did not pass --agent-name, so magus cannot tell which agent host it is "+
+				"answering, and nothing was judged. Run `magus agent harness apply` to rewrite "+
+				"the host's hook configuration; the commands it writes name the host."),
+	}
+}
+
 // Judge evaluates one request against this workspace's rules and reports the verdict.
+//
+// A request from installed glue (Form set) that names no Host is refused with
+// MGS3024 before anything is judged.
 //
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because
 // nothing here saw it.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
+	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
+		return hostUnnamed()
+	}
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}

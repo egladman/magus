@@ -180,9 +180,9 @@ func RegisterOpener(fn func() Annotator) {
 // Every provider is a spell: magus ships no CI syntax of its own, so a
 // workspace opts in by naming one (magus.ci.provider), and adding support
 // for a new system is a spell someone writes rather than a change to
-// magus. A spell that reports itself inactive (the github spell outside
-// Actions) yields Nop, so an unconditional wiring costs nothing
-// elsewhere.
+// magus. A spell that reports itself inactive yields Nop. Neither magus nor
+// a shipped provider detects which CI system is running: the workspace
+// wires a provider when its caller asks for one.
 //
 // Detect hands a provider no destination: a provider spell emits markers with
 // std\print to the real stdout, because a workflow command is only a command if

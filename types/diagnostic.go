@@ -441,6 +441,11 @@ const (
 	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
 	PipeCycle DiagnosticCode = "MGS3023"
+	// HookHostUnnamed is a call from installed hook glue that names no agent host. The
+	// configuration `magus agent harness apply` writes passes the host explicitly, so a
+	// call without one comes from a hand-written or stale config, and it is refused
+	// rather than defaulted to one host.
+	HookHostUnnamed DiagnosticCode = "MGS3024"
 	// ServerProtocolOutdated is a client that reached a magus server, or a per-process pool,
 	// still speaking the socket protocol from before it carried HTTP: a process started by an
 	// older magus. Restarting it is the fix.
@@ -635,8 +640,9 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
-	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed, WritePathClaimUngradable,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, HookHostUnnamed,
+	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
+	PipeUpstreamFailed, WritePathClaimUngradable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

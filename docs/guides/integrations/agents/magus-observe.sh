@@ -20,12 +20,15 @@
 #   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
-#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 #   __MAGUS_BIN  path to the binary, when it is not on PATH
 #
+# REQUIRED argument: `--agent-name <host>`, the host recorded alongside the observation,
+# which the configuration `magus agent harness apply` writes on the command. Without it
+# nothing is recorded and a coded message (MGS3024) goes to stderr: an observation filed
+# under a guessed host would be wrong, and a silent gap would be invisible.
+#
 # The defaults are Claude Code's event shape, matching its two siblings. A
-# different host overrides the dot-paths and passes its own __MAGUS_AGENT_NAME,
-# exactly as codex-hooks.json already does for the guard templates.
+# different host overrides the dot-paths.
 #
 # NO magus-guard-coverage line, and that absence is deliberate rather than an
 # oversight: a coverage declaration states how much of a VERDICT a host can
@@ -33,7 +36,7 @@
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -48,7 +51,18 @@
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
+if [ -z "$agent_name" ]; then
+  printf '%s\n' "magus-observe.sh: [MGS3024] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  exit 0
+fi
 # Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and
 # this file needs it MORE than they do, because it is silent by design. An older PATH copy
 # does not know --observe at all: it rejects the flag, prints its usage to a stream this
@@ -109,7 +123,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/d
 # discarded because a flag-parse error would otherwise reach the host as this
 # hook's response on every read.
 printf '%s' "$path" | "$__MAGUS_BIN" shell --observe \
-  --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" \
+  --agent-name "$agent_name" --session "$session" --transcript "$transcript" \
   --event PreToolUse >/dev/null 2>&1
 
 exit 0

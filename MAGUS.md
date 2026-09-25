@@ -50,7 +50,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `typescript`                                                                                              |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                             |
-| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
+| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `gha`                                                                                                           |
 | module     | built in | `magus query kind=module`     |                                                                                                                             |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1002`                                                                                             |
