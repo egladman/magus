@@ -244,6 +244,20 @@ func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
 	}
 }
 
+// exec runs a relative command from Dir, so the policy checks it there too: checked
+// from this process's directory it would lie outside the workspace and be refused.
+func TestExecChecksARelativeCommandWhereItRuns(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("'sh' not available")
+	}
+	ws := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "tool.sh"), []byte("#!/bin/sh\necho ran\n"), 0o755))
+	p := sandbox.BuildPolicy(sandbox.PolicyOptions{Mode: types.SandboxModeBestEffort, Workspace: ws, Environ: os.Environ(), GOOS: runtime.GOOS})
+	res, err := Exec(sandbox.WithPolicy(t.Context(), p), "./tool.sh", nil, ExecOptions{Dir: ws, Capture: true, Quiet: true})
+	require.NoError(t, err)
+	assert.Equal(t, "ran\n", res.Stdout)
+}
+
 func TestExecWorkdirRespected(t *testing.T) {
 	if _, err := exec.LookPath("pwd"); err != nil {
 		t.Skip("'pwd' not available")
