@@ -118,6 +118,29 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	assert.Equal(t, trail.KindSandboxDenial, events[0].Kind)
 }
 
+// TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox: a workspace that fails to load
+// has no policy to apply, and the script used to run anyway, under none. Breaking the
+// magusfile was a way out of the sandbox.
+func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	opens := countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) {
+		return nil, errors.New("magusfile.buzz:1: broken on purpose")
+	})
+
+	globalCfg.Sandbox.Enabled = true
+	_, err := buzzScriptContext(t.Context(), t.TempDir())
+	require.ErrorIs(t, err, types.WorkspaceLoadFailed)
+	assert.ErrorContains(t, err, "broken on purpose")
+	assert.Equal(t, 1, *opens)
+
+	// Adopted, so the open is attempted with the sandbox off too.
+	globalCfg.Sandbox.Enabled = false
+	_, err = buzzScriptContext(withMagus(t.Context(), nil), t.TempDir())
+	require.NoError(t, err, "with the sandbox off a failed load still only warns")
+	assert.Equal(t, 2, *opens)
+}
+
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.

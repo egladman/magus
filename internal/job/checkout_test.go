@@ -4,13 +4,28 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMain isolates the environment: lease markers live under XDG_STATE_HOME, and the
+// parallel tests here cannot pin it one test at a time.
+func TestMain(m *testing.M) { testkit.Main(m) }
+
+// writeMarker writes content as cacheDir's checkout-wide marker.
+func writeMarker(t *testing.T, cacheDir, content string) {
+	t.Helper()
+	path := MarkerPath(cacheDir)
+	require.NotEmpty(t, path)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
 
 // loadableRoot writes the smallest tree WorkspaceLoadFiles finds something in, and
 // returns it.
@@ -317,6 +332,31 @@ func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
 	}
 }
 
+// TestMarkerLivesOutsideTheCacheDir: the sandbox grants a run its workspace, cache dir
+// included, so a marker there let a confined run rename its own lease, or drop it, for
+// every later run in the checkout. A file a run writes where the marker used to be is now
+// nobody's binding.
+func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Setenv("BAGGAGE", "")
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+	require.NoError(t, BindLease(cacheDir, "wave/worker"))
+	assert.True(t, strings.HasPrefix(MarkerPath(cacheDir), state+string(filepath.Separator)),
+		"the marker is under the state dir: %s", MarkerPath(cacheDir))
+	entries, err := os.ReadDir(cacheDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "binding writes nothing into the cache dir")
+
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte("wave/root\n"), 0o644))
+	lease, from, err := ActingLease(cacheDir, "")
+	require.NoError(t, err)
+	assert.Equal(t, "wave/worker", lease, "a marker-shaped file in the cache dir binds nothing")
+	assert.Equal(t, types.LeaseSourceMarker, from)
+}
+
 // TestLeaseQueryRefusesAMarkerItCannotRead pins that an unreadable binding is an error
 // whatever else answers: reading it as none would hand the call to the claim, which is the
 // one source a worker can rewrite.
@@ -324,7 +364,7 @@ func TestLeaseQueryRefusesAMarkerItCannotRead(t *testing.T) {
 	t.Parallel()
 
 	cacheDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	writeMarker(t, cacheDir, "not a lease id!\n")
 	for name, q := range map[string]LeaseQuery{
 		"with a claim": {Checkout: Checkout{CacheDir: cacheDir}, Claim: "wave/claim"},
 		"with a flag":  {Checkout: Checkout{CacheDir: cacheDir}, Flag: "wave/flag"},
@@ -339,7 +379,7 @@ func TestLeaseQueryRefusesAMarkerItCannotRead(t *testing.T) {
 	}
 
 	unreadable := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(unreadable, LeaseMarkerName), 0o755))
+	require.NoError(t, os.MkdirAll(MarkerPath(unreadable), 0o755))
 	_, _, err := LeaseQuery{Checkout: Checkout{CacheDir: unreadable}}.Resolve()
 	require.Error(t, err, "a marker path that does not read as a file is not an absent marker")
 

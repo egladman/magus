@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 )
 
 // The checkout's own magus cache dir, on both surfaces.
@@ -89,14 +88,14 @@ const advisoryMarkerDirName = "advisories"
 // tool and a shell redirect reach the same bytes.
 func cacheDirDenial(what string) string {
 	return fmt.Sprintf("magus guard denied a write to %s, which is inside this checkout's magus cache dir. magus is the only writer of it.\n\n"+
-		"That directory is not a pile of build leftovers any more. `%s` records which lease this checkout is bound to, `%s/` holds the fire-once advisory markers, the touched-project set, and the served-next journal whose entries pre-authorize commands, and the activity trail, run logs, outputs and locks sit beside them. The guard's verdicts are computed FROM those files, so editing one rewrites the evidence you are being graded by and no later verdict says so.\n\n"+
+		"That directory is not a pile of build leftovers any more. `%s/` holds the fire-once advisory markers, the touched-project set, and the served-next journal whose entries pre-authorize commands, and the activity trail, run logs, outputs and locks sit beside them. The guard's verdicts are computed FROM those files, so editing one rewrites the evidence you are being graded by and no later verdict says so.\n\n"+
 		"The verbs that do what you were probably after:\n"+
 		"  `"+hint.JobExec.With("<job>")+"` takes a job's lease here, and writes the marker for you.\n"+
 		"  `"+hint.Clean.String()+"` removes the declared outputs.\n"+
 		"  `"+hint.QueryOutput.With("<ref>")+"` prints a run's captured log.\n"+
 		"`"+hint.Session.With("hook")+"` maintains its own markers and never needs you to edit them.\n"+
 		"READING in there is fine; it is writing that belongs to magus.",
-		what, job.LeaseMarkerName, advisoryMarkerDirName)
+		what, advisoryMarkerDirName)
 }
 
 // denyCacheDirPath is the path surface: the reason a file write into the cache dir is

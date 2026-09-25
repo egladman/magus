@@ -516,6 +516,72 @@ func TestReloadConfigRoundTrip(t *testing.T) {
 // TestSocketRoutes pins the socket's route table from outside: each operation answers on its
 // own method and path, a wrong method or an unknown /proc/ path is a 404 that runs nothing,
 // and the paths outside /proc/ belong to whatever is mounted, 404 until something is.
+// TestProcRoutesRequireTheToken is the confined-child case: a same-uid process that found
+// the socket but was never handed the token posts a run, and nothing runs. The peer check
+// alone admitted it.
+func TestProcRoutesRequireTheToken(t *testing.T) {
+	var called atomic.Bool
+	srv, err := New(Options{
+		Handler: func(context.Context, []string) error { called.Store(true); return nil },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	ep, err := endpoint.Parse(srv.Addr())
+	require.NoError(t, err)
+
+	for _, token := range []string{"", strings.Repeat("0", len(srv.Token())), srv.Token() + "x"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, socketURL(pathRun),
+			strings.NewReader(`{"args":["run","build"]}`))
+		require.NoError(t, err)
+		if token != "" {
+			req.Header.Set(tokenHeader, token)
+		}
+		resp, err := socketClient(ep).Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "token %q", token)
+	}
+	assert.False(t, called.Load(), "a request without the token must not reach the handler")
+
+	// A client that inherited the socket but not the token, and cannot read the file.
+	t.Setenv(SocketEnv, srv.Addr())
+	t.Setenv(TokenEnv, "wrong")
+	_, err = Forward(t.Context(), []string{"run", "build"}, "test", "")
+	require.ErrorIs(t, err, ErrTokenRefused)
+	assert.False(t, called.Load())
+
+	t.Setenv(TokenEnv, srv.Token())
+	require.NoError(t, os.Remove(tokenPath(ep.Addr)), "the env token must be enough on its own")
+	code, err := Forward(t.Context(), []string{"run", "build"}, "test", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.True(t, called.Load())
+}
+
+// TestTokenFileIsPrivateAndGoesWithTheServer pins the discovery half: a client that found
+// the socket reads the token beside it, the file is this user's alone, and Close removes it.
+func TestTokenFileIsPrivateAndGoesWithTheServer(t *testing.T) {
+	srv, err := New(Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	require.NoError(t, srv.Start())
+	ep, err := endpoint.Parse(srv.Addr())
+	require.NoError(t, err)
+
+	assert.Equal(t, srv.Token(), ReadToken(srv.Addr()))
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(tokenPath(ep.Addr))
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
+	_, err = QueryStatus(t.Context(), srv.Addr())
+	require.NoError(t, err, "a discovering client presents the file's token")
+
+	srv.Close()
+	_, err = os.Stat(tokenPath(ep.Addr))
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
 func TestSocketRoutes(t *testing.T) {
 	var called atomic.Bool
 	srv, err := New(Options{
@@ -532,6 +598,7 @@ func TestSocketRoutes(t *testing.T) {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), method, socketURL(path), strings.NewReader(`{"args":["run","build"]}`))
 		require.NoError(t, err)
+		req.Header.Set(tokenHeader, srv.Token())
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		_ = resp.Body.Close()

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
@@ -52,6 +53,32 @@ func ctxCause(ctx context.Context, err error) error {
 	return err
 }
 
+// ReadToken returns the token the server listening at addr published beside its socket,
+// or "" when there is none to read.
+func ReadToken(addr string) string {
+	ep, err := endpoint.Parse(addr)
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(tokenPath(ep.Addr))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// tokenFor is the token to present to ep: [TokenEnv] when ep is the socket this process
+// inherited, else the file beside the socket. The environment wins because a nested
+// magus under the sandbox may not be granted the socket directory at all.
+func tokenFor(ep endpoint.Endpoint) string {
+	if token := os.Getenv(TokenEnv); token != "" {
+		if inherited, err := endpoint.Parse(os.Getenv(SocketEnv)); err == nil && inherited.Addr == ep.Addr {
+			return token
+		}
+	}
+	return ReadToken(ep.String())
+}
+
 // roundTrip sends req (nil for none) to the server at addr as x and decodes the reply.
 // Errors read "proc: <op>: ...". A refusal carries the server's message rebuilt as the typed
 // error it names (decodeWireError), so errors.Is and NotAdopted see through it; a server on
@@ -82,6 +109,9 @@ func roundTrip[Reply any](ctx context.Context, addr string, x exchange, req any)
 	}
 	if req != nil {
 		hreq.Header.Set("Content-Type", "application/json")
+	}
+	if token := tokenFor(ep); token != "" {
+		hreq.Header.Set(tokenHeader, token)
 	}
 	resp, err := socketClient(ep).Do(hreq)
 	if err != nil {

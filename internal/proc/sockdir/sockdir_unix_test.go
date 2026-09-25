@@ -64,6 +64,26 @@ func TestVerifySockDirMissingIsNotAnError(t *testing.T) {
 	assert.NoError(t, verifySockDir(dir))
 }
 
+// TestDirStaysOutOfTMPDIR: with no runtime dir the sockets go to the user cache dir, not
+// $TMPDIR, because every sandboxed run may write $TMPDIR and so could unlink a socket
+// there and bind its own.
+func TestDirStaysOutOfTMPDIR(t *testing.T) {
+	root := t.TempDir()
+	tmp := filepath.Join(root, "tmp")
+	require.NoError(t, os.Mkdir(tmp, 0o700))
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	cache, err := os.UserCacheDir()
+	require.NoError(t, err)
+
+	dir := Dir()
+	assert.Equal(t, filepath.Join(cache, "magus", "run"), dir)
+	assert.NotContains(t, dir, tmp)
+	require.NoError(t, verifySockDir(dir))
+}
+
 // The wrong-owner case (a directory owned by a different uid) is not covered
 // here: creating one requires privileges this test process does not have, and
 // faking os.Lstat's Sys() result would not exercise the real syscall.Stat_t

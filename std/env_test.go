@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/types"
@@ -155,6 +156,36 @@ func TestEnvSet(t *testing.T) {
 	require.NoError(t, EnvSet(covEnvSandbox("OTHER"), "MAGUS_COV_SET", "smuggled"),
 		"a blocked set reports success; it just does nothing")
 	assert.Equal(t, "after", os.Getenv("MAGUS_COV_SET"))
+}
+
+// TestEnvSetStaysInItsRun is the server case: env\set in one run used to write the process
+// environment, so a second workspace's run in the same server read it and forked with it.
+func TestEnvSetStaysInItsRun(t *testing.T) {
+	t.Setenv("MAGUS_COV_RUN", "process")
+	a, b := environ.With(context.Background()), environ.With(context.Background())
+
+	require.NoError(t, EnvSet(a, "MAGUS_COV_RUN", "a"))
+	require.NoError(t, EnvSet(a, "PATH", "/run-a/bin"))
+	require.NoError(t, EnvUnset(b, "MAGUS_COV_RUN"))
+
+	got, err := EnvGet(a, "MAGUS_COV_RUN")
+	require.NoError(t, err)
+	assert.Equal(t, "a", got)
+	_, found, err := EnvLookup(b, "MAGUS_COV_RUN")
+	require.NoError(t, err)
+	assert.False(t, found, "b's unset is b's alone")
+	got, err = EnvGet(b, "PATH")
+	require.NoError(t, err)
+	assert.NotEqual(t, "/run-a/bin", got, "a's PATH must not reach b")
+
+	all, err := EnvList(a)
+	require.NoError(t, err)
+	assert.Equal(t, "/run-a/bin", all["PATH"])
+	expanded, err := EnvExpand(a, "$MAGUS_COV_RUN")
+	require.NoError(t, err)
+	assert.Equal(t, "a", expanded)
+
+	assert.Equal(t, "process", os.Getenv("MAGUS_COV_RUN"), "the process environment is untouched")
 }
 
 func TestEnvList(t *testing.T) {

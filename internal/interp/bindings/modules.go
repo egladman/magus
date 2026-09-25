@@ -177,7 +177,9 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 		}
 		return cfg.scriptOut
 	}}
-	_ = sess.Provide(env, slices.Concat(buzzstd.Modules, magusModules(cfg.modules))...)
+	_ = sess.Provide(env, buzzstd.Modules...)
+	guardUpstreamStdlib(sess)
+	_ = sess.Provide(env, magusModules(cfg.modules)...)
 }
 
 // registerMagusModules installs the magus module surface a Buzz session sees: Buzz's

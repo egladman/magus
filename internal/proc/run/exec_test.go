@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -258,6 +261,58 @@ func TestExecContextDeadline(t *testing.T) {
 	_, err := Exec(ctx, "sleep", []string{"30"}, ExecOptions{Dir: t.TempDir(), Quiet: true})
 	assert.Error(t, err, "want non-nil error after deadline")
 	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Exec should exit < 2s after deadline")
+}
+
+// TestExecResolvesAgainstTheRunsPATH: a PATH one run set with env\set decides which
+// binary that run starts, and no other run's. exec.LookPath read the process PATH, so a
+// server resolved every run's commands through whichever PATH was last written there.
+func TestExecResolvesAgainstTheRunsPATH(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("lookPath defers to exec.LookPath on windows")
+	}
+	dir := t.TempDir()
+	const tool = "magus-environ-probe"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, tool), []byte("#!/bin/sh\necho found $MAGUS_ENVIRON_VAR\n"), 0o755))
+
+	ctx := environ.With(t.Context())
+	environ.From(ctx).Set("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	environ.From(ctx).Set("MAGUS_ENVIRON_VAR", "x")
+
+	res, err := Exec(ctx, tool, nil, ExecOptions{Dir: dir, Capture: true, Quiet: true})
+	require.NoError(t, err)
+	assert.Equal(t, "found x", strings.TrimSpace(res.Stdout))
+	got, err := LookPath(ctx, tool)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, tool), got)
+
+	_, err = Exec(environ.With(t.Context()), tool, nil, ExecOptions{Dir: dir, Quiet: true})
+	require.ErrorIs(t, err, types.ToolNotOnPath, "another run's PATH does not carry the tool")
+}
+
+// TestChildEnvHoldsTheSandboxFloor: every child of a sandboxed run is told a nested magus
+// must run sandboxed, and an override from the target cannot say otherwise. The cache and
+// state dirs the scrub drops reach it too, so a nested magus reads the same lease marker
+// and job store.
+func TestChildEnvHoldsTheSandboxFloor(t *testing.T) {
+	t.Setenv("MAGUS_CACHE_DIR", "/parent/cache")
+	t.Setenv("XDG_STATE_HOME", "/parent/state")
+	p := &sandbox.Policy{BaseEnv: []string{"PATH=/usr/bin"}}
+	env, _ := childEnv(sandbox.WithPolicy(t.Context(), p), p,
+		[]string{SandboxEnvVar + "=0", "XDG_STATE_HOME=/target/state"})
+
+	var got []string
+	for _, kv := range env {
+		if name, value, _ := strings.Cut(kv, "="); name == SandboxEnvVar {
+			got = append(got, value)
+		}
+	}
+	assert.Equal(t, []string{"1"}, got)
+	assert.Equal(t, "/parent/cache", envValue(env, "MAGUS_CACHE_DIR"))
+	assert.Equal(t, "/target/state", envValue(env, "XDG_STATE_HOME"), "a location the target set wins")
+
+	t.Setenv(SandboxEnvVar, "")
+	env, _ = childEnv(t.Context(), nil, nil)
+	assert.Empty(t, envValue(env, SandboxEnvVar), "an unsandboxed run adds nothing")
 }
 
 func TestExecArgsVerbatim(t *testing.T) {

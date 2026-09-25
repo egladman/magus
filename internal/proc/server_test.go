@@ -3,6 +3,7 @@ package proc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -172,6 +174,32 @@ func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
 	assert.Empty(t, none.Lease)
 }
 
+// TestSandboxFloorCrossesTheWire: a client running sandboxed says so, and the adopted
+// handler sees it, so it can decline rather than run the work unsandboxed. Each run also
+// gets an env overlay of its own.
+func TestSandboxFloorCrossesTheWire(t *testing.T) {
+	srv, err := New(Options{Handler: func(ctx context.Context, args []string) error {
+		if environ.From(ctx) == nil {
+			return errors.New("no env overlay on the adopted run")
+		}
+		if want := args[len(args)-1] == "floor"; SandboxFloorFromContext(ctx) != want {
+			return fmt.Errorf("floor = %v, want %v", !want, want)
+		}
+		return nil
+	}})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	t.Setenv(SocketEnv, srv.Addr())
+
+	code, err := Forward(WithSandboxFloor(t.Context()), []string{"run", "build", "floor"}, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	code, err = Forward(t.Context(), []string{"run", "build", "none"}, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+}
+
 // TestRunWithholdsReportedError pins that a failure the handler already explained does not
 // come back as its sentinel's text. The client PRINTS runReply.Err, so a dispatch that
 // printed a diagnostic and returned a bare "silent exit" would have that phrase reported
@@ -327,6 +355,7 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	body := `{"args":["run","build","x"],"version":"dev-0000000000000000deadbeef","cwd":"/tmp"}`
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, socketURL(pathRun), strings.NewReader(body))
 	require.NoError(t, err)
+	req.Header.Set(tokenHeader, srv.Token())
 	resp, err := socketClient(ep).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

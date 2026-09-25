@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
@@ -426,6 +427,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 // family later meets it without this site changing.
 func TestServedInFiltersForTheActingRole(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cacheDir := t.TempDir()
 	next := []hint.Next{
 		{ID: "run-output", Run: "magus query output out1a2b3c", Argv: []string{"magus", "query", "output", "out1a2b3c"}},
@@ -435,7 +437,8 @@ func TestServedInFiltersForTheActingRole(t *testing.T) {
 	served := ServedIn(cacheDir, t.TempDir())(next)
 	require.Len(t, served, 2, "an unbound reader keeps the lot")
 
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "lease"), []byte("harness/reviewer\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
+	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("harness/reviewer\n"), 0o644))
 	served = ServedIn(cacheDir, t.TempDir())(next)
 	ids := make([]string, len(served))
 	for i, n := range served {
