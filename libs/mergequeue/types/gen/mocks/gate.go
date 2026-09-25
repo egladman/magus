@@ -39,8 +39,8 @@ func (_m *MockGate) EXPECT() *MockGate_Expecter {
 }
 
 // Validate provides a mock function for the type MockGate
-func (_mock *MockGate) Validate(ctx context.Context, cand types.Candidate, onto string, c types.Change) (types.GateResult, error) {
-	ret := _mock.Called(ctx, cand, onto, c)
+func (_mock *MockGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
+	ret := _mock.Called(ctx, cand, units)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Validate")
@@ -48,16 +48,16 @@ func (_mock *MockGate) Validate(ctx context.Context, cand types.Candidate, onto 
 
 	var r0 types.GateResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Candidate, string, types.Change) (types.GateResult, error)); ok {
-		return returnFunc(ctx, cand, onto, c)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Candidate, []string) (types.GateResult, error)); ok {
+		return returnFunc(ctx, cand, units)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Candidate, string, types.Change) types.GateResult); ok {
-		r0 = returnFunc(ctx, cand, onto, c)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Candidate, []string) types.GateResult); ok {
+		r0 = returnFunc(ctx, cand, units)
 	} else {
 		r0 = ret.Get(0).(types.GateResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, types.Candidate, string, types.Change) error); ok {
-		r1 = returnFunc(ctx, cand, onto, c)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, types.Candidate, []string) error); ok {
+		r1 = returnFunc(ctx, cand, units)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -72,13 +72,12 @@ type MockGate_Validate_Call struct {
 // Validate is a helper method to define mock.On call
 //   - ctx context.Context
 //   - cand types.Candidate
-//   - onto string
-//   - c types.Change
-func (_e *MockGate_Expecter) Validate(ctx interface{}, cand interface{}, onto interface{}, c interface{}) *MockGate_Validate_Call {
-	return &MockGate_Validate_Call{Call: _e.mock.On("Validate", ctx, cand, onto, c)}
+//   - units []string
+func (_e *MockGate_Expecter) Validate(ctx interface{}, cand interface{}, units interface{}) *MockGate_Validate_Call {
+	return &MockGate_Validate_Call{Call: _e.mock.On("Validate", ctx, cand, units)}
 }
 
-func (_c *MockGate_Validate_Call) Run(run func(ctx context.Context, cand types.Candidate, onto string, c types.Change)) *MockGate_Validate_Call {
+func (_c *MockGate_Validate_Call) Run(run func(ctx context.Context, cand types.Candidate, units []string)) *MockGate_Validate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -88,19 +87,14 @@ func (_c *MockGate_Validate_Call) Run(run func(ctx context.Context, cand types.C
 		if args[1] != nil {
 			arg1 = args[1].(types.Candidate)
 		}
-		var arg2 string
+		var arg2 []string
 		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 types.Change
-		if args[3] != nil {
-			arg3 = args[3].(types.Change)
+			arg2 = args[2].([]string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -111,7 +105,7 @@ func (_c *MockGate_Validate_Call) Return(gateResult types.GateResult, err error)
 	return _c
 }
 
-func (_c *MockGate_Validate_Call) RunAndReturn(run func(ctx context.Context, cand types.Candidate, onto string, c types.Change) (types.GateResult, error)) *MockGate_Validate_Call {
+func (_c *MockGate_Validate_Call) RunAndReturn(run func(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error)) *MockGate_Validate_Call {
 	_c.Call.Return(run)
 	return _c
 }

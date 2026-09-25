@@ -18,6 +18,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
+- **The agent guard refuses a backtick command substitution.** Inside double quotes a
+  backtick runs a command, so a literal backtick in a pattern pairs with the next one and
+  swallows everything between, file operands included. The deny names the fixes: `$(...)`
+  for a substitution, single quotes for a literal backtick.
 - **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
   other clients of the protocol it runs share the target's slots instead of
   choosing a width of their own. A target that declares no `slots` is unchanged.
@@ -67,6 +71,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   compression and shell completion tests now run only under it.
 - **A failing remote tier degrades the run to the local tier.** The first failure is
   reported and counted as failed, never missed, and the run stops asking.
+- **The agent guard refuses a filter that nothing feeds.** A `grep`, `sed`, `jq`, `head`,
+  `tr` or similar with no file operand, no pipe into it and no input redirect reads the
+  harness's stdin, which can hang past the tool timeout. Each tool's flags are modeled, and
+  a call the guard cannot classify passes.
 - **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
   `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
   `--embedded` for magusfile code.
@@ -138,6 +146,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   carries a `stdio` credential holding `mcp=write`, and every MCP tool call, over either
   transport, is refused below that with MGS9015.
 - **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
+- **A `pipe` Buzz module makes `magus buzz <script>` a stage of a magus pipe.** A
+  script reads the records of the run before it with `pipe\more`, `pipe\next` and
+  `pipe\all`, and `pipe\emit` writes records for the stage after it, so `magus run test .
+  | magus buzz failures.buzz` replaces `| grep FAIL`. Its exit status counts like any
+  stage's.
+- **Magus stages in a pipe trade typed records, and projects flow forward.** A run
+  whose stdout another magus reads writes its `-o jsonl` records there and its prose
+  on stderr, so `magus run format libs/x | magus run lint | magus run test` runs all
+  three on libs/x. Named projects still win; an explicit `-o` keeps its format.
 - **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
   `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
   turns into a token. magus runs none of it. `apply` refuses a status pinned to another
@@ -264,6 +281,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
   `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
   `cache.Open` reads no environment.
+- **Breaking: `magus queue apply` requires `--base`, and `--workflow` with a run
+  source.** Verdicts no longer carry `message`, and a provider's `list_artifacts`
+  returns the run's origin as `run`; a provider script without it is refused.
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
   without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
   matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
@@ -425,11 +445,19 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
   key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
   the hook form; the shipped sh and Buzz command and path hooks pass `sh` and `buzz`.
+- **A pipe of magus runs fails at its first failed stage, without `set -o pipefail`.**
+  A run starts nothing once a magus stage upstream of it has failed, and the last
+  stage exits with that stage's status (MGS3030), so `magus run generate:rw . | magus
+  run test .` is a chain whose exit status can be trusted.
 - **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
   a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
   the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
   caller's grant. Every mint is audited, and a revoked token ends its open streams.
 - **The PR advice comment leads with files no project claims.**
+- **The merge queue kicks back stale generated files before its gate runs.** A change
+  that edits generator code must commit outputs that are current on top of the base. If
+  they are stale, the kick-back names the stale files and says how to fix them. If they are
+  current, the change merges.
 - **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
   `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
   package leaves the command alone.
@@ -499,6 +527,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
   are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
   forking its spell's import path instead.
+- **Breaking: `magus run --then` and `magus affected --then`, with no alias.** Pipe the
+  run into a `magus buzz` script instead: `pipe\outputs`, `pipe\exportTo`,
+  `pipe\history`, `pipe\diff` and `pipe\value` act on the records it reads, and
+  `fs\readFile` and `crypto\sha256File` cover `contents` and `hash`.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
 - **The `preflight` target convention.** The starter magusfile and the docs no longer
@@ -664,6 +696,19 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A global flag's value (`magus --root . agent harness apply`) or a single-dash word with
   an `h` (`-o=template=hi`) hid the command from the guard. A spawn title naming a job
   outside the spawner's own lease tree is recorded as untrusted and attributes nothing.
+- **`magus queue apply` follows only the base's own validation run.** A pull
+  request's run executes its own copy of the queue workflow and could upload a forged
+  plan and verdicts that merged ungated. Apply now refuses any run but `--workflow`
+  started by a push or dispatch on `--base` of its repository (MGS3027), and
+  `queue-apply.yaml` dispatches main's run instead.
+- **`magus queue apply` checks the plan against what it reads itself.** A plan naming
+  another base or remote, a base commit the base lacks, or a stack base that is not
+  the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
+  a revert of the base. Apply writes the squash message itself.
+- **Breaking: no job holding a secret or a write token restores an Actions cache.** A
+  merge queue hook can read the runner's runtime token and plant cache entries in the
+  default branch's scope, so trusted jobs now install cold. `setup-magus` restores run
+  history only with `restore-history: 'true'`. A conventions test enforces both.
 
 ## [v0.4.3] - 2026-09-06
 

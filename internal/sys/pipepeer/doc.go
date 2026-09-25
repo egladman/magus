@@ -13,6 +13,7 @@ package pipepeer
 import (
 	"errors"
 	"os"
+	"slices"
 )
 
 // ErrNotPipe is returned for a descriptor that is not a pipe: a terminal, a regular
@@ -43,4 +44,31 @@ func SameExecutable(pid int) bool {
 		return false
 	}
 	return os.SameFile(theirs, ours)
+}
+
+// ExecPending reports whether pid runs the same executable file as its parent with the
+// same arguments, which is what a child looks like between fork and exec: a shell's
+// pipeline stage, or any other process's child that briefly holds a copy of every
+// descriptor its parent had. What such a process runs proves nothing yet; a caller
+// asking what a pipe's peer runs skips it and asks again.
+func ExecPending(pid int) bool {
+	parent, err := Parent(pid)
+	if err != nil || parent <= 0 {
+		return false
+	}
+	theirs, err := executable(pid)
+	if err != nil {
+		return false
+	}
+	parents, err := executable(parent)
+	if err != nil || !os.SameFile(theirs, parents) {
+		return false
+	}
+	// Arguments that cannot be read prove no exec either, so they count as pending.
+	args, err := Args(pid)
+	if err != nil {
+		return true
+	}
+	parentArgs, err := Args(parent)
+	return err != nil || slices.Equal(args, parentArgs)
 }

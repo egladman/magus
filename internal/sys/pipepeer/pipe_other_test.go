@@ -17,7 +17,13 @@ func TestPipeProofUnsupported(t *testing.T) {
 	if _, err := (Pipe{}).Writers(); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("Writers error = %v, want ErrUnsupported", err)
 	}
-	if (Pipe{}).WrittenBy(os.Getpid()) || SameExecutable(os.Getpid()) {
+	if _, err := WriteEnd(os.Getpid(), 1); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("WriteEnd error = %v, want ErrUnsupported", err)
+	}
+	if _, err := (Pipe{}).Readers(); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("Readers error = %v, want ErrUnsupported", err)
+	}
+	if (Pipe{}).WrittenBy(os.Getpid()) || (Pipe{}).ReadBy(os.Getpid()) || SameExecutable(os.Getpid()) || ExecPending(os.Getpid()) {
 		t.Errorf("an unsupported platform proved a peer")
 	}
 }

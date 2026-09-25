@@ -37,21 +37,6 @@ import (
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Kept before anything reshapes them: --detach re-submits this invocation verbatim.
 	origArgs := args
-	// Same grammar as `magus run`: the chain is split off the RAW args, before
-	// anything partitions or reorders them. affected is the CI-facing twin, and CI
-	// is exactly where "what did this produce" needs answering.
-	args, chainArgs, chained := splitOnThen(args)
-
-	// Parsed before the run, for the same reason `magus run` does: a typo'd verb must
-	// not cost a full CI pipeline before it is rejected.
-	var chain chainPlan
-	if chained {
-		var proceed bool
-		var chainErr error
-		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
-			return chainErr
-		}
-	}
 
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
@@ -194,7 +179,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		sink, closeSink, err := openRunSink(m, opts)
+		sink, closeSink, err := openRunSink(ctx, m, opts)
 		if err != nil {
 			return err
 		}
@@ -253,7 +238,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(m, opts)
+	sink, closeSink, err := openRunSink(ctx, m, opts)
 	if err != nil {
 		return err
 	}
@@ -284,7 +269,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	sink.EmitScope(ctx, scopeLabel, "")
+	sink.EmitScope(ctx, scopeLabel, "", scopePaths(targets))
 	sink.EmitBase(ctx, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
@@ -402,9 +387,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 
-	if chained {
-		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))
-	}
+	sink.RecordValues(target, readReturns(target))
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target),

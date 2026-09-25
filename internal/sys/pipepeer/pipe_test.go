@@ -139,6 +139,76 @@ func TestPipeWritersIgnoresReaders(t *testing.T) {
 	}
 }
 
+func TestPipeReadersFindsTheProcessReadingStdout(t *testing.T) {
+	r, w := blockingPipe(t)
+	reader := exec.Command("sleep", "5")
+	reader.Stdin = r
+	start(t, reader)
+	writer := exec.Command("sleep", "5")
+	writer.Stdout = w
+	start(t, writer)
+	_ = r.Close()
+
+	p, err := WriteEnd(os.Getpid(), int(w.Fd()))
+	if err != nil {
+		t.Fatalf("WriteEnd: %v", err)
+	}
+	got, err := p.Readers()
+	if err != nil {
+		t.Fatalf("Readers: %v", err)
+	}
+	if !slices.Equal(got, []int{reader.Process.Pid}) {
+		t.Fatalf("Readers() = %v, want only reader %d", got, reader.Process.Pid)
+	}
+	if p.ReadBy(writer.Process.Pid) || p.ReadBy(os.Getpid()) {
+		t.Fatalf("ReadBy counted a process holding only the write end")
+	}
+}
+
+func TestWriteEndRejectsNonPipes(t *testing.T) {
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devnull.Close()
+	if _, err := WriteEnd(os.Getpid(), int(devnull.Fd())); !errors.Is(err, ErrNotPipe) {
+		t.Fatalf("WriteEnd(devnull) error = %v, want ErrNotPipe", err)
+	}
+}
+
+// A re-exec of this test binary with its own argv, run under PIPEPEER_FORK_TWIN, stands
+// in for a fork that has not exec'd yet: it sleeps before any test can run.
+func init() {
+	if os.Getenv("PIPEPEER_FORK_TWIN") == "1" {
+		time.Sleep(5 * time.Second)
+		os.Exit(0)
+	}
+}
+
+func TestExecPending(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	twin := exec.Command(exe)
+	twin.Args = slices.Clone(os.Args)
+	twin.Env = append(os.Environ(), "PIPEPEER_FORK_TWIN=1")
+	start(t, twin)
+	// The same executable with other arguments has exec'd a command of its own.
+	other := start(t, helper(t, exe))
+	sleeper := start(t, exec.Command("sleep", "5"))
+	time.Sleep(100 * time.Millisecond)
+	if !ExecPending(twin.Process.Pid) {
+		t.Errorf("ExecPending(child with its parent's executable and argv) = false")
+	}
+	if ExecPending(other.Process.Pid) {
+		t.Errorf("ExecPending(child with its parent's executable and its own argv) = true")
+	}
+	if ExecPending(sleeper.Process.Pid) {
+		t.Errorf("ExecPending(sleep) = true")
+	}
+}
+
 func TestReadEndRejectsNonPipes(t *testing.T) {
 	file, err := os.Create(filepath.Join(t.TempDir(), "plan.json"))
 	if err != nil {

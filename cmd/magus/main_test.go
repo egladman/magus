@@ -468,11 +468,6 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 			want:  []string{"Usage: magus buzz", "-e <code>", "-t, -test", "--embedded", "--no-autoload", "lsp"},
 		},
 		{
-			name:  "chain",
-			print: chainUsage,
-			want:  []string{"--then", "outputs export --path <dir>", "file <path> history", "file <path> diff", "value"},
-		},
-		{
 			name:  "completion",
 			print: completionUsage,
 			want:  []string{"Usage: magus completion", "bash", "zsh", "fish", "powershell"},
