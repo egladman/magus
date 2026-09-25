@@ -133,7 +133,11 @@ test("selects the named VCS-neutral command-deny scenario", () => {
 
 test("the disposable probe stores the raw hook response and structured exit evidence", () => {
   assert.match(probeScript, /sh "\$2" --agent-name "\$1" > "\$MAGUS_HOST_E2E_RESPONSE"/);
-  assert.doesNotMatch(probeScript, /AGENT_NAME=/, "the host rides on argv, never in the environment");
+  assert.doesNotMatch(
+    probeScript,
+    /AGENT_NAME=/,
+    "the host rides on argv, never in the environment",
+  );
   assert.match(probeScript, /MAGUS_HOST_E2E_TRACE/);
   assert.match(probeScript, /"transport":"shell"/);
   assert.match(probeScript, /cat "\$MAGUS_HOST_E2E_RESPONSE"/);
