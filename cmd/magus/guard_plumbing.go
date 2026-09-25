@@ -70,13 +70,13 @@ func guardDependencies() guard.Dependencies {
 	// breaking the working tree must not be able to turn off.
 	deps.LoadFailure = loadErr
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
-		return magus.ApprovedSpawnRuleAt(ctx, root)
+		return magus.LoadApprovedSpawnRule(ctx, root)
 	}
 	deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
-		return magus.ApprovedCommandRuleAt(ctx, root)
+		return magus.LoadApprovedCommandRule(ctx, root)
 	}
 	deps.ApprovedWriteRule = func(ctx context.Context) (workspace.WriteRule, error) {
-		return magus.ApprovedWriteRuleAt(ctx, root)
+		return magus.LoadApprovedWriteRule(ctx, root)
 	}
 	return deps
 }
