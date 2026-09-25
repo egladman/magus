@@ -4,9 +4,13 @@ package run
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -46,17 +50,42 @@ func TestAGroupIsKilledBeforeItsLeaderIsReapedAndNeverAfter(t *testing.T) {
 }
 
 // A background process a command leaves behind dies with it, and Exec returns at the
-// command's exit rather than when that process lets go of the output it inherited.
+// command's exit rather than when that process lets go of the output it inherited. The
+// shell forks the sleep before it prints, so no fork is in flight when the group dies.
 func TestExecKillsWhatOutlivesTheChild(t *testing.T) {
-	dir := t.TempDir()
 	start := time.Now()
-	res, err := Exec(context.Background(), "sh", []string{"-c", `(sleep 2; touch late) & echo started`},
-		ExecOptions{Dir: dir, Capture: true, Quiet: true})
+	res, err := Exec(context.Background(), "sh", []string{"-c", `sleep 30 & echo $!`},
+		ExecOptions{Capture: true, Quiet: true})
 	require.NoError(t, err)
-	assert.Equal(t, "started\n", res.Stdout)
 	assert.Less(t, time.Since(start), time.Second, "Exec waited on the orphan's copy of stdout")
-	time.Sleep(2500 * time.Millisecond)
-	assert.NoFileExists(t, filepath.Join(dir, "late"))
+	pid, err := strconv.Atoi(strings.TrimSpace(res.Stdout))
+	require.NoError(t, err)
+	gone := func() bool { return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) }
+	if !assert.Eventually(t, gone, time.Second, 10*time.Millisecond, "the background sleep outlived Exec") {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+}
+
+// Members that fork without pause all die with the group, wherever their forks fall
+// against the kill.
+func TestKillGroupLeavesNoMemberAlive(t *testing.T) {
+	deadline := time.Now().Add(30 * time.Second)
+	for round := 0; round < 25 && time.Now().Before(deadline); round++ {
+		cmd := exec.Command("sh", "-c", `for i in 1 2 3 4; do (while :; do : & wait; done) & done; sleep 0.05`)
+		SetupProcessGroup(cmd)
+		require.NoError(t, cmd.Start())
+		pgid := cmd.Process.Pid
+		require.NoError(t, awaitExit(pgid))
+		killGroup(pgid)
+		_ = cmd.Wait()
+		// With the leader reaped, the group lasts only as long as a member does, so a
+		// signal to it cannot reach another group until it reports ESRCH.
+		empty := func() bool { return errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH) }
+		if !assert.Eventually(t, empty, 2*time.Second, 5*time.Millisecond, "round %d: a member outlived the group kill", round) {
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			return
+		}
+	}
 }
 
 // A cancelled child gets CancelGrace to stop after SIGTERM, and its group dies with it
