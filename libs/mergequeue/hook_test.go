@@ -145,7 +145,7 @@ func TestAHookSeesOnlyWhatTheSandboxAllows(t *testing.T) {
 	t.Setenv("PASSED", "p")
 	t.Setenv("GLOB_X", "g")
 	dir, scratch := t.TempDir(), t.TempDir()
-	env := HookEnv{Passthrough: []string{"PASSED", "GLOB_*"}, Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}}, Set: []string{"SET=s"}}
+	env := HookEnv{Passthrough: []string{"PASSED", "GLOB_*"}, Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}}, Fixed: []string{"SET=s"}}
 	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
 	require.NoError(t, err)
 	seen := seenEnv(t, dir)
@@ -158,24 +158,20 @@ func TestAHookSeesOnlyWhatTheSandboxAllows(t *testing.T) {
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
 	assert.Equal(t, "s", seen["SET"])
-	allowed := slices.Concat(sandboxenv.DefaultAllow(), []string{"PASSED", "GLOB_X", "GOCACHE", "SET", "MAGUS_SANDBOX_ENABLED", "MAGUS_SANDBOX_REQUIRED"},
+	allowed := slices.Concat(sandboxenv.DefaultAllow(), []string{"PASSED", "GLOB_X", "GOCACHE", "SET"},
 		[]string{"SHLVL", "_", "OLDPWD"}) // what sh sets itself
 	for name := range seen {
 		assert.Contains(t, allowed, name, "%s reaches the hook", name)
 	}
 }
 
-// Every hook runs the magus it starts sandboxed and required, whatever the job's
-// environment, the passthrough, --scratch-env or the queue's own variables say.
-func TestEveryHookIsForcedIntoTheSandbox(t *testing.T) {
-	t.Setenv("MAGUS_SANDBOX_ENABLED", "0")
-	t.Setenv("MAGUS_SANDBOX_REQUIRED", "0")
-	env := HookEnv{
-		Passthrough: []string{"MAGUS_*"},
-		Scratch:     []ScratchVar{{Name: "MAGUS_SANDBOX_ENABLED", Dir: "x"}},
-		Set:         []string{"MAGUS_SANDBOX_REQUIRED=0"},
-	}
-	record := script(`echo "$MAGUS_SANDBOX_ENABLED $MAGUS_SANDBOX_REQUIRED" > seen; echo '{"units": ["//..."]}'`)
+// Every kind of hook takes the same HookEnv: a passthrough name and a fixed assignment
+// reach a gate, a regeneration and a facts hook alike, over the queue's own value.
+func TestEveryHookTakesItsHookEnv(t *testing.T) {
+	t.Setenv("PASSED", "p")
+	t.Setenv("FIXED", "queue")
+	env := HookEnv{Passthrough: []string{"PASSED", "FIXED"}, Fixed: []string{"FIXED=f"}}
+	record := script(`echo "$PASSED $FIXED" > seen; echo '{"units": ["//..."]}'`)
 	ctx := context.Background()
 
 	gated := t.TempDir()
@@ -184,13 +180,13 @@ func TestEveryHookIsForcedIntoTheSandbox(t *testing.T) {
 	regenerated := t.TempDir()
 	require.NoError(t, CommandRegenerate(record, env, nil)(ctx, types.Regeneration{Dir: regenerated, Scratch: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
 	asked := t.TempDir()
-	_, err = CommandFacts(record, asked, env.Passthrough, nil).AllUnits(ctx)
+	_, err = CommandFacts(record, asked, env, nil).AllUnits(ctx)
 	require.NoError(t, err)
 
 	for _, dir := range []string{gated, regenerated, asked} {
 		seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 		require.NoError(t, err)
-		assert.Equal(t, "1 1\n", string(seen), dir)
+		assert.Equal(t, "p f\n", string(seen), dir)
 	}
 }
 
@@ -297,15 +293,13 @@ func TestParseScratchVarRefusesWhatWouldLeaveTheScratchDirectory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ScratchVar{Name: "MAGUS_CACHE_DIR", Dir: "magus/c"}, got)
 	for spec, want := range map[string]string{
-		"GOCACHE":                  "is not NAME=DIR",
-		"GOCACHE=":                 "is not NAME=DIR",
-		"1X=d":                     "is not NAME=DIR",
-		"A-B=d":                    "is not NAME=DIR",
-		"MAGUS_SANDBOX_ENABLED=d":  "the queue sets MAGUS_SANDBOX_ENABLED for every hook",
-		"MAGUS_SANDBOX_REQUIRED=d": "the queue sets MAGUS_SANDBOX_REQUIRED for every hook",
-		"GOCACHE=../out":           "../out leaves the scratch directory",
-		"GOCACHE=/tmp/go":          "/tmp/go leaves the scratch directory",
-		"GOCACHE=a/../../escape":   "a/../../escape leaves the scratch directory",
+		"GOCACHE":                "is not NAME=DIR",
+		"GOCACHE=":               "is not NAME=DIR",
+		"1X=d":                   "is not NAME=DIR",
+		"A-B=d":                  "is not NAME=DIR",
+		"GOCACHE=../out":         "../out leaves the scratch directory",
+		"GOCACHE=/tmp/go":        "/tmp/go leaves the scratch directory",
+		"GOCACHE=a/../../escape": "a/../../escape leaves the scratch directory",
 	} {
 		_, err := ParseScratchVar(spec)
 		require.ErrorContains(t, err, want, spec)
@@ -333,7 +327,7 @@ var facts = script(`case "$1" in
 
 func TestCommandFactsGetTheFactAskedForAsTheirArgument(t *testing.T) {
 	// magus affected --plan prints a shard plan with affected and unbounded_by beside it.
-	got, unboundedBy, err := CommandFacts(facts, t.TempDir(), nil, nil).Affected(context.Background(), hookChange, []string{"app/main.go"})
+	got, unboundedBy, err := CommandFacts(facts, t.TempDir(), HookEnv{}, nil).Affected(context.Background(), hookChange, []string{"app/main.go"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"app"}, got)
 	assert.Empty(t, unboundedBy)
@@ -341,14 +335,14 @@ func TestCommandFactsGetTheFactAskedForAsTheirArgument(t *testing.T) {
 
 func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
 	ctx := context.Background()
-	_, unboundedBy, err := CommandFacts(script(`echo '{}'`), t.TempDir(), nil, nil).Affected(ctx, hookChange, []string{"x"})
+	_, unboundedBy, err := CommandFacts(script(`echo '{}'`), t.TempDir(), HookEnv{}, nil).Affected(ctx, hookChange, []string{"x"})
 	require.NoError(t, err)
 	assert.Equal(t, "the affected hook printed no affected set", unboundedBy)
 
-	_, _, err = CommandFacts(script(`exit 3`), t.TempDir(), nil, nil).Affected(ctx, hookChange, []string{"x"})
+	_, _, err = CommandFacts(script(`exit 3`), t.TempDir(), HookEnv{}, nil).Affected(ctx, hookChange, []string{"x"})
 	require.EqualError(t, err, "affected hook: exited 3")
 
-	got, unboundedBy, err := CommandFacts(script(`exit 3`), t.TempDir(), nil, nil).Affected(ctx, hookChange, nil)
+	got, unboundedBy, err := CommandFacts(script(`exit 3`), t.TempDir(), HookEnv{}, nil).Affected(ctx, hookChange, nil)
 	require.NoError(t, err, "a change touching nothing is not asked about")
 	assert.Equal(t, []string{}, got)
 	assert.Empty(t, unboundedBy)
@@ -356,7 +350,7 @@ func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
 
 // A facts command that answers only "outputs" declares no update and maintains nothing.
 func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
-	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"]}'`), t.TempDir(), nil, nil).Classify(context.Background(), []string{"gen/a", ".gitattributes"})
+	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"]}'`), t.TempDir(), HookEnv{}, nil).Classify(context.Background(), []string{"gen/a", ".gitattributes"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}}, writes)
 }
@@ -364,7 +358,7 @@ func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
 func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	f := CommandFacts(facts, dir, nil, nil)
+	f := CommandFacts(facts, dir, HookEnv{}, nil)
 	writes, err := f.Classify(ctx, []string{"gen/a", "src/b", "docs/b.md", ".gitattributes"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true, Updated: true}, "docs/b.md": {Updated: true}, ".gitattributes": {Maintained: true}}, writes,
@@ -382,7 +376,7 @@ func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"//..."}, all, "the build tool's own spelling of every unit")
 
-	_, err = CommandFacts(script(`echo '{"units": []}'`), dir, nil, nil).AllUnits(ctx)
+	_, err = CommandFacts(script(`echo '{"units": []}'`), dir, HookEnv{}, nil).AllUnits(ctx)
 	require.EqualError(t, err, "all hook named no unit", "no arguments would leave what runs to the tool's default")
 }
 
@@ -409,12 +403,12 @@ func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
 		assert.Equal(t, []string{broken}, refused.Paths)
 		assert.NoFileExists(t, filepath.Join(dir, "got"), "the regeneration never ran")
 
-		got, unboundedBy, err := CommandFacts(script(`exit 9`), dir, nil, nil).Affected(ctx, hookChange, []string{"app/x.go", broken})
+		got, unboundedBy, err := CommandFacts(script(`exit 9`), dir, HookEnv{}, nil).Affected(ctx, hookChange, []string{"app/x.go", broken})
 		require.NoError(t, err, "the hook is not asked")
 		assert.Nil(t, got)
 		assert.Contains(t, unboundedBy, "holds a line break", "every unit is gated instead")
 
-		writes, err := CommandFacts(script(`cat > asked; echo '{"outputs": ["gen/ok"]}'`), dir, nil, nil).Classify(ctx, []string{"gen/ok", broken})
+		writes, err := CommandFacts(script(`cat > asked; echo '{"outputs": ["gen/ok"]}'`), dir, HookEnv{}, nil).Classify(ctx, []string{"gen/ok", broken})
 		require.NoError(t, err)
 		assert.Equal(t, map[string]types.Writes{"gen/ok": {Output: true}}, writes, "left unclassified, which is source")
 		asked, err := os.ReadFile(filepath.Join(dir, "asked"))

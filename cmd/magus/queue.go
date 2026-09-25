@@ -232,7 +232,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 		if err != nil {
 			return nil, nil, err
 		}
-		return mergequeue.CommandFacts(cmd, e.dir, globalCfg.Sandbox.Env.Passthrough, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
+		return mergequeue.CommandFacts(cmd, e.dir, mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough}, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
 	}
 	ws, err := client.OpenWorkspace(ctx, e.dir, target)
 	if err != nil {
@@ -481,7 +481,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	hookEnv := mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}
 	if f.RemoteCacheRead {
 		var proxy *mergequeue.CacheReadProxy
-		if proxy, hookEnv.Set, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
+		if proxy, hookEnv.Fixed, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
 			return err
 		}
 		defer func() { _ = proxy.Close() }()

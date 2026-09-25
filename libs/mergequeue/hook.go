@@ -33,11 +33,6 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
-// sandboxed is set last in every hook's environment, over the queue's own variables:
-// a hook runs the changes' code, so the magus it runs confines what it runs and refuses
-// to run where the kernel cannot enforce that (MGS2012).
-var sandboxed = []string{"MAGUS_SANDBOX_ENABLED=1", "MAGUS_SANDBOX_REQUIRED=1"}
-
 // ExitTempFail is EX_TEMPFAIL from sysexits.h: the hook could not run right now (a build
 // tool's lock was held, say). It is run again, and a failure that outlasts the retries
 // is the change's like any other.
@@ -194,7 +189,7 @@ func (c hookCommand) Run(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args)...)
 	cmd.Dir = c.Dir
 	// exec keeps the last value a name is given.
-	cmd.Env = slices.Concat(inherited, c.Env, sandboxed)
+	cmd.Env = slices.Concat(inherited, c.Env)
 	cmd.Stdin = c.Stdin
 	// Output goes through pipes of the queue's own: exec's would hold Wait until every
 	// process holding them exits, which is the group outliving the hook, so it could
@@ -398,16 +393,13 @@ type ScratchVar struct {
 	Dir  string // relative, inside the scratch directory
 }
 
-// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name other than one the
-// queue sets for every hook, and DIR a relative path that stays inside the scratch
-// directory.
+// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name, and DIR a relative
+// path that stays inside the scratch directory.
 func ParseScratchVar(spec string) (ScratchVar, error) {
 	name, dir, ok := strings.Cut(spec, "=")
 	switch {
 	case !ok || !isEnvName(name) || dir == "":
 		return ScratchVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
-	case slices.ContainsFunc(sandboxed, func(kv string) bool { return strings.HasPrefix(kv, name+"=") }):
-		return ScratchVar{}, fmt.Errorf("%q: the queue sets %s for every hook, so it confines what the hook runs", spec, name)
 	case !filepath.IsLocal(dir):
 		return ScratchVar{}, fmt.Errorf("%q: %s leaves the scratch directory", spec, dir)
 	}
@@ -436,14 +428,14 @@ type HookEnv struct {
 	Passthrough []string
 	// Scratch are pointed into each candidate's scratch directory.
 	Scratch []ScratchVar
-	// Set are NAME=VALUE assignments every hook takes as given, such as a
+	// Fixed are NAME=VALUE assignments every hook takes as given, such as a
 	// [CacheReadProxy]'s stand-ins.
-	Set []string
+	Fixed []string
 }
 
 // of creates each scratch variable under scratch and returns every assignment.
 func (e HookEnv) of(scratch string) ([]string, error) {
-	env := make([]string, 0, len(e.Scratch)+len(e.Set))
+	env := make([]string, 0, len(e.Scratch)+len(e.Fixed))
 	for _, v := range e.Scratch {
 		dir := filepath.Join(scratch, v.Dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -451,7 +443,7 @@ func (e HookEnv) of(scratch string) ([]string, error) {
 		}
 		env = append(env, v.Name+"="+dir)
 	}
-	return append(env, e.Set...), nil
+	return append(env, e.Fixed...), nil
 }
 
 // CommandGate is a [types.Gate] running cmd in a checkout with the units appended as
@@ -547,16 +539,17 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 // outputs leaves it unclassified, which is source.
 //
 // A failing command is an error, since the hook reads only the base, never the change's
-// code. Its environment is a gate's with passthrough as [HookEnv.Passthrough].
-func CommandFacts(cmd Command, dir string, passthrough []string, log *HookLog) types.BuildFacts {
-	return commandFacts{cmd: cmd, dir: dir, passthrough: passthrough, log: log}
+// code. Its environment is a gate's under env, less env.Scratch: facts run in dir, which
+// has no scratch directory.
+func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) types.BuildFacts {
+	return commandFacts{cmd: cmd, dir: dir, env: env, log: log}
 }
 
 type commandFacts struct {
-	cmd         Command
-	dir         string
-	passthrough []string
-	log         *HookLog
+	cmd Command
+	dir string
+	env HookEnv
+	log *HookLog
 }
 
 func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answer any) error {
@@ -567,7 +560,8 @@ func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answe
 		Command:     f.cmd,
 		Args:        []string{query},
 		Dir:         f.dir,
-		Passthrough: f.passthrough,
+		Passthrough: f.env.Passthrough,
+		Env:         f.env.Fixed,
 		Stdin:       strings.NewReader(stdin),
 		Stdout:      &stdout,
 		Stderr:      stderr,

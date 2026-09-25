@@ -141,7 +141,7 @@ func TestHooksReadTheCacheThroughTheProxyAndNeverHoldTheRealToken(t *testing.T) 
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "real-runtime-token")
 	t.Setenv("ACTIONS_RESULTS_URL", up.URL+"/")
 	p := startProxy(t, up.URL, nil)
-	env := HookEnv{Set: p.Env()}
+	env := HookEnv{Fixed: p.Env()}
 	dir, regenDir := t.TempDir(), t.TempDir()
 
 	_, err := CommandGate(script(`env > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)

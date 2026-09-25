@@ -140,14 +140,10 @@ generated file, a candidate tree or a review proof from a verdict.
   the token from a hook's environment and nothing more: the real one is in the
   environment of the validate process that started the hook, and a hook that goes
   looking can read it there as it can from the runner.
-- **Every hook runs sandboxed.** The queue sets `MAGUS_SANDBOX_ENABLED=1` and
-  `MAGUS_SANDBOX_REQUIRED=1` last in every hook's environment, over the job's own and
-  over `--scratch-env`, which refuses those names. The magus a hook runs confines what
-  it runs to the checkout and the sandbox's own environment allowlist, and refuses to
-  run where the kernel cannot enforce that (MGS2012). The allowlist also keeps GitHub
-  Actions' file commands (`GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, ...) and the
-  runner's own paths from a hook, so no line it writes steers a later step. Withholding a
-  path only unnames it: a hook runs as the runner's user, so the validation job is
+- **A hook is not confined to its checkout.** The allowlist keeps GitHub Actions' file
+  commands (`GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, ...) and the runner's own paths
+  from a hook, so no line it writes steers a later step, but a hook runs as the runner's
+  user with its filesystem. Withholding a path only unnames it, so the validation job is
   trusted for nothing after its first hook runs.
 - **A kick-back shows the author's bytes as text.** Its words are apply's, from facts it
   checked against the plan; what the verdict said is shown in a fence longer than any
