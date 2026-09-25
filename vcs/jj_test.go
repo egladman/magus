@@ -51,3 +51,44 @@ func TestConflictsDoesNotSwallowRealFailures(t *testing.T) {
 	_, err := jjVCS{}.Conflicts(t.Context(), t.TempDir())
 	require.Error(t, err, "a directory that is not a jj repo must not report 'no conflicts'")
 }
+
+// jj keeps a repository's config under the user's config directory, so the registration is
+// read back through jj rather than from the working copy. It routes jj resolve's
+// arguments, the output file included, to the merge driver, leaves ui.merge-editor alone,
+// and a second install changes nothing.
+func TestJJMergeDriverRegistersTheToolInTheRepoConfig(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	isolateUserConfig(t)
+	dir := t.TempDir()
+	jjInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	ctx := t.Context()
+	globs := types.MergeDriverGlobs{AutoResolve: []string{"CHANGELOG.md"}}
+
+	changed, err := jjVCS{}.EnsureMergeDriver(ctx, dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
+	require.NoError(t, err)
+	assert.False(t, changed, "only auto-resolution has a use for the tool on jj")
+
+	changed, err = jjVCS{}.EnsureMergeDriver(ctx, dir, globs)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	listed, err := vcsOutput(ctx, dir, "jj", "config", "list", "--repo")
+	require.NoError(t, err)
+	assert.Equal(t, `merge-tools.magus.program = "magus"`+"\n"+
+		`merge-tools.magus.merge-args = ["vcs", "merge-driver", "$base", "$left", "$right", "$marker_length", "$path", "$output"]`+"\n"+
+		`merge-tools.magus.merge-conflict-exit-codes = [1]`+"\n"+
+		`merge-tools.magus.merge-tool-edits-conflict-markers = true`, listed)
+	assert.NotContains(t, listed, "ui.merge-editor")
+
+	registered, err := jjVCS{}.CheckMergeDriver(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, registered)
+	command, err := jjVCS{}.MergeDriverCommand(ctx, dir)
+	require.NoError(t, err)
+	assert.Equal(t, "magus vcs merge-driver $base $left $right $marker_length $path $output", command)
+
+	changed, err = jjVCS{}.EnsureMergeDriver(ctx, dir, globs)
+	require.NoError(t, err)
+	assert.False(t, changed, "installing twice is idempotent")
+}

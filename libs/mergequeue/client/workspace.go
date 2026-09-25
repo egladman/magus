@@ -109,7 +109,7 @@ func (w *Workspace) plan(ctx context.Context, paths []string) ([]string, string,
 // a project's output, an in-place update by a target the regeneration runs, or a file
 // magus maintains itself. An update by any other target, such as a formatter's, is not
 // the regeneration's to write. A path only a VCS attribute marks generated is none of
-// them. AutoResolve is magus.yaml's vcs.auto_resolve.
+// them.
 func (w *Workspace) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
 	entries, err := w.m.ClassifyFiles(ctx, paths)
 	if err != nil {
@@ -121,12 +121,11 @@ func (w *Workspace) Classify(ctx context.Context, paths []string) (map[string]ty
 	out := make(map[string]types.Writes, len(paths))
 	for i, e := range entries {
 		writes := types.Writes{
-			Output:      len(e.OutputOf) > 0,
-			Updated:     slices.ContainsFunc(e.Claims, regenerated),
-			Maintained:  magustypes.IsMagusMaintained(paths[i]),
-			AutoResolve: w.m.AutoResolves(paths[i]),
+			Output:     len(e.OutputOf) > 0,
+			Updated:    slices.ContainsFunc(e.Claims, regenerated),
+			Maintained: magustypes.IsMagusMaintained(paths[i]),
 		}
-		if writes.Declared() || writes.AutoResolve {
+		if writes.Declared() {
 			out[paths[i]] = writes
 		}
 	}
@@ -191,6 +190,13 @@ var dataExtensions = []string{".md", ".markdown", ".txt", ".rst", ".adoc", ".csv
 
 func isData(p string) bool {
 	return slices.Contains(dataExtensions, strings.ToLower(path.Ext(p)))
+}
+
+// AutoResolvable is magus's change classifier on the merge (Magus.AutoResolvable): low
+// risk by the classes the ci gate uses, or code a project's merge_low_risk opts in.
+func (w *Workspace) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
+	verdict, ok := w.m.AutoResolvable(ctx, path, base, merged)
+	return verdict, ok, nil
 }
 
 // AllUnits is "/", the project reference magus reads as every project.

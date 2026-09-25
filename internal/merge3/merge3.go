@@ -1,9 +1,11 @@
 // Package merge3 settles a three-way text merge, but only the regions whose outcome no
-// reader could dispute. It backs `magus vcs merge-driver` for paths a workspace declares
-// eligible and the merge queue's candidate merges, so a person's merge and the queue's
-// agree byte for byte.
+// reader could dispute. It backs `magus vcs merge-driver` and the merge queue's candidate
+// merges, so a person's merge and the queue's agree byte for byte.
 //
-// A region both sides changed settles in two ways, and in no other:
+// Each side's edits against the merge base are types.RegionChange values (types.Hunks),
+// the model a footprint and a job claim compare concurrent edits with, and where both
+// sides changed the same lines their collisions (types.Collisions) name the region as a
+// types.Location. Such a region settles in two ways, and in no other:
 //
 //   - [Contained]: the sides are identical, or one side's lines are a subsequence of the
 //     other's and both removed the same base lines. The larger side is kept. A side that
@@ -13,17 +15,19 @@
 //     kept, then theirs.
 //
 // Any other region, where both sides edited or deleted base lines differently, leaves
-// the whole file unresolved.
+// the whole file unresolved. Lines only one side changed merge as that side has them.
 package merge3
 
 import (
-	"bytes"
+	"cmp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/types"
 )
 
-// Kind is how a region both sides changed was settled.
+// Kind is how a region both sides changed was settled; 0 is not settled.
 type Kind int
 
 const (
@@ -35,101 +39,222 @@ const (
 
 func (k Kind) String() string {
 	switch k {
+	case 0:
+		return "not settled"
 	case Contained:
-		return "contained"
+		return "kind 1"
 	case BothAdded:
-		return "both added"
+		return "kind 2"
 	}
 	return "Kind(" + strconv.Itoa(int(k)) + ")"
 }
 
-// Resolution is a settled merge.
+// Region is one region both sides changed: the locations their edits collide at, and how
+// it settled.
+type Region struct {
+	Locations []types.Location
+	Kind      Kind
+}
+
+func (r Region) String() string {
+	names := make([]string, len(r.Locations))
+	for i, l := range r.Locations {
+		names[i] = l.String()
+	}
+	return strings.Join(names, ", ") + ": " + r.Kind.String()
+}
+
+// Resolution is a three-way merge.
 type Resolution struct {
+	// Content is the merge, nil when it did not settle.
 	Content []byte
-	// Kinds has one entry per region both sides changed, in file order. It is empty when
-	// every region changed on one side only.
-	Kinds []Kind
+	// Regions has one entry per region both sides changed, in file order, settled or
+	// not. It is empty when every region changed on one side only.
+	Regions []Region
 }
 
-// Label names the kinds used, for a person reading a report: "kind 2", "kinds 1, 2", or
-// "one side each" when no region needed either.
+// Label names each region and how it settled, for a person reading a report:
+// `CHANGELOG.md#(preamble): kind 2`, or "one side each" when no region needed either.
 func (r Resolution) Label() string {
-	kinds := slices.Compact(slices.Sorted(slices.Values(r.Kinds)))
-	switch len(kinds) {
-	case 0:
+	if len(r.Regions) == 0 {
 		return "one side each"
-	case 1:
-		return "kind " + strconv.Itoa(int(kinds[0]))
 	}
-	nums := make([]string, len(kinds))
-	for i, k := range kinds {
-		nums[i] = strconv.Itoa(int(k))
+	parts := make([]string, len(r.Regions))
+	for i, reg := range r.Regions {
+		parts[i] = reg.String()
 	}
-	return "kinds " + strings.Join(nums, ", ")
+	return strings.Join(parts, "; ")
 }
 
-// maxEdits bounds the edit script between the base and either side. The trace a diff
-// keeps grows with its square, and a side that far from the base is no low-risk merge.
-const maxEdits = 2000
-
-// Resolve merges ours and theirs, both descended from base, line by line. Lines keep
-// their terminators, so CRLF and a missing final newline survive as the sides wrote them
-// and a change to either is a change to the line. It reports false when a region both
-// sides changed settles by neither kind, when any input holds a NUL byte (binary), or
-// when either side is more than maxEdits lines from the base.
-func Resolve(base, ours, theirs []byte) (Resolution, bool) {
-	if bytes.IndexByte(base, 0) >= 0 || bytes.IndexByte(ours, 0) >= 0 || bytes.IndexByte(theirs, 0) >= 0 {
-		return Resolution{}, false
-	}
-	o, a, b := splitLines(base), splitLines(ours), splitLines(theirs)
-	ma, ok := matches(o, a)
-	if !ok {
-		return Resolution{}, false
-	}
-	mb, ok := matches(o, b)
-	if !ok {
-		return Resolution{}, false
-	}
-	var out []string
-	var kinds []Kind
-	settle := func(lo, hi, aLo, aHi, bLo, bHi int) bool {
-		oc, ac, bc := o[lo:hi], a[aLo:aHi], b[bLo:bHi]
-		switch {
-		case slices.Equal(ac, oc):
-			out = append(out, bc...)
-		case slices.Equal(bc, oc):
-			out = append(out, ac...)
-		default:
-			lines, kind, ok := overlap(oc, ac, bc, deleted(ma[lo:hi]), deleted(mb[lo:hi]))
-			if !ok {
-				return false
-			}
-			out = append(out, lines...)
-			kinds = append(kinds, kind)
+// Unsettled lists the locations of the regions that did not settle.
+func (r Resolution) Unsettled() []types.Location {
+	var out []types.Location
+	for _, reg := range r.Regions {
+		if reg.Kind == 0 {
+			out = append(out, reg.Locations...)
 		}
-		return true
 	}
+	return out
+}
+
+// Resolve merges ours and theirs, both descended from base, line by line, naming regions
+// in path with the diff driver its name routes to (types.DiffDriverFor). Lines keep their
+// terminators, so CRLF and a missing final newline survive as the sides wrote them and a
+// change to either is a change to the line. It reports false when a region both sides
+// changed settles by neither kind, with that region in the result's Regions, and with an
+// empty result for binary input (a NUL byte) or sides too far from the base to diff by
+// line (types.Hunks).
+func Resolve(path string, base, ours, theirs []byte) (Resolution, bool) {
+	m, ok := align(path, base, ours, theirs)
+	if !ok {
+		return Resolution{}, false
+	}
+	out, regions, conflicted := m.walk(0)
+	if conflicted {
+		return Resolution{Regions: regions}, false
+	}
+	return Resolution{Content: out, Regions: regions}, true
+}
+
+// Markers merges as Resolve does, and wraps each region neither kind settles in conflict
+// markers markerSize characters wide (7 when not positive): ours, then base, then theirs,
+// labelled so. It is what a merge tool leaves for a person when Resolve reports false. It
+// reports false where Resolve refuses to merge lines at all.
+func Markers(base, ours, theirs []byte, markerSize int) ([]byte, bool) {
+	if markerSize <= 0 {
+		markerSize = 7
+	}
+	m, ok := align("", base, ours, theirs)
+	if !ok {
+		return nil, false
+	}
+	out, _, _ := m.walk(markerSize)
+	return out, true
+}
+
+// alignment is a base and two sides with each side's matches to the base.
+type alignment struct {
+	path           string
+	o, a, b        []string
+	ma, mb         []int // base line -> the side's line it is kept as, or -1
+	hunksA, hunksB []types.RegionChange
+}
+
+func align(path string, base, ours, theirs []byte) (alignment, bool) {
+	driver, _ := types.DiffDriverFor(path)
+	hunksA, ok := types.Hunks(path, base, ours, driver)
+	if !ok {
+		return alignment{}, false
+	}
+	hunksB, ok := types.Hunks(path, base, theirs, driver)
+	if !ok {
+		return alignment{}, false
+	}
+	m := alignment{path: path, o: types.SplitLines(base), a: types.SplitLines(ours), b: types.SplitLines(theirs),
+		hunksA: hunksA, hunksB: hunksB}
+	var okA, okB bool
+	m.ma, okA = kept(m.o, m.a)
+	m.mb, okB = kept(m.o, m.b)
+	return m, okA && okB
+}
+
+// kept maps each base line to the side line it is kept as, or -1 where the side dropped
+// it.
+func kept(o, s []string) ([]int, bool) {
+	pairs, ok := types.LineMatches(o, s)
+	if !ok {
+		return nil, false
+	}
+	m := make([]int, len(o))
+	for i := range m {
+		m[i] = -1
+	}
+	for _, p := range pairs {
+		m[p[0]] = p[1]
+	}
+	return m, true
+}
+
+// walk merges region by region. With markerSize 0 it stops at the first region that does
+// not settle and reports it conflicted; otherwise it writes that region between conflict
+// markers and goes on.
+func (m alignment) walk(markerSize int) (out []byte, regions []Region, conflicted bool) {
+	var lines []string
 	iO, iA, iB := 0, 0, 0
 	for {
 		// The next base line both sides kept is where the sides agree again.
 		next := iO
-		for next < len(o) && (ma[next] < 0 || mb[next] < 0) {
+		for next < len(m.o) && (m.ma[next] < 0 || m.mb[next] < 0) {
 			next++
 		}
-		eA, eB := len(a), len(b)
-		if next < len(o) {
-			eA, eB = ma[next], mb[next]
+		eA, eB := len(m.a), len(m.b)
+		if next < len(m.o) {
+			eA, eB = m.ma[next], m.mb[next]
 		}
-		if !settle(iO, next, iA, eA, iB, eB) {
-			return Resolution{}, false
+		oc, ac, bc := m.o[iO:next], m.a[iA:eA], m.b[iB:eB]
+		switch {
+		case slices.Equal(ac, oc):
+			lines = append(lines, bc...)
+		case slices.Equal(bc, oc):
+			lines = append(lines, ac...)
+		default:
+			settled, kind, ok := overlap(oc, ac, bc, deleted(m.ma[iO:next]), deleted(m.mb[iO:next]))
+			regions = append(regions, Region{Locations: m.locations(iO, next, iA, eA, iB, eB), Kind: kind})
+			if !ok {
+				conflicted = true
+				if markerSize == 0 {
+					return nil, regions, true
+				}
+				lines = append(lines, marked(oc, ac, bc, markerSize)...)
+			} else {
+				lines = append(lines, settled...)
+			}
 		}
-		if next == len(o) {
+		if next == len(m.o) {
 			break
 		}
-		out = append(out, o[next])
+		lines = append(lines, m.o[next])
 		iO, iA, iB = next+1, eA+1, eB+1
 	}
-	return Resolution{Content: []byte(strings.Join(out, "")), Kinds: kinds}, true
+	return []byte(strings.Join(lines, "")), regions, conflicted
+}
+
+// locations names a region both sides changed: where ours's and theirs's hunks over it
+// collide, else every location either side's hunks there name. Ranges are 0-based and
+// half-open over base, ours and theirs.
+func (m alignment) locations(lo, hi, aLo, aHi, bLo, bHi int) []types.Location {
+	a := over(m.hunksA, lo, hi, aLo, aHi)
+	b := over(m.hunksB, lo, hi, bLo, bHi)
+	if shared := types.Collisions(a, b); len(shared) > 0 {
+		return shared
+	}
+	var all []types.Location
+	for _, l := range slices.Concat(a, b) {
+		all = append(all, l.Location())
+	}
+	slices.SortFunc(all, func(x, y types.Location) int {
+		return cmp.Or(cmp.Compare(x.Path, y.Path), cmp.Compare(x.Declaration, y.Declaration))
+	})
+	all = slices.Compact(all)
+	if len(all) == 0 {
+		return []types.Location{{Path: m.path}}
+	}
+	return all
+}
+
+// over returns the hunks with lines in [lo, hi) of the base or [sLo, sHi) of the side.
+func over(hunks []types.RegionChange, lo, hi, sLo, sHi int) []types.Locator {
+	var out []types.Locator
+	for _, h := range hunks {
+		from, to := lo, hi
+		if h.Side == types.RegionNew {
+			from, to = sLo, sHi
+		}
+		if h.Lines[0]-1 < to && h.Lines[1]-1 >= from {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // overlap settles a region both sides changed differently. da and db mark which base
@@ -151,6 +276,24 @@ func overlap(o, a, b []string, da, db []bool) ([]string, Kind, bool) {
 	return nil, 0, false
 }
 
+// marked is one unsettled region between conflict markers. A section whose last line
+// has no newline gets one, so no marker lands on a content line.
+func marked(o, a, b []string, size int) []string {
+	section := func(marker, label string, lines []string) []string {
+		out := append([]string{strings.Repeat(marker, size) + label + "\n"}, lines...)
+		if last := out[len(out)-1]; !strings.HasSuffix(last, "\n") {
+			out[len(out)-1] = last + "\n"
+		}
+		return out
+	}
+	return slices.Concat(
+		section("<", " ours", a),
+		section("|", " base", o),
+		section("=", "", b),
+		[]string{strings.Repeat(">", size) + " theirs\n"},
+	)
+}
+
 // deleted reports, for each base line, whether its side dropped it.
 func deleted(m []int) []bool {
 	out := make([]bool, len(m))
@@ -168,104 +311,4 @@ func isSubsequence(small, large []string) bool {
 		}
 	}
 	return i == len(small)
-}
-
-// splitLines splits after every '\n', keeping it; a final line without one is kept as is.
-func splitLines(b []byte) []string {
-	var lines []string
-	s := string(b)
-	for s != "" {
-		i := strings.IndexByte(s, '\n')
-		if i < 0 {
-			lines = append(lines, s)
-			break
-		}
-		lines = append(lines, s[:i+1])
-		s = s[i+1:]
-	}
-	return lines
-}
-
-// matches maps each line of o to the line of s it is kept as on a shortest edit script,
-// or -1 where s dropped it. It reports false past maxEdits.
-func matches(o, s []string) ([]int, bool) {
-	m := make([]int, len(o))
-	for i := range m {
-		m[i] = -1
-	}
-	pre := 0
-	for pre < len(o) && pre < len(s) && o[pre] == s[pre] {
-		m[pre] = pre
-		pre++
-	}
-	suf := 0
-	for suf < len(o)-pre && suf < len(s)-pre && o[len(o)-1-suf] == s[len(s)-1-suf] {
-		m[len(o)-1-suf] = len(s) - 1 - suf
-		suf++
-	}
-	pairs, ok := myers(o[pre:len(o)-suf], s[pre:len(s)-suf])
-	if !ok {
-		return nil, false
-	}
-	for _, p := range pairs {
-		m[pre+p[0]] = pre + p[1]
-	}
-	return m, true
-}
-
-// myers returns the matched index pairs of a shortest edit script from a to b, in order
-// (Myers, "An O(ND) Difference Algorithm and Its Variations", 1986).
-func myers(a, b []string) ([][2]int, bool) {
-	n, m := len(a), len(b)
-	limit := min(n+m, maxEdits)
-	off := limit + 1
-	v := make([]int, 2*limit+3)
-	// trace[d] is v as step d found it, over diagonals -d..d.
-	var trace [][]int
-	for d := 0; d <= limit; d++ {
-		trace = append(trace, slices.Clone(v[off-d:off+d+1]))
-		for k := -d; k <= d; k += 2 {
-			var x int
-			if k == -d || (k != d && v[off+k-1] < v[off+k+1]) {
-				x = v[off+k+1]
-			} else {
-				x = v[off+k-1] + 1
-			}
-			y := x - k
-			for x < n && y < m && a[x] == b[y] {
-				x, y = x+1, y+1
-			}
-			v[off+k] = x
-			if x >= n && y >= m {
-				return backtrack(trace, n, m), true
-			}
-		}
-	}
-	return nil, false
-}
-
-func backtrack(trace [][]int, n, m int) [][2]int {
-	var pairs [][2]int
-	x, y := n, m
-	for d := len(trace) - 1; d > 0; d-- {
-		v := trace[d]
-		k := x - y
-		prev := k - 1
-		if k == -d || (k != d && v[k-1+d] < v[k+1+d]) {
-			prev = k + 1
-		}
-		px := v[prev+d]
-		py := px - prev
-		for x > px && y > py {
-			pairs = append(pairs, [2]int{x - 1, y - 1})
-			x, y = x-1, y-1
-		}
-		x, y = px, py
-	}
-	for x > 0 && y > 0 {
-		pairs = append(pairs, [2]int{x - 1, y - 1})
-		x, y = x-1, y-1
-	}
-	slices.Reverse(pairs)
-	return pairs
 }

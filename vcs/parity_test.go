@@ -1096,7 +1096,7 @@ func TestParityCheckoutStateWithoutARemote(t *testing.T) {
 // capability, so this matrix, not the compiler, is where support is written down.
 var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapBisector:              {"git": true, "hg": true, "sl": true},
-	types.CapMergeDriverInstaller:  {"git": true, "hg": true, "sl": true},
+	types.CapMergeDriverInstaller:  {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRefreshHookInstaller:  {"git": true, "hg": true, "sl": true},
 	types.CapDriftHookInstaller:    {"git": true, "hg": true, "sl": true},
 	types.CapRegenHookInstaller:    {"git": true},
@@ -1145,9 +1145,14 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapBisector, "Bisect", func(d types.VCSDriver, dir string) error {
 			return errOf(d.Bisect(ctx, dir, types.BisectOptions{Good: "-x"}))
 		}},
-		{types.CapMergeDriverInstaller, "InstallMergeDriver", func(d types.VCSDriver, dir string) error { return d.InstallMergeDriver(ctx, dir, nil) }},
+		{types.CapMergeDriverInstaller, "InstallMergeDriver", func(d types.VCSDriver, dir string) error {
+			return d.InstallMergeDriver(ctx, dir, types.MergeDriverGlobs{})
+		}},
 		{types.CapMergeDriverInstaller, "CheckMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.CheckMergeDriver(ctx, dir)) }},
-		{types.CapMergeDriverInstaller, "EnsureMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.EnsureMergeDriver(ctx, dir, nil)) }},
+		{types.CapMergeDriverInstaller, "EnsureMergeDriver", func(d types.VCSDriver, dir string) error {
+			return errOf(d.EnsureMergeDriver(ctx, dir, types.MergeDriverGlobs{}))
+		}},
+		{types.CapMergeDriverInstaller, "RunMergeDriver", func(d types.VCSDriver, dir string) error { return d.RunMergeDriver(ctx, dir, nil) }},
 		{types.CapMergeDriverInstaller, "MergeDriverCommand", func(d types.VCSDriver, dir string) error { return errOf(d.MergeDriverCommand(ctx, dir)) }},
 		{types.CapRefreshHookInstaller, "InstallRefreshHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRefreshHook(ctx, dir, "true")) }},
 		{types.CapDriftHookInstaller, "InstallDriftHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallDriftHook(ctx, dir, "true")) }},
@@ -1254,6 +1259,7 @@ func TestParityMergeDriverCommandReadsTheRegistration(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		skipUnsupported(t, b, types.CapMergeDriverInstaller)
 		isolateGitConfig(t)
+		isolateUserConfig(t)
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "a\n"})
 		ctx := t.Context()
@@ -1262,11 +1268,20 @@ func TestParityMergeDriverCommandReadsTheRegistration(t *testing.T) {
 		require.NoErrorf(t, err, "%s before install", b.name)
 		assert.Emptyf(t, got, "%s reported a driver nothing registered", b.name)
 
-		require.NoError(t, b.drv.InstallMergeDriver(ctx, dir, []string{"gen/**"}))
+		require.NoError(t, b.drv.InstallMergeDriver(ctx, dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}}))
 		got, err = b.drv.MergeDriverCommand(ctx, dir)
 		require.NoErrorf(t, err, "%s after install", b.name)
 		assert.Containsf(t, got, "vcs merge-driver", "%s", b.name)
 	})
+}
+
+// isolateUserConfig moves HOME and XDG_CONFIG_HOME under the test, since jj keeps a
+// repository's own config under the user's config directory, not in the working copy.
+func isolateUserConfig(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 }
 
 // skipUnsupported skips a parity test for a backend the matrix says declines capability.

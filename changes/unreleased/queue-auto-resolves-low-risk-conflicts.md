@@ -1,6 +1,7 @@
 ### Added
 
-- **The merge queue settles low-risk conflicts in files `vcs.auto_resolve` opts in.**
-  A conflict settles when both sides made the same change, one side's change holds the
-  other's, or both only added lines at one place. Apply recomputes it, the gate still
-  runs, and a `resolved` event and the verdict name each file.
+- **The merge queue and the merge driver settle low-risk conflicts.** A conflicted file
+  settles when every region both sides changed does, and magus's change classifier
+  classes the edit low risk, or `merge_low_risk` opts its code in. Each region is named
+  `path#declaration`. git, hg and Sapling run the driver while merging; jj through
+  `magus vcs resolve`.

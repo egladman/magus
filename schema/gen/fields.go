@@ -285,14 +285,6 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref.",
 	},
 	{
-		GoPath:   "VCS.AutoResolve",
-		YamlPath: "vcs.auto_resolve",
-		EnvVar:   "MAGUS_VCS_AUTO_RESOLVE",
-		Flag:     fieldtype.FlagNames{Long: ""},
-		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_VCS_AUTO_RESOLVE: AutoResolve lists workspace-relative globs whose merge conflicts the merge queue settles when every region both sides...",
-	},
-	{
 		GoPath:   "MCP.Enabled",
 		YamlPath: "mcp.enabled",
 		EnvVar:   "MAGUS_MCP_ENABLED",

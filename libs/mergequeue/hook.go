@@ -456,16 +456,20 @@ func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.Regen
 //	outputs     stdin: paths, one per line
 //	            prints {"outputs": [path], "updated": [path], "maintained": [path]}: the
 //	            ones some target writes whole, the ones a target rewrites in place, and
-//	            the ones the build tool rewrites itself on every run; it may add
-//	            "auto_resolve": [path], the ones the workspace opts into low-risk
-//	            conflict resolution; a missing key names none
+//	            the ones the build tool rewrites itself on every run; a missing key
+//	            names none
 //	generation  stdin: {"outputs": [path], "changed": [path]}
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
 //	all         stdin: empty
 //	            prints {"units": [unit]}: how the build tool names every unit
+//	auto_resolve  stdin: {"path": path, "base": text, "merged": text}, a conflicted
+//	            source file's merge base content and the merge the queue settled
+//	            prints {"auto_resolve": bool, "verdict": line}: whether the merge may
+//	            go without a person, and the build tool's line on the path either way;
+//	            a command that fails this query settles nothing
 //
-// A failing command is an error, since the hook reads only the base, never the change's
-// code.
+// A failing command is an error, auto_resolve aside, since the hook reads only the base,
+// never the change's code.
 func CommandFacts(cmd Command, dir string, log *HookLog) types.BuildFacts {
 	return commandFacts{cmd: cmd, dir: dir, log: log}
 }
@@ -520,10 +524,9 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 		return out, nil
 	}
 	var ans struct {
-		Outputs     []string `json:"outputs"`
-		Updated     []string `json:"updated"`
-		Maintained  []string `json:"maintained"`
-		AutoResolve []string `json:"auto_resolve"`
+		Outputs    []string `json:"outputs"`
+		Updated    []string `json:"updated"`
+		Maintained []string `json:"maintained"`
 	}
 	if err := f.ask(ctx, "outputs", "outputs", strings.Join(paths, "\n")+"\n", &ans); err != nil {
 		return nil, err
@@ -540,8 +543,27 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 	mark(ans.Outputs, func(w *types.Writes) { w.Output = true })
 	mark(ans.Updated, func(w *types.Writes) { w.Updated = true })
 	mark(ans.Maintained, func(w *types.Writes) { w.Maintained = true })
-	mark(ans.AutoResolve, func(w *types.Writes) { w.AutoResolve = true })
 	return out, nil
+}
+
+func (f commandFacts) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
+	in, err := json.Marshal(map[string]string{"path": path, "base": string(base), "merged": string(merged)})
+	if err != nil {
+		return "", false, err
+	}
+	var ans struct {
+		AutoResolve bool   `json:"auto_resolve"`
+		Verdict     string `json:"verdict"`
+	}
+	// A build tool that answers no auto_resolve settles nothing: the file stays the
+	// author's conflict, as it was before the query existed.
+	if err := f.ask(ctx, "auto_resolve", "auto_resolve", string(in), &ans); err != nil {
+		return path + ": the facts command answered no auto_resolve (" + err.Error() + ")", false, nil //nolint:nilerr // settles nothing, the safe side
+	}
+	if ans.Verdict == "" {
+		ans.Verdict = path + ": the auto_resolve hook gave no verdict"
+	}
+	return ans.Verdict, ans.AutoResolve, nil
 }
 
 func (f commandFacts) Generation(ctx context.Context, outputs, changed []string) (types.Generation, error) {

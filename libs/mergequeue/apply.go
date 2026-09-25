@@ -1132,7 +1132,7 @@ func (r *applyRun) settledAsValidated(ctx context.Context, rd *ready, plain magu
 	if len(src) == 0 || len(plain.Conflicts) == 0 {
 		return nil, src, nil
 	}
-	settled, _, err := resolveSources(ctx, r.vcs, r.facts, r.clone.Root, magustypes.TreeMerge{Ours: rd.tip, Theirs: rd.v.Change.Head}, plain.Conflicts)
+	settled, _, _, err := resolveSources(ctx, r.vcs, r.facts, r.clone.Root, magustypes.TreeMerge{Ours: rd.tip, Theirs: rd.v.Change.Head}, plain.Conflicts)
 	if err != nil {
 		return nil, nil, err
 	}

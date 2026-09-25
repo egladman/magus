@@ -158,12 +158,11 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## vcs
 
-| Config key         | Environment variable     | Flag             | Type                               |
-| ------------------ | ------------------------ | ---------------- | ---------------------------------- |
-| `vcs.auto_resolve` | `MAGUS_VCS_AUTO_RESOLVE` | _(env only)_     | list _(comma-separated, env only)_ |
-| `vcs.base_ref`     | `MAGUS_VCS_BASE_REF`     | `--vcs-base-ref` | string                             |
-| `vcs.enabled`      | `MAGUS_VCS_ENABLED`      | _(env only)_     | bool _(env only)_                  |
-| `vcs.name`         | `MAGUS_VCS_NAME`         | `--vcs-name`     | string                             |
+| Config key     | Environment variable | Flag             | Type              |
+| -------------- | -------------------- | ---------------- | ----------------- |
+| `vcs.base_ref` | `MAGUS_VCS_BASE_REF` | `--vcs-base-ref` | string            |
+| `vcs.enabled`  | `MAGUS_VCS_ENABLED`  | _(env only)_     | bool _(env only)_ |
+| `vcs.name`     | `MAGUS_VCS_NAME`     | `--vcs-name`     | string            |
 
 ## volatility
 

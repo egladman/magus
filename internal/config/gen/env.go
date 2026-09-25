@@ -238,16 +238,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	if v := getenv("MAGUS_VCS_BASE_REF"); v != "" {
 		cfg.VCS.BaseRef = v
 	}
-	if v := getenv("MAGUS_VCS_AUTO_RESOLVE"); v != "" {
-		parts := strings.Split(v, ",")
-		out := parts[:0]
-		for _, p := range parts {
-			if p = strings.TrimSpace(p); p != "" {
-				out = append(out, p)
-			}
-		}
-		cfg.VCS.AutoResolve = out
-	}
 	if v := getenv("MAGUS_MCP_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_MCP_ENABLED: %w", err))

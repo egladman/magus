@@ -1095,7 +1095,7 @@ var gitRegenHooks = []string{"post-commit", "post-merge", "post-rewrite"}
 // and the diff drivers git does not ship, all under one repository lock so a concurrent
 // install cannot pair one's attributes with the other's registration. A root outside any
 // git repository is an error.
-func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
+func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) error {
 	paths, ok, err := gitRepoPathsOf(ctx, root)
 	if err != nil {
 		return err
@@ -1104,7 +1104,7 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs
 		return fmt.Errorf("vcs: install merge driver: %s is not in a git repository", root)
 	}
 	return withRepoLock(ctx, paths.commonDir, func() error {
-		if _, err := writeManagedSection(filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(outputGlobs), configFile); err != nil {
+		if _, err := writeManagedSection(filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(globs), configFile); err != nil {
 			return err
 		}
 		return v.writeGitConfig(ctx, root)
@@ -1119,11 +1119,11 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs
 // .gitattributes, and a clone that never ran init has no registration at all. Both fail
 // the same silent way: a merge conflicts every generated file by hand. The globs are
 // derived, so treat the section as derived too and keep it current on its own.
-func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
-	if len(outputGlobs) == 0 {
+func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
+	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
 		return false, nil
 	}
-	attrsCurrent, attrsWanted, err := v.gitAttrsState(root, outputGlobs)
+	attrsCurrent, attrsWanted, err := v.gitAttrsState(root, globs)
 	if err != nil {
 		return false, err
 	}
@@ -1138,8 +1138,12 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 		driverIsPreferredHere(root, registered) && driverUsable(ctx, registered) {
 		return false, nil
 	}
-	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
+	return true, v.InstallMergeDriver(ctx, root, globs)
 }
+
+// RunMergeDriver implements types.MergeDriverInstaller: git ran the driver during the
+// merge, so a conflict still standing is one it did not settle.
+func (gitVCS) RunMergeDriver(context.Context, string, []string) error { return nil }
 
 // registeredDriver returns the command currently registered as the magus merge driver.
 // ok is false when nothing usable is registered; the predicates below read an executable
@@ -1378,13 +1382,13 @@ func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
 // gitAttrsState returns .gitattributes as it is now and as the declared globs say it
 // should be, so callers can compare the two without writing. It renders exactly what
 // writeManagedSection would write, CRLF preservation included.
-func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wanted string, err error) {
+func (v gitVCS) gitAttrsState(root string, globs types.MergeDriverGlobs) (current, wanted string, err error) {
 	path := filepath.Join(root, ".gitattributes")
 	existing, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", "", fmt.Errorf("vcs: read %s: %w", path, err)
 	}
-	wanted, err = renderManagedFile(path, string(existing), generatedMarkers, gitAttrsBody(outputGlobs), configFile)
+	wanted, err = renderManagedFile(path, string(existing), generatedMarkers, gitAttrsBody(globs), configFile)
 	if err != nil {
 		return "", "", err
 	}
@@ -1398,13 +1402,23 @@ func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wante
 // each attribute by the last line that sets it, so a generated `.go` file keeps
 // merge=magus from its glob line and takes diff=golang from `*.go`, whichever line comes
 // first.
-func gitAttrsBody(outputGlobs []string) string {
+//
+// An auto-resolve glob sets merge=magus alone: the file is source, and linguist-generated
+// would collapse it in review. One without a slash is anchored at the root, since git
+// matches a slashless pattern at every depth and magus.yaml's globs are rooted.
+func gitAttrsBody(globs types.MergeDriverGlobs) string {
 	var body strings.Builder
 	for _, d := range gitDiffDrivers {
 		body.WriteString(d.line() + "\n")
 	}
-	for _, glob := range outputGlobs {
+	for _, glob := range globs.Outputs {
 		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", glob)
+	}
+	for _, glob := range globs.AutoResolve {
+		if !strings.Contains(glob, "/") {
+			glob = "/" + glob
+		}
+		fmt.Fprintf(&body, "%s merge=magus\n", glob)
 	}
 	return body.String()
 }
@@ -1416,17 +1430,17 @@ type gitDiffDriver struct{ glob, driver string }
 
 func (d gitDiffDriver) line() string { return d.glob + " diff=" + d.driver }
 
-// gitDiffDrivers are the managed section's diff driver lines. golang, python, rust and
-// markdown are git built-ins; the rest need a gitFuncnames registration.
-var gitDiffDrivers = []gitDiffDriver{
-	{"*.go", "golang"},
-	{"*.py", "python"},
-	{"*.rs", "rust"},
-	{"*.md", "markdown"},
-	{"*.ts", "typescript"},
-	{"*.tsx", "typescript"},
-	{"*.buzz", "buzz"},
-}
+// gitDiffDrivers are the managed section's diff driver lines, one per glob of
+// types.DiffDrivers, in its order.
+var gitDiffDrivers = func() []gitDiffDriver {
+	var out []gitDiffDriver
+	for _, d := range types.DiffDrivers {
+		for _, g := range d.Globs {
+			out = append(out, gitDiffDriver{g, d.Name})
+		}
+	}
+	return out
+}()
 
 // gitFuncname is the xfuncname pattern magus registers for a diff driver git does not ship.
 // It lives in git config rather than .gitattributes, so, like the merge driver, every clone
@@ -1435,31 +1449,18 @@ type gitFuncname struct{ driver, pattern string }
 
 func (f gitFuncname) key() string { return "diff." + f.driver + ".xfuncname" }
 
-var gitFuncnames = []gitFuncname{
-	{"typescript", typescriptFuncname},
-	{"buzz", buzzFuncname},
-}
-
-// The patterns are POSIX extended regexes, one per line, tried in order until one matches;
-// a line starting with ! rejects what it matches. Group 1, when a pattern has one, is the
-// header git prints. [[:blank:]] stands in for [ \t], which a bracket expression reads as
-// a backslash and a t.
-
-// buzzFuncname names Buzz's top-level declarations: fun (export, extern or both), object,
-// protocol, enum (enum<str> too) and test blocks. A method is indented, so a change inside
-// one is named by its object.
-const buzzFuncname = `^((export[[:blank:]]+)?(extern[[:blank:]]+)?(fun|object|protocol|enum(<[^>]*>)?)[[:blank:]]+[A-Za-z_].*|test[[:blank:]]+".*)$`
-
-// typescriptFuncname names TypeScript declarations. The control-flow rejection comes first
-// because `  if (x) {` otherwise reads as a method. Top-level forms anchor at column 0 so a
-// local arrow function does not rename the function around it. A method must be indented
-// and close its parameter list on the line, which keeps a wrapped call from reading as one.
-var typescriptFuncname = strings.Join([]string{
-	`!^[[:blank:]]*(if|else|for|while|do|switch|case|catch|return|throw|with|new|await|yield|typeof|delete)([[:blank:](]|$)`,
-	`^((export[[:blank:]]+)?(default[[:blank:]]+)?(declare[[:blank:]]+)?(abstract[[:blank:]]+)?(async[[:blank:]]+)?(function[[:blank:]*]|class[[:blank:]]|interface[[:blank:]]|type[[:blank:]]+[A-Za-z_$][A-Za-z0-9_$]*[[:blank:]]*(<.*>)?[[:blank:]]*=|enum[[:blank:]]|namespace[[:blank:]]).*)$`,
-	`^((export[[:blank:]]+)?(const|let|var)[[:blank:]]+[A-Za-z_$][A-Za-z0-9_$]*[[:blank:]]*(:[^=]*)?=[[:blank:]]*(async[[:blank:]]+)?(<[^>]*>[[:blank:]]*)?(\(|function[[:blank:]*(]|[A-Za-z_$][A-Za-z0-9_$]*[[:blank:]]*=>).*)$`,
-	`^[[:blank:]]+(((public|private|protected|static|readonly|override|async|get|set)[[:blank:]]+)*\*?[A-Za-z_$#][A-Za-z0-9_$]*[[:blank:]]*(<[^>]*>)?[[:blank:]]*\([^;]*\)[[:blank:]]*(:.*)?\{[[:blank:]]*)$`,
-}, "\n")
+// gitFuncnames are the patterns of the types.DiffDrivers git does not ship. The pure
+// declaration placement (types.Hunks) reads the same patterns, so a region named without
+// git is the region git names.
+var gitFuncnames = func() []gitFuncname {
+	var out []gitFuncname
+	for _, d := range types.DiffDrivers {
+		if !d.Builtin {
+			out = append(out, gitFuncname{d.Name, d.Funcname})
+		}
+	}
+	return out
+}()
 
 // staleFuncnames returns the gitFuncnames whose registration in cfg is missing or holds
 // another pattern.
@@ -1497,16 +1498,22 @@ func staleFuncnames(cfg map[string]string) []gitFuncname {
 // practice is magus's own. Everyone else keeps the PATH registration and its
 // upgrade-in-place behavior.
 func gitMergeDriverCommand(ctx context.Context, root string) string {
+	return quoteDriverExe(driverExe(ctx, root)) + gitDriverArgs
+}
+
+// driverExe is the magus a merge driver registration or run names: the workspace's own
+// build, then PATH's, each only if it dispatches the driver, then this process.
+func driverExe(ctx context.Context, root string) string {
 	if exe := localDriverExe(root); exe != "" && driverExeAnswers(ctx, exe) {
-		return quoteDriverExe(exe) + gitDriverArgs
+		return exe
 	}
 	if exe, err := exec.LookPath("magus"); err == nil && driverExeAnswers(ctx, exe) {
-		return quoteDriverExe(exe) + gitDriverArgs
+		return exe
 	}
 	if exe, err := os.Executable(); err == nil {
-		return quoteDriverExe(exe) + gitDriverArgs
+		return exe
 	}
-	return "magus" + gitDriverArgs
+	return "magus"
 }
 
 // localDriverExe is the workspace's own magus binary, or "" when it has none built.

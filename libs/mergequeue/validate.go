@@ -565,7 +565,11 @@ func conflictAhead(after string, conf sourceConflict) string {
 	if after != "" {
 		with = "#" + after + " ahead of it"
 	}
-	return "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
+	reason := "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
+	if note := declinedNote(conf.declined); note != "" {
+		reason += "; " + note
+	}
+	return reason
 }
 
 // failureReport says what failed on which commits. How to run it again, the files at

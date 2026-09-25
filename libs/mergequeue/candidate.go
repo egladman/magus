@@ -123,23 +123,26 @@ func checkMerge(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, 
 	if err != nil {
 		return err
 	}
-	_, src, err := resolveSources(ctx, v, f, root, m, r.Conflicts)
+	_, src, declined, err := resolveSources(ctx, v, f, root, m, r.Conflicts)
 	if err != nil {
 		return err
 	}
 	if len(src) > 0 {
-		return &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, root, tip, c.Head, src)}}
+		return &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, root, tip, c.Head, src), declined: declined}}
 	}
 	return nil
 }
 
-// settledSource is a conflicted source file auto-resolution settled.
+// settledSource is a conflicted source file auto-resolution settled: the merge, and the
+// build tool's classification that allowed it.
 type settledSource struct {
-	path string
-	res  merge3.Resolution
+	path    string
+	res     merge3.Resolution
+	verdict string // the classifier's line, `<path>: <class> (<why>)`
 }
 
-func (s settledSource) String() string { return s.path + " (" + s.res.Label() + ")" }
+// String names the path's class and why, and each region as a location with its kind.
+func (s settledSource) String() string { return s.verdict + "; " + s.res.Label() }
 
 // resolvedNote is how a report names what the queue settled.
 func resolvedNote(settled []settledSource) string {
@@ -147,33 +150,43 @@ func resolvedNote(settled []settledSource) string {
 	for i, s := range settled {
 		names[i] = s.String()
 	}
-	return "auto-resolved " + joinPaths(names)
+	return "auto-resolved " + strings.Join(names, " | ")
+}
+
+// declinedNote is how a report names the conflicted source files auto-resolution tried
+// and why each stayed conflicted, or "" when it tried none.
+func declinedNote(declined []string) string {
+	if len(declined) == 0 {
+		return ""
+	}
+	return "not auto-resolved: " + strings.Join(declined, " | ")
 }
 
 // resolveSources settles what it can of the conflicts in cs that are not in generated
-// files, and returns those settled and the rest, both in cs's order. Only a content
-// conflict in a file the build tool opts into auto-resolution is tried, from its three
-// versions: at m.Ours, at m.Theirs, and at m.Base, or at their one merge base when
-// m.Base is empty. A file the base lacks stays conflicted, and a file settles only whole
-// ([merge3.Resolve]). The computation is the running queue's own, from the blobs alone,
-// so whoever recomputes it from the same commits gets the same bytes.
-func resolveSources(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root string, m magustypes.TreeMerge, cs []magustypes.Conflict) ([]settledSource, []string, error) {
+// files. It returns those settled, the rest, and for each of the rest it tried, why it
+// declined, all in cs's order.
+//
+// A content conflict is merged from its three versions: at m.Ours, at m.Theirs, and at
+// m.Base, or at their one merge base when m.Base is empty. It settles when merge3 settles
+// every region both sides changed and the build tool allows the result
+// (BuildFacts.AutoResolvable, the change classifier's low-risk classes or an opted-in
+// code path). A file the base lacks stays conflicted, and a file settles only whole. The
+// computation is the running queue's own, from the blobs alone, so whoever recomputes it
+// from the same commits gets the same bytes.
+func resolveSources(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root string, m magustypes.TreeMerge, cs []magustypes.Conflict) (settled []settledSource, left, declined []string, err error) {
 	if len(cs) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	writes, err := f.Classify(ctx, conflictPaths(cs))
 	if err != nil {
-		return nil, nil, fmt.Errorf("classify: %w", err)
+		return nil, nil, nil, fmt.Errorf("classify: %w", err)
 	}
 	base, looked := m.Base, m.Base != ""
-	var settled []settledSource
-	var left []string
 	for _, c := range cs {
-		w := writes[c.Path]
-		if w.Output {
+		if writes[c.Path].Output {
 			continue
 		}
-		if c.Kind != magustypes.ConflictKindContent || !w.AutoResolve {
+		if c.Kind != magustypes.ConflictKindContent {
 			left = append(left, c.Path)
 			continue
 		}
@@ -181,44 +194,57 @@ func resolveSources(ctx context.Context, v types.ReadVCS, f types.BuildFacts, ro
 			looked = true
 			// No one base (none, or a criss-cross) leaves base empty, and every file conflicted.
 			if base, _, err = v.MergeBase(ctx, root, m.Ours, m.Theirs); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
-		res, ok, err := resolveFile(ctx, v, root, base, m, c.Path)
+		s, why, err := resolveFile(ctx, v, f, root, base, m, c.Path)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		if !ok {
-			left = append(left, c.Path)
+		if why != "" {
+			left, declined = append(left, c.Path), append(declined, why)
 			continue
 		}
-		settled = append(settled, settledSource{path: c.Path, res: res})
+		settled = append(settled, s)
 	}
-	return settled, left, nil
+	return settled, left, declined, nil
 }
 
-// resolveFile merges path's versions at m.Ours and m.Theirs from base's, reporting false
-// when there is no base or the merge is not low risk.
-func resolveFile(ctx context.Context, v types.ReadVCS, root, base string, m magustypes.TreeMerge, path string) (merge3.Resolution, bool, error) {
+// resolveFile merges path's versions at m.Ours and m.Theirs from base's. why is non-empty
+// when it does not settle, saying why.
+func resolveFile(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, base string, m magustypes.TreeMerge, path string) (settledSource, string, error) {
 	if base == "" {
-		return merge3.Resolution{}, false, nil
+		return settledSource{}, path + ": the sides share no one merge base", nil
 	}
 	was, err := v.ReadFileAt(ctx, root, base, path)
 	if err != nil {
 		// No capability tells a path the base lacks from a failed read. Either way the
 		// file stays conflicted, the safe side.
-		return merge3.Resolution{}, false, nil //nolint:nilerr // no base version to merge from
+		return settledSource{}, path + ": absent at the merge base", nil //nolint:nilerr // no base version to merge from
 	}
 	ours, err := v.ReadFileAt(ctx, root, m.Ours, path)
 	if err != nil {
-		return merge3.Resolution{}, false, err
+		return settledSource{}, "", err
 	}
 	theirs, err := v.ReadFileAt(ctx, root, m.Theirs, path)
 	if err != nil {
-		return merge3.Resolution{}, false, err
+		return settledSource{}, "", err
 	}
-	res, ok := merge3.Resolve([]byte(was), []byte(ours), []byte(theirs))
-	return res, ok, nil
+	res, ok := merge3.Resolve(path, []byte(was), []byte(ours), []byte(theirs))
+	switch {
+	case !ok && len(res.Regions) == 0:
+		return settledSource{}, path + ": binary, or too far from the merge base to merge by line", nil
+	case !ok:
+		return settledSource{}, res.Label(), nil
+	}
+	verdict, allowed, err := f.AutoResolvable(ctx, path, []byte(was), res.Content)
+	if err != nil {
+		return settledSource{}, "", fmt.Errorf("auto-resolvable %s: %w", path, err)
+	}
+	if !allowed {
+		return settledSource{}, verdict, nil
+	}
+	return settledSource{path: path, res: res, verdict: verdict}, "", nil
 }
 
 func conflictPaths(cs []magustypes.Conflict) []string {
@@ -346,7 +372,7 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir, ours s
 	if err != nil || len(conflicts) == 0 {
 		return nil, nil, err
 	}
-	resolved, src, err := resolveSources(ctx, v, s.facts, dir, magustypes.TreeMerge{Ours: ours, Theirs: c.Head}, conflicts)
+	resolved, src, declined, err := resolveSources(ctx, v, s.facts, dir, magustypes.TreeMerge{Ours: ours, Theirs: c.Head}, conflicts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -354,7 +380,8 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir, ours s
 		if err := v.AbortMerge(ctx, dir); err != nil {
 			return nil, nil, err
 		}
-		return nil, nil, &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, s.clone.Root, s.onto, c.Head, src)}}
+		return nil, nil, &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, s.clone.Root, s.onto, c.Head, src),
+			declined: declined}}
 	}
 	if err := writeResolved(ctx, v, dir, resolved); err != nil {
 		return nil, nil, err
@@ -708,6 +735,9 @@ type sourceConflict struct {
 	change types.Change // the change whose addition conflicted
 	paths  []string     // the conflicted source files
 	with   []string     // base-branch commits touching paths ("abc123 subject")
+	// declined says, for each of paths auto-resolution tried, why it stayed conflicted:
+	// the locations merge3 could not settle, or the classifier's line.
+	declined []string
 }
 
 type conflictError struct{ conflict sourceConflict }

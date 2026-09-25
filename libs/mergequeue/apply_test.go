@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/mergequeue/types"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -350,7 +351,8 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 	}).Once()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(conflicts, nil).Once()
-	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(optedIn, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
+	d.facts.EXPECT().AutoResolvable(mock.Anything, "CHANGELOG.md", []byte("a\nz\n"), []byte("a\np\nq\nz\n")).Return(chVerdict, true, nil).Twice()
 	d.vcs.EXPECT().MergeBase(mock.Anything, mock.Anything, base, c.Head).Return(head("mb"), true, nil).Twice()
 	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, head("mb"), "CHANGELOG.md").Return("a\nz\n", nil).Twice()
 	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, base, "CHANGELOG.md").Return("a\np\nz\n", nil).Twice()
@@ -365,7 +367,7 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"CHANGELOG.md"}, nil).Twice()
 	d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, "validated", "CHANGELOG.md").Return("a\np\nq\nz\n", nil).Once()
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
-		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files\n\nThe merge queue auto-resolved CHANGELOG.md (kind 2).",
+		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files\n\nThe merge queue " + chNote + ".",
 			Author: author, Committer: bot},
 		Tree: "validated", Parents: []string{c.Head, base}}).Return(update, nil)
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
@@ -376,7 +378,15 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 	var events bytes.Buffer
 	a.Events = NewEvents(&events)
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
-	assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":"auto-resolved CHANGELOG.md (kind 2)","commit":"`+v.CandidateCommit+`"`)
+	assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+v.CandidateCommit+`"`)
+}
+
+// jsonString is s as a JSON string literal, the way an event line carries it.
+func jsonString(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	require.NoError(t, err)
+	return string(b)
 }
 
 // What the rebuild holds must be exactly what apply's own resolution against the tip
@@ -388,8 +398,9 @@ func TestAResolutionTheTreeDoesNotHoldIsNotSettled(t *testing.T) {
 	require.NoError(t, err)
 	r := &applyRun{Applier: a}
 	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}
-	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(optedIn, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
 	d.sides(base, c.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
+	d.allows("CHANGELOG.md", "a\nz\n", "a\np\nq\nz\n", chVerdict, true)
 	d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, "validated", "CHANGELOG.md").Return("a\nq\np\nz\n", nil)
 	rd := &ready{v: validated(c, base, ""), tip: base, tree: "validated"}
 	same, left, err := r.settledAsValidated(t.Context(), rd, magustypes.TreeMergeResult{Tree: "plain", Conflicts: conflicts}, []string{"CHANGELOG.md", "a/x.go"})
