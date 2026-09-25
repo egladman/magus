@@ -419,11 +419,9 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 
 // CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the
 // units appended as arguments, the generated paths on stdin, one per line, and vars
-// pointed into the checkout's scratch directory. forced is set last, over what the hook
-// inherits and over vars, so the caller can require a confinement the environment asks
-// for. A failure of the hook's processes is a *[types.RefusedError] naming the paths: the
-// change did not regenerate.
-func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog, forced ...string) types.RegenerateFunc {
+// pointed into the checkout's scratch directory. A failure of the hook's processes is a
+// *[types.RefusedError] naming the paths: the change did not regenerate.
+func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
 		env, err := scratchEnv(r.Scratch, vars)
 		if err != nil {
@@ -435,7 +433,7 @@ func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog, forced ...s
 			Command: cmd,
 			Args:    r.Units,
 			Dir:     r.Dir,
-			Env:     append(env, forced...),
+			Env:     env,
 			Stdin:   strings.NewReader(strings.Join(r.Paths, "\n") + "\n"),
 			Stdout:  out,
 			Stderr:  out,

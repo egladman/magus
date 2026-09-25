@@ -166,18 +166,6 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
 }
 
-// On a host that cannot confine it, apply's regeneration is refused before the provider
-// is opened: the mock expects no call, and no change is kicked back for the host.
-func TestQueueApplyRefusesToRegenerateWithoutTheKernelSandbox(t *testing.T) {
-	prev := kernelSandboxed
-	t.Cleanup(func() { kernelSandboxed = prev })
-	kernelSandboxed = func() bool { return false }
-	f := newQueueFixture(t, "", "")
-	_, err := f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--regenerate", "magus run generate:rw", "verdicts")
-	require.ErrorIs(t, err, magustypes.SandboxRequired)
-	assert.ErrorContains(t, err, "without --regenerate")
-}
-
 func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	out, err := f.run(t, "", "--help")

@@ -8,8 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 // A workspace with no magus.yaml is a workspace that never asked for anything, so
@@ -43,19 +41,6 @@ func TestApplyUnionSandboxReportsAMalformedWorkspaceConfig(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  enabled: [true\n"), 0o644))
 
 	assert.Error(t, ApplyUnionSandbox(context.Background(), []string{root}))
-}
-
-// A required sandbox that is not enabled is a misconfiguration, refused before any
-// ruleset is built rather than read as "nothing asked for".
-func TestApplyUnionSandboxRefusesARequiredSandboxLeftDisabled(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  required: true\n"), 0o644))
-
-	err := ApplyUnionSandbox(context.Background(), []string{root})
-	require.ErrorIs(t, err, types.SandboxRequired)
-	assert.ErrorContains(t, err, root)
 }
 
 // TestApplyUnionSandboxIsInertWithoutAnOptIn: the server applies a kernel policy

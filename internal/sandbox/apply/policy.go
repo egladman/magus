@@ -50,26 +50,14 @@ var policyFingerprint string
 // In this mode per-workspace Apply calls are attach-only (no syscall, no fingerprint check).
 var appliedExternally bool
 
-// kernelEnforced is set once a landlock ruleset is in force on this process, so a
-// required sandbox can tell kernel enforcement from the interpreter-level fallback.
-var kernelEnforced bool
-
-// MarkAppliedExternally records that the server has already applied the union landlock ruleset,
-// enforced saying whether the kernel took it. Subsequent per-workspace Apply calls become
-// attach-only; the MGS2010 fingerprint check is skipped.
-func MarkAppliedExternally(fp string, enforced bool) {
+// MarkAppliedExternally records that the server has already applied the union landlock ruleset.
+// Subsequent per-workspace Apply calls become attach-only; the MGS2010 fingerprint check is skipped.
+func MarkAppliedExternally(fp string) {
 	applyOnce.Do(func() {})
 	globalsMu.Lock()
 	policyFingerprint = fp
 	appliedExternally = true
-	kernelEnforced = enforced
 	globalsMu.Unlock()
-}
-
-// errRequired is the MGS2012 refusal of a required sandbox the kernel is not enforcing.
-func errRequired(root, why string) error {
-	return types.DiagnosticErrorf(types.SandboxRequired,
-		"sandbox.required is set for %s, and %s; run it on Linux 5.13 or newer with landlock enabled (/sys/kernel/security/landlock)", root, why)
 }
 
 // FromConfig assembles a sandbox Policy for root using the sandbox fields of cfg.
@@ -105,10 +93,9 @@ func FromConfig(ctx context.Context, root string, cfg config.Config) *sandbox.Po
 }
 
 // Apply applies the kernel-level landlock sandbox (once per process) and attaches policy to ctx.
-// ErrUnsupported logs MGS2005 and falls through to interpreter-level enforcement, unless
-// required, when it is MGS2012 and nothing is attached. A fingerprint mismatch rejects
-// the run with MGS2010 (landlock is immutable once set).
-func Apply(ctx context.Context, policy *sandbox.Policy, root string, required bool) (context.Context, error) {
+// ErrUnsupported logs MGS2005 and falls through to interpreter-level enforcement.
+// A fingerprint mismatch rejects the run with MGS2010 (landlock is immutable once set).
+func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Context, error) {
 	// Stamp the live provider as the binding-layer sandbox metrics recorder so the
 	// fs/archive/crypto/exec checks (which run below observability in the import graph
 	// and cannot reach it directly) can report allow/deny decisions and dropped env
@@ -118,12 +105,9 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string, required bo
 	}
 
 	globalsMu.Lock()
-	externally, enforced := appliedExternally, kernelEnforced
+	externally := appliedExternally
 	globalsMu.Unlock()
 	if externally { // server applied union policy; attach-only
-		if required && !enforced {
-			return ctx, errRequired(root, "the ruleset this process runs under is not kernel-enforced")
-		}
 		return sandbox.WithPolicy(ctx, policy), nil
 	}
 
@@ -138,15 +122,7 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string, required bo
 		secs := time.Since(start).Seconds()
 		switch {
 		case applyErr == nil:
-			globalsMu.Lock()
-			kernelEnforced = true
-			globalsMu.Unlock()
 			RecordApply(ctx, secs, "applied", "workspace", policy)
-		case errors.Is(applyErr, sandbox.ErrUnsupported) && required:
-			// Left as the error: the ruleset was never installed, so no later Apply in
-			// this process may run as though it were.
-			RecordApply(ctx, secs, "unsupported", "workspace", policy)
-			applyErr = errRequired(root, "the kernel cannot enforce it: "+applyErr.Error())
 		case errors.Is(applyErr, sandbox.ErrUnsupported):
 			warnedUnsupported.Do(func() {
 				slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
@@ -166,11 +142,8 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string, required bo
 	}
 
 	globalsMu.Lock()
-	current, enforced := policyFingerprint, kernelEnforced
+	current := policyFingerprint
 	globalsMu.Unlock()
-	if required && !enforced {
-		return ctx, errRequired(root, "an earlier apply in this process fell back to interpreter-level checks")
-	}
 	if fp != current { // mismatch: kernel-level and binding-level policies would disagree
 		RecordApply(ctx, 0, "mismatch", "workspace", nil) // no ruleset installed; count the outcome, not rules
 		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this server process (fingerprint %s vs %s); restart the server to pick up new sandbox configuration",

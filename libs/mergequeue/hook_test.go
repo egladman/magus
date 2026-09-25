@@ -207,20 +207,6 @@ func TestARegenerationGetsItsUnitsAsArgumentsAndIsRefusedWhenItFails(t *testing.
 	assert.Contains(t, refused.Reason, "was killed")
 }
 
-// The environment the caller forces on a regeneration wins over what the hook inherits
-// and over a scratch variable: apply requires the sandbox this way, whatever the job's
-// own environment or its --scratch-env says.
-func TestARegenerationsForcedEnvironmentOverridesWhatItInherits(t *testing.T) {
-	t.Setenv("MAGUS_SANDBOX_ENABLED", "0")
-	dir := t.TempDir()
-	vars := []ScratchVar{{Name: "MAGUS_SANDBOX_REQUIRED", Dir: "x"}}
-	regen := CommandRegenerate(script(`echo "$MAGUS_SANDBOX_ENABLED $MAGUS_SANDBOX_REQUIRED" > seen`), vars, nil, "MAGUS_SANDBOX_ENABLED=1", "MAGUS_SANDBOX_REQUIRED=1")
-	require.NoError(t, regen(context.Background(), types.Regeneration{Dir: dir, Scratch: t.TempDir(), Change: hookChange, Paths: []string{"x"}}))
-	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
-	require.NoError(t, err)
-	assert.Equal(t, "1 1\n", string(seen))
-}
-
 func TestScratchVarsPointIntoEachHooksOwnScratchDirectory(t *testing.T) {
 	vars := []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}, {Name: "XDG_CACHE_HOME", Dir: "cache/xdg"}}
 	dir, scratch := t.TempDir(), t.TempDir()

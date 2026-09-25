@@ -214,10 +214,9 @@ type ShadowAck struct {
 
 // SandboxConfig is the per-workspace sandbox policy.
 type SandboxConfig struct {
-	Enabled  bool               `json:"enabled" yaml:"enabled"`   // master switch; equivalent to MAGUS_SANDBOX_ENABLED=1
-	Required bool               `json:"required" yaml:"required"` // refuse to run (MGS2012) unless the kernel enforces it; needs Enabled
-	Allow    []SandboxAllowPath `json:"allow" yaml:"allow"`       // extra {path, mode} entries extending the filesystem allowlist
-	Env      SandboxEnv         `json:"env" yaml:"env"`           // env-var passthrough rules
+	Enabled bool               `json:"enabled" yaml:"enabled"` // master switch; equivalent to MAGUS_SANDBOX_ENABLED=1
+	Allow   []SandboxAllowPath `json:"allow" yaml:"allow"`     // extra {path, mode} entries extending the filesystem allowlist
+	Env     SandboxEnv         `json:"env" yaml:"env"`         // env-var passthrough rules
 }
 
 // SandboxAllowPath is one extra filesystem allowlist entry. Mode is "ro" or "rw"; other values emit MGS2004.
@@ -816,7 +815,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VOLATILITY_ANNOTATE_GHA", "volatility.annotate_gha", "true", "When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY"},
 		{"MAGUS_REPORT_FILTER", "report.filter", "", "Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query)"},
 		{"MAGUS_SANDBOX_ENABLED", "sandbox.enabled", "false", "When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
-		{"MAGUS_SANDBOX_REQUIRED", "sandbox.required", "false", "When 1 or true, refuse to run (MGS2012) unless kernel landlock enforces the sandbox, instead of falling back to interpreter-level checks (MGS2005); needs sandbox.enabled. magus queue apply sets it for the regeneration it runs"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
 		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
 	}

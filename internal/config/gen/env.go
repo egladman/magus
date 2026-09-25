@@ -523,13 +523,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Sandbox.Enabled = b
 		}
 	}
-	if v := getenv("MAGUS_SANDBOX_REQUIRED"); v != "" {
-		if b, err := parseBoolEnv(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_SANDBOX_REQUIRED: %w", err))
-		} else {
-			cfg.Sandbox.Required = b
-		}
-	}
 	if v := getenv("MAGUS_SANDBOX_ENV_PASSTHROUGH"); v != "" {
 		parts := strings.Split(v, ",")
 		out := parts[:0]

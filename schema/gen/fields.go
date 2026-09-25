@@ -637,14 +637,6 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_SANDBOX_ENABLED",
 	},
 	{
-		GoPath:   "Sandbox.Required",
-		YamlPath: "sandbox.required",
-		EnvVar:   "MAGUS_SANDBOX_REQUIRED",
-		Flag:     fieldtype.FlagNames{Long: "sandbox-required"},
-		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_SANDBOX_REQUIRED",
-	},
-	{
 		GoPath:   "Sandbox.Env.Passthrough",
 		YamlPath: "sandbox.env.passthrough",
 		EnvVar:   "MAGUS_SANDBOX_ENV_PASSTHROUGH",

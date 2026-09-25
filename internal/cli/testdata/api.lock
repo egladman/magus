@@ -55,7 +55,6 @@ config sandbox.allow.<name>.name
 config sandbox.allow.<name>.path
 config sandbox.enabled
 config sandbox.env.passthrough
-config sandbox.required
 config secret.interactive_timeout
 config secret.unattended_timeout
 config server.address
