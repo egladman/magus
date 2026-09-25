@@ -96,6 +96,7 @@ func runCLI() int {
 	// lock. Stamped here rather than in BeginInvocation because every subcommand that
 	// locks needs it, including the ones with no invocation record of their own (clean).
 	rootCtx = types.WithInvocationAncestors(rootCtx, run.AncestorsFromEnv())
+	rootCtx = proveStdio(rootCtx, args)
 
 	res, exitCode := startup(rootCtx, args)
 
@@ -112,7 +113,9 @@ func runCLI() int {
 
 	if exitCode >= 0 {
 		cleanup()
-		return withInterrupt(exitCode, nil, interrupted)
+		code := withInterrupt(exitCode, nil, interrupted)
+		recordPipeExit(args, code, interrupted)
+		return code
 	}
 
 	var dispatchErr error
@@ -139,8 +142,17 @@ func runCLI() int {
 			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		}
 	}
+	// Only a stage that succeeded settles: one that failed reports its own failure,
+	// never an upstream's.
+	if code == 0 {
+		if err := settlePipeline(res.rootCtx, args); err != nil {
+			dispatchErr, code = err, exitCodeOf(err)
+		}
+	}
 	cleanup()
-	return withInterrupt(code, dispatchErr, interrupted)
+	code = withInterrupt(code, dispatchErr, interrupted)
+	recordPipeExit(args, code, interrupted)
+	return code
 }
 
 // withInterrupt reports a signal-stopped run as the conventional 128+N.

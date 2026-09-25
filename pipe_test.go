@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
@@ -31,7 +32,8 @@ import (
 // this binary so it runs the same executable a real magus stage would. PIPETEST_*
 // configures it: sleep PRE_MS, take PROJECTS through takeRunLocks, touch READY, write
 // WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
-// RESULT, when set, receives "acquired" or the acquisition's error.
+// RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
+// the status it records and exits with.
 func TestHelperPipeStage(t *testing.T) {
 	if os.Getenv("PIPETEST_HELPER") != "1" {
 		t.Skip("subprocess helper; not run directly")
@@ -68,6 +70,11 @@ func TestHelperPipeStage(t *testing.T) {
 	time.Sleep(ms("HOLD_MS"))
 	release()
 	_, _ = os.Stdout.WriteString(env("WRITE_AFTER"))
+	if e := env("EXIT"); e != "" {
+		code, _ := strconv.Atoi(e)
+		writeExitRecord(l.pipeDir(), exitRecord{PID: os.Getpid(), Command: "helper", Status: code, Ended: time.Now()})
+		os.Exit(code)
+	}
 	// os.Exit rather than returning: the test framework would print PASS onto the pipe.
 	os.Exit(0)
 }
@@ -794,5 +801,200 @@ func TestHoldsRecordLifecycle(t *testing.T) {
 	defer rel()
 	if _, settled := quiet.settledProjects(os.Getpid()); settled {
 		t.Fatalf("published a lock set with no pipe on stdout")
+	}
+}
+
+// provedStdio is this test process as a reading stage that proved its upstream at start.
+func provedStdio(r *os.File) *ProcessStdio {
+	s := &ProcessStdio{Stdin: r}
+	s.ProveUpstream(context.Background())
+	return s
+}
+
+func wantPipeUpstreamFailed(t *testing.T, err error, status int, upstream int) {
+	t.Helper()
+	var coded interface{ ExitCode() int }
+	if !errors.Is(err, types.PipeUpstreamFailed) || !errors.As(err, &coded) || coded.ExitCode() != status {
+		t.Fatalf("err = %v, want MGS3030 exiting %d", err, status)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("pid %d (", upstream)) {
+		t.Fatalf("err = %q, want it to name upstream pid %d", err, upstream)
+	}
+}
+
+// TestPipeRedUpstreamRefusesBeforeTheLocks is `magus run a | magus run b`: a fails, so b
+// takes no lock and runs nothing, and exits with a's status.
+func TestPipeRedUpstreamRefusesBeforeTheLocks(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "200", "EXIT": "5"})
+	upstreamOf(t, up, w)
+
+	_, _, err := downstream(cacheDir, r).takeRunLocks(context.Background(), []string{"p"})
+	wantPipeUpstreamFailed(t, err, 5, up.Process.Pid)
+	if locks := heldLocks(cacheDir, testWorkspaceRoot); len(locks) != 0 {
+		t.Fatalf("heldLocks = %+v, want none taken after a failed upstream", locks)
+	}
+}
+
+func TestPipeGreenUpstreamIsNoRefusal(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "200", "EXIT": "0"})
+	upstreamOf(t, up, w)
+
+	release, _, err := downstream(cacheDir, r).takeRunLocks(context.Background(), []string{"p"})
+	if err != nil {
+		t.Fatalf("takeRunLocks after a green upstream: %v", err)
+	}
+	release()
+}
+
+// TestPipeEarlyProofOutlivesAFastFailingUpstream: the upstream fails and exits before this
+// run reaches its locks, when the kernel no longer shows it writing the pipe. The proof
+// taken at process start still counts it.
+func TestPipeEarlyProofOutlivesAFastFailingUpstream(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "7"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+	s.pipeline.all()
+	_ = up.Wait()
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	_, _, err := l.takeRunLocks(context.Background(), []string{"p"})
+	wantPipeUpstreamFailed(t, err, 7, up.Process.Pid)
+}
+
+// TestPipeSettleReportsARedUpstreamOnDisjointProjects: the stages run at once, this one
+// finishes first, and the pipeline still fails with the upstream.
+func TestPipeSettleReportsARedUpstreamOnDisjointProjects(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "HOLD_MS": "400", "EXIT": "4"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
+	if err != nil {
+		t.Fatalf("takeRunLocks on a disjoint project: %v", err)
+	}
+	release()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var notices bytes.Buffer
+	wantPipeUpstreamFailed(t, s.pipeline.settle(ctx, r, l.pipeDir(), &notices), 4, up.Process.Pid)
+}
+
+// TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes: this stage never read its stdin,
+// and the upstream is blocked on a full pipe. Settling must not wait on it forever.
+func TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "WRITE_BYTES": strconv.Itoa(4 << 20), "EXIT": "0"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
+	if err != nil {
+		t.Fatalf("takeRunLocks: %v", err)
+	}
+	release()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var notices bytes.Buffer
+	if err := s.pipeline.settle(ctx, r, l.pipeDir(), &notices); err != nil || notices.Len() != 0 {
+		t.Fatalf("settle = %v, notices %q; want a green pipeline", err, notices.String())
+	}
+}
+
+// TestPipeSettleCountsAVanishedUpstreamAsUnknown: a stage killed before it could record its
+// status is reported, not waited on, and not counted as a failure.
+func TestPipeSettleCountsAVanishedUpstreamAsUnknown(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "HOLD_MS": "60000", "EXIT": "0"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
+	if err != nil {
+		t.Fatalf("takeRunLocks: %v", err)
+	}
+	release()
+	time.AfterFunc(200*time.Millisecond, func() { _ = up.Process.Kill() })
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var notices bytes.Buffer
+	if err := s.pipeline.settle(ctx, r, l.pipeDir(), &notices); err != nil {
+		t.Fatalf("settle = %v, want nil for an upstream whose status is unknown", err)
+	}
+	if want := fmt.Sprintf("pid %d (", up.Process.Pid); !strings.Contains(notices.String(), want) || !strings.Contains(notices.String(), "unknown") {
+		t.Fatalf("notices = %q, want the vanished upstream named as unknown", notices.String())
+	}
+}
+
+func TestPipeSettleHonorsContextCancel(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "HOLD_MS": "60000", "EXIT": "0"})
+	upstreamOf(t, up, w)
+	s := provedStdio(r)
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
+	if err != nil {
+		t.Fatalf("takeRunLocks: %v", err)
+	}
+	release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err = s.pipeline.settle(ctx, r, l.pipeDir(), io.Discard)
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 5*time.Second {
+		t.Fatalf("settle = %v after %s, want the context's error", err, time.Since(start))
+	}
+}
+
+func TestPipeSettleWithoutProofIsNil(t *testing.T) {
+	r, _ := shellPipe(t)
+	if err := (&ProcessStdio{Stdin: r}).SettlePipeline(context.Background(), testWorkspaceRoot, config.Config{}); err != nil {
+		t.Fatalf("SettlePipeline without ProveUpstream = %v", err)
+	}
+	s := provedStdio(r)
+	if err := s.pipeline.settle(context.Background(), r, t.TempDir(), io.Discard); err != nil {
+		t.Fatalf("settle with no magus upstream = %v", err)
+	}
+}
+
+func TestPipeExitRecordLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	proved := time.Now()
+	u := upstreamStage{pid: 424242, proved: proved}
+
+	writeExitRecord(dir, exitRecord{PID: u.pid, Status: 2, Ended: proved.Add(-time.Hour)})
+	if _, ok := readExitRecord(dir, u); ok {
+		t.Fatalf("read a record left before the stage was proved alive: an earlier process with its pid")
+	}
+	writeExitRecord(dir, exitRecord{PID: u.pid, Status: 2, Ended: proved})
+	if rec, ok := readExitRecord(dir, u); !ok || rec.exitCode() != 2 {
+		t.Fatalf("readExitRecord = %+v, %v; want status 2", rec, ok)
+	}
+	if got := (exitRecord{Status: 130, Signal: "interrupt"}); got.exitCode() != 1 || got.ending() != "was stopped by a signal (interrupt)" {
+		t.Fatalf("a signalled stage exits %d, %q; want 1, stopped by a signal", got.exitCode(), got.ending())
+	}
+
+	stale := filepath.Join(dir, "999999"+exitSuffix)
+	writeRecord(t, stale, exitRecord{PID: 999999, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
+	writeExitRecord(dir, exitRecord{PID: 1, Ended: time.Now()})
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("a dead writer's day-old record was not swept: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, strconv.Itoa(u.pid)+exitSuffix)); err != nil {
+		t.Fatalf("a fresh record was swept: %v", err)
 	}
 }
