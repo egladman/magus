@@ -716,6 +716,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Security
 
+- **Breaking: the remote cache refuses pre-domain `ed25519` signature envelopes.** They
+  signed the manifest alone, so a store could replay a genuine entry with its log and
+  descriptor swapped or stripped. Every magus from 0.4.0 signs the domain-separated form;
+  an entry signed by 0.3.x is now a miss and rebuilds.
 - **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
   built console file, including the demo graph JSON holding the whole knowledge graph and
   its notes. Other files and directory listings now return 404, on loopback and on the LAN
@@ -724,6 +728,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A global flag's value (`magus --root . agent harness apply`) or a single-dash word with
   an `h` (`-o=template=hi`) hid the command from the guard. A spawn title naming a job
   outside the spawner's own lease tree is recorded as untrusted and attributes nothing.
+- **The merge queue trusts less of what a change controls.** A review counts only from
+  an account that can push, at the commit it approved; `describe` reports
+  `required_approvals`. The regeneration proof covers what merged beneath a candidate
+  and treats no extension as data. Regeneration follows no committed symlink, and update
+  commits carry the queue's committer.
 - **`magus queue apply` follows only the base's own validation run.** A pull
   request's run executes its own copy of the queue workflow and could upload a forged
   plan and verdicts that merged ungated. Apply now refuses any run but `--workflow`

@@ -296,6 +296,11 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 		fmt.Fprintf(&b, "; a stack queues by the label %q", caps.QueueLabel+"<method>")
 	}
 	b.WriteString("\n")
+	if caps.RequiredApprovals == 0 {
+		fmt.Fprintf(&b, "# %s requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own\n", base)
+	} else {
+		fmt.Fprintf(&b, "# %s requires %d approving reviews at the commit a review of a change's head covers\n", base, caps.RequiredApprovals)
+	}
 	s := caps.Setup
 	if s == nil {
 		fmt.Fprintf(&b, "# no setup: --status-context is empty, or provider %s reports none\n", provider)

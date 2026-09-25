@@ -60,9 +60,11 @@ type capabilitiesDoc struct {
 	StackMerge   types.StackMerge    `json:"stack_merge"`
 	LinearStacks bool                `json:"linear_stacks"`
 	Methods      []types.MergeMethod `json:"methods"`
-	QueueLabel   string              `json:"queue_label,omitempty"`
-	Committer    *personDoc          `json:"committer,omitempty"`
-	Setup        *types.Setup        `json:"setup,omitempty"`
+	// Never omitted: zero is the fact a reader most needs to see.
+	RequiredApprovals int          `json:"required_approvals"`
+	QueueLabel        string       `json:"queue_label,omitempty"`
+	Committer         *personDoc   `json:"committer,omitempty"`
+	Setup             *types.Setup `json:"setup,omitempty"`
 }
 
 type personDoc struct {
@@ -77,7 +79,7 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
 	}
 	doc := capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
-		LinearStacks: c.LinearStacks, Methods: c.Methods, QueueLabel: c.QueueLabel}
+		LinearStacks: c.LinearStacks, Methods: c.Methods, RequiredApprovals: c.RequiredApprovals, QueueLabel: c.QueueLabel}
 	if c.Setup != nil {
 		s := *c.Setup
 		// [] rather than null for a reader iterating them.

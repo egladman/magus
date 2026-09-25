@@ -45,15 +45,16 @@ func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
 }
 
 // Generated means declared as an output. The generating project's own sources are code
-// its regeneration runs, and so is anything that reaches it through the project graph;
-// a document it reads is not, and an edit to the declarations proves nothing.
+// its regeneration runs, whatever their extension, and so is anything that reaches it
+// through the project graph; an edit to the declarations proves nothing.
 func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 	root := t.TempDir()
 	for rel, body := range map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"outputs\": [\"gen/**\"]});\n",
 		"web/magusfile.buzz": "", "api/main.go": "package main\n", "api/gen/out.go": "package gen\n",
-		"api/notes.md": "notes\n", "web/app.go": "package web\n", "vendor/blob.go": "package blob\n",
+		"api/notes.md": "notes\n", "api/CMakeLists.txt": "project(api)\n", "api/requirements.txt": "requests\n",
+		"web/notes.md": "notes\n", "web/app.go": "package web\n", "vendor/blob.go": "package blob\n",
 	} {
 		abs := filepath.Join(root, filepath.FromSlash(rel))
 		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
@@ -67,13 +68,19 @@ func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"api/gen/out.go": {Output: true}}, out, "an undeclared file is source, whatever marks it")
 
-	g, err := w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/notes.md", "web/app.go"})
+	g, err := w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"web/notes.md", "web/app.go"})
 	require.NoError(t, err)
-	assert.Equal(t, types.Generation{Units: []string{"api"}}, g, "a document and another project's code prove it")
+	assert.Equal(t, types.Generation{Units: []string{"api"}}, g, "another project's document and code prove it")
 
 	g, err = w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/main.go", "web/app.go"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"api/main.go"}, g.Code)
+
+	// No extension makes a file data: CMakeLists.txt and requirements.txt are code to
+	// the tools that read them, and a generator may run what a document holds.
+	g, err = w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/CMakeLists.txt", "api/notes.md", "api/requirements.txt", "web/app.go"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"api/CMakeLists.txt", "api/notes.md", "api/requirements.txt"}, g.Code, "the generating project's files, whatever their extension")
 
 	g, err = w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"web/magusfile.buzz"})
 	require.NoError(t, err)

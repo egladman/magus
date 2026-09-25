@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -167,15 +168,19 @@ type building struct {
 	fail      map[string]error                 // starting the merge, by the head merged
 }
 
+// makeCheckout creates the checkout's directory, as the version control would; the
+// queue writes into it through an os.Root.
+func makeCheckout(_ context.Context, _, dir, _ string) error { return os.MkdirAll(dir, 0o755) }
+
 // builds answers what b says, and records each checkout's commit and head.
 func (d doubles) builds(b building) *checkouts {
 	co := &checkouts{onto: map[string]string{}, head: map[string]string{}}
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, _, dir, rev string) error {
+		RunAndReturn(func(ctx context.Context, _, dir, rev string) error {
 			co.mu.Lock()
 			defer co.mu.Unlock()
 			co.onto[dir] = rev
-			return nil
+			return makeCheckout(ctx, "", dir, rev)
 		}).Maybe()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, mock.Anything, candidateIdentity).
 		RunAndReturn(func(_ context.Context, dir, rev string, _ magustypes.Person) error {

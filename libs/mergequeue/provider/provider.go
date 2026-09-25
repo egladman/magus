@@ -3,7 +3,7 @@
 //
 // A provider script exports these functions, each taking one record and returning one:
 //
-//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}
+//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}
 //	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
@@ -220,7 +220,7 @@ func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabil
 	var committer map[string]string
 	var setup *record
 	if err := r.decode(required("stack_merge", &sm), required("linear_stacks", &c.LinearStacks), required("methods", &methods),
-		optional("queue_label", &c.QueueLabel), optional("committer", &committer), optional("setup", &setup)); err != nil {
+		required("required_approvals", &c.RequiredApprovals), optional("queue_label", &c.QueueLabel), optional("committer", &committer), optional("setup", &setup)); err != nil {
 		return types.Capabilities{}, err
 	}
 	if setup != nil {
@@ -548,7 +548,7 @@ type record struct {
 // field is one key of a record and where its value goes.
 type field struct {
 	key      string
-	dst      any // *string, *bool, *[]string, *[]record, **record or *map[string]string
+	dst      any // *string, *bool, *int, *[]string, *[]record, **record or *map[string]string
 	required bool
 }
 
@@ -587,6 +587,12 @@ func (r record) set(f field, v any) error {
 			return wrong("bool")
 		}
 		*dst = b
+	case *int:
+		n, ok := v.(int64)
+		if !ok {
+			return wrong("int")
+		}
+		*dst = int(n)
 	case *[]string:
 		items, ok := v.([]any)
 		if !ok {

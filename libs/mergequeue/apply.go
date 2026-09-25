@@ -54,13 +54,17 @@ type Applier struct {
 	Interval time.Duration
 	// DryRun reports what would merge and calls nothing on the provider.
 	DryRun bool
-	// Committer commits every update commit, overriding the committer the provider
-	// names. An update commit that merges the base in or regenerates keeps the change's
-	// author; one that restacks the branch is the committer's own.
+	// Committer authors and commits every update commit, overriding the committer the
+	// provider names. The head's author is never copied: it is a claim the change's
+	// author typed, and an update commit holds the base and its regeneration, not their
+	// work.
 	Committer magustypes.Person
 	// Regenerate is the base's own regeneration. An Applier runs it where validation's
 	// candidate holds regenerated files, and only once the build tool proved it runs
-	// none of the change's code. Nil kicks every such change back to its author.
+	// none of the change's code. Nil kicks every such change back to its author. It runs
+	// in the job holding the write credential over a checkout carrying the change's
+	// files, so it must confine itself to that checkout and fail rather than run
+	// unconfined: `magus queue apply` requires magus's kernel sandbox for it.
 	Regenerate types.RegenerateFunc
 	// Source names the validation run the verdicts come from, as the provider names it,
 	// for each kick-back to point at; empty when they come from a directory.
@@ -410,6 +414,7 @@ type ready struct {
 	v        types.Verdict
 	approval approvalResult
 	tip      string
+	onto     string // what cand was rebuilt onto
 	cand     string // the candidate rebuilt here
 	tree     string // the tree the base carries once it merges
 }
@@ -660,7 +665,7 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	if err != nil {
 		return nil, fmt.Errorf("predict %s after %s: %w", r.plan.Base, c.Label(), err)
 	}
-	return &ready{v: v, approval: a, tip: tip, cand: cand, tree: tree}, nil
+	return &ready{v: v, approval: a, tip: tip, onto: buildOnto, cand: cand, tree: tree}, nil
 }
 
 // rebuild builds v's candidate again onto onto and returns it once it is the commit
@@ -690,7 +695,7 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 	if len(regen) == 0 {
 		return "", &waitError{code: types.CodeWaitRevalidate, reason: "rebuilding its candidate gave " + short(b.Commit) + ", not the validated " + short(v.CandidateCommit) + "; validated again next run"}
 	}
-	g, err := r.generation(ctx, c, regen)
+	g, err := r.generation(ctx, c, regen, onto, b.touched)
 	if err != nil {
 		return "", err
 	}
@@ -706,19 +711,44 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 	return commit, nil
 }
 
-// generation proves regenerating outputs runs none of c's code, and says what the
-// regeneration runs.
-func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []string) (types.Generation, error) {
+// generation proves regenerating outputs, in a tree built on at with added changed on top,
+// runs none of c's code, and says what the regeneration runs.
+//
+// The build facts are the declarations at the plan's base, so everything between the base
+// and at is proven too: a change merged beneath c in this run can make one of c's files
+// a generator's input. A proof failing only on that span is not c's to fix, so c waits
+// for a run whose base holds it.
+func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []string, at string, added []string) (types.Generation, error) {
 	if r.Regenerate == nil {
 		return types.Generation{}, &types.RefusedError{Paths: outputs, Reason: "merging it needs " + joinPaths(outputs) +
 			" regenerated, and this queue regenerates nothing", Remedy: r.mergeBaseIn()}
 	}
-	g, err := generationOf(ctx, r.vcs, r.facts, r.clone.Root, r.plan.BaseCommit, c, outputs)
+	own, err := r.vcs.RangeFiles(ctx, r.clone.Root, r.plan.BaseCommit, c.Head, nil)
 	if err != nil {
 		return types.Generation{}, err
 	}
+	var beneath []string
+	if at != r.plan.BaseCommit {
+		if beneath, err = r.vcs.DiffTrees(ctx, r.clone.Root, r.plan.BaseCommit, at); err != nil {
+			return types.Generation{}, err
+		}
+	}
+	// The outputs themselves are overwritten, not run; own still names any c changed.
+	rewritten := func(p string) bool { return slices.Contains(outputs, p) }
+	added = slices.DeleteFunc(slices.Clone(added), rewritten)
+	changed := slices.Concat(own, added, slices.DeleteFunc(slices.Clone(beneath), rewritten))
+	changed = slices.Compact(slices.Sorted(slices.Values(changed)))
+	g, err := r.facts.Generation(ctx, outputs, changed)
+	if err != nil {
+		return types.Generation{}, fmt.Errorf("generation of %s: %w", joinPaths(outputs), err)
+	}
 	if regenerationProven(g) {
 		return g, nil
+	}
+	itsOwn := func(p string) bool { return slices.Contains(own, p) || slices.Contains(added, p) }
+	if len(g.Code) > 0 && !slices.ContainsFunc(g.Code, itsOwn) {
+		return types.Generation{}, &waitError{code: types.CodeWaitRevalidate, reason: "regenerating " + joinPaths(outputs) + " on " + short(at) +
+			" would run " + joinPaths(g.Code) + ", which it does not change but what it builds on does; validated again next run"}
 	}
 	why, paths := unprovenWhy(g, outputs)
 	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
@@ -732,14 +762,6 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 	for _, ob := range owed {
 		unreviewed := func(why string) error {
 			return &waitError{code: types.CodeWaitNotApproved, reason: "not approved at " + short(ob.Commit) + ": " + why}
-		}
-		g, err := r.generation(ctx, c, ob.Paths)
-		var refusedErr *types.RefusedError
-		if errors.As(err, &refusedErr) {
-			return unreviewed(joinPaths(ob.Paths) + " differ from its plain merge, and the base's regeneration cannot vouch for them")
-		}
-		if err != nil {
-			return err
 		}
 		plain, err := r.vcs.MergeTrees(ctx, r.clone.Root, magustypes.TreeMerge{Ours: ob.Onto, Theirs: ob.First})
 		if err != nil {
@@ -764,7 +786,20 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 		if err != nil {
 			return err
 		}
-		got, err := r.regenerateAt(ctx, c, from, date, ob.Paths, g.Units)
+		added, err := r.vcs.DiffTrees(ctx, r.clone.Root, ob.Onto, from)
+		if err != nil {
+			return err
+		}
+		g, err := r.generation(ctx, c, ob.Paths, ob.Onto, added)
+		var refusedErr *types.RefusedError
+		var held *waitError
+		if errors.As(err, &refusedErr) || errors.As(err, &held) {
+			return unreviewed(joinPaths(ob.Paths) + " differ from its plain merge, and the base's regeneration cannot vouch for them")
+		}
+		if err != nil {
+			return err
+		}
+		got, err := r.regenerateAt(ctx, c, from, ob.Onto, date, ob.Paths, added, g.Units)
 		if err != nil {
 			return err
 		}
@@ -779,16 +814,16 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 	return nil
 }
 
-// regenerateAt regenerates paths in a checkout of commit and returns the tree that
-// leaves.
-func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit string, date time.Time, paths, units []string) (string, error) {
+// regenerateAt regenerates paths in a checkout of commit, which holds changed
+// differently from onto, and returns the tree that leaves.
+func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit, onto string, date time.Time, paths, changed, units []string) (string, error) {
 	cand, err := checkout(ctx, r.vcs, r.clone.Root, r.scratch, "proof-"+c.ID, commit)
 	if err != nil {
 		return "", err
 	}
 	defer r.discard(ctx, cand)
-	b := built{Candidate: cand, touched: paths, date: date}
-	s := candidateSpec{clone: r.clone, facts: r.facts, change: c, scratch: r.scratch}
+	b := built{Candidate: cand, touched: paths, changed: changed, date: date}
+	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch}
 	after, err := regenerateIn(ctx, r.vcs, s, b, r.Regenerate, units)
 	if err != nil {
 		return "", err
@@ -1009,7 +1044,7 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 		return "", err
 	}
 	if len(outputs) > 0 {
-		if _, err := r.generation(ctx, c, outputs); err != nil {
+		if _, err := r.generation(ctx, c, outputs, rd.onto, nil); err != nil {
 			return "", err
 		}
 	}
@@ -1024,11 +1059,6 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	if r.committer == (magustypes.Person{}) {
 		return "", types.ErrNoCommitter
 	}
-	head, err := r.vcs.FindCommit(ctx, root, c.Head)
-	if err != nil {
-		return "", err
-	}
-	author := head.Author
 	parents, msg := []string{c.Head, rd.tip}, "merge "+r.plan.Base+" into #"+c.ID+" and regenerate generated files"
 	switch {
 	case c.Method == types.MethodRebase:
@@ -1048,12 +1078,15 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 			return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs its branch restacked onto it, which would replace the commits #" + above +
 				" is stacked on", Remedy: "Restack the stack onto `" + r.plan.Base + "`."}
 		}
-		parents, author = []string{rd.tip}, r.committer
+		parents = []string{rd.tip}
 		msg = "restack #" + c.ID + " onto " + r.plan.Base + "\n\nReplaces " + c.Head + " and the commits beneath it that " +
 			r.plan.Base + " lacks with one commit holding their delta onto " + short(rd.tip) + "."
 	}
 	update, err := r.vcs.CommitTree(ctx, root, magustypes.TreeCommit{
-		CommitMeta: magustypes.CommitMeta{Message: msg, Author: author, Committer: r.committer},
+		// The queue's own identity authors it too: its content is the base and the base's
+		// regeneration, not the author's work, and the head's author field is whatever
+		// the change's author typed, which the queue would otherwise countersign.
+		CommitMeta: magustypes.CommitMeta{Message: msg, Author: r.committer, Committer: r.committer},
 		Tree:       rd.tree, Parents: parents,
 	})
 	if err != nil {

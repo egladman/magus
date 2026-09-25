@@ -316,7 +316,8 @@ fun describeFrom(body: str, rules: str, setup: any, committer: any) > any !> any
     if (methods.len() == 0) {
         throw "github: describe: the repository settings and its rulesets on the base branch allow no merge method in common";
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "queue_label": QUEUE_LABEL, "committer": committer, "setup": setup};
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "required_approvals": requiredFrom(rules),
+        "queue_label": QUEUE_LABEL, "committer": committer, "setup": setup};
 }
 
 // describe reads the setup only when asked for a status context: planning asks for none,
@@ -1008,13 +1009,16 @@ fun requiredFrom(body: str) > int !> any {
 
 // approvalFrom decides approval AT commit from a GraphQL pull-request answer.
 //
-// Each reviewer's latest decisive review counts, as on GitHub, but an approval counts only
-// when it was given on commit itself: approving an older commit does not approve what the
-// queue tested. When commit lacks them, approved_commit names an older commit that holds
-// enough approvals, the one approved most recently (by commit id when two tie), and the
-// queue decides whether commit is that one rebased with its diff unchanged.
-// reviewDecision covers what rulesets do not show (classic protection, code owners), so
-// any requirement it signals needs at least one approval.
+// Each reviewer's latest decisive review counts, as on GitHub, but only a reviewer who can
+// push to the repository counts at all, as GitHub counts toward a required review: anyone
+// can leave an approving review on a public repository. An approval counts only when it
+// was given on commit itself: approving an older commit does not approve what the queue
+// tested. When commit lacks them, approved_commit names an older commit that holds enough
+// approvals, the one approved most recently (by commit id when two tie), and the queue
+// decides whether commit is that one rebased with its diff unchanged. reviewDecision
+// covers what rulesets do not show (classic protection, code owners), so any requirement
+// it signals needs at least one approval; its APPROVED alone approves nothing, since it
+// can stand on a review of an older commit.
 fun approvalFrom(body: str, commit: str, required: int) > {str: any} !> any {
     final pr = serialize\jsonDecode(body).q("data").q("repository").q("pullRequest");
     final head = pr.q("headRefOid").stringValue();
@@ -1030,7 +1034,11 @@ fun approvalFrom(body: str, commit: str, required: int) > {str: any} !> any {
         if (state != "APPROVED" and state != "CHANGES_REQUESTED" and state != "DISMISSED") {
             continue;
         }
+        // A deleted account has no login, and its review proves nothing either way.
         final who = r.q("author").q("login").stringValue();
+        if (who == "" or !r.q("authorCanPushToRepository").booleanValue()) {
+            continue;
+        }
         latest[who] = state;
         commits[who] = r.q("commit").q("oid").stringValue();
         times[who] = r.q("submittedAt").stringValue();
@@ -1128,7 +1136,7 @@ fun sharedFrom(pages: [str], number: str) > [str] !> any {
 }
 
 // Backquoted: GraphQL's braces would read as interpolation in a double-quoted string.
-final APPROVAL_QUERY = `query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid reviewDecision reviews(last: 100) { nodes { state submittedAt author { login } commit { oid } } } } } }`;
+final APPROVAL_QUERY = `query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid reviewDecision reviews(last: 100) { nodes { state submittedAt authorCanPushToRepository author { login } commit { oid } } } } } }`;
 
 export fun approval_at(io: {str: any}) > any !> any {
     final hdrs = reading("approval_at");
@@ -1984,7 +1992,7 @@ test "merged changes are the ones merged into the base at a head the change carr
 
 test "an approval counts only at the commit asked about" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "new", "reviewDecision": "APPROVED",
-        "reviews": {"nodes": [{"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "author": {"login": "a"}, "commit": {"oid": "old"}}]}}}}}`;
+        "reviews": {"nodes": [{"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "old"}}]}}}}}`;
     assert\equal(approvalFrom(body, commit: "old", required: 1)["approved"], want: true, message: "approved at old");
     final atNew = approvalFrom(body, commit: "new", required: 1);
     assert\equal(atNew["approved"], want: false, message: "not approved at a commit nobody reviewed");
@@ -1996,9 +2004,9 @@ test "an approval counts only at the commit asked about" {
 test "the commit approvals carry over from is the one approved most recently" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "new", "reviewDecision": "APPROVED",
         "reviews": {"nodes": [
-            {"state": "APPROVED", "submittedAt": "2026-01-03T00:00:00Z", "author": {"login": "b"}, "commit": {"oid": "second"}},
-            {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "author": {"login": "a"}, "commit": {"oid": "first"}},
-            {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "author": {"login": "c"}, "commit": {"oid": "first"}}
+            {"state": "APPROVED", "submittedAt": "2026-01-03T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "b"}, "commit": {"oid": "second"}},
+            {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "first"}},
+            {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "c"}, "commit": {"oid": "first"}}
         ]}}}}}`;
     assert\equal(approvalFrom(body, commit: "new", required: 1)["approved_commit"], want: "second", message: "whatever order the reviewers come in");
     assert\equal(approvalFrom(body, commit: "new", required: 2)["approved_commit"], want: "first", message: "among the commits holding enough");
@@ -2007,14 +2015,37 @@ test "the commit approvals carry over from is the one approved most recently" {
 test "a reviewer's latest decisive review wins, and changes requested blocks" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "CHANGES_REQUESTED",
         "reviews": {"nodes": [
-            {"state": "APPROVED", "author": {"login": "a"}, "commit": {"oid": "abc"}},
-            {"state": "COMMENTED", "author": {"login": "a"}, "commit": {"oid": "abc"}},
-            {"state": "CHANGES_REQUESTED", "author": {"login": "b"}, "commit": {"oid": "abc"}}
+            {"state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "abc"}},
+            {"state": "COMMENTED", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "abc"}},
+            {"state": "CHANGES_REQUESTED", "authorCanPushToRepository": true, "author": {"login": "b"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
     final got = approvalFrom(body, commit: "abc", required: 1);
     assert\equal(got["approved"], want: false, message: "changes requested blocks");
     assert\equal(got["reason"], want: "changes requested", message: "a comment does not undo an approval, and says why not");
     assert\equal(got["approved_commit"], want: "", message: "nothing carries over past a change request");
+}
+
+test "only a reviewer who can push counts, whatever reviewDecision says" {
+    final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "APPROVED",
+        "reviews": {"nodes": [
+            {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": false, "author": {"login": "drive-by"}, "commit": {"oid": "abc"}},
+            {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "author": {"login": "unsaid"}, "commit": {"oid": "abc"}},
+            {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": null, "commit": {"oid": "abc"}},
+            {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "old"}}
+        ]}}}}}`;
+    final got = approvalFrom(body, commit: "abc", required: 1);
+    assert\equal(got["approved"], want: false, message: "a stale APPROVED decision and approvals from accounts that cannot push approve nothing");
+    assert\equal(got["reason"], want: "0 of 1 approvals at this commit", message: "counts the writer's review only, at the commit it covers");
+    assert\equal(got["approved_commit"], want: "old", message: "the writer's approval still stands where it was given");
+}
+
+test "a change request from an account that cannot push blocks nothing" {
+    final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "APPROVED",
+        "reviews": {"nodes": [
+            {"state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "abc"}},
+            {"state": "CHANGES_REQUESTED", "authorCanPushToRepository": false, "author": {"login": "drive-by"}, "commit": {"oid": "abc"}}
+        ]}}}}}`;
+    assert\equal(approvalFrom(body, commit: "abc", required: 1)["approved"], want: true, message: "as on GitHub, where it does not count either");
 }
 
 test "no review requirement approves with no reviews" {
@@ -2060,6 +2091,7 @@ test "describe lists the methods the repository allows" {
     assert\equal(got["stack_merge"], want: "atomic", message: "GitHub merges a stack in one call");
     assert\equal(got["queue_label"], want: "queue: ", message: "the label a stack is queued by, before its method");
     assert\equal(got["committer"], want: bot, message: "the app's bot commits");
+    assert\equal(got["required_approvals"], want: 0, message: "no rule requires a review, and describe says so rather than leaving it out");
 }
 
 test "the app's bot commits under its noreply address" {
@@ -2069,8 +2101,9 @@ test "the app's bot commits under its noreply address" {
 
 test "an active pull_request ruleset rule narrows methods to what it allows" {
     final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": true, "allow_rebase_merge": true}`,
-        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`, setup: null, committer: null);
+        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"], "required_approving_review_count": 1}}]`, setup: null, committer: null);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "the repo settings allow merge too, but the ruleset does not");
+    assert\equal(got["required_approvals"], want: 1, message: "the approvals the same rule requires");
 }
 
 test "a required_linear_history rule drops merge even when settings and rulesets both allow it" {
