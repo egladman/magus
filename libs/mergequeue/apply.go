@@ -47,8 +47,8 @@ type Applier struct {
 	// [DefaultStatusContext].
 	StatusContext string
 	// App names the app the provider's write credential belongs to (github: a GitHub
-	// App's slug); empty is the provider's default credential. Run refuses to start when
-	// the base requires StatusContext from an integration other than the credential's.
+	// App's slug, which it requires); empty names none. Run refuses to start when the
+	// base requires StatusContext from an integration other than the credential's.
 	App string
 	// Interval is how long to wait between polls while verdicts are outstanding.
 	Interval time.Duration
@@ -853,7 +853,7 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 		r.revokeOne(ctx, c, commit, err)
 		return false, err
 	}
-	res, err := r.provider.MergeChange(ctx, c, types.MergeOptions{Commit: commit, Message: msg})
+	res, err := r.provider.MergeChange(ctx, c, types.MergeOptions{Commit: commit, Message: msg, App: r.App})
 	if err != nil {
 		return false, r.wait(context.WithoutCancel(ctx), c, commit, types.CodeWaitProviderRefused, "the provider refused the merge: "+err.Error())
 	}
@@ -1216,7 +1216,7 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 			return 0, err
 		}
 	}
-	res, mergeErr := r.provider.MergeChange(ctx, top.v.Change, types.MergeOptions{Commit: top.v.Change.Head, Message: msg, Through: pins(members)})
+	res, mergeErr := r.provider.MergeChange(ctx, top.v.Change, types.MergeOptions{Commit: top.v.Change.Head, Message: msg, App: r.App, Through: pins(members)})
 	after, err := fetchBase(ctx, r.vcs, r.clone, r.plan.Base)
 	if err != nil {
 		r.revoke(ctx, steps, err)

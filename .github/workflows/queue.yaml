@@ -28,11 +28,11 @@ on:
     types: [auto_merge_enabled, labeled, synchronize]
   pull_request_review:
     types: [submitted]
-  # Every merge moves the base the rest of the queue waits on. Apply merges with the
-  # Actions token, which starts no workflow, so queue-apply.yaml dispatches this instead;
-  # push covers a merge made any other way.
+  # Every merge moves the base the rest of the queue waits on, and every merge pushes
+  # main, the queue app's included.
   push:
     branches: [main]
+  # queue-apply.yaml's dispatch job starts a validation here for a pull request's intent.
   workflow_dispatch:
 
 # One validation at a time; a newer event waits rather than cancelling a run whose

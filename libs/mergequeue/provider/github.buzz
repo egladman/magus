@@ -27,9 +27,11 @@
 // list_artifacts) use MERGEQUEUE_TOKEN when the environment carries it, else
 // GITHUB_TOKEN: the validation side runs pull-request code and holds only a read-only
 // Actions token. The writes use MERGEQUEUE_TOKEN and nothing else, so a job that does
-// not hold the write credential cannot write by accident. It needs contents, pull
-// requests and commit statuses write; the apply job's own Actions token is enough, and
-// no bypass of any rule is needed.
+// not hold the write credential cannot write by accident. That credential is the queue's
+// own GitHub App, which describe and merge_change take as app, and nothing else: a run or
+// a merge the job's Actions token makes starts no workflow, so a queue writing with it
+// would validate changes and never merge one. The app needs contents, pull requests,
+// commit statuses, actions and workflows write, and no bypass of any rule.
 //
 // # Who merges
 //
@@ -37,10 +39,9 @@
 // request with auto-merge on, GitHub then merges it on behalf of whoever enabled
 // auto-merge, which starts the base branch's workflows; merge_change waits for that and
 // reports it (by_provider). Only when GitHub has not merged it in time does
-// merge_change merge it through the API itself, with the job's token, whose merges start
-// no workflow, so the caller dispatches the base branch's runs then. A stack, queued by
-// label with no auto-merge, is always merged by merge_change, which is not yet verified
-// on a real repository.
+// merge_change merge it through the API itself, as the app, which starts them too. A
+// stack, queued by label with no auto-merge, is always merged by merge_change, which is
+// not yet verified on a real repository.
 //
 // # Listings
 //
@@ -79,8 +80,6 @@ final MARK_COLORS = {"queued": "1d76db", "rejected": "d93f0b"};
 final FLAG_LABELS = {"changes_generator": "merge-queue: changes a generator"};
 final FLAG_DESCRIPTIONS = {"changes_generator": "The queue cannot regenerate its generated files; if the base moves them, merge it in and regenerate."};
 final FLAG_COLORS = {"changes_generator": "fbca04"};
-// Who commits what the queue pushes to a pull request's branch: the Actions bot.
-final COMMITTER = {"name": "github-actions[bot]", "email": "41898282+github-actions[bot]@users.noreply.github.com"};
 // Roles whose label queues a stack: the ones that can enable auto-merge.
 final QUEUE_ROLES = ["admin", "maintain", "write"];
 // How many pages of an issue timeline the labeler check reads before it gives up and
@@ -265,7 +264,7 @@ fun pages(url: str, what: str, hdrs: {str: str}) > [str] !> any {
 //
 // GitHub sends the allow_* settings only to a token with push access, so a read-only
 // token's describe starts from every method and needs a ruleset to name the allowed ones.
-fun describeFrom(body: str, rules: str, setup: any) > any !> any {
+fun describeFrom(body: str, rules: str, setup: any, committer: any) > any !> any {
     final r = serialize\jsonDecode(body);
     final settingsKnown = r.q("allow_squash_merge").boolean() != null;
     var methods = mut [<str>];
@@ -317,7 +316,7 @@ fun describeFrom(body: str, rules: str, setup: any) > any !> any {
     if (methods.len() == 0) {
         throw "github: describe: the repository settings and its rulesets on the base branch allow no merge method in common";
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "queue_label": QUEUE_LABEL, "committer": COMMITTER, "setup": setup};
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "queue_label": QUEUE_LABEL, "committer": committer, "setup": setup};
 }
 
 // describe reads the setup only when asked for a status context: planning asks for none,
@@ -332,16 +331,19 @@ export fun describe(io: {str: any}) > any !> any {
         needs: "metadata read on {repo}", hdrs: hdrs);
     final context = "{io["status_context"] ?? ""}";
     if (context == "") {
-        return describeFrom(body, rules: rules, setup: null);
+        return describeFrom(body, rules: rules, setup: null, committer: null);
+    }
+    final web = "https://" + apiHost(apiBase());
+    final slug = "{io["app"] ?? ""}";
+    if (slug == "") {
+        throw noApp(repo, web: web, repoBody: body);
     }
     final branch = readFor(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
         needs: "contents read on {repo}", hdrs: hdrs);
-    final slug = "{io["app"] ?? ""}";
-    var app = {<str: str>};
-    if (slug != "") {
-        app = appFrom(readFor(apiBase() + "/apps/" + escape(slug), what: "read the app {slug}",
-            needs: "to see the app: a private app is visible only to a token of its owner or of one of its installations", hdrs: hdrs));
-    }
+    final app = appFrom(readFor(apiBase() + "/apps/" + escape(slug), what: "read the app {slug}",
+        needs: "to see the app: a private app is visible only to a token of its owner or of one of its installations", hdrs: hdrs));
+    final bot = botFrom(slug, user: expect(get(apiBase() + "/users/" + escape(slug + "[bot]"), hdrs: hdrs), status: 200,
+        what: "read the bot of the app {slug}"));
     final steps = "{io["setup_steps"] ?? false}" == "true";
     var reports = [<{str: str}>];
     var rulesets = {<str: str>};
@@ -350,13 +352,26 @@ export fun describe(io: {str: any}) > any !> any {
         reports = reportsOn(repo, base: base, wanted: checks, hdrs: hdrs);
         rulesets = rulesetNames(repo, checks: checks, hdrs: hdrs);
     }
-    final at = {"repo": repo, "base": base, "context": context, "web": "https://" + apiHost(apiBase())};
+    final at = {"repo": repo, "base": base, "context": context, "web": web};
     return describeFrom(body, rules: rules, setup: setupFrom(at, repoBody: body, checks: requiredChecksFrom(rules, branch: branch),
-        reports: reports, rulesets: rulesets, app: app, steps: steps));
+        reports: reports, rulesets: rulesets, app: app, steps: steps), committer: bot);
 }
 
-// The app GITHUB_TOKEN belongs to: GitHub counts a status it posts as integration 15368's.
-final ACTIONS_APP = {"id": "15368", "name": "GitHub Actions"};
+// noApp is describe's refusal of a setup without the queue's own app, naming how to
+// register one.
+fun noApp(repo: str, web: str, repoBody: str) > str !> any {
+    final org = serialize\jsonDecode(repoBody).q("owner").q("type").stringValue() == "Organization";
+    return "github: the merge queue writes only as its own GitHub App, and --app names none: register one at "
+        + registrationURL(web, repo: repo, org: org) + ", then `magus queue describe --app <its slug>` prints the rest of the setup";
+}
+
+// botFrom is the committer of what the app pushes: its bot user, from user, GitHub's
+// record of "<slug>[bot]".
+fun botFrom(slug: str, user: str) > {str: str} !> any {
+    final login = slug + "[bot]";
+    return {"name": login, "email": id(serialize\jsonDecode(user).q("id")) + "+" + login + "@users.noreply.github.com"};
+}
+
 // Where queue-apply.yaml reads the queue app's credential from, which setup-magus's
 // queue-app-client-id and queue-app-private-key inputs take.
 final APP_ENVIRONMENT = "magus-queue";
@@ -543,15 +558,6 @@ fun eventsOf(reports: [{str: str}], context: str) > [str] {
     return events;
 }
 
-fun reportedOn(reports: [{str: str}], context: str, event: str) > bool {
-    foreach (e in eventsOf(reports, context: context)) {
-        if (e == event) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // statusRule is the required-status-checks rule requiring context from integration, with
 // strict up-to-date off: the queue validates each change on the base it merges onto.
 fun statusRule(context: str, integration: str) > any {
@@ -567,10 +573,9 @@ fun heredoc(command: str, body: any) > str {
 
 // pinSteps are the steps that make base require context from credential: a ruleset of
 // its own when nothing requires it yet, a rewrite of that ruleset while it holds only
-// the queue's rule, else a link to where a person edits it. With the Actions token a
-// context required from anyone already works, so it is left alone; with an app, pinning
-// it is the point.
-fun pinSteps(at: {str: str}, checks: [{str: str}], rulesets: {str: str}, credential: {str: str}, app: bool) > [any] !> any {
+// the queue's rule, else a link to where a person edits it. A context required from
+// anyone is pinned too: until it is, anyone with write access can post it.
+fun pinSteps(at: {str: str}, checks: [{str: str}], rulesets: {str: str}, credential: {str: str}) > [any] !> any {
     final repo = at["repo"] ?? "";
     final context = at["context"] ?? "";
     final want = credential["id"] ?? "";
@@ -583,7 +588,7 @@ fun pinSteps(at: {str: str}, checks: [{str: str}], rulesets: {str: str}, credent
         }
         required = true;
         final integration = c["integration"] ?? "";
-        if (integration == want or (integration == "" and !app)) {
+        if (integration == want) {
             continue;
         }
         final ruleset = c["ruleset"] ?? "";
@@ -620,17 +625,13 @@ fun registrationURL(web: str, repo: str, org: bool) > str {
 }
 
 // setupFrom builds describe's setup from what GitHub answered. at carries repo, base,
-// context and the web host; app is the queue app's record, empty for the Actions token.
+// context and the web host; app is the queue app's record.
 fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{str: str}], rulesets: {str: str}, app: {str: str}, steps: bool) > any !> any {
     final repo = at["repo"] ?? "";
     final web = at["web"] ?? "";
     final r = serialize\jsonDecode(repoBody);
     final org = r.q("owner").q("type").stringValue() == "Organization";
-    final hasApp = app["id"] != null;
-    var credential = ACTIONS_APP;
-    if (hasApp) {
-        credential = {"id": app["id"] ?? "", "name": app["name"] ?? ""};
-    }
+    final credential = {"id": app["id"] ?? "", "name": app["name"] ?? ""};
     final required = mut [<any>];
     foreach (c in checks) {
         required.append({"context": c["context"] ?? "", "integration": c["integration"] ?? "", "events": eventsOf(reports, context: c["context"] ?? "")});
@@ -645,40 +646,23 @@ fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{st
         todo.append({"title": "Allow auto-merge (Settings > General > Pull Requests > Allow auto-merge)",
             "command": "gh api -X PATCH repos/{repo} -F allow_auto_merge=true"});
     }
-    var appRecord: any = null;
-    if (hasApp) {
-        final slug = app["slug"] ?? "";
-        var appPage = web + "/settings/apps/" + slug;
-        if (org) {
-            appPage = web + "/organizations/" + repo.split("/")[0] + "/settings/apps/" + slug;
-        }
-        appRecord = {"slug": slug, "id": app["id"] ?? "", "client_id": app["client_id"] ?? "",
-            "registration_url": registrationURL(web, repo: repo, org: org), "install_url": web + "/apps/" + slug + "/installations/new",
-            "environment": APP_ENVIRONMENT, "variable": APP_VARIABLE, "secret": APP_SECRET};
-        todo.append({"title": "Install {slug} on {repo} only", "url": web + "/apps/" + slug + "/installations/new"});
-        todo.append({"title": "Create the {APP_ENVIRONMENT} environment, whose secrets only {at["base"] ?? ""} can read, so pull request runs never see the key",
-            "command": "gh api -X PUT repos/{repo}/environments/{APP_ENVIRONMENT} -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'\n" +
-                "gh api -X POST repos/{repo}/environments/{APP_ENVIRONMENT}/deployment-branch-policies -f name={at["base"] ?? ""} -f type=branch"});
-        todo.append({"title": "Store the app's client id", "command": "gh variable set {APP_VARIABLE} --repo {repo} --body '{app["client_id"] ?? ""}'"});
-        todo.append({"title": "Generate a private key on {appPage} (a .pem downloads), store it in the environment alone, and delete the download",
-            "command": "gh secret set {APP_SECRET} --repo {repo} --env {APP_ENVIRONMENT} < ~/Downloads/{slug}.*.private-key.pem\nrm ~/Downloads/{slug}.*.private-key.pem"});
+    final slug = app["slug"] ?? "";
+    var appPage = web + "/settings/apps/" + slug;
+    if (org) {
+        appPage = web + "/organizations/" + repo.split("/")[0] + "/settings/apps/" + slug;
     }
-    foreach (s in pinSteps(at, checks: checks, rulesets: rulesets, credential: credential, app: hasApp)) {
+    final appRecord = {"slug": slug, "id": app["id"] ?? "", "client_id": app["client_id"] ?? "",
+        "registration_url": registrationURL(web, repo: repo, org: org), "install_url": web + "/apps/" + slug + "/installations/new",
+        "environment": APP_ENVIRONMENT, "variable": APP_VARIABLE, "secret": APP_SECRET};
+    todo.append({"title": "Install {slug} on {repo} only", "url": web + "/apps/" + slug + "/installations/new"});
+    todo.append({"title": "Create the {APP_ENVIRONMENT} environment, whose secrets only {at["base"] ?? ""} can read, so pull request runs never see the key",
+        "command": "gh api -X PUT repos/{repo}/environments/{APP_ENVIRONMENT} -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'\n" +
+            "gh api -X POST repos/{repo}/environments/{APP_ENVIRONMENT}/deployment-branch-policies -f name={at["base"] ?? ""} -f type=branch"});
+    todo.append({"title": "Store the app's client id", "command": "gh variable set {APP_VARIABLE} --repo {repo} --body '{app["client_id"] ?? ""}'"});
+    todo.append({"title": "Generate a private key on {appPage} (a .pem downloads), store it in the environment alone, and delete the download",
+        "command": "gh secret set {APP_SECRET} --repo {repo} --env {APP_ENVIRONMENT} < ~/Downloads/{slug}.*.private-key.pem\nrm ~/Downloads/{slug}.*.private-key.pem"});
+    foreach (s in pinSteps(at, checks: checks, rulesets: rulesets, credential: credential)) {
         todo.append(s);
-    }
-    if (!hasApp) {
-        final unreported = mut [<str>];
-        foreach (c in checks) {
-            if ((c["context"] ?? "") != (at["context"] ?? "") and reportedOn(reports, context: c["context"] ?? "", event: "pull_request")) {
-                unreported.append("\"{c["context"] ?? ""}\"");
-            }
-        }
-        if (unreported.len() > 0) {
-            todo.append({"title": "Required {unreported.join(", ")}: reported by pull_request runs, which the queue's own pushes start only once someone approves them, so a change needing an update commit waits on them. Take them out of the required set, or add the queue's own app below",
-                "url": "{web}/{repo}/rules"});
-        }
-        todo.append({"title": "Optional, later: register the queue's own GitHub App (Create GitHub App), then run this again with --app <its slug>",
-            "url": registrationURL(web, repo: repo, org: org)});
     }
     return {"status_context": at["context"] ?? "", "credential": credential, "required_checks": required, "settings": settings, "app": appRecord, "steps": todo};
 }
@@ -1335,12 +1319,11 @@ fun awaitFrom(body: str, commit: str) > {str: str} !> any {
     return {"next": "wait", "reason": ""};
 }
 
-// mergedByOther reports whether anyone but the Actions token merged the pull request in
-// body: GitHub's auto-merge, on behalf of whoever enabled it, or a person. Either starts
-// the base branch's workflows, which the token's own merges do not. It tells a merge the
-// token's call raced apart from one whose answer was lost.
-fun mergedByOther(body: str) > bool !> any {
-    return serialize\jsonDecode(body).q("merged_by").q("login").stringValue() != (COMMITTER["name"] ?? "");
+// mergedByOther reports whether anyone but app's bot merged the pull request in body:
+// GitHub's auto-merge, on behalf of whoever enabled it, or a person. It tells a merge
+// the app's call raced apart from one whose answer was lost.
+fun mergedByOther(body: str, app: str) > bool !> any {
+    return serialize\jsonDecode(body).q("merged_by").q("login").stringValue() != app + "[bot]";
 }
 
 // mergeFailure reads GitHub's refusal of a merge call.
@@ -1362,6 +1345,10 @@ fun mergeFailure(res: {str: any}) > any !> any {
 // merged.
 export fun merge_change(io: {str: any}) > any !> any {
     final hdrs = writing("merge_change");
+    final app = "{io["app"] ?? ""}";
+    if (app == "") {
+        throw "github: merge_change merges only as the queue's own GitHub App, and names none";
+    }
     final repo = "{io["repo"] ?? ""}";
     final url = apiBase() + "/repos/" + repo + "/pulls/{io["id"] ?? ""}";
     final commit = "{io["commit"] ?? ""}";
@@ -1390,7 +1377,7 @@ export fun merge_change(io: {str: any}) > any !> any {
         }
         final now = get(url, hdrs: hdrs);
         if (now["status"] == 200 and (awaitFrom("{now["body"]}", commit: commit)["next"] ?? "") == "merged") {
-            return {"merged": true, "by_provider": mergedByOther("{now["body"]}"), "reason": ""};
+            return {"merged": true, "by_provider": mergedByOther("{now["body"]}", app: app), "reason": ""};
         }
         return mergeFailure(res);
     }
@@ -2067,41 +2054,46 @@ test "the other pull requests from a branch share it" {
 }
 
 test "describe lists the methods the repository allows" {
-    final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`, rules: `[]`, setup: null);
+    final bot = {"name": "q[bot]", "email": "7+q[bot]@users.noreply.github.com"};
+    final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`, rules: `[]`, setup: null, committer: bot);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "allowed methods");
     assert\equal(got["stack_merge"], want: "atomic", message: "GitHub merges a stack in one call");
     assert\equal(got["queue_label"], want: "queue: ", message: "the label a stack is queued by, before its method");
-    assert\equal(got["committer"], want: COMMITTER, message: "the Actions bot commits");
-    assert\equal(COMMITTER["email"], want: "41898282+github-actions[bot]@users.noreply.github.com", message: "the bot's noreply address");
+    assert\equal(got["committer"], want: bot, message: "the app's bot commits");
+}
+
+test "the app's bot commits under its noreply address" {
+    assert\equal(botFrom("acme-magus-queue", user: `{"login": "acme-magus-queue[bot]", "id": 41898282}`),
+        want: {"name": "acme-magus-queue[bot]", "email": "41898282+acme-magus-queue[bot]@users.noreply.github.com"}, message: "the bot's user id");
 }
 
 test "an active pull_request ruleset rule narrows methods to what it allows" {
     final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": true, "allow_rebase_merge": true}`,
-        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`, setup: null);
+        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`, setup: null, committer: null);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "the repo settings allow merge too, but the ruleset does not");
 }
 
 test "a required_linear_history rule drops merge even when settings and rulesets both allow it" {
     final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": true, "allow_rebase_merge": true}`,
-        rules: `[{"type": "required_linear_history"}]`, setup: null);
+        rules: `[{"type": "required_linear_history"}]`, setup: null, committer: null);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "a merge commit is never linear");
 }
 
 test "no rule targeting the base leaves the settings untouched" {
-    final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": false, "allow_rebase_merge": false}`, rules: `[]`, setup: null);
+    final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": false, "allow_rebase_merge": false}`, rules: `[]`, setup: null, committer: null);
     assert\equal(got["methods"], want: ["merge"], message: "a ruleset on another branch never reaches this call, since the rules are read for the base branch alone");
 }
 
 test "a read-only token takes the methods its ruleset names" {
     final got = describeFrom(`{"full_name": "o/r"}`,
-        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`, setup: null);
+        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`, setup: null, committer: null);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "absent settings are unknown, not off");
 }
 
 test "a read-only token with no ruleset naming methods is an error naming why" {
     var reason = "";
     try {
-        final _ = describeFrom(`{"full_name": "o/r"}`, rules: `[]`, setup: null);
+        final _ = describeFrom(`{"full_name": "o/r"}`, rules: `[]`, setup: null, committer: null);
     } catch (e) {
         reason = "{e}";
     }
@@ -2112,7 +2104,7 @@ test "an empty intersection is an error naming why" {
     var reason = "";
     try {
         final _ = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": false, "allow_rebase_merge": false}`,
-            rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash"]}}]`, setup: null);
+            rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash"]}}]`, setup: null, committer: null);
     } catch (e) {
         reason = "{e}";
     }
@@ -2152,9 +2144,10 @@ test "merge_change waits for auto-merge while the pull request is open at the co
         want: "closed before GitHub merged it", message: "closed unmerged");
 }
 
-test "a merge the token's call raced is GitHub's unless the token made it" {
-    assert\equal(mergedByOther(`{"merged_by": {"login": "egladman"}}`), want: true, message: "auto-merge merges as whoever enabled it");
-    assert\equal(mergedByOther(`{"merged_by": {"login": "github-actions[bot]"}}`), want: false, message: "the token's own merge, its answer lost");
+test "a merge the app's call raced is GitHub's unless the app's bot made it" {
+    assert\equal(mergedByOther(`{"merged_by": {"login": "egladman"}}`, app: "q"), want: true, message: "auto-merge merges as whoever enabled it");
+    assert\equal(mergedByOther(`{"merged_by": {"login": "q[bot]"}}`, app: "q"), want: false, message: "the app's own merge, its answer lost");
+    assert\equal(mergedByOther(`{"merged_by": {"login": "github-actions[bot]"}}`, app: "q"), want: true, message: "another integration's merge");
 }
 
 test "list_green keeps the open pull requests whose head carries the status at success" {
@@ -2376,7 +2369,6 @@ test "a check's events are the workflow runs that reported it" {
         runs: `{"workflow_runs": [{"check_suite_id": 1, "event": "pull_request"}, {"check_suite_id": 2, "event": "push"}]}`);
     assert\equal(eventsOf(reports, context: "ci gate"), want: ["pull_request", "push"], message: "each event once");
     assert\equal(eventsOf(reports, context: "codecov").len(), want: 0, message: "another app's check has no workflow event");
-    assert\equal(reportedOn(reports, context: "ci gate", event: "pull_request"), want: true, message: "on pull_request");
 }
 
 test "the sampled heads are pull requests from this repository, newest first" {
@@ -2404,42 +2396,44 @@ test "the registration link pre-fills a private app with the queue's permissions
         want: true, message: "an organization's app");
 }
 
-fun titles(setup: any) > [str] !> any {
-    final got = mut [<str>];
-    foreach (s in serialize\Boxed.init(setup).q("steps").listValue()) {
-        got.append(s.q("title").stringValue());
-    }
-    return got;
-}
-
 final AT = {"repo": "acme/widgets", "base": "main", "context": "merge-queue", "web": "https://github.com"};
 
-test "with the Actions token, setup requires the status, lists pull_request checks and offers the app" {
-    final checks = [{"context": "ci gate", "integration": "", "ruleset": "4"}];
-    final reports = [{"name": "ci gate", "event": "pull_request"}];
-    final repo = `{"allow_auto_merge": false, "owner": {"type": "User"}}`;
-    final setup = serialize\Boxed.init(setupFrom(AT, repoBody: repo, checks: checks, reports: reports, rulesets: {<str: str>}, app: {<str: str>}, steps: true));
-    assert\equal(setup.q("credential").q("id").stringValue(), want: "15368", message: "GITHUB_TOKEN posts as GitHub Actions");
-    assert\equal(setup.q("settings").listValue()[0].q("value").stringValue(), want: "false", message: "auto-merge is off");
-    assert\equal(setup.q("required_checks").listValue()[0].q("events").listValue()[0].stringValue(), want: "pull_request", message: "the event it was seen on");
-    final steps = setup.q("steps").listValue();
-    assert\equal(steps.len(), want: 4, message: "auto-merge, the ruleset, the unreported check, the app");
-    assert\equal(steps[0].q("command").stringValue(), want: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true", message: "auto-merge");
-    final ruleset = steps[1].q("command").stringValue();
-    assert\equal(ruleset.startsWith("gh api -X POST repos/acme/widgets/rulesets --input - <<'EOF'\n"), want: true, message: "a ruleset of its own");
-    assert\equal(ruleset.indexOf(`"integration_id":15368`) != null, want: true, message: "pinned to GitHub Actions");
-    assert\equal(ruleset.indexOf(`"strict_required_status_checks_policy":false`) != null, want: true, message: "no strict up-to-date");
-    assert\equal(ruleset.indexOf(`"refs/heads/main"`) != null, want: true, message: "on the base");
-    assert\equal(steps[2].q("title").stringValue().startsWith(`Required "ci gate": reported by pull_request runs`), want: true, message: "listed, not changed");
-    assert\equal(steps[2].q("command").stringValue(), want: "", message: "a link, never a command");
-    assert\equal(steps[3].q("url").stringValue().startsWith("https://github.com/settings/apps/new?"), want: true, message: "the upgrade");
+test "without an app, describe refuses a setup and links the app's registration" {
+    final msg = noApp("acme/widgets", web: "https://github.com", repoBody: `{"owner": {"type": "Organization"}}`);
+    assert\equal(msg.startsWith("github: the merge queue writes only as its own GitHub App, and --app names none: register one at "
+        + "https://github.com/organizations/acme/settings/apps/new?"), want: true, message: msg);
+    assert\equal(msg.endsWith("then `magus queue describe --app <its slug>` prints the rest of the setup"), want: true, message: msg);
 }
 
-test "with the Actions token, a context required from anyone already works" {
-    final checks = [{"context": "merge-queue", "integration": "", "ruleset": "9"}];
+test "setup allows auto-merge and pins a context required from anyone to the app" {
+    final checks = [{"context": "merge-queue", "integration": "", "ruleset": "9"}, {"context": "ci gate", "integration": "", "ruleset": "4"}];
+    final reports = [{"name": "ci gate", "event": "pull_request"}];
+    final app = {"slug": "acme-magus-queue", "id": "812", "client_id": "Iv23li", "name": "acme magus queue"};
+    final repo = `{"allow_auto_merge": false, "owner": {"type": "User"}}`;
+    final setup = serialize\Boxed.init(setupFrom(AT, repoBody: repo, checks: checks, reports: reports, rulesets: {"9": RULESET_NAME}, app: app, steps: true));
+    assert\equal(setup.q("credential").q("id").stringValue(), want: "812", message: "the app posts the status");
+    assert\equal(setup.q("settings").listValue()[0].q("value").stringValue(), want: "false", message: "auto-merge is off");
+    assert\equal(setup.q("required_checks").listValue()[1].q("events").listValue()[0].stringValue(), want: "pull_request", message: "the event it was seen on");
+    final steps = setup.q("steps").listValue();
+    assert\equal(steps[0].q("title").stringValue(), want: "Allow auto-merge (Settings > General > Pull Requests > Allow auto-merge)", message: "auto-merge first");
+    assert\equal(steps.len(), want: 6, message: "auto-merge, install, environment, variable, key, the pin");
+    assert\equal(steps[0].q("command").stringValue(), want: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true", message: "auto-merge");
+    assert\equal(steps[4].q("title").stringValue().indexOf("https://github.com/settings/apps/acme-magus-queue") != null, want: true, message: "a user's app page");
+    final pin = steps[5].q("command").stringValue();
+    assert\equal(pin.startsWith("gh api -X PUT repos/acme/widgets/rulesets/9 --input - <<'EOF'\n"), want: true, message: "the queue's own ruleset, rewritten");
+    assert\equal(pin.indexOf(`"integration_id":812`) != null, want: true, message: "pinned to the app");
+    assert\equal(pin.indexOf(`"strict_required_status_checks_policy":false`) != null, want: true, message: "no strict up-to-date");
+}
+
+test "setup requires the status from the app in a ruleset of its own when nothing requires it" {
+    final app = {"slug": "acme-magus-queue", "id": "812", "client_id": "Iv23li", "name": "acme magus queue"};
     final repo = `{"allow_auto_merge": true, "owner": {"type": "User"}}`;
-    final setup = setupFrom(AT, repoBody: repo, checks: checks, reports: [<{str: str}>], rulesets: {<str: str>}, app: {<str: str>}, steps: true);
-    assert\equal(titles(setup), want: ["Optional, later: register the queue's own GitHub App (Create GitHub App), then run this again with --app <its slug>"], message: "only the upgrade is left");
+    final steps = serialize\Boxed.init(setupFrom(AT, repoBody: repo, checks: [<{str: str}>], reports: [<{str: str}>], rulesets: {<str: str>}, app: app, steps: true)).q("steps").listValue();
+    assert\equal(steps.len(), want: 5, message: "install, environment, variable, key, the ruleset");
+    final ruleset = steps[4].q("command").stringValue();
+    assert\equal(ruleset.startsWith("gh api -X POST repos/acme/widgets/rulesets --input - <<'EOF'\n"), want: true, message: "a ruleset of its own");
+    assert\equal(ruleset.indexOf(`"integration_id":812`) != null, want: true, message: "pinned to the app");
+    assert\equal(ruleset.indexOf(`"refs/heads/main"`) != null, want: true, message: "on the base");
 }
 
 test "with an app, setup installs it, stores its credential and moves the pin" {
@@ -2463,7 +2457,7 @@ test "with an app, setup installs it, stores its credential and moves the pin" {
 
 test "without steps, setup is the facts apply checks" {
     final setup = serialize\Boxed.init(setupFrom(AT, repoBody: `{"allow_auto_merge": true}`, checks: [{"context": "merge-queue", "integration": "812", "ruleset": "9"}],
-        reports: [<{str: str}>], rulesets: {<str: str>}, app: {<str: str>}, steps: false));
+        reports: [<{str: str}>], rulesets: {<str: str>}, app: {"slug": "q", "id": "812", "name": "q"}, steps: false));
     assert\equal(setup.q("status_context").stringValue(), want: "merge-queue", message: "the context asked about");
     assert\equal(setup.q("required_checks").listValue()[0].q("integration").stringValue(), want: "812", message: "the pin apply compares");
     assert\equal(setup.q("steps").listValue().len(), want: 0, message: "no steps");
