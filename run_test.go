@@ -1781,6 +1781,71 @@ func TestApplyRunKeyingCarriesObservations(t *testing.T) {
 	assert.Equal(t, []string{"rw"}, step.Charms)
 }
 
+// TestTargetDrivenEnvKeys pins the two ways an op's EnvKeys reach a target's key: composed
+// inside a magusfile body under another target name (TargetSpellOps, same as
+// targetDrivenBins), and a bare op dispatched straight off its own name with no magusfile
+// body to extract from at all: what a plain `magus run go-vet` and the `go::go-vet`
+// spell filter both do.
+func TestTargetDrivenEnvKeys(t *testing.T) {
+	sp := spells.NewSpell("go", spells.WithOps(map[string]spells.Op{
+		"go-vet":   {Command: spells.Command{Bin: "go", Args: []string{"vet"}, EnvKeys: []string{"GOOS", "GOARCH"}}},
+		"go-clean": {Command: spells.Command{Bin: "go", Args: []string{"clean"}}},
+	}))
+	p := &types.Project{
+		Path:           ".",
+		ResolvedSpells: []*spells.Spell{sp},
+		TargetSpellOps: map[string][]types.TargetSpellUse{
+			"lint": {{Spell: "go", Ops: []string{"go-vet"}}},
+		},
+	}
+
+	assert.Equal(t, []string{"GOOS", "GOARCH"}, targetDrivenEnvKeys(p, "lint"),
+		"a magusfile body composing go-vet under another name carries its EnvKeys")
+	assert.Equal(t, []string{"GOOS", "GOARCH"}, targetDrivenEnvKeys(p, "go-vet"),
+		"a bare op dispatched off its own name carries its EnvKeys with no magusfile body to extract from")
+	assert.Empty(t, targetDrivenEnvKeys(p, "go-clean"),
+		"an op that declares no EnvKeys keys on nothing extra")
+	assert.Empty(t, targetDrivenEnvKeys(p, "test"),
+		"a target that names no spell op and matches no op's own name carries nothing")
+}
+
+// TestComputeTargetKeyFoldsOpDeclaredEnvKeys is the regression pin for the GOOS/GOARCH
+// cross-platform cache bug: an op that declares EnvKeys must key differently under a
+// different value of that variable even though nothing else about the run changed and no
+// magusfile body declared ctx.envInputs itself. Before targetDrivenEnvKeys, GOOS never
+// reached the key for a bare op-as-target, so `GOOS=windows magus run go::go-vet` and a
+// plain `magus run go::go-vet` shared one cache entry and a failure from one replayed onto
+// the other.
+func TestComputeTargetKeyFoldsOpDeclaredEnvKeys(t *testing.T) {
+	const spellName = "zzz-platform-spell"
+	s := spells.NewSpell(spellName, spells.WithOps(map[string]spells.Op{
+		"build": {Command: spells.Command{Bin: "true", EnvKeys: []string{"GOOS"}}},
+	}), spells.WithTargets("build"))
+	project.DefaultSpellRegistry().RegisterSpell(s)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	ctx := context.Background()
+
+	t.Setenv("GOOS", "linux")
+	linuxKey, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey (GOOS=linux)")
+
+	t.Setenv("GOOS", "windows")
+	windowsKey, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey (GOOS=windows)")
+
+	assert.NotEqual(t, linuxKey, windowsKey,
+		"an op declaring EnvKeys=[GOOS] must key differently for different GOOS, or a failing cross-platform run replays onto a same-platform one")
+}
+
 // A retired charm name no selected target declares fails the run; any other undeclared
 // charm only warns, and a target declaring the old name for itself keeps it.
 func TestCheckUndeclaredCharms(t *testing.T) {

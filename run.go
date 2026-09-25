@@ -559,6 +559,15 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
 	// Names, not values: hashStep reads each variable's process value at hash time.
 	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
+	// An op's own EnvKeys travel with it regardless of whether target's body declared
+	// ctx.envInputs: the op knows its result depends on the variable (GOOS, say), the
+	// author composing it may not. Folded against the accumulated set so a name already
+	// present via ctx.envInputs, or shared by two composed ops, is not hashed twice.
+	for _, k := range targetDrivenEnvKeys(p, target) {
+		if !slices.Contains(step.EnvAllow, k) {
+			step.EnvAllow = append(step.EnvAllow, k)
+		}
+	}
 	// ctx.observes: an external fact the answer depends on, keyed so the target stays
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
@@ -1311,6 +1320,46 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 		}
 	}
 	return driven
+}
+
+// targetDrivenEnvKeys is the deduped union of EnvKeys over every op target reaches,
+// the same TargetSpellOps walk targetDrivenBins uses for a magusfile body that
+// composes the op under some other target name (lint calling go["go-vet"]). It also
+// matches target directly against every resolved spell's own op names, because a bare
+// op runs with no magusfile body at all to extract from: `magus run go-vet` and the
+// `go::go-vet` spell filter both dispatch straight to the op, magusfile export or not
+// (an export shadows the RUN, per magusfileOverride, but the filter bypasses that
+// shadow, so the direct match is kept unconditional rather than trying to mirror the
+// shadow rule here too: the cost of matching it is at most one unneeded env line).
+// Same under-reporting caveat as observationsForTarget: an op reached only through a
+// helper the walk cannot follow is invisible, leaving the target keyed as it was
+// before.
+func targetDrivenEnvKeys(p *types.Project, target string) []string {
+	var keys []string
+	add := func(op spells.Op) {
+		for _, k := range op.EnvKeys {
+			if !slices.Contains(keys, k) {
+				keys = append(keys, k)
+			}
+		}
+	}
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			continue
+		}
+		for _, opName := range use.Ops {
+			if op, ok := p.ResolvedSpells[i].Op(opName); ok {
+				add(op)
+			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok {
+			add(op)
+		}
+	}
+	return keys
 }
 
 // observationsForTarget narrows a project's probed observations to the ones target
