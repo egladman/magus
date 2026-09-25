@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/secret"
@@ -137,23 +139,23 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
 		})
 	}
-	c := exec.CommandContext(ctx, name, args...)
-	c.Dir = opts.Dir
-	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
-	c.WaitDelay = 5 * time.Second
-
 	policy := sandbox.PolicyFromContext(ctx)
+	env, withheld := childEnv(ctx, policy, opts.Env)
+	resolved, lookErr := lookPath(name, envValue(env, "PATH"))
+	if lookErr != nil {
+		return ExecResult{Code: -1}, classifyMissingBinary(lookErr, name, false)
+	}
 	if policy != nil {
-		resolved, err := exec.LookPath(name)
-		if err != nil {
-			resolved = name // let exec.Cmd surface the real lookup error
-		}
 		if err := policy.CheckExec(ctx, resolved); err != nil {
 			sandbox.EmitDenyHint(policy, filesystem.Exec, resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
-	env, withheld := childEnv(ctx, policy, opts.Env)
+	c := exec.CommandContext(ctx, resolved, args...)
+	c.Args[0] = name
+	c.Dir = opts.Dir
+	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
+	c.WaitDelay = 5 * time.Second
 	c.Env = env
 	if js := jobserverFrom(ctx); js != nil {
 		c.ExtraFiles = js.files()
@@ -272,9 +274,15 @@ func classifyMissingBinary(err error, name string, started bool) error {
 }
 
 // ProcForwardVars never reach ordinary op subprocesses: the proc-server socket a magus
-// child forwards to, and the address `magus server` listens on. Both are unauthenticated
-// sockets, so only a recursive magus is handed them.
-var ProcForwardVars = []string{"MAGUS_PROC_SOCKET", "MAGUS_SERVER_ADDRESS"}
+// child forwards to, the token that socket demands, and the address `magus server`
+// listens on. Only a recursive magus is handed them.
+var ProcForwardVars = []string{"MAGUS_PROC_SOCKET", "MAGUS_PROC_TOKEN", "MAGUS_SERVER_ADDRESS"}
+
+// SandboxEnvVar is how a sandboxed run tells every child that a nested magus must run
+// sandboxed too. childEnv sets it after the caller's overrides.
+//
+// TODO(sandbox-policy): becomes MAGUS_SANDBOX=<mode> when the mode setting lands.
+const SandboxEnvVar = "MAGUS_SANDBOX_ENABLED"
 
 // childEnv layers self-reference variables and caller overrides over the base environment.
 //
@@ -285,6 +293,7 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	if policy != nil {
 		root = policy.BaseEnv
 	}
+	root = environ.From(ctx).Apply(root)
 	for _, name := range ProcForwardVars {
 		if hasEnvVar(root, name) && !hasEnvVar(overrides, name) {
 			withheld = append(withheld, name)
@@ -301,7 +310,72 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 		env = append(env, js.environ(env)...)
 	}
 	env = append(env, overrides...)
+	if policy != nil {
+		// Last, after the caller's overrides, so a target cannot hand a child a weaker value.
+		env = append(withoutEnvVars(env, []string{SandboxEnvVar}), SandboxEnvVar+"=1")
+		for _, name := range nestedMagusVars {
+			if v, ok := environ.Lookup(ctx, name); ok && !hasEnvVar(env, name) {
+				env = append(env, name+"="+v)
+			}
+		}
+	}
 	return env, withheld
+}
+
+// nestedMagusVars are what a magus nested in a sandboxed run needs to act on the same
+// cache and job store, and that the scrubbed BaseEnv drops: a different cache dir is a
+// different cache and lease marker, and the state dir holds the job store the lease
+// narrowing reads. A value the caller set wins; these locate, they do not confine.
+//
+// Not in the sandbox's env allowlist, which testkit also isolates tests with: a stray
+// MAGUS_CACHE_DIR reaching a test is the failure that list exists to stop.
+var nestedMagusVars = []string{"MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "XDG_STATE_HOME"}
+
+// WithEnvOverlay gives ctx an environment overlay of its own; see environ.With. It is
+// here so an entry point that already starts runs through this package need not import
+// a second one to begin a run.
+func WithEnvOverlay(ctx context.Context) context.Context { return environ.With(ctx) }
+
+// LookPath resolves name against the PATH a child of this run would get, the same answer
+// Exec acts on.
+func LookPath(ctx context.Context, name string) (string, error) {
+	env, _ := childEnv(ctx, sandbox.FromContext(ctx), nil)
+	return lookPath(name, envValue(env, "PATH"))
+}
+
+// envValue is name's value in env, the last entry winning as it does for exec.Cmd.
+func envValue(env []string, name string) string {
+	prefix := name + "="
+	for i := len(env) - 1; i >= 0; i-- {
+		if v, ok := strings.CutPrefix(env[i], prefix); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// lookPath resolves name against path, the PATH the child will run with, rather than
+// this process's: in the server one run's PATH is not another's (see environ.Overlay). A
+// name holding a separator is returned as given, for exec to resolve against the dir.
+func lookPath(name, path string) (string, error) {
+	if runtime.GOOS == "windows" {
+		// PATHEXT resolution is exec.LookPath's alone to get right.
+		return exec.LookPath(name)
+	}
+	if strings.ContainsRune(name, os.PathSeparator) {
+		return name, nil
+	}
+	for _, dir := range filepath.SplitList(path) {
+		// A relative entry is skipped, as exec.LookPath refuses one with ErrDot.
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		p := filepath.Join(dir, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", &exec.Error{Name: name, Err: exec.ErrNotFound}
 }
 
 func withoutEnvVars(env, drop []string) []string {

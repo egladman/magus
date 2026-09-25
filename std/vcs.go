@@ -5,9 +5,9 @@ package std
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"sync"
 
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -448,7 +448,7 @@ func vcsExe(ctx context.Context) (string, error) {
 	if v == nil {
 		return "", nil
 	}
-	path, err := exec.LookPath(v.Name())
+	path, err := run.LookPath(ctx, v.Name())
 	if err != nil {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%s is the resolved VCS but is not on PATH", v.Name())
 	}

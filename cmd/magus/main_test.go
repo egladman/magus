@@ -26,6 +26,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/run"
+	sandboxapply "github.com/egladman/magus/internal/sandbox/apply"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
@@ -1036,6 +1038,63 @@ func BenchmarkStartupCompletionBash(b *testing.B) {
 // subcommand that actually needs the workspace open.
 func BenchmarkStartupLs(b *testing.B) {
 	benchStartup(b, []string{"ls"})
+}
+
+// TestAdoptedSandboxOnlyStrengthens: the forwarded --sandbox-enabled bound into this
+// process's globalCfg and reached nothing, so a confined client's work ran here under
+// whatever the server's workspace said. A client asking for less is refused; a client
+// under a sandbox this workspace does not apply is declined, and runs the work itself.
+func TestAdoptedSandboxOnlyStrengthens(t *testing.T) {
+	sandboxapply.MarkAppliedExternally("adopted sandbox test")
+	off, _, _ := buzzSandboxWorkspace(t, false)
+	on, _, _ := buzzSandboxWorkspace(t, true)
+	floor := func(ctx context.Context) context.Context { return proc.WithSandboxFloor(ctx) }
+
+	require.NoError(t, adoptedSandbox(off, "", []string{"build", "."}), "nothing asked, nothing checked")
+	require.NoError(t, adoptedSandbox(on, "", []string{"build", "."}))
+	require.NoError(t, adoptedSandbox(off, "", []string{"build", "--sandbox-enabled=false"}), "off and asked to stay off")
+	require.NoError(t, adoptedSandbox(floor(on), "", []string{"build"}), "a sandboxed client, a sandboxing workspace")
+
+	require.ErrorIs(t, adoptedSandbox(floor(off), "", []string{"build"}), proc.ErrNotAdoptable)
+	require.ErrorIs(t, adoptedSandbox(off, "", []string{"build", "--sandbox-enabled"}), proc.ErrNotAdoptable)
+	require.ErrorIs(t, adoptedSandbox(floor(off), "", []string{"build", "--", "--sandbox-enabled=false"}), proc.ErrNotAdoptable,
+		"a tool's own argument after -- is not the flag")
+
+	require.ErrorIs(t, adoptedSandbox(on, "", []string{"build", "--sandbox-enabled=false"}), types.SandboxPolicyMismatch)
+	require.ErrorIs(t, adoptedSandbox(floor(off), "", []string{"build", "-sandbox-enabled=0"}), types.SandboxPolicyMismatch)
+}
+
+func TestSandboxFlag(t *testing.T) {
+	for _, tc := range []struct {
+		args      []string
+		want, set bool
+	}{
+		{nil, false, false},
+		{[]string{"build", "."}, false, false},
+		{[]string{"--sandbox-enabled"}, true, true},
+		{[]string{"-sandbox-enabled=false"}, false, true},
+		{[]string{"--sandbox-enabled=true", "--sandbox-enabled=0"}, false, true},
+		{[]string{"--", "--sandbox-enabled=false"}, false, false},
+		{[]string{"--sandbox-enabled-extra"}, false, false},
+	} {
+		want, set := sandboxFlag(tc.args)
+		assert.Equal(t, [2]bool{tc.want, tc.set}, [2]bool{want, set}, "%q", tc.args)
+	}
+}
+
+// TestRefuseInheritedSandboxOff: a magus a sandboxed run started may not pass
+// --sandbox-enabled=false to shed it.
+func TestRefuseInheritedSandboxOff(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv(run.SandboxEnvVar, "1")
+	require.ErrorIs(t, refuseInheritedSandboxOff(false), types.SandboxPolicyMismatch)
+	require.NoError(t, refuseInheritedSandboxOff(true))
+
+	t.Setenv("MAGUS_LEVEL", "0")
+	require.NoError(t, refuseInheritedSandboxOff(false), "at the top level the person's flag is the authority")
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv(run.SandboxEnvVar, "")
+	require.NoError(t, refuseInheritedSandboxOff(false), "a parent that ran unsandboxed passes nothing down")
 }
 
 // TestIsDeclaredRunRejectsEverythingButThreeBareTokens pins the shape half of the job-dispatch

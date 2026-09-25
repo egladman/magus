@@ -14,6 +14,14 @@ import (
 // per-process pool or the `magus server` it adopted. Set by magus, never by a person.
 const SocketEnv = "MAGUS_PROC_SOCKET"
 
+// TokenEnv carries the secret the server at [SocketEnv] requires on every /proc/ request.
+// A magus exports it beside SocketEnv, and like SocketEnv only a nested magus inherits
+// it: an ordinary op subprocess is never handed either (see run.ProcForwardVars).
+const TokenEnv = "MAGUS_PROC_TOKEN" //nolint:gosec // G101: an env var NAME, not a credential
+
+// tokenHeader is the request header a client presents the token in.
+const tokenHeader = "Magus-Proc-Token" //nolint:gosec // G101: a header NAME, not a credential
+
 // The paths the proc server answers on its socket, one per operation. The version is in the
 // path: a client and a server that disagree on it meet a 404, never a misread body.
 const (
@@ -80,6 +88,9 @@ type runRequest struct {
 	// exempt from the trail's redaction, so an unchecked one is a way to carry a
 	// credential onto an event line.
 	Lease string `json:"lease,omitempty"`
+	// Sandbox is true when the client runs sandboxed, so the server may take the run only
+	// if it will sandbox it too. See [WithSandboxFloor].
+	Sandbox bool `json:"sandbox,omitempty"`
 }
 
 // runReply is the response from the parent to the child.

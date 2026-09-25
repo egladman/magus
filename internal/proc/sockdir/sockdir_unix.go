@@ -9,12 +9,23 @@ import (
 	"syscall"
 )
 
-// Dir prefers $XDG_RUNTIME_DIR/magus/ and falls back to $TMPDIR/magus-$UID/. It panics
-// when the directory exists but is not private to this user, since a socket there is
-// one another account could tamper with.
+// Dir prefers $XDG_RUNTIME_DIR/magus/, then the user cache dir's magus/run/, and only
+// with neither falls back to $TMPDIR/magus-$UID/. It panics when the directory exists
+// but is not private to this user, since a socket there is one another account could
+// tamper with.
+//
+// $TMPDIR is last because the sandbox grants every run write access to it: a confined
+// child could unlink a socket there and bind its own in its place, or read the token
+// file beside it (see proc.TokenEnv). Neither of the first two is granted.
 func Dir() string {
+	var bases []string
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
-		dir := filepath.Join(xdg, "magus")
+		bases = append(bases, filepath.Join(xdg, "magus"))
+	}
+	if cache, err := os.UserCacheDir(); err == nil {
+		bases = append(bases, filepath.Join(cache, "magus", "run"))
+	}
+	for _, dir := range bases {
 		if err := os.MkdirAll(dir, 0o700); err == nil {
 			if verr := verifySockDir(dir); verr != nil {
 				panic(verr)

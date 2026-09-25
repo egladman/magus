@@ -40,6 +40,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root,
 		Ancestors: types.InvocationAncestorsFromContext(ctx),
 		Lease:     trail.LeaseFromEnv(),
+		Sandbox:   SandboxFloorFromContext(ctx),
 	}
 	reply, err := roundTrip[runReply](ctx, addr, runExchange, req)
 	if err != nil {

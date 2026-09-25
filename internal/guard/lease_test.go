@@ -291,18 +291,19 @@ func TestActingLeaseFromMarker(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, lease, "no marker, no lease")
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(base)), 0o755))
+	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte(" harness/lease-scoped-deny \n"), 0o644))
 	lease, _, err = job.ActingLease(base, "")
 	require.NoError(t, err)
 	assert.Equal(t, "harness/lease-scoped-deny", lease)
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
 	_, _, err = job.ActingLease(base, "")
 	require.Error(t, err, "a malformed marker is an error, never an unbound checkout")
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "does not read")
-	assert.Contains(t, v.Reason, filepath.Join(base, job.LeaseMarkerName), "the deny names the file")
+	assert.Contains(t, v.Reason, job.MarkerPath(base), "the deny names the file")
 }
 
 // A deny that also refused its own repair would be a lockout: no agent in the checkout
@@ -312,7 +313,8 @@ func TestAnUnreadableMarkerLetsItsRepairThrough(t *testing.T) {
 	t.Setenv("BAGGAGE", "")
 	ctx, _ := fleetFixture(t, narrowLease())
 	base := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(base)), 0o755))
+	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
 
 	for _, command := range []string{
 		"magus job exec --vacate",
