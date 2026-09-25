@@ -117,10 +117,10 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 
 - `.claude/skills/magus-*` are INSTALLED copies (stamped, checked by `magus
   doctor`'s `agent-skills`); edit the sources in `internal/agent/skills/` and
-  re-run `magus agent install .claude/skills --force`. `magus-skill-authoring`
-  and `magus-local-development` are hand-authored and tracked (pinned by
-  `conventions_test.go`'s `handAuthoredSkills`); edit those in place, and read
-  magus-skill-authoring before touching the agent surface.
+  re-run `magus agent install .claude/skills --force`. `magus-skill-authoring`,
+  `magus-local-development` and `land-pull-requests` are hand-authored and
+  tracked (pinned by `conventions_test.go`'s `handAuthoredSkills`); edit those
+  in place, and read magus-skill-authoring before touching the agent surface.
 - Record decisions worth keeping, with the why, via `magus_memory`.
 - If a convention matters, give it an enforcement point. Measured 2026-08-24: the
   only skills that loaded on their own were the two a hook demanded, and a rule
