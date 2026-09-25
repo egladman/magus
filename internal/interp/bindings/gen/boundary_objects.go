@@ -1081,6 +1081,43 @@ func ObjectDriftResult(v types.DriftResult) vm.Value {
 	return out
 }
 
+func ObjectPipeRecord(v types.PipeRecord) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("schema", vm.IntValue(int64(v.Schema)))
+	out.MapSet("type", vm.StrValue(v.Type))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("status", vm.StrValue(v.Status))
+	out.MapSet("error", vm.StrValue(v.Error))
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	itemsProjects := make([]vm.Value, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = vm.StrValue(v.Projects[indexProjects])
+	}
+	out.MapSet("projects", vm.ListValue(itemsProjects))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectTargetArtifact(v types.TargetArtifact) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	out.MapSet("project", vm.StrValue(v.ProjectPath))
+	return out
+}
+
+func ObjectArtifactVersion(v types.ArtifactVersion) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("blob", vm.StrValue(v.Blob))
+	out.MapSet("short", vm.StrValue(v.Short))
+	out.MapSet("size", vm.IntValue(int64(v.Size)))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("created", vm.StrValue(v.Created))
+	out.MapSet("entry", vm.StrValue(v.Entry))
+	return out
+}
+
 func ObjectShellCommand(v types.ShellCommand) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("bin", vm.StrValue(v.Bin))

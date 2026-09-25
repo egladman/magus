@@ -46,6 +46,10 @@ type ProcessStdio struct {
 	// project locks. An upstream it answers false for never delays this run. nil counts
 	// every upstream magus as one that may.
 	TakesLocks func(argv []string) bool
+	// WritesRecords reports whether a magus invoked with argv (argv[0] first) writes
+	// records to a magus reading its stdout. When the stage writing Stdin directly is one,
+	// ProveUpstream reads Stdin as its records (see Records). nil reads none.
+	WritesRecords func(argv []string) bool
 
 	// pipeline is shared by every copy of this value, so the stages one run proves are
 	// the ones the process settles at its end. nil until ProveUpstream.
@@ -57,6 +61,10 @@ type ProcessStdio struct {
 // has exited by the time a run reaches its locks, and with it goes the kernel's only
 // evidence that it was ever upstream. Every run given s afterwards weighs those stages
 // too, and SettlePipeline reports them.
+//
+// When a record stage writes Stdin directly, it then starts reading its records (see
+// ReadRecords), after the walk: reading them puts a relay in Stdin's place, which no
+// walk can follow back.
 func (s *ProcessStdio) ProveUpstream(ctx context.Context) {
 	p := &pipeline{ready: make(chan struct{})}
 	s.pipeline = p
@@ -64,18 +72,45 @@ func (s *ProcessStdio) ProveUpstream(ctx context.Context) {
 		close(p.ready)
 		return
 	}
-	takesLocks := s.TakesLocks
-	fd := int(s.Stdin.Fd())
+	takesLocks, writesRecords := s.TakesLocks, s.WritesRecords
+	stdin := s.Stdin
 	go func() {
 		defer close(p.ready)
-		in, err := pipepeer.ReadEnd(os.Getpid(), fd)
+		in, err := pipepeer.ReadEnd(os.Getpid(), int(stdin.Fd()))
 		if err != nil {
 			return
+		}
+		recordsFrom := 0
+		if writesRecords != nil {
+			recordsFrom, _ = RecordUpstream(ctx, stdin, writesRecords)
 		}
 		// A cycle is refused by the walk a run repeats at its locks.
 		ups, _ := walkUpstream(ctx, in, takesLocks)
 		p.add(ups)
+		if recordsFrom == 0 {
+			return
+		}
+		r, err := ReadRecords(stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "magus: pid %d upstream writes records this process cannot read: %v\n", recordsFrom, err)
+			return
+		}
+		p.mu.Lock()
+		p.records, p.recordsFrom = r, recordsFrom
+		p.mu.Unlock()
 	}()
+}
+
+// Records returns the record stream of the record stage writing Stdin directly, and its
+// pid, once ProveUpstream has proven it; nil when none writes Stdin.
+func (s *ProcessStdio) Records() (*report.Reader, int) {
+	if s == nil || s.pipeline == nil {
+		return nil, 0
+	}
+	<-s.pipeline.ready
+	s.pipeline.mu.Lock()
+	defer s.pipeline.mu.Unlock()
+	return s.pipeline.records, s.pipeline.recordsFrom
 }
 
 // SettlePipeline ends a stage that succeeded. It waits for every magus stage proven
@@ -92,7 +127,19 @@ func (s *ProcessStdio) SettlePipeline(ctx context.Context, root string, cfg conf
 	if s.pipeline == nil {
 		return nil
 	}
-	return s.pipeline.settle(ctx, s.Stdin, pipeDirOf(resolveCacheDir(root, cfg), root), os.Stderr)
+	stdin := s.Stdin
+	if s.readsRecords() {
+		// The record reader drains it; closing it under that reader is what exiting does.
+		stdin = nil
+	}
+	return s.pipeline.settle(ctx, stdin, pipeDirOf(resolveCacheDir(root, cfg), root), os.Stderr)
+}
+
+// readsRecords reports whether this process reads Stdin as records. That reader drains
+// the pipe already, so a run neither spools nor drains it.
+func (s *ProcessStdio) readsRecords() bool {
+	r, _ := s.Records()
+	return r != nil
 }
 
 // RecordPipeExit leaves this process's exit status where the magus stage reading its
@@ -112,6 +159,182 @@ func RecordPipeExit(root string, cfg config.Config, status int, signal string) {
 	writeExitRecord(pipeDirOf(cacheDir, root), exitRecord{
 		PID: os.Getpid(), Command: strings.Join(os.Args, " "), Status: status, Signal: signal, Ended: time.Now(),
 	})
+}
+
+// ReadByMagus reports whether out is a pipe that the kernel proves another process
+// running this same executable reads: the next magus stage of a shell pipe, which takes
+// this process's records rather than its prose. A reader that is one of this process's
+// ancestors (a parent magus capturing a target's output) does not count, and neither
+// does anything on a platform where the kernel cannot prove it.
+//
+// It blocks while a reader is a shell child that has yet to exec its command, up to
+// pipeExecWait, since the shell forks every stage of a pipeline at once.
+func ReadByMagus(ctx context.Context, out *os.File) bool {
+	if out == nil {
+		return false
+	}
+	self := os.Getpid()
+	p, err := pipepeer.WriteEnd(self, int(out.Fd()))
+	if err != nil {
+		return false
+	}
+	ancestors := ancestorPIDs(ctx, self)
+	return pollPeers(ctx, p.Readers, func(pid int) bool { return pid == self || ancestors[pid] }, func(pid int) bool {
+		// Asked after SameExecutable: a fork listed as a reader that has since exec'd this
+		// executable closed its copy of the pipe on the way.
+		return pipepeer.SameExecutable(pid) && p.ReadBy(pid)
+	})
+}
+
+// RecordUpstream returns the pid of a magus stage writing in directly, proven from the
+// kernel as ReadByMagus proves a reader, whose argv writes answers true for: a stage
+// whose stdout carries records. A shell child still between fork and exec is waited
+// for, up to pipeExecWait. ok is false when no such stage writes in.
+func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool) {
+	if in == nil {
+		return 0, false
+	}
+	self := os.Getpid()
+	p, err := pipepeer.ReadEnd(self, int(in.Fd()))
+	if err != nil {
+		return 0, false
+	}
+	ancestors := ancestorPIDs(ctx, self)
+	found := 0
+	ok = pollPeers(ctx, p.Writers, func(w int) bool { return w == self || ancestors[w] }, func(w int) bool {
+		if !pipepeer.SameExecutable(w) {
+			return false
+		}
+		argv, err := pipepeer.Args(w)
+		if err != nil || !writes(argv) || !p.WrittenBy(w) {
+			return false
+		}
+		found = w
+		return true
+	})
+	return found, ok
+}
+
+// ReadRecords starts reading stdin, which a record stage writes (see RecordUpstream), as
+// records. A line that is not a record is what the upstream's targets wrote to their
+// stdout; it keeps reaching whatever in this process reads stdin, through a pipe put in
+// stdin's place, so a target downstream reads its upstream's bytes as it always has.
+// Those bytes are held in memory until read, so the upstream never blocks on them.
+func ReadRecords(stdin *os.File) (*report.Reader, error) {
+	src, _, err := dupForDrain(stdin)
+	if err != nil {
+		return nil, fmt.Errorf("pipe: read the records on stdin: %w", err)
+	}
+	w, err := installRelay(stdin)
+	if err != nil {
+		_ = src.Close()
+		return nil, fmt.Errorf("pipe: relay stdin: %w", err)
+	}
+	relay := newByteRelay(w)
+	r := report.NewReader(src, relay)
+	go func() {
+		<-r.Done()
+		relay.close()
+	}()
+	return r, nil
+}
+
+// byteRelay passes bytes on to w without ever blocking the writer: what w has not taken
+// yet waits in memory.
+type byteRelay struct {
+	mu   sync.Mutex
+	cond *sync.Cond
+	buf  []byte
+	eof  bool
+}
+
+func newByteRelay(w io.WriteCloser) *byteRelay {
+	b := &byteRelay{}
+	b.cond = sync.NewCond(&b.mu)
+	go b.pump(w)
+	return b
+}
+
+func (b *byteRelay) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.eof {
+		return len(p), nil
+	}
+	b.buf = append(b.buf, p...)
+	b.cond.Broadcast()
+	return len(p), nil
+}
+
+func (b *byteRelay) close() {
+	b.mu.Lock()
+	b.eof = true
+	b.cond.Broadcast()
+	b.mu.Unlock()
+}
+
+func (b *byteRelay) pump(w io.WriteCloser) {
+	defer w.Close()
+	for {
+		b.mu.Lock()
+		for len(b.buf) == 0 && !b.eof {
+			b.cond.Wait()
+		}
+		chunk, done := b.buf, b.eof && len(b.buf) == 0
+		b.buf = nil
+		b.mu.Unlock()
+		if done {
+			return
+		}
+		if _, err := w.Write(chunk); err != nil {
+			// Nobody reads stdin any more; the bytes have nowhere to go.
+			b.mu.Lock()
+			b.buf, b.eof = nil, true
+			b.mu.Unlock()
+			return
+		}
+	}
+}
+
+// pipeExecWait bounds how long a peer proof waits for a shell child to exec its command.
+// A fork reaches exec within milliseconds; the bound only matters to a peer that never
+// execs, like a subshell, whose own children are what the proof finds meanwhile.
+const pipeExecWait = 250 * time.Millisecond
+
+// pollPeers asks peers until one matches, skipping those skip names. It keeps asking
+// only while some peer is a fork that has not exec'd yet.
+func pollPeers(ctx context.Context, peers func() ([]int, error), skip, match func(pid int) bool) bool {
+	deadline := time.Now().Add(pipeExecWait)
+	for {
+		pids, err := peers()
+		if err != nil {
+			return false
+		}
+		pending := false
+		for _, pid := range pids {
+			if skip(pid) {
+				continue
+			}
+			// A fork runs its parent's executable until it execs, so it would match as
+			// this executable when its parent is one: a magus forking a target, a test
+			// binary forking the next command.
+			if pipepeer.ExecPending(pid) {
+				pending = true
+				continue
+			}
+			if match(pid) {
+				return true
+			}
+		}
+		if !pending || time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
 }
 
 // WithProcessStdio gives the run its process's standard streams. See ProcessStdio.
@@ -316,10 +539,27 @@ func (l *projectLocker) redUpstream(ups []upstreamStage) error {
 // waitOut drains stdin while any upstream stage still blocks paths, starting from
 // blocking, then relays it.
 func (l *projectLocker) waitOut(ctx context.Context, ups []upstreamStage, blocking []upstreamBlock, paths []string) (*stdinSpool, error) {
+	if l.stdio.readsRecords() {
+		return nil, l.waitBlocking(ctx, ups, blocking, paths, nil)
+	}
 	sp, err := startSpool(l.stdio.Stdin, l.pipeDir())
 	if err != nil {
 		return nil, fmt.Errorf("workspace lock: drain stdin while waiting on pid %d: %w", blocking[0].stage.pid, err)
 	}
+	if err := l.waitBlocking(ctx, ups, blocking, paths, sp); err != nil {
+		sp.abandon()
+		return nil, err
+	}
+	if err := sp.handOff(l.stdio.Stdin); err != nil {
+		sp.abandon()
+		return nil, fmt.Errorf("workspace lock: restore stdin: %w", err)
+	}
+	return sp, nil
+}
+
+// waitBlocking polls until no upstream stage blocks paths. sp, when set, is the spool
+// draining stdin meanwhile.
+func (l *projectLocker) waitBlocking(ctx context.Context, ups []upstreamStage, blocking []upstreamBlock, paths []string, sp *stdinSpool) error {
 	retract := func() {}
 	defer func() { retract() }()
 	announced := false
@@ -338,21 +578,17 @@ func (l *projectLocker) waitOut(ctx context.Context, ups []upstreamStage, blocki
 		}
 		select {
 		case <-ctx.Done():
-			sp.abandon()
-			return nil, fmt.Errorf("workspace lock: gave up waiting on pid %d upstream of this run: %w", blocking[0].stage.pid, ctx.Err())
+			return fmt.Errorf("workspace lock: gave up waiting on pid %d upstream of this run: %w", blocking[0].stage.pid, ctx.Err())
 		case <-t.C:
 		}
-		if err := sp.failed(); err != nil {
-			sp.abandon()
-			return nil, fmt.Errorf("workspace lock: drain stdin while waiting on pid %d: %w", blocking[0].stage.pid, err)
+		if sp != nil {
+			if err := sp.failed(); err != nil {
+				return fmt.Errorf("workspace lock: drain stdin while waiting on pid %d: %w", blocking[0].stage.pid, err)
+			}
 		}
 		blocking = l.blocking(ups, paths)
 	}
-	if err := sp.handOff(l.stdio.Stdin); err != nil {
-		sp.abandon()
-		return nil, fmt.Errorf("workspace lock: restore stdin: %w", err)
-	}
-	return sp, nil
+	return nil
 }
 
 // walkUpstream walks back from the pipe this run reads, through every process writing it,
@@ -560,6 +796,9 @@ type pipeline struct {
 	mu     sync.Mutex
 	stages []upstreamStage
 	spool  *stdinSpool
+	// records reads the stdin recordsFrom writes, when that stage writes records.
+	records     *report.Reader
+	recordsFrom int
 }
 
 func (p *pipeline) add(ups []upstreamStage) {

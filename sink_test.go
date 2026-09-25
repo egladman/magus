@@ -45,7 +45,7 @@ var sinkEvents = []any{
 // recording format's stream where they arise, never through a sink: per-target
 // results, graph and volatility telemetry, race findings, and the lock's decisions.
 var recordedOutsideTheSink = []any{
-	report.TargetResult{}, report.GraphBuild{}, report.GraphQuery{}, report.GraphError{},
+	report.TargetResult{}, report.TargetValue{}, report.GraphBuild{}, report.GraphQuery{}, report.GraphError{},
 	report.VolatilityCall{}, report.RaceDetected{},
 	report.LockSuperseded{}, report.LockSupersedeRefused{}, report.LockPipeWait{},
 }
@@ -129,7 +129,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 	s, err := NewSink(fake, io.Discard, io.Discard)
 	require.NoError(t, err)
 	ctx := t.Context()
-	s.EmitScope(ctx, "api", "magusfile")
+	s.EmitScope(ctx, "api", "magusfile", []string{"api"})
 	s.EmitCharms(ctx, "rw")
 	s.EmitCache(ctx, "local", "read+write")
 	s.EmitBase(ctx, "git diff vs main")
@@ -144,7 +144,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 	require.NoError(t, s.Close())
 
 	assert.Equal(t, []any{
-		report.RunScope{Label: "api", Source: "magusfile"},
+		report.RunScope{Label: "api", Source: "magusfile", Projects: []string{"api"}},
 		report.RunCharms{Charms: "rw"},
 		report.RunCache{Tier: "local", Mode: "read+write"},
 		report.RunBase{Base: "git diff vs main"},
@@ -233,7 +233,7 @@ func TestTextSinkSilentKeepsWhatExplainsAFailure(t *testing.T) {
 	s, err := NewSink(FormatText, io.Discard, &out, WithSinkLevel(slog.LevelError))
 	require.NoError(t, err)
 	ctx := t.Context()
-	s.EmitScope(ctx, "api", "")
+	s.EmitScope(ctx, "api", "", nil)
 	s.emit(ctx, report.RunSummary{Hits: 1})
 	s.EmitNotice(ctx, slog.LevelWarn, "", "silent-run notice")
 	s.emit(ctx, report.DeterminismMismatch{Project: "api", Target: "build"})
@@ -271,13 +271,13 @@ func TestJSONLSinkRecordsHeaders(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	s, err := NewSink(FormatJSONL, &stdout, &stderr)
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "magusfile")
+	s.EmitScope(t.Context(), "api", "magusfile", []string{"api"})
 	s.EmitBase(t.Context(), "git diff vs main")
 	s.EmitNotice(t.Context(), slog.LevelWarn, types.AffectedSetUncomputable, "full build")
 	s.EmitDiagnostic(t.Context(), "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
 	require.NoError(t, s.Close())
 
-	assert.Equal(t, `{"schema":5,"type":"run.scope","label":"api","source":"magusfile"}
+	assert.Equal(t, `{"schema":5,"type":"run.scope","label":"api","source":"magusfile","projects":["api"]}
 {"schema":5,"type":"run.base","base":"git diff vs main"}
 {"schema":5,"type":"run.diagnostic","unit":"api","code":"`+string(types.UndeclaredSeedingFile)+`","message":"seeded by LICENSE"}
 `, stdout.String())
@@ -291,7 +291,7 @@ func TestJSONLSinkOverOneWriter(t *testing.T) {
 	var both bytes.Buffer
 	s, err := NewSink(FormatJSONL, &both, &both)
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "")
+	s.EmitScope(t.Context(), "api", "", nil)
 	s.EmitNotice(t.Context(), slog.LevelInfo, "", "same stream")
 	require.NoError(t, s.Close())
 	assert.Equal(t, `{"schema":5,"type":"run.scope","label":"api"}
@@ -305,13 +305,60 @@ func TestJSONLSinkFilter(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	s, err := NewSink(FormatJSONL, &stdout, &stderr, WithSinkFilter([]string{report.TypeShardTotal}))
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "")
+	s.EmitScope(t.Context(), "api", "", nil)
 	s.EmitShardTotal(t.Context(), "2", 4, 1500*time.Millisecond)
 	s.EmitNotice(t.Context(), slog.LevelInfo, "", "kept")
 	require.NoError(t, s.Close())
 	assert.Equal(t, `{"schema":5,"type":"shard.total","shard":"2","n_shards":4,"duration_ms":1500}
 `, stdout.String())
 	assert.Contains(t, stderr.String(), `"msg":"kept"`)
+}
+
+// A text sink writing records beside its prose, as a stage whose stdout a magus reads,
+// prints what a text run prints and records every event but a notice, which stays prose.
+// The lock's decisions go to prose too, since the locker prints either one or the other.
+func TestTextSinkWithRecords(t *testing.T) {
+	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
+	interactive.SetHintsEnabled(true)
+	var stdout, stderr, records bytes.Buffer
+	s, err := NewSink(FormatText, &stdout, &stderr, WithSinkRecords(&records))
+	require.NoError(t, err)
+	s.EmitScope(t.Context(), "api", "pipe", []string{"api"})
+	s.EmitNotice(t.Context(), slog.LevelInfo, "", "tee notice")
+	require.NoError(t, s.Close())
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "projects: api (pipe)\nhint: tee notice\n", stderr.String())
+	assert.Equal(t, `{"schema":5,"type":"run.scope","label":"api","source":"pipe","projects":["api"]}
+`, records.String())
+
+	var o run
+	WithSink(s)(&o)
+	assert.NotNil(t, o.report, "the engine's own records reach the record stream")
+	assert.Nil(t, o.lockReport, "lock decisions print as prose")
+
+	_, err = NewSink(FormatJSONL, io.Discard, io.Discard, WithSinkRecords(io.Discard))
+	assert.ErrorContains(t, err, "already writes records")
+}
+
+// A returned value is recorded for a format that records, one record per project in
+// path order, and prose gets none.
+func TestSinkRecordsValues(t *testing.T) {
+	returns := types.Returns{"web": []string{"a", "b"}, "api": "1.2.3"}
+	var records, stderr bytes.Buffer
+	s, err := NewSink(FormatText, io.Discard, &stderr, WithSinkRecords(&records))
+	require.NoError(t, err)
+	s.RecordValues("describe", returns)
+	require.NoError(t, s.Close())
+	assert.Equal(t, `{"schema":5,"type":"run.target.value","project":"api","target":"describe","value":"1.2.3"}
+{"schema":5,"type":"run.target.value","project":"web","target":"describe","value":["a","b"]}
+`, records.String())
+	assert.Empty(t, stderr.String())
+
+	text, err := NewSink(FormatText, io.Discard, &stderr)
+	require.NoError(t, err)
+	text.RecordValues("describe", returns)
+	assert.Empty(t, stderr.String())
 }
 
 // gatedWriter blocks every Write until open is closed, standing in for a reader that

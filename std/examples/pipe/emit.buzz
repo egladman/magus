@@ -1,0 +1,17 @@
+import "std";
+import "pipe";
+
+// magus run test . | magus buzz retry.buzz | magus run test
+// A run.scope record names the projects a run downstream runs on when it names none,
+// so this passes on only the projects that failed.
+try {
+    var failed: mut [str] = mut [];
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+            failed.append(rec.project);
+        }
+    }
+    pipe\emit(pipe\PipeRecord{ @"type" = "run.scope", projects = failed });
+} catch (e) {
+    std\print("no magus run is piped into this script");
+}
