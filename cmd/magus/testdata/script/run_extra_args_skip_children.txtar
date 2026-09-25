@@ -1,0 +1,86 @@
+# Args after `--` belong to the target the user named. A target it composes gets none
+# of them, however it is dispatched: inline through ctx.needs, as the skip_cache gate
+# run ahead of a replay, or as a --preflight step.
+#
+# The gate is how they leaked: a second `magus run test . -- -run X` in this repo
+# replayed test, re-ran generate as its gate, and generate's `go mod edit -json`
+# failed on the unknown flag.
+
+cd ws
+
+# Default charms (rw): only test's own op sees the forwarded args.
+exec magus run test . -- -run X
+cmp $WORK/log $WORK/want-x
+
+# The same run again replays test and runs its skip_cache chain as a gate.
+rm $WORK/log
+exec magus run test . -- -run X
+stderr '\(cached'
+cmp $WORK/log $WORK/want-gate
+
+# Without the default charm.
+rm $WORK/log
+exec magus run test . --no-default-charms -- -run Y
+cmp $WORK/log $WORK/want-y
+
+# Structured output takes the same path.
+rm $WORK/log
+exec magus run test . -o jsonl --tee $WORK/out.jsonl -- -run Z
+cmp $WORK/log $WORK/want-z
+
+# A preflight pass runs generate first, as a step of its own that is not the named one.
+rm $WORK/log
+exec magus run test . --preflight generate -- -run P
+cmp $WORK/log $WORK/want-p
+
+-- want-x --
+child:
+parent:-run X
+-- want-gate --
+child:
+-- want-y --
+child:
+parent:-run Y
+-- want-z --
+child:
+parent:-run Z
+-- want-p --
+child:
+parent:-run P
+-- ws/gen.txt --
+gen
+-- ws/magus.yaml --
+default_charms:
+  - rw
+-- ws/.gitignore --
+.magus/
+-- ws/magusfile.buzz --
+import "magus";
+import "spells/acme";
+magus\project({"name": "forward", "spells": [acme], "targets": {
+    "generate": {"skip_cache": "stands in for a drift gate"},
+}});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen.txt");
+    acme["child"](ctx);
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(format);
+    acme["parent"](ctx);
+}
+-- ws/spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun parent(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo \"$0:$*\" >> ../log", "parent"]};
+}
+fun child(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo \"$0:$*\" >> ../log && echo gen > gen.txt", "child"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"parent": parent, "child": child}; }
