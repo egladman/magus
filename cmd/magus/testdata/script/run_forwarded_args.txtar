@@ -1,0 +1,42 @@
+# A target receives the args forwarded after `--` as its `args` parameter. An op call
+# with explicit args does NOT forward them on its own: the explicit list replaces the
+# passthrough. So a target that states its own scope narrows only by appending `args`,
+# which is what the root magusfile's `test` target does. The acme op records each argv
+# it was forked with, one line per call.
+
+# Without forwarded args the call shape is the target's own, and `args` is empty.
+exec magus run check
+grep '^forwarded: 0$' calls.txt
+grep '^-race ./\.\.\.$' calls.txt
+! grep 'TestNarrow' calls.txt
+rm calls.txt
+
+# Forwarded args reach the body and, appended, the op.
+exec magus run check -- -run TestNarrow
+grep '^forwarded: 2$' calls.txt
+grep '^-race ./\.\.\. -run TestNarrow$' calls.txt
+rm calls.txt
+
+# An explicit args list alone drops them: the replace rule this script documents.
+exec magus run pinned -- -run TestNarrow
+grep '^-race ./\.\.\.$' calls.txt
+! grep 'TestNarrow' calls.txt
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme";
+magus.project({ "spells": [acme] });
+export fun check(ctx: magus\Context, args: [str]) > void {
+    acme.test(ctx, {"args": ["forwarded: {args.len()}"]});
+    acme.test(ctx, {"args": ["-race", "./..."] + args});
+}
+export fun pinned(ctx: magus\Context, args: [str]) > void { acme.test(ctx, {"args": ["-race", "./..."]}); }
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun test(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo \"$*\" >> calls.txt", "acme"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"test": test}; }
