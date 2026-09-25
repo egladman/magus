@@ -127,10 +127,10 @@ type ListQuery struct {
 
 	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
 	// the base requires and who the write credential posts as. App names the app whose
-	// credential the queue writes with (github: a GitHub App's slug); empty is the
-	// provider's default credential. SetupSteps also asks for the steps that finish
-	// wiring the queue, which cost the provider more reads, some needing permissions an
-	// apply job does not hold.
+	// credential the queue writes with (github: a GitHub App's slug, which it requires
+	// with a StatusContext); empty names none. SetupSteps also asks for the steps that
+	// finish wiring the queue, which cost the provider more reads, some needing
+	// permissions an apply job does not hold.
 	StatusContext string
 	App           string
 	SetupSteps    bool
@@ -295,6 +295,9 @@ func (c Capabilities) Allows(m MergeMethod) bool { return slices.Contains(c.Meth
 type MergeOptions struct {
 	Commit  string // the head the change must still be at; the merge is pinned to it
 	Message string // squash body when the author set none
+	// App is the applier's [ListQuery.App], the app the merge is made as; github refuses
+	// to merge without one.
+	App string
 	// Through, when set, is the run of stacked changes beneath this one that merge in
 	// the same call ([StackMergeAtomic]), lowest first, each pinned to the head it must
 	// still be at.

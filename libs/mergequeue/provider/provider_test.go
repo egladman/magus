@@ -90,7 +90,7 @@ export fun retarget(io: {str: any}) > bool {
 export fun merge_change(io: {str: any}) > any {
     final through = serialize\Boxed.init(io["through"]).listValue();
     final pinned = through.len() == 1 and through[0].q("id").stringValue() == "5" and through[0].q("commit").stringValue() == "` + headE + `";
-    return {"merged": io["message"] == "* body" and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
+    return {"merged": io["message"] == "* body" and io["app"] == "q" and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
 }
 
 export fun kick_back(io: {str: any}) > bool {
@@ -297,15 +297,17 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	require.ErrorContains(t, p.PostStatus(ctx, change, headA, types.CommitStatus{Context: "other", State: types.StateSuccess}), "provider refused")
 	require.NoError(t, p.Retarget(ctx, change, "main"))
 	require.ErrorContains(t, p.Retarget(ctx, change, "dev"), "provider refused")
-	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body",
+	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: "q",
 		Through: []types.PinnedChange{{ID: "5", Commit: headE}}})
 	require.NoError(t, err)
 	assert.Equal(t, types.MergeResult{}, merged, "the queue's own call merged the stack")
-	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body"})
+	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: "q"})
 	require.NoError(t, err)
 	assert.Equal(t, types.MergeResult{ByProvider: true}, merged)
-	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other"})
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other", App: "q"})
 	require.ErrorContains(t, err, "not merged: head moved")
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body"})
+	require.ErrorContains(t, err, "not merged", "the app reaches the script")
 	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c",
 		Source: "o/r/runs/7", Reproduce: &types.Reproduction{Gate: "make test"}}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))

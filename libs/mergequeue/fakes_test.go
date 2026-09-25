@@ -128,7 +128,7 @@ var (
 )
 
 // Planning asks Describe for the base alone; an Applier also asks for the setup of its
-// status, on the default credential.
+// status, naming no app.
 var (
 	planQuery  = types.ListQuery{Base: "main"}
 	applyQuery = types.ListQuery{Base: "main", StatusContext: DefaultStatusContext}

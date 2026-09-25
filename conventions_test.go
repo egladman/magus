@@ -285,12 +285,12 @@ const (
 )
 
 // handAuthoredSkills live beside the installed ones and are NOT written by
-// `magus agent install`. Both are tracked through explicit .gitignore negations,
+// `magus agent install`. Each is tracked through an explicit .gitignore negation,
 // and magus-workspace-rules tells readers to put local rules in exactly this
 // shape, so a declaration that claims them tells an author the one file they are
 // supposed to edit is generated, and hands it to the regenerating merge driver
 // on a conflict.
-var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development"}
+var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development", "land-pull-requests"}
 
 // skillOutputGlob matches the declared-output patterns in skills_generate. The
 // install calls in the same body name a bare destination directory with no
@@ -3657,6 +3657,24 @@ func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
 	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", setup.With["queue-app-client-id"])
 	assert.NotContains(t, string(raw), "github.token", "a workflow names the token as secrets.GITHUB_TOKEN")
 	assert.NotContains(t, string(raw), "GH_TOKEN", "gh reads GITHUB_TOKEN")
+	assert.NotContains(t, string(raw), "|| secrets.GITHUB_TOKEN",
+		"the queue writes only as its app: a run or a merge the job's own token makes starts no workflow")
+
+	// A run the Actions token dispatches fires no workflow_run, so no apply would follow
+	// it: dispatch holds the app's token, minted for dispatching alone.
+	dispatch := workflow.Jobs["dispatch"]
+	assert.Equal(t, "magus-queue", dispatch.Environment, "the key is released to main's runs alone")
+	var dispatchMint *actionStep
+	for i := range dispatch.Steps {
+		if strings.HasPrefix(dispatch.Steps[i].Uses, "actions/create-github-app-token@") {
+			dispatchMint = &dispatch.Steps[i]
+		}
+	}
+	require.NotNil(t, dispatchMint, "dispatch mints the queue app's token")
+	assert.Equal(t, "${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}", dispatchMint.With["private-key"])
+	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", dispatchMint.With["client-id"])
+	assert.Equal(t, "write", dispatchMint.With["permission-actions"])
+	assert.NotContains(t, dispatchMint.With, "permission-contents", "dispatching needs actions alone")
 }
 
 // A job holding a secret, a write token or id-token restores no Actions cache. main's
