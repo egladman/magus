@@ -243,13 +243,17 @@ Key properties:
   ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
   same verdict whatever else is running. Observed pressure warns separately and
   never blocks.
-- **It does not queue behind another invocation.** A step kept out by another magus
-  invocation is refused immediately, exiting **75**
-  ([MGS3009](../reference/codes/sandbox/MGS3009.md)) - the same transient-failure code
+- **By default it does not queue behind another invocation.** A step kept out by
+  another magus invocation is refused immediately, exiting **75**
+  ([MGS3009](../reference/codes/sandbox/MGS3009.md)), the same transient-failure code
   a contended lock uses above, and for the same reason. The refusal names who holds
-  the budget - pid, project, target, and directory - so a caller can go see why and
+  the budget (pid, project, target, and directory) so a caller can go see why and
   retry once it frees. A step kept out only by its own process or its own run waits
-  for them, on the same terms as the lock.
+  in line for them, on the same terms as the lock.
+- **Waiting on others is opt-in and bounded.** `--capacity-wait 10m` (or
+  `capacity_wait` in `magus.yaml`, or `MAGUS_CAPACITY_WAIT`) lets a step wait in the
+  broker's line for up to that long before it is refused with the same exit 75, now
+  saying how long it waited. See [Waiting in line](#waiting-in-line).
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker will not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead
@@ -264,6 +268,49 @@ Key properties:
 
 `magus status` shows the whole budget: what is held, and by whom, across every
 worktree on the machine.
+
+### Waiting in line
+
+With `capacity_wait` set, a step the host cannot seat joins the broker's line instead
+of refusing. It prints one line when it starts waiting on another invocation, and one
+more each time the set of holders changes, never on a timer:
+
+```text
+magus: api integration is waiting up to 10m0s for 2 slots, 8.0 GiB: held by pid 48190 (api test, magus affected ci in /src/magus-a) since 14:02
+```
+
+When the bound passes it is refused with exit 75 like any other MGS3009, naming who
+still holds the host. A step kept out only by its own run is not bounded by it: what it
+waits on is its own work finishing.
+
+**Why the line cannot deadlock.** Waiting across invocations once deadlocked: two runs
+each held slots and waited for more. The line removes the hold-and-wait that made that
+possible. A step asks for its whole need at once and holds none of it until all of it
+is granted, so a waiter never holds anything another waiter needs. Every claim a waiter
+waits behind belongs to a step that is running, and a running step ends without
+waiting on the line. The one running step that cannot end on its own is a parent
+blocked in exec on a nested `magus`; that child is always let past the line, and the
+free-seat rule GNU make's jobserver uses (one step per stalled parent) seats it even on
+a full host, so the parent finishes too. A nested `magus`
+that cannot name its parent (its environment dropped `MAGUS_INVOCATION_ANCESTORS`) is
+still refused rather than queued, since it would wait on the run waiting for it.
+
+**Order.** The line is served oldest first, with bounded backfill: a later claim that
+fits may be seated past an older one that does not, until that older one has been
+passed over four times. From then on only its own run, and nested children of holders,
+may go past it, so capacity drains toward it. Strict head-of-line order would leave
+small steps idle behind one large one, and unbounded backfill would starve the large
+one. A run without `capacity_wait` that finds such a barrier is refused (exit 75),
+naming the waiter it would have passed. `magus status` prints the order on the
+`capacity` row and a `wait` row per waiter, with its place and what blocks it.
+
+**A broker that dies under the line.** The line dies with it, since each place rides
+the waiter's connection. Under `broker: required` each waiter starts a new broker if
+none answers, waits again in its line and says its place was lost; a broker that keeps
+dying is refused with [MGS3022](../reference/codes/sandbox/MGS3022.md) after three
+tries. Under `best-effort` each waiter proceeds unarbitrated with one line saying how
+many of its run's steps were released, and they run one at a time, because the host
+they were waiting for was full.
 
 ## Relationship to the broker and the server
 

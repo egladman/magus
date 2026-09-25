@@ -47,6 +47,20 @@ message Broker {
   google.protobuf.Timestamp start_time = 6;
   Capacity capacity = 7;
   int32 idle_exit_seconds = 8;               // how long it stays up once it holds nothing
+  repeated Wait waiting = 9;                 // the line of claims waiting for capacity, oldest first
+  string order = 10;                         // how the line is served: "fifo-backfill"; empty from a broker that predates it
+  int32 backfill_limit = 11;                 // how often a waiter may be passed over before only its own run may pass it
+}
+
+// Wait is one claim waiting in the broker's line, and what keeps it out.
+message Wait {
+  Claim claim = 1;                           // what it asks for, and who asks; start_time is unset
+  int32 position = 2;                        // its place in line, 1 being the oldest waiter
+  google.protobuf.Timestamp start_time = 3;  // when it joined the line
+  bool own_run = 4;                          // only its own run's claims keep it out
+  repeated Claim blocked_by = 5;             // other invocations' claims counting against it, oldest first
+  repeated Claim ahead = 6;                  // older waiters of other runs it may not be seated past
+  int32 passed_over = 7;                     // how many later claims were seated past it
 }
 
 // Capacity is the host's whole budget, what is held, and every claim holding it.

@@ -71,6 +71,30 @@ type MachineVerdict struct {
 	HeldMB      int               `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
 	BudgetSlots int               `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
 	HeldSlots   int               `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
+	// Ahead are waiters of other invocations this claim may not be seated past, because
+	// each has already been passed over as often as the line allows. A claim kept out
+	// only by them would fit today, and does not because it would starve them.
+	Ahead []MachineClaimant `json:"ahead,omitempty" yaml:"ahead,omitempty"`
+}
+
+// MachineWait is one claim waiting in the broker's line for host capacity, and what
+// keeps it out. Since is when it joined the line.
+type MachineWait struct {
+	Claim MachineClaim `json:"claim" yaml:"claim"`
+	// Position is its place in line, 1 being the oldest waiter.
+	Position int       `json:"position" yaml:"position"`
+	Since    time.Time `json:"since" yaml:"since"`
+	// OwnRun is set while it would fit beside every claim outside its own process and
+	// run: what keeps it out will be released by its own run.
+	OwnRun bool `json:"own_run,omitzero" yaml:"own_run,omitempty"`
+	// BlockedBy are the claims of OTHER invocations counting against it, oldest first.
+	// Its own run's claims are left out: they are not what a person waiting can act on.
+	BlockedBy []MachineClaimant `json:"blocked_by,omitempty" yaml:"blocked_by,omitempty"`
+	// Ahead are older waiters of other invocations it may not be seated past; see
+	// MachineVerdict.Ahead.
+	Ahead []MachineClaimant `json:"ahead,omitempty" yaml:"ahead,omitempty"`
+	// PassedOver is how many later claims have been seated past it.
+	PassedOver int `json:"passed_over,omitzero" yaml:"passed_over,omitempty"`
 }
 
 // MachineSnapshot is the whole machine budget: what it is, what is spent, and the

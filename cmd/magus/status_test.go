@@ -346,6 +346,34 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	assert.Contains(t, lines[4], "service   -      postgres-15  running  deps 2  ports 5432")
 }
 
+// TestBrokerRowsShowTheLine: a waiter is a row of its own, with its place, and what
+// keeps it out, as pids an admin can hand to ps.
+func TestBrokerRowsShowTheLine(t *testing.T) {
+	var buf bytes.Buffer
+	since := time.Now().Add(-time.Minute)
+	printBrokerRows(&buf, types.StatusBroker{
+		PID:           48213,
+		Order:         "fifo-backfill",
+		BackfillLimit: 4,
+		Capacity:      types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 2},
+		Waiting: []types.MachineWait{
+			{Claim: types.MachineClaim{Project: "api", Target: "integration", PID: 48412, Slots: 2, MemoryMB: 8 << 10, Dir: "/src/c", Command: "magus run test"},
+				Position: 1, Since: since, BlockedBy: []types.MachineClaimant{{PID: 48190}, {PID: 48377}}},
+			{Claim: types.MachineClaim{Project: "web", Target: "lint", PID: 48500}, Position: 2, Since: since, OwnRun: true,
+				Ahead: []types.MachineClaimant{{PID: 48412}}},
+			{Claim: types.MachineClaim{Project: "web", Target: "test", PID: 48500}, Position: 3, Since: since, OwnRun: true},
+		},
+	}, types.BrokerBestEffort, time.Now())
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 5)
+	assert.Contains(t, lines[1], "broker: best-effort  order fifo-backfill/4")
+	assert.True(t, strings.HasPrefix(lines[2], "wait      48412"), lines[2])
+	assert.Contains(t, lines[2], "slots 2  mem 8.0 GiB  api integration  /src/c  magus run test")
+	assert.Contains(t, lines[2], "place 1  blocked-by 48190,48377")
+	assert.Contains(t, lines[3], "place 2  behind 48412")
+	assert.Contains(t, lines[4], "place 3  blocked-by own-run")
+}
+
 // An idle broker still prints its capacity: "nothing is held" is the answer to the
 // question people open status to ask, and a silent section reads as a missing feature.
 func TestBrokerRowsIdle(t *testing.T) {

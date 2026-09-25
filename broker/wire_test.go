@@ -27,6 +27,8 @@ import (
 func wireFixtures() map[string]any {
 	since := time.Date(2026, 9, 24, 14, 2, 0, 0, time.UTC)
 	holder := types.MachineClaimant{Project: "api", Target: "test", PID: 4242, MemoryMB: 512, Slots: 2, Dir: "/src/a", Command: "magus run test", Since: since}
+	waiting := types.MachineClaim{Project: "api", Target: "test", MemoryMB: 512, Slots: 2, PID: 4242, Dir: "/src/a",
+		Command: "magus run test", Invocation: "inv-2"}
 	return map[string]any{
 		typeHello: hello{Magic: helloMagic, Protocol: 1, MinProtocol: 1, PID: 4242, Dir: "/src/a",
 			Argv: []string{"magus", "run", "test"}, Version: "v0.5.0"},
@@ -35,7 +37,12 @@ func wireFixtures() map[string]any {
 			MemoryMB: 512, Slots: 2, PID: 4242, Dir: "/src/a", Command: "magus run test", Invocation: "inv-2", Ancestors: []string{"inv-1"}}},
 		typeClaimReply: claimReply{Verdict: types.MachineVerdict{Granted: false, ID: "c-1", Fits: true, OwnRun: true,
 			Holders: []types.MachineClaimant{holder}, BudgetMB: 4096, HeldMB: 512, BudgetSlots: 8, HeldSlots: 2}},
-		typeRelease: releaseRequest{ClaimID: "c-1"},
+		typeWait: claimRequest{Claim: waiting},
+		typeWaiting: types.MachineWait{Claim: waiting, Position: 2, Since: since, BlockedBy: []types.MachineClaimant{holder},
+			Ahead: []types.MachineClaimant{holder}, PassedOver: 3},
+		typeLeave:      leaveRequest{WaitID: 7},
+		typeLeaveReply: leaveReply{Left: true},
+		typeRelease:    releaseRequest{ClaimID: "c-1"},
 		typeServiceAcquire: serviceAcquireRequest{Key: "pg", Service: serviceWire{Command: []string{"postgres", "-D", "/data"},
 			Readiness: []string{"pg_isready"}, Stop: []string{"pg_ctl", "stop"}, IdleMS: 1_800_000}},
 		typeServiceRelease: serviceReleaseRequest{Key: "pg"},
@@ -43,6 +50,8 @@ func wireFixtures() map[string]any {
 		typeStatusReply: types.StatusBroker{PID: 100, Version: "v0.5.0", Protocol: 1, Socket: "unix:///run/user/1000/magus/broker.sock",
 			Executable: "/usr/bin/magus", StartTime: since, IdleExitSeconds: 600,
 			Capacity: types.MachineSnapshot{BudgetMB: 4096, HeldMB: 512, BudgetSlots: 8, HeldSlots: 2, Holders: []types.MachineClaimant{holder}},
+			Waiting:  []types.MachineWait{{Claim: waiting, Position: 1, Since: since, BlockedBy: []types.MachineClaimant{holder}}},
+			Order:    "fifo-backfill", BackfillLimit: 4,
 			Services: []types.StatusService{{ID: "pg", Label: "postgres", Command: "postgres -D /data", Ports: []string{"5432"},
 				State: types.ServiceRunning, Dependents: 1, StartedAt: since}}},
 		typeShutdown: shutdownRequest{Magic: shutdownMagic},

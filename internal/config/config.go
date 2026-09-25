@@ -39,6 +39,11 @@ type Config struct {
 	// Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself).
 	Broker types.BrokerPolicy `json:"broker" yaml:"broker"`
 
+	// CapacityWait is how long a step kept out of this host's capacity by another magus invocation waits in the broker's line before it is refused (MGS3009, exit 75). Zero, the default, refuses it at once; a step kept out only by its own run always waits.
+	//
+	// It is a bound, never a default wait: magus does not wait on another invocation unless asked. The line is deadlock-free because a waiting step holds none of its claim until all of it is granted.
+	CapacityWait time.Duration `json:"capacity_wait" yaml:"capacity_wait" validate:"gte=0s"`
+
 	// MaxFailures bounds how many projects may fail before a run stops starting
 	// more. Zero, the default, is unlimited: a batch runs everything it can and
 	// reports every failure at once.

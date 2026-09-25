@@ -48,6 +48,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | Config key            | Environment variable        | Flag                    | Type                               |
 | --------------------- | --------------------------- | ----------------------- | ---------------------------------- |
 | `broker`              | `MAGUS_BROKER`              | `--broker`              | string                             |
+| `capacity_wait`       | `MAGUS_CAPACITY_WAIT`       | `--capacity-wait`       | duration                           |
 | `concurrency`         | `MAGUS_CONCURRENCY`         | `-j`, `--concurrency`   | int                                |
 | `concurrency_profile` | `MAGUS_CONCURRENCY_PROFILE` | `--concurrency-profile` | string                             |
 | `default_charms`      | `MAGUS_DEFAULT_CHARMS`      | _(env only)_            | list _(comma-separated, env only)_ |

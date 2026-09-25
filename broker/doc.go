@@ -8,7 +8,8 @@
 // has held nothing for its idle window.
 //
 // State is scoped to a connection. A client holds one connection for its life and every
-// claim and service reference it takes rides that connection, so the kernel closing it
+// claim, place in the line for capacity, and service reference it takes rides that
+// connection, so the kernel closing it
 // (a clean exit, a crash, SIGKILL) releases all of it at once. When a broker dies with
 // holders still running, each holder re-asserts its claims on the next broker it
 // reaches, so a restart loses nothing a running step is using.

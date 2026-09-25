@@ -249,6 +249,13 @@ type StatusBroker struct {
 	StartTime  time.Time `json:"start_time" yaml:"start_time"`
 	// Capacity is the whole budget, what is held, and every claim holding it.
 	Capacity MachineSnapshot `json:"capacity" yaml:"capacity"`
+	// Waiting is the line of claims waiting for capacity, oldest first.
+	Waiting []MachineWait `json:"waiting,omitempty" yaml:"waiting,omitempty"`
+	// Order is how the line is served: "fifo-backfill" seats waiters oldest first and
+	// lets a later claim that fits go past one that does not, until that one has been
+	// passed over BackfillLimit times. Empty from a broker that predates the line.
+	Order         string `json:"order,omitempty" yaml:"order,omitempty"`
+	BackfillLimit int    `json:"backfill_limit,omitzero" yaml:"backfill_limit,omitempty"`
 	// Services are the shared services it hosts right now.
 	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
 	// IdleExitSeconds is how long the broker stays up once it holds nothing: no claim,

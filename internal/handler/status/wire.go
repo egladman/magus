@@ -86,9 +86,36 @@ func brokerToProto(b *types.StatusBroker) *statusv1.Broker {
 			HeldSlots:   int32(c.HeldSlots),
 		},
 		IdleExitSeconds: int32(b.IdleExitSeconds),
+		Order:           b.Order,
+		BackfillLimit:   int32(b.BackfillLimit),
 	}
-	for _, h := range c.Holders {
-		out.Capacity.Holders = append(out.Capacity.Holders, &statusv1.Claim{
+	out.Capacity.Holders = claimantsToProto(c.Holders)
+	for _, w := range b.Waiting {
+		out.Waiting = append(out.Waiting, &statusv1.Wait{
+			Claim: &statusv1.Claim{
+				Project:  w.Claim.Project,
+				Target:   w.Claim.Target,
+				Pid:      int32(w.Claim.PID),
+				MemoryMb: int32(w.Claim.MemoryMB),
+				Slots:    int32(max(w.Claim.Slots, 1)),
+				Dir:      w.Claim.Dir,
+				Command:  w.Claim.Command,
+			},
+			Position:   int32(w.Position),
+			StartTime:  tsFromTime(w.Since),
+			OwnRun:     w.OwnRun,
+			BlockedBy:  claimantsToProto(w.BlockedBy),
+			Ahead:      claimantsToProto(w.Ahead),
+			PassedOver: int32(w.PassedOver),
+		})
+	}
+	return out
+}
+
+func claimantsToProto(cs []types.MachineClaimant) []*statusv1.Claim {
+	out := make([]*statusv1.Claim, 0, len(cs))
+	for _, h := range cs {
+		out = append(out, &statusv1.Claim{
 			Project:   h.Project,
 			Target:    h.Target,
 			Pid:       int32(h.PID),

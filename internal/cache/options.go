@@ -1,6 +1,9 @@
 package cache
 
-import "log/slog"
+import (
+	"log/slog"
+	"time"
+)
 
 // Option configures a Cache at open time.
 type Option func(*Cache)
@@ -94,8 +97,8 @@ func WithCollapse(collapse bool) Option {
 
 // WithMachineAdmission routes every step through machine-wide admission: it takes its
 // concurrency slots and declared memory_mb from a budget shared by every magus on the
-// host. A step that does not fit fails fast (MGS3009, exit 75); magus never queues
-// behind a peer already holding the budget.
+// host. A step kept out by another invocation fails fast (MGS3009, exit 75) unless
+// WithMachineWait lets it wait in line.
 //
 // admitter must reach the ONE arbiter for this machine, which is the user's broker.
 // Omitting the option leaves admission per-process, which is what a library caller
@@ -112,6 +115,13 @@ func WithMachineAdmission(admitter MachineAdmitter) Option {
 // WithMachineAdmission.
 func WithMachineAdmissionRequired() Option {
 	return func(c *Cache) { c.machineRequired = true }
+}
+
+// WithMachineWait lets a step kept out by other invocations wait up to d in the
+// broker's line before it is refused (MGS3009, exit 75). Zero, the default, refuses it
+// at once. It has no effect without WithMachineAdmission.
+func WithMachineWait(d time.Duration) Option {
+	return func(c *Cache) { c.machineWait = d }
 }
 
 // RunOption configures a single Cache.Run (or RunAll) invocation.

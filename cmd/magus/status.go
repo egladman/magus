@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -489,13 +490,21 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 		fmt.Sprintf("proto %d", st.Protocol),
 		st.Version, st.Executable, st.Socket), "  "))
 	c := st.Capacity
-	fmt.Fprintf(tw, "capacity\t-\t%s  broker: %s\n", capacityText(c), policy.Resolved())
+	fmt.Fprintf(tw, "capacity\t-\t%s\n", strings.Join(nonEmpty(capacityText(c), "broker: "+string(policy.Resolved()), orderText(st)), "  "))
 	for _, h := range c.Holders {
 		fmt.Fprintf(tw, "held\t%d\t%s\n", h.PID, strings.Join(nonEmpty(
 			fmt.Sprintf("slots %d", max(h.Slots, 1)),
 			mbText("mem ", h.MemoryMB),
 			holderProject(h.Project)+" "+h.Target,
 			h.Dir, h.Command, sinceText(h.Since)), "  "))
+	}
+	for _, w := range st.Waiting {
+		fmt.Fprintf(tw, "wait\t%d\t%s\n", w.Claim.PID, strings.Join(nonEmpty(
+			fmt.Sprintf("slots %d", max(w.Claim.Slots, 1)),
+			mbText("mem ", w.Claim.MemoryMB),
+			holderProject(w.Claim.Project)+" "+w.Claim.Target,
+			w.Claim.Dir, w.Claim.Command, sinceText(w.Since),
+			fmt.Sprintf("place %d", w.Position), blockedByText(w)), "  "))
 	}
 	for _, s := range st.Services {
 		label := s.Label
@@ -552,6 +561,40 @@ func capacityText(c types.MachineSnapshot) string {
 	}
 	if len(parts) == 0 {
 		return "unmeasured"
+	}
+	return strings.Join(parts, "  ")
+}
+
+// orderText names how the broker serves its line, empty for a broker that predates it.
+func orderText(st types.StatusBroker) string {
+	if st.Order == "" {
+		return ""
+	}
+	if st.BackfillLimit > 0 {
+		return fmt.Sprintf("order %s/%d", st.Order, st.BackfillLimit)
+	}
+	return "order " + st.Order
+}
+
+// blockedByText names what keeps a waiter out: the pids of other invocations holding
+// the host, older waiters it may not pass, or its own run.
+func blockedByText(w types.MachineWait) string {
+	pids := func(cs []types.MachineClaimant) string {
+		out := make([]string, 0, len(cs))
+		for _, c := range cs {
+			out = append(out, strconv.Itoa(c.PID))
+		}
+		return strings.Join(out, ",")
+	}
+	parts := make([]string, 0, 2)
+	if len(w.BlockedBy) > 0 && !w.OwnRun {
+		parts = append(parts, "blocked-by "+pids(w.BlockedBy))
+	}
+	if len(w.Ahead) > 0 {
+		parts = append(parts, "behind "+pids(w.Ahead))
+	}
+	if len(parts) == 0 {
+		return "blocked-by own-run"
 	}
 	return strings.Join(parts, "  ")
 }
