@@ -378,32 +378,21 @@ is an input, and every one can be silenced per pull request with a label. See
 ## Merge queue
 
 [`magus queue`](../../concepts/merge-queue.md) runs as two workflows: `queue.yaml`
-validates with a read-only token, and `queue-apply.yaml` merges with a write token and
-runs none of the changes' code. Copy both from this repository. They work unchanged on
-the job's own token, and unchanged again once you add the queue's own GitHub App.
+validates with a read-only token, and `queue-apply.yaml` merges with the queue's own
+GitHub App and runs none of the changes' code. Copy both from this repository. The queue
+runs on nothing but its app: a run or a merge the job's own token makes starts no
+workflow, so on it the queue would validate and merge nothing.
 
-Without a credential, setup is three steps:
+Setup is four steps, with no YAML edit:
 
 1. Commit the two workflows.
-2. Run what `GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main`
-   prints: allow auto-merge, and a ruleset of its own requiring `merge-queue` from GitHub
-   Actions, with "Require branches to be up to date before merging" off. On a phone:
-   Settings > General > Pull Requests > "Allow auto-merge", then Settings > Rules >
-   Rulesets > New branch ruleset.
-3. Take the required checks it lists as running on `pull_request` out of the required
-   set, or accept that a change the queue pushes to waits until someone approves those
-   runs.
-
-The queue's own GitHub App is five more steps, with no YAML edit. Add it for a second
-writer, for required `pull_request` checks you want to keep, for pull requests touching
-`.github/workflows`, or for main's `push` workflows on every merge:
-
-1. Open the registration link `describe` printed and click "Create GitHub App".
-2. Generate a private key on the app's page.
-3. Install the app on this repository alone.
-4. Run `describe --app <slug>` and run the environment, variable and secret commands it
-   prints. On a phone, paste the key into Settings > Environments > magus-queue.
-5. Apply the ruleset change it prints, pinning `merge-queue` to the app.
+2. Run `GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main`,
+   which stops with the app's registration link; open it and click "Create GitHub App".
+3. Run `describe --app <slug>` and run what it prints: allow auto-merge, install the app on
+   this repository alone, and the environment, variable and secret commands. On a
+   phone, paste the key into Settings > Environments > magus-queue.
+4. Apply the ruleset change it prints, requiring `merge-queue` from the app, with
+   "Require branches to be up to date before merging" off.
 
 The apply job takes the app through `setup-magus`. The client id is an input, since it is
 not a secret; the key is never an input, and reaches the action through the calling
@@ -423,23 +412,20 @@ jobs:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
       - run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
         env:
-          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
-          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
+          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
           APP: ${{ steps.magus.outputs.queue-app-slug }}
           COMMITTER: ${{ steps.magus.outputs.queue-committer }}
 ```
 
-With neither the variable nor the secret, `setup-magus` mints nothing, its outputs are
-empty, and the job runs on its own token. With one and not the other it fails the job,
-since a queue that quietly fell back would post a status its ruleset does not count. The
-token is an output, never an environment variable, because `setup-magus` also runs in
-jobs that execute pull-request code. The mode reaches the queue as explicit flags: with
-`--app` and `--committer` set, apply writes as the app and dispatches nothing, since the
-app's merges start main's workflows themselves; with the two empty, it runs on the job's
-token and dispatches after a merge of its own. Nothing reads the runner's environment to
-guess.
+With neither the variable nor the secret, `setup-magus` mints nothing and its outputs are
+empty; this repository's apply job then fails before the queue starts, and
+`gha-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
+other `setup-magus` fails the job. The token is an output, never an environment
+variable, because `setup-magus` also runs in jobs that execute pull-request code. The app
+reaches the queue as explicit flags; nothing reads the runner's environment to guess.
 
 ## Permissions
 

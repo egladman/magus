@@ -15,9 +15,9 @@ name: CI
 # populates the shared cache and the run-duration history a pull request may only read.
 # See MAGUS_CACHE_REMOTE_WRITE_ENABLED below.
 #
-# workflow_dispatch is the merge queue's main run: its merges use the Actions token, whose
-# pushes start no workflow, so queue-apply.yaml dispatches this on main instead. Every
-# check below that means "a main run" is therefore `!= 'pull_request'`, not `== 'push'`.
+# workflow_dispatch lets a person rerun main's checks by hand; the merge queue's merges
+# push main like any other. Every check below that means "a main run" is therefore
+# `!= 'pull_request'`, not `== 'push'`.
 
 on:
   pull_request:

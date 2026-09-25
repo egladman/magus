@@ -28,11 +28,11 @@ on:
     types: [auto_merge_enabled, labeled, synchronize]
   pull_request_review:
     types: [submitted]
-  # Every merge moves the base the rest of the queue waits on. Apply merges with the
-  # Actions token, which starts no workflow, so queue-apply.yaml dispatches this instead;
-  # push covers a merge made any other way.
+  # Every merge moves the base the rest of the queue waits on, and every merge pushes
+  # main, the queue app's included.
   push:
     branches: [main]
+  # queue-apply.yaml's dispatch job starts a validation here for a pull request's intent.
   workflow_dispatch:
 
 # One validation at a time; a newer event waits rather than cancelling a run whose
@@ -112,13 +112,15 @@ jobs:
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # Every step's logic is tools/gha-queue.buzz, one subcommand each.
-      # Speculation depth 3: the first three changes of each partition get a validate job;
-      # the rest wait for the run the next merge starts.
+      # Speculation depth 8: the first eight changes of each partition get a validate job;
+      # the rest wait for the run the next merge starts. Nearly every change here touches
+      # the root project, so the queue is one partition, and at 3 it validated three
+      # changes per run while the rest waited a full run each.
       - id: plan
         name: Plan the queue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: magus buzz tools/gha-queue.buzz -- plan --depth 3
+        run: magus buzz tools/gha-queue.buzz -- plan --depth 8
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
