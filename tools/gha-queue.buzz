@@ -6,9 +6,9 @@
 //	magus buzz tools/gha-queue.buzz -- plan --depth <n>         plan the queue; write the validation matrix
 //	magus buzz tools/gha-queue.buzz -- validate --change <id>   validate one change of the plan
 //	magus buzz tools/gha-queue.buzz -- planned --run <id>       write whether validation run <id> plans at all
-//	magus buzz tools/gha-queue.buzz -- apply --run <id> --base <branch> [--app <slug> --committer <who>]
+//	magus buzz tools/gha-queue.buzz -- apply --run <id> --base <branch> --app <slug> --committer <who>
 //	                                                            merge what the run uploads onto the base,
-//	                                                            as the queue app when one is named
+//	                                                            as the queue app
 //	magus buzz tools/gha-queue.buzz -- dispatch --run <id> --base <branch>
 //	                                                            start a validation run on the base once
 //	                                                            pull-request run <id> saw merge intent
@@ -31,10 +31,6 @@ import "proc";
 import "serialize";
 
 import "assert";
-
-// main's workflows the apply step starts after a merge the queue made with the job's
-// Actions token, which starts none. A merge GitHub's auto-merge made starts them itself.
-final DISPATCH = ["ci.yaml", "cd.yaml", "queue.yaml"];
 
 // WORKFLOW is the validation workflow apply follows. Apply refuses a run of any other
 // file, and one that file ran for a pull request's event, since that run executed the
@@ -115,12 +111,12 @@ export fun validateArgs(dir: str, change: str) > [str] {
     return args;
 }
 
-// applyArgs polls every 15s: each poll is two API requests on the job's Actions token,
-// which GitHub limits to 1,000 an hour per repository. The regeneration is main's own,
-// run in magus's sandbox on exactly the projects that generate the files a merge needs
-// regenerated; the queue runs it only once the workspace proves the change touches none
-// of their code. committer and app are the queue app's, from the workflow; empty, the
-// provider names who commits each update commit and the credential is the job's token.
+// applyArgs polls every 15s: each poll is two API requests on the queue app's token,
+// which shares its hourly limit with every other request the app makes. The regeneration
+// is main's own, run in magus's sandbox on exactly the projects that generate the files a
+// merge needs regenerated; the queue runs it only once the workspace proves the change
+// touches none of their code. committer and app are the queue app's bot and slug, from
+// the workflow.
 export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", "--provider", "github", "--base", base, "--workflow", WORKFLOW,
         "--status-context", "merge-queue", "--interval", "15s",
@@ -128,58 +124,18 @@ export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) >
     foreach (a in SCRATCH) {
         args.append(a);
     }
-    if (committer != "") {
-        args.append("--committer");
-        args.append(committer);
-    }
-    if (app != "") {
-        args.append("--app");
-        args.append(app);
-    }
+    args.append("--committer");
+    args.append(committer);
+    args.append("--app");
+    args.append(app);
     args.append("run:{repo}/runs/{run}");
     return args;
 }
 
-// queueMerged reports whether apply's JSONL events record a merge the queue made itself,
-// one not marked by_provider.
-export fun queueMerged(events: str) > bool !> any {
-    foreach (line in events.split("\n")) {
-        if (!line.trim().startsWith("\{")) {
-            continue;
-        }
-        final e = serialize\jsonDecode(line);
-        if (e.q("kind").stringValue() == "merged" and !e.q("by_provider").booleanValue()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// dispatches names the workflows to start on main: all of them when the queue merged
-// something itself on the job's Actions token, whose merges start none. The queue app's
-// merges start them themselves, so with an app nothing is dispatched.
-export fun dispatches(queueMerged: bool, app: str) > [str] {
-    if (!queueMerged or app != "") {
-        return [<str>];
-    }
-    return DISPATCH;
-}
-
-// Credential is apply's optional pair: the queue app's slug and the committer its bot
-// pushes as, both empty when the job runs on its own Actions token.
-object Credential {
-    app: str,
-    committer: str,
-}
-
-// credentialOf pairs apply's --app and --committer. setup-magus reports the two together
-// or neither, so one without the other is a workflow bug.
-export fun credentialOf(app: str, committer: str) > Credential !> any {
-    if ((app == "") != (committer == "")) {
-        throw "queue: apply takes --app and --committer together or neither";
-    }
-    return Credential{ app = app, committer = committer };
-}
+// APPLY_FLAGS are apply's flags, all required: the queue writes only as its own GitHub
+// App, since a run or a merge the job's Actions token makes starts no workflow, and a
+// queue on it validates changes it never merges.
+final APPLY_FLAGS = ["--run", "--base", "--app", "--committer"];
 
 // jobRan reads `gh run view --json status,jobs` of a queue.yaml run: whether its job
 // named job runs, or null while the run has not said. A run cancelled while it waited
@@ -252,24 +208,16 @@ fun dispatch(run: str, base: str) > void !> any {
     }
 }
 
-fun apply(run: str, base: str, cred: Credential) > void !> any {
-    final repo = need("GITHUB_REPOSITORY");
-    final args = applyArgs(run, repo: repo, base: base, committer: cred.committer, app: cred.app);
-    final applied = proc\exec("magus", args: args, opts: {"allow_failure": true});
-    // A failed apply still dispatches main's runs for whatever merged before it stopped.
-    foreach (workflow in dispatches(queueMerged(applied.stdout), app: cred.app)) {
-        proc\exec("gh", args: ["workflow", "run", workflow, "--repo", repo, "--ref", base], opts: {});
-    }
-    if (!applied.ok) {
-        os\exit(applied.code);
-    }
+fun apply(run: str, base: str, app: str, committer: str) > void !> any {
+    final args = applyArgs(run, repo: need("GITHUB_REPOSITORY"), base: base, committer: committer, app: app);
+    proc\exec("magus", args: args, opts: {});
 }
 
 final usage = "usage: magus buzz tools/gha-queue.buzz -- <step> <flags>\n"
     + "  plan --depth <n>\n"
     + "  validate --change <id>\n"
     + "  planned --run <id>\n"
-    + "  apply --run <id> --base <branch> [--app <slug> --committer <name <email>>]\n"
+    + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
     + "  dispatch --run <id> --base <branch>";
 
 // options parses one step's flags, all valued. Each name in required must be given a
@@ -303,8 +251,8 @@ export fun main(args: [str]) > void !> any {
     } else if (step == "planned") {
         planned(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
     } else if (step == "apply") {
-        final o = options(step, argv: argv, required: ["--run", "--base"], optional: ["--app", "--committer"]);
-        apply(o["--run"]!, base: o["--base"]!, cred: credentialOf(o["--app"] ?? "", committer: o["--committer"] ?? ""));
+        final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
+        apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
     } else if (step == "dispatch") {
         final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
         dispatch(o["--run"]!, base: o["--base"]!);
@@ -368,50 +316,40 @@ test "validation hooks are lines a person can run once they name the projects, w
 
 test "validation runs the candidate's own magus; apply keeps main's" {
     assert\equal(candidateMagus("version"), want: "go run ./cmd/magus version", message: "one argv, no shell");
-    foreach (a in applyArgs("99", repo: "o/r", base: "main", committer: "", app: "")) {
+    foreach (a in applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q")) {
         assert\equal(a.indexOf("go run"), want: null, message: "apply builds nothing: " + a);
     }
 }
 
-test "apply follows the validation run as its source, pinned to the base and queue.yaml, and regenerates in the sandbox" {
-    assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "", app: ""), want: ["queue", "apply", "--provider", "github",
-        "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
+test "apply follows the validation run as its source, pinned to the base and queue.yaml, as the queue app's bot, regenerating in the sandbox" {
+    assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply",
+        "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
         "--regenerate", "magus --sandbox-enabled run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
-        "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache", "run:o/r/runs/99"], message: "argv");
+        "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache",
+        "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>", "--app", "q", "run:o/r/runs/99"], message: "argv");
 }
 
-test "with the queue app, apply commits as its bot and checks the status is pinned to it" {
-    final args = applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q");
-    assert\equal(args.len(), want: 27, message: "two flags more");
-    assert\equal(args[22], want: "--committer", message: "the committer flag");
-    assert\equal(args[23], want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "one argument, spaces and all");
-    assert\equal(args[24], want: "--app", message: "the app flag");
-    assert\equal(args[25], want: "q", message: "the app's slug");
-    assert\equal(args[26], want: "run:o/r/runs/99", message: "the source stays last");
-}
-
-test "apply takes the queue app's slug and committer together or neither" {
-    assert\equal(credentialOf("", committer: "").app, want: "", message: "setup-magus minted nothing");
-    final cred = credentialOf("q", committer: "q[bot] <7+q[bot]@users.noreply.github.com>");
-    assert\equal(cred.app, want: "q", message: "slug");
-    assert\equal(cred.committer, want: "q[bot] <7+q[bot]@users.noreply.github.com>", message: "committer");
-    foreach (pair in [["q", ""], ["", "c"]]) {
+test "apply refuses to run without the queue app's slug and committer" {
+    final all = ["--run", "7", "--base", "main", "--app", "q", "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>"];
+    assert\equal(options("apply", argv: all, required: APPLY_FLAGS, optional: [<str>])["--app"], want: "q", message: "every flag given");
+    foreach (argv in [["--run", "7", "--base", "main"], ["--run", "7", "--base", "main", "--app", "q"],
+        ["--run", "7", "--base", "main", "--committer", "c"], ["--run", "7", "--base", "main", "--app", "", "--committer", ""]]) {
         var refused = false;
         try {
-            credentialOf(pair[0], committer: pair[1]);
+            options("apply", argv: argv, required: APPLY_FLAGS, optional: [<str>]);
         } catch (e) {
             refused = true;
         }
-        assert\equal(refused, want: true, message: pair.join(","));
+        assert\equal(refused, want: true, message: argv.join(" "));
     }
 }
 
 test "each step takes the flags it declares and refuses the rest" {
-    final o = options("apply", argv: ["--run", "7", "--base=main", "--app", "", "--committer", ""], required: ["--run", "--base"], optional: ["--app", "--committer"]);
+    final o = options("planned", argv: ["--run", "7", "--base=main", "--note", ""], required: ["--run"], optional: ["--base", "--note"]);
     assert\equal(o["--run"], want: "7", message: "a valued flag");
     assert\equal(o["--base"], want: "main", message: "the =value form");
-    assert\equal(o["--app"], want: "", message: "an optional flag may be empty");
+    assert\equal(o["--note"], want: "", message: "an optional flag may be empty");
     foreach (argv in [["--depth"], ["--depth", ""], ["3"], ["--depth", "3", "--extra", "x"]]) {
         var refused = false;
         try {
@@ -429,16 +367,4 @@ test "plan args carry the depth and leave the affected sets to the workspace" {
     assert\equal(args[7], want: "3", message: "depth");
     assert\equal(args[8], want: "--out", message: "no facts command");
     assert\equal(args.len(), want: 10, message: "argv length");
-}
-
-test "main's runs are dispatched only when the queue merged something itself" {
-    final github = `{"schema":"mergequeue.event/v1","kind":"merged","change":"4","commit":"abc","by_provider":true}`;
-    final queue = `{"schema":"mergequeue.event/v1","kind":"merged","change":"5","commit":"def"}`;
-    final waiting = `{"schema":"mergequeue.event/v1","kind":"waiting","change":"6","reason":"r"}`;
-    assert\equal(queueMerged(waiting + "\n"), want: false, message: "nothing merged");
-    assert\equal(queueMerged(github + "\n" + waiting + "\n"), want: false, message: "GitHub's auto-merge started main's runs itself");
-    assert\equal(queueMerged(github + "\n" + queue + "\n"), want: true, message: "the queue's own merge started none");
-    assert\equal(dispatches(false, app: "").len(), want: 0, message: "no dispatch");
-    assert\equal(dispatches(true, app: ""), want: ["ci.yaml", "cd.yaml", "queue.yaml"], message: "every workflow of main");
-    assert\equal(dispatches(true, app: "q").len(), want: 0, message: "the app's merges started them themselves");
 }
