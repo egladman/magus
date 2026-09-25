@@ -211,7 +211,10 @@ import (
 // type-checks without running. Review had no way to PROVE a strict-mode finding and
 // said to read for it; running a file whose job is a side effect was never a check of
 // it, and was the only thing standing in for one.
-const SkillVersion = 86
+// 87: magus-multi-agent no longer says magus transitions nothing. Every read of the job
+// store ends a live job it can prove dead (an ended ancestor, a vanished checkout, an
+// untaken job past jobs.stale_after), so a worktree is removed only once its job is done.
+const SkillVersion = 87
 
 const skillLicense = "GPL-3.0-or-later"
 

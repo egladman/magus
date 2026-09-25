@@ -1569,6 +1569,8 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
+	out.MapSet("checkoutRoot", vm.StrValue(v.CheckoutRoot))
+	out.MapSet("endReason", vm.StrValue(v.EndReason))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))
 	out.MapSet("deadline", vm.IntValue(int64(v.Deadline)))

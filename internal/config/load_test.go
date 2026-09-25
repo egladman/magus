@@ -354,3 +354,37 @@ func TestTypeMismatchKeepsYamlsOwnReport(t *testing.T) {
 	assert.Contains(t, err.Error(), path)
 	assert.Contains(t, err.Error(), "cannot unmarshal")
 }
+
+// jobs.stale_after defaults to 2h, and a written zero is never rather than the default:
+// non-zero-wins would read `0` as absent.
+func TestJobsStaleAfterHonorsAWrittenZero(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		yaml string
+		want string
+	}{
+		"absent is the default":   {want: "2h0m0s"},
+		"a written zero is never": {yaml: "jobs:\n  stale_after: 0s\n", want: "0s"},
+		"a written window wins":   {yaml: "jobs:\n  stale_after: 30m\n", want: "30m0s"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.yaml != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			}
+			cfg, err := LoadWorkspaceOnly(root)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.Jobs.StaleAfter.String())
+		})
+	}
+}
+
+func TestJobsStaleAfterRefusesANegativeWindow(t *testing.T) {
+	t.Parallel()
+
+	cfg := Defaults()
+	cfg.Jobs.StaleAfter = -1
+	assert.ErrorContains(t, Validate(cfg), "stale_after")
+}

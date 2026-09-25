@@ -424,13 +424,20 @@ on a tree the releaser never saw.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
-`write_paths`, and how long since each row was touched. Both are facts, not
-verdicts - magus transitions nothing, so a row that has gone quiet is a job YOU
-decide is possibly dead, and a reported overlap is a pair you either intended or
-must repartition. It also marks a live job `orphan` when its root job has ended,
-`stale` when it was not updated within `jobs.stale_after` (only when that key is
-set), and `overdue`, and names `{{cmd "job exit"}} <id>` for each; `{{cmd "doctor"}}`
-reports the first two. Ending the row stays yours.
+`write_paths`, and how long since each row was touched. A reported overlap is a
+pair you either intended or must repartition.
+
+magus ENDS a live job itself, as `no_return` with an `end_reason`, on every read
+of the store when it can prove nobody holds it: an ancestor ended, the checkout
+`{{cmd "job exec"}}` took it in no longer exists, or it is still `declared`,
+nobody ever took it, and it was not updated within `jobs.stale_after` (default
+2h, `0` for never){{if .Full}}. A root outlives children still working under it;
+the guard noting somebody else's write in a job's paths does not count as an
+update{{end}}. Each ended job prints `ended <id>: <reason>` on stderr. So remove a
+worker's worktree only once its job is done, and advance a root you are still
+using. What magus cannot prove it leaves live: a taken job that went quiet reads
+`stale`, one past its timeout `overdue`, each with `{{cmd "job exit"}} <id>`, and
+ending those stays yours.
 
 `--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
 denies every write graded under that lease, and its paths stop blocking other

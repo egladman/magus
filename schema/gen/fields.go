@@ -554,7 +554,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_JOBS_STALE_AFTER",
 		Flag:     fieldtype.FlagNames{Long: "jobs-stale-after"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_JOBS_STALE_AFTER: StaleAfter flags a live job nobody updated for this long, in 'magus ls jobs' and 'magus doctor'.",
+		Usage:    "MAGUS_JOBS_STALE_AFTER: StaleAfter ends a declared job nobody took and nobody updated for this long, and flags a taken one in 'magus ls jobs'...",
 	},
 	{
 		GoPath:   "Concurrency",

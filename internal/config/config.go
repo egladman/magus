@@ -131,8 +131,9 @@ type Diff struct {
 	Tui *bool `json:"tui" yaml:"tui"`
 }
 
-// Jobs bounds the job tree `magus job fork` declares. Every field is unset by default, and
+// Jobs bounds the job tree `magus job fork` declares. Every limit is unset by default, and
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
+// StaleAfter is the exception, because it decides when magus ends a row nobody took.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -141,9 +142,10 @@ type Jobs struct {
 	MaxLive int `json:"max_live" yaml:"max_live" validate:"gte=0"`
 	// DefaultTimeout bounds a fork that names no --timeout. Zero = no bound.
 	DefaultTimeout time.Duration `json:"default_timeout" yaml:"default_timeout"`
-	// StaleAfter flags a live job nobody updated for this long, in `magus ls jobs` and
-	// `magus doctor`. Zero = never flag. It only reports; the row is never transitioned.
-	StaleAfter time.Duration `json:"stale_after" yaml:"stale_after"`
+	// StaleAfter ends a declared job nobody took and nobody updated for this long, and flags
+	// a taken one in `magus ls jobs` and `magus doctor`. Default 2h; 0 = never. Ending a row
+	// reads the workspace's own magus.yaml, never user-global config or the environment.
+	StaleAfter time.Duration `json:"stale_after" yaml:"stale_after" validate:"gte=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -835,6 +837,7 @@ func Defaults() Config {
 			},
 		},
 		HistoryPath: DefaultHistoryPath(),
+		Jobs:        Jobs{StaleAfter: 2 * time.Hour},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
 		Secret: Secret{

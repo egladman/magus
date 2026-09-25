@@ -639,6 +639,8 @@ export object Job {
     baseVerdict: str = "",
     registeredBy: Origin = Origin{},
     registered: int = 0,
+    checkoutRoot: str = "",
+    endReason: str = "",
     created: int = 0,
     updated: int = 0,
     deadline: int = 0,
