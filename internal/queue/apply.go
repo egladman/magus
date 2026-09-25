@@ -63,8 +63,9 @@ type Applier struct {
 	// candidate holds regenerated files, and only once the build tool proved it runs
 	// none of the change's code. Nil kicks every such change back to its author. It runs
 	// in the job holding the write credential over a checkout carrying the change's
-	// files, so it must confine itself to that checkout and fail rather than run
-	// unconfined: `magus queue apply` requires magus's kernel sandbox for it.
+	// files, so it must be confined to that checkout and fail rather than run
+	// unconfined: [CommandRegenerate] runs it in the base's sandbox, which `magus queue
+	// apply --sandbox=required` holds to the kernel's confinement.
 	Regenerate types.RegenerateFunc
 	// Source names the validation run the verdicts come from, as the provider names it,
 	// for each kick-back to point at; empty when they come from a directory.

@@ -1,6 +1,6 @@
 //go:build darwin || dragonfly || freebsd || netbsd || openbsd
 
-package queue
+package run
 
 import (
 	"errors"

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -25,6 +29,24 @@ var (
 )
 
 func init() { retryDelay = time.Millisecond }
+
+// TestMain lets the test binary serve as the sandbox launcher, since a hook confined by
+// the kernel re-executes it, and keeps the private temp dirs hook policies make out of
+// the host's TMPDIR.
+func TestMain(m *testing.M) {
+	sandbox.MaybeLaunch()
+	tmp, err := os.MkdirTemp("", "queue-test")
+	if err == nil {
+		err = os.Setenv("TMPDIR", tmp)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(tmp)
+	os.Exit(code)
+}
 
 // script is a hook running body with sh, which reads the appended inputs as $1 onward.
 func script(body string) Command { return Command{"sh", "-c", body, "hook"} }
@@ -135,17 +157,23 @@ func seenEnv(t *testing.T, dir string) map[string]string {
 	return seen
 }
 
-// A hook runs the changes' code, so of the queue's environment it gets only what
-// magus's sandbox gives a sandboxed child and the workspace's passthrough: a
-// credential, a GitHub Actions file command and anything else unnamed never reach it.
-func TestAHookSeesOnlyWhatTheSandboxAllows(t *testing.T) {
+// A hook runs the changes' code, so its environment is the sandbox's, built from the
+// base's config: the names a sandboxed child gets and the base's passthrough, TMPDIR in
+// the candidate's scratch directory and the mode, raised to best-effort, for a magus the
+// hook runs. A credential, a GitHub Actions file command and anything else unnamed
+// never reach it.
+func TestAHooksEnvironmentIsTheSandboxes(t *testing.T) {
 	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV"} {
 		t.Setenv(name, "leaked")
 	}
 	t.Setenv("PASSED", "p")
 	t.Setenv("GLOB_X", "g")
 	dir, scratch := t.TempDir(), t.TempDir()
-	env := HookEnv{Passthrough: []string{"PASSED", "GLOB_*"}, Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}}, Fixed: []string{"SET=s"}}
+	env := HookEnv{
+		Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"PASSED", "GLOB_*"}}},
+		Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}},
+		Fixed:   []string{"SET=s"},
+	}
 	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
 	require.NoError(t, err)
 	seen := seenEnv(t, dir)
@@ -155,14 +183,54 @@ func TestAHookSeesOnlyWhatTheSandboxAllows(t *testing.T) {
 	}
 	assert.Equal(t, os.Getenv("PATH"), seen["PATH"])
 	assert.Equal(t, filepath.Join(scratch, "go-build"), seen["GOCACHE"])
+	assert.Equal(t, filepath.Join(scratch, "tmp"), seen["TMPDIR"])
+	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[procrun.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
 	assert.Equal(t, "s", seen["SET"])
 	allowed := slices.Concat(sandboxenv.DefaultAllow(), []string{"PASSED", "GLOB_X", "GOCACHE", "SET"},
-		[]string{"SHLVL", "_", "OLDPWD"}) // what sh sets itself
+		// What magus gives every sandboxed child: itself, its mode, and where its cache
+		// and job store are when this process was told.
+		[]string{"MAGUS", "MAGUS_LEVEL", procrun.AncestorsEnvVar, procrun.SandboxEnvVar, "MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "XDG_STATE_HOME"},
+		[]string{"SHLVL", "_", "OLDPWD", "PWD"}) // what sh sets itself
 	for name := range seen {
 		assert.Contains(t, allowed, name, "%s reaches the hook", name)
 	}
+}
+
+// A base that requires the kernel sandbox keeps that mode for its hooks: where the
+// kernel cannot confine them, none runs, and that is the machine's failure.
+func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
+	dir := t.TempDir()
+	env := HookEnv{Sandbox: config.SandboxConfig{Mode: magustypes.SandboxModeRequired}}
+	res, err := CommandGate(script(`echo "$MAGUS_SANDBOX" > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	if abi, abiErr := sandbox.ABI(); abiErr != nil || abi < sandbox.RequiredABI {
+		require.ErrorIs(t, err, magustypes.SandboxRequired)
+		assert.NoFileExists(t, filepath.Join(dir, "seen"))
+		return
+	}
+	require.NoError(t, err)
+	assert.True(t, res.Green)
+	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+	require.NoError(t, err)
+	assert.Equal(t, "required\n", string(seen))
+}
+
+// Where the kernel has landlock, a hook writes in its checkout and its scratch
+// directory and nowhere else, and a process it starts is held to the same.
+func TestAHookIsConfinedToItsCheckoutWhereTheKernelCan(t *testing.T) {
+	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
+		t.Skip("no landlock on this host: best-effort confines the environment only")
+	}
+	dir, scratch, outside := t.TempDir(), t.TempDir(), t.TempDir()
+	body := `touch in "$1/scratch-file" && sh -c 'touch "$1/escaped"' child "$2"`
+	res, err := CommandGate(Command{"sh", "-c", body, "hook", scratch, outside}, HookEnv{}, nil).
+		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, nil)
+	require.NoError(t, err)
+	assert.False(t, res.Green, "the write outside the grant fails")
+	assert.FileExists(t, filepath.Join(dir, "in"))
+	assert.FileExists(t, filepath.Join(scratch, "scratch-file"))
+	assert.NoFileExists(t, filepath.Join(outside, "escaped"))
 }
 
 // Every kind of hook takes the same HookEnv: a passthrough name and a fixed assignment
@@ -170,7 +238,7 @@ func TestAHookSeesOnlyWhatTheSandboxAllows(t *testing.T) {
 func TestEveryHookTakesItsHookEnv(t *testing.T) {
 	t.Setenv("PASSED", "p")
 	t.Setenv("FIXED", "queue")
-	env := HookEnv{Passthrough: []string{"PASSED", "FIXED"}, Fixed: []string{"FIXED=f"}}
+	env := HookEnv{Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"PASSED", "FIXED"}}}, Fixed: []string{"FIXED=f"}}
 	record := script(`echo "$PASSED $FIXED" > seen; echo '{"units": ["//..."]}'`)
 	ctx := context.Background()
 
@@ -191,8 +259,9 @@ func TestEveryHookTakesItsHookEnv(t *testing.T) {
 }
 
 func TestAPassthroughThatIsNoGlobIsAnError(t *testing.T) {
-	_, err := CommandGate(Command{"true"}, HookEnv{Passthrough: []string{"*"}}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
-	require.ErrorContains(t, err, "sandbox.env.passthrough")
+	env := HookEnv{Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"*"}}}}
+	_, err := CommandGate(Command{"true"}, env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	require.ErrorIs(t, err, magustypes.AllowlistUnresolved)
 }
 
 // A candidate's lines name its change, and a commit gated as it stands says it is the

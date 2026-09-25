@@ -27,9 +27,11 @@ import (
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/queue/types"
-	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
+	"github.com/egladman/magus/internal/sandbox"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -44,7 +46,7 @@ const attempts = 3
 // retryDelay is the wait before running a hook again after ExitTempFail.
 var retryDelay = 5 * time.Second
 
-// interruptGrace is how long an interrupted hook gets to stop before it is killed.
+// interruptGrace is how long a cancelled hook gets to stop before it is killed.
 const interruptGrace = 30 * time.Second
 
 // Command is a hook: a program and the arguments it always takes. The queue appends its
@@ -156,160 +158,77 @@ func pattern(lit string, leads bool) string {
 
 // hookCommand is one hook invocation: Command run with Args appended.
 type hookCommand struct {
-	Command     Command
-	Args        []string
-	Dir         string
-	Passthrough []string // see [HookEnv]
-	Env         []string // set over what passes from the queue's environment
-	Stdin       io.Reader
-	Stdout      io.Writer
-	Stderr      io.Writer
+	Command Command
+	Args    []string
+	Dir     string
+	// Sandbox is the base's config the hook runs under; see [HookEnv].
+	Sandbox config.SandboxConfig
+	// Scratch is the candidate's scratch directory, writable and holding TMPDIR; empty
+	// for a facts hook, which runs in the base's own checkout.
+	Scratch string
+	Env     []string // set over what the sandbox passes from the queue's environment
+	Stdin   string
+	Stdout  io.Writer // nil discards
+	Stderr  io.Writer // nil discards
+	// Capture also returns stdout in the result, redacted.
+	Capture bool
 }
 
-// Run runs c in a process group of its own. A cancelled context interrupts the whole
-// group rather than killing it, so a build tool it started can stop cleanly; the group
-// is killed interruptGrace later. Whatever of the group outlives the hook is killed
-// before Run returns, so no process a hook started runs on into the next hook or past
-// the verdict it led to. A process that left the group itself (setsid) escapes this,
-// and only the machine's own boundary, a CI job's, ends it. An argument
-// [types.CheckUnit] refuses is an error, since Args follow Command's own.
-func (c hookCommand) Run(ctx context.Context) error {
+// Run runs c through magus's own process runner under c's sandbox policy, in a process
+// group of its own. A cancelled context sends the group SIGTERM, so a build tool it
+// started can stop cleanly, and kills it interruptGrace later. Whatever of the group
+// outlives the hook is killed before Run returns, so no process a hook started runs on
+// into the next hook or past the verdict it led to; a process that left the group
+// itself (setsid) escapes this, and only the machine's own boundary, a CI job's, ends
+// it. An argument [types.CheckUnit] refuses is an error, since Args follow Command's
+// own.
+func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 	if len(c.Command) == 0 {
-		return errors.New("empty command hook")
+		return procrun.ExecResult{}, errors.New("empty command hook")
 	}
 	for _, a := range c.Args {
 		if err := types.CheckUnit(a); err != nil {
-			return fmt.Errorf("%s hook: %w", c.Command[0], err)
+			return procrun.ExecResult{}, fmt.Errorf("%s hook: %w", c.Command[0], err)
 		}
 	}
-	inherited, err := hookEnviron(c.Passthrough)
+	policy, err := c.policy()
 	if err != nil {
-		return err
+		return procrun.ExecResult{}, err
 	}
-	cmd := exec.CommandContext(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args)...)
-	cmd.Dir = c.Dir
-	// exec keeps the last value a name is given.
-	cmd.Env = slices.Concat(inherited, c.Env)
-	cmd.Stdin = c.Stdin
-	// Output goes through pipes of the queue's own: exec's would hold Wait until every
-	// process holding them exits, which is the group outliving the hook, so it could
-	// not be killed at the hook's exit.
-	out, err := pipeOutput(cmd, c.Stdout, c.Stderr)
-	if err != nil {
-		return err
-	}
-	isolate(cmd)
-	g := &group{cmd: cmd}
-	var killer *time.Timer
-	cmd.Cancel = func() error {
-		killer = time.AfterFunc(interruptGrace, func() { _ = g.signal(true) })
-		return g.signal(false)
-	}
-	cmd.WaitDelay = interruptGrace + time.Second
-	if err := cmd.Start(); err != nil {
-		out.close()
-		return err
-	}
-	out.started()
-	err = g.wait()
-	if killer != nil {
-		killer.Stop()
-	}
-	out.drain()
-	return err
-}
-
-// group is a started hook's process group, whose id is its leader's process id. Once
-// the leader is reaped that id is free for another process, and a new group, a
-// parallel hook's say, can take it; so no signal is sent to it from then on. wait,
-// per platform, reaps the leader.
-type group struct {
-	cmd    *exec.Cmd
-	mu     sync.Mutex
-	reaped bool
-}
-
-// signal interrupts the group, or kills it, unless its leader is reaped.
-func (g *group) signal(kill bool) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.reaped {
-		return os.ErrProcessDone
-	}
-	return signalGroup(g.cmd, kill)
-}
-
-// hookOutput copies a hook's stdout and stderr to their writers through pipes.
-type hookOutput struct {
-	writes []*os.File // the ends the hook writes, closed here once it started
-	reads  []*os.File
-	done   sync.WaitGroup
-}
-
-// pipeOutput gives cmd a pipe per distinct writer among stdout and stderr; a nil writer
-// discards.
-func pipeOutput(cmd *exec.Cmd, stdout, stderr io.Writer) (*hookOutput, error) {
-	o := &hookOutput{}
-	pipe := func(w io.Writer) (*os.File, error) {
-		if w == nil {
-			return nil, nil //nolint:nilnil // a discarded stream gets no pipe, and exec gives the hook the null device
-		}
-		r, pw, err := os.Pipe()
-		if err != nil {
-			return nil, err
-		}
-		o.writes, o.reads = append(o.writes, pw), append(o.reads, r)
-		o.done.Go(func() { _, _ = io.Copy(w, r) })
-		return pw, nil
-	}
-	var err error
-	if cmd.Stdout, err = pipe(stdout); err != nil {
-		o.close()
-		return nil, err
-	}
-	if stderr == stdout {
-		cmd.Stderr = cmd.Stdout
-	} else if cmd.Stderr, err = pipe(stderr); err != nil {
-		o.close()
-		return nil, err
-	}
-	// A nil *os.File in the interface would read as a writer, not as no output.
+	stdout, stderr := c.Stdout, c.Stderr
 	if stdout == nil {
-		cmd.Stdout = nil
+		stdout = io.Discard
 	}
 	if stderr == nil {
-		cmd.Stderr = nil
+		stderr = io.Discard
 	}
-	return o, nil
+	ctx = procrun.WithOutputWriters(sandbox.WithPolicy(ctx, policy), stdout, stderr)
+	return procrun.Exec(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args), procrun.ExecOptions{
+		Dir:         c.Dir,
+		Env:         c.Env,
+		Stdin:       c.Stdin,
+		Capture:     c.Capture,
+		CancelGrace: interruptGrace,
+	})
 }
 
-func (o *hookOutput) started() {
-	for _, w := range o.writes {
-		_ = w.Close()
+// policy is the base's sandbox for a hook in c.Dir: its mode raised to at least
+// best-effort, since a hook runs a change's code whatever the base asks, with c.Scratch
+// writable and TMPDIR inside it.
+func (c hookCommand) policy() (*sandbox.Policy, error) {
+	cfg := c.Sandbox
+	if cfg.Mode.WeakerThan(magustypes.SandboxModeBestEffort) {
+		cfg.Mode = magustypes.SandboxModeBestEffort
 	}
-}
-
-func (o *hookOutput) close() {
-	o.started()
-	for _, r := range o.reads {
-		_ = r.Close()
+	if c.Scratch == "" {
+		return sandbox.FromConfig(c.Dir, "", cfg)
 	}
-	o.done.Wait()
-}
-
-// drain waits for the copies to reach the end of what the killed group wrote. A process
-// that left the group can hold a pipe open indefinitely, so the wait is bounded.
-func (o *hookOutput) drain() {
-	finished := make(chan struct{})
-	go func() {
-		o.done.Wait()
-		close(finished)
-	}()
-	select {
-	case <-finished:
-	case <-time.After(time.Second):
+	tmp := filepath.Join(c.Scratch, "tmp")
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		return nil, err
 	}
-	o.close()
+	cfg.Allow = append(slices.Clone(cfg.Allow), config.SandboxAllowPath{Path: c.Scratch, Mode: "rw"})
+	return sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg)
 }
 
 // pathLines is paths one per line, as a hook reads them on stdin. Git allows a line
@@ -330,18 +249,6 @@ func pathLines(paths []string) (lines string, refused []string) {
 	return strings.Join(kept, "\n") + "\n", refused
 }
 
-// hookEnviron is what of the queue's own environment reaches a hook: the names magus's
-// sandbox gives a sandboxed child (PATH, HOME, TMPDIR, the locale, ...) and passthrough.
-func hookEnviron(passthrough []string) ([]string, error) {
-	allow, err := sandboxenv.Parse(passthrough)
-	if err != nil {
-		return nil, fmt.Errorf("sandbox.env.passthrough: %w", err)
-	}
-	allow.Names = append(allow.Names, sandboxenv.DefaultAllow()...)
-	kept, _ := allow.Scrub(os.Environ())
-	return kept, nil
-}
-
 // changeFailure is a hook failing on the change: what it says is about the change.
 type changeFailure struct{ why string }
 
@@ -350,28 +257,34 @@ func (f changeFailure) Error() string { return f.why }
 // runHook runs c, running it again after ExitTempFail. It returns a changeFailure for
 // anything the hook's process tree did, and any other error only when the hook could
 // not run.
-func runHook(ctx context.Context, c hookCommand) error {
+func runHook(ctx context.Context, c hookCommand) (procrun.ExecResult, error) {
 	for attempt := 1; ; attempt++ {
-		err := c.Run(ctx)
+		res, err := c.Run(ctx)
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return res, ctx.Err()
 		}
 		var exit *exec.ExitError
-		if err == nil || !errors.As(err, &exit) {
-			return err
+		switch {
+		case errors.As(err, &exit):
+		// The hook exited 0 and a process that left its group held its output past
+		// the grace: the stray is the change's, and the exit is the verdict.
+		case err == nil, errors.Is(err, exec.ErrWaitDelay) && res.Started:
+			return res, nil
+		default:
+			return res, err
 		}
 		code := exit.ExitCode()
 		switch {
 		case code < 0:
-			return changeFailure{"was killed (" + exit.String() + ")"}
+			return res, changeFailure{"was killed (" + exit.String() + ")"}
 		case code != ExitTempFail:
-			return changeFailure{fmt.Sprintf("exited %d", code)}
+			return res, changeFailure{fmt.Sprintf("exited %d", code)}
 		case attempt == attempts:
-			return changeFailure{fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts)}
+			return res, changeFailure{fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts)}
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return res, ctx.Err()
 		case <-time.After(retryDelay):
 		}
 	}
@@ -412,14 +325,15 @@ func isEnvName(s string) bool {
 	return s != ""
 }
 
-// HookEnv is a gate's or a regeneration's environment. Of the queue's own environment
-// a hook gets only what magus's sandbox gives a sandboxed child and Passthrough; the
-// rest, a credential or a GitHub Actions file command included, never reaches it.
+// HookEnv is the sandbox a hook runs in and what its environment adds.
 type HookEnv struct {
-	// Passthrough are the names, or suffix globs such as "GO*", that also pass: the
-	// workspace's sandbox.env.passthrough. A credential named here reaches every hook,
-	// which is the workspace's choice.
-	Passthrough []string
+	// Sandbox is the base's sandbox config, never a candidate's. Every hook runs under
+	// the policy it builds, rooted at the hook's checkout, in its mode raised to at
+	// least best-effort. So of the queue's own environment a hook gets only what the
+	// sandbox gives a sandboxed child and the passthrough names, and where the kernel
+	// has landlock its whole process tree is held to the policy's files. A credential
+	// the passthrough names reaches every hook, which is the workspace's choice.
+	Sandbox config.SandboxConfig
 	// Scratch are pointed into each candidate's scratch directory.
 	Scratch []ScratchVar
 	// Fixed are NAME=VALUE assignments every hook takes as given, such as a
@@ -466,7 +380,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	}
 	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Passthrough: g.env.Passthrough, Env: env, Stdout: out, Stderr: out})
+	_, err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Sandbox: g.env.Sandbox, Scratch: cand.Scratch, Env: env, Stdout: out, Stderr: out})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
@@ -494,15 +408,16 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 		}
 		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
 		defer out.Close()
-		err = runHook(ctx, hookCommand{
-			Command:     cmd,
-			Args:        r.Units,
-			Dir:         r.Dir,
-			Passthrough: hookEnv.Passthrough,
-			Env:         env,
-			Stdin:       strings.NewReader(stdin),
-			Stdout:      out,
-			Stderr:      out,
+		_, err = runHook(ctx, hookCommand{
+			Command: cmd,
+			Args:    r.Units,
+			Dir:     r.Dir,
+			Sandbox: hookEnv.Sandbox,
+			Scratch: r.Scratch,
+			Env:     env,
+			Stdin:   stdin,
+			Stdout:  out,
+			Stderr:  out,
 		})
 		var failed changeFailure
 		if errors.As(err, &failed) {
@@ -554,21 +469,20 @@ type commandFacts struct {
 func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answer any) error {
 	stderr := f.log.Prefixed("[" + label + "] ")
 	defer stderr.Close()
-	var stdout bytes.Buffer
-	err := runHook(ctx, hookCommand{
-		Command:     f.cmd,
-		Args:        []string{query},
-		Dir:         f.dir,
-		Passthrough: f.env.Passthrough,
-		Env:         f.env.Fixed,
-		Stdin:       strings.NewReader(stdin),
-		Stdout:      &stdout,
-		Stderr:      stderr,
+	res, err := runHook(ctx, hookCommand{
+		Command: f.cmd,
+		Args:    []string{query},
+		Dir:     f.dir,
+		Sandbox: f.env.Sandbox,
+		Env:     f.env.Fixed,
+		Stdin:   stdin,
+		Stderr:  stderr,
+		Capture: true,
 	})
 	if err != nil {
 		return fmt.Errorf("%s hook: %w", query, err)
 	}
-	if err := json.Unmarshal(stdout.Bytes(), answer); err != nil {
+	if err := json.Unmarshal([]byte(res.Stdout), answer); err != nil {
 		return fmt.Errorf("%s hook printed no JSON object: %w", query, err)
 	}
 	return nil

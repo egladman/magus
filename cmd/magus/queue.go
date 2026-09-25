@@ -232,7 +232,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 		if err != nil {
 			return nil, nil, err
 		}
-		return queue.CommandFacts(cmd, e.dir, queue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough}, queue.NewHookLog(e.stderr)), func() error { return nil }, nil
+		return queue.CommandFacts(cmd, e.dir, queue.HookEnv{Sandbox: globalCfg.Sandbox}, queue.NewHookLog(e.stderr)), func() error { return nil }, nil
 	}
 	ws, err := client.OpenWorkspace(ctx, e.dir, target)
 	if err != nil {
@@ -481,9 +481,9 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 		}
 	}
 	log := queue.NewHookLog(e.stderr)
-	// The passthrough is the base's, like the trust set: a candidate's magus.yaml widens
+	// The sandbox is the base's, like the trust set: a candidate's magus.yaml widens
 	// neither.
-	hookEnv := queue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}
+	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox, Scratch: vars}
 	if f.RemoteCacheRead {
 		var proxy *queue.CacheReadProxy
 		if proxy, hookEnv.Fixed, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
@@ -702,7 +702,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
-		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}, queue.NewHookLog(e.stderr))
+		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Scratch: vars}, queue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
 }
