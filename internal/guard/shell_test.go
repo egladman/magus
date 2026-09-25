@@ -1580,11 +1580,20 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`while ! test -f done.marker; do sleep 5; done`,
 		`while [ ! -f done.marker ]; do sleep 1; done`,
 		`until ./magus query output ref; do sleep 30; done`,
+		// A counted for loop that only sleeps is the same wait with a bound.
+		`for i in $(seq 1 60); do sleep 10; done`,
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+	// A loop that works each pass, or a for loop over a list, is not waiting.
+	for _, cmd := range []string{
+		`for f in a b; do gofmt -l $f; done`,
+		`for i in 1 2 3; do ./magus run build .; sleep 1; done`,
+	} {
+		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDependencies(), cmd).Rule.Name, cmd)
 	}
 }
 
@@ -1677,6 +1686,44 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		`cat gate.jsonl | jq -r .target`,
 	} {
 		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
+// The measured command: its two triple backticks paired into one substitution that ate the
+// file operand and the rest of the pipeline, and the grep left over read stdin for two hours.
+const backtickEvidence = "S=...; grep -n \"fun \\|mergequeue:\\|<details\\|```\\|escape\\|fence\" $S/provider/github.buzz" +
+	" | sed -n 1,200p | grep -n -i \"kick\\|report\\|```\""
+
+func TestGuardDeniesBacktickSubstitution(t *testing.T) {
+	for _, cmd := range []string{
+		backtickEvidence,
+		"echo `date`",
+		"x=`pwd`",
+		"echo \"built at `date`\"",
+		`git commit -m "fix the ` + "`--root`" + ` flag"`,
+		"grep -n \"``\" README.md",
+		"cat <<EOF\n`whoami`\nEOF",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Equal(t, denyRule{Name: denyRuleBacktickSubstitution}, v.Rule, cmd)
+		assert.Contains(t, v.Deny, "`$(...)`", "the substitution spelling that cannot pair: %s", cmd)
+		assert.Contains(t, v.Deny, "single quotes", "where a literal backtick belongs: %s", cmd)
+		assert.Contains(t, v.Deny, "Inside double quotes a backtick RUNS a command", cmd)
+	}
+}
+
+func TestGuardAllowsBackticksAsText(t *testing.T) {
+	for _, cmd := range []string{
+		"echo 'literal ` backtick in single quotes'",
+		"grep -n '```' README.md",
+		"echo $(date)",
+		"echo \"$(date)\"",
+		"cat <<'EOF'\n`date`\nEOF",
+		// An odd backtick inside double quotes does not parse, so the shell would not run it
+		// either, and the guard fails open.
+		"echo \"`\"",
+	} {
+		assert.NotEqual(t, denyRuleBacktickSubstitution, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

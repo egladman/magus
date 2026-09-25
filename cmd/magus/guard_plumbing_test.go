@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -85,7 +86,7 @@ const spawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","
 // in root, as the shipped hook does.
 func judgeSpawnAt(t *testing.T, root string) guard.Verdict {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Chdir(root)
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
 	return guard.Judge(ctx, guardDependencies(), guard.Request{Input: spawnEnvelope, Host: "claude-code"})

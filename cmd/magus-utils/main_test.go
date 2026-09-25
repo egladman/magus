@@ -6,9 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestUsageNamesEverySubcommand: the usage line was maintained by hand and named
 // 13 of the 20 registered scribes, so seven subcommands were unreachable to

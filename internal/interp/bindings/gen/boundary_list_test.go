@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestEveryBoundaryTypeEncodes is the guard the CheckStatus bug got past.
 //

@@ -11,9 +11,12 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 type fakeRunSource struct {
 	targets map[string][]string

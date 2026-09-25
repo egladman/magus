@@ -572,12 +572,44 @@ func busyWaitFires(command string, d Dialect) bool {
 		if found {
 			return false
 		}
-		if loop, ok := n.(*syntax.WhileClause); ok && bodyOnlySleeps(loop.Do, d) {
+		if body, ok := pollingLoop(n, d); ok && bodyOnlySleeps(body, d) {
 			found = true
 			return false
 		}
 		return true
 	})
+	return found
+}
+
+// pollingLoop reports whether n is a loop that polls, with its body. A while or until loop
+// always repeats; a for loop polls when its body sleeps between passes, since one over a
+// list without a sleep reads each item once. busy-wait and a command's Repeats both ask
+// this, so the engine holds one notion of a polling loop.
+func pollingLoop(n syntax.Node, d Dialect) ([]*syntax.Stmt, bool) {
+	switch n := n.(type) {
+	case *syntax.WhileClause:
+		return n.Do, true
+	case *syntax.ForClause:
+		return n.Do, sleepsIn(n.Do, d)
+	}
+	return nil, false
+}
+
+// sleepsIn reports whether body runs sleep anywhere, nested commands included.
+func sleepsIn(body []*syntax.Stmt, d Dialect) bool {
+	found := false
+	for _, stmt := range body {
+		syntax.Walk(stmt, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok {
+				for _, inv := range peelWrappers(literalWords(call.Args), d) {
+					if path.Base(inv.Name) == "sleep" {
+						found = true
+					}
+				}
+			}
+			return !found
+		})
+	}
 	return found
 }
 
