@@ -29,6 +29,8 @@ type BuildVCS interface {
 	magustypes.MergeStarter
 	magustypes.ConflictResolver
 	magustypes.CommitWriter
+	// Bundler carries a regenerated candidate from validation to applying as a file.
+	magustypes.Bundler
 	// DirtyFiles is magus's VCSDriver's own; no capability carries it.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
@@ -165,6 +167,10 @@ type VerdictSource interface {
 // VerdictBatch is one [VerdictSource.Poll].
 type VerdictBatch struct {
 	Verdicts []Verdict
+	// Bundles maps a change to the absolute path of the bundle validation left beside its
+	// verdict: the regenerated candidate, on the merge it regenerated. A job that ran the
+	// change's code wrote it, so an Applier checks every commit it takes from one.
+	Bundles map[string]string
 	// Rejected are the changes whose verdict could not be read. Each waits alone.
 	Rejected []RejectedVerdict
 	// Done says no more verdicts will arrive.

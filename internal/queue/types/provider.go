@@ -20,6 +20,10 @@ type Provider interface {
 	ListChanges(ctx context.Context, q ListQuery) (Changes, error)
 	// ApprovalAt reports c's review state at commit exactly.
 	ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error)
+	// RequiredChecks reports each check c's base requires and its state at commit; one
+	// commit carries no report of yet is pending. A provider that cannot read them
+	// returns none, and the queue then learns of a red one only from a refused merge.
+	RequiredChecks(ctx context.Context, c Change, commit string) ([]Check, error)
 	// ListGreen returns every open change whose head carries the commit status
 	// statusContext at success, whatever branch it targets, since a stacked change is
 	// pointed at the base once the change beneath it merges.
@@ -79,6 +83,13 @@ type Approval struct {
 	// BranchSharedWith lists the other open changes whose head branch is this change's
 	// branch. The queue pushes no update commit to a shared branch.
 	BranchSharedWith []string
+}
+
+// Check is one check a base requires, as one commit carries it. Name is the base's own
+// name for it (github: the status context or check run name its rules require).
+type Check struct {
+	Name  string
+	State CommitState
 }
 
 // GreenChange is an open change whose head carries the queue's status at success. It
