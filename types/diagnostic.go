@@ -430,6 +430,10 @@ const (
 	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
 	PipeCycle DiagnosticCode = "MGS3023"
+	// ServerProtocolOutdated is a client that reached a magus server, or a per-process pool,
+	// still speaking the socket protocol from before it carried HTTP: a process started by an
+	// older magus. Restarting it is the fix.
+	ServerProtocolOutdated DiagnosticCode = "MGS3025"
 	// QueueRunUntrusted is a merge queue apply asked to follow a validation run that
 	// something other than the base branch's own queue workflow started: a pull request's
 	// event, a fork, another branch or another workflow. What such a run uploads is its
@@ -548,6 +552,9 @@ const (
 	// TokenRequestInvalid is a mint or revoke that asks for something no token can be: an
 	// invalid or empty grant, or a name that is not a valid name or looks like an id.
 	TokenRequestInvalid DiagnosticCode = "MGS9021"
+	// SocketPeerNotOwner is a connection to the server's MCP unix socket from a process whose
+	// uid is not the server's, or whose uid the kernel did not report, answered 403.
+	SocketPeerNotOwner DiagnosticCode = "MGS9022"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -602,7 +609,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated,
 	QueueRunUntrusted, QueuePlanUnverified,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
@@ -616,7 +623,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
-	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid,
+	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

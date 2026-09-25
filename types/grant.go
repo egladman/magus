@@ -83,6 +83,8 @@ var (
 	GrantConnector = Grant{MCP: LevelWrite}
 	GrantConsole   = Grant{Console: LevelWrite}
 	GrantViewer    = Grant{Console: LevelRead}
+	// GrantSocketPeer is never minted: it is what a same-user peer on a magus unix socket holds.
+	GrantSocketPeer = Grant{MCP: LevelWrite, Console: LevelWrite}
 )
 
 // Level returns the grant's level on s, and LevelNone for a surface it does not know.
@@ -173,7 +175,7 @@ func (n Need) Validate() error {
 
 // CredentialClass is which kind of bearer a credential is. A bearer's class is carried in the
 // token string itself, as the prefix, so a verifier knows which store to consult before it
-// hashes anything. [ClassStdio] is the one class with no token.
+// hashes anything. [ClassStdio] and [ClassSocketPeer] are not bearers and have no token.
 type CredentialClass string
 
 const (
@@ -192,6 +194,10 @@ const (
 	// return it. The host started the process as the local user, the trust the CLI itself
 	// runs on.
 	ClassStdio CredentialClass = "stdio"
+	// ClassSocketPeer is a process connected to a magus unix socket whose uid, as the kernel
+	// reports it for the connection, is the server's own. It presents no token, so no bearer
+	// verifier can return it.
+	ClassSocketPeer CredentialClass = "socket-peer"
 )
 
 // CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP surface and nothing
@@ -199,9 +205,16 @@ const (
 // process serves one caller.
 var CredentialStdio = Credential{Class: ClassStdio, Grant: GrantConnector}
 
-// Credential is what a request was admitted as, a bearer the server verified or
-// [CredentialStdio]: what it is, which one, what its owner called it, and what it may do.
-// The Grant is copied at verification, so a record stays
+// CredentialSocketPeer is what a request on a magus unix socket is admitted as once its peer's
+// uid matches the server's: MCP and the console surfaces, never token management. A build step
+// runs as the same user and can reach the socket, and minting a token would let it keep access
+// past the run, which is also why landlock keeps it from the operator file. It has no ID
+// because it has no secret.
+var CredentialSocketPeer = Credential{Class: ClassSocketPeer, Grant: GrantSocketPeer}
+
+// Credential is what a request was admitted as, a bearer the server verified, [CredentialStdio]
+// or [CredentialSocketPeer]: what it is, which one, what its owner called it, and what it may
+// do. The Grant is copied at verification, so a record stays
 // self-contained after the token is revoked. It never holds a secret or a full hash.
 type Credential struct {
 	Class CredentialClass `json:"class,omitempty" yaml:"class,omitempty"`
@@ -227,6 +240,8 @@ func (c Credential) Phrase() string {
 		return strings.TrimSpace("link code " + c.ID)
 	case c.Class == ClassStdio:
 		return "stdio"
+	case c.Class == ClassSocketPeer:
+		return "the socket's owner"
 	case c.Name != "" && c.ID != "":
 		return "token " + c.Name + " (" + c.ID + ")"
 	case c.Name != "":
