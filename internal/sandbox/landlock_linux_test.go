@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +10,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
+
+// requireLandlock skips a test that needs the kernel sandbox where there is none,
+// and fails it instead under MAGUS_TEST_REQUIRE_LANDLOCK=1, so a host that must
+// have landlock cannot pass by skipping.
+func requireLandlock(t *testing.T) {
+	t.Helper()
+	if _, err := ABI(); err != nil {
+		if os.Getenv("MAGUS_TEST_REQUIRE_LANDLOCK") == "1" {
+			t.Fatalf("landlock is required here and unavailable: %v", err)
+		}
+		t.Skipf("landlock unavailable: %v", err)
+	}
+}
 
 // TestAccessForPathTypeDropsDirRightsOnFiles pins the masking rule that keeps
 // landlock_add_rule from returning EINVAL. Directory-only rights on a regular file are
@@ -33,34 +49,111 @@ func TestAccessForPathTypeCanEmptyTheMask(t *testing.T) {
 	assert.Equal(t, uint64(0), accessForPathType(unix.LANDLOCK_ACCESS_FS_READ_DIR, false))
 }
 
-// TestApplyLinuxEnforcement verifies that on a kernel with landlock support,
-// Apply actually confines the process: writes inside the allowed dir succeed,
-// reads of paths outside the allowlist fail with EACCES, and child processes
-// inherit the restriction.
-//
-// This test calls Apply which permanently restricts the test process.  It must
-// run in isolation (go test -run TestApplyLinuxEnforcement -count=1) because
-// subsequent tests in the same process will also be restricted.  The test is
-// skipped when Supported() is false (kernel <5.13 or landlock disabled).
-func TestApplyLinuxEnforcement(t *testing.T) {
-	if !Supported() {
-		t.Skip("landlock not available on this kernel; skipping enforcement test")
+// TestHandledRightsFollowTheABI pins which right each ABI adds, since asking a
+// kernel for one it predates fails the whole ruleset with EINVAL.
+func TestHandledRightsFollowTheABI(t *testing.T) {
+	cases := []struct {
+		abi    int
+		fs     uint64
+		scopes uint64
+	}{
+		{1, fsAccessV1, 0},
+		{2, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER, 0},
+		{3, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE, 0},
+		{4, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE, 0},
+		{5, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE | unix.LANDLOCK_ACCESS_FS_IOCTL_DEV, 0},
+		{6, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE | unix.LANDLOCK_ACCESS_FS_IOCTL_DEV,
+			unix.LANDLOCK_SCOPE_SIGNAL | unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.fs, handledAccessFS(c.abi), "filesystem rights at ABI %d", c.abi)
+		assert.Equal(t, c.scopes, handledScopes(c.abi), "scopes at ABI %d", c.abi)
+	}
+}
+
+func TestABIAgreesWithSupported(t *testing.T) {
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, abi, 1)
+	assert.True(t, Supported())
+	t.Logf("landlock ABI %d", abi)
+}
+
+// helperApply is the "apply" helper: it confines itself in process to a policy
+// granting ws, then proves reads outside ws fail for it and for a child it starts.
+func helperApply(ws string) int {
+	exe, err := os.Executable()
+	if err != nil {
+		return exitApplyWrong
+	}
+	outside := filepath.Join(filepath.Dir(ws), "outside")
+	rules := []filesystem.Rule{
+		{Path: ws, Read: true, Write: true},
+		{Path: filesystem.ResolveRulePath(exe), Read: true, Exec: true},
+	}
+	for _, dir := range []string{"/lib", "/lib64", "/usr/lib", "/usr/lib64"} {
+		rules = append(rules, filesystem.Rule{Path: filesystem.ResolveRulePath(dir), Read: true, Exec: true})
+	}
+	if err := Apply(&Policy{FS: filesystem.Ruleset{Rules: rules}}); err != nil {
+		os.Stderr.WriteString(err.Error() + "\n")
+		if errors.Is(err, ErrUnsupported) {
+			return exitUnsupported
+		}
+		return exitApplyWrong
 	}
 
-	ws := t.TempDir()
-	p := BuildPolicy(ws, nil, nil, nil, nil)
+	check := func(ok bool, what string) bool {
+		if !ok {
+			os.Stderr.WriteString(what + "\n")
+		}
+		return ok
+	}
+	_, readOutside := os.ReadFile(filepath.Join(outside, "f"))
+	child := func(path string) int {
+		cmd := exec.Command(exe)
+		cmd.Env = append(os.Environ(), helperEnv+"=read", helperPathEnv+"="+path)
+		err := cmd.Run()
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return exitErr.ExitCode()
+		}
+		if err != nil {
+			return -1
+		}
+		return 0
+	}
+	if !check(os.WriteFile(filepath.Join(ws, "hello"), []byte("ok"), 0o600) == nil, "write inside ws failed") ||
+		!check(errors.Is(readOutside, os.ErrPermission), "read outside ws was not denied") ||
+		!check(child(filepath.Join(ws, "hello")) == 0, "child could not read inside ws") ||
+		!check(child(filepath.Join(outside, "f")) == exitDenied, "child read outside ws was not denied") {
+		return exitApplyWrong
+	}
+	return 0
+}
 
-	require.NoError(t, Apply(p))
+// TestApplyLinuxEnforcement confines a subprocess in place with Apply, the path the
+// multi-workspace server takes, and has it prove the confinement from inside: a
+// write inside the workspace works, a read outside is denied, and a child it
+// starts is confined too. The test process itself is never confined.
+func TestApplyLinuxEnforcement(t *testing.T) {
+	requireLandlock(t)
 
-	// Write inside workspace must succeed.
-	allowed := filepath.Join(ws, "hello.txt")
-	assert.NoError(t, os.WriteFile(allowed, []byte("ok"), 0o644), "WriteFile inside workspace should succeed")
+	root := t.TempDir()
+	ws := filepath.Join(root, "ws")
+	outside := filepath.Join(root, "outside")
+	require.NoError(t, os.Mkdir(ws, 0o700))
+	require.NoError(t, os.Mkdir(outside, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "f"), []byte("x"), 0o600))
 
-	// Read of /etc/passwd must be denied.
-	_, err := os.ReadFile("/etc/passwd")
-	assert.Error(t, err, "ReadFile /etc/passwd should be denied after Apply")
-
-	// Child process must also be confined: `cat /etc/passwd` should fail.
-	cmd := exec.Command("cat", "/etc/passwd")
-	assert.Error(t, cmd.Run(), "child `cat /etc/passwd` should fail under landlock")
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	code, out := runHelper(t, exec.Command(exe), "apply", filesystem.ResolveRulePath(ws))
+	if code == exitUnsupported {
+		if os.Getenv("MAGUS_TEST_REQUIRE_LANDLOCK") == "1" {
+			t.Fatalf("landlock is required here and Apply reports it unsupported: %s", out)
+		}
+		t.Skipf("Apply unsupported in this build: %s", out)
+	}
+	assert.Equal(t, 0, code, out)
 }
