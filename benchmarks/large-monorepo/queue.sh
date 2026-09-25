@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # queue.sh: merge-queue scenarios on the enriched fixture, driving the mergequeue CLI
-# (libs/mergequeue) with magus as its affected hook and its gate.
+# (internal/queue) with magus as its affected hook and its gate.
 #
 #   Q1  planning latency over N open changes, each editing one feature library:
 #       admission, conflict checks and partitioning. Q1a is the whole plan, asking
@@ -33,7 +33,7 @@ BASE="bench/queue"
 MAGUS="$(command -v "$MAGUS")"
 mkdir -p "$OUT"
 MQ="$OUT/mergequeue"
-go -C "$ROOT/libs/mergequeue" build -o "$MQ" ./cmd/mergequeue
+go -C "$ROOT/internal/queue" build -o "$MQ" ./cmd/mergequeue
 # Every stage is a worktree of its own; pointing them all at the checkout's cache is what
 # lets a stage replay what the stage below already ran.
 export MAGUS_CACHE_DIR="$REPO/.magus"
