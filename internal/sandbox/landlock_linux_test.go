@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
 // requireLandlock skips a test that needs the kernel sandbox where there is none,
@@ -33,9 +35,28 @@ func TestAccessForPathTypeDropsDirRightsOnFiles(t *testing.T) {
 	assert.Equal(t, both, kept, "a directory holds every requested right")
 
 	masked := accessForPathType(both, false)
-	assert.Equal(t, uint64(0), masked&fsAccessDirOnly, "no directory-only right survives on a file")
+	assert.Equal(t, uint64(0), masked&^fsAccessFile, "no directory-only right survives on a file")
 	assert.NotZero(t, masked&unix.LANDLOCK_ACCESS_FS_READ_FILE, "reading the file is still allowed")
 	assert.NotZero(t, masked&unix.LANDLOCK_ACCESS_FS_WRITE_FILE, "writing it is still allowed")
+}
+
+// TestAccessForPathTypeDropsReferFromAWriteGrant pins the rw("/dev/null") case: a write
+// grant carries REFER, which a device cannot hold.
+func TestAccessForPathTypeDropsReferFromAWriteGrant(t *testing.T) {
+	assert.Equal(t,
+		unix.LANDLOCK_ACCESS_FS_WRITE_FILE|unix.LANDLOCK_ACCESS_FS_TRUNCATE|unix.LANDLOCK_ACCESS_FS_IOCTL_DEV,
+		accessForPathType(fsAccessWrite, false))
+}
+
+// TestRulesetAcceptsAWritableDevice asks the running kernel for the grant every
+// sandboxed run makes, read and write on /dev/null, at the highest ABI it offers.
+func TestRulesetAcceptsAWritableDevice(t *testing.T) {
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	fd, err := buildRuleset([]filesystem.Rule{{Path: "/dev/null", Read: true, Write: true}}, abi, 0)
+	require.NoError(t, err)
+	require.NoError(t, unix.Close(fd))
 }
 
 // TestAccessForPathTypeCanEmptyTheMask covers the case addPathRule then skips: a rule
