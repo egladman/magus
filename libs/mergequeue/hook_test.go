@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/libs/mergequeue/types"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -120,17 +122,81 @@ func TestGateIsGreenOnExitZeroAndRedOtherwise(t *testing.T) {
 	assert.True(t, res.Green)
 }
 
-// A gate runs the changes' code; before, it inherited the write token with everything
-// else in the queue's environment.
-func TestHooksNeverSeeTheQueuesCredentials(t *testing.T) {
-	t.Setenv("MERGEQUEUE_TOKEN", "write")
-	t.Setenv("GITHUB_TOKEN", "read")
-	t.Setenv("KEPT", "yes")
-	var log bytes.Buffer
-	g := CommandGate(script(`echo "[$MERGEQUEUE_TOKEN][$GITHUB_TOKEN][$KEPT]"`), HookEnv{}, NewHookLog(&log))
-	_, err := g.Validate(context.Background(), types.Candidate{Commit: "s", Change: "7", Dir: t.TempDir()}, hookUnits)
+// seenEnv reads the environment a hook wrote with `env -0 > seen` in dir.
+func seenEnv(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"[s #7] [][][yes]"}, lines(&log))
+	seen := map[string]string{}
+	for kv := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\x00"), "\x00") {
+		name, value, _ := strings.Cut(kv, "=")
+		seen[name] = value
+	}
+	return seen
+}
+
+// A hook runs the changes' code, so of the queue's environment it gets only what
+// magus's sandbox gives a sandboxed child and the workspace's passthrough: a
+// credential, a GitHub Actions file command and anything else unnamed never reach it.
+func TestAHookSeesOnlyWhatTheSandboxAllows(t *testing.T) {
+	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV"} {
+		t.Setenv(name, "leaked")
+	}
+	t.Setenv("PASSED", "p")
+	t.Setenv("GLOB_X", "g")
+	dir, scratch := t.TempDir(), t.TempDir()
+	env := HookEnv{Passthrough: []string{"PASSED", "GLOB_*"}, Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}}, Set: []string{"SET=s"}}
+	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
+	require.NoError(t, err)
+	seen := seenEnv(t, dir)
+
+	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV"} {
+		assert.NotContains(t, seen, name, "%s reaches the hook", name)
+	}
+	assert.Equal(t, os.Getenv("PATH"), seen["PATH"])
+	assert.Equal(t, filepath.Join(scratch, "go-build"), seen["GOCACHE"])
+	assert.Equal(t, "p", seen["PASSED"])
+	assert.Equal(t, "g", seen["GLOB_X"])
+	assert.Equal(t, "s", seen["SET"])
+	allowed := slices.Concat(sandboxenv.DefaultAllow(), []string{"PASSED", "GLOB_X", "GOCACHE", "SET", "MAGUS_SANDBOX_ENABLED", "MAGUS_SANDBOX_REQUIRED"},
+		[]string{"SHLVL", "_", "OLDPWD"}) // what sh sets itself
+	for name := range seen {
+		assert.Contains(t, allowed, name, "%s reaches the hook", name)
+	}
+}
+
+// Every hook runs the magus it starts sandboxed and required, whatever the job's
+// environment, the passthrough, --scratch-env or the queue's own variables say.
+func TestEveryHookIsForcedIntoTheSandbox(t *testing.T) {
+	t.Setenv("MAGUS_SANDBOX_ENABLED", "0")
+	t.Setenv("MAGUS_SANDBOX_REQUIRED", "0")
+	env := HookEnv{
+		Passthrough: []string{"MAGUS_*"},
+		Scratch:     []ScratchVar{{Name: "MAGUS_SANDBOX_ENABLED", Dir: "x"}},
+		Set:         []string{"MAGUS_SANDBOX_REQUIRED=0"},
+	}
+	record := script(`echo "$MAGUS_SANDBOX_ENABLED $MAGUS_SANDBOX_REQUIRED" > seen; echo '{"units": ["//..."]}'`)
+	ctx := context.Background()
+
+	gated := t.TempDir()
+	_, err := CommandGate(record, env, nil).Validate(ctx, types.Candidate{Commit: "s", Dir: gated, Scratch: t.TempDir()}, hookUnits)
+	require.NoError(t, err)
+	regenerated := t.TempDir()
+	require.NoError(t, CommandRegenerate(record, env, nil)(ctx, types.Regeneration{Dir: regenerated, Scratch: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+	asked := t.TempDir()
+	_, err = CommandFacts(record, asked, env.Passthrough, nil).AllUnits(ctx)
+	require.NoError(t, err)
+
+	for _, dir := range []string{gated, regenerated, asked} {
+		seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+		require.NoError(t, err)
+		assert.Equal(t, "1 1\n", string(seen), dir)
+	}
+}
+
+func TestAPassthroughThatIsNoGlobIsAnError(t *testing.T) {
+	_, err := CommandGate(Command{"true"}, HookEnv{Passthrough: []string{"*"}}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	require.ErrorContains(t, err, "sandbox.env.passthrough")
 }
 
 // A candidate's lines name its change, and a commit gated as it stands says it is the
@@ -231,15 +297,15 @@ func TestParseScratchVarRefusesWhatWouldLeaveTheScratchDirectory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ScratchVar{Name: "MAGUS_CACHE_DIR", Dir: "magus/c"}, got)
 	for spec, want := range map[string]string{
-		"GOCACHE":                "is not NAME=DIR",
-		"GOCACHE=":               "is not NAME=DIR",
-		"1X=d":                   "is not NAME=DIR",
-		"A-B=d":                  "is not NAME=DIR",
-		"GITHUB_TOKEN=d":         "the queue removes GITHUB_TOKEN from every hook",
-		"MERGEQUEUE_TOKEN=d":     "the queue removes MERGEQUEUE_TOKEN from every hook",
-		"GOCACHE=../out":         "../out leaves the scratch directory",
-		"GOCACHE=/tmp/go":        "/tmp/go leaves the scratch directory",
-		"GOCACHE=a/../../escape": "a/../../escape leaves the scratch directory",
+		"GOCACHE":                  "is not NAME=DIR",
+		"GOCACHE=":                 "is not NAME=DIR",
+		"1X=d":                     "is not NAME=DIR",
+		"A-B=d":                    "is not NAME=DIR",
+		"MAGUS_SANDBOX_ENABLED=d":  "the queue sets MAGUS_SANDBOX_ENABLED for every hook",
+		"MAGUS_SANDBOX_REQUIRED=d": "the queue sets MAGUS_SANDBOX_REQUIRED for every hook",
+		"GOCACHE=../out":           "../out leaves the scratch directory",
+		"GOCACHE=/tmp/go":          "/tmp/go leaves the scratch directory",
+		"GOCACHE=a/../../escape":   "a/../../escape leaves the scratch directory",
 	} {
 		_, err := ParseScratchVar(spec)
 		require.ErrorContains(t, err, want, spec)
@@ -267,7 +333,7 @@ var facts = script(`case "$1" in
 
 func TestCommandFactsGetTheFactAskedForAsTheirArgument(t *testing.T) {
 	// magus affected --plan prints a shard plan with affected and unbounded_by beside it.
-	got, unboundedBy, err := CommandFacts(facts, t.TempDir(), nil).Affected(context.Background(), hookChange, []string{"app/main.go"})
+	got, unboundedBy, err := CommandFacts(facts, t.TempDir(), nil, nil).Affected(context.Background(), hookChange, []string{"app/main.go"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"app"}, got)
 	assert.Empty(t, unboundedBy)
@@ -275,14 +341,14 @@ func TestCommandFactsGetTheFactAskedForAsTheirArgument(t *testing.T) {
 
 func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
 	ctx := context.Background()
-	_, unboundedBy, err := CommandFacts(script(`echo '{}'`), t.TempDir(), nil).Affected(ctx, hookChange, []string{"x"})
+	_, unboundedBy, err := CommandFacts(script(`echo '{}'`), t.TempDir(), nil, nil).Affected(ctx, hookChange, []string{"x"})
 	require.NoError(t, err)
 	assert.Equal(t, "the affected hook printed no affected set", unboundedBy)
 
-	_, _, err = CommandFacts(script(`exit 3`), t.TempDir(), nil).Affected(ctx, hookChange, []string{"x"})
+	_, _, err = CommandFacts(script(`exit 3`), t.TempDir(), nil, nil).Affected(ctx, hookChange, []string{"x"})
 	require.EqualError(t, err, "affected hook: exited 3")
 
-	got, unboundedBy, err := CommandFacts(script(`exit 3`), t.TempDir(), nil).Affected(ctx, hookChange, nil)
+	got, unboundedBy, err := CommandFacts(script(`exit 3`), t.TempDir(), nil, nil).Affected(ctx, hookChange, nil)
 	require.NoError(t, err, "a change touching nothing is not asked about")
 	assert.Equal(t, []string{}, got)
 	assert.Empty(t, unboundedBy)
@@ -290,7 +356,7 @@ func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
 
 // A facts command that answers only "outputs" declares no update and maintains nothing.
 func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
-	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"]}'`), t.TempDir(), nil).Classify(context.Background(), []string{"gen/a", ".gitattributes"})
+	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"]}'`), t.TempDir(), nil, nil).Classify(context.Background(), []string{"gen/a", ".gitattributes"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}}, writes)
 }
@@ -298,7 +364,7 @@ func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
 func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	f := CommandFacts(facts, dir, nil)
+	f := CommandFacts(facts, dir, nil, nil)
 	writes, err := f.Classify(ctx, []string{"gen/a", "src/b", "docs/b.md", ".gitattributes"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true, Updated: true}, "docs/b.md": {Updated: true}, ".gitattributes": {Maintained: true}}, writes,
@@ -316,34 +382,8 @@ func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"//..."}, all, "the build tool's own spelling of every unit")
 
-	_, err = CommandFacts(script(`echo '{"units": []}'`), dir, nil).AllUnits(ctx)
+	_, err = CommandFacts(script(`echo '{"units": []}'`), dir, nil, nil).AllUnits(ctx)
 	require.EqualError(t, err, "all hook named no unit", "no arguments would leave what runs to the tool's default")
-}
-
-// A hook runs the changes' code, so nothing in its environment may steer a later step:
-// before, GITHUB_ENV and GITHUB_PATH reached it, and a line appended there set the
-// environment and PATH of every step after the gate.
-func TestHooksNeverSeeWhatSteersALaterStep(t *testing.T) {
-	for _, name := range scrubbed {
-		t.Setenv(name, "/set/"+name)
-	}
-	t.Setenv("GITHUB_SHA", "kept")
-	t.Setenv("NOT_GITHUB_PATH", "kept")
-	dir := t.TempDir()
-	_, err := CommandGate(script(`env -0 > seen`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
-	require.NoError(t, err)
-	raw, err := os.ReadFile(filepath.Join(dir, "seen"))
-	require.NoError(t, err)
-	seen := map[string]string{}
-	for kv := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\x00"), "\x00") {
-		name, value, _ := strings.Cut(kv, "=")
-		seen[name] = value
-	}
-	for _, name := range append([]string{"GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT", "GITHUB_STATE", "GITHUB_STEP_SUMMARY"}, scrubbed...) {
-		assert.NotContains(t, seen, name, "%s reaches the hook", name)
-	}
-	assert.Equal(t, "kept", seen["GITHUB_SHA"], "a fact about the run stays")
-	assert.Equal(t, "kept", seen["NOT_GITHUB_PATH"], "only the exact names are removed")
 }
 
 // The queue appends units after the hook's own words with no "--" between, so a unit
@@ -369,12 +409,12 @@ func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
 		assert.Equal(t, []string{broken}, refused.Paths)
 		assert.NoFileExists(t, filepath.Join(dir, "got"), "the regeneration never ran")
 
-		got, unboundedBy, err := CommandFacts(script(`exit 9`), dir, nil).Affected(ctx, hookChange, []string{"app/x.go", broken})
+		got, unboundedBy, err := CommandFacts(script(`exit 9`), dir, nil, nil).Affected(ctx, hookChange, []string{"app/x.go", broken})
 		require.NoError(t, err, "the hook is not asked")
 		assert.Nil(t, got)
 		assert.Contains(t, unboundedBy, "holds a line break", "every unit is gated instead")
 
-		writes, err := CommandFacts(script(`cat > asked; echo '{"outputs": ["gen/ok"]}'`), dir, nil).Classify(ctx, []string{"gen/ok", broken})
+		writes, err := CommandFacts(script(`cat > asked; echo '{"outputs": ["gen/ok"]}'`), dir, nil, nil).Classify(ctx, []string{"gen/ok", broken})
 		require.NoError(t, err)
 		assert.Equal(t, map[string]types.Writes{"gen/ok": {Output: true}}, writes, "left unclassified, which is source")
 		asked, err := os.ReadFile(filepath.Join(dir, "asked"))

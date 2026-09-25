@@ -28,34 +28,15 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/json"
+	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/libs/mergequeue/types"
 	magustypes "github.com/egladman/magus/types"
 )
 
-// scrubbed are the variables no hook sees, since a hook runs the changes' code:
-//
-//   - credentials: a token in a hook's environment is handed to every author in the
-//     queue. The Actions runtime and cache URLs go with the runtime token they serve.
-//   - GitHub Actions' file commands: a line a hook appends to GITHUB_ENV, GITHUB_PATH,
-//     GITHUB_OUTPUT, GITHUB_STATE or GITHUB_STEP_SUMMARY sets a later step's
-//     environment, PATH, outputs or summary. GITHUB_EVENT_PATH is the event a later
-//     action reads as its context.
-//   - where the runner keeps what later steps trust: RUNNER_TEMP holds the file
-//     commands' files, RUNNER_TOOL_CACHE the toolchains setup actions hand later steps,
-//     GITHUB_ACTION_PATH the running action's own files, GITHUB_WORKSPACE the job's
-//     checkout, which a later step uploads from. A hook works in its candidate's.
-//
-// Every other variable GitHub documents is a fact about the run (GITHUB_SHA,
-// GITHUB_REPOSITORY, RUNNER_OS, CI) and stays. Removing a path only unnames it: a hook
-// runs as the runner's user and can find it, so the job running hooks is trusted for
-// nothing after them.
-var scrubbed = []string{
-	"MERGEQUEUE_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
-	"ACTIONS_RUNTIME_TOKEN", "ACTIONS_RUNTIME_URL", "ACTIONS_RESULTS_URL", "ACTIONS_CACHE_URL",
-	"ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL",
-	"GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT", "GITHUB_STATE", "GITHUB_STEP_SUMMARY", "GITHUB_EVENT_PATH",
-	"RUNNER_TEMP", "RUNNER_TOOL_CACHE", "GITHUB_ACTION_PATH", "GITHUB_WORKSPACE",
-}
+// sandboxed is set last in every hook's environment, over the queue's own variables:
+// a hook runs the changes' code, so the magus it runs confines what it runs and refuses
+// to run where the kernel cannot enforce that (MGS2012).
+var sandboxed = []string{"MAGUS_SANDBOX_ENABLED=1", "MAGUS_SANDBOX_REQUIRED=1"}
 
 // ExitTempFail is EX_TEMPFAIL from sysexits.h: the hook could not run right now (a build
 // tool's lock was held, say). It is run again, and a failure that outlasts the retries
@@ -180,13 +161,14 @@ func pattern(lit string, leads bool) string {
 
 // hookCommand is one hook invocation: Command run with Args appended.
 type hookCommand struct {
-	Command Command
-	Args    []string
-	Dir     string
-	Env     []string // added to the queue's environment, less the scrubbed credentials
-	Stdin   io.Reader
-	Stdout  io.Writer
-	Stderr  io.Writer
+	Command     Command
+	Args        []string
+	Dir         string
+	Passthrough []string // see [HookEnv]
+	Env         []string // set over what passes from the queue's environment
+	Stdin       io.Reader
+	Stdout      io.Writer
+	Stderr      io.Writer
 }
 
 // Run runs c in a process group of its own. A cancelled context interrupts the whole
@@ -205,9 +187,14 @@ func (c hookCommand) Run(ctx context.Context) error {
 			return fmt.Errorf("%s hook: %w", c.Command[0], err)
 		}
 	}
+	inherited, err := hookEnviron(c.Passthrough)
+	if err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args)...)
 	cmd.Dir = c.Dir
-	cmd.Env = append(hookEnviron(), c.Env...)
+	// exec keeps the last value a name is given.
+	cmd.Env = slices.Concat(inherited, c.Env, sandboxed)
 	cmd.Stdin = c.Stdin
 	// Output goes through pipes of the queue's own: exec's would hold Wait until every
 	// process holding them exits, which is the group outliving the hook, so it could
@@ -348,11 +335,22 @@ func pathLines(paths []string) (lines string, refused []string) {
 	return strings.Join(kept, "\n") + "\n", refused
 }
 
-func hookEnviron() []string {
-	return slices.DeleteFunc(os.Environ(), func(kv string) bool {
-		name, _, _ := strings.Cut(kv, "=")
-		return slices.Contains(scrubbed, name)
-	})
+// hookEnviron is what of the queue's own environment reaches a hook: the names magus's
+// sandbox gives a sandboxed child (PATH, HOME, TMPDIR, the locale, ...) and passthrough.
+func hookEnviron(passthrough []string) ([]string, error) {
+	allow := sandboxenv.Allowlist{Allow: sandboxenv.DefaultAllow()}
+	for _, p := range passthrough {
+		if strings.Contains(p, "*") {
+			allow.Globs = append(allow.Globs, p)
+		} else {
+			allow.Allow = append(allow.Allow, p)
+		}
+	}
+	if err := sandboxenv.ValidateGlobs(allow.Globs); err != nil {
+		return nil, fmt.Errorf("sandbox.env.passthrough: %w", err)
+	}
+	kept, _ := allow.Scrub(os.Environ())
+	return kept, nil
 }
 
 // changeFailure is a hook failing on the change: what it says is about the change.
@@ -400,16 +398,16 @@ type ScratchVar struct {
 	Dir  string // relative, inside the scratch directory
 }
 
-// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name other than a
-// credential the queue removes, and DIR a relative path that stays inside the scratch
+// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name other than one the
+// queue sets for every hook, and DIR a relative path that stays inside the scratch
 // directory.
 func ParseScratchVar(spec string) (ScratchVar, error) {
 	name, dir, ok := strings.Cut(spec, "=")
 	switch {
 	case !ok || !isEnvName(name) || dir == "":
 		return ScratchVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
-	case slices.Contains(scrubbed, name):
-		return ScratchVar{}, fmt.Errorf("%q: the queue removes %s from every hook", spec, name)
+	case slices.ContainsFunc(sandboxed, func(kv string) bool { return strings.HasPrefix(kv, name+"=") }):
+		return ScratchVar{}, fmt.Errorf("%q: the queue sets %s for every hook, so it confines what the hook runs", spec, name)
 	case !filepath.IsLocal(dir):
 		return ScratchVar{}, fmt.Errorf("%q: %s leaves the scratch directory", spec, dir)
 	}
@@ -428,13 +426,18 @@ func isEnvName(s string) bool {
 	return s != ""
 }
 
-// HookEnv is what the queue adds to a gate's or a regeneration's environment.
+// HookEnv is a gate's or a regeneration's environment. Of the queue's own environment
+// a hook gets only what magus's sandbox gives a sandboxed child and Passthrough; the
+// rest, a credential or a GitHub Actions file command included, never reaches it.
 type HookEnv struct {
+	// Passthrough are the names, or suffix globs such as "GO*", that also pass: the
+	// workspace's sandbox.env.passthrough. A credential named here reaches every hook,
+	// which is the workspace's choice.
+	Passthrough []string
 	// Scratch are pointed into each candidate's scratch directory.
 	Scratch []ScratchVar
-	// Set are NAME=VALUE assignments every hook takes as given. One may name a scrubbed
-	// variable: the runner's value still reaches no hook, and the queue's own, such as a
-	// [CacheReadProxy]'s, is the queue's decision.
+	// Set are NAME=VALUE assignments every hook takes as given, such as a
+	// [CacheReadProxy]'s stand-ins.
 	Set []string
 }
 
@@ -477,7 +480,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	}
 	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Env: env, Stdout: out, Stderr: out})
+	err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Passthrough: g.env.Passthrough, Env: env, Stdout: out, Stderr: out})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
@@ -506,13 +509,14 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
 		defer out.Close()
 		err = runHook(ctx, hookCommand{
-			Command: cmd,
-			Args:    r.Units,
-			Dir:     r.Dir,
-			Env:     env,
-			Stdin:   strings.NewReader(stdin),
-			Stdout:  out,
-			Stderr:  out,
+			Command:     cmd,
+			Args:        r.Units,
+			Dir:         r.Dir,
+			Passthrough: hookEnv.Passthrough,
+			Env:         env,
+			Stdin:       strings.NewReader(stdin),
+			Stdout:      out,
+			Stderr:      out,
 		})
 		var failed changeFailure
 		if errors.As(err, &failed) {
@@ -543,15 +547,16 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 // outputs leaves it unclassified, which is source.
 //
 // A failing command is an error, since the hook reads only the base, never the change's
-// code.
-func CommandFacts(cmd Command, dir string, log *HookLog) types.BuildFacts {
-	return commandFacts{cmd: cmd, dir: dir, log: log}
+// code. Its environment is a gate's with passthrough as [HookEnv.Passthrough].
+func CommandFacts(cmd Command, dir string, passthrough []string, log *HookLog) types.BuildFacts {
+	return commandFacts{cmd: cmd, dir: dir, passthrough: passthrough, log: log}
 }
 
 type commandFacts struct {
-	cmd Command
-	dir string
-	log *HookLog
+	cmd         Command
+	dir         string
+	passthrough []string
+	log         *HookLog
 }
 
 func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answer any) error {
@@ -559,12 +564,13 @@ func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answe
 	defer stderr.Close()
 	var stdout bytes.Buffer
 	err := runHook(ctx, hookCommand{
-		Command: f.cmd,
-		Args:    []string{query},
-		Dir:     f.dir,
-		Stdin:   strings.NewReader(stdin),
-		Stdout:  &stdout,
-		Stderr:  stderr,
+		Command:     f.cmd,
+		Args:        []string{query},
+		Dir:         f.dir,
+		Passthrough: f.passthrough,
+		Stdin:       strings.NewReader(stdin),
+		Stdout:      &stdout,
+		Stderr:      stderr,
 	})
 	if err != nil {
 		return fmt.Errorf("%s hook: %w", query, err)

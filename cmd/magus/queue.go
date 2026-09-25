@@ -232,7 +232,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 		if err != nil {
 			return nil, nil, err
 		}
-		return mergequeue.CommandFacts(cmd, e.dir, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
+		return mergequeue.CommandFacts(cmd, e.dir, globalCfg.Sandbox.Env.Passthrough, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
 	}
 	ws, err := client.OpenWorkspace(ctx, e.dir, target)
 	if err != nil {
@@ -476,7 +476,9 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 		}
 	}
 	log := mergequeue.NewHookLog(e.stderr)
-	hookEnv := mergequeue.HookEnv{Scratch: vars}
+	// The passthrough is the base's, like the trust set: a candidate's magus.yaml widens
+	// neither.
+	hookEnv := mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}
 	if f.RemoteCacheRead {
 		var proxy *mergequeue.CacheReadProxy
 		if proxy, hookEnv.Set, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
@@ -695,7 +697,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
-		a.Regenerate = mergequeue.CommandRegenerate(regenerate, mergequeue.HookEnv{Scratch: vars}, mergequeue.NewHookLog(e.stderr))
+		a.Regenerate = mergequeue.CommandRegenerate(regenerate, mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}, mergequeue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
 }
