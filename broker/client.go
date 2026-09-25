@@ -308,6 +308,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		held = append(held, h)
 	}
 	c.mu.Unlock()
+	reasserted := make(map[*heldClaim]string, len(held))
 	for _, h := range held {
 		var reply claimReply
 		if err := cn.roundTrip(dctx, c.next(), typeClaim, claimRequest{Claim: h.claim, Reassert: true}, typeClaimReply, &reply, nil); err != nil {
@@ -317,15 +318,32 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		c.mu.Lock()
 		h.remote = reply.Verdict.ID
 		c.mu.Unlock()
+		reasserted[h] = reply.Verdict.ID
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		_ = nc.Close()
 		return nil, fmt.Errorf("%w: client closed", ErrUnavailable)
 	}
 	c.cur = cn
+	// A Release that ran while the claims were being re-asserted found no connection to
+	// send on and only forgot the claim here, so the new broker still counts it.
+	stillHeld := make(map[*heldClaim]bool, len(c.held))
+	for _, h := range c.held {
+		stillHeld[h] = true
+	}
+	var orphaned []string
+	for h, id := range reasserted {
+		if !stillHeld[h] {
+			orphaned = append(orphaned, id)
+		}
+	}
+	c.mu.Unlock()
+	for _, id := range orphaned {
+		_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: id}, nil)
+	}
 	return cn, nil
 }
 
