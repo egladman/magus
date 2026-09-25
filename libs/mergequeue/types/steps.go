@@ -106,7 +106,8 @@ type Generation struct {
 	Units []string
 	// Code lists the changed paths the regeneration would run as code: its targets'
 	// definitions, their spell and op sources, toolchain pins and lockfiles, and every
-	// code input those targets read.
+	// input those targets read. No extension makes a path data: a generator may run
+	// what a .txt or .md file holds.
 	Code []string
 	// Unbounded, when set, says why the build tool cannot bound what the regeneration
 	// runs.

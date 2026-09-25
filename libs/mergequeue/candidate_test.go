@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,7 +70,7 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
 		CommitMeta: magustypes.CommitMeta{Message: "merge queue: #2 is stacked on " + parent.Head[:12], Author: candidateIdentity, Committer: candidateIdentity, Date: candidateDate},
 		Tree:       "tip tree", Parents: []string{onto, parent.Head}}).Return(recorded, nil)
-	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).Return(nil)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).RunAndReturn(makeCheckout)
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil)
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #2")}).Return(head("cand"), nil)
@@ -156,7 +157,7 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
-			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}}
+			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}, changed: []string{"a.go", "gen/a.go"}}
 			regenerate := func(_ context.Context, r types.Regeneration) error {
 				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
 				return nil
@@ -192,6 +193,73 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// A symbolic link the change holds would carry the generator's writes wherever it
+// points, so the base's regeneration never runs in a checkout where one sits at, or
+// above, a path the change holds or the regeneration writes.
+func TestRegenerateInRefusesACheckoutWhereTheChangeHoldsALink(t *testing.T) {
+	c := change("1")
+	for name, tc := range map[string]struct {
+		link, to string
+		want     []string
+	}{
+		"an output":              {link: "gen/a.go", to: "a.go", want: []string{"gen/a.go"}},
+		"a directory above one":  {link: "gen", to: "elsewhere", want: []string{"gen/a.go"}},
+		"another path it holds":  {link: "tools", to: "elsewhere", want: []string{"tools/x.sh"}},
+		"a link pointing inside": {link: "gen/a.go", to: "../a.go", want: []string{"gen/a.go"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir, outside := t.TempDir(), t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(dir, "gen"), 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(outside, "elsewhere"), 0o755))
+			target := tc.to
+			if !strings.HasPrefix(target, "..") {
+				target = filepath.Join(outside, tc.to)
+			}
+			require.NoError(t, os.RemoveAll(filepath.Join(dir, tc.link)))
+			require.NoError(t, os.Symlink(target, filepath.Join(dir, tc.link)))
+			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir}, touched: []string{"gen/a.go"}, changed: []string{"a.go", "gen/a.go", "tools/x.sh"}}
+			d := newDoubles(t)
+			d.facts.EXPECT().Classify(mock.Anything, b.touched).Return(map[string]types.Writes{"gen/a.go": {Output: true}}, nil)
+			regenerate := func(context.Context, types.Regeneration) error {
+				t.Error("regenerated through a link")
+				return nil
+			}
+			_, err := regenerateIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, b, regenerate, []string{"gen"})
+			var refused *types.RefusedError
+			require.ErrorAs(t, err, &refused)
+			assert.Equal(t, tc.want, refused.Paths)
+			assert.Contains(t, refused.Reason, "as a symbolic link")
+		})
+	}
+}
+
+// A maintained file is put back through the checkout's root: a link the regeneration
+// left there is refused, and what it points at is never written.
+func TestRestoreNeverWritesThroughALink(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	victim := filepath.Join(outside, "config")
+	require.NoError(t, os.WriteFile(victim, []byte("untouched\n"), 0o600))
+	require.NoError(t, os.Symlink(victim, filepath.Join(dir, ".gitattributes")))
+	d := newDoubles(t)
+	cand := types.Candidate{Commit: head("cand"), Dir: dir}
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, dir, head("cand"), ".gitattributes").Return("the change's\n", nil)
+	require.ErrorContains(t, restore(t.Context(), d.vcs, cand, ".gitattributes"), ".gitattributes is a symbolic link")
+	content, err := os.ReadFile(victim)
+	require.NoError(t, err)
+	assert.Equal(t, "untouched\n", string(content))
+
+	// A regular file is replaced, keeping its mode.
+	require.NoError(t, os.Remove(filepath.Join(dir, ".gitattributes")))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
+	require.NoError(t, restore(t.Context(), d.vcs, cand, ".gitattributes"))
+	info, err := os.Lstat(filepath.Join(dir, ".gitattributes"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode())
+	content, err = os.ReadFile(filepath.Join(dir, ".gitattributes"))
+	require.NoError(t, err)
+	assert.Equal(t, "the change's\n", string(content))
 }
 
 // A merge of the base into a change is covered by the review beneath it when it adds

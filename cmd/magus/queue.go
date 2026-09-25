@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/libs/mergequeue"
 	"github.com/egladman/magus/libs/mergequeue/client"
@@ -296,6 +297,11 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 		fmt.Fprintf(&b, "; a stack queues by the label %q", caps.QueueLabel+"<method>")
 	}
 	b.WriteString("\n")
+	if caps.RequiredApprovals == 0 {
+		fmt.Fprintf(&b, "# %s requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own\n", base)
+	} else {
+		fmt.Fprintf(&b, "# %s requires %d approving reviews at the commit a review of a change's head covers\n", base, caps.RequiredApprovals)
+	}
 	s := caps.Setup
 	if s == nil {
 		fmt.Fprintf(&b, "# no setup: --status-context is empty, or provider %s reports none\n", provider)
@@ -578,6 +584,13 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return usagef("magus queue apply: --committer: %v", err)
 	}
+	// Refused here, before anything is read or merged: a regeneration that could not run
+	// confined would kick every change needing one back as though it were the change's.
+	if f.Regenerate != "" && !globalCfg.DryRun && !kernelSandboxed() {
+		return magustypes.DiagnosticErrorf(magustypes.SandboxRequired,
+			"magus queue apply --regenerate runs main's regeneration over changes' files in the job holding the write credential, "+
+				"and this host has no kernel landlock (/sys/kernel/security/landlock) to confine it; run apply on Linux 5.13 or newer, or without --regenerate")
+	}
 	var regenerate mergequeue.Command
 	if f.Regenerate != "" {
 		if regenerate, err = mergequeue.ParseCommand("--regenerate", f.Regenerate); err != nil {
@@ -646,10 +659,18 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.Base, a.RemoteURL = f.Base, remoteURL
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	if regenerate != nil {
-		a.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, mergequeue.NewHookLog(e.stderr))
+		// The kernel sandbox, required: the regeneration refuses to run behind
+		// interpreter-level checks alone (MGS2012), whatever the job's environment or
+		// --scratch-env says.
+		a.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, mergequeue.NewHookLog(e.stderr),
+			"MAGUS_SANDBOX_ENABLED=1", "MAGUS_SANDBOX_REQUIRED=1")
 	}
 	return a.Run(ctx, pl)
 }
+
+// kernelSandboxed reports whether this host can confine apply's regeneration with
+// landlock; a variable so a test can take the other answer.
+var kernelSandboxed = magus.KernelSandboxSupported
 
 // parsePerson reads "Name <email>"; empty is the zero Person.
 func parseCommitter(s string) (magustypes.Person, error) {

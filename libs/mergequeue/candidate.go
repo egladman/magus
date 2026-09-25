@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -153,6 +154,9 @@ type built struct {
 	types.Candidate
 	touched []string // the paths the merge changed or settled, sorted
 	settled []string // the generated files it conflicted in, which took the change's side
+	// changed is every path the checkout holds differently from onto, none of which may
+	// be a symbolic link, or sit under one, when a regeneration writes there.
+	changed []string
 }
 
 // buildMerge checks out onto in a directory of its own, merges the change, settles
@@ -205,7 +209,8 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 	if err != nil {
 		return built{}, err
 	}
-	return built{Candidate: cand, touched: slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled)))), settled: settled}, nil
+	all := slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled))))
+	return built{Candidate: cand, touched: all, settled: settled, changed: all}, nil
 }
 
 // checkout checks commit out in a directory of its own under scratch, named from name,
@@ -312,6 +317,16 @@ func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b 
 	if len(regen) == 0 {
 		return nil, nil
 	}
+	// A link the change committed would carry the base's generator's writes wherever it
+	// points, in the job that may hold the write credential.
+	linked, err := linksIn(b.Dir, slices.Concat(b.changed, regen))
+	if err != nil {
+		return nil, err
+	}
+	if len(linked) > 0 {
+		return nil, &types.RefusedError{Paths: linked, Reason: "regenerating " + strings.Join(regen, ", ") + " would write in a checkout where it holds " +
+			strings.Join(linked, ", ") + " as a symbolic link", Remedy: "Regenerate the generated files yourself and push them, or commit those paths as regular files."}
+	}
 	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Change: s.change, Paths: regen, Units: units}); err != nil {
 		return nil, err
 	}
@@ -373,18 +388,84 @@ func unprovenWhy(g types.Generation, outputs []string) (string, []string) {
 	return why, paths
 }
 
-// restore writes path in cand's checkout back to its content at cand's commit.
+// restore writes path in cand's checkout back to its content at cand's commit, as a
+// regular file. It writes through an [os.Root] on the checkout and refuses a path at or
+// under a symbolic link, so nothing the regeneration left can redirect the write.
 func restore(ctx context.Context, v types.BuildVCS, cand types.Candidate, path string) error {
 	content, err := v.ReadFileAt(ctx, cand.Dir, cand.Commit, path)
 	if err != nil {
 		return fmt.Errorf("restore %s: %w", path, err)
 	}
-	abs := filepath.Join(cand.Dir, filepath.FromSlash(path))
+	root, err := os.OpenRoot(cand.Dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if at, err := linkIn(root, path); err != nil || at != "" {
+		if err != nil {
+			return fmt.Errorf("restore %s: %w", path, err)
+		}
+		return fmt.Errorf("restore %s: %s is a symbolic link", path, at)
+	}
 	mode := os.FileMode(0o644)
-	if info, err := os.Stat(abs); err == nil {
+	if info, err := root.Lstat(path); err == nil && info.Mode().IsRegular() {
 		mode = info.Mode().Perm()
 	}
-	return os.WriteFile(abs, []byte(content), mode)
+	// Removed, then created exclusively: O_EXCL never follows a link planted between the
+	// check above and the write.
+	if err := root.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	f, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	return f.Close()
+}
+
+// linksIn returns the paths, of paths within dir, that are a symbolic link or sit under
+// one, in order. A path that does not exist is none.
+func linksIn(dir string, paths []string) ([]string, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	var linked []string
+	for _, p := range slices.Compact(slices.Sorted(slices.Values(paths))) {
+		at, err := linkIn(root, p)
+		if err != nil {
+			return nil, err
+		}
+		if at != "" {
+			linked = append(linked, p)
+		}
+	}
+	return linked, nil
+}
+
+// linkIn returns the first component of the slash path p, within root, that is a
+// symbolic link, or "". The walk stops at the first component that does not exist.
+func linkIn(root *os.Root, p string) (string, error) {
+	parts := strings.Split(p, "/")
+	for i := range parts {
+		at := strings.Join(parts[:i+1], "/")
+		info, err := root.Lstat(at)
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return at, nil
+		}
+	}
+	return "", nil
 }
 
 func queueMeta(msg string) magustypes.CommitMeta {

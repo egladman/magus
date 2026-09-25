@@ -50,7 +50,7 @@ import "std";
 import "serialize";
 
 export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "{io["base"]}"], "queue_label": "queue: ",
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "{io["base"]}"], "required_approvals": 2, "queue_label": "queue: ",
         "committer": {"name": "bot", "email": "bot@example.com"}};
 }
 
@@ -133,14 +133,14 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 	got, err := open(t, script).Describe(context.Background(), types.ListQuery{Base: "merge"})
 	require.NoError(t, err)
 	assert.Equal(t, types.Capabilities{StackMerge: types.StackMergeAtomic, LinearStacks: true,
-		Methods: []types.MergeMethod{types.MethodSquash, types.MethodMerge}, QueueLabel: "queue: ",
+		Methods: []types.MergeMethod{types.MethodSquash, types.MethodMerge}, RequiredApprovals: 2, QueueLabel: "queue: ",
 		Committer: magustypes.Person{Name: "bot", Email: "bot@example.com"}}, got)
 }
 
 // setupScript answers describe with a setup built from what it was asked.
 const setupScript = `
 export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "setup": {
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
         "status_context": io["status_context"],
         "credential": {"id": "812", "name": io["app"]},
         "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
@@ -252,6 +252,11 @@ func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 	}
 	_, err := open(t, strings.Replace(script, `"linear_stacks": true, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
 	require.ErrorContains(t, err, `field "linear_stacks" is missing`)
+	// Read as zero, a missing count would say the base requires no review.
+	_, err = open(t, strings.Replace(script, `"required_approvals": 2, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `field "required_approvals" is missing`)
+	_, err = open(t, strings.Replace(script, `"required_approvals": 2, `, `"required_approvals": "2", `, 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `field "required_approvals" is string, want int`)
 }
 
 func TestListGreenDecodesTheChangesCarryingTheStatus(t *testing.T) {

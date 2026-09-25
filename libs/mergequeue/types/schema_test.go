@@ -120,6 +120,8 @@ func TestCapabilitiesCheckRefusesAnUnknownStackMergeAndNoMethod(t *testing.T) {
 	require.ErrorContains(t, Capabilities{StackMerge: "batch", Methods: []MergeMethod{MethodSquash}}.Check(), `provider describes stack merging as "batch"`)
 	require.EqualError(t, Capabilities{StackMerge: StackMergeAtomic}.Check(), "provider allows no merge method")
 	require.ErrorContains(t, Capabilities{StackMerge: StackMergeAtomic, Methods: []MergeMethod{"ff"}}.Check(), `merge method "ff"`)
+	require.EqualError(t, Capabilities{StackMerge: StackMergeAtomic, Methods: []MergeMethod{MethodSquash}, RequiredApprovals: -1}.Check(),
+		"provider says the base requires -1 approvals, which is negative")
 	caps := Capabilities{StackMerge: StackMergeSequential, Methods: []MergeMethod{MethodSquash}}
 	require.NoError(t, caps.Check())
 	require.True(t, caps.Allows(MethodSquash))

@@ -33,7 +33,7 @@ func queueHead(id string) string { return strings.Repeat("0", 39) + id }
 // nothing, and lists RUN as every validation run's artifacts.
 const queueProvider = `
 export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"], "queue_label": "merge: ",
+    return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"], "required_approvals": 0, "queue_label": "merge: ",
         "committer": {"name": "bot", "email": "bot@example.invalid"}};
 }
 export fun list_changes(io: {str: any}) > any {
@@ -166,6 +166,18 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
 }
 
+// On a host that cannot confine it, apply's regeneration is refused before the provider
+// is opened: the mock expects no call, and no change is kicked back for the host.
+func TestQueueApplyRefusesToRegenerateWithoutTheKernelSandbox(t *testing.T) {
+	prev := kernelSandboxed
+	t.Cleanup(func() { kernelSandboxed = prev })
+	kernelSandboxed = func() bool { return false }
+	f := newQueueFixture(t, "", "")
+	_, err := f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--regenerate", "magus run generate:rw", "verdicts")
+	require.ErrorIs(t, err, magustypes.SandboxRequired)
+	assert.ErrorContains(t, err, "without --regenerate")
+}
+
 func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	out, err := f.run(t, "", "--help")
@@ -211,10 +223,24 @@ func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
 	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
 	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"sequential","linear_stacks":false,`+
-		`"methods":["squash"],"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
+		`"methods":["squash"],"required_approvals":0,"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
 
 	_, err = f.run(t, "", "describe", "--provider", "local.buzz")
 	require.ErrorContains(t, err, "--base")
+}
+
+// A base requiring no approval is said out loud: the queue then merges what nobody
+// reviewed, and adds no review rule of its own.
+func TestQueueDescribeSaysWhenTheBaseRequiresNoApproval(t *testing.T) {
+	withOutput(t, "")
+	f := newQueueFixture(t, "", "")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
+	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--status-context", "")
+	require.NoError(t, err)
+	assert.Equal(t, `# local.buzz on main: merge methods squash; stacks merge sequential; a stack queues by the label "merge: <method>"
+# main requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own
+# no setup: --status-context is empty, or provider local.buzz reports none
+`, string(out))
 }
 
 // setupProvider describes a setup naming the status context and app describe was asked
@@ -222,9 +248,9 @@ func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
 const setupProvider = `
 export fun describe(io: {str: any}) > any {
     if (io["status_context"] == "") {
-        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"]};
+        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2};
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "queue_label": "queue: ",
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "required_approvals": 2, "queue_label": "queue: ",
         "setup": {
             "status_context": io["status_context"],
             "credential": {"id": "812", "name": "{io["app"]}"},
@@ -257,6 +283,7 @@ func TestQueueDescribePrintsTheSetupStepsAPersonRuns(t *testing.T) {
 	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q")
 	require.NoError(t, err)
 	assert.Equal(t, `# local.buzz on main: merge methods squash, merge; stacks merge atomic; a stack queues by the label "queue: <method>"
+# main requires 2 approving reviews at the commit a review of a change's head covers
 # the queue posts "merge-queue" as 812 (q)
 # main requires "merge-queue" from integration 15368 (not seen reported)
 # main requires "ci gate" from any source (seen on pull_request)
@@ -304,7 +331,7 @@ func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
 	f := newSetupFixture(t)
 	out, err := f.run(t, "", "describe", "-o", "json", "--status-context", "", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
-	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"]}`+"\n", string(out))
+	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
 }
 
 func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {

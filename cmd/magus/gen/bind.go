@@ -80,4 +80,5 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing.")
 	fs.BoolVar(&cfg.DryRun, "u", cfg.DryRun, "Short for --dry-run")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")
+	fs.BoolVar(&cfg.Sandbox.Required, "sandbox-required", cfg.Sandbox.Required, "MAGUS_SANDBOX_REQUIRED")
 }

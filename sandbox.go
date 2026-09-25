@@ -27,6 +27,9 @@ import (
 // resolved by job.ActingLease in the order the guard hook resolves it.
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if !m.cfg.Sandbox.Enabled {
+		if m.cfg.Sandbox.Required {
+			return ctx, types.DiagnosticErrorf(types.SandboxRequired, "sandbox.required is set for %s, and sandbox.enabled is not", m.ws.Root)
+		}
 		return ctx, nil
 	}
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
@@ -36,8 +39,13 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("sandbox: %w", err)
 	}
 	p = sandboxapply.NarrowToLease(ctx, p, loc, lease, from)
-	return sandboxapply.Apply(ctx, p, m.ws.Root)
+	return sandboxapply.Apply(ctx, p, m.ws.Root, m.cfg.Sandbox.Required)
 }
+
+// KernelSandboxSupported reports whether this host's kernel can enforce the sandbox
+// (Linux landlock); false means a sandbox falls back to interpreter-level checks, and a
+// required one is refused (MGS2012).
+func KernelSandboxSupported() bool { return sandbox.Supported() }
 
 // ApplyUnionSandbox unions the landlock policies of every workspace root and
 // applies the combined ruleset to the current process exactly once. Roots whose
@@ -56,10 +64,17 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 
 	policies := make([]*sandbox.Policy, 0, len(roots))
 	anyEnabled := false
+	required := ""
 	for _, root := range roots {
 		cfg, err := loadWorkspaceConfig(root)
 		if err != nil {
 			return err
+		}
+		switch {
+		case cfg.Sandbox.Required && !cfg.Sandbox.Enabled:
+			return types.DiagnosticErrorf(types.SandboxRequired, "sandbox.required is set for %s, and sandbox.enabled is not", root)
+		case cfg.Sandbox.Required:
+			required = root
 		}
 		if cfg.Sandbox.Enabled {
 			anyEnabled = true
@@ -77,16 +92,19 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 	secs := time.Since(start).Seconds()
 	if err != nil {
 		if errors.Is(err, sandbox.ErrUnsupported) {
+			sandboxapply.RecordApply(ctx, secs, "unsupported", "union", union)
+			if required != "" {
+				return types.DiagnosticErrorf(types.SandboxRequired, "sandbox.required is set for %s, and the kernel cannot enforce it: %v", required, err)
+			}
 			slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
 				"kernel landlock unavailable; multi-workspace server running with interpreter-level checks only"),
 				"reason", err.Error())
-			sandboxapply.MarkAppliedExternally(union.Fingerprint())
-			sandboxapply.RecordApply(ctx, secs, "unsupported", "union", union)
+			sandboxapply.MarkAppliedExternally(union.Fingerprint(), false)
 			return nil
 		}
 		return fmt.Errorf("magus: apply union sandbox: %w", err)
 	}
-	sandboxapply.MarkAppliedExternally(union.Fingerprint())
+	sandboxapply.MarkAppliedExternally(union.Fingerprint(), true)
 	sandboxapply.RecordApply(ctx, secs, "applied", "union", union)
 	slog.InfoContext(ctx, "magus: applied union landlock ruleset",
 		"workspaces", len(roots),

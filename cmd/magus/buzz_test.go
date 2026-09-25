@@ -104,7 +104,7 @@ func buzzSandboxWorkspace(t *testing.T, sandboxEnabled bool) (context.Context, *
 // permanent and process-wide, so applying it here would confine every later test in this
 // binary. The policy still reaches ctx, which is what the binding checks read.
 func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
-	sandboxapply.MarkAppliedExternally("magus buzz sandbox test")
+	sandboxapply.MarkAppliedExternally("magus buzz sandbox test", false)
 	ctx, m, script := buzzSandboxWorkspace(t, true)
 
 	err := buzzCmd(ctx, "", []string{"-s", script})

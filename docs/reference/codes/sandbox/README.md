@@ -63,6 +63,11 @@ Or per-invocation:
 MAGUS_SANDBOX_ENABLED=1 magus run build
 ```
 
+Without kernel landlock the sandbox falls back to interpreter-level checks
+([MGS2005](MGS2005.md)). To refuse that fallback, set `sandbox.required: true`
+(`MAGUS_SANDBOX_REQUIRED=1`) beside `enabled`, and magus stops with
+[MGS2012](MGS2012.md) instead.
+
 ## Extending the allowlist
 
 ```yaml
@@ -111,6 +116,7 @@ Two layers run together:
 - [MGS2007](MGS2007.md): exec denied.
 - [MGS2008](MGS2008.md): server socket withheld from sandboxed children.
 - [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).
+- [MGS2012](MGS2012.md): the sandbox is required and the kernel is not enforcing it.
 - [MGS3009](MGS3009.md): machine budget exhausted.
 - [MGS3010](MGS3010.md): redundant gate deferred.
 - [MGS3011](MGS3011.md): target exceeded its declared timeout.

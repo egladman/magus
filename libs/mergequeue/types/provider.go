@@ -154,6 +154,10 @@ type Capabilities struct {
 	// its base, so an update commit the queue pushes there is linear too.
 	LinearStacks bool
 	Methods      []MergeMethod // the merge methods the repository allows
+	// RequiredApprovals is how many approvals the base requires at the commit a review
+	// of a change's head covers. The queue enforces the base's own rule and adds none of
+	// its own, so zero means it merges a change nobody approved.
+	RequiredApprovals int
 	// QueueLabel is the prefix of the label that queues a change, followed by its merge
 	// method ("queue: squash"); empty when the provider queues changes some other way.
 	QueueLabel string
@@ -252,6 +256,9 @@ func (c Capabilities) Check() error {
 	}
 	if c.Committer != (magustypes.Person{}) && (c.Committer.Name == "" || c.Committer.Email == "") {
 		return fmt.Errorf("provider names committer %q <%s>, which needs a name and an email", c.Committer.Name, c.Committer.Email)
+	}
+	if c.RequiredApprovals < 0 {
+		return fmt.Errorf("provider says the base requires %d approvals, which is negative", c.RequiredApprovals)
 	}
 	if c.Setup != nil {
 		return c.Setup.Check()

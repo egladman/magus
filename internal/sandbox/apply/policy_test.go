@@ -85,13 +85,13 @@ func TestApplyFingerprintMismatch(t *testing.T) {
 
 	// First Apply records policyA's fingerprint. ErrUnsupported is swallowed as the
 	// documented fallback, so this returns no error and attaches the policy to ctx.
-	ctxA, err := Apply(ctx, policyA, rootA)
+	ctxA, err := Apply(ctx, policyA, rootA, false)
 	require.NoError(t, err, "first Apply should succeed (ErrUnsupported is a soft fallback)")
 	assert.Same(t, policyA, sandbox.FromContext(ctxA), "policyA should be attached to the returned ctx")
 
 	// Second Apply with a divergent fingerprint must be rejected with MGS2010 and
 	// must NOT attach the new policy (the returned ctx is the unchanged input).
-	gotCtx, err := Apply(ctx, policyB, rootB)
+	gotCtx, err := Apply(ctx, policyB, rootB, false)
 	require.Error(t, err, "a divergent policy must be rejected")
 	assert.ErrorIs(t, err, types.SandboxPolicyMismatch,
 		"mismatch must carry the MGS2010 diagnostic")
@@ -102,9 +102,16 @@ func TestApplyFingerprintMismatch(t *testing.T) {
 	assert.Nil(t, sandbox.FromContext(gotCtx), "a rejected Apply must not attach its policy")
 
 	// Re-applying the *same* fingerprint is idempotent: it succeeds and re-attaches.
-	ctxA2, err := Apply(ctx, policyA, rootA)
+	ctxA2, err := Apply(ctx, policyA, rootA, false)
 	require.NoError(t, err, "re-applying the same fingerprint should succeed")
 	assert.Same(t, policyA, sandbox.FromContext(ctxA2))
+
+	// The process fell back to interpreter-level checks, so a caller requiring the
+	// kernel's enforcement is refused, and nothing is attached for it to run under.
+	gotCtx, err = Apply(ctx, policyA, rootA, true)
+	require.ErrorIs(t, err, types.SandboxRequired)
+	assert.ErrorContains(t, err, rootA, "names the workspace that required it")
+	assert.Nil(t, sandbox.FromContext(gotCtx), "a refused Apply attaches no policy")
 }
 
 // TestConcurrentMarkAppliedExternallyAndApply races MarkAppliedExternally's writes to
@@ -132,11 +139,11 @@ func TestConcurrentMarkAppliedExternallyAndApply(t *testing.T) {
 		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
-			MarkAppliedExternally(fmt.Sprintf("fp-%d", i))
+			MarkAppliedExternally(fmt.Sprintf("fp-%d", i), false)
 		}(i)
 		go func() {
 			defer wg.Done()
-			_, _ = Apply(ctx, policy, root)
+			_, _ = Apply(ctx, policy, root, false)
 		}()
 	}
 	wg.Wait()
@@ -329,12 +336,29 @@ func TestApplyAttachesANarrowedPolicy(t *testing.T) {
 		WritePaths: []string{"pkg/a/**"},
 	})
 	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
-	MarkAppliedExternally(p.Fingerprint())
+	MarkAppliedExternally(p.Fingerprint(), false)
 
-	ctx, err := Apply(t.Context(), p, root)
+	ctx, err := Apply(t.Context(), p, root, false)
 	require.NoError(t, err)
 	require.Same(t, p, sandbox.FromContext(ctx))
 	assert.Error(t, sandbox.FromContext(ctx).CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
+}
+
+// Attach-only, a required sandbox holds only when the ruleset the server applied is
+// kernel-enforced.
+func TestAttachingARequiredSandboxNeedsTheKernelsEnforcement(t *testing.T) {
+	root := t.TempDir()
+	p := FromConfig(t.Context(), root, config.Config{})
+
+	MarkAppliedExternally(p.Fingerprint(), false)
+	ctx, err := Apply(t.Context(), p, root, true)
+	require.ErrorIs(t, err, types.SandboxRequired)
+	assert.Nil(t, sandbox.FromContext(ctx))
+
+	MarkAppliedExternally(p.Fingerprint(), true)
+	ctx, err = Apply(t.Context(), p, root, true)
+	require.NoError(t, err)
+	assert.Same(t, p, sandbox.FromContext(ctx))
 }
 
 // sanity: the sentinel-based match used above behaves as errors.Is expects, so a
