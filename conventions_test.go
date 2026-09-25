@@ -285,12 +285,12 @@ const (
 )
 
 // handAuthoredSkills live beside the installed ones and are NOT written by
-// `magus agent install`. Both are tracked through explicit .gitignore negations,
+// `magus agent install`. Each is tracked through an explicit .gitignore negation,
 // and magus-workspace-rules tells readers to put local rules in exactly this
 // shape, so a declaration that claims them tells an author the one file they are
 // supposed to edit is generated, and hands it to the regenerating merge driver
 // on a conflict.
-var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development"}
+var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development", "land-pull-requests"}
 
 // skillOutputGlob matches the declared-output patterns in skills_generate. The
 // install calls in the same body name a bare destination directory with no

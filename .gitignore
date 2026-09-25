@@ -134,9 +134,9 @@ coverage.cmd.out
 # the workspace. Regenerate the ignored trees instead:
 #   magus agent install .claude/skills --force
 #
-# magus-skill-authoring and magus-local-development are the exceptions and stay tracked: both
-# are hand-authored, never embedded in the binary, and nothing regenerates them. Hand-authored
-# stays, generated goes. magus-local-development is additionally the name magus RESERVES for a
+# magus-skill-authoring, magus-local-development and land-pull-requests are the exceptions and
+# stay tracked: each is hand-authored, never embedded in the binary, and nothing regenerates
+# it. Hand-authored stays, generated goes. magus-local-development is additionally the name magus RESERVES for a
 # workspace's own rules (internal/agent.LocalSkillName, held by TestLocalSkillNameIsReserved),
 # so install and verify leave it alone by construction - but only if it is committed does it
 # survive a fresh clone or a new worktree.
@@ -145,6 +145,7 @@ coverage.cmd.out
 .claude/skills/*
 !.claude/skills/magus-skill-authoring/
 !.claude/skills/magus-local-development/
+!.claude/skills/land-pull-requests/
 
 # launch.json pins one machine's dev-server command and port, so it stays per developer.
 #
