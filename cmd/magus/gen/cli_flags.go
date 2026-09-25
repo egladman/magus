@@ -47,6 +47,7 @@ const (
 	FlagAffectedOpen = "open"
 	// affected: --plan
 	FlagAffectedPlan = "plan"
+	FlagAffectedRisk = "risk"
 	// affected: --preflight
 	FlagAffectedPreflight = "preflight"
 	// affected: --race
@@ -2147,5 +2148,24 @@ type VersionFlags struct {
 func BindVersion(fs *flag.FlagSet) *VersionFlags {
 	var f VersionFlags
 	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the server probe entirely")
+	return &f
+}
+
+// AffectedRiskFlags are the flags declared for `magus affected risk`.
+type AffectedRiskFlags struct {
+	Risk  bool   // --risk
+	Base  string // --base, -b
+	Stdin bool   // --stdin
+	Null  bool   // --null
+}
+
+// BindAffectedRisk registers `magus affected risk`'s flags on fs and returns the destination.
+func BindAffectedRisk(fs *flag.FlagSet) *AffectedRiskFlags {
+	var f AffectedRiskFlags
+	fs.BoolVar(&f.Risk, FlagAffectedRisk, false, "Classify the changeset by risk (trivial, mechanical, scoped, full) and print the reduced gate that suffices for it (read-only; runs nothing)")
+	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
+	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
+	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
+	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	return &f
 }

@@ -324,7 +324,7 @@ func bridgeServerOptions() []server.Option {
 	}
 	// The server's own socket carries MCP and the APIs beside its control routes.
 	if procServer != nil {
-		opts = append(opts, serverhttp.WithSocket(procServer))
+		opts = append(opts, server.WithSocket(procServer))
 	}
 	return opts
 }

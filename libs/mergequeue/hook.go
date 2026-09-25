@@ -333,17 +333,11 @@ func pathLines(paths []string) (lines string, refused []string) {
 // hookEnviron is what of the queue's own environment reaches a hook: the names magus's
 // sandbox gives a sandboxed child (PATH, HOME, TMPDIR, the locale, ...) and passthrough.
 func hookEnviron(passthrough []string) ([]string, error) {
-	allow := sandboxenv.Allowlist{Allow: sandboxenv.DefaultAllow()}
-	for _, p := range passthrough {
-		if strings.Contains(p, "*") {
-			allow.Globs = append(allow.Globs, p)
-		} else {
-			allow.Allow = append(allow.Allow, p)
-		}
-	}
-	if err := sandboxenv.ValidateGlobs(allow.Globs); err != nil {
+	allow, err := sandboxenv.Parse(passthrough)
+	if err != nil {
 		return nil, fmt.Errorf("sandbox.env.passthrough: %w", err)
 	}
+	allow.Names = append(allow.Names, sandboxenv.DefaultAllow()...)
 	kept, _ := allow.Scrub(os.Environ())
 	return kept, nil
 }
