@@ -265,6 +265,8 @@ type runCtx struct {
 	onError func(error)
 	// auditReplay judges the paths a hit just wrote; see AuditReplay.
 	auditReplay func(ctx context.Context, s Step, written []string) error
+	// localHit is the step's key when it was admitted as a local hit; see replayLocal.
+	localHit string
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -450,12 +452,54 @@ func (c *Cache) RunningTargets() []string {
 // reporting whether a project's symbol index reflects current sources). A missing
 // manifest is "not fresh", not an error; only a hashing failure returns one.
 func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
-	hash, err := c.hashStep(ctx, &s)
+	_, hit, err := c.probeLocal(ctx, &s)
+	return hit, err
+}
+
+// probeLocal hashes s and reports whether the local store holds an entry for that key.
+func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
+	hash, err := c.hashStep(ctx, s)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
+	return hash, mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
+}
+
+// errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
+// is no longer replayable: evicted, or its blobs missing. Run returns it before any other
+// tier or fn, so nothing executes unclaimed.
+//
+// The caller then gives its slot back, takes the machine claim, and admits the step again
+// as a miss. Claiming there, under the slot, would invert the seat order claimMachine
+// explains; refusing would fail a step on an eviction race nobody can act on.
+var errLocalEntryGone = errors.New("magus/cache: the probed local entry is gone")
+
+// replayLocal tells Run the step's key and that the local tier held it at admission, so
+// Run neither hashes again nor falls through to another tier or to fn: the caller took no
+// machine claim on the strength of that hit.
+func replayLocal(hash string) RunOption {
+	return func(rc *runCtx) { rc.localHit = hash }
+}
+
+// localHitKey returns s's key when its entry is in the local store and a machine claim
+// would otherwise be taken for it, else "". A hit replays without spending the machine
+// budget, so a fully cached run is never refused for memory it would not use.
+//
+// No claim is at stake when there is no admitter or an ancestor's claim already covers
+// this step, and a NoCache or SkipReplay step never replays, so none of those hash here.
+// A hashing error answers "" and leaves Run to hash again and report it.
+func (c *Cache) localHitKey(ctx context.Context, s *Step) string {
+	if c.machine == nil || admissionFrom(ctx).machineClaim || s.NoCache || s.SkipReplay {
+		return ""
+	}
+	hashCtx, endHash := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.hash")
+	hash, hit, err := c.probeLocal(hashCtx, s)
+	endHash(err)
+	if err != nil || !hit {
+		return ""
+	}
+	return hash
 }
 
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
@@ -478,11 +522,15 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	result := Result{ProjectPath: s.ProjectPath}
 	tracer := tracerFromContext(ctx)
 
-	hashCtx, endHash := tracer.StartSpan(ctx, "magus.cache.hash")
-	hash, err := c.hashStep(hashCtx, rc.step)
-	endHash(err)
-	if err != nil {
-		return result, fmt.Errorf("magus/cache: hash %q: %w", s.ProjectPath, err)
+	hash := rc.localHit
+	if hash == "" {
+		hashCtx, endHash := tracer.StartSpan(ctx, "magus.cache.hash")
+		var err error
+		hash, err = c.hashStep(hashCtx, rc.step)
+		endHash(err)
+		if err != nil {
+			return result, fmt.Errorf("magus/cache: hash %q: %w", s.ProjectPath, err)
+		}
 	}
 	result.Hash = hash
 
@@ -547,7 +595,11 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if !s.NoCache && !s.SkipReplay {
 		// Each tier in order, local first. A replay that fails (a missing blob, a partial
 		// restore) moves on to the next tier once rather than straight to a rebuild.
-		for i, t := range c.tiers {
+		tiers := c.tiers
+		if rc.localHit != "" {
+			tiers = tiers[:1]
+		}
+		for i, t := range tiers {
 			e, err := t.lookup(ctx, &s, hash)
 			if err != nil {
 				if !errors.Is(err, errTierMiss) && t == tier(c.local) {
@@ -567,6 +619,9 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				return r, nil
 			}
 			e.done()
+		}
+		if rc.localHit != "" {
+			return result, errLocalEntryGone
 		}
 	}
 
@@ -1001,6 +1056,12 @@ func stepSlots(s Step, lim *Limiter) int {
 // and the declared memory arbitrated across every magus on the host. It returns ctx
 // marked as holding the claim, plus the release that hands it back.
 //
+// Only a step that will execute takes it. A step whose entry is in the local store
+// ([Cache.localHitKey]) replays under its local slot alone: replay spends none of the
+// memory the claim reserves, and claiming it anyway let two fully cached runs of a large
+// target refuse each other with MGS3009 though neither would run anything. A remote hit
+// still claims, since the remote tier is only consulted after the claim.
+//
 // It is the FIRST seat a step takes, ahead of the run-isolation lease and the local
 // limiter slot, because it is the only one whose wait is other processes' to end. Held
 // the other way round, a step queued for the machine occupies the gate while it waits,
@@ -1060,8 +1121,8 @@ func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error
 // admit takes the in-process seats a step needs before it executes and puts it on the
 // record every observer reads: the local limiter slots, the inflight set a killed run is
 // reported from, and the invocation heartbeat the stall watchdog compares against. A step
-// reaches here already holding its machine claim; claimMachine says why that one cannot
-// be taken under the isolation lease. It returns a context carrying the hold, the clamped
+// reaches here already holding its machine claim, or as a local hit that needs none;
+// claimMachine says why the claim cannot be taken under the isolation lease. It returns a context carrying the hold, the clamped
 // slot count, and one release that gives the seats back.
 //
 // The returned context is what a blocking wait inside the step marks itself on
@@ -1171,11 +1232,22 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	if lim == nil {
 		lim = NewLimiter(DefaultConcurrency())
 	}
+	if key := c.localHitKey(ctx, &s); key != "" {
+		r, err := c.runAsideAdmitted(ctx, s, lim, fn, slices.Concat(opts, []RunOption{replayLocal(key)}))
+		if !errors.Is(err, errLocalEntryGone) {
+			return r, err
+		}
+	}
 	ctx, releaseMachine, err := c.claimMachine(ctx, s, stepSlots(s, lim))
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
+	return c.runAsideAdmitted(ctx, s, lim, fn, opts)
+}
+
+// runAsideAdmitted is RunAside past the machine claim, which ctx carries if one was taken.
+func (c *Cache) runAsideAdmitted(ctx context.Context, s Step, lim *Limiter, fn func(context.Context) error, opts []RunOption) (Result, error) {
 	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
@@ -1323,47 +1395,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := barrier.waitForDeps(gctx, s); err != nil {
 				return fail(err)
 			}
-			// The machine budget comes before the slot, so a step queues for it holding
-			// nothing a peer needs in order to finish; claimMachine carries the
-			// interleaving that ordering answers.
-			machineCtx, releaseMachine, machineErr := c.claimMachine(gctx, s, stepSlots(s, lim))
-			if machineErr != nil {
-				// A machine refusal is an independent finding: nothing upstream failed and
-				// the batch was not cancelled, the machine refused this step on its own
-				// account. Without this the refusal takes the never-started path, where it
-				// spends no failure budget and joins no error, and a run that did nothing
-				// reports success.
-				ran = gctx.Err() == nil
-				if ran {
-					c.reportRefusal(gctx, rc, s, machineErr)
-				}
-				return fail(machineErr)
-			}
-			defer releaseMachine()
-			// claimMachine hands a free budget over without consulting the context, so a
-			// sibling that failed while this step queued for it is only observed here.
-			// lim.Acquire below would catch it too, except on an unlimited limiter, where
-			// it returns nil without consulting ctx.
-			if err := gctx.Err(); err != nil {
-				return fail(err)
-			}
-			// A slot-acquire failure is usually this batch's own cancellation, which fail
-			// swallows regardless. A deadlocked pool is the exception: nothing upstream
-			// failed and the batch was not cancelled, so it is an independent finding and
-			// has to count as one, or a run that did nothing reports success.
-			stepCtx, slots, release, admitErr := c.admit(machineCtx, s, lim)
-			if admitErr != nil {
-				ran = errors.Is(admitErr, types.BuildSlotsDeadlocked) && gctx.Err() == nil
-				return fail(admitErr)
-			}
-			defer release()
-			if slog.Default().Enabled(gctx, levelTrace) {
-				slog.LogAttrs(gctx, levelTrace, "schedule.run",
-					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
-					slog.Int("slots", slots))
-			}
-
-			// Fold upstream keys into Deps for transitive cache-key propagation.
+			// Fold upstream keys into Deps for transitive cache-key propagation. Before
+			// the local-hit probe, which hashes the full key.
 			if len(s.DependsOn) > 0 {
 				keysMu.Lock()
 				depKeys := make([]string, 0, len(s.DependsOn))
@@ -1378,21 +1411,76 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				}
 			}
 
-			// Re-check after the slot, not just before it. A step that is failing releases
-			// its slot in a DEFER, and that defer runs strictly before errgroup observes
-			// its error and cancels the group, so a waiter can be admitted in the window
-			// between those two moments and would otherwise start work the batch has
-			// already given up on. At concurrency 1 that window is every time: the waiter
-			// is always parked on exactly the slot the failing step is about to release.
-			if err := gctx.Err(); err != nil {
-				return fail(err)
+			// admitAndRun takes the local slot beneath whatever machine seat machineCtx
+			// carries and runs the step there.
+			admitAndRun := func(machineCtx context.Context, runOpts []RunOption) (Result, error) {
+				// A slot-acquire failure is usually this batch's own cancellation, which
+				// fail swallows regardless. A deadlocked pool is the exception: nothing
+				// upstream failed and the batch was not cancelled, so it is an independent
+				// finding and has to count as one, or a run that did nothing reports success.
+				stepCtx, slots, release, admitErr := c.admit(machineCtx, s, lim)
+				if admitErr != nil {
+					ran = errors.Is(admitErr, types.BuildSlotsDeadlocked) && gctx.Err() == nil
+					return Result{}, admitErr
+				}
+				defer release()
+				if slog.Default().Enabled(gctx, levelTrace) {
+					slog.LogAttrs(gctx, levelTrace, "schedule.run",
+						slog.String("project", s.ProjectPath), slog.String("target", s.Target),
+						slog.Int("slots", slots))
+				}
+				// Re-check after the slot, not just before it. A step that is failing
+				// releases its slot in a DEFER, and that defer runs strictly before errgroup
+				// observes its error and cancels the group, so a waiter can be admitted in
+				// the window between those two moments and would otherwise start work the
+				// batch has already given up on. At concurrency 1 that window is every time:
+				// the waiter is always parked on exactly the slot the failing step is about
+				// to release.
+				if err := gctx.Err(); err != nil {
+					return Result{}, err
+				}
+				// Past every gate: from here a failure is this step's own, not a consequence
+				// of someone else's, so it counts against the budget and is worth reporting.
+				ran = true
+				return c.Run(stepCtx, s, func(ctx context.Context) error {
+					return runSeated(ctx, lim, slots, func(ctx context.Context) error { return fn(ctx, s) })
+				}, runOpts...)
 			}
-			// Past every gate: from here a failure is this step's own, not a consequence
-			// of someone else's, so it counts against the budget and is worth reporting.
-			ran = true
-			r, err := c.Run(stepCtx, s, func(ctx context.Context) error {
-				return runSeated(ctx, lim, slots, func(ctx context.Context) error { return fn(ctx, s) })
-			}, opts...)
+
+			var r Result
+			var err error
+			key := c.localHitKey(gctx, &s)
+			if key != "" {
+				r, err = admitAndRun(gctx, slices.Concat(opts, []RunOption{replayLocal(key)}))
+			}
+			if key == "" || errors.Is(err, errLocalEntryGone) {
+				ran = false
+				// The machine budget comes before the slot, so a step queues for it holding
+				// nothing a peer needs in order to finish; claimMachine carries the
+				// interleaving that ordering answers.
+				machineCtx, releaseMachine, machineErr := c.claimMachine(gctx, s, stepSlots(s, lim))
+				if machineErr != nil {
+					// A machine refusal is an independent finding: nothing upstream failed
+					// and the batch was not cancelled, the machine refused this step on its
+					// own account. Without this the refusal takes the never-started path,
+					// where it spends no failure budget and joins no error, and a run that
+					// did nothing reports success.
+					ran = gctx.Err() == nil
+					if ran {
+						c.reportRefusal(gctx, rc, s, machineErr)
+					}
+					return fail(machineErr)
+				}
+				defer releaseMachine()
+				// claimMachine hands a free budget over without consulting the context, so
+				// a sibling that failed while this step queued for it is only observed
+				// here. lim.Acquire would catch it too, except on an unlimited limiter,
+				// where it returns nil without consulting ctx.
+				if err := gctx.Err(); err != nil {
+					return fail(err)
+				}
+				r, err = admitAndRun(machineCtx, opts)
+			}
 			// Write key before markDone; the markDone→waitForDeps happens-before edge
 			// ensures dependents see the key when they unblock.
 			if r.Hash != "" {
