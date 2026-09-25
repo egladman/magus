@@ -395,6 +395,14 @@ type CI struct {
 	// base, keeping every timing and volatility field. Off, magus records nothing and
 	// `--base last-passed` says so loudly rather than resolving to something arbitrary.
 	RecordRuns bool `json:"record_runs" yaml:"record_runs"`
+	// RiskMinRuns is how many recorded affected runs a (project, target) needs, every
+	// one of them passing inside RiskWindow, before `magus affected --risk` drops it
+	// from a scoped or full gate. That drop is statistics, not proof: it leans on
+	// main's post-merge CI, which always runs the full gate. 0 turns pruning off.
+	RiskMinRuns int `json:"risk_min_runs" yaml:"risk_min_runs" validate:"gte=0"`
+	// RiskWindow is how far back RiskMinRuns counts recorded runs, as a duration (720h is thirty days).
+	// It must be positive while RiskMinRuns prunes.
+	RiskWindow time.Duration `json:"risk_window" yaml:"risk_window" validate:"gte=0,required_unless=RiskMinRuns 0"`
 }
 
 // Volatility controls volatility detection and auto-retry for test runs.
@@ -886,7 +894,7 @@ func EnvVarDocs() []EnvVarDoc {
 // Defaults returns a Config populated with the magus built-in defaults.
 func Defaults() Config {
 	return Config{
-		CI: CI{MaxShards: 8, RecordRuns: true},
+		CI: CI{MaxShards: 8, RecordRuns: true, RiskMinRuns: 50, RiskWindow: 30 * 24 * time.Hour},
 		Server: Server{
 			Enabled: true,
 			Maintenance: Maintenance{

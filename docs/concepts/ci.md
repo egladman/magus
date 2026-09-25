@@ -20,7 +20,8 @@ same ops against the same declared inputs, and the same cache key decides whethe
 any of it has to run at all. That is the point: a pipeline you cannot reproduce
 locally is a pipeline you debug through the web UI.
 
-Four things do change, and each has a page.
+Four things do change, and each has a page. A fifth is optional: a change can say
+how much of the gate it needs, see [Risk tiers](ci/risk.md).
 
 ## The pipeline verb
 

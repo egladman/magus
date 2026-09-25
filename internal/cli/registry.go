@@ -381,7 +381,10 @@ Forensic modes reason about the affected set instead of executing a target.
 --explain shows why a project is in the set. --plan emits a provider-neutral
 JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
 plan of proposed paths before editing. --bisect drives VCS bisect using run
-history to find the commit that introduced a regression.
+history to find the commit that introduced a regression. <target> --risk
+classifies the change (trivial, mechanical, scoped, full) with per-file
+evidence and prints the reduced gate that suffices for it, as runnable magus
+commands.
 
 --preflight works as it does for magus run: the named targets run first across
 the affected set, a failure stops everything with exit 3 (MGS3020), and a name
@@ -392,10 +395,11 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 	Usage: "magus affected <target> [flags]",
 	Flags: []Flag{
 		{Name: "impact", Kind: FlagBool, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
-		{Name: "base", Kind: FlagString, Modes: []string{"", "plan", "impact"}, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},
-		{Name: "stdin", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Read changed file paths from stdin instead of running a VCS diff"},
-		{Name: "null", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
-		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact"}, Doc: "Short for --base"},
+		{Name: "risk", Kind: FlagBool, Modes: []string{"risk"}, Doc: "Classify the changeset by risk (trivial, mechanical, scoped, full) and print the reduced gate that suffices for it (read-only; runs nothing)"},
+		{Name: "base", Kind: FlagString, Modes: []string{"", "plan", "impact", "risk"}, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},
+		{Name: "stdin", Kind: FlagBool, Modes: []string{"", "plan", "risk"}, Doc: "Read changed file paths from stdin instead of running a VCS diff"},
+		{Name: "null", Kind: FlagBool, Modes: []string{"", "plan", "risk"}, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
+		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact", "risk"}, Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
@@ -430,6 +434,7 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{"Fail fast on drift before the affected set runs ci", "magus affected ci --preflight generate"},
 		{"Gate a CI shard plan on drift: no plan, and no shards, unless generate passes", "magus affected ci --plan --preflight generate"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
+		{"Classify the branch by risk and print the reduced gate", "magus affected ci --risk --base origin/main -o json"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
 	},
 	ExitStatus: []ExitCode{
