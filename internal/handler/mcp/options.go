@@ -14,7 +14,7 @@ import (
 )
 
 // Options configures a magus MCP server, served by ServeStdio or built via HTTPHandler
-// (server mode, assembled by internal/serverhttp).
+// (server mode, assembled by internal/server).
 type Options struct {
 	// Magus is the opened workspace handle. Required. Pass the result of
 	// magus.Open; the MCP server does not open its own instance so the
