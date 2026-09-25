@@ -14,7 +14,7 @@ A scripted substitute-and-write, which cannot tell your symbol from a dependency
 
 ## Why
 
-A regex cannot tell YOUR symbol from a dependency's symbol of the same name. A `\.Sum\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for "no matches" is how a rename misses half its sites. Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool.
+A regex cannot tell YOUR symbol from a dependency's symbol of the same name. A `\.Sum\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for "no matches" is how a rename misses half its sites. Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched.
 
 ## Seeing it
 

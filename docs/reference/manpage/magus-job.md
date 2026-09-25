@@ -139,8 +139,8 @@ them and magus describe job prints one job's terms.
 **--timeout** *duration*
 : Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
 
-**--write-paths** *string*
-: A path this job may write; repeatable or comma-separated
+**--write-paths** *\<file\>#\<declaration\>*
+: A path this job may write, or \`\<file\>#\<declaration\>\` to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
 
 ### job exec options
 

@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/egladman/magus/types"
 )
 
 // Snap is a snapshot of files keyed by absolute path; values pack mtime_ns and size into one int64.
@@ -56,6 +58,9 @@ type ContentSnap map[string][32]byte
 type OutputGlobs struct {
 	Root  string   // absolute
 	Globs []string // relative to Root, as the magusfile declared them
+	// Nested are the dirs, relative to Root, of the projects nested under it. A file in one
+	// is claimed only by a glob rooted there; see types.GlobClaims.
+	Nested []string
 }
 
 // HashContent returns a SHA-256 digest per regular file matching one of the declared output
@@ -78,12 +83,17 @@ func HashContent(ctx context.Context, sets []OutputGlobs) (ContentSnap, error) {
 	for _, set := range sets {
 		rootFS := os.DirFS(set.Root)
 		for _, g := range set.Globs {
-			matches, err := doublestar.Glob(rootFS, filepath.ToSlash(g))
+			g = filepath.ToSlash(g)
+			matches, err := doublestar.Glob(rootFS, g)
 			if err != nil {
 				return nil, fmt.Errorf("declared output glob %q: %w", g, err)
 			}
+			claims := func(abs string) bool {
+				rel, err := filepath.Rel(set.Root, abs)
+				return err == nil && types.GlobClaims(g, filepath.ToSlash(rel), set.Nested)
+			}
 			for _, m := range matches {
-				if err := hashPath(ctx, snap, filepath.Join(set.Root, m)); err != nil {
+				if err := hashPath(ctx, snap, filepath.Join(set.Root, m), claims); err != nil {
 					return nil, err
 				}
 			}
@@ -93,14 +103,14 @@ func HashContent(ctx context.Context, sets []OutputGlobs) (ContentSnap, error) {
 }
 
 // hashPath records abs when it is a regular file, and every regular file beneath it when it
-// is a directory. Symlinks are not followed.
-func hashPath(ctx context.Context, snap ContentSnap, abs string) error {
+// is a directory, keeping only the files claims accepts. Symlinks are not followed.
+func hashPath(ctx context.Context, snap ContentSnap, abs string, claims func(string) bool) error {
 	info, err := os.Lstat(abs)
 	if err != nil {
 		return nil //nolint:nilerr // a match that vanished between glob and stat is not an output
 	}
 	if !info.IsDir() {
-		if info.Mode()&os.ModeSymlink == 0 {
+		if info.Mode()&os.ModeSymlink == 0 && claims(abs) {
 			hashFileInto(snap, abs)
 		}
 		return nil
@@ -114,7 +124,9 @@ func hashPath(ctx context.Context, snap ContentSnap, abs string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		hashFileInto(snap, path)
+		if claims(path) {
+			hashFileInto(snap, path)
+		}
 		return nil
 	})
 }

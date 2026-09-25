@@ -44,7 +44,7 @@ contract: functions the remote-cache subsystem detects by name and invokes:
 
 | function                   | when                              | returns                                                        |
 | -------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| `enabled(target, cb)`      | once, before any other call       | is the provider active here? (gates everything)                |
+| `enabled(target, cb)`      | once, before any other call       | is the provider configured? (gates everything)                 |
 | `get_artifact(target, cb)` | on a local-tier miss              | download into `dest`; `true` = hit, `false` = not stored       |
 | `put_artifact(target, cb)` | after a build, and for a backfill | upload `src`; `true` = stored, `false` = already stored        |
 | `has_artifact(target, cb)` | before a backfill (optional)      | is it stored? without downloading; absent = cannot say         |
@@ -66,8 +66,10 @@ Wiring has two parts: the magusfile binds the provider (a spell, i.e. code), and
 `magus.yaml` declares the trust set that secures it (`cache.remote.trusted_keys`, i.e.
 data). The split is deliberate. A trust anchor is declarative config, not build
 logic, so it lives in YAML where it can't branch or compute itself. The spell
-**self-gates** via `enabled()`, so the provider is a no-op anywhere it isn't
-configured (e.g. a developer machine with no credentials):
+**self-gates** via `enabled()` on the configuration it was given, so the provider is a
+no-op anywhere it isn't configured (e.g. a developer machine with no credentials). It
+never gates on detecting where it runs; see
+[Told, never guessed](../../doctrine.md#told-never-guessed):
 
 ```buzz
 // magusfile.buzz
@@ -98,17 +100,17 @@ import "spells/github/actions" as github;
 magus\cache.remote(github);
 ```
 
-It reads everything it needs from the runner environment, all provided
-automatically inside a GitHub Actions job:
+It reads everything it needs from two variables the runner hands to a JavaScript action,
+which the workflow re-exports to its steps
+([how](../../guides/integrations/github-actions.md#remote-caching)):
 
-| variable                | provided by | purpose                                     |
-| ----------------------- | ----------- | ------------------------------------------- |
-| `GITHUB_ACTIONS`        | the runner  | gates the provider (`"true"` only in a job) |
-| `ACTIONS_RESULTS_URL`   | the runner  | cache service (v2) base URL                 |
-| `ACTIONS_RUNTIME_TOKEN` | the runner  | bearer token for the cache service          |
+| variable                | provided by       | purpose                            |
+| ----------------------- | ----------------- | ---------------------------------- |
+| `ACTIONS_RESULTS_URL`   | the workflow step | cache service (v2) base URL        |
+| `ACTIONS_RUNTIME_TOKEN` | the workflow step | bearer token for the cache service |
 
-There is no transport to configure: bind it, and it activates in CI and stays
-dormant locally. You still declare a trust set and set the signing secret as for
+There is no transport to configure: a job that exports them uses the cache, and a job or a
+laptop that does not misses every read and stores nothing. You still declare a trust set and set the signing secret as for
 any provider (see [Signing is required](#signing-is-required-trust-model)). GitHub
 evicts old artifacts on its own (7-day idle / repo size cap).
 
@@ -311,8 +313,8 @@ trusted pushes rather than `true`: unset, the remote tier is written whenever th
 signing key is present and a failing store degrades the run; `true` makes every
 remote write required, so an outage fails the build. To write neither tier, set
 `MAGUS_CACHE_WRITE_ENABLED=false` instead; `true` for the remote tier with the local
-tier off is a config error. See the
-[supply-chain note in the README](../../../README.md#shared-cache-trust-signing-and-read-only-refs).
+tier off is a config error. See
+[Why a pull request cannot poison the default branch](#why-a-pull-request-cannot-poison-the-default-branch).
 
 A remote-tier lookup that finds nothing prints
 `<project> not in the remote cache (out...)`, naming the ref the producing run
@@ -320,6 +322,37 @@ printed for that key; a hit prints `(cached from <backend>, <size>, ...)`; and t
 end-of-run line counts restored, missed, stored and failed. At `-v` the miss also
 carries one digest per key-input class, masked as stored key inputs are, so two
 machines that should share an entry show which class differs.
+
+## Why a pull request cannot poison the default branch
+
+In the 2026 TanStack compromise, a `pull_request_target` workflow ran a fork's code
+with the base repository's cache scope.[^tanstack-2026] That code saved a pnpm store
+under the key the default branch's release workflow computes. The release workflow
+restored it and published 84 malicious packages.
+
+The attack needed untrusted code that can write a cache entry, a trusted ref that
+restores it, and a restore that never checks the writer. This repository's CI denies
+each one:
+
+<!--diagram:cache-trust-->
+
+- **Pull requests do not write the remote tier.** `ci.yaml` sets
+  `MAGUS_CACHE_REMOTE_WRITE_ENABLED=false` on `pull_request` events and hands
+  `MAGUS_CACHE_SIGNING_KEY` only to runs on the default branch.
+- **A pull request's local tier stays with it.** The workflow saves `.magus/` on
+  `pull_request` events only, and GitHub scopes that save to the pull request's ref,
+  out of the default branch's reach. No workflow uses `pull_request_target`, and the
+  default-branch job that checks out pull request code saves no cache.
+- **Every remote read verifies a signature.** An entry that reached the store any
+  other way carries no signature from `cache.remote.trusted_keys`, so the consumer
+  rejects it and rebuilds.
+
+The first two are workflow configuration. The third lives in magus and holds whatever
+the workflow says, unless you turn on [insecure mode](#insecure-mode-no-signing).
+
+[^tanstack-2026]: TanStack, "Postmortem: TanStack npm supply-chain compromise",
+    <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>. `bundle-size.yml`
+    saved the poisoned entry on 2026-05-11 and `release.yml` restored it the same day.
 
 ## Observability
 

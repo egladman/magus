@@ -33,7 +33,11 @@ import (
 
 // TestMain keeps the variables helper processes are instructed with: LOCKTEST_* for
 // helperHold's holder and PIPETEST_* for pipeStage's stages.
-func TestMain(m *testing.M) { testkit.Main(m, "LOCKTEST_*", "PIPETEST_*") }
+func TestMain(m *testing.M) {
+	// A sandboxed run's children start as this binary re-run as their launcher.
+	MaybeLaunchSandbox()
+	testkit.Main(m, "LOCKTEST_*", "PIPETEST_*")
+}
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
 // affected --stdin streaming flow.
@@ -1442,23 +1446,54 @@ func TestApplyEnvToConfig(t *testing.T) {
 // An unrecognized boolean is refused for both bool kinds, and the field keeps its value.
 func TestApplyEnv_UnrecognizedBooleanIsAnError(t *testing.T) {
 	env := map[string]string{
-		"MAGUS_SANDBOX_ENABLED":            "ture",
+		"MAGUS_DRY_RUN":                    "ture",
 		"MAGUS_CACHE_REMOTE_WRITE_ENABLED": "off",
 	}
 	cfg := config.Defaults()
 	err := configgen.ApplyEnv(&cfg, func(k string) string { return env[k] })
 	require.Error(t, err)
-	assert.ErrorContains(t, err, `MAGUS_SANDBOX_ENABLED: "ture" is not a boolean`)
+	assert.ErrorContains(t, err, `MAGUS_DRY_RUN: "ture" is not a boolean`)
 	assert.ErrorContains(t, err, `MAGUS_CACHE_REMOTE_WRITE_ENABLED: "off" is not a boolean`)
-	assert.False(t, cfg.Sandbox.Enabled)
+	assert.False(t, cfg.DryRun)
 	assert.Nil(t, cfg.Cache.Remote.Write.Enabled)
 }
 
-func TestApplyEnv_SandboxEnabled(t *testing.T) {
-	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
+func TestApplyEnvSandboxMode(t *testing.T) {
 	cfg := config.Defaults()
-	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
-	assert.True(t, cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled should be true")
+	require.NoError(t, configgen.ApplyEnv(&cfg, func(k string) string {
+		return map[string]string{"MAGUS_SANDBOX": "required"}[k]
+	}))
+	assert.Equal(t, types.SandboxModeRequired, cfg.Sandbox.Mode)
+
+	cfg = config.Defaults()
+	err := configgen.ApplyEnv(&cfg, func(k string) string {
+		return map[string]string{"MAGUS_SANDBOX": "on"}[k]
+	})
+	assert.ErrorContains(t, err, `MAGUS_SANDBOX: unknown sandbox mode "on"`)
+
+	// The retired name is an error naming its replacement, never a sandbox quietly off.
+	err = configgen.ApplyEnv(&cfg, func(k string) string {
+		return map[string]string{"MAGUS_SANDBOX_ENABLED": "1"}[k]
+	})
+	assert.ErrorContains(t, err, "MAGUS_SANDBOX_ENABLED was renamed to MAGUS_SANDBOX")
+}
+
+// MAGUS_SANDBOX is the mode a sandboxed parent hands its children, and a floor: a
+// nested workspace that declares a stronger mode runs under its own, and one that
+// declares a weaker mode runs under its parent's.
+func TestApplyEnvSandboxModeIsAFloor(t *testing.T) {
+	parent := func(k string) string { return map[string]string{"MAGUS_SANDBOX": "best-effort"}[k] }
+	for declared, want := range map[types.SandboxMode]types.SandboxMode{
+		types.SandboxModeRequired:   types.SandboxModeRequired,
+		types.SandboxModeOff:        types.SandboxModeBestEffort,
+		"":                          types.SandboxModeBestEffort,
+		types.SandboxModeBestEffort: types.SandboxModeBestEffort,
+	} {
+		cfg := config.Defaults()
+		cfg.Sandbox.Mode = declared
+		require.NoError(t, configgen.ApplyEnv(&cfg, parent))
+		assert.Equal(t, want, cfg.Sandbox.Mode, "workspace declares %q", declared)
+	}
 }
 
 // The environment overwrites fields after the yaml is validated, so an SDK load has to

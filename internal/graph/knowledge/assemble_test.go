@@ -51,7 +51,7 @@ func sampleInputs() Inputs {
 			Doc:     "Version control.",
 			Methods: []types.ModuleMethodEntry{{Name: "shortHash", Doc: "Short commit hash.", Buzz: "vcs.shortHash() str"}},
 		}},
-		Diagnostics: []types.DiagnosticCode{types.SandboxPolicyMismatch},
+		Diagnostics: []types.DiagnosticCode{types.SandboxWeakened},
 	}
 }
 
@@ -143,7 +143,7 @@ func TestAssembleNodes(t *testing.T) {
 	assert.Equal(t, "vcs.shortHash() str", method.Attrs["buzz"])
 
 	diag, _ := nodeByID(out, "diagnostic:MGS2010")
-	assert.Equal(t, types.CodeURL(types.SandboxPolicyMismatch), diag.Attrs["url"])
+	assert.Equal(t, types.CodeURL(types.SandboxWeakened), diag.Attrs["url"])
 }
 
 // TestProjectAttrsWithoutEngine: a project that declares no engine still reports
@@ -225,7 +225,7 @@ func TestAssembleRuntimeEmitsEdges(t *testing.T) {
 	events := []types.DiagnosticEvent{
 		{Unit: "pkg/foo:build", Code: types.ExecDenied},
 		{Unit: "pkg/foo:build", Code: types.ExecDenied}, // dup -> one edge
-		{Unit: "pkg/bar", Code: types.SandboxPolicyMismatch},
+		{Unit: "pkg/bar", Code: types.SandboxWeakened},
 		{Unit: "", Code: types.ExecDenied}, // no unit -> skipped
 	}
 	s := assembleRuntime(events, nil, nil, nil)
@@ -573,7 +573,7 @@ fun helper() > void {
 	}}
 	in.VCSAuthorship = true
 	// emits: a diagnostic observed in run history, which is the only producer of the edge.
-	in.Runtime = []types.DiagnosticEvent{{Code: types.SandboxPolicyMismatch, Unit: "pkg/a:build"}}
+	in.Runtime = []types.DiagnosticEvent{{Code: types.SandboxWeakened, Unit: "pkg/a:build"}}
 	// annotates: anchored to a project, which knownNodeIDs always contains. An anchor the
 	// graph does not model is dropped rather than made into an edge, so an unknown one
 	// would fail the coverage assertion for a reason that is not about the vocabulary.

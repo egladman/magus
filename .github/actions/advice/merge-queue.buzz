@@ -4,7 +4,8 @@
 //
 // A pull request queues by enabling auto-merge; the label is how a stack queues from its
 // top. The label's prefix and the merge methods come from `magus queue describe`, so the
-// advice names what the provider accepts rather than what this file assumes.
+// advice names what the provider accepts rather than what this file assumes. Only the
+// prefix followed by a method is intent: the queue's status labels share the prefix.
 //
 // Reads the `merge-queue-provider` and `merge-queue-base` inputs.
 import "proc";
@@ -18,12 +19,12 @@ final section = "merge-queue";
 // queueable reports whether a pull request in this state could join the queue and has
 // not. An empty prefix means the provider queues nothing by label.
 export fun queueable(state: str, review: str, base: str, queueBase: str, labels: [str], fork: bool,
-    autoMerge: bool, prefix: str) > bool {
+    autoMerge: bool, prefix: str, methods: [str]) > bool {
     if (state != "OPEN" or review != "APPROVED" or base != queueBase or fork or autoMerge) {
         return false;
     }
-    foreach (label in labels) {
-        if (prefix != "" and label.startsWith(prefix)) { return false; }
+    foreach (m in methods) {
+        if (prefix != "" and labels.indexOf(prefix + m) != null) { return false; }
     }
     return true;
 }
@@ -77,44 +78,49 @@ fun main() > void !> any {
     final labels = mut [<str>];
     foreach (l in p.q("labels").listValue()) { labels.append(l.q("name").stringValue()); }
     final prefix = caps.q("queue_label").stringValue();
+    final methods = mut [<str>];
+    foreach (m in caps.q("methods").listValue()) { methods.append(m.stringValue()); }
     var body = "";
     if (queueable(p.q("state").stringValue(), review: p.q("reviewDecision").stringValue(),
         base: p.q("baseRefName").stringValue(), queueBase: queueBase, labels: labels,
         fork: p.q("isCrossRepository").booleanValue(), autoMerge: p.q("autoMergeRequest").map() != null,
-        prefix: prefix)) {
-        final methods = mut [<str>];
-        foreach (m in caps.q("methods").listValue()) { methods.append(m.stringValue()); }
+        prefix: prefix, methods: methods)) {
         body = suggestion(queueBase, pr: pr, prefix: prefix, methods: methods);
     }
     advice\publish(repo, pr: pr, name: section, title: "Ready for the merge queue", body: body);
     std\print("merge-queue: advised {body != ""}");
 }
 
+final P = "merge-queue: ";
+final M = ["squash", "rebase"];
+
 test "an approved pull request on the queue's base with no intent is queueable" {
     std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["bug"], fork: false,
-        autoMerge: false, prefix: "queue: "), message: "shown");
+        autoMerge: false, prefix: P, methods: M), message: "shown");
+    std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["merge-queue: kicked back"], fork: false,
+        autoMerge: false, prefix: P, methods: M), message: "a status label is no intent");
 }
 
 test "every other state retracts" {
-    std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["queue: squash"],
-        fork: false, autoMerge: false, prefix: "queue: "), message: "already labeled");
+    std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["merge-queue: squash"],
+        fork: false, autoMerge: false, prefix: P, methods: M), message: "already labeled");
     std\assert(!queueable("MERGED", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
-        fork: false, autoMerge: false, prefix: "queue: "), message: "merged");
+        fork: false, autoMerge: false, prefix: P, methods: M), message: "merged");
     std\assert(!queueable("CLOSED", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
-        fork: false, autoMerge: false, prefix: "queue: "), message: "closed");
+        fork: false, autoMerge: false, prefix: P, methods: M), message: "closed");
     std\assert(!queueable("OPEN", review: "REVIEW_REQUIRED", base: "main", queueBase: "main", labels: [<str>],
-        fork: false, autoMerge: false, prefix: "queue: "), message: "not approved");
+        fork: false, autoMerge: false, prefix: P, methods: M), message: "not approved");
     std\assert(!queueable("OPEN", review: "APPROVED", base: "feature", queueBase: "main", labels: [<str>],
-        fork: false, autoMerge: false, prefix: "queue: "), message: "another base");
+        fork: false, autoMerge: false, prefix: P, methods: M), message: "another base");
     std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
-        fork: true, autoMerge: false, prefix: "queue: "), message: "a fork");
+        fork: true, autoMerge: false, prefix: P, methods: M), message: "a fork");
     std\assert(!queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: [<str>],
-        fork: false, autoMerge: true, prefix: "queue: "), message: "auto-merge is already intent");
+        fork: false, autoMerge: true, prefix: P, methods: M), message: "auto-merge is already intent");
 }
 
 test "a provider that queues nothing by label still queues by auto-merge" {
-    std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["queue: squash"],
-        fork: false, autoMerge: false, prefix: ""), message: "no label is intent");
+    std\assert(queueable("OPEN", review: "APPROVED", base: "main", queueBase: "main", labels: ["merge-queue: squash"],
+        fork: false, autoMerge: false, prefix: "", methods: M), message: "no label is intent");
 }
 
 test "the advice names gh pr merge --auto for each allowed method, and the label only for a stack" {

@@ -263,6 +263,11 @@ const (
 	// one outside the root magusfile. The load stops, because a rule that silently did not
 	// register is a guard that looks enforced and is not.
 	GuardRuleMisdeclared DiagnosticCode = "MGS1045"
+	// MisconfiguredEnvVar is a MAGUS_* environment variable that is provably wrong: a name
+	// magus retired, or a near miss of one it reads. Every command stops before doing any
+	// work and `magus shell` denies, because a value exported for magus and silently not
+	// honored is a configuration that looks applied and is not.
+	MisconfiguredEnvVar DiagnosticCode = "MGS1046"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -287,17 +292,23 @@ const (
 	// It fires only on total omission. A footprint naming one *.go path is a narrowing its
 	// author meant; a footprint naming no Go file at all under a target that calls go-fmt is
 	// the mistake, and the two are distinguishable without knowing what the op reads.
-	FootprintDropsOpGlobs     DiagnosticCode = "MGS1036"
-	PathReadDenied            DiagnosticCode = "MGS2001"
-	PathWriteDenied           DiagnosticCode = "MGS2002"
-	EnvStripped               DiagnosticCode = "MGS2003"
-	AllowlistUnresolved       DiagnosticCode = "MGS2004"
-	SandboxUnsupported        DiagnosticCode = "MGS2005"
-	PathShimSuspected         DiagnosticCode = "MGS2006"
-	ExecDenied                DiagnosticCode = "MGS2007"
-	ProcSocketWithheld        DiagnosticCode = "MGS2008"
-	SandboxPolicyMismatch     DiagnosticCode = "MGS2010"
-	SecretTooShortToMask      DiagnosticCode = "MGS2011"
+	FootprintDropsOpGlobs DiagnosticCode = "MGS1036"
+	PathReadDenied        DiagnosticCode = "MGS2001"
+	PathWriteDenied       DiagnosticCode = "MGS2002"
+	EnvStripped           DiagnosticCode = "MGS2003"
+	AllowlistUnresolved   DiagnosticCode = "MGS2004"
+	SandboxUnsupported    DiagnosticCode = "MGS2005"
+	PathShimSuspected     DiagnosticCode = "MGS2006"
+	ExecDenied            DiagnosticCode = "MGS2007"
+	ProcSocketWithheld    DiagnosticCode = "MGS2008"
+	// SandboxWeakened is a nested or forwarded run asking for a weaker sandbox mode than
+	// the run that started it. A mode only strengthens on the way down.
+	SandboxWeakened      DiagnosticCode = "MGS2010"
+	SecretTooShortToMask DiagnosticCode = "MGS2011"
+	// SandboxRequired is sandbox mode required where the kernel cannot confine a child:
+	// MGS2005's fallback to binding checks, refused. Code the caller does not trust must
+	// not run behind checks it can step around.
+	SandboxRequired           DiagnosticCode = "MGS2012"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	VCSUnavailable            DiagnosticCode = "MGS3002"
 	ToolNotOnPath             DiagnosticCode = "MGS3003"
@@ -430,6 +441,11 @@ const (
 	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
 	PipeCycle DiagnosticCode = "MGS3023"
+	// HookHostUnnamed is a call from installed hook glue that names no agent host. The
+	// configuration `magus agent harness apply` writes passes the host explicitly, so a
+	// call without one comes from a hand-written or stale config, and it is refused
+	// rather than defaulted to one host.
+	HookHostUnnamed DiagnosticCode = "MGS3024"
 	// ServerProtocolOutdated is a client that reached a magus server, or a per-process pool,
 	// still speaking the socket protocol from before it carried HTTP: a process started by an
 	// older magus. Restarting it is the fix.
@@ -452,7 +468,13 @@ const (
 	// PipeUpstreamFailed is a magus stage upstream of a run in a shell pipe that exited
 	// non-zero. A run that sees it before taking its locks starts nothing; the last stage
 	// of a pipeline that succeeded exits with it, so the pipeline fails without pipefail.
-	PipeUpstreamFailed        DiagnosticCode = "MGS3030"
+	PipeUpstreamFailed DiagnosticCode = "MGS3030"
+	// WritePathClaimUngradable is a job fork whose write path claims a declaration
+	// (`<path>#<declaration>`) that no footprint could grade: a glob or an empty
+	// declaration, a checkout whose version control does not place changed lines, or a
+	// file with no diff driver to name its declarations. Refused rather than recorded,
+	// because a claim nothing can check reads as a boundary and is none.
+	WritePathClaimUngradable  DiagnosticCode = "MGS3031"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -610,16 +632,17 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
-	SpellOverrideInvalid, GuardRuleMisdeclared,
+	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
-	SandboxPolicyMismatch, SecretTooShortToMask,
+	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
-	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, HookHostUnnamed,
+	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
+	PipeUpstreamFailed, WritePathClaimUngradable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

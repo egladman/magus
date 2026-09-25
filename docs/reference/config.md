@@ -119,10 +119,10 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## sandbox
 
-| Config key                | Environment variable            | Flag                | Type                               |
-| ------------------------- | ------------------------------- | ------------------- | ---------------------------------- |
-| `sandbox.enabled`         | `MAGUS_SANDBOX_ENABLED`         | `--sandbox-enabled` | bool                               |
-| `sandbox.env.passthrough` | `MAGUS_SANDBOX_ENV_PASSTHROUGH` | _(env only)_        | list _(comma-separated, env only)_ |
+| Config key                | Environment variable            | Flag         | Type                               |
+| ------------------------- | ------------------------------- | ------------ | ---------------------------------- |
+| `sandbox.env.passthrough` | `MAGUS_SANDBOX_ENV_PASSTHROUGH` | _(env only)_ | list _(comma-separated, env only)_ |
+| `sandbox.mode`            | `MAGUS_SANDBOX`                 | `--sandbox`  | string                             |
 
 ## secret
 

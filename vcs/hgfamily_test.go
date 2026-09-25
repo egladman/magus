@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // The three hg-family sections share one config file and never touch the user's own
@@ -16,7 +18,9 @@ func TestWriteHgFamilySections(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("[ui]\nusername = me\n"), 0o644))
 
 	for _, write := range []func() (bool, error){
-		func() (bool, error) { return writeHgFamilyMergeDriverSection(path, []string{"gen/**", "dist/**"}) },
+		func() (bool, error) {
+			return writeHgFamilyMergeDriverSection(path, types.MergeDriverGlobs{Outputs: []string{"gen/**", "dist/**"}})
+		},
 		func() (bool, error) { return writeHgFamilyRefreshSection(path, "magus job run sync-graph") },
 		func() (bool, error) { return writeHgFamilyDriftSection(path, "magus job run check-drift") },
 	} {
@@ -44,10 +48,33 @@ func TestWriteHgFamilySections(t *testing.T) {
 	changed, err := writeHgFamilyRefreshSection(path, "magus job run sync-graph")
 	require.NoError(t, err)
 	assert.False(t, changed)
-	changed, err = writeHgFamilyMergeDriverSection(path, []string{"gen/**"})
+	changed, err = writeHgFamilyMergeDriverSection(path, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
 	require.NoError(t, err)
 	assert.True(t, changed, "a dropped glob rewrites the section in place")
 	present, err := managedSectionPresent(path, generatedMarkers)
 	require.NoError(t, err)
 	assert.True(t, present)
+}
+
+// An auto-resolve glob routes to the same tool as an output, once even when an output
+// glob names it too, and a second write of the same globs changes nothing.
+func TestWriteHgFamilyMergeDriverSectionRoutesAutoResolveGlobs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hgrc")
+	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**"}, AutoResolve: []string{"CHANGELOG.md", "gen/**", "docs/**/*.md"}}
+	changed, err := writeHgFamilyMergeDriverSection(path, globs)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assertFile(t, path, generatedMarkers.section("[merge-patterns]\n"+
+		"glob:gen/** = magus\n"+
+		"glob:CHANGELOG.md = magus\n"+
+		"glob:docs/**/*.md = magus\n"+
+		"\n[merge-tools]\n"+
+		"magus.executable = magus\n"+
+		"magus.args = vcs merge-driver $base $local $other 0 $local\n"+
+		"magus.premerge = False\n"+
+		"magus.gui = False\n"), 0o644)
+
+	changed, err = writeHgFamilyMergeDriverSection(path, globs)
+	require.NoError(t, err)
+	assert.False(t, changed, "installing twice is idempotent")
 }

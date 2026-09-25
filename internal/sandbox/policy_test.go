@@ -7,60 +7,109 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestPolicyContext_RoundTrip(t *testing.T) {
+func TestPolicyContextRoundTrip(t *testing.T) {
 	p := &Policy{}
-	ctx := WithPolicy(context.Background(), p)
-	got := FromContext(ctx)
-	assert.Same(t, p, got, "FromContext should return the stored Policy")
+	assert.Same(t, p, PolicyFromContext(WithPolicy(context.Background(), p)))
+	assert.Nil(t, PolicyFromContext(context.Background()), "no policy is sandbox off")
 }
 
-func TestFromContext_Empty(t *testing.T) {
-	assert.Nil(t, FromContext(context.Background()), "FromContext(empty) should return nil")
-}
-
-func TestPolicy_CheckRead_NilPolicy(t *testing.T) {
+// A nil policy is the sandbox off: every check passes and every name is inherited.
+func TestNilPolicyAllowsEverything(t *testing.T) {
 	var p *Policy
-	// A nil policy (no restrictions) should allow all reads.
-	assert.NoError(t, p.CheckRead("/any/path"), "nil Policy.CheckRead should allow all reads")
+	ctx := t.Context()
+	assert.NoError(t, p.CheckRead(ctx, "/etc/shadow"))
+	assert.NoError(t, p.CheckWrite(ctx, "/etc/passwd"))
+	assert.NoError(t, p.CheckExec(ctx, "/tmp/payload"))
+	assert.True(t, p.AllowsEnv("GITHUB_TOKEN"))
 }
 
-func TestUnionPolicies_NilSafe(t *testing.T) {
-	p := UnionPolicies()
-	assert.NotNil(t, p, "UnionPolicies() of zero policies should not return nil")
+// Each check honours only its own flag: a read grant permits no exec, the gap that
+// once let a host without landlock run anything it could read.
+func TestPolicyChecksHonourTheirOwnFlag(t *testing.T) {
+	dir := filesystem.ResolveRulePath(t.TempDir())
+	p := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: dir, Read: true}}}}
+	ctx := t.Context()
+	assert.NoError(t, p.CheckRead(ctx, filepath.Join(dir, "tool")))
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(dir, "tool")), filesystem.ErrDenied)
+	assert.ErrorIs(t, p.CheckExec(ctx, filepath.Join(dir, "tool")), filesystem.ErrDenied)
 }
 
-// noopMetrics satisfies MetricsRecorder without doing work. The benchmarks stamp one
-// because RecordCheck returns immediately when ctx carries no recorder (metrics.go), and
-// that early return IS the whole difference between CheckRead and CheckReadCtx. Without a
-// recorder a benchmark named CheckReadCtx measures the one thing its name promises to
-// include. A real run always stamps one (internal/sandbox/apply).
+// A symlink inside the workspace pointing out of it is checked where it points.
+func TestSymlinkEscapeRejected(t *testing.T) {
+	ws := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(outside, []byte("x"), 0o600))
+	link := filepath.Join(ws, "evil")
+	require.NoError(t, os.Symlink(outside, link))
+	p := BuildPolicy(PolicyOptions{Workspace: ws})
+	assert.ErrorIs(t, p.CheckRead(t.Context(), link), filesystem.ErrDenied)
+}
+
+func TestAllowsEnv(t *testing.T) {
+	p := BuildPolicy(PolicyOptions{Env: env.Allowlist{Names: []string{"GOPATH"}, Prefixes: []string{"NPM_CONFIG_*"}}})
+	for name, want := range map[string]bool{
+		"PATH": true, "HOME": true, "GOPATH": true, "NPM_CONFIG_CACHE": true, "MAGUS_RUN_ID": false,
+		"GITHUB_TOKEN": false, "AWS_ACCESS_KEY_ID": false, "NPM_TOKEN": false,
+		"MAGUS_PROC_SOCKET": false, "MAGUS_SERVER_ADDRESS": false,
+	} {
+		assert.Equal(t, want, p.AllowsEnv(name), name)
+	}
+}
+
+// A file another tool runs code from after the run is refused inside the workspace's
+// own write grant, at any depth, and so are the git directories' hooks and config.
+func TestCheckWriteRefusesControlFiles(t *testing.T) {
+	ws := t.TempDir()
+	common := t.TempDir() // a linked worktree keeps its git dirs outside the checkout
+	gitDir := filepath.Join(common, "worktrees", "wt")
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, ".git", "hooks"), 0o755))
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(ws, ".git", "hooks"), filepath.Join(ws, "hooks-link")))
+	p := BuildPolicy(PolicyOptions{Workspace: ws, GitDir: gitDir, GitCommonDir: common})
+	ctx := t.Context()
+
+	for _, rel := range []string{
+		".git", ".git/hooks/pre-commit", ".git/config", ".git/info/exclude", "hooks-link/pre-push",
+		"magus.yaml", "mise.toml", ".mise.toml", ".mise/tasks/build", ".tool-versions", ".envrc",
+		".claude/settings.json", ".cursor/rules/x.mdc", ".mcp.json", ".vscode/tasks.json",
+		".pre-commit-config.yaml", ".husky/pre-push", "lefthook.yml",
+		"pkg/sub/.envrc", "pkg/sub/mise.toml", "pkg/.claude/settings.json",
+	} {
+		assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), filesystem.ErrDenied, rel)
+		assert.NoError(t, p.CheckRead(ctx, filepath.Join(ws, rel)), "reads are not refused: %s", rel)
+	}
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(gitDir, "config.worktree")), filesystem.ErrDenied,
+		"the worktree's own git dir is write-granted and its config is still refused")
+
+	for _, rel := range []string{"magus", "src/main.go", ".vscode/settings.json", ".gitignore", "docs/magus.yaml.md"} {
+		assert.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), rel)
+	}
+	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")), "git's own writes stay granted")
+	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")))
+}
+
+// noopMetrics satisfies MetricsRecorder without doing work. The benchmark stamps one
+// because recordCheck returns early without a recorder, and a real run always has one.
 type noopMetrics struct{}
 
-func (noopMetrics) RecordSandboxCheck(context.Context, string, string, string) {}
-func (noopMetrics) RecordSandboxEnvDropped(context.Context, string, int64)     {}
+func (noopMetrics) RecordSandboxCheck(context.Context, string, string, string)  {}
+func (noopMetrics) RecordSandboxEnvDropped(context.Context, string, int64)      {}
+func (noopMetrics) RecordSandboxApply(context.Context, float64, string, string) {}
 
 // benchPolicy returns a policy shaped like a real run's, plus the workspace root its last
-// rule guards. The root is returned rather than recovered from the rules, because reaching
-// back through Rules[len-1] made the fixture's two halves silently interdependent: append a
-// rule and the path builders start writing somewhere else entirely.
-//
-// Rule paths go through ResolveRulePath. checkAccess symlink-resolves the path it is handed
-// and compares it against the rule string as written, so an unresolved rule matches nothing
-// and every call falls through to ErrDenied plus its fmt.Errorf. On macOS TempDir sits under
-// /var, itself a symlink to /private/var, so omitting it benchmarks the DENY path here while
-// benchmarking the allow path on Linux, the same benchmark name reporting two different
-// algorithms by OS. See TestUnnormalizedRulePathMatchesNothing.
-//
-// None of the fixed rules may be an ancestor of the temp root, or which rule matches (and at
-// what depth in the scan) becomes a function of TMPDIR. That is why there is no /private/tmp
-// entry here despite it being realistic.
+// rule guards. Rule paths go through ResolveRulePath: an unresolved rule matches nothing,
+// and on macOS (TMPDIR under the /var symlink) the benchmark would measure the deny path.
+// None of the fixed rules may be an ancestor of the temp root, or which rule matches
+// becomes a function of TMPDIR.
 func benchPolicy(b *testing.B) (*Policy, string) {
 	b.Helper()
 	root := filesystem.ResolveRulePath(b.TempDir())
@@ -72,17 +121,8 @@ func benchPolicy(b *testing.B) (*Policy, string) {
 	}}}, root
 }
 
-// benchCtx carries the policy and a recorder, matching what a real binding-layer call sees.
-func benchCtx(p *Policy) context.Context {
-	return WithMetrics(WithPolicy(context.Background(), p), noopMetrics{})
-}
-
-// benchPaths returns n absolute paths under root, in the shape fs.glob hands to
-// CheckReadCtx one match at a time, creating them on disk when create is set.
-//
-// Unexported behind the two named wrappers below rather than called directly: the flag
-// selects between two different algorithms inside normalizePath, not a shade of the same
-// one, and a bare true/false at the call site does not say which is being measured.
+// benchPaths returns n allowed paths under root in the shape fs.glob hands to CheckRead
+// one match at a time, creating them on disk when create is set.
 func benchPaths(b *testing.B, p *Policy, root string, n int, create bool) []string {
 	b.Helper()
 	dir := filepath.Join(root, "internal", "pkg")
@@ -96,177 +136,68 @@ func benchPaths(b *testing.B, p *Policy, root string, n int, create bool) []stri
 			require.NoError(b, os.WriteFile(paths[i], []byte("package pkg\n"), 0o644))
 		}
 	}
-	// A benchmark that measures the deny path reports a number unrelated to its own name and
-	// says nothing while doing it. Both branches here must be ALLOWED (absence selects
-	// normalizePath's ancestor walk, not a denial), so assert it instead of trusting the
-	// ruleset and the path builder to keep agreeing.
-	require.NoError(b, p.CheckRead(paths[0]), "benchmark paths must be inside the allowlist")
+	require.NoError(b, p.CheckRead(context.Background(), paths[0]), "benchmark paths must be inside the allowlist")
 	return paths
 }
 
-// benchExistingPaths is the fs.glob shape: matches came from a directory listing, so they
-// exist and normalizePath resolves them on its first EvalSymlinks.
-func benchExistingPaths(b *testing.B, p *Policy, root string, n int) []string {
-	b.Helper()
-	return benchPaths(b, p, root, n, true)
+// BenchmarkCheckRead is the per-call cost of the binding-layer read check. fs.glob calls
+// it once per match, so anything added here is multiplied by the match count. The cost is
+// dominated by the lstat of each path component, so it scales with TMPDIR's depth; a
+// missing path stops lstat-ing at its first missing component.
+//
+// Each sub-benchmark builds its own root: sharing one would make the missing case's files
+// exist.
+func BenchmarkCheckRead(b *testing.B) {
+	for _, tc := range []struct {
+		name   string
+		create bool
+	}{{"existing", true}, {"missing", false}} {
+		b.Run(tc.name, func(b *testing.B) {
+			p, root := benchPolicy(b)
+			paths := benchPaths(b, p, root, 1024, tc.create)
+			ctx := WithMetrics(WithPolicy(context.Background(), p), noopMetrics{})
+			b.ReportAllocs()
+			for i := 0; b.Loop(); i++ {
+				_ = p.CheckRead(ctx, paths[i%len(paths)])
+			}
+		})
+	}
 }
 
-// benchMissingPaths is the not-yet-created shape: nothing on disk, so normalizePath's first
-// EvalSymlinks fails and it walks up the tree resolving each ancestor in turn.
-//
-// Measured through CheckReadCtx even though a missing path is usually a write target: the
-// branch lives in normalizePath, which read and write checks share, so going through the
-// read entry point isolates the resolve cost instead of also swapping the access mode.
-func benchMissingPaths(b *testing.B, p *Policy, root string, n int) []string {
-	b.Helper()
-	return benchPaths(b, p, root, n, false)
-}
-
-// BenchmarkCheckReadCtx is the per-call cost of the binding-layer read check, split by which
-// normalizePath branch the path takes. fs.glob calls this once per match (std/fs.go), so a
-// large glob pays the "existing" number per file and anything added here is multiplied by
-// the match count, which is what makes it the baseline for read attribution.
-//
-// Sub-benchmarks rather than two flat names: benchstat compares a shared prefix, and the
-// existing/missing pair is the comparison these exist to support.
-//
-// Both numbers are dominated by EvalSymlinks, which lstats every path component, so they
-// scale with the depth of TMPDIR rather than with anything in checkAccess. Read them as the
-// cost of the check as callers actually pay it, not as a measurement of the rule scan.
-//
-// Each sub-benchmark builds its OWN policy and root. Sharing one root silently destroys the
-// distinction being measured: the existing case creates file0..fileN, the missing case then
-// asks for the same names under the same directory, and they are no longer missing. The two
-// reported identical numbers when this was shared, which is the only symptom it produces.
-func BenchmarkCheckReadCtx(b *testing.B) {
-	b.Run("existing", func(b *testing.B) {
-		p, root := benchPolicy(b)
-		paths := benchExistingPaths(b, p, root, 1024)
-		ctx := benchCtx(p)
-		b.ReportAllocs()
-		for i := 0; b.Loop(); i++ {
-			_ = p.CheckReadCtx(ctx, paths[i%len(paths)])
-		}
-	})
-
-	b.Run("missing", func(b *testing.B) {
-		p, root := benchPolicy(b)
-		paths := benchMissingPaths(b, p, root, 1024)
-		ctx := benchCtx(p)
-		b.ReportAllocs()
-		for i := 0; b.Loop(); i++ {
-			_ = p.CheckReadCtx(ctx, paths[i%len(paths)])
-		}
-	})
-}
-
-// TestDenialLandsOnTheTrail covers the producer half of the sandbox-denial bell. The kind, the
-// wire encoder, and the console notification all shipped and all worked; nothing ever appended
-// one, so the notification could not fire on any workspace.
+// A denial lands on the run's trail, naming the access and the path: the console's
+// sandbox-denial bell has no other producer.
 func TestDenialLandsOnTheTrail(t *testing.T) {
 	base := t.TempDir()
 	allowed := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
 	ctx := trail.ContextWithBase(t.Context(), base)
 
-	if err := policy.CheckWriteCtx(ctx, "/definitely/not/allowed/f"); err == nil {
-		t.Fatal("CheckWriteCtx: expected the write to be denied")
-	}
+	require.Error(t, policy.CheckWrite(ctx, "/definitely/not/allowed/f"))
+	require.NoError(t, policy.CheckRead(ctx, filepath.Join(allowed, "f")), "an allow leaves no event")
 
 	events, err := trail.ReadRecent(base, 10)
-	if err != nil {
-		t.Fatalf("reading the trail: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("recorded %d events, want 1: %+v", len(events), events)
-	}
-	if events[0].Kind != trail.KindSandboxDenial {
-		t.Errorf("kind = %q, want %q", events[0].Kind, trail.KindSandboxDenial)
-	}
-	// The console renders this as "Sandbox denied <action>."; it has to name what was
-	// refused, or the notification says only that something somewhere was blocked.
-	if want := "write of /definitely/not/allowed/f"; events[0].Action != want {
-		t.Errorf("action = %q, want %q", events[0].Action, want)
-	}
-	if events[0].Outcome != trail.OutcomeError || events[0].Error == "" {
-		t.Errorf("a denial must record as an error carrying its cause: %+v", events[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, trail.KindSandboxDenial, events[0].Kind)
+	assert.Equal(t, "write of /definitely/not/allowed/f", events[0].Action)
+	assert.Equal(t, trail.OutcomeError, events[0].Outcome)
+	assert.NotEmpty(t, events[0].Error)
+	assert.Empty(t, events[0].Lease, "a workspace-default denial claims no lease")
 }
 
-// TestAllowedAccessLeavesNoTrailEvent keeps the producer off the happy path: a read check runs
-// once per glob match, and the trail is a durable append-only file.
-func TestAllowedAccessLeavesNoTrailEvent(t *testing.T) {
-	base := t.TempDir()
-	allowed := filesystem.ResolveRulePath(t.TempDir())
-	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
-	ctx := trail.ContextWithBase(t.Context(), base)
-
-	if err := policy.CheckReadCtx(ctx, filepath.Join(allowed, "f")); err != nil {
-		t.Fatalf("CheckReadCtx allow: unexpected error: %v", err)
-	}
-
-	events, err := trail.ReadRecent(base, 10)
-	if err != nil {
-		t.Fatalf("reading the trail: %v", err)
-	}
-	if len(events) != 0 {
-		t.Errorf("an allowed access wrote %d trail events: %+v", len(events), events)
-	}
-}
-
-// TestDenialNamesTheLeaseThatNarrowedThePolicy keeps the boundary attributable. A worker's
-// run is refused by a grant derived from its job row, so a denial that does not carry
-// the lease leaves a reader unable to say whose boundary was hit.
+// A lease-narrowed policy names its lease on a denial, so a reader can say whose
+// boundary was hit and whether it was bound or only claimed.
 func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	base := t.TempDir()
-	allowed := filesystem.ResolveRulePath(t.TempDir())
-	policy := &Policy{
-		FS:        filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}},
-		Lease:     "fleet/worker-3",
-		LeaseFrom: types.LeaseSourceMarker,
-	}
+	policy := &Policy{Lease: "fleet/worker-3", LeaseFrom: types.LeaseSourceMarker}
 	ctx := trail.ContextWithBase(t.Context(), base)
 
-	if err := policy.CheckWriteCtx(ctx, "/definitely/not/allowed/f"); err == nil {
-		t.Fatal("CheckWriteCtx: expected the write to be denied")
-	}
+	require.Error(t, policy.CheckExec(ctx, "/definitely/not/allowed/f"))
 
 	events, err := trail.ReadRecent(base, 10)
-	if err != nil {
-		t.Fatalf("reading the trail: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("recorded %d events, want 1: %+v", len(events), events)
-	}
-	if events[0].Lease != "fleet/worker-3" {
-		t.Errorf("lease = %q, want %q", events[0].Lease, "fleet/worker-3")
-	}
-	if events[0].LeaseFrom != types.LeaseSourceMarker {
-		t.Errorf("lease_from = %q, want %q: a bound boundary must read apart from a claimed one", events[0].LeaseFrom, types.LeaseSourceMarker)
-	}
-}
-
-// TestDenialUnderTheWorkspacePolicyNamesNoLease pins the other half: an unleased run's
-// denial must not claim a lease, or every workspace-default refusal reads as a boundary
-// somebody declared.
-func TestDenialUnderTheWorkspacePolicyNamesNoLease(t *testing.T) {
-	base := t.TempDir()
-	allowed := filesystem.ResolveRulePath(t.TempDir())
-	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
-	ctx := trail.ContextWithBase(t.Context(), base)
-
-	if err := policy.CheckWriteCtx(ctx, "/definitely/not/allowed/f"); err == nil {
-		t.Fatal("CheckWriteCtx: expected the write to be denied")
-	}
-
-	events, err := trail.ReadRecent(base, 10)
-	if err != nil {
-		t.Fatalf("reading the trail: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("recorded %d events, want 1: %+v", len(events), events)
-	}
-	if events[0].Lease != "" {
-		t.Errorf("lease = %q, want empty", events[0].Lease)
-	}
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "fleet/worker-3", events[0].Lease)
+	assert.Equal(t, types.LeaseSourceMarker, events[0].LeaseFrom)
+	assert.Equal(t, "exec of /definitely/not/allowed/f", events[0].Action)
 }

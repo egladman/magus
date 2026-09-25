@@ -50,6 +50,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 ## go-clean
 
+go rejects -cache/-testcache/-modcache/-fuzzcache combined with ANY package pattern ("cannot be used with package arguments"), in any order, so "./..." can only be safe on a fully bare invocation. defaultArgs cannot express that: it rides along even when `magus run <t> -- <extra>` forwards a flag. trailingArgs drops out the moment any arg is forwarded, keeping a bare `magus run go::go-clean .` identical to today (`go clean ./...`) while `-- -cache` (or -i/-r/-n/-x) reaches `go clean` with no pattern at all.
+
 **Command:** `go clean ./...`
 
 ### Example

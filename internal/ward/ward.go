@@ -59,9 +59,9 @@ func detachFlag(cmd spells.Command) (string, bool) {
 	if !identity.IsContainerRuntime(cmd.Bin) {
 		return "", false
 	}
-	// DefaultArgs are argv on every no-args invocation, so a flag there is the
-	// same self-contradiction as one in Args.
-	for _, a := range slices.Concat(cmd.Args, cmd.DefaultArgs) {
+	// DefaultArgs and TrailingArgs are argv on every no-args invocation, so a
+	// flag in either is the same self-contradiction as one in Args.
+	for _, a := range slices.Concat(cmd.Args, cmd.DefaultArgs, cmd.TrailingArgs) {
 		switch {
 		case a == "-d", a == "--detach", a == "--detach=true":
 			return a, true
@@ -88,7 +88,7 @@ func watchFlag(cmd spells.Command) (string, bool) {
 		return "", false
 	}
 	// Same reach as detachFlag: a watch flag in the defaults hangs the no-args run.
-	for _, a := range slices.Concat(cmd.Args, cmd.DefaultArgs) {
+	for _, a := range slices.Concat(cmd.Args, cmd.DefaultArgs, cmd.TrailingArgs) {
 		if a == "--watch" || strings.HasPrefix(a, "--watch=") || a == "-w" {
 			return a, true
 		}

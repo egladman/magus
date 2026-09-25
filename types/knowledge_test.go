@@ -220,3 +220,34 @@ func relativeLuminance(hex string) float64 {
 	}
 	return 0.2126*ch(1) + 0.7152*ch(3) + 0.0722*ch(5)
 }
+
+func TestCountLines(t *testing.T) {
+	for in, want := range map[string]int{
+		"":           0,
+		"\n":         1,
+		"a":          1,
+		"a\n":        1,
+		"a\nb":       2,
+		"a\nb\n":     2,
+		"a\n\nb\n\n": 4,
+	} {
+		assert.Equalf(t, want, CountLines([]byte(in)), "%q", in)
+	}
+}
+
+func TestBodyDigest(t *testing.T) {
+	lines := SplitSourceLines([]byte("package a\n\nfunc F() {\n\treturn\n}\n"))
+
+	whole, ok := BodyDigest(lines, 3, 5)
+	require.True(t, ok)
+	again, _ := BodyDigest(SplitSourceLines([]byte("// moved\npackage a\n\nfunc F() {\n\treturn\n}\n")), 4, 6)
+	assert.Equal(t, whole, again, "the digest covers the lines, not their position")
+	decl, ok := BodyDigest(lines, 3, 3)
+	require.True(t, ok)
+	assert.NotEqual(t, whole, decl)
+
+	for _, r := range [][2]int{{0, 1}, {3, 2}, {3, 8}} {
+		_, ok := BodyDigest(lines, r[0], r[1])
+		assert.Falsef(t, ok, "range %v does not fit the file", r)
+	}
+}

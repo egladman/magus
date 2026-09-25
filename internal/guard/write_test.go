@@ -912,3 +912,29 @@ func TestGradeLeasedWriteNamesHowToReleaseAnOwner(t *testing.T) {
 	assert.Contains(t, got.Reason, "ago")
 	assert.Contains(t, got.Reason, hint.JobExit.With("lease-a"))
 }
+
+// TestLeasedPathAdvisesOncePerSessionPerLease: the owned-path advisory was 52% of every
+// advisory served in the 2026-09-24 audit, 8,419 servings, because it spoke on every edit.
+// The writer has the fact after the first, so a session hears it once per lease; a
+// second lease is a second fact, and a second session has heard nothing.
+func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, root := fleetFixture(t, fleetLeases()...)
+	write := func(session, rel string) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: session, Host: "test-host"})
+	}
+
+	first := write("s1", "internal/ledger/store.go")
+	assert.Equal(t, "advise", first.Decision)
+	assert.Equal(t, string(advisoryLeasedPath), first.Rule)
+	assert.Contains(t, first.Context, "if you are lease lease-a")
+
+	assert.Equal(t, "pass", write("s1", "internal/ledger/other.go").Decision, "the same lease, told once")
+	assert.Equal(t, "pass", write("s1", "internal/ledger/store.go").Decision)
+
+	other := write("s1", "cmd/magus/main.go")
+	assert.Equal(t, string(advisoryLeasedPath), other.Rule, "a different lease is a new fact")
+	assert.Contains(t, other.Context, "if you are lease lease-b")
+
+	assert.Equal(t, string(advisoryLeasedPath), write("s2", "internal/ledger/store.go").Rule, "a new session has heard nothing")
+}

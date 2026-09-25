@@ -84,7 +84,7 @@ func TestCryptoSignFileHonorsSandbox(t *testing.T) {
 	t.Setenv(keyEnv, hex.EncodeToString(priv))
 
 	// A policy with no matching rule denies both read and write.
-	p := &sandbox.Policy{Workspace: t.TempDir()}
+	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
 	_, err = CryptoSignFile(ctx, SignEd25519, path, keyEnv)

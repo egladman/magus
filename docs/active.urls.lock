@@ -360,6 +360,7 @@ reference/buzz/math/
 reference/buzz/net/
 reference/buzz/os/
 reference/buzz/path/
+reference/buzz/pipe/
 reference/buzz/platform/
 reference/buzz/proc/
 reference/buzz/semver/
@@ -398,6 +399,7 @@ reference/codes/auth/MGS9018/
 reference/codes/auth/MGS9019/
 reference/codes/auth/MGS9020/
 reference/codes/auth/MGS9021/
+reference/codes/auth/MGS9022/
 reference/codes/capability/
 reference/codes/capability/MGS1101/
 reference/codes/capability/MGS1102/
@@ -482,6 +484,7 @@ reference/codes/sandbox/MGS2008/
 reference/codes/sandbox/MGS2009/
 reference/codes/sandbox/MGS2010/
 reference/codes/sandbox/MGS2011/
+reference/codes/sandbox/MGS2012/
 reference/codes/sandbox/MGS3001/
 reference/codes/sandbox/MGS3002/
 reference/codes/sandbox/MGS3003/
@@ -504,6 +507,12 @@ reference/codes/sandbox/MGS3019/
 reference/codes/sandbox/MGS3020/
 reference/codes/sandbox/MGS3021/
 reference/codes/sandbox/MGS3022/
+reference/codes/sandbox/MGS3023/
+reference/codes/sandbox/MGS3025/
+reference/codes/sandbox/MGS3026/
+reference/codes/sandbox/MGS3027/
+reference/codes/sandbox/MGS3028/
+reference/codes/sandbox/MGS3030/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -564,6 +573,7 @@ reference/manpage/magus-x/
 reference/manpage/magus/
 reference/remote-spells/
 reference/rules/
+reference/rules/agent-sign-off/
 reference/rules/backtick-substitution/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
@@ -818,11 +828,13 @@ tags/integration/
 tags/interactive/
 tags/interpreter/
 tags/jobs/
+tags/jobserver/
 tags/journal/
 tags/json-patch/
 tags/json/
 tags/jsonl/
 tags/keep-warm/
+tags/kernel/
 tags/knowledge-graph/
 tags/landlock/
 tags/leases/
@@ -896,6 +908,7 @@ tags/permissions/
 tags/philosophy/
 tags/picker/
 tags/pinning/
+tags/pipe/
 tags/platform/
 tags/plugin/
 tags/podman/
@@ -930,6 +943,7 @@ tags/repl/
 tags/replace/
 tags/replay/
 tags/reproduce/
+tags/required/
 tags/retry/
 tags/review/
 tags/rfc-6902/
@@ -969,8 +983,11 @@ tags/sources/
 tags/spawn/
 tags/spell/
 tags/spells/
+tags/stacks/
 tags/stall/
 tags/status/
+tags/stdin/
+tags/stdio/
 tags/stdlib/
 tags/store/
 tags/strengthen-only/

@@ -45,15 +45,16 @@ func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
 }
 
 // Generated means declared as an output. The generating project's own sources are code
-// its regeneration runs, and so is anything that reaches it through the project graph;
-// a document it reads is not, and an edit to the declarations proves nothing.
+// its regeneration runs, whatever their extension, and so is anything that reaches it
+// through the project graph; an edit to the declarations proves nothing.
 func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 	root := t.TempDir()
 	for rel, body := range map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"outputs\": [\"gen/**\"]});\n",
 		"web/magusfile.buzz": "", "api/main.go": "package main\n", "api/gen/out.go": "package gen\n",
-		"api/notes.md": "notes\n", "web/app.go": "package web\n", "vendor/blob.go": "package blob\n",
+		"api/notes.md": "notes\n", "api/CMakeLists.txt": "project(api)\n", "api/requirements.txt": "requests\n",
+		"web/notes.md": "notes\n", "web/app.go": "package web\n", "vendor/blob.go": "package blob\n",
 	} {
 		abs := filepath.Join(root, filepath.FromSlash(rel))
 		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
@@ -67,13 +68,19 @@ func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"api/gen/out.go": {Output: true}}, out, "an undeclared file is source, whatever marks it")
 
-	g, err := w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/notes.md", "web/app.go"})
+	g, err := w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"web/notes.md", "web/app.go"})
 	require.NoError(t, err)
-	assert.Equal(t, types.Generation{Units: []string{"api"}}, g, "a document and another project's code prove it")
+	assert.Equal(t, types.Generation{Units: []string{"api"}}, g, "another project's document and code prove it")
 
 	g, err = w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/main.go", "web/app.go"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"api/main.go"}, g.Code)
+
+	// No extension makes a file data: CMakeLists.txt and requirements.txt are code to
+	// the tools that read them, and a generator may run what a document holds.
+	g, err = w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"api/CMakeLists.txt", "api/notes.md", "api/requirements.txt", "web/app.go"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"api/CMakeLists.txt", "api/notes.md", "api/requirements.txt"}, g.Code, "the generating project's files, whatever their extension")
 
 	g, err = w.Generation(t.Context(), []string{"api/gen/out.go"}, []string{"web/magusfile.buzz"})
 	require.NoError(t, err)
@@ -124,6 +131,36 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
+	}
+}
+
+// A merge is allowed by magus's change classifier: prose by the built-in markdown globs,
+// code only where a project's merge_low_risk opts it in.
+func TestWorkspaceAutoResolvableIsTheChangeClassifier(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"merge_low_risk\": [\"fixtures/**\"]});\n",
+	} {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+	w, err := OpenWorkspace(t.Context(), root, "ci")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = w.Close() })
+	for path, want := range map[string]struct {
+		verdict string
+		ok      bool
+	}{
+		"CHANGELOG.md":        {`CHANGELOG.md: prose (matches "**/*.md" (built-in default))`, true},
+		"api/fixtures/a.json": {`api/fixtures/a.json: code (matches "fixtures/**" (merge_low_risk of project api))`, true},
+		"api/handler.json":    {"api/handler.json: code (no comment syntax is declared for this language; classified as code)", false},
+	} {
+		verdict, ok, err := w.AutoResolvable(t.Context(), path, []byte("a\n"), []byte("a\nb\n"))
+		require.NoError(t, err)
+		assert.Equal(t, want.ok, ok, path)
+		assert.Equal(t, want.verdict, verdict, path)
 	}
 }
 

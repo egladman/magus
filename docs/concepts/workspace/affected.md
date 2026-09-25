@@ -44,7 +44,7 @@ magus autodetects the VCS adapter from `.git`, `.hg`, or `.jj` at the workspace
 root. The diff is taken against a base ref: `--base`, else `MAGUS_VCS_BASE_REF`,
 else the adapter's built-in default (`origin/main` for git). Two escape hatches:
 
-- `MAGUS_VCS_COMMAND` / `vcs.command_name` pin or replace the VCS command.
+- `MAGUS_VCS_NAME` / `vcs.name` pins the adapter (`git`, `hg`, `sl`, `jj`).
 - `MAGUS_VCS_ENABLED=false` (or `vcs.enabled: false`) short-circuits detection and
   falls back to the full project set, labeled `vcs disabled`. Use it where no VCS
   is available (a release tarball, a fresh container) so a build still runs.

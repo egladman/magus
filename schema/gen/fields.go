@@ -554,7 +554,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_JOBS_STALE_AFTER",
 		Flag:     fieldtype.FlagNames{Long: "jobs-stale-after"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_JOBS_STALE_AFTER: StaleAfter flags a live job nobody updated for this long, in 'magus ls jobs' and 'magus doctor'.",
+		Usage:    "MAGUS_JOBS_STALE_AFTER: StaleAfter ends a declared job nobody took and nobody updated for this long, and flags a taken one in 'magus ls jobs'...",
 	},
 	{
 		GoPath:   "Concurrency",
@@ -629,12 +629,12 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by default, e.g.",
 	},
 	{
-		GoPath:   "Sandbox.Enabled",
-		YamlPath: "sandbox.enabled",
-		EnvVar:   "MAGUS_SANDBOX_ENABLED",
-		Flag:     fieldtype.FlagNames{Long: "sandbox-enabled"},
-		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_SANDBOX_ENABLED",
+		GoPath:   "Sandbox.Mode",
+		YamlPath: "sandbox.mode",
+		EnvVar:   "MAGUS_SANDBOX",
+		Flag:     fieldtype.FlagNames{Long: "sandbox"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_SANDBOX: Mode is off (the default), best-effort (landlock confines each child where the host has it, magus's own binding check...",
 	},
 	{
 		GoPath:   "Sandbox.Env.Passthrough",
@@ -642,6 +642,6 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_SANDBOX_ENV_PASSTHROUGH",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds names/globs (e.g.",
+		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds exact names and prefix patterns such as MISE_* to the built-in env allowlist.",
 	},
 }

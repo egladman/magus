@@ -52,6 +52,7 @@ const (
 	ToolVCSCheckpoint   ToolName = "magus_vcs_checkpoint"
 	ToolJob             ToolName = "magus_job"
 	ToolConsolePresent  ToolName = "magus_console_present"
+	ToolBuzz            ToolName = "magus_buzz"
 )
 
 // AllToolNames is every declared tool-name constant, for the drift test to walk.
@@ -64,7 +65,7 @@ var AllToolNames = []ToolName{
 	ToolAffectedPlan, ToolConfigGet, ToolMemory,
 	ToolQuery, ToolOutput, ToolExplain, ToolRefs, ToolPath, ToolStats,
 	ToolDiff,
-	ToolVCSCheckpoint, ToolJob, ToolConsolePresent,
+	ToolVCSCheckpoint, ToolJob, ToolConsolePresent, ToolBuzz,
 }
 
 // LookupTool resolves a declared tool name, reporting false for one nobody declares.

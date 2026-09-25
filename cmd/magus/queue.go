@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/mergequeue"
 	"github.com/egladman/magus/libs/mergequeue/client"
 	"github.com/egladman/magus/libs/mergequeue/provider"
@@ -231,7 +232,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 		if err != nil {
 			return nil, nil, err
 		}
-		return mergequeue.CommandFacts(cmd, e.dir, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
+		return mergequeue.CommandFacts(cmd, e.dir, mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough}, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
 	}
 	ws, err := client.OpenWorkspace(ctx, e.dir, target)
 	if err != nil {
@@ -296,6 +297,11 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 		fmt.Fprintf(&b, "; a stack queues by the label %q", caps.QueueLabel+"<method>")
 	}
 	b.WriteString("\n")
+	if caps.RequiredApprovals == 0 {
+		fmt.Fprintf(&b, "# %s requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own\n", base)
+	} else {
+		fmt.Fprintf(&b, "# %s requires %d approving reviews at the commit a review of a change's head covers\n", base, caps.RequiredApprovals)
+	}
 	s := caps.Setup
 	if s == nil {
 		fmt.Fprintf(&b, "# no setup: --status-context is empty, or provider %s reports none\n", provider)
@@ -474,6 +480,17 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 			return err
 		}
 	}
+	log := mergequeue.NewHookLog(e.stderr)
+	// The passthrough is the base's, like the trust set: a candidate's magus.yaml widens
+	// neither.
+	hookEnv := mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}
+	if f.RemoteCacheRead {
+		var proxy *mergequeue.CacheReadProxy
+		if proxy, hookEnv.Fixed, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
+			return err
+		}
+		defer func() { _ = proxy.Close() }()
+	}
 	dir := &mergequeue.VerdictDir{Path: e.path(f.Verdicts)}
 	// A single-change run is one of several filling out; whoever gathers them marks it.
 	// A full run marks it however it ends: what it recorded is final, and apply
@@ -503,17 +520,43 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 		return err
 	}
 	defer cleanup()
-	log := mergequeue.NewHookLog(e.stderr)
-	v, err := mergequeue.NewValidator(drv, cl, mergequeue.CommandGate(gate, vars, log), dir, bf, scratch)
+	v, err := mergequeue.NewValidator(drv, cl, mergequeue.CommandGate(gate, hookEnv, log), dir, bf, scratch)
 	if err != nil {
 		return err
 	}
 	v.Only, v.Parallel, v.Events = f.Only, f.Parallel, mergequeue.NewEvents(e.stdout)
 	v.Reproduce = types.Reproduction{Gate: f.Gate, Regenerate: f.Regenerate}
 	if regenerate != nil {
-		v.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, log)
+		v.Regenerate = mergequeue.CommandRegenerate(regenerate, hookEnv, log)
 	}
 	return v.Run(ctx, pl)
+}
+
+// queueCacheRead starts the proxy --remote-cache-read asks for and returns what every
+// hook's environment takes to read through it. The runner's cache credentials are read
+// here, in the process that runs no change's code, and reach no hook. A read is safe to
+// hand a hook only because every entry replayed is verified, so the trust set is the
+// base's, pinned for the hooks: a candidate's own magus.yaml cannot widen it or turn
+// verification off.
+func queueCacheRead(remote config.CacheRemote, log *mergequeue.HookLog) (*mergequeue.CacheReadProxy, []string, error) {
+	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	switch {
+	case upstream == "" || token == "":
+		return nil, nil, usagef("magus queue validate: --remote-cache-read reads through the runner's cache service, and ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set; GitHub Actions gives them to an action, not a run: step, so export them to this step")
+	case remote.Insecure:
+		return nil, nil, usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.insecure turns that check off")
+	case len(remote.TrustedKeys) == 0:
+		return nil, nil, usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.trusted_keys names none")
+	}
+	proxy, err := mergequeue.StartCacheReadProxy(upstream, token, log)
+	if err != nil {
+		return nil, nil, err
+	}
+	return proxy, append(proxy.Env(),
+		"MAGUS_CACHE_REMOTE_TRUSTED_KEYS="+strings.Join(remote.TrustedKeys, ","),
+		"MAGUS_CACHE_REMOTE_INSECURE=false",
+		"MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
+	), nil
 }
 
 // queueScratchVars is --scratch-env, which may repeat.
@@ -584,6 +627,18 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 			return err
 		}
 	}
+	if f.ReproduceRegenerate != "" && f.ReproduceGate == "" {
+		return usagef("magus queue apply: --reproduce-regenerate needs --reproduce-gate")
+	}
+	// Shown, never run; parsed so a kick-back never shows a line validate would refuse.
+	for _, hook := range [][2]string{{"--reproduce-gate", f.ReproduceGate}, {"--reproduce-regenerate", f.ReproduceRegenerate}} {
+		if hook[1] == "" {
+			continue
+		}
+		if _, err := mergequeue.ParseCommand(hook[0], hook[1]); err != nil {
+			return err
+		}
+	}
 	p, err := e.openProvider(ctx, f.Provider)
 	if err != nil {
 		return err
@@ -645,8 +700,9 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	}
 	a.Base, a.RemoteURL = f.Base, remoteURL
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
+	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
-		a.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, mergequeue.NewHookLog(e.stderr))
+		a.Regenerate = mergequeue.CommandRegenerate(regenerate, mergequeue.HookEnv{Passthrough: globalCfg.Sandbox.Env.Passthrough, Scratch: vars}, mergequeue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
 }

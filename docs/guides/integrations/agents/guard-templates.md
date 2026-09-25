@@ -62,15 +62,22 @@ One implementation per guard surface. A host sets overrides and delegates:
 | `HOST_EVENT_RAW`               | (the `.sh` copies only) hand the whole event instead of one `HOST_EVENT_PATH` field - for a surface like MCP whose payload is a tool name plus a params object, not one string. The `.buzz` ports read this off the event instead; see below |
 | `HOST_SESSION_PATH`            | dot-path to the session id inside your host's event JSON                                                                                                                                                                                     |
 | `HOST_RESPONSE`                | Go template rendering your host's reply from the verdict                                                                                                                                                                                     |
-| `__MAGUS_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                                                                                                                                                             |
 | `__MAGUS_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance                                                                                                                                              |
 | `__MAGUS_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence                                                                                                                                     |
 | `__MAGUS_BIN`                  | absolute path to magus when it is not on PATH                                                                                                                                                                                                |
 
-`__MAGUS_AGENT_NAME` and `HOST_SESSION_PATH` feed `magus session hook --agent-name` and
-`--session`, which are pure attribution: they label the recorded observation and
-cannot change a verdict. A host that supplies neither is judged identically and
-simply records less about itself.
+The host is not a variable. Every command names it as an argument, `--agent-name <host>`
+(`sh magus-command.sh --agent-name codex`, or `magus buzz -s magus-command.buzz --
+--agent-name claude-code`), and the template reads it from there and nowhere else: not
+from the event's shape, not from the environment, never by default. The configuration
+`magus agent harness apply` writes renders it from the harness spell's own name. A
+template given none refuses the call
+([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answer in a guessed
+host's dialect, because a reply shaped for the wrong host can let a call through.
+
+To magus, the name and `HOST_SESSION_PATH` are attribution: they label the recorded
+observation and cannot change a verdict. The template does read the name for one thing,
+which reply shape its host can parse.
 
 `__MAGUS_BIN` avoids the `MAGUS_*` prefix on purpose. That space is magus's
 own configuration surface, and a variable these templates invent must not look
@@ -101,8 +108,9 @@ that vary PER ENTRY move accordingly:
   shape exists to avoid, and so is a guard that refuses to answer because an entry was
   typed wrong.
 
-The host-level variables in the table - `HOST_RESPONSE`, `__MAGUS_AGENT_NAME`,
-`__MAGUS_BIN`, the two notice overrides - are unchanged in both forms. A host sets those
+The host name rides on the argv in both forms, after `--` for a `.buzz` port. The
+host-level variables in the table - `HOST_RESPONSE`, `__MAGUS_BIN`, the two notice
+overrides - are unchanged in both forms. A host sets those
 once; they do not distinguish one entry from another.
 
 ## `magus-command.sh`
@@ -139,7 +147,6 @@ is one implementation to reason about and two ways to run it.
 #                    front of the PERSON through the host's own approval prompt
 #   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
 #                    an advise renders nothing rather than a reply it rejects
-#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 #   __MAGUS_SHELL_FLAGS  extra `magus shell` flags this wiring declares about itself,
 #                    space-separated. Capabilities, not policy: a config that also
 #                    matches its host's skill tool passes --observes-skill-loads, and
@@ -154,11 +161,18 @@ is one implementation to reason about and two ways to run it.
 #
 # The defaults are Claude Code's event and response shape.
 #
-# __MAGUS_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
-# its activity event so a reader can tell which host produced an observation;
+# REQUIRED argument: `--agent-name <host>`, the host this entry is wired into, which the
+# configuration `magus agent harness apply` writes on the command
+# (`sh magus-command.sh --agent-name codex`). It is the only place this file learns the
+# host, and without it `magus shell` refuses the call (MGS3024).
+#
+# The host name and the session are ATTRIBUTION to magus, not policy. magus records them
+# on its activity event so a reader can tell which host produced an observation;
 # neither one can change the verdict, and a host whose event carries no session
 # id records none and is judged exactly the same. The subagent id is the exception:
-# magus grades a subagent it saw spawned under that spawn's job.
+# magus grades a subagent it saw spawned under that spawn's job. This file does read the
+# host name for one thing, which reply shape its host can parse, and that is why it must
+# be given.
 #
 # __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 # magus's own configuration surface, so a variable this template invents must stay
@@ -184,7 +198,7 @@ is one implementation to reason about and two ways to run it.
 # denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 # permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 # names the person's own terminal.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -204,7 +218,17 @@ is one implementation to reason about and two ways to run it.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The host this entry is wired into, from the entry's own argv and nowhere else: never the
+# event's shape, never the environment, never a default. Without it `magus shell` refuses
+# the call (MGS3024). See --agent-name in magus-command.buzz.
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
 # The one arm here that does not fail open; see the truncated-envelope check below. Plain
 # assignment for the same reason as the rest: a `}` would end a ${...}.
 [ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
@@ -326,19 +350,9 @@ codex_cannot_prompt() {
   printf 'no .codex/rules/magus.rules carries the prompt rule for this push, which magus agent harness apply --id codex writes'
 }
 
-# Codex is recognized by its event as well as by name, so a Codex wiring that forgot
-# __MAGUS_AGENT_NAME still never receives permissionDecision "ask", which it would run
-# unasked. turn_id is a required field of Codex's published PreToolUse input
-# (testdata/hosts/codex/pre-tool-use.command.input.schema.json) and of its
-# PermissionRequest input; no vendored Claude Code or Cursor schema names it.
-#
-# The two are kept apart rather than or-ed, because the arms below trust them differently.
-codex_named=
-codex_inferred=
-[ "$__MAGUS_AGENT_NAME" = codex ] && codex_named=1
-[ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ] && codex_inferred=1
+# Codex is the host the entry names, never one the event's shape suggests.
 codex=
-{ [ -n "$codex_named" ] || [ -n "$codex_inferred" ]; } && codex=1
+[ "$agent_name" = codex ] && codex=1
 
 # renders_ask is the --renders-ask claim: this call's reply puts an ask in front of the
 # person, or refuses it, and never lets it through unasked. Only a reply this file assembled
@@ -351,16 +365,7 @@ renders_ask=
 # header for why this file never sends Codex permissionDecision "ask".
 if [ -z "$HOST_ASK_BRANCH" ]; then
   if [ -n "$codex" ]; then
-    # Only a wiring that NAMED itself Codex may render an ask as context the agent is free
-    # to skip. Inferring the host from a turn_id key is a guess over an envelope nobody
-    # schema-types, and the two ways of being wrong are not equal: the context arm turns an
-    # ask into a note that is silently ignored, while the deny arm turns it into a refusal
-    # the person can act on. A host that adds turn_id therefore costs a deny, not a pass.
-    if [ -n "$codex_named" ]; then
-      ask_blocker=$(codex_cannot_prompt)
-    else
-      ask_blocker='this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here'
-    fi
+    ask_blocker=$(codex_cannot_prompt)
     if [ -z "$ask_blocker" ]; then
       HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}'
     else
@@ -482,7 +487,7 @@ guard_failure_notice() {
 # --transport sh names this form as the caller; the Buzz port says buzz. magus keeps a
 # deny's full text and its once-per-session notices per host, transport and session.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
@@ -556,9 +561,10 @@ wasteful, not destructive.
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
-# __MAGUS_AGENT_NAME, HOST_SESSION_PATH and HOST_AGENT_PATH work exactly as they do
-# in magus-command.sh: attribution recorded on the activity event; the subagent id
-# also selects the job that subagent was spawned for.
+# `--agent-name <host>`, HOST_SESSION_PATH and HOST_AGENT_PATH work exactly as they do
+# in magus-command.sh: the host name is REQUIRED on this script's argv, all three are
+# attribution recorded on the activity event, and the subagent id also selects the job
+# that subagent was spawned for.
 #
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-command.sh. It records what HOST_RESPONSE RENDERS, not
@@ -568,7 +574,7 @@ wasteful, not destructive.
 # before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 # Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 # renders as a deny.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
@@ -578,7 +584,15 @@ wasteful, not destructive.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The host this entry is wired into, from the entry's own argv only; see magus-command.sh.
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
 # The one arm on this surface that does not fail open; see the truncated-envelope check
 # below. Plain assignment for the same reason as the rest: a `}` would end a ${...}.
 [ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this write from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
@@ -655,10 +669,10 @@ if [ "$(printf '%s' "$event" | jq -r '(.tool_name // "") | startswith("mcp__")' 
   whole_event=
 fi
 
-# Codex by name or by its event's turn_id, exactly as magus-command.sh decides it. No
-# Codex rule prompts for a write, so there an ask renders as a deny.
+# Codex is the host the entry names, exactly as magus-command.sh decides it. No Codex rule
+# prompts for a write, so there an ask renders as a deny.
 if [ -z "$HOST_ASK_BRANCH" ]; then
-  if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
+  if [ "$agent_name" = codex ]; then
     HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason "\n\nThis write needs the approval of the person you work for, and Codex has no prompt for it. Ask them to make it themselves.")}}}}'
   else
     HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}'
@@ -692,7 +706,7 @@ guard() {
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
@@ -749,12 +763,15 @@ surface, and this file carries no verdict on no surface.
 #   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
-#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 #   __MAGUS_BIN  path to the binary, when it is not on PATH
 #
+# REQUIRED argument: `--agent-name <host>`, the host recorded alongside the observation,
+# which the configuration `magus agent harness apply` writes on the command. Without it
+# nothing is recorded and a coded message (MGS3024) goes to stderr: an observation filed
+# under a guessed host would be wrong, and a silent gap would be invisible.
+#
 # The defaults are Claude Code's event shape, matching its two siblings. A
-# different host overrides the dot-paths and passes its own __MAGUS_AGENT_NAME,
-# exactly as codex-hooks.json already does for the guard templates.
+# different host overrides the dot-paths.
 #
 # NO magus-guard-coverage line, and that absence is deliberate rather than an
 # oversight: a coverage declaration states how much of a VERDICT a host can
@@ -762,7 +779,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -777,7 +794,18 @@ surface, and this file carries no verdict on no surface.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
+if [ -z "$agent_name" ]; then
+  printf '%s\n' "magus-observe.sh: [MGS3024] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  exit 0
+fi
 # Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and
 # this file needs it MORE than they do, because it is silent by design. An older PATH copy
 # does not know --observe at all: it rejects the flag, prints its usage to a stream this
@@ -838,7 +866,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/d
 # discarded because a flag-parse error would otherwise reach the host as this
 # hook's response on every read.
 printf '%s' "$path" | "$__MAGUS_BIN" shell --observe \
-  --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" \
+  --agent-name "$agent_name" --session "$session" --transcript "$transcript" \
   --event PreToolUse >/dev/null 2>&1
 
 exit 0
@@ -935,6 +963,12 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // declares about itself. Everything else is still an environment variable, because
 // it is a property of the HOST rather than of one entry, and a host sets it once.
 //
+//   -- --agent-name <host>  REQUIRED: the host this entry is wired into, the harness
+//                    spell's own name, which the configuration `magus agent harness
+//                    apply` writes on every command. It is the ONLY place this file
+//                    learns the host: never the event's shape, never the environment,
+//                    never a default. Without it `magus shell` refuses the call
+//                    (MGS3024), so a hand-written config that omits it fails loudly
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
@@ -959,7 +993,6 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 //                    front of the PERSON through the host's own approval prompt
 //   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
 //                    an advise renders nothing rather than a reply it rejects
-//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 //   __MAGUS_BIN  path to the binary, when it is not on PATH
 //   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 //                    host can choose its own fail-open or fail-closed stance
@@ -974,11 +1007,13 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 //
 // The defaults are Claude Code's event and response shape.
 //
-// __MAGUS_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
-// its activity event so a reader can tell which host produced an observation;
+// The host name and the session are ATTRIBUTION to magus, not policy. magus records them
+// on its activity event so a reader can tell which host produced an observation;
 // neither one can change the verdict, and a host whose event carries no session
 // id records none and is judged exactly the same. The subagent id is the exception:
-// magus grades a subagent it saw spawned under that spawn's job.
+// magus grades a subagent it saw spawned under that spawn's job. This file does read the
+// host name for one thing, which reply shape its host can parse, and that is why it must
+// be given.
 //
 // __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 // magus's own configuration surface, so a variable this template invents must stay
@@ -1014,7 +1049,7 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // wired to magus-command.sh. The arms ship ahead of the wiring for the same reason
 // the deny arm shipped ahead of its first rule, so a Codex config can move to Buzz
 // without a window where a decision renders as nothing.
-// magus-guard-template: 17
+// magus-guard-template: 18
 // magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
 // claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
@@ -1098,6 +1133,10 @@ final ENVELOPE_PREFIX = "\{";
 // host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
 // and magus can change it without every installed config being edited.
 final SUPPORTED_FLAGS = ["--observes-skill-loads"];
+
+// The host this entry is wired into. Valued, and read by this file rather than forwarded
+// as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
+final AGENT_NAME_FLAG = "--agent-name";
 
 fun envOr(name: str, fallback: str) > str {
     final value = env\get(name) catch "";
@@ -1184,12 +1223,6 @@ fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
-}
-
-fun hasKey(event: any?, key: str) > bool {
-    final m = event as? {str: any};
-    if (m == null) { return false; }
-    return m![key] != null;
 }
 
 // trimTrailingNewlines matches shell command substitution, which drops every
@@ -1340,7 +1373,7 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
 // supports, and decides for itself that an argument it did not declare is reported and
 // dropped rather than refused, because a misconfigured entry must not block work.
 fun shellFlags(args: [str]) > [str] {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [<str>]) catch null;
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) {
         // Unreachable while every supported flag is a switch, and caught anyway: NOTHING
         // here may raise, and a `catch` that exists only for that is cheaper than a
@@ -1360,6 +1393,14 @@ fun shellFlags(args: [str]) > [str] {
         if (parsed!.values[name] != null) { supported.append(name); }
     }
     return supported;
+}
+
+// agentNameOf is the host this entry names on its argv, or "" when it names none. Empty is
+// not defaulted: `magus shell` refuses installed glue that names no host (MGS3024).
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 // warn names the file, because a host reports a hook's stderr with the entry's matcher at
@@ -1511,19 +1552,10 @@ fun noticeReply(eventName: str, text: str) > str {
 // askBranch picks the ask arm for the host that sent this event. Only a reply this
 // file assembled may claim --renders-ask; see the header for why Codex never receives
 // permissionDecision "ask".
-fun askBranch(event: any?, codexNamed: bool, codexInferred: bool, pushRule: str?) > str {
+fun askBranch(event: any?, codex: bool, pushRule: str?) > str {
     final declared = env\get("HOST_ASK_BRANCH") catch "";
     if (declared != "") { return declared; }
-    if (!codexNamed and !codexInferred) { return ASK_CLAUDE; }
-    // Only a wiring that NAMED itself Codex may render an ask as context the agent is free
-    // to skip. Inferring the host from a `turn_id` key is a guess over an envelope nobody
-    // schema-types, and the two ways of being wrong are not equal: the context arm turns an
-    // ask into a note that is silently ignored, while the deny arm turns it into a refusal
-    // the person can act on. A host that adds `turn_id` therefore costs a deny, not a pass.
-    if (!codexNamed) {
-        return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT,
-            with: "this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here");
-    }
+    if (!codex) { return ASK_CLAUDE; }
     final blocker = codexPromptBlocker(event, pushRule: pushRule);
     if (blocker == "") { return ASK_CODEX_PROMPTS; }
     return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
@@ -1564,7 +1596,7 @@ fun main(args: [str]) > void {
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+    final agentName = agentNameOf(args);
     // Overridable alongside the other dot-paths rather than fixed: a host that points
     // HOST_EVENT_PATH at a field it DOES populate for MCP calls loses the namespace test
     // otherwise, and gets that field judged as a shell command.
@@ -1584,14 +1616,10 @@ fun main(args: [str]) > void {
     var pushRule: str? = null;
     if (!rawEvent) { pushRule = pushRuleFor(field(event, dotPath: eventPath)); }
 
-    // Codex is recognized by its event as well as by name, so a Codex wiring that forgot
-    // __MAGUS_AGENT_NAME still never receives permissionDecision "ask", which it would run
-    // unasked. turn_id is a required field of Codex's published PreToolUse input and of its
-    // PermissionRequest input; no vendored Claude Code or Cursor schema names it.
-    //
-    // The two are kept apart rather than or-ed, because askBranch trusts them differently.
-    final codexNamed = agentName == "codex";
-    final codexInferred = hasKey(event, key: "turn_id");
+    // Codex is the host the entry names, never one the event's shape suggests: see
+    // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
+    // is assembled here.
+    final codex = agentName == "codex";
 
     var response = env\get("HOST_RESPONSE") catch "";
     var rendersAsk = [<str>];
@@ -1599,7 +1627,7 @@ fun main(args: [str]) > void {
         response = permissionResponse(pushRule);
         rendersAsk = ["--renders-ask"];
     } else if (response == "") {
-        response = DENY_HEAD + askBranch(event, codexNamed: codexNamed, codexInferred: codexInferred, pushRule: pushRule)
+        response = DENY_HEAD + askBranch(event, codex: codex, pushRule: pushRule)
             + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         rendersAsk = ["--renders-ask"];
     }
@@ -1710,9 +1738,9 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // A host with no file-write hook still gets the command rules; it just misses
 // this one. That is a coverage difference to record, not a reason to skip it.
 //
-// __MAGUS_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
-// magus-command.buzz: attribution recorded on the activity event, never an
-// input to the verdict.
+// `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
+// magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
+// attribution recorded on the activity event, never an input to the verdict.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -1721,7 +1749,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 //                    whole envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
-//   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
+//   __MAGUS_BIN      the binary, when it is not on PATH
 //   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found
 //   __MAGUS_FAILED_RESPONSE  the same, for a magus found but unable to judge
 //   __MAGUS_UNREADABLE_RESPONSE  what to print when the write never arrived, the one
@@ -1743,7 +1771,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // coverage declaration states what a HOST gets. The Codex ask arm is implemented and
 // graded here anyway, so a Codex config can move to Buzz with no window in which a
 // decision renders as nothing.
-// magus-guard-template: 17
+// magus-guard-template: 18
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -1825,12 +1853,6 @@ fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
-}
-
-fun hasKey(event: any?, key: str) > bool {
-    final m = event as? {str: any};
-    if (m == null) { return false; }
-    return m![key] != null;
 }
 
 // trimTrailingNewlines matches shell command substitution, which drops every
@@ -1916,28 +1938,34 @@ fun warn(message: str) > void {
     io\stderr.write("magus-path.buzz: {message}\n") catch void;
 }
 
-// This surface declares no flags, and parses its argv ANYWAY.
+// The host this entry is wired into, the one argument this surface takes; see
+// AGENT_NAME_FLAG in magus-command.buzz.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// reports every other argument. Empty is not defaulted: `magus shell` refuses installed
+// glue that names no host (MGS3024).
 //
 // An argument that arrives here means the wiring meant something by it, and reading none
 // at all accepted that in silence. Reported and then ignored, which is the same policy
 // every other arm of this file takes: a misconfigured entry must not block work, and must
 // not be invisible either.
-fun reportArgv(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
-    if (parsed == null) { return; }
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares none. "
+        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    reportArgv(args);
+    final agentName = agentNameOf(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // The binary is resolved BEFORE stdin is drained, where magus-command.buzz reads first.
     // That file's notices are held to one firing per session and the session id keys them,
@@ -1968,9 +1996,9 @@ fun main(args: [str]) > void {
     final agent = field(event, dotPath: agentPath);
     final transcript = field(event, dotPath: transcriptPath);
 
-    // Codex by name or by its event's turn_id, exactly as magus-command.buzz decides
-    // it. No Codex rule prompts for a write, so there an ask renders as a deny.
-    final isCodex = agentName == "codex" or hasKey(event, key: "turn_id");
+    // Codex is the host the entry names, exactly as magus-command.buzz decides it. No
+    // Codex rule prompts for a write, so there an ask renders as a deny.
+    final isCodex = agentName == "codex";
     var askBranch = env\get("HOST_ASK_BRANCH") catch "";
     if (askBranch == "") {
         if (isCodex) { askBranch = ASK_CODEX; } else { askBranch = ASK_CLAUDE; }
@@ -2052,11 +2080,14 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 //   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
-//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 //   __MAGUS_BIN  path to the binary, when it is not on PATH
 //
+// REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
+// observation, which the configuration `magus agent harness apply` writes on the
+// command. Without it nothing is recorded and MGS3024 goes to stderr.
+//
 // The defaults are Claude Code's event shape, matching its two siblings. A
-// different host overrides the dot-paths and passes its own __MAGUS_AGENT_NAME.
+// different host overrides the dot-paths.
 //
 // NO magus-guard-coverage line, and that absence is deliberate rather than an
 // oversight: a coverage declaration states how much of a VERDICT a host can
@@ -2064,7 +2095,7 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -2169,23 +2200,36 @@ fun warn(message: str) > void {
     io\stderr.write("magus-observe.buzz: {message}\n") catch void;
 }
 
-// This surface declares no flags, and parses its argv anyway: an argument arriving here
-// means the wiring meant something by it, and reading none at all accepted that silently.
-fun reportArgv(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
-    if (parsed == null) { return; }
+// The host this entry is wired into, the one argument this surface takes; see
+// AGENT_NAME_FLAG in magus-command.buzz.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// reports every other argument: an argument arriving here means the wiring meant
+// something by it, and reading none at all accepted that silently.
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares none. "
+        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    reportArgv(args);
+    // No host, no record, and a coded line on stderr rather than a guess: an observation
+    // filed under the wrong host is wrong, and a silent gap is invisible.
+    final agentName = agentNameOf(args);
+    if (agentName == "") {
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
+            + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
+            + "the commands it writes name the host.");
+        return;
+    }
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent observer is SILENT, where an absent guard is loud.
     //
@@ -2256,8 +2300,11 @@ does, so it selects nothing and imports no JSON reader at all.
 // the rest; nothing in the payload becomes the note, because a note is a sentence
 // a person writes. It prints NOTHING and always exits 0. Override:
 //
-//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
 //   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
+// checkpoint, which the configuration `magus agent harness apply` writes on the
+// command. Without it nothing is recorded and MGS3024 goes to stderr.
 //
 // A host whose envelope spells those fields differently passes them as flags
 // instead, since `--session` and `--transcript` outrank the envelope, and a host that
@@ -2272,7 +2319,7 @@ does, so it selects nothing and imports no JSON reader at all.
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, matching the templates beside it and the
 // missing `set -e` in the sh copy. A hook that can fail is a hook that can break
@@ -2343,20 +2390,32 @@ fun warn(message: str) > void {
     io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
 }
 
-// This surface declares no flags, and parses its argv anyway: an argument arriving here
-// means the wiring meant something by it, and reading none at all accepted that silently.
-fun reportArgv(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
-    if (parsed == null) { return; }
+// The host this entry is wired into, the one argument this surface takes; see
+// AGENT_NAME_FLAG in magus-command.buzz.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// reports every other argument: an argument arriving here means the wiring meant
+// something by it, and reading none at all accepted that silently.
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares none. "
+        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    reportArgv(args);
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+    // No host, no record, and a coded line on stderr rather than a guess.
+    final agentName = agentNameOf(args);
+    if (agentName == "") {
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
+            + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
+            + "the commands it writes name the host.");
+        return;
+    }
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
     // unenforced, because there is no rule, so announcing it would interrupt the end of
@@ -2437,7 +2496,7 @@ escape its sh twin builds out of a pipeline is one byte-indexed loop here.
 // carries no verdict on no surface. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, matching the templates beside it and the
 // missing `set -e` in the sh copy. A hook that can fail is a hook that can break the
@@ -2662,8 +2721,11 @@ It declares no `magus-guard-coverage` line, for the reason
 # the rest; nothing in the payload becomes the note, because a note is a sentence
 # a person writes. It prints NOTHING and always exits 0. Override:
 #
-#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
 #   __MAGUS_BIN   path to the binary, when it is not on PATH
+#
+# REQUIRED argument: `--agent-name <host>`, the host recorded alongside the checkpoint,
+# which the configuration `magus agent harness apply` writes on the command. Without it
+# nothing is recorded and a coded message (MGS3024) goes to stderr.
 #
 # A host whose envelope spells those fields differently passes them as flags
 # instead - `--session` and `--transcript` outrank the envelope - and a host that
@@ -2679,13 +2741,24 @@ It declares no `magus-guard-coverage` line, for the reason
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
 # of where the work stopped is worth strictly less than the work.
 
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
+if [ -z "$agent_name" ]; then
+  printf '%s\n' "magus-checkpoint.sh: [MGS3024] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  exit 0
+fi
 # Prefer the workspace's own ./magus over PATH, found by walking UP to the
 # magusfile: a hook runs in the host's session directory, which is not always the
 # workspace root. The command template carries the full reasoning.
@@ -2710,7 +2783,7 @@ fi
 # usage, and that would otherwise reach the host as this hook's response every
 # time a session ends. The absence shows up where it is actionable instead - as
 # an empty checkpoint list in `magus session`.
-"$__MAGUS_BIN" session checkpoint --agent-name "$__MAGUS_AGENT_NAME" >/dev/null 2>&1
+"$__MAGUS_BIN" session checkpoint --agent-name "$agent_name" >/dev/null 2>&1
 
 exit 0
 ```
@@ -2798,7 +2871,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 17
+# magus-guard-template: 18
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.

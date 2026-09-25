@@ -23,7 +23,7 @@ Read the records a magus stage upstream in a pipe writes, and write records for 
 
 Report whether another record is coming from the magus stage writing this script's stdin, waiting for it or for that stage to end. Errors when no magus stage writing records feeds this script.
 
-**Signature:** `pipe\more() -> bool` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L157)
+**Signature:** `pipe\more() -> bool` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L158)
 
 **Returns:** bool
 
@@ -51,7 +51,7 @@ try {
 
 Return the next record from the magus stage writing this script's stdin, waiting for it. Errors past the last record, and when no magus stage writing records feeds this script.
 
-**Signature:** `pipe\next() -> PipeRecord` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L170)
+**Signature:** `pipe\next() -> PipeRecord` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L171)
 
 **Returns:** map[string]any
 
@@ -59,7 +59,7 @@ Return the next record from the magus stage writing this script's stdin, waiting
 
 Return every record not yet read, once the magus stage writing this script's stdin has ended. Errors when no magus stage writing records feeds this script.
 
-**Signature:** `pipe\all() -> [PipeRecord]` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L186)
+**Signature:** `pipe\all() -> [PipeRecord]` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L187)
 
 **Returns:** any
 
@@ -67,7 +67,7 @@ Return every record not yet read, once the magus stage writing this script's std
 
 Write record to stdout for the stage downstream. A record read from upstream passes through byte for byte; one built here is written from its fields, and needs a type. A run.scope record's projects are what a run downstream that names none runs on.
 
-**Signature:** `pipe\emit(record)` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L207)
+**Signature:** `pipe\emit(record)` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L208)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -99,7 +99,7 @@ try {
 
 Return the files the target of record declared as outputs and that exist on disk now, sorted by workspace-relative path. record names a project and a target, like a run.target.result.
 
-**Signature:** `pipe\outputs(record) -> [Artifact]` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L238)
+**Signature:** `pipe\outputs(record) -> [Artifact]` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L239)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -132,7 +132,7 @@ try {
 
 Copy artifact to dest, keeping its mode, and return dest. It writes a temporary file beside dest and renames it into place, so a symlink at dest is replaced rather than written through and an artifact exported onto itself survives.
 
-**Signature:** `pipe\exportTo(artifact, dest) -> string` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L281)
+**Signature:** `pipe\exportTo(artifact, dest) -> string` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L282)
 
 | Parameter  | Type             | Optional | Description |
 | ---------- | ---------------- | -------- | ----------- |
@@ -145,7 +145,7 @@ Copy artifact to dest, keeping its mode, and return dest. It writes a temporary 
 
 Return every version of artifact the cache stored, newest first, with identical consecutive content collapsed: when its bytes changed, which its VCS history cannot say.
 
-**Signature:** `pipe\history(artifact) -> [ArtifactVersion]` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L346)
+**Signature:** `pipe\history(artifact) -> [ArtifactVersion]` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L347)
 
 | Parameter  | Type             | Optional | Description |
 | ---------- | ---------------- | -------- | ----------- |
@@ -157,7 +157,7 @@ Return every version of artifact the cache stored, newest first, with identical 
 
 Compare artifact on disk against its most recent different cached version with your difftool: $MAGUS_DIFFTOOL, else $DIFFTOOL, else `git diff --no-index`. It renders nothing itself.
 
-**Signature:** `pipe\diff(artifact)` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L371)
+**Signature:** `pipe\diff(artifact)` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L372)
 
 | Parameter  | Type             | Optional | Description |
 | ---------- | ---------------- | -------- | ----------- |
@@ -167,7 +167,7 @@ Compare artifact on disk against its most recent different cached version with y
 
 Return what a target returned, a str or a [str], from its run.target.value record. Errors for any other record.
 
-**Signature:** `pipe\value(record) -> any` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L456)
+**Signature:** `pipe\value(record) -> any` - [source](https://github.com/egladman/magus/blob/main/std/pipe.go#L459)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |

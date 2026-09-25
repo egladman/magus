@@ -31,9 +31,12 @@ final FIELDS = "number,title,state,author,headRefName,baseRefName,headRefOid,isD
 final LIMIT = 100;
 
 // The queue's own surface: a stack's top carries QUEUE_LABEL plus a method, a kick-back
-// sets REJECTED and ends its comment with KICK_MARKER, and QUEUE_STATUS is its status.
-final QUEUE_LABEL = "queue: ";
-final REJECTED = "merge-queue: rejected";
+// sets KICKED or, for KICK_REGENERATION, NEEDS_REGENERATION, and ends its comment with
+// KICK_MARKER, and QUEUE_STATUS is its status. The status labels share QUEUE_LABEL, so
+// only a method after it is intent.
+final QUEUE_LABEL = "merge-queue: ";
+final KICKED = "merge-queue: kicked back";
+final NEEDS_REGENERATION = "merge-queue: needs regeneration";
 final KICK_MARKER = "<!-- mergequeue: ";
 final QUEUE_STATUS = "merge-queue";
 
@@ -42,6 +45,9 @@ final HYGIENE = "pr hygiene";
 final GREEN = ["SUCCESS", "SKIPPED", "NEUTRAL"];
 // A run that never got to judge the change; rerunning it is safe.
 final TRANSIENT = ["CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"];
+// Steps that prepare the runner before any of the change's own work: a job that failed
+// only in these never judged the change either.
+final SETUP_STEPS = ["Set up job", "Run actions/checkout@", "Run actions/setup-", "Run jdx/mise-action@"];
 final METHODS = ["squash", "merge", "rebase"];
 
 // SENSITIVE holds the paths where a mistake is a security or queue-integrity bug, so a
@@ -108,6 +114,8 @@ object Facts {
     // run_attempt by workflow run id; a run is one head's, so above 1 means that head
     // was rerun already.
     attempts: {str: int} = {<str: int>},
+    // Names of the failed steps by check job id.
+    failedSteps: {str: [str]} = {<str: [str]>},
     // Kick-back paths that are declared outputs.
     generated: [str] = [<str>],
 }
@@ -123,6 +131,7 @@ object Evidence {
     top: int? = null,
     rerun: [str] = [<str>],
     sensitive: [str] = [<str>],
+    drifted: [str] = [<str>],
 }
 
 object Record {
@@ -326,8 +335,8 @@ export fun stackTops(p: Pull, open: [Pull], depth: int) > [int] {
 }
 
 export fun hasQueueLabel(labels: [str]) > bool {
-    foreach (l in labels) {
-        if (l.startsWith(QUEUE_LABEL)) {
+    foreach (m in METHODS) {
+        if (labels.indexOf(QUEUE_LABEL + m) != null) {
             return true;
         }
     }
@@ -388,7 +397,8 @@ export fun stateOf(p: Pull, open: [Pull]) > str {
         return "conflicting";
     }
     // A kick-back takes the intent away; intent back on means someone queued it again.
-    if (p.labels.indexOf(REJECTED) != null and !intent(p, open: open)) {
+    final kicked = p.labels.indexOf(KICKED) != null or p.labels.indexOf(NEEDS_REGENERATION) != null;
+    if (kicked and !intent(p, open: open)) {
         return "kicked-back";
     }
     if (failing(p.checks).len() > 0) {
@@ -493,30 +503,95 @@ export fun conflictModel(conflicts: [Conflict], sensitive: [str]) > str {
     return "sonnet";
 }
 
-// annotationsOf keeps a check run's failure annotations that name a file; the runner's
-// own ("Process completed with exit code 1") and magus's per-project ones name "." or
-// ".github" and say nothing about where.
-export fun annotationsOf(body: str) > [Annotation] !> any {
-    final acc = mut[<Annotation>];
-    foreach (a in serialize\jsonDecode(body).listValue()) {
-        final path = a.q("path").stringValue();
-        if (a.q("annotation_level").stringValue() != "failure" or a.q("start_line").integerValue() <= 0
-            or path == "." or path == ".github") {
-            continue;
+// DRIFT_PHRASE is the wording every generate gate's throw shares even where a sibling
+// project skips the MGS4006 code.
+final DRIFT_PHRASE = "regeneration changed";
+
+// isDriftMessage says whether message is a drift gate's own throw, not a failure a
+// person or agent has to read code for.
+fun isDriftMessage(message: str) > bool {
+    return message.indexOf("MGS4006") != null or message.indexOf(DRIFT_PHRASE) != null;
+}
+
+// driftPaths reads the comma-separated file list a drift gate's throw ends its first
+// line with, after the LAST colon-space (an earlier one is the diagnostic code or a
+// clause, not the list). Buzz has no lastIndexOf, so this walks forward taking the last
+// hit, the same idiom withoutFooter in advice.buzz uses for a footer marker.
+fun driftPaths(message: str) > [str] {
+    final line = message.split("\n")[0];
+    var at: int? = null;
+    var scan = 0;
+    while (true) {
+        final hit = line.indexOf(": ", from: scan);
+        if (hit == null) {
+            break;
         }
-        acc.append(Annotation{ path = path, message = a.q("message").stringValue() });
+        at = hit;
+        scan = hit! + 2;
+    }
+    if (at == null) {
+        return [<str>];
+    }
+    final acc = mut [<str>];
+    foreach (part in line.sub(at! + 2).split(", ")) {
+        final path = part.trim();
+        if (path != "") {
+            acc.append(path);
+        }
     }
     return acc;
 }
 
-// mechanicalMessage is a failure a formatter or a regeneration fixes.
-fun mechanicalMessage(message: str) > bool {
-    return message.indexOf("not properly formatted") != null or message.indexOf("MGS4006") != null;
+// annotationsOf keeps a check run's failure annotations that name a file; the runner's
+// own ("Process completed with exit code 1") and magus's per-project ones name "." or
+// ".github" and say nothing about where. A drift gate's own throw is the one exception:
+// it names its files in the MESSAGE, not in path or start_line, so a "." or missing line
+// there does not disqualify it.
+export fun annotationsOf(body: str) > [Annotation] !> any {
+    final acc = mut[<Annotation>];
+    foreach (a in serialize\jsonDecode(body).listValue()) {
+        final path = a.q("path").stringValue();
+        final message = a.q("message").stringValue();
+        if (a.q("annotation_level").stringValue() != "failure") {
+            continue;
+        }
+        if (!isDriftMessage(message) and (a.q("start_line").integerValue() <= 0
+            or path == "." or path == ".github")) {
+            continue;
+        }
+        acc.append(Annotation{ path = path, message = message });
+    }
+    return acc;
 }
 
-// checkClass says what one failing check is: transient, hygiene, elsewhere (its annotated
-// files are none the change touched), mechanical, source, or unexplained (no annotation
-// names a file).
+// setupOnly reports failed steps that are all runner setup, and at least one.
+export fun setupOnly(steps: [str]) > bool {
+    if (steps.len() == 0) {
+        return false;
+    }
+    foreach (step in steps) {
+        var setup = false;
+        foreach (prefix in SETUP_STEPS) {
+            if (step.startsWith(prefix)) {
+                setup = true;
+            }
+        }
+        if (!setup) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// mechanicalMessage is a failure a formatter fixes.
+fun mechanicalMessage(message: str) > bool {
+    return message.indexOf("not properly formatted") != null;
+}
+
+// checkClass says what one failing check is: transient, setup (it failed before the
+// change's own work ran), hygiene, drift (the drift gate's own throw), elsewhere (its
+// annotated files are none the change touched), mechanical, source, or unexplained (no
+// annotation names a file).
 export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
     if (TRANSIENT.indexOf(c.conclusion) != null) {
         return "transient";
@@ -524,12 +599,16 @@ export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
     if (c.name == HYGIENE) {
         return "hygiene";
     }
+    if (setupOnly(facts.failedSteps[c.job] ?? [<str>])) {
+        return "setup";
+    }
     final notes = facts.annotations[c.job] ?? [<Annotation>];
     if (notes.len() == 0) {
         return "unexplained";
     }
     var touched = false;
     var mechanical = true;
+    var drift = true;
     foreach (n in notes) {
         if (p.files.indexOf(n.path) != null) {
             touched = true;
@@ -537,6 +616,12 @@ export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
         if (!mechanicalMessage(n.message)) {
             mechanical = false;
         }
+        if (!isDriftMessage(n.message)) {
+            drift = false;
+        }
+    }
+    if (drift) {
+        return "drift";
     }
     if (!touched) {
         return "elsewhere";
@@ -547,7 +632,7 @@ export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
     return "source";
 }
 
-fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str], sensitive: [str]) > Evidence {
+fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str], sensitive: [str], drifted: [str]) > Evidence {
     var kick = "";
     var kickPaths = [<str>];
     var kickUrl = "";
@@ -567,6 +652,7 @@ fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str],
         top = top,
         rerun = rerun,
         sensitive = sensitive,
+        drifted = drifted,
     };
 }
 
@@ -578,8 +664,19 @@ fun recordOf(p: Pull, state: str, action: str, model: str, reason: str, evidence
 fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
     final bad = failing(p.checks);
     final classes = mut [<str>];
+    final drifted = mut [<str>];
     foreach (c in bad) {
-        classes.append(checkClass(c, p: p, facts: facts));
+        final cls = checkClass(c, p: p, facts: facts);
+        classes.append(cls);
+        if (cls == "drift") {
+            foreach (n in facts.annotations[c.job] ?? [<Annotation>]) {
+                foreach (path in driftPaths(n.message)) {
+                    if (drifted.indexOf(path) == null) {
+                        drifted.append(path);
+                    }
+                }
+            }
+        }
     }
     final runs = mut [<str>];
     var rerunnable = true;
@@ -592,7 +689,7 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         if (cls != "unexplained") {
             explained = true;
         }
-        if (cls != "transient" and cls != "elsewhere" and cls != "unexplained") {
+        if (cls != "transient" and cls != "setup" and cls != "elsewhere" and cls != "unexplained") {
             rerunnable = false;
         }
         if (cls == "source") {
@@ -607,13 +704,20 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         i = i + 1;
     }
     final failed = names(bad, conclusion: null).join(", ");
-    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
     // An unexplained failure beside an explained one is taken to follow it, the way the
     // `ci gate` aggregate fails when a shard does. Alone, nothing says where it is.
     if (!explained) {
         return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
     }
     if (rerunnable and runs.len() > 0) {
+        // GitHub refuses to rerun a run that is still going, so wait for it to finish.
+        foreach (c in p.checks) {
+            if (c.conclusion == "PENDING" and runs.indexOf(c.run) != null) {
+                return recordOf(p, state: "red", action: "none", model: "none",
+                    reason: "red ({failed}) outside the files the change touched; its run is still going", evidence: plain);
+            }
+        }
         foreach (run in runs) {
             if ((facts.attempts[run] ?? 1) > 1) {
                 return recordOf(p, state: "red", action: "fix", model: "opus",
@@ -622,12 +726,37 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         }
         return recordOf(p, state: "red", action: "rerun", model: "none",
             reason: "red ({failed}) outside the files the change touched",
-            evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: runs, sensitive: sensitive));
+            evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: runs, sensitive: sensitive, drifted: [<str>]));
     }
     if (source or rerunnable) {
         return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}) in the change's own source", evidence: plain);
     }
-    // What is left is hygiene and formatting or drift, maybe beside a transient run.
+    // Every failing check is the drift gate's own throw, or an unexplained one that
+    // follows it the same way `ci gate` follows a shard above: an aggregate carries no
+    // annotation of its own, so it is never the thing that disqualifies a drift verdict.
+    // A red this shape has exactly one cause: files that need regenerating and
+    // committing. SENSITIVE exists to keep a hand-edit in guarded code off a mechanical
+    // model, and this red carries no hand-edit at all - the fix touches only what the
+    // drift names, so a sensitive path elsewhere in the PR is not this failure's doing
+    // and does not escalate it. A failing check that carries its OWN non-drift
+    // annotation (a real test or lint failure) is a hand-edit's failure, and stays opus.
+    final hasDrift = classes.indexOf("drift") != null;
+    var driftOnly = hasDrift;
+    foreach (cls in classes) {
+        if (cls != "drift" and cls != "unexplained") {
+            driftOnly = false;
+        }
+    }
+    if (hasDrift and !driftOnly) {
+        return recordOf(p, state: "red", action: "fix", model: "opus",
+            reason: "red ({failed}): a drift throw beside a failing check that is not drift", evidence: plain);
+    }
+    if (driftOnly) {
+        return recordOf(p, state: "red", action: "fix", model: "sonnet",
+            reason: "generated files drifted: {drifted.join(", ")}; regenerate and commit them",
+            evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: drifted));
+    }
+    // What is left is hygiene and formatting, maybe beside a transient run.
     final mechanical = classes.indexOf("mechanical") != null;
     if (mechanical and sensitive.len() > 0) {
         return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}) in a change to {sensitive[0]}", evidence: plain);
@@ -645,10 +774,15 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
 }
 
 fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
-    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
+    // The queue never merges it, whatever is fixed: a person regenerates and merges it.
+    if (p.labels.indexOf(NEEDS_REGENERATION) != null or (p.kick != null and p.kick!.code == "KICK_REGENERATION")) {
+        return recordOf(p, state: "kicked-back", action: "none", model: "none",
+            reason: "KICK_REGENERATION: its own code regenerates its generated files; regenerate them and merge it by hand", evidence: plain);
+    }
     if (p.kick == null) {
         return recordOf(p, state: "kicked-back", action: "fix", model: "opus",
-            reason: "labeled {REJECTED}, and no kick-back comment carries its facts", evidence: plain);
+            reason: "labeled {KICKED}, and no kick-back comment carries its facts", evidence: plain);
     }
     final kick = p.kick!;
     if (kick.code == "KICK_CONFLICT") {
@@ -677,7 +811,7 @@ fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
 export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
     final state = stateOf(p, open: open);
     final sensitive = sensitivePaths(p.files);
-    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
     if (state == "merged") {
         return recordOf(p, state: state, action: "none", model: "none", reason: "merged", evidence: Evidence{});
     }
@@ -692,7 +826,7 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
         final parent = parentOf(p, open: open)!;
         return recordOf(p, state: state, action: "none", model: "none",
             reason: "stacked on #{parent.number}, which has not merged",
-            evidence: evidenceOf(p, conflicts: [<str>], parent: parent.number, top: null, rerun: [<str>], sensitive: sensitive));
+            evidence: evidenceOf(p, conflicts: [<str>], parent: parent.number, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
     }
     if (state == "conflicting") {
         final paths = mut [<str>];
@@ -709,7 +843,7 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
             reason = "conflicts with {p.base} in a change to {sensitive[0]}";
         }
         return recordOf(p, state: state, action: "merge-base", model: model, reason: reason,
-            evidence: evidenceOf(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive));
+            evidence: evidenceOf(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
     }
     if (state == "kicked-back") {
         return kickRecord(p, facts: facts, sensitive: sensitive);
@@ -754,7 +888,7 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
         top = tops[0];
     }
     return recordOf(p, state: state, action: "queue", model: "none", reason: "green on a current base",
-        evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: top, rerun: [<str>], sensitive: sensitive));
+        evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: top, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
 }
 
 // render is the status line: the record with the evidence it holds and nothing empty.
@@ -771,6 +905,7 @@ export fun render(r: Record) > str {
     if (r.evidence.parent != null) { e["stack_parent"] = r.evidence.parent!; }
     if (r.evidence.top != null) { e["stack_top"] = r.evidence.top!; }
     if (r.evidence.rerun.len() > 0) { e["rerun_runs"] = r.evidence.rerun; }
+    if (r.evidence.drifted.len() > 0) { e["drifted_paths"] = r.evidence.drifted; }
     // Sensitive paths explain a model, so a record with none leaves them out; a few name
     // the reason, and the agent reads the full diff anyway.
     if (r.model != "none" and r.evidence.sensitive.len() > 0) {
@@ -966,6 +1101,25 @@ fun annotationsFor(p: Pull) > {str: [Annotation]} !> any {
     return acc;
 }
 
+// failedStepsFor reads the failed step names of p's failing check jobs, one request each.
+fun failedStepsFor(p: Pull) > {str: [str]} !> any {
+    final acc = mut{<str: [str]>};
+    foreach (c in failing(p.checks)) {
+        if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
+            continue;
+        }
+        final steps = mut [<str>];
+        foreach (line in capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/jobs/{c.job}",
+            "--jq", `.steps[] | select(.conclusion == "failure") | .name`]).split("\n")) {
+            if (line.trim() != "") {
+                steps.append(line.trim());
+            }
+        }
+        acc[c.job] = steps;
+    }
+    return acc;
+}
+
 fun attemptsOf(runs: [str]) > {str: int} !> any {
     final acc = mut{<str: int>};
     foreach (run in runs) {
@@ -1007,14 +1161,15 @@ fun records(sel: Selector) > [Record] !> any {
         final state = stateOf(p, open: open);
         var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>] };
         if (state == "red") {
-            facts = Facts{ annotations = annotationsFor(p) };
+            facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p) };
         } else if (state == "kicked-back" and p.kick != null) {
             facts = Facts{ generated = generatedOf(p.kick!.paths) };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
         if (r.action == "rerun") {
-            r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, attempts = attemptsOf(r.evidence.rerun) });
+            r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, failedSteps = facts.failedSteps,
+                attempts = attemptsOf(r.evidence.rerun) });
         }
         acc.append(r);
     }
@@ -1065,7 +1220,7 @@ final SAMPLE = `{
   "headRefName": "delete-ci-shard", "headRefOid": "6d401ee42f1190d5dc092c450b7ff62764e793c0",
   "isCrossRepository": false, "isDraft": false, "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING",
   "number": 317, "state": "OPEN", "title": "refactor(ci)!: delete ci-shard; run a shard of a saved plan with magus run --stdin",
-  "labels": [{"id": "LA_1", "name": "merge-queue: rejected", "color": "d93f0b"}],
+  "labels": [{"id": "LA_1", "name": "merge-queue: kicked back", "color": "b60205"}],
   "files": [{"path": ".github/workflows/ci.yaml", "additions": 10, "deletions": 3}, {"path": "types/diagnostic.go", "additions": 1, "deletions": 1}],
   "statusCheckRollup": [
     {"__typename": "CheckRun", "conclusion": "CANCELLED", "detailsUrl": "https://github.com/egladman/magus/actions/runs/36064348656/job/107850475236", "name": "queue advice", "status": "COMPLETED", "workflowName": "Queue advice"},
@@ -1086,7 +1241,7 @@ test "a gh pr view record reads into a pull request, each check at its newest ru
     assert\equal(p.head, want: "delete-ci-shard", message: "head");
     assert\equal(p.author, want: "egladman", message: "author");
     assert\equal(p.autoMerge, want: false, message: "a null autoMergeRequest is no intent");
-    assert\equal(p.labels, want: ["merge-queue: rejected"], message: "labels");
+    assert\equal(p.labels, want: ["merge-queue: kicked back"], message: "labels");
     assert\equal(p.files, want: [".github/workflows/ci.yaml", "types/diagnostic.go"], message: "files");
     assert\equal(p.checks.len(), want: 3, message: "queue advice once, and the queue's own status left out");
     assert\equal(p.checks[0].conclusion, want: "SUCCESS", message: "the cancelled run was superseded");
@@ -1107,7 +1262,7 @@ test "an unreadable kick marker is a kick with no code" {
 
 test "state is the first thing between a pull request and its merge" {
     final bottom = Pull{ number = 1, head = "a" };
-    final top = Pull{ number = 2, head = "b", base = "a", labels = ["queue: squash"] };
+    final top = Pull{ number = 2, head = "b", base = "a", labels = ["merge-queue: squash"] };
     final open = [bottom, top];
     final expect = fun(p: Pull, want: str) > void {
         assert\equal(stateOf(p, open: open), want: want, message: "#{p.number} {want}");
@@ -1119,12 +1274,14 @@ test "state is the first thing between a pull request and its merge" {
     expect(top, want: "waiting-below");
     expect(Pull{ number = 3, mergeable = "CONFLICTING", checks = failed }, want: "conflicting");
     expect(Pull{ number = 3, mergeState = "DIRTY" }, want: "conflicting");
-    expect(Pull{ number = 3, labels = [REJECTED], checks = failed }, want: "kicked-back");
-    expect(Pull{ number = 3, labels = [REJECTED], autoMerge = true }, want: "queued");
+    expect(Pull{ number = 3, labels = [KICKED], checks = failed }, want: "kicked-back");
+    expect(Pull{ number = 3, labels = [NEEDS_REGENERATION] }, want: "kicked-back");
+    expect(Pull{ number = 3, labels = [KICKED], autoMerge = true }, want: "queued");
     expect(Pull{ number = 3, autoMerge = true, checks = failed }, want: "red");
     expect(Pull{ number = 3, mergeState = "BEHIND" }, want: "behind");
     expect(Pull{ number = 3, autoMerge = true }, want: "queued");
-    expect(Pull{ number = 3, labels = ["queue: rebase"] }, want: "queued");
+    expect(Pull{ number = 3, labels = ["merge-queue: rebase"] }, want: "queued");
+    expect(Pull{ number = 3, labels = ["merge-queue: queued", "merge-queue: Squash"] }, want: "needs-queue");
     expect(bottom, want: "queued");
     expect(Pull{ number = 3, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, want: "needs-queue");
 }
@@ -1173,6 +1330,85 @@ test "annotations keep failures that name a file" {
     assert\equal(notes[0].path, want: "types/diagnostic.go", message: "path");
 }
 
+test "annotationsOf keeps a drift gate's own throw despite its generic path" {
+    final body = "[\{\"path\": \".\", \"start_line\": 0, \"annotation_level\": \"failure\", "
+        + "\"message\": \"generate failed in magus: buzz: uncaught error: MGS4006: generate: "
+        + "regeneration changed generated files, and they are already written in this tree; "
+        + "review and commit them. Drift in another project needs `magus affected generate:rw` "
+        + "first: MAGUS.md\"}, "
+        + "\{\"path\": \".github\", \"start_line\": 3918, \"annotation_level\": \"failure\", "
+        + "\"message\": \"Process completed with exit code 1.\"}]";
+    final notes = annotationsOf(body);
+    assert\equal(notes.len(), want: 1, message: "the runner's own noise stays out; the drift throw stays in");
+    assert\equal(driftPaths(notes[0].message), want: ["MAGUS.md"], message: "the trailing file list");
+}
+
+// PR #330: `magus plan` threw MGS4006 with no path GitHub could attribute to a file, so
+// this read "no annotation names a file" and went to opus before the message itself was
+// read. This is the fix: the message names MAGUS.md, and regenerating and committing it
+// is mechanical work.
+test "PR 330's exact MGS4006 throw is mechanical: regenerate and commit the path it names" {
+    final message = "generate failed in magus: buzz: uncaught error: MGS4006: generate: "
+        + "regeneration changed generated files, and they are already written in this tree; "
+        + "review and commit them. Drift in another project needs `magus affected generate:rw` "
+        + "first: MAGUS.md";
+    final p = Pull{ number = 330, files = ["MAGUS.md"], checks = [red("magus plan", conclusion: "FAILURE", job: "7")] };
+    final facts = Facts{ annotations = {"7": [Annotation{ path = ".", message = message }]} };
+    final r = classify(p, open: [p], facts: facts);
+    assert\equal([r.state, r.action, r.model], want: ["red", "fix", "sonnet"], message: r.reason);
+    assert\equal(r.reason, want: "generated files drifted: MAGUS.md; regenerate and commit them", message: "reason names the path");
+    assert\equal(r.evidence.drifted, want: ["MAGUS.md"], message: "drifted_paths");
+}
+
+// The live shape #330 actually failed with: `ci gate` is the aggregate that fails
+// whenever a shard or `magus plan` does, and carries no annotation of its own. It must
+// follow the drift verdict, the same as it follows any other explained failure. The PR
+// also touches libs/mergequeue source files for real reasons unrelated to this red;
+// that sensitive touch is not this failure's doing, so it does not escalate it.
+test "the live PR 330 shape: a drift throw plus ci gate's bare aggregate is still sonnet" {
+    final message = "generate failed in magus: buzz: uncaught error: MGS4006: generate: "
+        + "regeneration changed generated files, and they are already written in this tree; "
+        + "review and commit them. Drift in another project needs `magus affected generate:rw` "
+        + "first: MAGUS.md";
+    final plan = red("magus plan", conclusion: "FAILURE", job: "7");
+    final gate = red("ci gate", conclusion: "FAILURE", job: "8");
+    final p = Pull{ number = 330, files = ["MAGUS.md", "libs/mergequeue/apply.go"], checks = [plan, gate] };
+    // job "8" has no entry: ci gate carries no annotation of its own.
+    final facts = Facts{ annotations = {"7": [Annotation{ path = ".", message = message }]} };
+    final r = classify(p, open: [p], facts: facts);
+    assert\equal([r.state, r.action, r.model], want: ["red", "fix", "sonnet"], message: r.reason);
+    assert\equal(r.evidence.drifted, want: ["MAGUS.md"], message: "drifted_paths");
+}
+
+test "a drift throw beside a real failing check still needs opus" {
+    final drift = red("magus plan", conclusion: "FAILURE", job: "7");
+    final broken = red("go test", conclusion: "FAILURE", job: "8");
+    final facts = Facts{ annotations = {
+        "7": [Annotation{ path = ".", message = "MGS4006: generate: regeneration changed generated files; first: MAGUS.md" }],
+        "8": [Annotation{ path = "internal/cache/key.go", message = "want 1, got 2" }],
+    } };
+    final p = Pull{ number = 4, files = ["internal/cache/key.go"], checks = [drift, broken] };
+    final r = classify(p, open: [p], facts: facts);
+    assert\equal([r.state, r.action, r.model], want: ["red", "fix", "opus"], message: r.reason);
+}
+
+// Decision: a red where every failing check is drift (or a bare aggregate) stays
+// mechanical no matter which sensitive paths the PR touches, even a path the drift
+// message never names. The fix is regenerating and committing what the drift names;
+// nothing about libs/mergequeue's own hand-written logic is implicated by that failure,
+// so SENSITIVE has nothing to escalate. It escalates only when a failing check carries
+// its OWN non-drift annotation - see "a drift throw beside a real failing check still
+// needs opus" above, where the second check's own annotation is what forces opus.
+test "drift under libs/mergequeue stays mechanical even when the drift names a different path" {
+    final message = "MGS4006: generate: regeneration changed generated files; first: MAGUS.md";
+    final p = Pull{ number = 9, files = ["libs/mergequeue/apply.go"], checks = [red("magus plan", conclusion: "FAILURE", job: "7")] };
+    final facts = Facts{ annotations = {"7": [Annotation{ path = ".", message = message }]} };
+    final r = classify(p, open: [p], facts: facts);
+    assert\equal([r.state, r.action, r.model], want: ["red", "fix", "sonnet"], message: r.reason);
+    assert\equal(r.evidence.sensitive, want: ["libs/mergequeue/apply.go"], message: "the sensitive path is still recorded as evidence");
+    assert\equal(r.evidence.drifted, want: ["MAGUS.md"], message: "the drift's own paths, regardless of the sensitive touch");
+}
+
 test "a red record says whether to rerun, and who fixes it" {
     final files = ["internal/cache/key.go"];
     final at = fun (path: str, message: str) > {str: [Annotation]} => {"7": [Annotation{ path = path, message = message }]};
@@ -1189,6 +1425,11 @@ test "a red record says whether to rerun, and who fixes it" {
     expect([shard, gate], facts: Facts{ annotations = at("internal/cache/key.go", message: "want 1, got 2") }, action: "fix", model: "opus");
     expect([shard, gate], facts: Facts{ annotations = at("internal/cache/key.go", message: "File is not properly formatted (gofmt)") }, action: "fix", model: "sonnet");
     expect([shard, gate], facts: Facts{}, action: "fix", model: "opus");
+    expect([shard], facts: Facts{ failedSteps = {"7": ["Run jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654"]} }, action: "rerun", model: "none");
+    expect([shard], facts: Facts{ failedSteps = {"7": ["Run jdx/mise-action@7e36c90", "Run CI for shard"]} }, action: "fix", model: "opus");
+    expect([shard], facts: Facts{ failedSteps = {"7": ["Set up job"]}, attempts = {"11": 2} }, action: "fix", model: "opus");
+    expect([shard, red("magus shard 1: docs", conclusion: "PENDING", job: "12")],
+        facts: Facts{ failedSteps = {"7": ["Set up job"]} }, action: "none", model: "none");
     expect([red(HYGIENE, conclusion: "FAILURE", job: "9"), red("t", conclusion: "CANCELLED", job: "7")], facts: Facts{}, action: "fix", model: "sonnet");
     final rerun = classify(Pull{ number = 4, checks = [red("t", conclusion: "CANCELLED", job: "7")] }, open: [<Pull>], facts: Facts{});
     assert\equal(rerun.evidence.rerun, want: ["11"], message: "the run to rerun");
@@ -1205,7 +1446,7 @@ test "a failed hygiene check names the title or the changelog fragment" {
 }
 
 test "a kick-back is fixed by the model its code and paths call for" {
-    final kicked = fun (code: str, paths: [str]) > Pull => Pull{ number = 6, labels = [REJECTED], kick = Kick{ code = code, paths = paths, url = "u" } };
+    final kicked = fun (code: str, paths: [str]) > Pull => Pull{ number = 6, labels = [KICKED], kick = Kick{ code = code, paths = paths, url = "u" } };
     final expect = fun(p: Pull, facts: Facts, action: str, model: str) > void {
         final r = classify(p, open: [p], facts: facts);
         assert\equal([r.state, r.action, r.model], want: ["kicked-back", action, model], message: r.reason);
@@ -1215,7 +1456,9 @@ test "a kick-back is fixed by the model its code and paths call for" {
     expect(kicked("KICK_REFUSED", paths: ["MAGUS.md"]), facts: Facts{ generated = ["MAGUS.md"] }, action: "fix", model: "sonnet");
     expect(kicked("KICK_REFUSED", paths: [<str>]), facts: Facts{}, action: "fix", model: "opus");
     expect(kicked("KICK_NEW", paths: [<str>]), facts: Facts{}, action: "fix", model: "opus");
-    expect(Pull{ number = 6, labels = [REJECTED] }, facts: Facts{}, action: "fix", model: "opus");
+    expect(Pull{ number = 6, labels = [KICKED] }, facts: Facts{}, action: "fix", model: "opus");
+    expect(kicked("KICK_REGENERATION", paths: ["MAGUS.md"]), facts: Facts{ generated = ["MAGUS.md"] }, action: "none", model: "none");
+    expect(Pull{ number = 6, labels = [NEEDS_REGENERATION] }, facts: Facts{}, action: "none", model: "none");
     final r = classify(kicked("KICK_RED", paths: ["a.go"]), open: [<Pull>], facts: Facts{});
     assert\equal([r.evidence.kick, r.evidence.kickUrl], want: ["KICK_RED", "u"], message: "the kick in evidence");
 }
@@ -1230,7 +1473,7 @@ test "a green pull request is queued, a stack by the label on its top" {
     final top = Pull{ number = 3, head = "c", base = "b" };
     final stacked = classify(lone, open: [lone, mid, top], facts: Facts{});
     assert\equal(stacked.evidence.top, want: 3, message: "the top of the stack");
-    assert\equal(applyCommands(stacked, method: "rebase"), want: [["gh", "pr", "edit", "3", "--add-label", "queue: rebase"]], message: "the label on the top");
+    assert\equal(applyCommands(stacked, method: "rebase"), want: [["gh", "pr", "edit", "3", "--add-label", "merge-queue: rebase"]], message: "the label on the top");
     assert\equal(classify(mid, open: [lone, mid, top], facts: Facts{}).evidence.parent, want: 1, message: "the middle waits on the bottom");
 
     final fork = Pull{ number = 4, head = "d", base = "a" };
@@ -1256,7 +1499,7 @@ test "apply only queues and reruns" {
 test "model none goes only with no action or one apply takes" {
     final ps = [
         Pull{ number = 1, mergeable = "CONFLICTING" },
-        Pull{ number = 2, labels = [REJECTED] },
+        Pull{ number = 2, labels = [KICKED] },
         Pull{ number = 3, checks = [red("x", conclusion: "ACTION_REQUIRED", job: "1")] },
         Pull{ number = 4, checks = [red("x", conclusion: "STALE", job: "1")] },
         Pull{ number = 5, mergeState = "BEHIND" },

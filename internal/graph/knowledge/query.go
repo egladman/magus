@@ -40,6 +40,11 @@ func SeedsLazyLayer(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
 		return true
 	}
+	// An explicit file: or dir: node ID, which for a SCIP-indexed source exists only in the
+	// symbol shards. A prefix, not Contains: "profile:" would otherwise seed.
+	if strings.HasPrefix(input, types.KindFile+":") || strings.HasPrefix(input, types.KindDir+":") {
+		return true
+	}
 	q := parseQuery(input)
 	if len(q.fields["language"]) > 0 || len(q.reFields["language"]) > 0 {
 		return true
@@ -643,6 +648,36 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	slices.SortFunc(out.Defs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
 	slices.SortFunc(out.Refs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
 	out.FileCount = len(out.Refs)
+	return out, true
+}
+
+// Definitions resolves ref to a symbol and lists each file that defines it, with the
+// line range the index recorded where it recorded one. Every site is
+// DefinitionUnverified: checking a range against the tree reads files, which the graph
+// does not do. ok=false when ref does not resolve.
+func (g *Graph) Definitions(ref string) (types.KnowledgeDefinitionsOutput, bool) {
+	refs, ok := g.Refs(ref)
+	if !ok {
+		return types.KnowledgeDefinitionsOutput{}, false
+	}
+	n, _ := g.node(refs.Symbol)
+	endLine, _ := strconv.Atoi(n.Attrs[attrDefEndLine])
+	out := types.KnowledgeDefinitionsOutput{
+		Definition:    types.KnowledgeDefinitionsDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Symbol:        refs.Symbol,
+		Label:         refs.Label,
+	}
+	for _, d := range refs.Defs {
+		site := types.KnowledgeDefinitionSite{File: d.File, Status: types.DefinitionUnverified}
+		if len(d.Lines) > 0 {
+			site.StartLine = d.Lines[0]
+			if endLine >= site.StartLine {
+				site.EndLine = endLine
+			}
+		}
+		out.Definitions = append(out.Definitions, site)
+	}
 	return out, true
 }
 

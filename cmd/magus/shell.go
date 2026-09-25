@@ -97,6 +97,14 @@ func shellCmd(ctx context.Context, args []string) error {
 	return shellCmdWithErrorWriter(ctx, os.Stdin, os.Stdout, os.Stderr, args)
 }
 
+type envRefusalKey struct{}
+
+// withEnvRefusal hands shellCmd the MGS1046 error startup found, for it to answer as the
+// verdict instead of judging the input.
+func withEnvRefusal(ctx context.Context, err error) context.Context {
+	return context.WithValue(ctx, envRefusalKey{}, err)
+}
+
 // shellCmdWithErrorWriter is shellCmd's transport seam. The CLI reports a deny reason on
 // stderr for machine-readable output, while a host adapter has already carried that
 // reason in its host reply and must not leak a second, non-protocol message into the
@@ -111,11 +119,11 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// TestNoHostSpecificBehaviorInCode.
 	//
 	// The attribution flags name WHO produced the observation, and the guard's
-	// verdict never reads them. Every one is optional and unvalidated, including
-	// the host name, which is an opaque label the caller chooses rather than a set
-	// magus knows, because a magus that enumerated hosts would need a release per
-	// host. A wrapper that cannot extract a session id must still get a verdict;
-	// erroring here would block a tool call over metadata.
+	// verdict never reads what they say. The host name is an opaque label rather
+	// than a set magus knows, because a magus that enumerated hosts would need a
+	// release per host. A wrapper that cannot extract a session id must still get a
+	// verdict. The one requirement is that installed glue (--transport) names its
+	// host at all; guard.Judge refuses it otherwise (MGS3024).
 	sf := gen.BindShell(fset)
 	// --lease has no environment default: the guard reads BAGGAGE itself and ranks it below
 	// the spawn record and the marker, and a default here would pass that claim in as a
@@ -132,6 +140,22 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err
+	}
+
+	// Answered as a deny, never as the exit a startup refusal would be: a hook reads a
+	// failed guard as no verdict and fails open, so an environment magus knows is wrong
+	// would disarm every rule for the session. --observe carries no verdict to deny.
+	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe {
+		verdict := guard.Verdict{
+			SchemaVersion: agent.GuardSchemaVersion,
+			Decision:      "deny",
+			Reason: refusal.Error() + "\n" +
+				"Nothing was judged, so this call is blocked rather than cleared. Fix the environment the agent host runs in.",
+		}
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return enforceVerdictTo(errOut, opts, verdict)
 	}
 
 	input, readErr := shellInput(in, fset.Args())

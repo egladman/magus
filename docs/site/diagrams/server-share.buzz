@@ -6,7 +6,7 @@
 // The subset is drawn route by route rather than as one "read-only views" box, because the
 // asymmetry IS the message: a share link is a URL handed to a phone, so the graph, the diff
 // routes, the plan, /mcp and job control never appear on it. The three boxes on
-// the left are internal/serverhttp/server.go's shareGuarded map and its complement, in order.
+// the left are internal/server/server.go's shareGuarded map and its complement, in order.
 namespace serverShare;
 
 import "../libs/diagram/diagram" as _;

@@ -5,7 +5,6 @@ package sandbox
 import (
 	"errors"
 	"fmt"
-	"os"
 	"syscall"
 	"unsafe"
 
@@ -14,32 +13,20 @@ import (
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
-// Landlock ABI versions and the access bits they introduce.
-// v1 = kernel 5.13, v2 = 5.19 (adds REFER), v3 = 6.2 (adds TRUNCATE).
-// We probe the running kernel's ABI and mask fsAccessAll accordingly so
-// that landlock_create_ruleset does not fail with EINVAL on older kernels.
-const (
-	// fsAccessV1 is the complete set of FS access rights introduced in ABI v1.
-	fsAccessV1 uint64 = unix.LANDLOCK_ACCESS_FS_EXECUTE |
-		unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
-		unix.LANDLOCK_ACCESS_FS_READ_FILE |
-		unix.LANDLOCK_ACCESS_FS_READ_DIR |
-		unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
-		unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
-		unix.LANDLOCK_ACCESS_FS_MAKE_CHAR |
-		unix.LANDLOCK_ACCESS_FS_MAKE_DIR |
-		unix.LANDLOCK_ACCESS_FS_MAKE_REG |
-		unix.LANDLOCK_ACCESS_FS_MAKE_SOCK |
-		unix.LANDLOCK_ACCESS_FS_MAKE_FIFO |
-		unix.LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-		unix.LANDLOCK_ACCESS_FS_MAKE_SYM
-
-	// fsAccessV2 adds REFER (hard-link across directories) in ABI v2.
-	fsAccessV2 = fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER
-
-	// fsAccessV3 adds TRUNCATE in ABI v3.
-	fsAccessV3 = fsAccessV2 | unix.LANDLOCK_ACCESS_FS_TRUNCATE
-)
+// fsAccessV1 is every filesystem right landlock ABI v1 (Linux 5.13) handles.
+const fsAccessV1 uint64 = unix.LANDLOCK_ACCESS_FS_EXECUTE |
+	unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
+	unix.LANDLOCK_ACCESS_FS_READ_FILE |
+	unix.LANDLOCK_ACCESS_FS_READ_DIR |
+	unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
+	unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
+	unix.LANDLOCK_ACCESS_FS_MAKE_CHAR |
+	unix.LANDLOCK_ACCESS_FS_MAKE_DIR |
+	unix.LANDLOCK_ACCESS_FS_MAKE_REG |
+	unix.LANDLOCK_ACCESS_FS_MAKE_SOCK |
+	unix.LANDLOCK_ACCESS_FS_MAKE_FIFO |
+	unix.LANDLOCK_ACCESS_FS_MAKE_BLOCK |
+	unix.LANDLOCK_ACCESS_FS_MAKE_SYM
 
 // fsAccessReadOnly grants file and directory reads without execve permission.
 // This is sufficient for the dynamic linker to mmap(PROT_EXEC) shared libs
@@ -48,8 +35,6 @@ const (
 const fsAccessReadOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_FILE |
 	unix.LANDLOCK_ACCESS_FS_READ_DIR
 
-// fsAccessWrite is the full write/create/rename surface. REFER and TRUNCATE
-// are masked against the probed ABI before use.
 // fsAccessDirOnly are the rights only a directory can carry. Requesting any of them on
 // a regular file makes landlock_add_rule fail with EINVAL, which is how a rule for
 // /run/systemd/resolve/stub-resolv.conf (a FILE in an allowlist that assumed a
@@ -74,6 +59,9 @@ func accessForPathType(access uint64, isDir bool) uint64 {
 	return access &^ fsAccessDirOnly
 }
 
+// fsAccessWrite is the full write/create/rename surface. Device ioctls ride with
+// write: they can change device state, and a read-only grant never allowed that.
+// Bits the running ABI does not handle are masked off before use.
 const fsAccessWrite uint64 = unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
 	unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
 	unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
@@ -85,22 +73,49 @@ const fsAccessWrite uint64 = unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
 	unix.LANDLOCK_ACCESS_FS_MAKE_BLOCK |
 	unix.LANDLOCK_ACCESS_FS_MAKE_SYM |
 	unix.LANDLOCK_ACCESS_FS_REFER |
-	unix.LANDLOCK_ACCESS_FS_TRUNCATE
+	unix.LANDLOCK_ACCESS_FS_TRUNCATE |
+	unix.LANDLOCK_ACCESS_FS_IOCTL_DEV
 
-// landlock ABI version flag; queries supported version without creating a ruleset.
-const landlockCreateRulesetVersion = 1 // LANDLOCK_CREATE_RULESET_VERSION
+// handledAccessFS is every filesystem right the kernel at abi can deny. Requesting
+// a bit beyond the ABI makes landlock_create_ruleset fail with EINVAL. The ABI table
+// is https://docs.kernel.org/userspace-api/landlock.html#previous-limitations.
+// Network rights (v4) are deliberately absent: network is unconfined, and handling
+// them would deny every port no rule names.
+func handledAccessFS(abi int) uint64 {
+	access := fsAccessV1
+	if abi >= 2 {
+		access |= unix.LANDLOCK_ACCESS_FS_REFER
+	}
+	if abi >= 3 {
+		access |= unix.LANDLOCK_ACCESS_FS_TRUNCATE
+	}
+	if abi >= 5 {
+		access |= unix.LANDLOCK_ACCESS_FS_IOCTL_DEV
+	}
+	return access
+}
 
-// probeABI returns the highest landlock ABI version the running kernel supports.
-// Returns 0 and an error if landlock is not available on this kernel.
-func probeABI() (int, error) {
+// handledScopes is every IPC scope the kernel at abi can restrict to the domain.
+func handledScopes(abi int) uint64 {
+	if abi >= 6 {
+		return unix.LANDLOCK_SCOPE_SIGNAL | unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
+	}
+	return 0
+}
+
+// ABI reports the highest landlock ABI version the running kernel supports. It
+// changes no process state. The error wraps ErrUnsupported when landlock is absent
+// (ENOSYS), disabled at boot (EOPNOTSUPP) or its syscalls are filtered (EPERM from a
+// seccomp policy: the version query needs no privilege, so nothing else denies it).
+func ABI() (int, error) {
 	ret, _, errno := syscall.Syscall(
 		unix.SYS_LANDLOCK_CREATE_RULESET,
 		0, // NULL attr
 		0, // size = 0
-		landlockCreateRulesetVersion,
+		unix.LANDLOCK_CREATE_RULESET_VERSION,
 	)
 	if errno != 0 {
-		if errors.Is(errno, syscall.ENOSYS) || errors.Is(errno, syscall.EOPNOTSUPP) {
+		if errors.Is(errno, syscall.ENOSYS) || errors.Is(errno, syscall.EOPNOTSUPP) || errors.Is(errno, syscall.EPERM) {
 			return 0, fmt.Errorf("%w: landlock_create_ruleset(VERSION): %w", ErrUnsupported, errno)
 		}
 		return 0, fmt.Errorf("sandbox: landlock_create_ruleset(VERSION): %w", errno)
@@ -108,51 +123,13 @@ func probeABI() (int, error) {
 	return int(ret), nil
 }
 
-// abiAccessFS returns the union of all FS access bits supported at a given
-// landlock ABI version. Requesting bits beyond the ABI causes EINVAL.
-func abiAccessFS(abi int) uint64 {
-	switch {
-	case abi >= 3:
-		return fsAccessV3
-	case abi == 2:
-		return fsAccessV2
-	default:
-		return fsAccessV1
-	}
-}
-
-// Apply installs the policy as a landlock ruleset on the current process (inherited by all descendants).
-// Returns ErrUnsupported when landlock is unavailable (kernel <5.13 or LSM disabled).
-// Restriction is permanent and cannot be loosened; must be called before spell code or subprocesses start.
-func Apply(p *Policy) error {
-	if p == nil {
-		return nil
-	}
-
-	// Supported() promises that a false return means Apply reports ErrUnsupported, and
-	// until now Apply never asked. On a host where the landlock syscalls work but
-	// securityfs is not mounted (a GitHub Actions runner, for one), Supported() said no
-	// while Apply went ahead, built a ruleset, and failed with whatever the kernel
-	// objected to. Callers treat ErrUnsupported as a soft fallback and anything else as a
-	// hard failure, so that gap turned an unmountable securityfs into a broken run.
-	if !Supported() {
-		return fmt.Errorf("%w: sandbox: landlock securityfs is not mounted", ErrUnsupported)
-	}
-
-	// PR_SET_NO_NEW_PRIVS is mandatory for unprivileged landlock_restrict_self.
-	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
-		return fmt.Errorf("%w: sandbox: prctl(PR_SET_NO_NEW_PRIVS): %w", ErrUnsupported, err)
-	}
-	_ = unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0) // best-effort
-
-	abi, err := probeABI()
-	if err != nil {
-		return err
-	}
-	supportedFS := abiAccessFS(abi)
-
+// buildRuleset compiles rules and the given scopes into a landlock ruleset for abi and
+// returns its descriptor, close-on-exec. It changes no process state.
+func buildRuleset(rules []filesystem.Rule, abi int, scopes uint64) (int, error) {
+	handledFS := handledAccessFS(abi)
 	attr := unix.LandlockRulesetAttr{
-		Access_fs: supportedFS,
+		Access_fs: handledFS,
+		Scoped:    scopes,
 	}
 	fd, _, errno := syscall.Syscall(
 		unix.SYS_LANDLOCK_CREATE_RULESET,
@@ -162,73 +139,85 @@ func Apply(p *Policy) error {
 	)
 	if errno != 0 {
 		if errors.Is(errno, syscall.ENOSYS) || errors.Is(errno, syscall.EOPNOTSUPP) {
-			return fmt.Errorf("%w: sandbox: landlock_create_ruleset: %w", ErrUnsupported, errno)
+			return -1, fmt.Errorf("%w: sandbox: landlock_create_ruleset: %w", ErrUnsupported, errno)
 		}
-		return fmt.Errorf("sandbox: landlock_create_ruleset: %w", errno)
+		return -1, fmt.Errorf("sandbox: landlock_create_ruleset: %w", errno)
 	}
 	rulesetFD := int(fd)
-	defer unix.Close(rulesetFD)
+	if err := addPathRules(rulesetFD, rules, handledFS); err != nil {
+		unix.Close(rulesetFD)
+		return -1, err
+	}
+	return rulesetFD, nil
+}
 
-	for _, r := range p.FS.Rules {
-		if err := addPathRule(rulesetFD, r, supportedFS); err != nil {
-			// Missing paths on the host are not an error — a Rust toolchain
-			// allowlist may include $CARGO_HOME even when the user is
-			// running a Go-only project. The kernel only denies what is
-			// not listed; a never-seen path is implicitly denied either way.
-			if errors.Is(err, syscall.ENOENT) {
-				continue
-			}
+// addPathRules attaches each of rules to the ruleset. A missing path is not an error:
+// a Rust toolchain allowlist may name $CARGO_HOME on a host that only builds Go, and an
+// unlisted path is denied either way.
+func addPathRules(rulesetFD int, rules []filesystem.Rule, handledFS uint64) error {
+	for _, r := range rules {
+		if err := addPathRule(rulesetFD, r, handledFS); err != nil && !errors.Is(err, syscall.ENOENT) {
 			return fmt.Errorf("sandbox: landlock_add_rule %s: %w", r.Path, err)
 		}
 	}
+	return nil
+}
 
-	if _, _, errno := syscall.Syscall(
-		unix.SYS_LANDLOCK_RESTRICT_SELF,
-		uintptr(rulesetFD),
-		0,
-		0,
-	); errno != 0 {
+// restrictSelf sets no_new_privs, which unprivileged landlock_restrict_self
+// requires, and enforces the ruleset on the calling thread alone. The caller must
+// have locked the thread and must exec from it, since sibling threads stay
+// unconfined (https://docs.kernel.org/userspace-api/landlock.html#inheritance).
+func restrictSelf(rulesetFD int) error {
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return fmt.Errorf("sandbox: prctl(PR_SET_NO_NEW_PRIVS): %w", err)
+	}
+	if _, _, errno := syscall.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(rulesetFD), 0, 0); errno != 0 {
 		return fmt.Errorf("sandbox: landlock_restrict_self: %w", errno)
 	}
 	return nil
 }
 
-// addPathRule attaches one Rule to the ruleset by opening the path as
-// O_PATH | O_CLOEXEC and calling landlock_add_rule.
-// supportedFS is the ABI-probed bitmask; rule access bits are masked against
-// it so we never request rights the kernel does not understand.
-func addPathRule(rulesetFD int, r filesystem.Rule, supportedFS uint64) error {
+// addPathRule attaches one Rule to the ruleset. handledFS is the ABI's handled set;
+// rule rights are masked against it so the kernel is never asked for one it lacks.
+func addPathRule(rulesetFD int, r filesystem.Rule, handledFS uint64) error {
 	if !r.Read && !r.Write && !r.Exec {
 		return nil
 	}
-	dirFD, err := unix.Open(r.Path, unix.O_PATH|unix.O_CLOEXEC, 0)
+	// Rule paths were symlink-resolved when the policy was built. O_NOFOLLOW keeps a
+	// link planted at that path since then from granting whatever it points at.
+	pathFD, err := unix.Open(r.Path, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(dirFD)
+	defer unix.Close(pathFD)
+
+	var st unix.Stat_t
+	if err := unix.Fstat(pathFD, &st); err != nil {
+		return err
+	}
+	if st.Mode&unix.S_IFMT == unix.S_IFLNK {
+		return nil
+	}
 
 	var access uint64
 	if r.Read {
-		access |= fsAccessReadOnly & supportedFS
+		access |= fsAccessReadOnly
 	}
 	if r.Exec {
-		access |= unix.LANDLOCK_ACCESS_FS_EXECUTE & supportedFS
+		access |= unix.LANDLOCK_ACCESS_FS_EXECUTE
 	}
 	if r.Write {
-		access |= fsAccessWrite & supportedFS
+		access |= fsAccessWrite
 	}
-	// A rule's path may be a file (an allowlist entry pointing at a config, a socket, a
-	// resolv.conf symlink target); ask only for rights its type can hold.
-	var st unix.Stat_t
-	if err := unix.Fstat(dirFD, &st); err == nil {
-		access = accessForPathType(access, st.Mode&unix.S_IFMT == unix.S_IFDIR)
-	}
+	// A rule's path may be a file (an allowlist entry pointing at a config or a
+	// socket); ask only for rights its type can hold.
+	access = accessForPathType(access&handledFS, st.Mode&unix.S_IFMT == unix.S_IFDIR)
 	if access == 0 {
 		return nil
 	}
 	pba := unix.LandlockPathBeneathAttr{
 		Allowed_access: access,
-		Parent_fd:      int32(dirFD),
+		Parent_fd:      int32(pathFD),
 	}
 	if _, _, errno := syscall.Syscall6(
 		unix.SYS_LANDLOCK_ADD_RULE,
@@ -240,13 +229,4 @@ func addPathRule(rulesetFD int, r filesystem.Rule, supportedFS uint64) error {
 		return errno
 	}
 	return nil
-}
-
-// Supported reports whether a kernel-level sandbox can be installed on this
-// host. It does not modify any process state. A true return does not
-// guarantee Apply will succeed (the LSM may be present but disabled), but a
-// false return guarantees Apply will fail with ErrUnsupported.
-func Supported() bool {
-	_, err := os.Stat("/sys/kernel/security/landlock")
-	return err == nil
 }

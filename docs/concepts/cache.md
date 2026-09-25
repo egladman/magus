@@ -482,7 +482,7 @@ that is not a source file":
 
 | The fact                               | Declare                           | Because                                                        |
 | -------------------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| An environment variable's value        | `ctx.envInputs("CI")`             | Only the NAME is knowable statically; magus reads the value    |
+| An environment variable's value        | `ctx.envInputs("GOFLAGS")`        | Only the NAME is knowable statically; magus reads the value    |
 | A fact a person maintains              | `ctx.observes("schema-rev", "7")` | Magus cannot reach it, so the magusfile states it              |
 | A fact the tool can be asked           | `Tool{observe = Command{...}}`    | The tool knows which copy of the world it holds; magus asks it |
 | Nothing - the target must never replay | `skip_cache` policy               | It signs, publishes, mutates, or never returns                 |

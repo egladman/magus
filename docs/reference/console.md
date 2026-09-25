@@ -89,7 +89,7 @@ agent cannot reach the human route, so it cannot post as the person.
 on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
 watch a run from a phone. It serves only the plain-JSON `events` and `insight`
 routes, plus the metrics, activity, status, insight, and viewer Connect
-services (`internal/serverhttp/server.go`'s `shareGuarded` map is the exact list).
+services (`internal/server/server.go`'s `shareGuarded` map is the exact list).
 The viewer service is the typed twin of the run browser - a past run's journal
 holds the captured output plus the command that produced it, which a
 `magus query output --open` link has always carried in its fragment; the
@@ -446,7 +446,7 @@ that sends it out.
 A locally built console is not limited to the hosted site's copy: the server's
 LAN share listener (`POST /api/v1/share`) and its own `/console/` mount both
 resolve which built console to serve via `resolveConsoleDir`
-(`internal/serverhttp/share.go`), which honors `MAGUS_CONSOLE_DIR` as an override
+(`internal/server/share.go`), which honors `MAGUS_CONSOLE_DIR` as an override
 before falling back to `<workspace root>/console/gen`. Point it at a console
 you built and audited yourself to serve that copy instead of trusting any
 prebuilt one.

@@ -63,7 +63,7 @@ func TestWorkspaceShellAdviseDoesNotReplaceBuiltInAdvise(t *testing.T) {
 		Reason:   "workspace-specific rg note",
 	}}
 
-	v := Evaluate(deps, "rg Foo")
+	v := Evaluate(deps, "rg HandleRequest")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus refs")
 	assert.NotContains(t, v.Context, "workspace-specific rg note")

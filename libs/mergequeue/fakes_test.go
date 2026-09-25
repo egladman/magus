@@ -7,10 +7,13 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 
@@ -115,10 +118,14 @@ func newDoubles(t *testing.T) doubles {
 	}
 }
 
-// tip answers a fetch of the base branch with commit.
+// tip answers a fetch of the base branch with commit, dated when.
 func (d doubles) tip(commit string) {
 	d.vcs.EXPECT().FetchRef(mock.Anything, clone.Root, clone.Remote, "refs/heads/main").Return(commit, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Date: when}, nil).Maybe()
 }
+
+// when dates every commit the doubles name, and so every plan.
+var when = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
 // bot is the committer the provider names, and author wrote every change's head.
 var (
@@ -145,7 +152,7 @@ func (d doubles) caps(methods ...types.MergeMethod) {
 
 // plain says commit has one parent, so a review of it covers it, and author wrote it.
 func (d doubles) plain(commit string) {
-	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Parents: []string{base}, Author: author}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Parents: []string{base}, Author: author, Date: when}, nil)
 }
 
 // noCheckouts is the cleanup a validator or an applier runs, finding nothing left.
@@ -160,16 +167,33 @@ type building struct {
 	touched   []string
 	conflicts map[string][]magustypes.Conflict // by the head merged
 	fail      map[string]error                 // starting the merge, by the head merged
+	files     map[string]string                // written into every checkout, by path
 }
+
+// makeCheckout creates the checkout's directory, as the version control would; the
+// queue writes into it through an os.Root.
+func makeCheckout(_ context.Context, _, dir, _ string) error { return os.MkdirAll(dir, 0o755) }
 
 // builds answers what b says, and records each checkout's commit and head.
 func (d doubles) builds(b building) *checkouts {
 	co := &checkouts{onto: map[string]string{}, head: map[string]string{}}
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, _, dir, rev string) error {
+		RunAndReturn(func(ctx context.Context, _, dir, rev string) error {
 			co.mu.Lock()
 			defer co.mu.Unlock()
 			co.onto[dir] = rev
+			if err := makeCheckout(ctx, "", dir, rev); err != nil {
+				return err
+			}
+			for path, content := range b.files {
+				abs := filepath.Join(dir, filepath.FromSlash(path))
+				if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+					return err
+				}
+			}
 			return nil
 		}).Maybe()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, mock.Anything, candidateIdentity).
@@ -238,22 +262,6 @@ func (d doubles) marks(fail map[string]error) *trail {
 			}
 			tr.add(entry)
 			return fail[entry]
-		}).Maybe()
-	return tr
-}
-
-// flags records every flag the provider is asked to show as "<id> <flag> on" or "<id>
-// <flag> off". Set before [applierFor], it answers every flag ahead of that catch-all.
-func (d doubles) flags() *trail {
-	tr := &trail{}
-	d.provider.EXPECT().Flag(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, c types.Change, f types.Flag, on bool) error {
-			state := "off"
-			if on {
-				state = "on"
-			}
-			tr.add(c.ID + " " + string(f) + " " + state)
-			return nil
 		}).Maybe()
 	return tr
 }

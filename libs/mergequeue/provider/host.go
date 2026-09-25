@@ -10,10 +10,14 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 // hostDecls types the host module for the checker; the natives below are what run.
 const hostDecls = `export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}) > {str: any} !> any;
+export extern fun codeSpan(text: str) > str !> any;
+export extern fun codeBlock(text: str) > str !> any;
 `
 
 // maxBody bounds a response a provider reads: API answers are small, and an
@@ -28,10 +32,22 @@ var hostModule = buzz.Module{
 	Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
 		m := vm.NewMap()
 		m.MapSet("request", vm.DirectValue("mergequeue.request", request))
+		m.MapSet("codeSpan", vm.DirectValue("mergequeue.codeSpan", literal("codeSpan", types.CodeSpan)))
+		m.MapSet("codeBlock", vm.DirectValue("mergequeue.codeBlock", literal("codeBlock", types.CodeBlock)))
 		s.SetNativeModule("mergequeue", m)
 		s.SetModuleDecls("mergequeue", hostDecls)
 		return nil
 	},
+}
+
+// literal binds render, which shows untrusted text literally in Markdown, as a native.
+func literal(name string, render func(string) string) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) != 1 || !args[0].IsStr() {
+			return vm.Null, fmt.Errorf("mergequeue.%s: want (text: str)", name)
+		}
+		return vm.StrValue(render(args[0].AsString())), nil
+	}
 }
 
 func request(ctx context.Context, args []vm.Value) (vm.Value, error) {

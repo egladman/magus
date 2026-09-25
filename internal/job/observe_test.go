@@ -323,7 +323,7 @@ func newOverlapFixture(t *testing.T) overlapFixture {
 	bind := func(dir, id string) {
 		cacheDir := filepath.Join(dir, ".magus")
 		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte(id+"\n"), 0o644))
+		writeMarker(t, cacheDir, id+"\n")
 	}
 	bind(f.root, "a")
 	bind(f.other, "b")
@@ -433,7 +433,7 @@ func TestOverlapFootprints(t *testing.T) {
 			t.Parallel()
 			f := newOverlapFixture(t)
 			if tc.unbindB {
-				require.NoError(t, os.Remove(filepath.Join(f.other, ".magus", LeaseMarkerName)))
+				require.NoError(t, os.Remove(MarkerPath(filepath.Join(f.other, ".magus"))))
 			}
 			f.driver.EXPECT().OtherCheckouts(f.root).Return([]string{f.other}, tc.listErr)
 			if tc.askA {

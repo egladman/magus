@@ -364,8 +364,7 @@ var affectedCommand = Command{
 	Tags:        []string{"cli", "magus affected", "affected", "changed files", "vcs", "git", "bisect", "ci"},
 	Long: `Run a named target for every project that is affected by changes in
 version control. The active VCS adapter is picked by autodetect from .git, .hg,
-or .jj at the workspace root, or pinned with MAGUS_VCS_COMMAND_NAME /
-vcs.command_name. MAGUS_VCS_COMMAND overrides the command entirely. When
+or .jj at the workspace root, or pinned with MAGUS_VCS_NAME / vcs.name. When
 MAGUS_VCS_ENABLED=false (or vcs.enabled: false) affected detection
 short-circuits and falls back to the full project set with the source label
 "vcs disabled".
@@ -1409,13 +1408,15 @@ only look is the caller's knowledge, never magus's.
 
 --agent-name, --session, --transcript, and --event are attribution, not policy.
 They record who produced the observation on the activity event, and the verdict
-never reads them. All are optional and unvalidated, including the host name,
-which is an opaque label the caller chooses rather than a set magus knows: a
-magus that enumerated hosts would need a release per host, and a caller that
-cannot extract a session id must still be able to get a verdict.
+never reads what they say. The host name is an opaque label rather than a set
+magus knows: a magus that enumerated hosts would need a release per host, and a
+caller that cannot extract a session id must still be able to get a verdict.
 
 --transport names the form of the hook calling, such as sh or buzz, as that form
-declares it. With --agent-name and --session it names the CALLER that the
+declares it. Installed hook glue passes it, and glue that passes it without
+--agent-name is refused with MGS3024: the configuration "magus agent harness
+apply" writes names the host, so a call that does not is a stale or hand-written
+config, never defaulted to one host. With --agent-name and --session it names the CALLER that the
 once-per-session notices and the full text of a repeated deny are kept for, as
 one key, host/transport/session. A session id alone is not enough: two hosts can
 present the same id, and two forms of one hook wired into a session are two
@@ -1444,8 +1445,8 @@ not block every tool call.`,
 		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
 		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE"},
-		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
-		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session"},
+		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only); required with --transport"},
+		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 		{Name: "agent", Kind: FlagString, Doc: "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
@@ -1492,6 +1493,14 @@ and says so rather than falling back to a text search - a grep result
 and an index result answer different questions, and quietly substituting
 one for the other is how a wrong answer looks right.
 
+--definition answers "where is the body" with the exact lines: each
+definition as path:start-end, from the index's enclosing range, checked
+against the file on disk: verified when the file predates its index,
+changed (exit 1) when the symbol's name has left the start line, and
+unverified when the name is there but the file was edited since. An index
+that recorded no end line says so instead of guessing one. --source adds
+the lines themselves.
+
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
 every other grep-shaped tool. It is the replacement a guard deny routes a
@@ -1502,6 +1511,8 @@ questions and are not meant to share a contract.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
+		{Name: "definition", Kind: FlagBool, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
+		{Name: "source", Kind: FlagBool, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n"},
 		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace"},
 		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
@@ -1513,6 +1524,8 @@ questions and are not meant to share a contract.`,
 		{"Every reference to a symbol", "magus refs Open"},
 		{"By fully-qualified node ID", "magus refs symbol:github.com/egladman/magus/Open"},
 		{"As JSON", "magus refs Open -o json"},
+		{"Where a symbol's body starts and ends", "magus refs Open --definition"},
+		{"A symbol's body, by name", "magus refs Open --source"},
 		{"Raw text search, no index needed", "magus refs TODO --text"},
 	},
 }
@@ -1751,6 +1764,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
 				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable"},
+				{Name: "remote-cache-read", Kind: FlagBool, Doc: "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key"},
 			}, queueFacts...), queueCheckout...),
 		},
 		{
@@ -1767,6 +1781,8 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
 				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it"},
+				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
+				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
 				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable"},
 			}, queueFacts...), queueCheckout...),
 		},
@@ -2177,7 +2193,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "timeout", Kind: FlagDuration, Doc: "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout"},
 				{Name: "parent", Kind: FlagString, Doc: "The job this one is forked from"},
 				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
-				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this job may write; repeatable or comma-separated"},
+				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\\#b.md`); repeatable or comma-separated"},
 				{Name: "deny-paths", Kind: FlagCustom, Doc: "A path inside the write paths this job may not write; repeatable or comma-separated"},
 				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)"},
 				{Name: "depends-on", Kind: FlagCustom, Doc: "A job this one waits on; repeatable or comma-separated"},

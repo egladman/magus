@@ -207,13 +207,13 @@ func TestLoadDirIntoAbsentBoolInherits(t *testing.T) {
 func TestLoadDirIntoBoolTrueOverridesADefaultOffKey(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte("sandbox:\n  enabled: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte("dry_run: true\n"), 0o644))
 
-	require.False(t, Defaults().Sandbox.Enabled, "precondition: sandbox.enabled defaults false")
+	require.False(t, Defaults().DryRun, "precondition: dry_run defaults false")
 
 	cfg, err := loadDirInto(Defaults(), dir)
 	require.NoError(t, err)
-	assert.True(t, cfg.Sandbox.Enabled)
+	assert.True(t, cfg.DryRun)
 }
 
 // A key magus will not honor must fail the load, naming the key and the file it
@@ -302,8 +302,8 @@ func TestUnknownKeyMessage(t *testing.T) {
 			want: `magus.yaml:1: unknown key "concurrencyy"; did you mean "concurrency"?`,
 		},
 		"nested typo": {
-			doc:  "sandbox:\n  enabledd: true\n",
-			want: `magus.yaml:2: unknown key "enabledd"; did you mean "enabled"?`,
+			doc:  "sandbox:\n  modee: required\n",
+			want: `magus.yaml:2: unknown key "modee"; did you mean "mode"?`,
 		},
 		// No near key to suggest, so the note that this build may simply predate the key
 		// is appended. "unknown key" alone reads as "you misspelled it", and the two
@@ -314,9 +314,9 @@ func TestUnknownKeyMessage(t *testing.T) {
 				ward.StaleBinaryAdvice("", "") + ". If the key is genuinely misspelled, this note does not apply",
 		},
 		"two unknown keys": {
-			doc: "concurrencyy: 4\nsandbox:\n  enabledd: true\n",
+			doc: "concurrencyy: 4\nsandbox:\n  modee: required\n",
 			want: "magus.yaml:1: unknown key \"concurrencyy\"; did you mean \"concurrency\"?\n" +
-				"magus.yaml:3: unknown key \"enabledd\"; did you mean \"enabled\"?",
+				"magus.yaml:3: unknown key \"modee\"; did you mean \"mode\"?",
 		},
 		// A retired key is misconfiguration, and the error names the key that took its
 		// settings rather than guessing at a typo or blaming the binary.
@@ -353,4 +353,38 @@ func TestTypeMismatchKeepsYamlsOwnReport(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), path)
 	assert.Contains(t, err.Error(), "cannot unmarshal")
+}
+
+// jobs.stale_after defaults to 2h, and a written zero is never rather than the default:
+// non-zero-wins would read `0` as absent.
+func TestJobsStaleAfterHonorsAWrittenZero(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		yaml string
+		want string
+	}{
+		"absent is the default":   {want: "2h0m0s"},
+		"a written zero is never": {yaml: "jobs:\n  stale_after: 0s\n", want: "0s"},
+		"a written window wins":   {yaml: "jobs:\n  stale_after: 30m\n", want: "30m0s"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.yaml != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			}
+			cfg, err := LoadWorkspaceOnly(root)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.Jobs.StaleAfter.String())
+		})
+	}
+}
+
+func TestJobsStaleAfterRefusesANegativeWindow(t *testing.T) {
+	t.Parallel()
+
+	cfg := Defaults()
+	cfg.Jobs.StaleAfter = -1
+	assert.ErrorContains(t, Validate(cfg), "stale_after")
 }

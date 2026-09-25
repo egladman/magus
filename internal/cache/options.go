@@ -1,6 +1,9 @@
 package cache
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+)
 
 // Option configures a Cache at open time.
 type Option func(*Cache)
@@ -120,6 +123,14 @@ type RunOption func(*runCtx)
 // OnHit fires after a cache hit replay.
 func OnHit(fn func(*Result)) RunOption {
 	return func(rc *runCtx) { rc.onHit = fn }
+}
+
+// AuditReplay judges the absolute paths a cache hit just restored. A hit never invokes
+// the step's function, so a check that wraps the function sees nothing a replay writes;
+// this is where that check gets the replay. A non-nil error fails the step after the
+// replay is reported.
+func AuditReplay(fn func(ctx context.Context, s Step, written []string) error) RunOption {
+	return func(rc *runCtx) { rc.auditReplay = fn }
 }
 
 // OnMiss fires after a successful cache miss (fn returned no error).

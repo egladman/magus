@@ -81,6 +81,7 @@ var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 	hint.ToolDoctor:          {command: hint.Doctor},
 	hint.ToolStatus:          {command: hint.Status},
 	hint.ToolConfigGet:       {command: hint.ConfigView},
+	hint.ToolBuzz:            {command: hint.Buzz, operands: []string{"path"}},
 }
 
 // renderMCPCall normalizes an MCP call to a magus tool into a command line.

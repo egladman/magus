@@ -32,9 +32,9 @@
 // A host with no file-write hook still gets the command rules; it just misses
 // this one. That is a coverage difference to record, not a reason to skip it.
 //
-// __MAGUS_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
-// magus-command.buzz: attribution recorded on the activity event, never an
-// input to the verdict.
+// `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
+// magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
+// attribution recorded on the activity event, never an input to the verdict.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -43,7 +43,7 @@
 //                    whole envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
-//   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
+//   __MAGUS_BIN      the binary, when it is not on PATH
 //   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found
 //   __MAGUS_FAILED_RESPONSE  the same, for a magus found but unable to judge
 //   __MAGUS_UNREADABLE_RESPONSE  what to print when the write never arrived, the one
@@ -65,7 +65,7 @@
 // coverage declaration states what a HOST gets. The Codex ask arm is implemented and
 // graded here anyway, so a Codex config can move to Buzz with no window in which a
 // decision renders as nothing.
-// magus-guard-template: 17
+// magus-guard-template: 18
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -147,12 +147,6 @@ fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
-}
-
-fun hasKey(event: any?, key: str) > bool {
-    final m = event as? {str: any};
-    if (m == null) { return false; }
-    return m![key] != null;
 }
 
 // trimTrailingNewlines matches shell command substitution, which drops every
@@ -238,28 +232,34 @@ fun warn(message: str) > void {
     io\stderr.write("magus-path.buzz: {message}\n") catch void;
 }
 
-// This surface declares no flags, and parses its argv ANYWAY.
+// The host this entry is wired into, the one argument this surface takes; see
+// AGENT_NAME_FLAG in magus-command.buzz.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// reports every other argument. Empty is not defaulted: `magus shell` refuses installed
+// glue that names no host (MGS3024).
 //
 // An argument that arrives here means the wiring meant something by it, and reading none
 // at all accepted that in silence. Reported and then ignored, which is the same policy
 // every other arm of this file takes: a misconfigured entry must not block work, and must
 // not be invisible either.
-fun reportArgv(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
-    if (parsed == null) { return; }
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares none. "
+        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    reportArgv(args);
+    final agentName = agentNameOf(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // The binary is resolved BEFORE stdin is drained, where magus-command.buzz reads first.
     // That file's notices are held to one firing per session and the session id keys them,
@@ -290,9 +290,9 @@ fun main(args: [str]) > void {
     final agent = field(event, dotPath: agentPath);
     final transcript = field(event, dotPath: transcriptPath);
 
-    // Codex by name or by its event's turn_id, exactly as magus-command.buzz decides
-    // it. No Codex rule prompts for a write, so there an ask renders as a deny.
-    final isCodex = agentName == "codex" or hasKey(event, key: "turn_id");
+    // Codex is the host the entry names, exactly as magus-command.buzz decides it. No
+    // Codex rule prompts for a write, so there an ask renders as a deny.
+    final isCodex = agentName == "codex";
     var askBranch = env\get("HOST_ASK_BRANCH") catch "";
     if (askBranch == "") {
         if (isCodex) { askBranch = ASK_CODEX; } else { askBranch = ASK_CLAUDE; }

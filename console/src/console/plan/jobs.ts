@@ -86,8 +86,9 @@ export function isTerminal(s: JobState): boolean {
 // this view starts drawing attention to a job, and nothing downstream reads it. Ten minutes,
 // because a job is re-put on every state change and a working one moves far more often than that -
 // long enough that a normal running job is never called stale, short enough that a worker that died
-// is noticed while the reader still remembers spawning it. The store transitions nothing on its
-// own; what a stale job MEANS stays the reader's call.
+// is noticed while the reader still remembers spawning it. The store ends only jobs it can prove
+// dead (an ended ancestor, a vanished checkout, jobs.stale_after untaken); what a job that is
+// merely quiet MEANS stays the reader's call.
 export const STALE_AFTER_MS = 10 * 60 * 1000;
 
 // isStale is that threshold applied to one job. A terminal job is never stale - it is finished -

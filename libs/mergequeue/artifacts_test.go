@@ -105,7 +105,7 @@ func planBytes(t *testing.T, ids ...string) []byte {
 		g = append(g, change(id))
 	}
 	var buf bytes.Buffer
-	require.NoError(t, WritePlan(&buf, types.Plan{Base: "main", BaseCommit: base, Depth: 3, Partitions: [][]types.Change{g}}))
+	require.NoError(t, WritePlan(&buf, types.Plan{Base: "main", BaseCommit: base, CommitDate: when, Depth: 3, Partitions: [][]types.Change{g}}))
 	return buf.Bytes()
 }
 

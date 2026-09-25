@@ -2310,7 +2310,6 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 // every surface reads: the console gets it over the wire and the terminal gets it here, and a hint
 // that re-derived it would be the second lookup this join exists to prevent.
 func TestHintSinceLastReview(t *testing.T) {
-	t.Setenv("MAGUS_HINTS", "1")
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
 	reviewed := func(at types.VCSCheckpoint, files int) types.Diff {
 		rev := types.Diff{Files: []types.DiffFile{{Path: "a.go"}, {Path: "b.go"}}}

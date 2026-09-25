@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -82,6 +83,11 @@ type Store struct {
 	// them as whoever started the process.
 	actor    *Actor
 	cacheDir string
+	// clock, staleAfter and notices are the sweep's seams (see [Store.List]); nil means
+	// time.Now, the workspace's jobs.stale_after, and stderr.
+	clock      func() time.Time
+	staleAfter *time.Duration
+	notices    io.Writer
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -297,7 +303,7 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 			}
 		}
 		next = append(next, types.JobUnattributedWrite{
-			Path: path, Digest: s.digest(ctx, path), At: now,
+			Path: path, Digest: s.fileDigest(ctx, path), At: now,
 		})
 		if len(next) > MaxUnattributedWrites {
 			next = next[len(next)-MaxUnattributedWrites:]
@@ -366,14 +372,24 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		case i >= 0:
 			if kind != asExec {
 				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
+				row.CheckoutRoot = prev.CheckoutRoot
 			}
 			if kind != asObservation {
 				row.Unattributed = prev.Unattributed
 			}
 		case actor.Bound():
 			row.ReportedBase, row.BaseVerdict, row.Registered, row.Unattributed = "", "", 0, nil
+			row.CheckoutRoot = ""
+		}
+		// Only the sweep writes a reason, and a row brought back to life has none.
+		row.EndReason = prev.EndReason
+		if row.State.Live() {
+			row.EndReason = ""
 		}
 		row.Updated = now
+		if kind == asObservation && i >= 0 {
+			row.Updated = prev.Updated
+		}
 		row.Created = now
 		row.SchemaVersion = types.JobSchemaVersion
 		row.Releases = s.releases(ctx, prev, row, now)
@@ -399,12 +415,20 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
+//
+// Every read SWEEPS first: a live row magus can prove is dead is ended as no_return with
+// its [types.Job.EndReason], and one line per ended row goes to stderr. See [sweeper.dead]
+// for the rules. The sweep is the one write a read makes, and only when a row is dead, so
+// a plan with nothing to end is still read without either lock.
 func (s *Store) List() ([]types.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	f, _, err := s.read()
 	if err != nil {
+		return nil, err
+	}
+	if f, err = s.sweep(f); err != nil {
 		return nil, err
 	}
 	out := make([]types.Job, len(f.Jobs))
@@ -521,7 +545,21 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) [
 //
 // Runs under the store's mutex, which is deliberate (reading the previous owned set and
 // recording what it gave up has to be one step), and is why every branch below is bounded.
+//
+// A released declaration (`run.go#executeStages`) digests the lines the declaration spans
+// in the file now, as the footprint places them, so the next holder inherits that body
+// rather than a file other claims on it keep changing. A declaration no line is placed in
+// any more is absent.
 func (s *Store) digest(ctx context.Context, declared string) string {
+	p, decl := types.SplitClaim(declared)
+	if decl != "" {
+		return s.declarationDigest(ctx, p, decl)
+	}
+	return s.fileDigest(ctx, p)
+}
+
+// fileDigest is digest for a path SplitClaim already cut.
+func (s *Store) fileDigest(ctx context.Context, declared string) string {
 	if s.root == "" {
 		return types.DigestAbsent
 	}
@@ -570,6 +608,47 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 		return types.DigestUnreadable
 	}
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
+}
+
+// declarationDigest is digest for one declaration of the file at p. The file passes every
+// check digest makes of a whole file before a line of it is placed.
+func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
+	if whole := s.fileDigest(ctx, p); !strings.HasPrefix(whole, "sha256:") {
+		return whole
+	}
+	root, err := filepath.EvalSymlinks(s.root)
+	if err != nil {
+		return types.DigestUnreadable
+	}
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+	if err != nil {
+		return types.DigestUnreadable
+	}
+	res, err := vcs.Resolve(ctx, s.root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return types.DigestUnreadable
+	}
+	regions, err := res.VCS.RegionsBetween(ctx, s.root, path.Clean(p), nil, body)
+	if err != nil {
+		return types.DigestUnreadable
+	}
+	lines := strings.SplitAfter(string(body), "\n")
+	var spanned strings.Builder
+	found := false
+	for _, r := range regions {
+		if !types.NamesDeclaration(decl, r.Declaration) {
+			continue
+		}
+		found = true
+		for n := r.Lines[0]; n <= r.Lines[1] && n-1 < len(lines); n++ {
+			spanned.WriteString(lines[n-1])
+		}
+	}
+	if !found {
+		return types.DigestAbsent
+	}
+	sum := sha256.Sum256([]byte(spanned.String()))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // maxDigestBytes bounds one release digest, because the hash is computed while the store

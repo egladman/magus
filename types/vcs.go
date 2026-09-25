@@ -424,15 +424,33 @@ func (e *VCSUnsupportedError) Unwrap() error { return ErrVCSUnsupported }
 // is given but no built-in or registered implementation matches it.
 var ErrVCSUnknown = errors.New("vcs: unknown VCS")
 
+// MergeDriverGlobs are the workspace-relative globs a merge driver registration routes
+// to magus.
+type MergeDriverGlobs struct {
+	// Outputs are declared outputs, which the backend also marks generated where it can.
+	Outputs []string
+	// AutoResolve are the source files magus.yaml's vcs.auto_resolve opts into low-risk
+	// conflict resolution. They are source, and are never marked generated.
+	AutoResolve []string
+}
+
 // MergeDriverInstaller is the capability to register magus as the merge driver for
-// declared output globs.
+// declared output globs and the globs opted into auto-resolution, and to run it where the
+// VCS does not run it during the operation.
 type MergeDriverInstaller interface {
-	InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error
+	// RunMergeDriver runs the registered driver over paths, content conflicts in the
+	// working copy at root. A path the driver does not settle stays conflicted, and is
+	// no error. git, hg and Sapling ran the driver during the merge that left the
+	// conflicts, so they have nothing to run; jj records a conflict in the commit and
+	// runs a tool only through `jj resolve`.
+	RunMergeDriver(ctx context.Context, root string, paths []string) error
+	InstallMergeDriver(ctx context.Context, root string, globs MergeDriverGlobs) error
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
 	// EnsureMergeDriver re-installs only when the registration is missing or the
-	// declared globs have moved on, reporting whether it changed anything. Callers
-	// run it routinely, so it must be cheap and silent in the steady state.
-	EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error)
+	// globs have moved on, reporting whether it changed anything. Callers run it
+	// routinely, so it must be cheap and silent in the steady state. No globs at all
+	// installs nothing.
+	EnsureMergeDriver(ctx context.Context, root string, globs MergeDriverGlobs) (bool, error)
 	// MergeDriverCommand returns the command line the VCS runs for a conflict in a declared
 	// output, as the backend's effective config for root holds it, or "" when none is
 	// registered. It reads what CheckMergeDriver only confirms is present, so a caller can
@@ -744,6 +762,17 @@ type RegionReporter interface {
 	// Declaration empty: which lines changed is known even when what encloses them is not.
 	// An unresolvable base is an error, not an empty answer.
 	Regions(ctx context.Context, root, base string, files []FileChange) ([]RegionChange, error)
+	// RegionsBetween is Regions for two versions of one file the caller holds, such as a
+	// file and the edit about to be written over it: the regions of path that before and
+	// after differ in, placed by path's diff driver as root's attributes name it. Neither
+	// version is read from the checkout. A nil before is an empty file, so every line of
+	// after is a RegionNew region, which is how a caller reads where each declaration of a
+	// file lies.
+	RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]RegionChange, error)
+	// Drivers names the diff driver root's attributes give each of paths, the one Regions
+	// would place its lines with. A path with none is absent from the map: Regions reports
+	// its lines with no Declaration.
+	Drivers(ctx context.Context, root string, paths []string) (map[string]string, error)
 }
 
 // AncestryReporter is the capability to answer whether one revision is reachable from
@@ -956,6 +985,10 @@ type TreeMerger interface {
 	// reported in TreeMergeResult.Conflicts, never an error; an error means the merge could
 	// not run (an unknown revision, a backend too old to merge trees).
 	MergeTrees(ctx context.Context, root string, m TreeMerge) (TreeMergeResult, error)
+	// MergeBase returns the merge base a plain merge of a and b takes. ok is false when
+	// they have none, or several (a criss-cross), since no one commit is then the base
+	// either side's changes are measured from.
+	MergeBase(ctx context.Context, root, a, b string) (base string, ok bool, err error)
 }
 
 // GeneratedPathReporter is the capability to report which paths a REVISION marks as

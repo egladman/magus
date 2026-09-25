@@ -14,6 +14,7 @@ import (
 	// project.DefaultSpellRegistry().All() in testDependencies below runs against a registry
 	// nothing ever populated, and every raw-tool test would match against an empty
 	// catalog. See internal/interp/bindings/spell.go's init.
+	"github.com/egladman/magus/internal/agent"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
@@ -172,6 +173,39 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	assert.NotEqual(t, first.Lease, second.Lease)
 }
 
+// TestHostUnnamedRefusesWithTheCodeAndTheRemedy pins the whole verdict: a deny, never an
+// ask or a pass, carrying MGS3024 and the command that fixes it, and naming no form so
+// the sh and Buzz forms of one template reply byte for byte alike.
+func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
+	t.Parallel()
+	got := hostUnnamed()
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: got.Reason}, got)
+	assert.Contains(t, got.Reason, string(types.HookHostUnnamed))
+	assert.Contains(t, got.Reason, "--agent-name")
+	assert.Contains(t, got.Reason, "magus agent harness apply")
+	assert.NotContains(t, got.Reason, "buzz")
+}
+
+// TestJudgeRefusesInstalledGlueThatNamesNoHost is the refusal reached through Judge, before
+// any rule or dependency is consulted: zero Dependencies would fail a rule's lookup, so a
+// verdict equal to hostUnnamed's proves nothing past the check ran.
+func TestJudgeRefusesInstalledGlueThatNamesNoHost(t *testing.T) {
+	t.Parallel()
+	for _, host := range []string{"", "  "} {
+		got := Judge(context.Background(), Dependencies{}, Request{Input: "ls", Form: "sh", Host: host})
+		assert.Equal(t, hostUnnamed(), got, "host %q", host)
+	}
+}
+
+// TestJudgeLeavesCallersWithoutAFormAlone keeps the refusal to installed glue. A person
+// running `magus shell` names no form and no host, and is judged as before.
+func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
+	t.Parallel()
+	got := Judge(context.Background(), testDependencies(), Request{Input: ""})
+	assert.Equal(t, "pass", got.Decision, "an empty input from a person passes")
+	assert.NotContains(t, got.Reason, string(types.HookHostUnnamed))
+}
+
 // A command typed at a terminal is the CLI's: it records no session and is not an agent's,
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
@@ -306,4 +340,22 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	for _, rule := range listed {
 		assert.True(t, covered[rule[1]], "%s is in the policy's header with no real-input case here", rule[1])
 	}
+}
+
+// TestWriteOutsideTheWorkspaceIsAdvisedNothing: a scratch file or a user-level config is
+// not this workspace's to advise on, and the audit caught advisories on exactly those.
+// The same write inside the root still is.
+func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvBaggage, "")
+	root, elsewhere := t.TempDir(), t.TempDir()
+	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
+	write := func(path string) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: path, IsPath: true, Session: "s1", Host: "test-host"})
+	}
+
+	assert.Equal(t, "pass", write(elsewhere+"/CLAUDE.md").Decision)
+	inside := write(root + "/CLAUDE.md")
+	assert.Equal(t, "advise", inside.Decision)
+	assert.Equal(t, string(advisoryMemoryWrite), inside.Rule)
 }

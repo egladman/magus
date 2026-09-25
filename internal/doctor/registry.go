@@ -275,7 +275,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:           "job-tree",
-		Doc:            "live jobs nobody is left to wait on: an ended root ancestor, or no update within jobs.stale_after",
+		Doc:            "live jobs a holder took and left quiet past jobs.stale_after, or blocked on a dependency that ended without passing",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkJobTree() },
@@ -341,7 +341,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:           "environment-variables",
-		Doc:            "exported MAGUS_* variables magus does not recognize, which are usually typos",
+		Doc:            "exported MAGUS_* variables magus retired or that misspell one it reads (a failure, MGS1046), and ones it does not read at all (advice)",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkEnvVars() },

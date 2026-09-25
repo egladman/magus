@@ -10,7 +10,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 9,
+      "const": 11,
       "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
     },
     "id": {
@@ -36,7 +36,7 @@
       "items": {
         "type": "string"
       },
-      "description": "WritePaths is what this lease may write, empty on a read-only row by design."
+      "description": "WritePaths is what this lease may write, empty on a read-only row by design. An entry `<file>#<declaration>` claims one declaration of the file (see SplitClaim)."
     },
     "deny_paths": {
       "type": "array",

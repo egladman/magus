@@ -21,6 +21,18 @@ type writeFields struct {
 	Content string
 	OldText string
 	NewText string
+	// ReplaceAll replaces every occurrence of OldText rather than requiring exactly one.
+	ReplaceAll bool
+	// Edits is a sequence of replacements applied in order, for a host that sends several
+	// in one write; OldText and NewText are then empty.
+	Edits []textEdit
+}
+
+// textEdit is one replacement a host said a write makes.
+type textEdit struct {
+	OldText    string
+	NewText    string
+	ReplaceAll bool
 }
 
 // gradeWorkspaceWrite asks the workspace's magus\guard.write rule about a write the

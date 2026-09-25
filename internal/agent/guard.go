@@ -161,7 +161,15 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // never reached magus: a subagent's shell command or edit was graded as its parent's, under
 // the parent's lease rather than the job it was spawned for. A copy that predates this keeps
 // grading every subagent call that way, and nothing in a verdict says whose lease it used.
-const GuardTemplateVersion = 17
+//
+// 18: the host is named on the hook command, `--agent-name <host>`, rendered from the
+// harness spell's own mgs_getName(), and read from there ONLY. __MAGUS_AGENT_NAME is gone,
+// no template defaults to one host, and none infers a host from an event's shape.
+// Installed glue that names no host is refused with MGS3024 instead of answered in a
+// guessed host's dialect. This bumps because the CONFIG and the glue moved together: a
+// config written for 17 sets the environment variable an 18 copy never reads, so every
+// call it makes is refused until `magus agent harness apply` rewrites it.
+const GuardTemplateVersion = 18
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

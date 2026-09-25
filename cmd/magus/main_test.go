@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
@@ -701,6 +702,8 @@ func itoa(n int) string {
 // run), so behavior tests exercise the actual command, not a mock. It keeps the one
 // variable a helper re-exec of this binary is instructed with.
 func TestMain(m *testing.M) {
+	// A sandboxed child starts as this binary re-run as its launcher, as main does.
+	magus.MaybeLaunchSandbox()
 	// A spawned broker is this test binary re-run as `broker`, which testscript.Main
 	// does not dispatch, so it would run the whole suite again, detached. Not when this
 	// binary is a script's `exec magus`, which is the real CLI.
@@ -1036,6 +1039,76 @@ func BenchmarkStartupCompletionBash(b *testing.B) {
 // subcommand that actually needs the workspace open.
 func BenchmarkStartupLs(b *testing.B) {
 	benchStartup(b, []string{"ls"})
+}
+
+// TestAdoptedSandboxOnlyStrengthens: the forwarded --sandbox bound into this process's
+// globalCfg and reached nothing, so a confined client's work ran here under whatever the
+// server's workspace said. A client asking for less is refused; a client under a mode
+// this workspace does not meet is declined, and runs the work itself.
+func TestAdoptedSandboxOnlyStrengthens(t *testing.T) {
+	off, _, _ := buzzSandboxWorkspace(t, types.SandboxModeOff)
+	best, _, _ := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)
+	floor := func(ctx context.Context, mode types.SandboxMode) context.Context {
+		return proc.WithSandboxFloor(ctx, mode)
+	}
+	be, req := types.SandboxModeBestEffort, types.SandboxModeRequired
+
+	require.NoError(t, adoptedSandbox(off, "", []string{"build", "."}), "nothing asked, nothing checked")
+	require.NoError(t, adoptedSandbox(best, "", []string{"build", "."}))
+	require.NoError(t, adoptedSandbox(off, "", []string{"build", "--sandbox=off"}), "off and asked to stay off")
+	require.NoError(t, adoptedSandbox(floor(best, be), "", []string{"build"}), "a sandboxed client, a sandboxing workspace")
+	require.NoError(t, adoptedSandbox(floor(best, be), "", []string{"build", "--sandbox", "best-effort"}))
+
+	require.ErrorIs(t, adoptedSandbox(floor(off, be), "", []string{"build"}), proc.ErrNotAdoptable)
+	require.ErrorIs(t, adoptedSandbox(floor(best, req), "", []string{"build"}), proc.ErrNotAdoptable,
+		"a required client is not served by a best-effort workspace")
+	require.ErrorIs(t, adoptedSandbox(off, "", []string{"build", "--sandbox=best-effort"}), proc.ErrNotAdoptable)
+	require.ErrorIs(t, adoptedSandbox(floor(off, be), "", []string{"build", "--", "--sandbox=off"}), proc.ErrNotAdoptable,
+		"a tool's own argument after -- is not the flag")
+
+	require.ErrorIs(t, adoptedSandbox(best, "", []string{"build", "--sandbox=off"}), types.SandboxWeakened)
+	require.ErrorIs(t, adoptedSandbox(floor(off, req), "", []string{"build", "-sandbox=best-effort"}), types.SandboxWeakened)
+}
+
+func TestSandboxFlag(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want types.SandboxMode
+		set  bool
+	}{
+		{nil, "", false},
+		{[]string{"build", "."}, "", false},
+		{[]string{"--sandbox=required"}, types.SandboxModeRequired, true},
+		{[]string{"-sandbox", "off"}, types.SandboxModeOff, true},
+		{[]string{"--sandbox=required", "--sandbox=best-effort"}, types.SandboxModeBestEffort, true},
+		{[]string{"--", "--sandbox=off"}, "", false},
+		{[]string{"--sandbox-extra=off"}, "", false},
+		{[]string{"--sandbox=on"}, "", false},
+		{[]string{"--sandbox"}, "", false},
+	} {
+		want, set := sandboxFlag(tc.args)
+		assert.Equal(t, tc.want, want, "%q", tc.args)
+		assert.Equal(t, tc.set, set, "%q", tc.args)
+	}
+}
+
+// TestRefuseInheritedSandboxWeakened: a magus a sandboxed run started may not pass a
+// weaker --sandbox to shed its parent's mode, and may pass a stronger one.
+func TestRefuseInheritedSandboxWeakened(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv(run.SandboxEnvVar, "required")
+	require.ErrorIs(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), types.SandboxWeakened)
+	require.ErrorIs(t, refuseInheritedSandboxWeakened(types.SandboxModeBestEffort), types.SandboxWeakened)
+	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeRequired))
+
+	t.Setenv(run.SandboxEnvVar, "best-effort")
+	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeRequired), "a nested run may strengthen")
+
+	t.Setenv("MAGUS_LEVEL", "0")
+	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), "at the top level the person's flag is the authority")
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv(run.SandboxEnvVar, "")
+	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), "a parent that ran unsandboxed passes nothing down")
 }
 
 // TestIsDeclaredRunRejectsEverythingButThreeBareTokens pins the shape half of the job-dispatch

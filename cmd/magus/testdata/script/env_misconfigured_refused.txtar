@@ -1,0 +1,48 @@
+# A MAGUS_* variable that is provably wrong, a retired name or a near miss of one magus
+# reads, stops every command before any work, version included, with one line per
+# variable saying what to do instead (MGS1046). An unknown name that is neither passes:
+# it may be a newer magus's or a repository's own. An empty value counts as unset.
+
+env MAGUS_NO_WAIT=1
+env MAGUS_CACHE_DIRR=/tmp/c
+env MAGUS_OWN_TOOL=1
+! exec magus version
+! stdout .
+stderr '\[MGS1046\] MAGUS_CACHE_DIRR is set, but magus does not read it; did you mean MAGUS_CACHE_DIR\?'
+stderr '^MAGUS_NO_WAIT was removed in v0.5.0; delete it'
+! stderr MAGUS_OWN_TOOL
+stderr 'see: https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1046/'
+
+# `magus shell` is an agent host's guard hook, and a hook that exits without a verdict is
+# read as allow. So it DENIES, exit 2, with the refusal as the reason, even for a command
+# that would pass.
+! exec magus shell -o json 'ls -la'
+stdout '"decision": "deny"'
+stdout 'MGS1046'
+stdout 'MAGUS_NO_WAIT was removed in v0.5.0'
+
+# The same through the shipped Buzz glue a host runs: `magus buzz` carries on so the glue
+# can reach `magus shell`, and the host receives a deny, not the empty reply of a broken
+# guard.
+stdin pass-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript
+stdout '"permissionDecision":"deny"'
+stdout 'MGS1046'
+! stdout 'magus guard is NOT running'
+
+# --observe carries no verdict, so there is nothing to deny.
+exec magus shell --observe 'README.md'
+! stdout deny
+
+env MAGUS_NO_WAIT=
+env MAGUS_CACHE_DIRR=
+env MAGUS_LEVEL=1
+exec magus version
+! stderr MGS1046
+
+stdin pass-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript
+! stdout 'permissionDecision'
+
+-- pass-command.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}

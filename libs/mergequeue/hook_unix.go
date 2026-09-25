@@ -1,8 +1,9 @@
-//go:build unix
+//go:build linux || darwin || dragonfly || freebsd || netbsd || openbsd
 
 package mergequeue
 
 import (
+	"fmt"
 	"os/exec"
 	"syscall"
 )
@@ -13,6 +14,28 @@ func isolate(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-func interrupt(cmd *exec.Cmd) error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGINT) }
+func signalGroup(cmd *exec.Cmd, kill bool) error {
+	sig := syscall.SIGINT
+	if kill {
+		sig = syscall.SIGKILL
+	}
+	return syscall.Kill(-cmd.Process.Pid, sig)
+}
 
-func kill(cmd *exec.Cmd) { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+// wait waits for the leader to exit, kills what is left of its group while the
+// leader's unreaped exit still holds the group's id, and only then reaps it. A kill
+// after the reap could reach another hook's group that took the id.
+func (g *group) wait() error {
+	exitErr := awaitExit(g.cmd.Process.Pid)
+	g.mu.Lock()
+	if exitErr == nil {
+		_ = signalGroup(g.cmd, true)
+	}
+	g.reaped = true
+	g.mu.Unlock()
+	err := g.cmd.Wait()
+	if exitErr != nil {
+		return fmt.Errorf("wait for the hook's exit, which left the processes it started running: %w", exitErr)
+	}
+	return err
+}

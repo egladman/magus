@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -303,10 +304,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 
 	c.mu.Lock()
-	held := make([]*heldClaim, 0, len(c.held))
-	for _, h := range c.held {
-		held = append(held, h)
-	}
+	held := maps.Clone(c.held)
 	c.mu.Unlock()
 	for _, h := range held {
 		var reply claimReply
@@ -320,12 +318,24 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		_ = nc.Close()
 		return nil, fmt.Errorf("%w: client closed", ErrUnavailable)
 	}
 	c.cur = cn
+	// A Release that ran before cn was published found no connection to send on, so
+	// the claims it dropped are handed back here; one after it finds cn itself.
+	var released []string
+	for id, h := range held {
+		if c.held[id] != h {
+			released = append(released, h.remote)
+		}
+	}
+	c.mu.Unlock()
+	for _, id := range released {
+		_, _ = cn.call(dctx, c.next(), typeRelease, releaseRequest{ClaimID: id}, nil)
+	}
 	return cn, nil
 }
 

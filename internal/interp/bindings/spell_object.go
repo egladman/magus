@@ -223,6 +223,9 @@ func commandToMap(t spells.Command) vm.Value {
 	if len(t.DefaultArgs) > 0 {
 		op.MapSet("defaultArgs", strSliceToBuzzList(t.DefaultArgs))
 	}
+	if len(t.TrailingArgs) > 0 {
+		op.MapSet("trailingArgs", strSliceToBuzzList(t.TrailingArgs))
+	}
 	if len(t.Charms) > 0 {
 		charms := vm.NewMap()
 		for cn, c := range t.Charms {

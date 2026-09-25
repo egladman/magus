@@ -2,11 +2,11 @@ name: Queue
 
 # The merge queue's validation half, run by `magus queue` (libs/mergequeue). A pull
 # request joins the queue when auto-merge is enabled on it, or, for a stack, when a
-# "queue: <method>" label is on its top. The plan job lists the queue, checks approval at
-# each head and partitions it by the affected sets the magus workspace reports through
-# the Go SDK; each validate job then validates one change on main plus the changes ahead
-# of it in its partition, gated with `magus affected ci` against the candidate it was
-# built onto. Every job uploads its verdict the moment it finishes, and
+# "merge-queue: <method>" label is on its top. The plan job lists the queue, checks
+# approval at each head and partitions it by the affected sets the magus workspace
+# reports through the Go SDK; each validate job then validates one change on main plus
+# the changes ahead of it in its partition, gated with `magus affected ci` against the
+# candidate it was built onto. Every job uploads its verdict the moment it finishes, and
 # queue-apply.yaml, already running, merges it.
 #
 # This workflow executes pull-request code, so its token reads and nothing more. Nothing
@@ -23,8 +23,9 @@ name: Queue
 on:
   # No branches filter: a stacked pull request targets the branch below it, not main.
   pull_request:
-    # auto_merge_enabled is the entry, and a "queue: <method>" label on a stack's top;
-    # synchronize and a review can make a queued pull request ready without either again.
+    # auto_merge_enabled is the entry, and a "merge-queue: <method>" label on a stack's
+    # top; synchronize and a review can make a queued pull request ready without either
+    # again.
     types: [auto_merge_enabled, labeled, synchronize]
   pull_request_review:
     types: [submitted]
@@ -52,19 +53,23 @@ env:
   # PR-controlled mise.toml must not execute config hooks or plugins.
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
+  # Wires the github-actions CI provider in magusfile.buzz (job-log groups and
+  # annotations). magus is told it runs under Actions, never detects it.
+  CI_PROVIDER: github-actions
 
 jobs:
   # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
   # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
   # forks too and the plan refuses them by name; skipping them here only saves a run
-  # nobody's change can use.
+  # nobody's change can use. Only a method's label is intent: the queue's status labels
+  # share the prefix.
   intent:
     name: queue intent
     if: >-
       github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-       startsWith(github.event.label.name, 'queue: '))
+       contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name))
     runs-on: ubuntu-latest
     timeout-minutes: 1
     permissions: {}
@@ -169,14 +174,32 @@ jobs:
           name: mergequeue-plan
           path: ${{ runner.temp }}/queue
 
+      # `queue validate --remote-cache-read` reads these to serve hooks main's signed
+      # magus cache through a read-only loopback proxy; the hooks get a stand-in token and
+      # never these. The runner injects them into an action's process but not into a
+      # `run:` step, so re-exporting them takes a JS action, as in ci.yaml. Missing, the
+      # validate step refuses to start rather than running cold.
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              if (!value) continue
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
+
       # Pull request refs are fetched over the checkout's remote, which carries no
       # credential; the repository is public, so the read needs none.
       # Every hook keeps its caches in its own candidate's scratch directory
       # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
-      # gate replays as green.
+      # gate replays as green. The remote cache it reads is main's, verified against
+      # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every hook.
       - name: Validate #${{ matrix.change }}
         env:
           CHANGE: ${{ matrix.change }}
+          MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
         run: magus buzz tools/gha-queue.buzz -- validate --change "$CHANGE"
 
       # The directory's contents become the artifact's root: verdict.json.

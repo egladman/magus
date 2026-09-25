@@ -24,7 +24,7 @@ var jobFieldNames = []string{
 	"schema_version", "id", "parent", "criteria", "checkpoint", "write_paths", "deny_paths",
 	"read_paths", "depends_on", "model", "check", "validation", "completion_gates", "state", "holder",
 	"read_only", "releases", "unattributed", "write_proof", "reported_base", "base_verdict",
-	"registered_by", "registered", "created", "updated", "deadline", "result", "attempt", "gate_attempts", "last_run",
+	"registered_by", "registered", "checkout_root", "end_reason", "created", "updated", "deadline", "result", "attempt", "gate_attempts", "last_run",
 }
 
 // TestJobSchemaVersionCoversEveryField pins Job's field set against jobFieldNames, read
@@ -150,6 +150,40 @@ func TestJobOverlaps(t *testing.T) {
 				{JobA: "a", JobB: "c", PathsA: []string{"internal"}, PathsB: []string{"internal/handler"}},
 			},
 		},
+		{
+			// Listed rather than dropped: the file is shared, and "disjoint" is what tells the
+			// reader the pair is an integration order and not a wait.
+			name:   "different declarations of one file are a disjoint pair",
+			leases: []Job{owner("a", StateRunning, "run.go#executeStages"), owner("b", StateRunning, "run.go#RunCI", "docs/x.md")},
+			want: []JobOverlap{
+				{JobA: "a", JobB: "b", PathsA: []string{"run.go#executeStages"}, PathsB: []string{"run.go#RunCI"}, Claims: ClaimsDisjoint},
+			},
+		},
+		{
+			name:   "one declaration claimed twice is shared",
+			leases: []Job{owner("a", StateRunning, "run.go#RunCI"), owner("b", StateRunning, "run.go# RunCI ")},
+			want: []JobOverlap{
+				{JobA: "a", JobB: "b", PathsA: []string{"run.go#RunCI"}, PathsB: []string{"run.go# RunCI "}, Claims: ClaimsShared},
+			},
+		},
+		{
+			name:   "a declaration inside a directory claimed whole is shared",
+			leases: []Job{owner("a", StateRunning, "internal/job"), owner("b", StateRunning, "internal/job/store.go#digest")},
+			want: []JobOverlap{
+				{JobA: "a", JobB: "b", PathsA: []string{"internal/job"}, PathsB: []string{"internal/job/store.go#digest"}, Claims: ClaimsShared},
+			},
+		},
+		{
+			name:   "a disjoint file beside a shared one makes the pair shared",
+			leases: []Job{owner("a", StateRunning, "run.go#A", "b.go"), owner("b", StateRunning, "run.go#B", "b.go")},
+			want: []JobOverlap{
+				{JobA: "a", JobB: "b", PathsA: []string{"run.go#A", "b.go"}, PathsB: []string{"run.go#B", "b.go"}, Claims: ClaimsShared},
+			},
+		},
+		{
+			name:   "declarations of different files do not meet at all",
+			leases: []Job{owner("a", StateRunning, "run.go#A"), owner("b", StateRunning, "order.go#A")},
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,6 +193,28 @@ func TestJobOverlaps(t *testing.T) {
 			assert.Equal(t, tt.want, jobOverlaps(tt.leases))
 		})
 	}
+}
+
+func TestPathsIntersectReadsTheClaimGrammar(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"run.go#A", "run.go#B", false},
+		{"run.go#A", "run.go#A", true},
+		{"run.go#A", "run.go", true},
+		{"run.go#A", ".", true},
+		{"run.go#A", "*.go", true},
+		{"run.go#A", "order.go#A", false},
+		{"pkg/run.go#A", "pkg", true},
+		{"run.go#A", "", false},
+	} {
+		assert.Equal(t, tc.want, PathsIntersect(tc.a, tc.b), "%q and %q", tc.a, tc.b)
+		assert.Equal(t, tc.want, PathsIntersect(tc.b, tc.a), "%q and %q, reversed", tc.b, tc.a)
+	}
+	assert.Equal(t, "pkg/run.go", LiteralPrefix("pkg/run.go#A"), "a declaration is not a path segment")
 }
 
 // A finished lease is not competing for anything. The skill has a worker RELEASE its

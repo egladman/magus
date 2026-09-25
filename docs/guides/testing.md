@@ -74,13 +74,15 @@ Reach for `equal` most often. `==` compares identity for maps, lists, and object
 depth and ignoring map key order.
 
 `assert\skip(message)` stops the current test and marks it skipped instead of failed
-(Go's `t.Skip`). Use it for a case that cannot run in the current environment. The
-runner reports skipped tests apart from failures:
+(Go's `t.Skip`). Use it for a case that needs something the caller has to provide.
+Key the skip on the caller asking, never on detecting CI
+([Told, never guessed](../doctrine.md#told-never-guessed)). The runner reports skipped
+tests apart from failures:
 
 ```buzz
 test "reads the platform keychain" {
-    if (os\env("CI") != null) {
-        assert\skip("no keychain in CI");
+    if (os\env("KEYCHAIN_TESTS") == null) {
+        assert\skip("set KEYCHAIN_TESTS=1 to run against the platform keychain");
     }
     assert\notNull(readKey(), "key present");
 }
@@ -132,8 +134,8 @@ per-test controls, callable from inside an `it` body:
 
 ```buzz
 s.it("reads the fixture", fun () > void {
-    if (os\env("CI") == null) {
-        s.skip("needs the CI fixture");
+    if (os\env("FIXTURE_DIR") == null) {
+        s.skip("set FIXTURE_DIR to the fixture checkout");
     }
 
     final handle = openFixture();

@@ -83,6 +83,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			".gitattributes: *.ts diff=typescript",
 			".gitattributes: *.tsx diff=typescript",
 			".gitattributes: *.buzz diff=buzz",
+			"git config diff.golang.xfuncname",
 			"git config diff.typescript.xfuncname",
 			"git config diff.buzz.xfuncname",
 			"rewire them with `" + hint.Ls.String() + "`: any command that opens the workspace does, " +
@@ -92,7 +93,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 
 	installer, ok := vcs.Installer("git")
 	require.True(t, ok)
-	require.NoError(t, installer.InstallMergeDriver(t.Context(), root, nil))
+	require.NoError(t, installer.InstallMergeDriver(t.Context(), root, types.MergeDriverGlobs{}))
 	register() // the install points the driver at a real magus; the probe needs `true`
 	assert.Equal(t, types.Check{Name: "merge-driver-loads-workspace", Status: types.CheckOK,
 		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads())

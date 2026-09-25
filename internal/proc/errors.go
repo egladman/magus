@@ -16,6 +16,9 @@ var (
 
 	// ErrCycleDetected is set in runReply.Err when the same (target, project) pair is already in-flight.
 	ErrCycleDetected = errors.New("proc: cycle detected in nested magus invocation")
+
+	// ErrTokenRefused answers a /proc/ request that did not carry the server's token.
+	ErrTokenRefused = errors.New("proc: request refused: it does not carry this server's token")
 )
 
 // notAdoptedError is a proc sentinel for a forwarded call the server did not adopt:
@@ -94,6 +97,8 @@ func decodeWireError(msg string) error {
 		return ErrVersionMismatch
 	case ErrCycleDetected.Error():
 		return ErrCycleDetected
+	case ErrTokenRefused.Error():
+		return ErrTokenRefused
 	}
 	if strings.HasPrefix(msg, ErrNotAdoptable.Error()+":") {
 		return fmt.Errorf("%w%s", ErrNotAdoptable, strings.TrimPrefix(msg, ErrNotAdoptable.Error()))

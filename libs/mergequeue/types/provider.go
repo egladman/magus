@@ -35,43 +35,28 @@ type Provider interface {
 	MergeChange(ctx context.Context, c Change, m MergeOptions) (MergeResult, error)
 	// KickBack removes c's merge intent, wherever it lives, and tells its author why.
 	KickBack(ctx context.Context, c Change, commit string, k Kick) error
-	// Mark leaves c showing m and no other mark; [MarkNone] clears both. Marking a change
-	// that already shows m is success.
+	// Mark leaves c showing m and no other mark. [MarkNone] clears every mark and the
+	// label that queued c, if its intent is one: the queue marks none only a change that
+	// left it. Marking a change that already shows m is success.
 	Mark(ctx context.Context, c Change, m Mark) error
-	// Flag shows f on c when on and clears it otherwise, leaving c's mark and other flags
-	// as they are. Either when c already shows it so is success.
-	Flag(ctx context.Context, c Change, f Flag, on bool) error
 }
 
-// Mark is which of the two states the queue tracks at a service level a change shows
-// where people look (github: a label). A mark is a courtesy: the status and the
-// kick-back comment are the record, and the queue reads a mark back only to clear one
-// left on a change it no longer holds.
+// Mark is the one queue state a change shows where people look (github: a label). A
+// mark is a courtesy: the status and the kick-back comment are the record, and the queue
+// reads a mark back only to clear one left on a change it no longer holds.
 type Mark string
 
 const (
-	MarkNone     Mark = ""         // neither
-	MarkQueued   Mark = "queued"   // the queue holds the change
-	MarkRejected Mark = "rejected" // the queue kicked the change back
+	MarkNone              Mark = ""                   // none
+	MarkQueued            Mark = "queued"             // the queue holds the change
+	MarkKickedBack        Mark = "kicked_back"        // the queue kicked the change back
+	MarkNeedsRegeneration Mark = "needs_regeneration" // kicked back with [CodeKickRegeneration]; a person merges it
 )
 
-// Valid reports whether m is one of the three marks.
+// Valid reports whether m is one of the marks.
 func (m Mark) Valid() bool {
-	return m == MarkNone || m == MarkQueued || m == MarkRejected
+	return m == MarkNone || m == MarkQueued || m == MarkKickedBack || m == MarkNeedsRegeneration
 }
-
-// Flag is a property of a change the queue shows where people look (github: a label).
-// Unlike a [Mark], flags are independent of the queue's state and of each other: a
-// queued change can show any of them. A flag is a courtesy, as a mark is.
-type Flag string
-
-// FlagChangesGenerator says the queue cannot regenerate the change's generated files
-// itself, since the build tool cannot prove their regeneration runs none of the change's
-// code. When the base moves them, only the author can regenerate them.
-const FlagChangesGenerator Flag = "changes_generator"
-
-// Valid reports whether f is a flag the queue shows.
-func (f Flag) Valid() bool { return f == FlagChangesGenerator }
 
 // Approval is the review state of a change at one exact commit, and what the provider
 // says of the change now.
@@ -154,8 +139,12 @@ type Capabilities struct {
 	// its base, so an update commit the queue pushes there is linear too.
 	LinearStacks bool
 	Methods      []MergeMethod // the merge methods the repository allows
+	// RequiredApprovals is how many approvals the base requires at the commit a review
+	// of a change's head covers. The queue enforces the base's own rule and adds none of
+	// its own, so zero means it merges a change nobody approved.
+	RequiredApprovals int
 	// QueueLabel is the prefix of the label that queues a change, followed by its merge
-	// method ("queue: squash"); empty when the provider queues changes some other way.
+	// method ("merge-queue: squash"); empty when the provider queues changes some other way.
 	QueueLabel string
 	// Committer is the identity the provider's automation pushes as, which commits what
 	// the queue writes to a change's branch. Zero when the provider names none.
@@ -253,6 +242,9 @@ func (c Capabilities) Check() error {
 	if c.Committer != (magustypes.Person{}) && (c.Committer.Name == "" || c.Committer.Email == "") {
 		return fmt.Errorf("provider names committer %q <%s>, which needs a name and an email", c.Committer.Name, c.Committer.Email)
 	}
+	if c.RequiredApprovals < 0 {
+		return fmt.Errorf("provider says the base requires %d approvals, which is negative", c.RequiredApprovals)
+	}
 	if c.Setup != nil {
 		return c.Setup.Check()
 	}
@@ -313,24 +305,39 @@ type PinnedChange struct {
 
 // Kick is what a kick-back tells the author and the provider: a closed Code a provider
 // can act on, the rendered Report, and the facts the report was rendered from.
+//
+// Only Report, Source and Reproduce are the queue's own words. Claim, Paths and With
+// can come from a verdict, which a job running the change's code wrote, and a file name
+// is the author's to choose: a provider shows them as literal text only ([CodeSpan],
+// [CodeBlock]), never as markup.
 type Kick struct {
-	Code            Code
-	Report          string
+	Code Code
+	// Report is Markdown; every file name in it is a [CodeSpan].
+	Report string
+	// Claim is what the verdict behind the kick said went wrong, at most [MaxClaim]
+	// bytes; empty when the queue decided it itself.
+	Claim           string
 	Paths           []string // the files at issue: conflicting, or outside what may differ
 	With            []string // base-branch commits touching Paths ("abc123 subject")
 	CandidateCommit string   // the candidate it was validated in, when one was built
 	// Source is the validation run apply followed, as the provider names it
 	// ("acme/widgets/runs/7"); empty when apply read a directory.
 	Source string
-	// Reproduce is how to run what validation ran on the change's candidate again; nil
-	// when validation did not decide the kick-back, as for a conflict planning found.
+	// Reproduce is how to run what validation ran on the change's candidate again, from
+	// apply's own configuration; nil when validation did not decide the kick-back, as
+	// for a conflict planning found, or apply was given no hook lines.
 	Reproduce *Reproduction
-	// Flag is the flag the change shows for the reason it was kicked back, for the report
-	// to name; empty when none explains it.
-	Flag Flag
 }
 
-// Reproduction is the hook command lines validation ran on a candidate, as given to
+// Mark is the mark the kick-back leaves on the change.
+func (k Kick) Mark() Mark {
+	if k.Code == CodeKickRegeneration {
+		return MarkNeedsRegeneration
+	}
+	return MarkKickedBack
+}
+
+// Reproduction is the hook command lines validation runs on a candidate, as given to
 // `magus queue validate`: run with its --gate and --regenerate, and --only the change,
 // they build and gate that candidate again.
 type Reproduction struct {

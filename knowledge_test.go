@@ -248,6 +248,23 @@ func TestLoadKnowledgeSymbolsSkipsCorrupt(t *testing.T) {
 	assert.Empty(t, got, "an undecodable index is skipped, not fatal")
 }
 
+func TestSymbolIndexedAt(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	_, ok := SymbolIndexedAt(cacheDir, filepath.Join(root, "pkg/a"))
+	assert.False(t, ok, "no index built yet")
+
+	idx := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	require.NoError(t, os.MkdirAll(filepath.Dir(idx), 0o755))
+	require.NoError(t, os.WriteFile(idx, nil, 0o644))
+	when := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, os.Chtimes(idx, when, when))
+
+	got, ok := SymbolIndexedAt(cacheDir, filepath.Join(root, "pkg/a"))
+	require.True(t, ok)
+	assert.True(t, when.Equal(got))
+}
+
 func TestLoadKnowledgeSymbolsExplicitOverride(t *testing.T) {
 	root := t.TempDir()
 	// The override points at a tree path; the index lives there, not in the cache.

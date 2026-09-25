@@ -185,15 +185,16 @@ func main() {
 }
 
 // resolvedArgv joins an op's command and arguments into the shell-free argv a
-// target forks (`go tool golangci-lint run ./...`). The declared defaults trail the
-// fixed args, as the runner appends them on a no-args invocation, the invocation
-// this page documents. Empty for a marker op with no command (an opaque spell's
-// aggregate target).
+// target forks (`go tool golangci-lint run ./...`). The declared defaults trail
+// the fixed args, and TrailingArgs (an operand safe only on a fully bare call,
+// see spells.Command.TrailingArgs) trail those, as the runner appends them on a
+// no-args invocation, the invocation this page documents. Empty for a marker op
+// with no command (an opaque spell's aggregate target).
 func resolvedArgv(op spells.Op) string {
 	if op.Bin == "" {
 		return ""
 	}
-	argv := slices.Concat([]string{op.Bin}, op.Args, op.DefaultArgs)
+	argv := slices.Concat([]string{op.Bin}, op.Args, op.DefaultArgs, op.TrailingArgs)
 	return strings.TrimSpace(strings.Join(argv, " "))
 }
 
