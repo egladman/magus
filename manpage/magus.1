@@ -208,6 +208,9 @@ Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read 
 \fBMAGUS_PROC_SOCKET\fR
 Env\-only, no magus.yaml equivalent: the proc\-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
 .TP
+\fBMAGUS_PROC_TOKEN\fR
+Env\-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
+.TP
 \fBMAGUS_CI_MAX_SHARDS\fR
 Maximum number of parallel CI shards; \-1 means unlimited (default: 8). Equivalent magus.yaml key: \fBci.max_shards\fR.
 .TP

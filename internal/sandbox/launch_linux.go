@@ -103,7 +103,7 @@ func launch(args []string) error {
 	if err := unix.Close(rulesetFD); err != nil {
 		return fmt.Errorf("sandbox: launcher: close ruleset: %w", err)
 	}
-	if err := syscall.Exec(path, argv, os.Environ()); err != nil {
+	if err := syscall.Exec(path, argv, os.Environ()); err != nil { //nolint:gosec // G702: the command the parent chose and resolved, now under the ruleset
 		return fmt.Errorf("sandbox: launcher: exec %s: %w", path, err)
 	}
 	return nil

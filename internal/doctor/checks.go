@@ -566,6 +566,7 @@ var runtimeEnvVars = map[string]struct{}{
 	"MAGUS_N_SHARDS":             {},
 	"MAGUS_CACHE_SIGNING_KEY":    {},
 	"MAGUS_PROC_SOCKET":          {},
+	"MAGUS_PROC_TOKEN":           {},
 }
 
 func (*runner) checkEnvVars() types.Check {
@@ -597,6 +598,8 @@ func (*runner) checkEnvVars() types.Check {
 		//   MAGUS_PROC_SOCKET        the proc-server socket magus exports for its own
 		//                            forwarded children (proc.SocketEnv); a child
 		//                            magus legitimately sees it, and no person sets it.
+		//   MAGUS_PROC_TOKEN         the secret that socket requires (proc.TokenEnv),
+		//                            exported and inherited beside it.
 		if _, ok := runtimeEnvVars[key]; ok {
 			continue
 		}

@@ -160,7 +160,7 @@ This holds **regardless of `sandbox.mode`**, and that distinction matters becaus
 
 The one case that keeps them is a **recursive `magus` invocation**: the same trusted binary re-executing itself, which genuinely needs server coordination. For that case magus re-injects the vars as explicit overrides on the child (also logged under [MGS2008](../reference/codes/sandbox/MGS2008.md)).
 
-Reaching the socket is not enough to use it. Every request must carry the socket's token: `MAGUS_PROC_TOKEN` for a nested magus, or the `<socket>.token` file (mode 0600) beside the socket for a client that found it on disk. The socket directory is `$XDG_RUNTIME_DIR/magus/`, else `<user cache dir>/magus/run/`, and only with neither `$TMPDIR/magus-<uid>/`. None of the first two is granted to a sandboxed run, so a confined child can neither read the token file nor unlink the socket and bind its own in its place.
+Reaching the socket is not enough to use it. Every request must carry the socket's token: `MAGUS_PROC_TOKEN` for a nested magus, or the `<socket>.token` file (mode 0600) beside the socket for a client that found it on disk. The socket directory is `$XDG_RUNTIME_DIR/magus/`, else `<user cache dir>/magus/run/`, and only with neither `/tmp/magus-<uid>/` (never `$TMPDIR`, which a harness may point inside the workspace). None of the first two is granted to a sandboxed run, so a confined child can neither read the token file nor unlink the socket and bind its own in its place.
 
 ## How a target's declared footprint becomes the allowlist
 

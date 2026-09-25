@@ -123,7 +123,7 @@ and it speaks HTTP. `/mcp` is one path on it, beside the Connect APIs and the co
 operations the CLI uses (see [the server's socket](server.md#two-transports)):
 
 ```text
-$XDG_RUNTIME_DIR/magus/server.sock      # or $TMPDIR/magus-<uid>/server.sock without XDG_RUNTIME_DIR
+$XDG_RUNTIME_DIR/magus/server.sock      # else <user cache dir>/magus/run/, else /tmp/magus-<uid>/
 ```
 
 It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP,

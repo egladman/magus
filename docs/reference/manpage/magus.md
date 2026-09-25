@@ -219,6 +219,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_PROC_SOCKET**
 : Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
 
+**MAGUS_PROC_TOKEN**
+: Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
+
 **MAGUS_CI_MAX_SHARDS**
 : Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: **ci.max_shards**.
 
