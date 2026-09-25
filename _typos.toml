@@ -23,6 +23,8 @@ mis = "mis"
 nd = "nd"
 # typos splits "ANDed" and flags the "Ded" tail, so the accepted word is that fragment.
 Ded = "Ded"
+# BRE is POSIX's basic regular expression dialect, beside ERE, in the guard's search rules.
+BRE = "BRE"
 # The generated skill docs embed a content hash (docs/reference/skills/*.md's
 # `skill-content` row) so a magus upgrade proves drift rather than asserting it; typos
 # splits hex on digit/letter boundaries, and this hash happened to contain "ba" at one.
