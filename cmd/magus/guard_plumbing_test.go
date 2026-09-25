@@ -40,7 +40,7 @@ func committedDenyRule(t *testing.T) string {
 
 // A committed spawn rule still answers however the working tree leaves the root magusfile:
 // a syntax error, the file deleted, or the other magusfile form added beside it.
-func TestApprovedSpawnRuleAtSurvivesABrokenWorkingTree(t *testing.T) {
+func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 	cases := []struct {
 		name   string
 		mutate func(t *testing.T, root string)
@@ -61,14 +61,14 @@ func TestApprovedSpawnRuleAtSurvivesABrokenWorkingTree(t *testing.T) {
 			root := committedDenyRule(t)
 			tc.mutate(t, root)
 
-			rule, err := magus.ApprovedSpawnRuleAt(t.Context(), root)
+			rule, err := magus.LoadApprovedSpawnRule(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, rule)
 			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
 			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, got)
 
-			command, err := magus.ApprovedCommandRuleAt(t.Context(), root)
+			command, err := magus.LoadApprovedCommandRule(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, command)
 			got, err = command(t.Context(), types.CommandRequest{Command: "ls", Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
@@ -156,6 +156,45 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, "workspace:command", v.Rule)
+}
+
+// The working tree may point its magusfile at another policy file and loosen the one the
+// committed magusfile imports in the same edit. Its own load never reads that file, and the
+// committed load still has to read it as committed, not as edited.
+func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
+	root := initGitRepo(t)
+	policy := filepath.Join(root, "policy")
+	require.NoError(t, os.MkdirAll(policy, 0o755))
+	write := func(name, body string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+	rule := func(ns, verdict string) string {
+		return "namespace " + ns + ";\n\nimport \"magus\";\n\nexport fun judge(req: CommandRequest) > GuardVerdict {\n    return " + verdict + ";\n}\n"
+	}
+	importing := func(name string) string {
+		return "import \"magus\";\nimport \"./policy/" + name + "\" as p;\nmagus\\guard.command(p\\judge);\n"
+	}
+	write("magus.yaml", "{}\n")
+	write("policy/a.buzz", rule("a", `magus\guard.deny("Not in this repository.")`))
+	write("policy/b.buzz", rule("b", `magus\guard.allow()`))
+	write("magusfile.buzz", importing("a"))
+	runGit(t, root, "add", "-A")
+	runGit(t, root, "commit", "-q", "-m", "init")
+
+	write("magusfile.buzz", importing("b"))
+	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+
+	rules, err := loadGuardRules(t.Context())
+	require.NoError(t, err)
+	approved, err := rules.ApprovedCommandRule(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, approved)
+	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardDeny, got.Decision)
 }
 
 // The committed side is loaded only while a file the root load read differs from it:

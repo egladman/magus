@@ -72,7 +72,7 @@ func (g *GuardRules) Policy() GuardPolicy {
 // when no file the root load read differs from its approved content, and a second load of
 // the root magusfile when one does.
 func (g *GuardRules) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, error) {
-	reg, err := approvedRegistryBeside(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
 	if err != nil || reg == nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (g *GuardRules) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule
 
 // ApprovedCommandRule is ApprovedSpawnRule for the magus\guard.command rule.
 func (g *GuardRules) ApprovedCommandRule(ctx context.Context) (workspace.CommandRule, error) {
-	reg, err := approvedRegistryBeside(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
 	if err != nil || reg == nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (g *GuardRules) ApprovedCommandRule(ctx context.Context) (workspace.Command
 
 // ApprovedWriteRule is ApprovedSpawnRule for the magus\guard.write rule.
 func (g *GuardRules) ApprovedWriteRule(ctx context.Context) (workspace.WriteRule, error) {
-	reg, err := approvedRegistryBeside(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
 	if err != nil || reg == nil {
 		return nil, err
 	}
