@@ -8,7 +8,6 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/types"
 )
 
@@ -112,19 +111,6 @@ func WithGraphNodes(load func(context.Context) ([]types.KnowledgeNode, error)) O
 // Opting in is for the case that wants it, checking an environment before a long run
 // instead of finding out eight minutes in.
 func WithProbe() Option { return func(o *options) { o.probe = true } }
-
-// KnownEnvVars is the precomputed set of every MAGUS_* env var derived
-// from the magus config struct via schema. Used to surface typos in
-// checkEnvVars. No bespoke entries are accepted here — any MAGUS_* var
-// that isn't in schema.Fields should be migrated onto the config struct
-// so it shows up in the generated set automatically.
-var KnownEnvVars = func() map[string]struct{} {
-	m := make(map[string]struct{}, len(schema.Fields))
-	for _, f := range schema.Fields {
-		m[f.EnvVar] = struct{}{}
-	}
-	return m
-}()
 
 type runner struct {
 	opts options

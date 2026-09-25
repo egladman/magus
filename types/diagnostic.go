@@ -263,6 +263,11 @@ const (
 	// one outside the root magusfile. The load stops, because a rule that silently did not
 	// register is a guard that looks enforced and is not.
 	GuardRuleMisdeclared DiagnosticCode = "MGS1045"
+	// MisconfiguredEnvVar is a MAGUS_* environment variable that is provably wrong: a name
+	// magus retired, or a near miss of one it reads. Every command stops before doing any
+	// work and `magus shell` denies, because a value exported for magus and silently not
+	// honored is a configuration that looks applied and is not.
+	MisconfiguredEnvVar DiagnosticCode = "MGS1046"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -610,7 +615,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
-	SpellOverrideInvalid, GuardRuleMisdeclared,
+	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

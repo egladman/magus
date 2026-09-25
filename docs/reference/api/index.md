@@ -51,7 +51,7 @@ A unary Connect method is a plain POST with a JSON body, so `curl` is a complete
 ```sh
 curl -X POST \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $MAGUS_TOKEN" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"pageSize":0,"pageToken":""}' \
   http://127.0.0.1:7391/magus.activity.v1alpha1.ActivityService/ListActivityEvents
 ```

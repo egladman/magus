@@ -174,17 +174,32 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CACHE_SIZE_MB**
 : Cache disk usage cap in MB (binary, 1\<\<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: **cache.size_mb**.
 
+**MAGUS_CACHE_REMOTE_TRUSTED_KEYS**
+: Comma-separated base64 Ed25519 public keys a remote artifact must be signed by; required when a remote backend is wired. Equivalent magus.yaml key: **cache.remote.trusted_keys**.
+
 **MAGUS_CACHE_REMOTE_INSECURE**
 : Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only. Requires cache.remote.insecure_reason (default: false). Equivalent magus.yaml key: **cache.remote.insecure**.
 
 **MAGUS_CACHE_REMOTE_INSECURE_REASON**
 : Why this cache runs unverified; required whenever cache.remote.insecure is true. Equivalent magus.yaml key: **cache.remote.insecure_reason**.
 
+**MAGUS_CACHE_SIGNING_KEY**
+: Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see \`magus config cache-key\`); env-only because a signing secret in a committed file is not a secret
+
+**MAGUS_CACHE_TOOL_VERSION**
+: Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off (default: project)
+
 **MAGUS_LOG_FORMAT**
 : Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: **log.format**.
 
 **MAGUS_LOG_LEVEL**
 : Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: **log.level**.
+
+**MAGUS_LOG_SILENT**
+: When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, and surface only lines a target marks as a notice (default: false). Equivalent magus.yaml key: **log.silent**.
+
+**MAGUS_LOG_STREAM**
+: When true, the env equivalent of -vv: stream every target's output live instead of withholding a passing target's output (default: false). Equivalent magus.yaml key: **log.stream**.
 
 **MAGUS_CONCURRENCY**
 : Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive (default: concurrency_profile decides). Equivalent magus.yaml key: **concurrency**.
@@ -200,6 +215,15 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_DRY_RUN**
 : When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: **dry_run**.
+
+**MAGUS_MAX_FAILURES**
+: How many projects may fail before a run stops starting more; 1 is fail-fast, 0 is unlimited (default: 0). Equivalent magus.yaml key: **max_failures**.
+
+**MAGUS_TARGET_TIMEOUT**
+: Duration after which magus cancels any single target, subprocesses included; 0 means no limit (default: 0). Equivalent magus.yaml key: **target_timeout**.
+
+**MAGUS_STALL_TIMEOUT**
+: Abort an invocation that starts, finishes and prints nothing for this long; negative turns the watchdog off (default: 15m). Equivalent magus.yaml key: **stall_timeout**.
 
 **MAGUS_DEFAULT_CHARMS**
 : Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run. Equivalent magus.yaml key: **default_charms**.
@@ -224,6 +248,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_CI_RUNNER_POOL_BUDGET**
 : Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited (default: 0). Equivalent magus.yaml key: **ci.runner_pool_budget**.
+
+**MAGUS_CI_RECORD_RUNS**
+: Keep the per-branch run log (which commit a branch passed or failed at) in the history file (default: true). Equivalent magus.yaml key: **ci.record_runs**.
 
 **MAGUS_SHARD**
 : CI matrix shard ID (e.g. "0"); equivalent to magus run --shard; set by .github/actions/magus
@@ -261,6 +288,21 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_SERVER_WORKSPACES**
 : Colon-separated list of workspace roots the server will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010). Equivalent magus.yaml key: **server.workspaces**.
 
+**MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES**
+: How often the server checks whether the activity trail is due for a trim (default: 1h). Equivalent magus.yaml key: **server.maintenance.rotate_activities**.
+
+**MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS**
+: How often the server checks the run-log journals, and the age past which it trims them (default: 168h). Equivalent magus.yaml key: **server.maintenance.rotate_logs**.
+
+**MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED**
+: How often the server checks for expired \`vcs checkpoint --preserve\` captures (default: 24h). Equivalent magus.yaml key: **server.maintenance.prune_preserved**.
+
+**MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH**
+: How often the server reconciles the knowledge graph, a safety net behind the VCS refresh hook (default: 6h). Equivalent magus.yaml key: **server.maintenance.sync_graph**.
+
+**MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW**
+: How often the server checks for a merge or a new remark on a review this tree took part in (default: 15m). Equivalent magus.yaml key: **server.maintenance.check_review**.
+
 **MAGUS_MCP_ENABLED**
 : When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: **mcp.enabled**.
 
@@ -270,8 +312,83 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_MCP_INSECURE_BIND**
 : Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: **mcp.insecure_bind**.
 
+**MAGUS_CONSOLE_ENABLED**
+: When false, the MCP HTTP server does not mount the console's read-only API and job service (default: true when MCP is up). Equivalent magus.yaml key: **console.enabled**.
+
 **MAGUS_HINTS_ENABLED**
 : When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: **hints.enabled**.
+
+**MAGUS_DIFF_TUI**
+: When false, \`magus diff\` prints its report instead of opening the interactive viewer (default: true). Equivalent magus.yaml key: **diff.tui**.
+
+**MAGUS_JOBS_MAX_DEPTH**
+: How many levels below its root job a \`magus job fork\` may land; 0 means unlimited (default: 0). Equivalent magus.yaml key: **jobs.max_depth**.
+
+**MAGUS_JOBS_MAX_LIVE**
+: How many live jobs one root's tree may hold at once, the new one included; 0 means unlimited (default: 0). Equivalent magus.yaml key: **jobs.max_live**.
+
+**MAGUS_JOBS_DEFAULT_TIMEOUT**
+: Timeout for a fork that names no --timeout; 0 means no bound (default: 0). Equivalent magus.yaml key: **jobs.default_timeout**.
+
+**MAGUS_JOBS_STALE_AFTER**
+: Flag a live job nobody updated for this long in \`magus ls jobs\` and \`magus doctor\`; 0 never flags (default: 0). Equivalent magus.yaml key: **jobs.stale_after**.
+
+**MAGUS_SECRET_INTERACTIVE_TIMEOUT**
+: Bound on a secret-provider read when stdin is a terminal (default: 60s). Equivalent magus.yaml key: **secret.interactive_timeout**.
+
+**MAGUS_SECRET_UNATTENDED_TIMEOUT**
+: Bound on a secret-provider read with no terminal to prompt on (default: 10s). Equivalent magus.yaml key: **secret.unattended_timeout**.
+
+**MAGUS_KNOWLEDGE_WORKSPACES**
+: Comma-separated extra workspace roots a --global knowledge-graph query unions in. Equivalent magus.yaml key: **knowledge.workspaces**.
+
+**MAGUS_KNOWLEDGE_PUBLISHED_REF**
+: OCI artifact a published knowledge graph is read from, as \<registry\>/\<repository\>:\<tag\>. Equivalent magus.yaml key: **knowledge.published_ref**.
+
+**MAGUS_KNOWLEDGE_MAX_SIZE_MB**
+: Soft cap on the knowledge shard store in MB; least-recently-used shards are evicted past it. 0 means unlimited (default: 0). Equivalent magus.yaml key: **knowledge.max_size_mb**.
+
+**MAGUS_KNOWLEDGE_VCS_ENABLED**
+: Fold VCS history (last commit, commit count) onto file nodes as the @vcs shard (default: false). Equivalent magus.yaml key: **knowledge.vcs.enabled**.
+
+**MAGUS_KNOWLEDGE_VCS_MAX_COMMITS**
+: Bound the history walk to the most recent N commits; 0 uses a built-in default (default: 0). Equivalent magus.yaml key: **knowledge.vcs.max_commits**.
+
+**MAGUS_KNOWLEDGE_VCS_AUTHORSHIP**
+: Include author nodes and authored edges in the @vcs shard; false keeps only the per-file attributes (default: true). Equivalent magus.yaml key: **knowledge.vcs.authorship**.
+
+**MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED**
+: When true, the server never re-runs a project's scip op on its own (default: false). Equivalent magus.yaml key: **knowledge.symbol_indexing.disabled**.
+
+**MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS**
+: Seconds a project's sources must be quiet before the server re-indexes it; 0 uses a built-in default (default: 0). Equivalent magus.yaml key: **knowledge.symbol_indexing.quiet_seconds**.
+
+**MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS**
+: Minimum seconds between re-index runs for one project; 0 uses a built-in default (default: 0). Equivalent magus.yaml key: **knowledge.symbol_indexing.min_interval_seconds**.
+
+**MAGUS_KNOWLEDGE_SESSIONS_DISABLED**
+: When true, \`graph build\` runs no agent-session adapter (default: false). Equivalent magus.yaml key: **knowledge.sessions.disabled**.
+
+**MAGUS_KNOWLEDGE_NOTES_SHARED**
+: Workspace-relative directory of the team's committed notes. Equivalent magus.yaml key: **knowledge.notes.shared**.
+
+**MAGUS_KNOWLEDGE_NOTES_PRIVATE**
+: A second notes directory, yours rather than the team's, anywhere on disk. Equivalent magus.yaml key: **knowledge.notes.private**.
+
+**MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES**
+: Fewest callees a function needs before the duplication lens compares it (default: 3). Equivalent magus.yaml key: **knowledge.duplication.min_callees**.
+
+**MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED**
+: Fewest shared callees a pair needs to be reported as duplicates (default: 4). Equivalent magus.yaml key: **knowledge.duplication.min_shared**.
+
+**MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE**
+: Lowest similarity score in [0,1] the duplication lens reports (default: 0.7). Equivalent magus.yaml key: **knowledge.duplication.min_score**.
+
+**MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO**
+: Lowest ratio in [0,1] of the shorter function's span to the longer one's (default: 0.5). Equivalent magus.yaml key: **knowledge.duplication.min_span_ratio**.
+
+**MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS**
+: When true, the duplication lens also compares test functions (default: false). Equivalent magus.yaml key: **knowledge.duplication.include_tests**.
 
 **MAGUS_VOLATILITY_ENABLED**
 : Master switch for volatility detection and auto-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: **volatility.enabled**.
@@ -294,11 +411,59 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_SANDBOX_ENABLED**
 : When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: **sandbox.enabled**.
 
+**MAGUS_SANDBOX_ENV_PASSTHROUGH**
+: Comma-separated names or globs (e.g. MISE_\*) added to the sandbox's child-process env allowlist. Equivalent magus.yaml key: **sandbox.env.passthrough**.
+
 **MAGUS_UPDATE_URL**
 : Env-only, no magus.yaml equivalent: override the release index URL for \`magus self update\`; set to a self-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
 
 **MAGUS_NO_BOOTSTRAP_EXEC**
 : Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
+
+**MAGUS_REGISTRY_URL**
+: Env-only, no magus.yaml equivalent: override the built-in registry source's URL with a mirror of its signed index (default: https://eli.gladman.cc/magus/public/registry/index.json)
+
+**MAGUS_OFFLINE**
+: Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote-spell fetch fails with a named error instead of sending a request (default: false)
+
+**MAGUS_DIFFTOOL**
+: Env-only, no magus.yaml equivalent: the command, taking two paths, that \`--then file \<path\> diff\` compares a cached artifact with (default: $DIFFTOOL, then git diff --no-index)
+
+**MAGUS_LOG_VIEWER_URL**
+: Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror (default: the hosted log viewer)
+
+**MAGUS_CONSOLE_DIR**
+: Env-only, no magus.yaml equivalent: directory of the built console the LAN share serves (default: \<root\>/console/gen)
+
+**MAGUS_PPROF**
+: Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated
+
+**MAGUS_MCP_TOKEN**
+: Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
+
+**MAGUS_S3_BUCKET**
+: Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in
+
+**MAGUS_S3_ENDPOINT**
+: Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to (default: https://s3.\<region\>.amazonaws.com)
+
+**MAGUS_LEVEL**
+: Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand
+
+**MAGUS_INVOCATION_ANCESTORS**
+: Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand
+
+**MAGUS_BOOTSTRAP_EXEC_DONE**
+: Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand
+
+**MAGUS_SYMBOL_INDEX**
+: Set by magus for a spell's scip op: the path the indexer writes its SCIP index to; never set it by hand
+
+**MAGUS_INTERNAL_ADVICE_MODE**
+: Set by \`magus diff\` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice
+
+**MAGUS_INTERNAL_ADVICE_BASE_BRANCH**
+: Set by \`magus diff\` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting
 
 ## Files
 
