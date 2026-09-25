@@ -15,7 +15,7 @@ import (
 // passed over, because it teaches the opposite.
 
 // briefFenceRe matches a fenced block and its info string.
-var briefFenceRe = regexp.MustCompile("(?ms)^[ \t]*```([A-Za-z]*)[^\n]*\n(.*?)^[ \t]*```")
+var briefFenceRe = regexp.MustCompile("(?ms)^[ \t]*```([A-Za-z]*)[^\n]*\n((?:.*?\n)??)[ \t]*```")
 
 // briefSpanRe matches an inline code span on one line.
 var briefSpanRe = regexp.MustCompile("`([^`\n]+)`")

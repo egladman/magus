@@ -157,8 +157,8 @@ var scopeValueFlags = map[string]string{
 // invocationPaths is the operands of one command that name a file or directory.
 func invocationPaths(c hint.Invocation) []string {
 	name := path.Base(c.Name)
-	switch {
-	case name == "find":
+	switch name {
+	case "find":
 		// find's paths lead; everything from the first expression on is a predicate.
 		var out []string
 		for _, a := range c.Args {
@@ -168,7 +168,7 @@ func invocationPaths(c hint.Invocation) []string {
 			out = append(out, a)
 		}
 		return out
-	case name == "sed":
+	case "sed":
 		files, _ := hint.SedFiles(c.Args)
 		return files
 	}

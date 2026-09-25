@@ -36,6 +36,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused               |
 | [raw-tool](raw-tool.md)                           | a toolchain command a spell already wraps, run outside the cache                                  |
 | [scripted-rewrite](scripted-rewrite.md)           | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                |
+| [search-translation](search-translation.md)       | a text search whose pattern a graph query provably answers with the same entities                 |
 | [sed-in-place](sed-in-place.md)                   | `sed -i`, whose two spellings destroy each other's work across platforms                          |
 | [shared-stash](shared-stash.md)                   | a bare stash push or pop, on a stack every worktree shares                                        |
 | [sibling-checkout](sibling-checkout.md)           | a magus command relocated into another checkout, judging a tree nobody ships                      |

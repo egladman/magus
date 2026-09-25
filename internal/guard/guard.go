@@ -103,6 +103,11 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// GraphIDs lists the ids of every knowledge-graph node of kind, from the graph
+	// `magus query` would answer from. definitive is false when the graph could not be
+	// loaded, which proves nothing. It can build the graph, so a rule calls it only for a
+	// command it has already found a translation candidate.
+	GraphIDs func(ctx context.Context, kind string) (ids []string, definitive bool)
 	// HeadCommit is this checkout's current revision, abbreviated, or "" when there is no
 	// VCS to ask. The push gate matches it against the commit each recorded gate run was
 	// built from; with no answer that rule stands down rather than refusing on an absence.
@@ -170,6 +175,15 @@ func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
 		return false, false
 	}
 	return d.SymbolDefined(ident)
+}
+
+// graphIDs answers not-definitive for an unset resolver, so a caller that supplies none
+// never gains a deny.
+func (d Dependencies) graphIDs(ctx context.Context, kind string) ([]string, bool) {
+	if d.GraphIDs == nil {
+		return nil, false
+	}
+	return d.GraphIDs(ctx, kind)
 }
 
 // Request is one call the guard was asked to judge: the payload, plus what the caller's

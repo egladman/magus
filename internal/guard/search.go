@@ -215,9 +215,9 @@ func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 		node := string(types.KindDiagnostic) + ":" + alt
 		return searchRoute{name: node, run: hint.Explain.With(node)}, true
 	}
-	ident := ""
+	var ident string
 	switch m := definitionLookupRe.FindStringSubmatch(alt); {
-	case m != nil && hint.IsIdentifier(m[1]):
+	case len(m) > 1 && hint.IsIdentifier(m[1]):
 		ident = m[1]
 	case len(alt) >= precedentIdentMin && precedentIdentRe.MatchString(alt):
 		ident = alt

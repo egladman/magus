@@ -102,6 +102,7 @@ const (
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 	denyRuleCd                denyRuleName = "cd"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
+	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
@@ -1507,6 +1508,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Context: installGuardContext}
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
+	}
+	if v, ok := translateVerdict(deps, cmds); ok {
+		return v
 	}
 	if v, ok := searchVerdict(deps, cmds); ok {
 		return v
