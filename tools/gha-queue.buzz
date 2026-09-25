@@ -99,6 +99,11 @@ export fun candidateMagus(args: str) > str {
     return "go run ./cmd/magus " + args;
 }
 
+// SANDBOX is the mode every hook runs in: a hook runs a change's code, so where the
+// kernel cannot confine it the queue refuses to run it rather than run it unconfined.
+// A magus a hook runs inherits the mode and may not ask for a weaker one.
+final SANDBOX = "--sandbox=required";
+
 // GATE and REGENERATE are validation's hook lines. Apply shows them on a kick-back from
 // its own flags: a verdict is written by a job that ran the change's code.
 final GATE = candidateMagus("run ci --no-default-charms");
@@ -108,7 +113,7 @@ final REGENERATE = candidateMagus("run generate:rw");
 // each hook line, or "/" when that set is no proof. Hooks read main's signed cache
 // through the queue's read-only proxy; the runner's cache token stays with the queue.
 export fun validateArgs(dir: str, change: str) > [str] {
-    final args = mut ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
+    final args = mut ["queue", "validate", SANDBOX, "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
         "--gate", GATE, "--regenerate", REGENERATE, "--remote-cache-read"];
     foreach (a in SCRATCH) {
         args.append(a);
@@ -123,9 +128,9 @@ export fun validateArgs(dir: str, change: str) > [str] {
 // touches none of their code. committer and app are the queue app's bot and slug, from
 // the workflow.
 export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
-    final args = mut ["queue", "apply", "--provider", "github", "--base", base, "--workflow", WORKFLOW,
+    final args = mut ["queue", "apply", SANDBOX, "--provider", "github", "--base", base, "--workflow", WORKFLOW,
         "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", "magus --sandbox=best-effort run generate:rw",
+        "--regenerate", "magus run generate:rw",
         "--reproduce-gate", GATE, "--reproduce-regenerate", REGENERATE];
     foreach (a in SCRATCH) {
         args.append(a);
@@ -312,7 +317,7 @@ test "outputs render a compact matrix and its count" {
 }
 
 test "validation hooks are lines a person can run once they name the projects, with caches the queue keeps private" {
-    assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--plan", "/t/queue/plan.json", "--only", "482",
+    assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--sandbox=required", "--plan", "/t/queue/plan.json", "--only", "482",
         "--verdicts", "/t/queue/verdicts",
         "--gate", "go run ./cmd/magus run ci --no-default-charms",
         "--regenerate", "go run ./cmd/magus run generate:rw",
@@ -330,9 +335,9 @@ test "validation runs the candidate's own magus; apply keeps main's" {
 }
 
 test "apply follows the validation run as its source, pinned to the base and queue.yaml, as the queue app's bot, regenerating in the sandbox" {
-    assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply",
+    assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply", "--sandbox=required",
         "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", "magus --sandbox=best-effort run generate:rw",
+        "--regenerate", "magus run generate:rw",
         "--reproduce-gate", "go run ./cmd/magus run ci --no-default-charms", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache",

@@ -71,7 +71,16 @@ type ExecOptions struct {
 	//
 	// Ignored unless TTY is set.
 	TTYCols, TTYRows int
+
+	// CancelGrace is how long a cancelled child and its process group have after SIGTERM
+	// (CTRL_BREAK on Windows) before the child is killed, and the group with it. It also
+	// bounds the wait, once the child exits, for output a process that left the group
+	// still holds open. Zero is defaultCancelGrace.
+	CancelGrace time.Duration
 }
+
+// defaultCancelGrace is ExecOptions.CancelGrace when unset.
+const defaultCancelGrace = 5 * time.Second
 
 // ExecResult is the outcome of Exec.
 type ExecResult struct {
@@ -118,6 +127,11 @@ func (r ExecResult) BuzzObject() types.BuzzObject {
 // policy the child starts confined by the kernel where the host has landlock (see
 // sandbox.Command), and a required policy on a host that cannot confine it is refused
 // (MGS2012) before anything starts.
+//
+// The child runs in a process group of its own. Off a TTY, on Linux, macOS and the
+// BSDs, whatever of that group outlives the child is killed once the child exits and
+// before it is reaped, so a background process it started ends with it; a process that
+// left the group (setsid) is not reached.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
 	if types.Tracing(ctx) {
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
@@ -154,7 +168,12 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		return ExecResult{Code: -1}, classifyMissingBinary(lookErr, name, false)
 	}
 	if policy != nil {
-		if err := policy.CheckExec(ctx, resolved); err != nil {
+		checked := resolved
+		if !filepath.IsAbs(checked) && opts.Dir != "" {
+			// exec runs a relative path from Dir, not from this process's directory.
+			checked = filepath.Join(opts.Dir, checked)
+		}
+		if err := policy.CheckExec(ctx, checked); err != nil {
 			sandbox.EmitDenyHint(policy, filesystem.Exec, resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
@@ -164,8 +183,11 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		return ExecResult{Code: -1}, err
 	}
 	c.Dir = opts.Dir
-	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
-	c.WaitDelay = 5 * time.Second
+	group := setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
+	c.WaitDelay = defaultCancelGrace
+	if opts.CancelGrace > 0 {
+		c.WaitDelay = opts.CancelGrace
+	}
 	c.Env = env
 	if js := jobserverFrom(ctx); js != nil {
 		c.ExtraFiles = append(c.ExtraFiles, js.files()...)
@@ -214,17 +236,17 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	var runErr error
 	if opts.TTY {
 		runErr = runOnPTY(ctx, c, outW, &outBuf, opts, started)
+		if ctx.Err() != nil {
+			KillGroup(c) // reap grandchildren that ignored the graceful signal
+		}
 	} else {
 		if runErr = c.Start(); runErr == nil {
 			started(c.Process.Pid)
-			runErr = c.Wait()
+			runErr = group.wait()
 		}
 	}
 	treePeak := sampler.stop()
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
-	if ctx.Err() != nil {
-		KillGroup(c) // reap grandchildren that ignored the graceful signal
-	}
 
 	res := ExecResult{}
 	if c.ProcessState != nil {

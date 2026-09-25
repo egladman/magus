@@ -26,6 +26,17 @@ import (
 // parse, are errors (MGS2004): a sandbox that quietly grants less than was written
 // breaks builds in ways nobody can trace, and one that grants more is not a sandbox.
 func FromConfig(root, cacheDir string, cfg config.SandboxConfig) (*Policy, error) {
+	tmp, err := privateTempDir(os.TempDir(), root)
+	if err != nil {
+		return nil, err
+	}
+	return FromConfigWithTempDir(root, cacheDir, tmp, cfg)
+}
+
+// FromConfigWithTempDir is FromConfig with tempDir, a directory the caller keeps private
+// to this policy's children, as their TMPDIR in place of one FromConfig creates. It
+// must lie outside root.
+func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxConfig) (*Policy, error) {
 	home, _ := os.UserHomeDir()
 	var errs []error
 	allow := make([]filesystem.Rule, 0, len(cfg.Allow))
@@ -43,12 +54,8 @@ func FromConfig(root, cacheDir string, cfg config.SandboxConfig) (*Policy, error
 		return nil, types.WrapDiagnostic(types.AllowlistUnresolved, err, "sandbox config for %s", root)
 	}
 
-	tmp, err := privateTempDir(os.TempDir(), root)
-	if err != nil {
-		return nil, err
-	}
-	if filesystem.Under(filesystem.ResolveRulePath(tmp), filesystem.ResolveRulePath(root)) {
-		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s; point TMPDIR outside it", tmp, root)
+	if filesystem.Under(filesystem.ResolveRulePath(tempDir), filesystem.ResolveRulePath(root)) {
+		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s; point TMPDIR outside it", tempDir, root)
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -63,7 +70,7 @@ func FromConfig(root, cacheDir string, cfg config.SandboxConfig) (*Policy, error
 		Mode:         cfg.Mode,
 		Workspace:    root,
 		CacheDir:     cacheDir,
-		TempDir:      tmp,
+		TempDir:      tempDir,
 		Executable:   exe,
 		GitDir:       gitDir,
 		GitCommonDir: commonDir,

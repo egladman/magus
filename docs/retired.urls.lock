@@ -46,6 +46,11 @@ development/libs-diag/
 # PROJECT, and there is no longer a project here to alias to.
 development/cmd-magus-starter/
 
+# libs/mergequeue moved to internal/queue and stopped being a project: it has no go.mod
+# and versions with magus. A /development/ page is derived from a project, so there is
+# nothing to alias to.
+development/libs-mergequeue/
+
 # retired by the concepts/guides/reference/migrating docs reorg (pre-1.0 URL break)
 affected/
 agents/

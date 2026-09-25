@@ -1,6 +1,6 @@
 name: Queue
 
-# The merge queue's validation half, run by `magus queue` (libs/mergequeue). A pull
+# The merge queue's validation half, run by `magus queue` (internal/queue). A pull
 # request joins the queue when auto-merge is enabled on it, or, for a stack, when a
 # "merge-queue: <method>" label is on its top. The plan job lists the queue, checks
 # approval at each head and partitions it by the affected sets the magus workspace

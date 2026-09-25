@@ -3033,15 +3033,17 @@ func TestTypesStaysPureDomain(t *testing.T) {
 // It is a RATCHET: the number may fall, never rise.
 //
 // Measured over this repository's history, it was 25 in May, 36 in July, 48 in August and
-// 63 now, while cmd/magus's references to the root package rose 71 -> 189 over the same
-// span. Both doors into the engine are widening, and the cost is not abstract: the
-// concurrency clamp exists in cmd/magus/main.go AND magus.go, with a comment in the
-// former admitting the latter "never runs".
+// 63 in September, while cmd/magus's references to the root package rose 71 -> 189 over
+// the same span. Both doors into the engine are widening, and the cost is not abstract:
+// the concurrency clamp exists in cmd/magus/main.go AND magus.go, with a comment in the
+// former admitting the latter "never runs". It is 67 now because the merge queue's four
+// packages moved from libs/mergequeue to internal/queue: cmd/magus imported them already,
+// and only the prefix this test counts changed.
 //
 // This test decides nothing about which door is right. It only stops the drift being
 // invisible. Lowering the number is the win; raising it should be a sentence in a commit
 // message explaining why the composition root could not hold the new dependency.
-const cmdMagusInternalCeiling = 63
+const cmdMagusInternalCeiling = 67
 
 func TestCmdMagusInternalImportsOnlyShrink(t *testing.T) {
 	t.Parallel()
