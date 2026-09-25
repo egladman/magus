@@ -42,6 +42,9 @@ final HYGIENE = "pr hygiene";
 final GREEN = ["SUCCESS", "SKIPPED", "NEUTRAL"];
 // A run that never got to judge the change; rerunning it is safe.
 final TRANSIENT = ["CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"];
+// Steps that prepare the runner before any of the change's own work: a job that failed
+// only in these never judged the change either.
+final SETUP_STEPS = ["Set up job", "Run actions/checkout@", "Run actions/setup-", "Run jdx/mise-action@"];
 final METHODS = ["squash", "merge", "rebase"];
 
 // SENSITIVE holds the paths where a mistake is a security or queue-integrity bug, so a
@@ -108,6 +111,8 @@ object Facts {
     // run_attempt by workflow run id; a run is one head's, so above 1 means that head
     // was rerun already.
     attempts: {str: int} = {<str: int>},
+    // Names of the failed steps by check job id.
+    failedSteps: {str: [str]} = {<str: [str]>},
     // Kick-back paths that are declared outputs.
     generated: [str] = [<str>],
 }
@@ -514,15 +519,37 @@ fun mechanicalMessage(message: str) > bool {
     return message.indexOf("not properly formatted") != null or message.indexOf("MGS4006") != null;
 }
 
-// checkClass says what one failing check is: transient, hygiene, elsewhere (its annotated
-// files are none the change touched), mechanical, source, or unexplained (no annotation
-// names a file).
+// setupOnly reports failed steps that are all runner setup, and at least one.
+export fun setupOnly(steps: [str]) > bool {
+    if (steps.len() == 0) {
+        return false;
+    }
+    foreach (step in steps) {
+        var setup = false;
+        foreach (prefix in SETUP_STEPS) {
+            if (step.startsWith(prefix)) {
+                setup = true;
+            }
+        }
+        if (!setup) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// checkClass says what one failing check is: transient, setup (it failed before the
+// change's own work ran), hygiene, elsewhere (its annotated files are none the change
+// touched), mechanical, source, or unexplained (no annotation names a file).
 export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
     if (TRANSIENT.indexOf(c.conclusion) != null) {
         return "transient";
     }
     if (c.name == HYGIENE) {
         return "hygiene";
+    }
+    if (setupOnly(facts.failedSteps[c.job] ?? [<str>])) {
+        return "setup";
     }
     final notes = facts.annotations[c.job] ?? [<Annotation>];
     if (notes.len() == 0) {
@@ -592,7 +619,7 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         if (cls != "unexplained") {
             explained = true;
         }
-        if (cls != "transient" and cls != "elsewhere" and cls != "unexplained") {
+        if (cls != "transient" and cls != "setup" and cls != "elsewhere" and cls != "unexplained") {
             rerunnable = false;
         }
         if (cls == "source") {
@@ -614,6 +641,13 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
     }
     if (rerunnable and runs.len() > 0) {
+        // GitHub refuses to rerun a run that is still going, so wait for it to finish.
+        foreach (c in p.checks) {
+            if (c.conclusion == "PENDING" and runs.indexOf(c.run) != null) {
+                return recordOf(p, state: "red", action: "none", model: "none",
+                    reason: "red ({failed}) outside the files the change touched; its run is still going", evidence: plain);
+            }
+        }
         foreach (run in runs) {
             if ((facts.attempts[run] ?? 1) > 1) {
                 return recordOf(p, state: "red", action: "fix", model: "opus",
@@ -966,6 +1000,25 @@ fun annotationsFor(p: Pull) > {str: [Annotation]} !> any {
     return acc;
 }
 
+// failedStepsFor reads the failed step names of p's failing check jobs, one request each.
+fun failedStepsFor(p: Pull) > {str: [str]} !> any {
+    final acc = mut{<str: [str]>};
+    foreach (c in failing(p.checks)) {
+        if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
+            continue;
+        }
+        final steps = mut [<str>];
+        foreach (line in capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/jobs/{c.job}",
+            "--jq", `.steps[] | select(.conclusion == "failure") | .name`]).split("\n")) {
+            if (line.trim() != "") {
+                steps.append(line.trim());
+            }
+        }
+        acc[c.job] = steps;
+    }
+    return acc;
+}
+
 fun attemptsOf(runs: [str]) > {str: int} !> any {
     final acc = mut{<str: int>};
     foreach (run in runs) {
@@ -1007,14 +1060,15 @@ fun records(sel: Selector) > [Record] !> any {
         final state = stateOf(p, open: open);
         var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>] };
         if (state == "red") {
-            facts = Facts{ annotations = annotationsFor(p) };
+            facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p) };
         } else if (state == "kicked-back" and p.kick != null) {
             facts = Facts{ generated = generatedOf(p.kick!.paths) };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
         if (r.action == "rerun") {
-            r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, attempts = attemptsOf(r.evidence.rerun) });
+            r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, failedSteps = facts.failedSteps,
+                attempts = attemptsOf(r.evidence.rerun) });
         }
         acc.append(r);
     }
@@ -1189,6 +1243,11 @@ test "a red record says whether to rerun, and who fixes it" {
     expect([shard, gate], facts: Facts{ annotations = at("internal/cache/key.go", message: "want 1, got 2") }, action: "fix", model: "opus");
     expect([shard, gate], facts: Facts{ annotations = at("internal/cache/key.go", message: "File is not properly formatted (gofmt)") }, action: "fix", model: "sonnet");
     expect([shard, gate], facts: Facts{}, action: "fix", model: "opus");
+    expect([shard], facts: Facts{ failedSteps = {"7": ["Run jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654"]} }, action: "rerun", model: "none");
+    expect([shard], facts: Facts{ failedSteps = {"7": ["Run jdx/mise-action@7e36c90", "Run CI for shard"]} }, action: "fix", model: "opus");
+    expect([shard], facts: Facts{ failedSteps = {"7": ["Set up job"]}, attempts = {"11": 2} }, action: "fix", model: "opus");
+    expect([shard, red("magus shard 1: docs", conclusion: "PENDING", job: "12")],
+        facts: Facts{ failedSteps = {"7": ["Set up job"]} }, action: "none", model: "none");
     expect([red(HYGIENE, conclusion: "FAILURE", job: "9"), red("t", conclusion: "CANCELLED", job: "7")], facts: Facts{}, action: "fix", model: "sonnet");
     final rerun = classify(Pull{ number = 4, checks = [red("t", conclusion: "CANCELLED", job: "7")] }, open: [<Pull>], facts: Facts{});
     assert\equal(rerun.evidence.rerun, want: ["11"], message: "the run to rerun");
