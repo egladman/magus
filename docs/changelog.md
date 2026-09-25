@@ -18,6 +18,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
+- **The agent guard refuses a backtick command substitution.** Inside double quotes a
+  backtick runs a command, so a literal backtick in a pattern pairs with the next one and
+  swallows everything between, file operands included. The deny names the fixes: `$(...)`
+  for a substitution, single quotes for a literal backtick.
 - **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
   other clients of the protocol it runs share the target's slots instead of
   choosing a width of their own. A target that declares no `slots` is unchanged.
@@ -64,6 +68,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   the GitHub provider writes them under its comment for a workflow to read.
 - **A failing remote tier degrades the run to the local tier.** The first failure is
   reported and counted as failed, never missed, and the run stops asking.
+- **The agent guard refuses a filter that nothing feeds.** A `grep`, `sed`, `jq`, `head`,
+  `tr` or similar with no file operand, no pipe into it and no input redirect reads the
+  harness's stdin, which can hang past the tool timeout. Each tool's flags are modeled, and
+  a call the guard cannot classify passes.
 - **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
   `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
   `--embedded` for magusfile code.

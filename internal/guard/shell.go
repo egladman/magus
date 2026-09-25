@@ -105,6 +105,9 @@ const (
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
+	denyRuleBacktickSubstitution denyRuleName = "backtick-substitution"
+	denyRuleFilterWithoutInput   denyRuleName = "filter-without-input"
+
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 
 	// Not shell rules: one fires on a SPAWN and one on a FILE WRITE, and neither reaches a
@@ -438,6 +441,24 @@ func isBareExitStatus(p *syntax.ParamExp) bool {
 		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
 		p.NestedParam == nil && p.Index == nil && len(p.Modifiers) == 0 &&
 		p.Slice == nil && p.Repl == nil && p.Names == 0 && p.Exp == nil
+}
+
+// backtickSubstFires reports a backtick command substitution anywhere on the line. Only the
+// parse can tell: a backtick inside single quotes or a quoted heredoc is text, and one
+// inside double quotes is a command.
+func backtickSubstFires(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if cs, ok := n.(*syntax.CmdSubst); ok && cs.Backquotes {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // throwawayDirRe matches a path under a temp root, or any path with a scratchpad
@@ -1128,6 +1149,9 @@ var (
 		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
 
+	denyBacktickSubstitution = "Write a command substitution as `$(...)`, and put a literal backtick in single quotes, as in grep -n '```' README.md.\n" +
+		"Inside double quotes a backtick RUNS a command: it pairs with the next backtick anywhere on the line, and everything between them, file operands and pipes included, becomes that command."
+
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
 	// most likely to turn a focused change into an unreviewable one: it sweeps every
@@ -1209,6 +1233,20 @@ func redirectDeny(verb, dest string) string {
 		answer = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
 	}
 	return lead + answer + mintedLogNote(verb)
+}
+
+// filterWithoutInputDeny names the tool, since on a pipeline the reader cannot otherwise
+// tell which stage was left without input.
+func filterWithoutInputDeny(tool string) string {
+	lead := "Give `" + tool + "` its input: name a file, pipe into it, or redirect one with `<`."
+	switch {
+	case stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand:
+		lead = "`" + tool + "` reads only stdin, and its operands are never input: pipe into it or redirect a file with `<`."
+	case tool == "grep" || tool == "egrep" || tool == "fgrep":
+		lead += " A recursive grep names its path too (`" + tool + " -r <pattern> .`): macOS's BSD grep reads stdin without one."
+	}
+	return lead + "\n" +
+		"As written it reads the shell's own stdin, which nothing on this line feeds: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
 }
 
 // mintedLogNote names where the output already lives, and ONLY for a verb that mints one.
@@ -1591,6 +1629,15 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(cmds) {
 		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}
+	}
+	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
+	// waiting in the background. The backtick is judged first because a stray one is how a
+	// filter loses its file operand in the first place.
+	if backtickSubstFires(command, d) {
+		return ShellVerdict{Deny: denyBacktickSubstitution, Rule: denyRule{Name: denyRuleBacktickSubstitution}}
+	}
+	if tool, ok := unfedReader(command, d); ok {
+		return ShellVerdict{Deny: filterWithoutInputDeny(tool), Rule: denyRule{Name: denyRuleFilterWithoutInput, Arg: tool}}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
 	// a task capture, this one refuses trimming it once it arrives. It has to sit above

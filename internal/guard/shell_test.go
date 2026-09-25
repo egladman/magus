@@ -1680,6 +1680,44 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 	}
 }
 
+// The measured command: its two triple backticks paired into one substitution that ate the
+// file operand and the rest of the pipeline, and the grep left over read stdin for two hours.
+const backtickEvidence = "S=...; grep -n \"fun \\|mergequeue:\\|<details\\|```\\|escape\\|fence\" $S/provider/github.buzz" +
+	" | sed -n 1,200p | grep -n -i \"kick\\|report\\|```\""
+
+func TestGuardDeniesBacktickSubstitution(t *testing.T) {
+	for _, cmd := range []string{
+		backtickEvidence,
+		"echo `date`",
+		"x=`pwd`",
+		"echo \"built at `date`\"",
+		`git commit -m "fix the ` + "`--root`" + ` flag"`,
+		"grep -n \"``\" README.md",
+		"cat <<EOF\n`whoami`\nEOF",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Equal(t, denyRule{Name: denyRuleBacktickSubstitution}, v.Rule, cmd)
+		assert.Contains(t, v.Deny, "`$(...)`", "the substitution spelling that cannot pair: %s", cmd)
+		assert.Contains(t, v.Deny, "single quotes", "where a literal backtick belongs: %s", cmd)
+		assert.Contains(t, v.Deny, "Inside double quotes a backtick RUNS a command", cmd)
+	}
+}
+
+func TestGuardAllowsBackticksAsText(t *testing.T) {
+	for _, cmd := range []string{
+		"echo 'literal ` backtick in single quotes'",
+		"grep -n '```' README.md",
+		"echo $(date)",
+		"echo \"$(date)\"",
+		"cat <<'EOF'\n`date`\nEOF",
+		// An odd backtick inside double quotes does not parse, so the shell would not run it
+		// either, and the guard fails open.
+		"echo \"`\"",
+	} {
+		assert.NotEqual(t, denyRuleBacktickSubstitution, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
 // The program rules read the parsed commands, so a line that only MENTIONS a program is
 // not that program running. Every case here was a live false positive: the sed rule
 // refused a `grep` looking for where it was tested, and refused an `echo` describing it.
