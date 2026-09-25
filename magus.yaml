@@ -62,6 +62,12 @@ sandbox:
       - CGO_CPPFLAGS
       - CGO_CXXFLAGS
       - CGO_LDFLAGS
+      # The tools this repo pins run through mise. Without its trust list a sandboxed
+      # child refuses a checkout's mise.toml, and without MISE_SAFE a pull request's
+      # mise.toml could run its own hooks inside the merge queue's candidates. Named,
+      # not MISE_*, which would carry MISE_GITHUB_TOKEN too.
+      - MISE_TRUSTED_CONFIG_PATHS
+      - MISE_SAFE
 
 cache:
   remote:
