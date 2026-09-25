@@ -13,7 +13,10 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/docs"
+	"github.com/egladman/magus/libs/testkit"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // skillCatalog is the same embedded catalog the generator renders from, so a test asserting what
 // pages exist is asserting against the bodies a build actually ships. It replaced a relative path

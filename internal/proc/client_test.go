@@ -19,8 +19,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/internal/testenv"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -584,11 +584,11 @@ func TestForwardArgsWithNewline(t *testing.T) {
 	assert.Equal(t, "x\ny", args[2])
 }
 
-// TestMain isolates the package, which among other things clears MAGUS_PROC_SOCKET.
+// TestMain isolates the package, which among other things drops MAGUS_PROC_SOCKET.
 // proc.New returns ErrAlreadyAdopted when that var is set; the tests that exercise
 // adoption set it themselves via t.Setenv. But under `magus run` magus injects it into
 // the test subprocess (the recursive-call convention), tripping the guard before any test
 // opts in, so `magus run test`/`coverage` failed every proc test even though plain `go
 // test` passed. Clearing it here can't be done per-test: three sibling tests use
 // t.Parallel, which forbids t.Setenv.
-func TestMain(m *testing.M) { testenv.Main(m) }
+func TestMain(m *testing.M) { testkit.Main(m) }

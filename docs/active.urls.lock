@@ -564,6 +564,7 @@ reference/manpage/magus-x/
 reference/manpage/magus/
 reference/remote-spells/
 reference/rules/
+reference/rules/backtick-substitution/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
 reference/rules/cache-dir-write/
@@ -576,6 +577,7 @@ reference/rules/code-search/
 reference/rules/credential-verb/
 reference/rules/doc-search/
 reference/rules/exit-status-echo/
+reference/rules/filter-without-input/
 reference/rules/focus/
 reference/rules/gate-repeat/
 reference/rules/generated-write/

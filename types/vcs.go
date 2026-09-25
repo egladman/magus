@@ -156,6 +156,7 @@ type VCSDriver interface {
 	ChurnReporter
 	BranchChangeReporter
 	RangeReporter
+	RegionReporter
 	AncestryReporter
 	ConflictResolver
 	RevisionFileReader
@@ -386,6 +387,7 @@ const (
 	CapChurnReporter         VCSCapability = "ChurnReporter"
 	CapBranchChangeReporter  VCSCapability = "BranchChangeReporter"
 	CapRangeReporter         VCSCapability = "RangeReporter"
+	CapRegionReporter        VCSCapability = "RegionReporter"
 	CapAncestryReporter      VCSCapability = "AncestryReporter"
 	CapConflictResolver      VCSCapability = "ConflictResolver"
 	CapRevisionFileReader    VCSCapability = "RevisionFileReader"
@@ -619,15 +621,6 @@ const (
 	ChangeRenamed  ChangeStatus = "renamed"
 )
 
-// FileChange is one path a commit touched. Path is the name AFTER the commit;
-// PrevPath is set only on a rename and carries the name before it, which is the
-// edge a reader follows to reassemble a file's lineage.
-type FileChange struct {
-	Path     string
-	PrevPath string
-	Status   ChangeStatus
-}
-
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
@@ -730,6 +723,27 @@ type RangeReporter interface {
 	// those with more than one parent. paths, when non-empty, keeps only the commits that
 	// changed one of those literal repository-relative paths.
 	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
+}
+
+// RegionReporter is the capability to say where inside each file a change landed: the
+// declaration (a function, a type, a doc heading, a target) enclosing every changed line,
+// as the file's diff driver names it. It is the footprint two concurrent changes are
+// compared by, finer than a path and computed from the edits themselves, never guessed.
+type RegionReporter interface {
+	// Regions refines files, as ChangedFiles returned them for base, into the
+	// declarations each one's changed lines land in.
+	//
+	// It compares the working tree with the merge base of base and the checkout's head, as
+	// ChangedFiles does, and returns one region per declaration each hunk touches, ordered
+	// by path, then side, then line. Deleted lines are placed through the merge base's
+	// version of the file and added or modified lines through the working tree's, so a new
+	// declaration is named as itself, never as the one above it.
+	//
+	// Only files are read, so an empty files returns no regions: there is nothing to
+	// refine. A file with no diff driver still yields its regions, with Driver and
+	// Declaration empty: which lines changed is known even when what encloses them is not.
+	// An unresolvable base is an error, not an empty answer.
+	Regions(ctx context.Context, root, base string, files []FileChange) ([]RegionChange, error)
 }
 
 // AncestryReporter is the capability to answer whether one revision is reachable from

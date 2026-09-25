@@ -1,0 +1,97 @@
+# Projects flow forward through a pipe of magus runs. A stage whose stdout another magus
+# reads writes its records there and its prose on stderr; a run naming no projects runs
+# on the projects its upstream ran on, and one naming projects runs exactly those.
+[windows] skip 'no kernel API proves the peers of an anonymous pipe'
+
+exec bash -c 'set -o pipefail; magus run format a | magus run lint | magus run test'
+cmp log/order want-chain
+stderr 'projects: a \(pipe\)'
+
+# Explicit projects win over the records.
+rm log/order
+exec bash -c 'set -o pipefail; magus run format a | magus run lint b'
+grep -count=1 'format a' log/order
+grep -count=1 'lint b' log/order
+! grep 'lint a' log/order
+
+# A reader that is not magus gets what it always got: prose on stderr, nothing on stdout.
+rm log/order
+exec bash -c 'set -o pipefail; magus run format a | cat'
+! stdout .
+stderr 'projects: a'
+
+# An explicit -o keeps the format asked for, so the stage downstream gets no records
+# and runs its own default: every project serving lint.
+rm log/order
+exec bash -c 'set -o pipefail; magus run format a -o json | magus run lint'
+grep 'lint a' log/order
+grep 'lint b' log/order
+
+# Without a magus upstream nothing is inherited.
+rm log/order
+exec bash -c 'set -o pipefail; echo a | magus run lint'
+grep 'lint a' log/order
+grep 'lint b' log/order
+
+# Bytes a target writes still reach the target downstream, beside the records.
+rm log/order
+exec bash -c 'set -o pipefail; magus run emit a | magus run consume b'
+cmp log/order want-bytes
+
+-- want-chain --
+format a
+lint a
+test a
+-- want-bytes --
+consume got payload
+-- log/.keep --
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "pipe-root"});
+-- a/magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({"targets": {
+    "format": {"skip_cache": "logs per invocation"},
+    "lint": {"skip_cache": "logs per invocation"},
+    "test": {"skip_cache": "logs per invocation"},
+    "emit": {"skip_cache": "writes stdout per invocation"},
+}});
+
+fun mark(what: str) > void !> any {
+    proc\exec("sh", ["-c", "echo {what} >> ../log/order"]);
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void !> any { mark("format a"); }
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { mark("lint a"); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { mark("test a"); }
+export fun emit(ctx: magus\Context, args: [str]) > void !> any { io\stdout.write("payload\n"); }
+-- b/magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({"targets": {
+    "lint": {"skip_cache": "logs per invocation"},
+    "test": {"skip_cache": "logs per invocation"},
+    "consume": {"skip_cache": "reads stdin per invocation"},
+}});
+
+fun mark(what: str) > void !> any {
+    proc\exec("sh", ["-c", "echo {what} >> ../log/order"]);
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { mark("lint b"); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { mark("test b"); }
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    final got = io\stdin.readLine();
+    if (got != null) {
+        mark("consume got {got}");
+    }
+}

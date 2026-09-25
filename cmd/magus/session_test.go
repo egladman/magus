@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +64,7 @@ func sessionsLeaseCell(t *testing.T, out, session string) string {
 }
 
 func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -86,7 +87,7 @@ func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
 // A store written before the invocation rename is told as that, not as a killed process: a
 // reader who sees "killed mid-write" goes looking for a crash that never happened.
 func TestSessionsNamesLinesWrittenBeforeTheRename(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	recordSession(t, root, "run", []string{"build"}, "invNew")
@@ -105,7 +106,7 @@ func TestSessionsNamesLinesWrittenBeforeTheRename(t *testing.T) {
 // What the environment CLAIMED reaches the listing verbatim: the spawner label a person reads,
 // and the parent span a later session can be joined to.
 func TestSessionsRendersTheSpawnerAndParentFromTheEnvironment(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -139,7 +140,7 @@ func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
 // me", so an open queue gets one cross-reference line, and a quiet queue gets silence
 // rather than a reassurance nobody asked for.
 func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	recordSession(t, root, "run", []string{"build"}, "invQuiet")
@@ -235,7 +236,7 @@ func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
 // A store with sessions in it, all older than the window, must not read as a store
 // nothing has ever written to: the second sends a person looking for a broken producer.
 func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	recordSession(t, root, "run", []string{"build"}, "invOld")
@@ -300,7 +301,7 @@ func loadedEvent(t *testing.T, root, session string, i int) sessions.AgentEvent 
 // re-reads whole transcript files rather than tracking where it stopped, so the
 // second pass over the same file has to be free.
 func TestSessionLoadIsIdempotent(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -325,7 +326,7 @@ func TestSessionLoadIsIdempotent(t *testing.T) {
 }
 
 func TestSessionLoadDropsAnotherRepositorysEvents(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	elsewhere := t.TempDir()
@@ -342,7 +343,7 @@ func TestSessionLoadDropsAnotherRepositorysEvents(t *testing.T) {
 // assertion is over the FILES rather than over the struct, because a field added
 // later would satisfy a struct-shaped test and still write the line to disk.
 func TestSessionLoadNeverStoresTheCommandText(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -365,7 +366,7 @@ func TestSessionLoadNeverStoresTheCommandText(t *testing.T) {
 // TODAY's rules have caught a command that ran weeks ago, under whatever rules
 // existed then, or under none at all.
 func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -389,7 +390,7 @@ func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
 // A rejected line names what is wrong with it and does not take the rest of the
 // stream down: an adapter emitting one bad shape emits it for a whole transcript.
 func TestSessionLoadRejectsAnUnknownKind(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -405,7 +406,7 @@ func TestSessionLoadRejectsAnUnknownKind(t *testing.T) {
 }
 
 func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 
@@ -429,7 +430,7 @@ func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
 }
 
 func TestSessionShowNamesTheLoadWhenNothingIsThere(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 
 	err := sessionShow(t.TempDir(), []string{"nope"})
@@ -466,7 +467,7 @@ func TestCommandProgramReadsThroughAWrapper(t *testing.T) {
 // guard's live observations share the host session id, so `show` reports what the trail in
 // this checkout saw the session do, under which lease, and whom it spawned.
 func TestSessionShowJoinsThisCheckoutsTrail(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))

@@ -487,37 +487,55 @@ keyed by their sha256, referenced by one manifest per cache entry. Every earlier
 version of a declared output is therefore still on disk and addressable, until
 eviction reclaims it.
 
-Two chain verbs expose that:
+A `magus buzz` script downstream of the run reaches them through the
+[`pipe`](../../reference/buzz/pipe.md) module: `pipe\outputs` lists the files a
+`run.target.result` record's target produced, and `pipe\history` and `pipe\diff` take
+one of them.
 
-```sh
-magus run build --then file dist/app history   # every cached version of that artifact
-magus run build --then file dist/app diff      # compare it against the last cached version
+```buzz
+import "std";
+import "pipe";
+
+// magus run build . | magus buzz history.buzz
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                foreach (v in pipe\history(a)) {
+                    std\print("{v.created}  {v.short}  {v.size}  {v.target}");
+                }
+                pipe\diff(a);
+            }
+        }
+    }
+}
 ```
 
 `history` answers a question the VCS answers badly for generated files. Git tells you
 when someone committed a regeneration; this tells you when the **bytes** changed:
 
 ```text
-2026-07-30T00:35:44Z  81db67b6a570      412  build
-2026-07-30T00:12:09Z  2d27fbdf4e8c      412  build
+2026-07-30T00:35:44Z  81db67b6a570  412  build
+2026-07-30T00:12:09Z  2d27fbdf4e8c  412  build
 ```
 
 Runs that produced identical bytes collapse to one row, and the row kept is the
 earliest of the run, because the useful question is when content first appeared
-rather than when it was last re-confirmed. Add `-o json` (before `--then`) for the
-blob, size, target and cache entry, so a script can compare them itself.
+rather than when it was last re-confirmed. Each row also carries the blob and the
+cache entry, and the blob is the sha256 `crypto\sha256File` gives for the file on
+disk, so a script can compare them itself.
 
 ### diff delegates; it does not render
 
-`diff` materializes the cached side into a temporary file and runs **your** difftool,
-resolved in order from `$MAGUS_DIFFTOOL`, then `$DIFFTOOL`, then `git diff
+`pipe\diff` materializes the cached side into a temporary file and runs **your**
+difftool, resolved in order from `$MAGUS_DIFFTOOL`, then `$DIFFTOOL`, then `git diff
 --no-index` (git is already a hard dependency of a workspace, so it is the one
 differ guaranteed to be present). The value is split on spaces, so a tool with flags
 works without a shell:
 
 ```sh
-MAGUS_DIFFTOOL="delta --side-by-side" magus run build --then file dist/app diff
-MAGUS_DIFFTOOL="difft"                magus run build --then file dist/app diff
+magus run build . | MAGUS_DIFFTOOL="delta --side-by-side" magus buzz history.buzz
+magus run build . | MAGUS_DIFFTOOL="difft" magus buzz history.buzz
 ```
 
 magus emits and does not render, exactly as it refuses to draw the knowledge graph.

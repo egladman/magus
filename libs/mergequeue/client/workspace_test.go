@@ -38,6 +38,10 @@ func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{}, affected, "a change touching nothing reaches nothing")
 	assert.Empty(t, unboundedBy)
+
+	all, err := w.AllUnits(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"/"}, all, "magus run reads / as every project")
 }
 
 // Generated means declared as an output. The generating project's own sources are code

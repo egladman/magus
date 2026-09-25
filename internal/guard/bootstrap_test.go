@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +107,7 @@ func TestRankOwnBuildLeavesOtherGoVerbsAlone(t *testing.T) {
 // Judge reads the envelope's cwd, so a worker's fresh checkout is judged as the worker
 // sees it rather than as the hook process's directory.
 func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	fresh := checkoutFixture(t, ownModule, false)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: fresh})
 	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + fresh + `","tool_input":{"command":"go build -o magus ./cmd/magus"}}`

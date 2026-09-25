@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,6 +145,91 @@ func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	assert.NotContains(t, got, "magus query output outfeedface", "a verified gate needs no query-output line")
 }
 
+func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		status job.Status
+		want   string
+	}{
+		{
+			name: "known",
+			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true, Footprint: []types.RegionChange{
+				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{3, 9}, Declaration: "func X() {", Driver: "golang"},
+				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{12, 14}, Declaration: "func X() {", Driver: "golang"},
+				{File: types.FileChange{Path: "a.go"}, Side: types.RegionOld, Lines: [2]int{20, 21}, Declaration: "func Y() {", Driver: "golang"},
+				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{1, 2}},
+				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{8, 8}},
+			}},
+			want: "verified plan, recorded pass\n" +
+				"footprint, reported and never graded: where its diff since the checkpoint landed\n" +
+				"  a.go#func X() {\n" +
+				"  a.go#func Y() {\n" +
+				"  notes.txt:1-2\n" +
+				"  notes.txt:8-8\n",
+		},
+		{
+			name:   "known and empty",
+			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true},
+			want: "verified plan, recorded pass\n" +
+				"footprint, reported and never graded: no line changed since the checkpoint\n",
+		},
+		{
+			name:   "declined",
+			status: job.Status{Job: "plan", Verified: true, FootprintReason: "git does not report changed regions (RegionReporter)"},
+			want: "verified plan, recorded pass\n" +
+				"footprint, reported and never graded: not known, git does not report changed regions (RegionReporter)\n",
+		},
+		{
+			name:   "nobody looked",
+			status: job.Status{Job: "plan", Verified: true},
+			want: "verified plan, recorded pass\n" +
+				"footprint, reported and never graded: not known, nothing observed the tree\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out strings.Builder
+			printJobStatus(&out, tc.status)
+			assert.Equal(t, tc.want, out.String())
+		})
+	}
+}
+
+func TestPrintJobTreeRendersEachFootprintVerdict(t *testing.T) {
+	t.Parallel()
+
+	pair := func(f *types.JobOverlapFootprint) types.JobOverlap {
+		return types.JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: f}
+	}
+	rows := []types.Job{
+		{ID: "a", State: types.StateRunning, WritePaths: []string{"api"}},
+		{ID: "b", State: types.StateRunning, WritePaths: []string{"api/x.go"}},
+	}
+	for _, tc := range []struct {
+		name string
+		f    *types.JobOverlapFootprint
+		want string
+	}{
+		{"disjoint", &types.JobOverlapFootprint{Verdict: types.FootprintDisjoint}, "    footprints: disjoint\n"},
+		{"shared", &types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"a.go#func X", "b.go#func Y"}},
+			"    footprints: shared (a.go#func X, b.go#func Y)\n"},
+		{"unknown", &types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository is bound to b"},
+			"    footprints: unknown (b: no checkout of this repository is bound to b)\n"},
+		{"not computed", nil, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out strings.Builder
+			printJobTree(&out, types.JobList{Jobs: rows, Overlaps: []types.JobOverlap{pair(tc.f)}})
+			_, after, ok := strings.Cut(out.String(), "    b: api/x.go\n")
+			require.True(t, ok, "the pair's paths are rendered: %s", out.String())
+			assert.Equal(t, tc.want, after)
+		})
+	}
+}
+
 // Explain resolves a bare name fuzzily, which is right for a person typing
 // `magus explain build` and wrong for evidence: asked for "cmd/magus" it once answered
 // target:.:release-sign, and a blast radius from an unrelated node is worse than silence.
@@ -257,7 +343,7 @@ func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 // the one jobExec sees. Mirrors TestHookEnvelopeCwdLocatesTheWorkersCheckout's setup.
 func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root = t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
