@@ -914,14 +914,14 @@ run with `Run`), the pure decisions they share (stack detection, partitioning, a
 carry-over), the document codecs, the verdict directory, the artifact follower and the
 command hooks.
 
-| Interface        | What it answers                                                               | magus's implementation      |
-| ---------------- | ----------------------------------------------------------------------------- | --------------------------- |
-| `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)          | magus's `types.VCSDriver`   |
-| `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation)       | magus's `types.VCSDriver`   |
-| `PushVCS`        | `BuildVCS` plus a leased push (applying)                                      | magus's `types.VCSDriver`   |
-| `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs       | `client.Workspace`          |
-| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark       | the `provider` Buzz scripts |
-| `ArtifactLister` | the artifacts a validation run uploaded                                       | the `provider` Buzz scripts |
+| Interface        | What it answers                                                         | magus's implementation      |
+| ---------------- | ----------------------------------------------------------------------- | --------------------------- |
+| `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)    | magus's `types.VCSDriver`   |
+| `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
+| `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
+| `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs | `client.Workspace`          |
+| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark | the `provider` Buzz scripts |
+| `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so
 which merge base a prediction takes, which conflicts are the author's and which

@@ -246,10 +246,10 @@ no glob either, so git and hg reach one only through the queue or `magus vcs res
 
 Each VCS reaches the driver its own way, and the decision is the driver's in all of them:
 
-| VCS                | Registration                                         | When it runs                                                    |
-| ------------------ | ---------------------------------------------------- | --------------------------------------------------------------- |
-| git                | `.gitattributes` and `merge.magus.driver`            | during `git merge`, `rebase` and `cherry-pick`                  |
-| Mercurial, Sapling | `[merge-patterns]` and `[merge-tools]` in the config | during `hg merge` and `sl` merges                               |
+| VCS                | Registration                                         | When it runs                                                      |
+| ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| git                | `.gitattributes` and `merge.magus.driver`            | during `git merge`, `rebase` and `cherry-pick`                    |
+| Mercurial, Sapling | `[merge-patterns]` and `[merge-tools]` in the config | during `hg merge` and `sl` merges                                 |
 | Jujutsu            | `merge-tools.magus` in the repository's config       | `magus vcs resolve`, or `jj resolve --tool magus <files>` by hand |
 
 jj records a conflict in the commit and never runs a tool on its own, so `magus vcs
