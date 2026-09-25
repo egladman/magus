@@ -9,7 +9,7 @@
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
-//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
+//	merge_change(change + {commit, message, app, through: [{id, commit}]}) > {merged, by_provider?, reason?}
 //	kick_back(change + {commit, code, report, paths, with, candidate_commit, flag}) > bool
 //	mark(change + {mark})                          > bool
 //	flag(change + {flag, on})                      > bool
@@ -432,6 +432,7 @@ func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.Mer
 	params := changeParams(c)
 	params["commit"] = opts.Commit
 	params["message"] = opts.Message
+	params["app"] = opts.App
 	through := make([]map[string]string, len(opts.Through))
 	for i, pin := range opts.Through {
 		through[i] = map[string]string{"id": pin.ID, "commit": pin.Commit}

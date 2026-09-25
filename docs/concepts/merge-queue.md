@@ -288,8 +288,8 @@ committer the provider's `describe` names; `--committer "Name <email>"` override
 for example `--committer "Release Bot <release-bot@example.com>"`. magus has no default:
 with neither, a change that needs an update commit waits with `WAIT_NO_COMMITTER` and
 apply stops with an error. `--app <slug>` names the app whose token the provider writes
-with, when it is not the job's own; apply then checks that the base requires the queue's
-status from that app.
+with, and apply checks that the base requires the queue's status from that app. The
+GitHub provider requires it: without one it refuses to describe a setup or to merge.
 
 A run source (`run:<owner>/<name>/runs/<id>` on GitHub) needs `--workflow`, the
 definition the run must have run. Every listing says what started the run: apply
@@ -545,7 +545,7 @@ verdicts pass between them one change at a time:
    plan out as a job matrix, one `validate --only <id>` job per change up to the depth of
    each partition. Each job uploads its verdict as an artifact the moment it finishes.
 2. `queue-apply.yaml` starts when validation is requested (`workflow_run: requested`), from
-   main's definition with a write-scoped Actions token, and downloads each verdict
+   main's definition with the queue app's token, and downloads each verdict
    artifact as it appears, while validation is still running: `apply` with the run as its
    source merges each change whose predecessors have merged, and stops once the
    validation run completes. A first job waits only to see whether validation's plan job
@@ -553,22 +553,22 @@ verdicts pass between them one change at a time:
 3. A pull request event (merge intent enabled, a queue label, a push, a review) runs the
    pull request's own copy of `queue.yaml`, so apply never follows it. That run's one job
    says whether the event carries merge intent, and `queue-apply.yaml`'s dispatch job,
-   holding only `actions: write`, answers it by dispatching `queue.yaml` on main, which
-   validates the whole queue. A forged intent job starts one more run on main and
-   nothing else.
+   holding only an app token scoped to `actions: write`, answers it by dispatching
+   `queue.yaml` on main, which validates the whole queue. A forged intent job starts one
+   more run on main and nothing else.
 
-The apply job runs in the `magus-queue` environment, which holds the app's key when
-there is one, so every apply run is listed under the repository's Deployments as a
+The apply job runs in the `magus-queue` environment, which holds the app's key, so every
+apply run is listed under the repository's Deployments as a
 deployment to `magus-queue`. That list is the queue's run history, not a release.
 
-The apply token is the job's own unless the repository adds the queue's own GitHub App
-(see [Setting it up on GitHub](#setting-it-up-on-github)), so by default no long-lived
-secret exists. Most merges are made by GitHub's auto-merge on behalf of whoever enabled
-it, and start main's CI, CD and the queue's next run like any merge. A merge the queue
-makes itself with the Actions token starts no workflow, so after one the job dispatches
-those runs itself; `apply` marks each `merged` event GitHub made with `by_provider`, and
-the job reads that to decide. With the app's token the queue's own merges start those
-runs themselves, and the workflow tells the job not to dispatch.
+Both jobs that need a token use the queue's own GitHub App's (see
+[Setting it up on GitHub](#setting-it-up-on-github)), and neither runs without it: a run
+the job's Actions token dispatches starts no `workflow_run`, and a merge it makes starts
+no workflow, so on that token the queue would validate every change and merge none. Most
+merges are made by GitHub's auto-merge on behalf of whoever enabled it; when GitHub has
+not merged a change in time, the queue merges it itself, as the app. Either merge starts
+main's CI, CD and the queue's next run, so nothing is dispatched. `apply` marks each
+`merged` event GitHub made with `by_provider`.
 
 Before each merge, apply re-reads the change's approval, merge intent, base and merge
 method from the provider, rebuilds its candidate, and predicts the tree main will carry:
@@ -625,78 +625,60 @@ a rebase), and stops otherwise.
 
 ## Setting it up on GitHub
 
-The queue runs on the job's own Actions token and needs no secret. That is the whole
-setup for most repositories, and adding the queue's own GitHub App later is
-configuration alone: the workflows are the same files either way.
+The queue writes only as its own GitHub App, for the reason
+[above](#applying-as-each-candidate-goes-green): on the job's Actions token it would
+validate changes and merge none. `queue-apply.yaml` fails both jobs that need a token
+until the app is configured, naming the variable and the secret it needs.
 
 `magus queue describe` reads how the repository is wired and prints the rest as `gh`
 commands, each under a comment saying what it does. magus never runs them, and never
 changes a setting itself. It reads over the network with your token, so pass one:
 
 ```sh
-GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main
+GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main --app <slug>
 ```
 
-`-o json` prints the same as the `setup` of a `mergequeue.capabilities/v1` document: the
-status the queue posts and who its credential posts it as, every check the base requires
-and the integration each is pinned to, the repository settings the queue needs, and the
-steps.
-
-### Without a credential: three steps
+Without `--app` it stops with an error carrying the app's registration link, since a
+setup without the app is not one the queue can run on. `-o json` prints the same as the
+`setup` of a `mergequeue.capabilities/v1` document: the status the queue posts and who
+its credential posts it as, every check the base requires and the integration each is
+pinned to, the repository settings the queue needs, the app, and the steps.
 
 1. Commit `.github/workflows/queue.yaml` and `.github/workflows/queue-apply.yaml` (this
-   repository's are the reference). Both setups use them unchanged.
-2. Run the commands `describe` prints: allow auto-merge, and a ruleset of its own that
-   requires `merge-queue` from GitHub Actions (integration 15368) with "Require branches
-   to be up to date before merging" off. Your other rulesets stay as they are. On a
-   phone, the same is Settings > General > Pull Requests > "Allow auto-merge", and
-   Settings > Rules > Rulesets > New branch ruleset: target the default branch, "Require
-   status checks to pass", add `merge-queue` with GitHub Actions as its source.
-3. Decide about the required checks `describe` lists as running on `pull_request`. A push
-   the queue makes with the Actions token (an update commit or a regeneration) starts
-   runs that wait for someone to approve them, so those checks go unreported on it. Take
-   them out of the required set, as this repository did with `ci gate`, or accept that
-   such a change waits until someone approves its runs, or add the app.
+   repository's are the reference).
+2. Run `describe` without `--app`, open the registration link it prints, and click
+   "Create GitHub App". It is pre-filled: private, no webhook, and contents, pull
+   requests, commit statuses, actions and workflows write.
+3. Run `describe` again with `--app <slug>`, and run the commands it prints in order:
+   allow auto-merge, install the app on this repository alone, create the `magus-queue`
+   environment with its secrets released to the default branch only, set the
+   `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's client id, generate a private key on
+   the app's page, store it as the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, and
+   delete the download. On a phone, the first is Settings > General > Pull Requests >
+   "Allow auto-merge", and the key goes into Settings > Environments > magus-queue > Add
+   secret.
+4. Apply the ruleset change it prints last, which requires `merge-queue` from the app's
+   id with "Require branches to be up to date before merging" off: a ruleset of its own
+   when nothing requires it yet, a `gh api` rewrite of that ruleset, or a link for any
+   other. Your other rulesets stay as they are. The pin is what makes the status
+   unforgeable: anyone with write access can post a status from GitHub Actions, and only
+   the app posts as the app.
 
 Require `merge-queue` only once the queue is on the default branch. Before that, nothing
 posts it, and every merge waits on it.
 
-### The queue's own GitHub App: five more steps
-
-Add it when any of these holds:
-
-- a second person has write access, since anyone with write access can post a status
-  from GitHub Actions, and only a status pinned to an app nobody else holds cannot be
-  forged;
-- you want to keep required checks that run on `pull_request`, since the app's pushes
-  start them like anyone's;
-- a pull request touches `.github/workflows`, which the Actions token cannot merge;
-- you want main's `push` workflows to start on every merge, with nothing dispatched and
-  nothing run twice.
-
-1. Open the registration link `describe` printed last and click "Create GitHub App". It
-   is pre-filled: private, no webhook, and contents, pull requests, commit statuses,
-   actions and workflows write.
-2. On the app's page, generate a private key. A `.pem` downloads.
-3. Install the app on this repository alone.
-4. Run `describe` again with `--app <slug>`, and run the commands it prints: they create
-   the `magus-queue` environment with its secrets released to the default branch only,
-   set the `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's client id, store the key as
-   the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, and delete the download. On a
-   phone, paste the key into Settings > Environments > magus-queue > Add secret.
-5. Apply the ruleset change it prints, which pins `merge-queue` to the app's id: a
-   `gh api` rewrite of the ruleset step 2 created, or a link for any other.
-
 The next `queue-apply` run finds the variable and the secret. `setup-magus` mints a token
 for this repository alone that expires when the job ends, and the queue merges, pushes,
-commits and posts its status as the app's bot. The key lives in the environment, and a
-pull request's run is evaluated against its merge ref, so no pull request's workflow can
-read it.
+commits and posts its status as the app's bot. The app's pushes start a pull request's
+workflows like anyone's, so required checks that run on `pull_request` report on its
+update commits, and it can merge a pull request that touches `.github/workflows`. The key
+lives in the environment, and a pull request's run is evaluated against its merge ref, so
+no pull request's workflow can read it.
 
 `apply` refuses to start, with [MGS3019](../reference/codes/sandbox/MGS3019.md), when the
-ruleset pins `merge-queue` to one integration and it holds another's token: GitHub would
-count none of the statuses it posts. That happens when step 5 is skipped, or when the
-secret goes missing and the job falls back to its own token.
+ruleset pins `merge-queue` to another integration than the app: GitHub would count none
+of the statuses it posts. That happens when step 4 is skipped after the ruleset pinned
+the context elsewhere, or when the app was replaced.
 
 ## Providers
 
@@ -711,7 +693,7 @@ functions, each taking one record:
 | `list_green`     | `{base, remote_url, context}`                                                                      | `{changes: [{id, repo, head}]}`                                                  |
 | `post_status`    | the change plus `{commit, context, state, description}`                                            | `true` when recorded                                                             |
 | `retarget`       | the change plus `{base}`                                                                           | `true` once the change targets `base`                                            |
-| `merge_change`   | the change plus `{commit, message, through}`                                                       | `{merged, by_provider?, reason?}`                                                |
+| `merge_change`   | the change plus `{commit, message, app, through}`                                                  | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, claim, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                            |
 | `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                                  | `true` once the change shows that mark and no other                              |
 | `flag`           | the change plus `{flag, on}`: `changes_generator`, and whether to show it                          | `true` once the change shows the flag exactly when `on`                          |
@@ -730,7 +712,7 @@ pushes as, which commits every update commit unless `--committer` overrides it.
 `setup` is asked for with a `status_context`: `{status_context, credential: {id, name?},
 required_checks: [{context, integration?, events?}], settings: [{name, value, want}],
 app?, steps: [{title, command? or url?}]}`. `credential` is the integration the write
-credential posts statuses as (the `app` named, else the provider's default),
+credential posts statuses as (the `app` named; GitHub's provider requires one),
 `required_checks` what the base requires and the integration each is pinned to, and
 `steps` only when `setup_steps` is true, since they cost reads a job's token may not be
 allowed. A provider that returns no `setup` skips apply's credential check.
@@ -745,7 +727,8 @@ intent (`queued`), and the other open changes whose head branch is its branch
 the queue carries over only across a rebase that changed nothing. `list_green` names
 every open change, whatever it targets, whose head carries the status `context` at
 success. `through` lists the changes beneath a stack's top that merge in the same call,
-lowest first, each with the commit it must still be at. `merge_change` sets
+lowest first, each with the commit it must still be at. `app` is apply's `--app`, the
+app the merge is made as. `merge_change` sets
 `by_provider` when the provider merged the change on its own rather than on this call;
 left out, it reads as the call's merge. `kick_back`'s `report` is Markdown in the
 queue's own words, every file name in it a code span. `claim` is what the verdict said
@@ -806,19 +789,20 @@ description the first time a repository needs it: `mark` swaps between
 carrying that flag names the label in its comment. A label GitHub refuses to create for
 any reason but that the repository already has it is an error naming GitHub's reason.
 None of these labels starts with `"queue: "`, so none reads as merge intent. Its
-`describe` reports the label prefix `"queue: "` and the committer
-`github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
-identity a workflow's token pushes as; with the queue's app, `queue-apply.yaml` passes the
-app's bot as `--committer`. Its setup reads the base's rulesets and classic branch
-protection, the app with `--app`, and for the steps the checks and workflow runs on the
+`describe` reports the label prefix `"queue: "` and, with a setup, the committer
+`<slug>[bot] <<id>+<slug>[bot]@users.noreply.github.com>`, the app's bot, read from
+GitHub; `queue-apply.yaml` passes the same as `--committer`. Its setup refuses to go on
+without `--app`, printing the app's registration link instead, and reads the base's
+rulesets and classic branch protection, the app, and for the steps the checks and
+workflow runs on the
 head of the most recently updated pull request from the repository, which is how it
 tells which required checks run on `pull_request`. A read refused with 403 or 404 names
 the permission it needs.
 
 On GitHub, `merge_change` for a pull request with auto-merge on waits up to a minute for
 GitHub to merge it once the queue's status went green, then merges it itself through the
-API, pinned to the head. A merge GitHub made in the meantime reads as GitHub's unless
-the Actions bot made it. A stack, queued by label, has no auto-merge, so the queue always
+API, pinned to the head, as the app. A merge GitHub made in the meantime reads as
+GitHub's unless the app's bot made it. A stack, queued by label, has no auto-merge, so the queue always
 merges it itself. No merge needs a bypass actor. Its `describe` narrows `methods` to what
 the repository settings and every active ruleset rule targeting the base branch both
 allow, dropping `merge` when one of those rules requires a linear history, and errors

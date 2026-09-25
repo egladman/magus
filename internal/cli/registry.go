@@ -1715,7 +1715,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
 				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
-				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App, required with a --status-context)"},
 			}, queueCheckout...),
 		},
 		{
@@ -1766,7 +1766,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
-				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it"},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
