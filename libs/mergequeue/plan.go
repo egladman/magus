@@ -354,6 +354,12 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 	if c.AuthorRegenerates, err = authorRegenerates(ctx, r.facts, paths); err != nil {
 		return nil, fmt.Errorf("regeneration of %s: %w", c.Label(), err)
 	}
+	// A new project is the author's to name, and every hook takes the units as arguments.
+	for _, u := range c.Affected {
+		if err := types.CheckUnit(u); err != nil {
+			return refused(*c, "its affected set: "+err.Error()), nil //nolint:nilerr // a unit no hook can take refuses the change, not the plan
+		}
+	}
 	return nil, nil //nolint:nilnil // no verdict is planning's answer that c is admitted
 }
 

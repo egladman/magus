@@ -245,6 +245,11 @@ func TestPlanAdmission(t *testing.T) {
 			changed: []string{"gen/x.go", "magusfile.buzz"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}, Unbounded: "magusfile.buzz edits the declarations"},
 		}, wantSet: []string{"a"}, wantRegen: []string{"gen/x.go"}},
+		// Every hook takes the units as arguments after its own, with no "--" between.
+		"a project a hook would read as an option is kicked back": {c: unknown, admit: &admitting{affected: []string{"a", "--gate=sh"}},
+			want: types.DecisionKick, wantCode: types.CodeKickRefused},
+		"so is one given with the change": {c: change("1", "-x"), admit: &admitting{},
+			want: types.DecisionKick, wantCode: types.CodeKickRefused},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)

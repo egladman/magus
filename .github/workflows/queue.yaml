@@ -169,14 +169,32 @@ jobs:
           name: mergequeue-plan
           path: ${{ runner.temp }}/queue
 
+      # `queue validate --remote-cache-read` reads these to serve hooks main's signed
+      # magus cache through a read-only loopback proxy; the hooks get a stand-in token and
+      # never these. The runner injects them into an action's process but not into a
+      # `run:` step, so re-exporting them takes a JS action, as in ci.yaml. Missing, the
+      # validate step refuses to start rather than running cold.
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              if (!value) continue
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
+
       # Pull request refs are fetched over the checkout's remote, which carries no
       # credential; the repository is public, so the read needs none.
       # Every hook keeps its caches in its own candidate's scratch directory
       # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
-      # gate replays as green.
+      # gate replays as green. The remote cache it reads is main's, verified against
+      # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every hook.
       - name: Validate #${{ matrix.change }}
         env:
           CHANGE: ${{ matrix.change }}
+          MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
         run: magus buzz tools/gha-queue.buzz -- validate --change "$CHANGE"
 
       # The directory's contents become the artifact's root: verdict.json.

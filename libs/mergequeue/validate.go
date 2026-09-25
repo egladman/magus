@@ -575,9 +575,15 @@ func ontoName(base, onto, after string) string {
 	return "`" + base + "` at `" + short(onto) + "`"
 }
 
+// joinPaths names paths in a report, each a [types.CodeSpan]: a file name is the
+// author's to choose, and a report is Markdown.
 func joinPaths(paths []string) string {
-	if len(paths) > 5 {
-		return fmt.Sprintf("%s and %d more", strings.Join(paths[:5], ", "), len(paths)-5)
+	shown := make([]string, 0, min(len(paths), 5))
+	for _, p := range paths[:min(len(paths), 5)] {
+		shown = append(shown, types.CodeSpan(p))
 	}
-	return strings.Join(paths, ", ")
+	if len(paths) > 5 {
+		return fmt.Sprintf("%s and %d more", strings.Join(shown, ", "), len(paths)-5)
+	}
+	return strings.Join(shown, ", ")
 }

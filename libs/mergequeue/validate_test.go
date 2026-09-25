@@ -274,7 +274,7 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 
 	got := recorded(t, dir)
 	assert.Equal(t, types.CodeWaitConflictAhead, got["2"].Code)
-	assert.Equal(t, "conflicts with #1 ahead of it in a/x.go; retried once it merges", got["2"].Reason)
+	assert.Equal(t, "conflicts with #1 ahead of it in `a/x.go`; retried once it merges", got["2"].Reason)
 	assert.Equal(t, []string{"a/x.go"}, got["2"].Paths)
 	assert.Equal(t, "1", got["3"].After, "stacked past the change that waits")
 	assert.Equal(t, types.DecisionMerge, got["3"].Decision)
@@ -354,7 +354,7 @@ func TestValidationRegeneratesOnlyWhatApplyingCanReproduce(t *testing.T) {
 		"a generator change whose outputs are fresh": {want: types.DecisionMerge},
 		"a generator change whose outputs are stale": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
 			want:       types.DecisionKick,
-			wantReason: "building its candidate failed: gen/x.go are stale on top of " + base[:12] + ", and it changes code their regeneration runs (gen/gen.go), so the queue cannot regenerate them for it"},
+			wantReason: "building its candidate failed: `gen/x.go` are stale on top of " + base[:12] + ", and it changes code their regeneration runs (`gen/gen.go`), so the queue cannot regenerate them for it"},
 		"a change the regeneration runs none of": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}}, want: types.DecisionMerge},
 	} {
 		t.Run(name, func(t *testing.T) {

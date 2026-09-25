@@ -4,12 +4,54 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/mergequeue/types"
 )
+
+func TestAClaimIsBoundedAndCutAtARuneBoundary(t *testing.T) {
+	assert.Equal(t, "short", claim("short"))
+	got := claim(strings.Repeat("\xc3\xa9", types.MaxClaim))
+	assert.LessOrEqual(t, len(got), types.MaxClaim)
+	assert.True(t, utf8.ValidString(got), "no rune is split")
+	assert.True(t, strings.HasSuffix(got, "\n[cut]"), got[len(got)-10:])
+}
+
+// A kick read from a plan or a verdict says what the queue checked; the verdict's own
+// words, which a job running the change's code could have written, never become markup.
+func TestAReadKickIsWordedByTheQueue(t *testing.T) {
+	c := change("1", "a")
+	hostile := "@team [click](https://evil.example) <!-- `"
+	for name, tc := range map[string]struct {
+		v    types.Verdict
+		want types.Kick
+	}{
+		"a conflict": {
+			v:    types.Verdict{Change: c, Code: types.CodeKickConflict, Reason: hostile, Report: hostile},
+			want: types.Kick{Code: types.CodeKickConflict, Report: conflictReport("main", c.Head)},
+		},
+		"a fork": {
+			v:    types.Verdict{Change: types.Change{ID: "1", Head: c.Head, Fork: true}, Code: types.CodeKickRefused, Reason: hostile, Report: hostile},
+			want: types.Kick{Code: types.CodeKickRefused, Report: forkReport},
+		},
+		"a red gate": {
+			v: types.Verdict{Change: c, Code: types.CodeKickRed, Onto: head("o"), After: "7", Reason: hostile, Report: hostile},
+			want: types.Kick{Code: types.CodeKickRed, Claim: hostile,
+				Report: "The merge queue built this change at `" + c.Head[:12] + "` onto the candidate of #7 (`" + head("o")[:12] + "`), and the gate failed on it and passed without it.\n"},
+		},
+		"a red gate naming nothing it was built onto": {
+			v:    types.Verdict{Change: c, Code: types.CodeKickRed, Reason: hostile, Report: hostile},
+			want: types.Kick{Code: types.CodeKickRed, Claim: hostile, Report: "The merge queue cannot merge this change at `" + c.Head[:12] + "`.\n"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, kickOf("main", tc.v))
+		})
+	}
+}
 
 func TestPlanRoundTrips(t *testing.T) {
 	p := types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 3,
