@@ -73,8 +73,15 @@ func (h headPolicy) Pending(ctx context.Context, scope []string) ([]string, erro
 		return nil, nil
 	}
 	dirty, err := h.driver.DirtyFiles(ctx, h.workspace, pathspecs)
-	if err != nil || len(dirty) == 0 {
+	if err != nil {
+		if _, rootErr := h.repoRoot(ctx); rootErr != nil {
+			//nolint:nilerr // a workspace outside any repository has no approved state to defer to
+			return nil, nil
+		}
 		return nil, err
+	}
+	if len(dirty) == 0 {
+		return nil, nil
 	}
 	repoRoot, err := h.repoRoot(ctx)
 	if err != nil {
