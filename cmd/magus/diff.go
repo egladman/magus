@@ -2502,7 +2502,6 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 // it here is the failure that gate exists for.
 var localAdvisors = []string{
 	"merge-conflict.buzz",
-	"hand-edited-generated.buzz",
 	"target-outputs.buzz",
 	"doctor.buzz",
 	"version-floor.buzz",

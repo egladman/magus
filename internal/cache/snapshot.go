@@ -26,7 +26,7 @@ import (
 // declared outputs yields an empty manifest (a correct cache hit on rerun).
 func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Duration) (*Manifest, []string, error) {
 	root := s.WorkspaceRoot
-	matches, err := expandOutputGlobs(s.Outputs, root)
+	matches, err := expandOutputGlobs(s.Outputs, root, s.NestedDirs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -39,7 +39,7 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	// above: a target declaring its own outputs alongside a cross-project one passes that
 	// test on its own outputs alone, and the missing foreign file goes unnoticed.
 	for _, g := range s.RequiredOutputs {
-		found, err := expandOutputGlobs([]string{g}, root)
+		found, err := expandOutputGlobs([]string{g}, root, s.NestedDirs)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -155,7 +155,8 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 }
 
 // expandOutputGlobs expands output globs relative to root; rejects absolute paths and "..".
-func expandOutputGlobs(globs []string, root string) ([]relAbs, error) {
+// A match inside one of nested is dropped unless its glob is rooted inside that project.
+func expandOutputGlobs(globs []string, root string, nested []string) ([]relAbs, error) {
 	rootFS := os.DirFS(root)
 	seen := map[string]struct{}{}
 	var out []relAbs
@@ -184,6 +185,9 @@ func expandOutputGlobs(globs []string, root string) ([]relAbs, error) {
 					}
 					rel, _ := filepath.Rel(root, p)
 					rel = filepath.ToSlash(rel)
+					if !types.GlobClaims(g, rel, nested) {
+						return nil
+					}
 					if _, ok := seen[rel]; ok {
 						return nil
 					}
@@ -196,6 +200,9 @@ func expandOutputGlobs(globs []string, root string) ([]relAbs, error) {
 				}
 				continue
 			}
+			if !types.GlobClaims(g, m, nested) {
+				continue
+			}
 			if _, ok := seen[m]; ok {
 				continue
 			}
@@ -205,6 +212,37 @@ func expandOutputGlobs(globs []string, root string) ([]relAbs, error) {
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
 	return out, nil
+}
+
+// ownedOutputs drops the records inside a nested project that no glob of s rooted there
+// claims. A manifest is not trusted to have been snapshotted under this rule (a remote
+// tier, an older binary), so a hit enforces it again. It returns m itself when nothing
+// drops.
+func ownedOutputs(m *Manifest, s Step) *Manifest {
+	if len(s.NestedDirs) == 0 {
+		return m
+	}
+	kept := make([]OutputRecord, 0, len(m.Outputs))
+	for _, rec := range m.Outputs {
+		if types.NestedOwner(rec.Path, s.NestedDirs) == "" || slices.ContainsFunc(s.Outputs, func(g string) bool {
+			g = filepath.ToSlash(g)
+			// A literal glob that names a directory claims every file beneath it, as
+			// expandOutputGlobs walks it.
+			ok := rec.Path == g || strings.HasPrefix(rec.Path, g+"/")
+			if !ok {
+				ok, _ = doublestar.Match(g, rec.Path)
+			}
+			return ok && types.GlobClaims(g, rec.Path, s.NestedDirs)
+		}) {
+			kept = append(kept, rec)
+		}
+	}
+	if len(kept) == len(m.Outputs) {
+		return m
+	}
+	narrowed := *m
+	narrowed.Outputs = kept
+	return &narrowed
 }
 
 // replay restores a manifest's outputs from the local store.

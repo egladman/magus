@@ -28,10 +28,6 @@ func (jjName) name() string      { return "jj" }
 //
 // Why each backend declines what it does:
 //
-//   - jj, MergeDriverInstaller: its merge-tools config selects one tool for the whole
-//     repository, with no per-path key (checked against `jj config list
-//     --include-defaults`), so registering magus would route every conflicted file
-//     through it. ConflictResolver settles a jj workspace with no driver at all.
 //   - jj, the hook installers: jj has no native hooks, and `jj git push` passes
 //     --no-verify, so not even git's hooks under a colocated workspace would fire.
 //   - jj, PushStatusReporter: hg and Sapling answer from a phase recorded on the commit;
@@ -54,22 +50,6 @@ func decline[N backendName](c types.VCSCapability) error {
 
 func (declines[N]) Bisect(context.Context, string, types.BisectOptions) (types.Culprit, error) {
 	return types.Culprit{}, decline[N](types.CapBisector)
-}
-
-func (declines[N]) InstallMergeDriver(context.Context, string, []string) error {
-	return decline[N](types.CapMergeDriverInstaller)
-}
-
-func (declines[N]) CheckMergeDriver(context.Context, string) (bool, error) {
-	return false, decline[N](types.CapMergeDriverInstaller)
-}
-
-func (declines[N]) EnsureMergeDriver(context.Context, string, []string) (bool, error) {
-	return false, decline[N](types.CapMergeDriverInstaller)
-}
-
-func (declines[N]) MergeDriverCommand(context.Context, string) (string, error) {
-	return "", decline[N](types.CapMergeDriverInstaller)
 }
 
 func (declines[N]) InstallRefreshHook(context.Context, string, string) ([]string, error) {
@@ -136,6 +116,18 @@ func (declines[N]) RangeCommits(context.Context, string, string, string, []strin
 	return nil, decline[N](types.CapRangeReporter)
 }
 
+func (declines[N]) Regions(context.Context, string, string, []types.FileChange) ([]types.RegionChange, error) {
+	return nil, decline[N](types.CapRegionReporter)
+}
+
+func (declines[N]) RegionsBetween(context.Context, string, string, []byte, []byte) ([]types.RegionChange, error) {
+	return nil, decline[N](types.CapRegionReporter)
+}
+
+func (declines[N]) Drivers(context.Context, string, []string) (map[string]string, error) {
+	return nil, decline[N](types.CapRegionReporter)
+}
+
 func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {
 	return false, decline[N](types.CapAncestryReporter)
 }
@@ -194,6 +186,10 @@ func (declines[N]) DiffTrees(context.Context, string, string, string) ([]string,
 
 func (declines[N]) MergeTrees(context.Context, string, types.TreeMerge) (types.TreeMergeResult, error) {
 	return types.TreeMergeResult{}, decline[N](types.CapTreeMerger)
+}
+
+func (declines[N]) MergeBase(context.Context, string, string, string) (string, bool, error) {
+	return "", false, decline[N](types.CapTreeMerger)
 }
 
 func (declines[N]) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {

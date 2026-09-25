@@ -45,6 +45,42 @@ func ReadEnd(pid, fd int) (Pipe, error) {
 	return Pipe{id: peer}, nil
 }
 
+// WriteEnd returns the pipe open at fd in pid, seen from its write end: the same Pipe
+// ReadEnd names from the other end.
+func WriteEnd(pid, fd int) (Pipe, error) {
+	self, _, ok := pipeHandles(pid, fd)
+	if !ok {
+		return Pipe{}, ErrNotPipe
+	}
+	return Pipe{id: self}, nil
+}
+
+// Readers returns every process of this user that holds p's read end open.
+func (p Pipe) Readers() ([]int, error) {
+	pids, err := userPIDs()
+	if err != nil {
+		return nil, err
+	}
+	var out []int
+	for _, pid := range pids {
+		if p.ReadBy(pid) {
+			out = append(out, pid)
+		}
+	}
+	return out, nil
+}
+
+// ReadBy reports whether pid holds p's read end open right now. A read end's peer is
+// the write end that names the pipe.
+func (p Pipe) ReadBy(pid int) bool {
+	for _, fd := range pipeFDs(pid) {
+		if _, peer, ok := pipeHandles(pid, fd); ok && peer == p.id {
+			return true
+		}
+	}
+	return false
+}
+
 // Writers returns every process of this user that holds p's write end open. Processes
 // that hold only the read end are not writers.
 func (p Pipe) Writers() ([]int, error) {

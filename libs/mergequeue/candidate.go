@@ -10,12 +10,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/libs/mergequeue/types"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -23,10 +25,6 @@ import (
 // candidateIdentity authors every candidate commit. A candidate is never pushed, so no
 // one sees it; it is fixed so the same inputs yield the same commit.
 var candidateIdentity = magustypes.Person{Name: "merge queue", Email: "queue@mergequeue.invalid"}
-
-// candidateDate dates every candidate commit, so the same inputs yield the same commit
-// in every job that builds it.
-var candidateDate = time.Unix(946684800, 0).UTC()
 
 // reviewDepth bounds how many merges of the base reviewTarget and ownTop look through.
 const reviewDepth = 8
@@ -111,24 +109,139 @@ func mergeBase(ctx context.Context, v types.ReadVCS, root, rev string, c types.C
 }
 
 // checkMerge merges c onto tip without a checkout and returns a *conflictError when a
-// file no target declares as its output conflicts.
+// file no target declares as its output conflicts and auto-resolution does not settle it.
 func checkMerge(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, tip string, c types.Change) error {
 	mb, err := mergeBase(ctx, v, root, tip, c)
 	if err != nil {
 		return err
 	}
-	r, err := v.MergeTrees(ctx, root, magustypes.TreeMerge{Base: mb, Ours: tip, Theirs: c.Head})
+	m := magustypes.TreeMerge{Base: mb, Ours: tip, Theirs: c.Head}
+	r, err := v.MergeTrees(ctx, root, m)
 	if err != nil {
 		return err
 	}
-	src, err := sources(ctx, f, conflictPaths(r.Conflicts))
+	_, src, declined, err := resolveSources(ctx, v, f, root, m, r.Conflicts)
 	if err != nil {
 		return err
 	}
 	if len(src) > 0 {
-		return &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, root, tip, c.Head, src)}}
+		return &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, root, tip, c.Head, src), declined: declined}}
 	}
 	return nil
+}
+
+// settledSource is a conflicted source file auto-resolution settled: the merge, and the
+// build tool's classification that allowed it.
+type settledSource struct {
+	path    string
+	res     merge3.Resolution
+	verdict string // the classifier's line, `<path>: <class> (<why>)`
+}
+
+// String names the path's class and why, and each region as a location with its kind.
+func (s settledSource) String() string { return s.verdict + "; " + s.res.Label() }
+
+// resolvedNote is how a report names what the queue settled.
+func resolvedNote(settled []settledSource) string {
+	names := make([]string, len(settled))
+	for i, s := range settled {
+		names[i] = s.String()
+	}
+	return "auto-resolved " + strings.Join(names, " | ")
+}
+
+// declinedNote is how a report names the conflicted source files auto-resolution tried
+// and why each stayed conflicted, or "" when it tried none.
+func declinedNote(declined []string) string {
+	if len(declined) == 0 {
+		return ""
+	}
+	return "not auto-resolved: " + strings.Join(declined, " | ")
+}
+
+// resolveSources settles what it can of the conflicts in cs that are not in generated
+// files. It returns those settled, the rest, and for each of the rest it tried, why it
+// declined, all in cs's order.
+//
+// A content conflict is merged from its three versions: at m.Ours, at m.Theirs, and at
+// m.Base, or at their one merge base when m.Base is empty. It settles when merge3 settles
+// every region both sides changed and the build tool allows the result
+// (BuildFacts.AutoResolvable, the change classifier's low-risk classes or an opted-in
+// code path). A file the base lacks stays conflicted, and a file settles only whole. The
+// computation is the running queue's own, from the blobs alone, so whoever recomputes it
+// from the same commits gets the same bytes.
+func resolveSources(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root string, m magustypes.TreeMerge, cs []magustypes.Conflict) (settled []settledSource, left, declined []string, err error) {
+	if len(cs) == 0 {
+		return nil, nil, nil, nil
+	}
+	writes, err := f.Classify(ctx, conflictPaths(cs))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("classify: %w", err)
+	}
+	base, looked := m.Base, m.Base != ""
+	for _, c := range cs {
+		if writes[c.Path].Output {
+			continue
+		}
+		if c.Kind != magustypes.ConflictKindContent {
+			left = append(left, c.Path)
+			continue
+		}
+		if !looked {
+			looked = true
+			// No one base (none, or a criss-cross) leaves base empty, and every file conflicted.
+			if base, _, err = v.MergeBase(ctx, root, m.Ours, m.Theirs); err != nil {
+				return nil, nil, nil, err
+			}
+		}
+		s, why, err := resolveFile(ctx, v, f, root, base, m, c.Path)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if why != "" {
+			left, declined = append(left, c.Path), append(declined, why)
+			continue
+		}
+		settled = append(settled, s)
+	}
+	return settled, left, declined, nil
+}
+
+// resolveFile merges path's versions at m.Ours and m.Theirs from base's. why is non-empty
+// when it does not settle, saying why.
+func resolveFile(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, base string, m magustypes.TreeMerge, path string) (settledSource, string, error) {
+	if base == "" {
+		return settledSource{}, path + ": the sides share no one merge base", nil
+	}
+	was, err := v.ReadFileAt(ctx, root, base, path)
+	if err != nil {
+		// No capability tells a path the base lacks from a failed read. Either way the
+		// file stays conflicted, the safe side.
+		return settledSource{}, path + ": absent at the merge base", nil //nolint:nilerr // no base version to merge from
+	}
+	ours, err := v.ReadFileAt(ctx, root, m.Ours, path)
+	if err != nil {
+		return settledSource{}, "", err
+	}
+	theirs, err := v.ReadFileAt(ctx, root, m.Theirs, path)
+	if err != nil {
+		return settledSource{}, "", err
+	}
+	res, ok := merge3.Resolve(path, []byte(was), []byte(ours), []byte(theirs))
+	switch {
+	case !ok && len(res.Regions) == 0:
+		return settledSource{}, path + ": binary, or too far from the merge base to merge by line", nil
+	case !ok:
+		return settledSource{}, res.Label(), nil
+	}
+	verdict, allowed, err := f.AutoResolvable(ctx, path, []byte(was), res.Content)
+	if err != nil {
+		return settledSource{}, "", fmt.Errorf("auto-resolvable %s: %w", path, err)
+	}
+	if !allowed {
+		return settledSource{}, verdict, nil
+	}
+	return settledSource{path: path, res: res, verdict: verdict}, "", nil
 }
 
 func conflictPaths(cs []magustypes.Conflict) []string {
@@ -145,19 +258,26 @@ type candidateSpec struct {
 	facts   types.BuildFacts
 	onto    string
 	change  types.Change
-	scratch string // the directory each candidate gets a private one under
+	scratch string    // the directory each candidate gets a private one under
+	date    time.Time // the plan's CommitDate
 }
 
 // built is a candidate whose merge is committed, and what regenerating it would rewrite.
 type built struct {
 	types.Candidate
-	touched []string // the paths the merge changed or settled, sorted
-	settled []string // the generated files it conflicted in, which took the change's side
+	touched  []string        // the paths the merge changed or settled, sorted
+	settled  []string        // the generated files it conflicted in, which took the change's side
+	resolved []settledSource // the source files it conflicted in, which auto-resolution settled
+	date     time.Time       // what the candidate and a regeneration on it are dated
+	// changed is every path the checkout holds differently from onto, none of which may
+	// be a symbolic link, or sit under one, when a regeneration writes there.
+	changed []string
 }
 
 // buildMerge checks out onto in a directory of its own, merges the change, settles
-// conflicts in generated files by taking the change's side, and commits. A source
-// conflict is a *conflictError. On any error nothing is left behind.
+// conflicts in generated files by taking the change's side and those auto-resolution
+// settles in source files, and commits. Any other source conflict is a *conflictError.
+// On any error nothing is left behind.
 func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built, err error) {
 	c, root := s.change, s.clone.Root
 	from := s.onto
@@ -177,45 +297,56 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 		if err != nil {
 			return built{}, err
 		}
-		from, err = v.CommitTree(ctx, root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: #" + c.ID + " is stacked on " + short(mb)),
+		from, err = v.CommitTree(ctx, root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: #"+c.ID+" is stacked on "+short(mb), s.date),
 			Tree: tree, Parents: []string{s.onto, mb}})
 		if err != nil {
 			return built{}, err
 		}
 	}
-	// A directory of its own per candidate, so no hook run on one can have planted
-	// anything where another will look.
-	box, err := os.MkdirTemp(s.scratch, "candidate-"+c.ID+"-")
+	cand, err := checkout(ctx, v, root, s.scratch, "candidate-"+c.ID, from)
 	if err != nil {
 		return built{}, err
 	}
-	cand := types.Candidate{Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
-	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
-		_ = os.RemoveAll(box)
-		return built{}, err
-	}
-	if err := v.CreateCheckout(ctx, root, cand.Dir, from); err != nil {
-		_ = os.RemoveAll(box)
-		return built{}, err
-	}
+	cand.Change = c.ID
 	defer func() {
 		if err != nil {
 			// The build's own error is what the caller acts on.
 			_ = discard(ctx, v, root, cand)
 		}
 	}()
-	settled, err := mergeIn(ctx, v, s, cand.Dir)
+	settled, resolved, err := mergeIn(ctx, v, s, cand.Dir, from)
 	if err != nil {
 		return built{}, err
 	}
-	if cand.Commit, err = v.Commit(ctx, cand.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #" + c.ID)}); err != nil {
+	if cand.Commit, err = v.Commit(ctx, cand.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, s.date)}); err != nil {
 		return built{}, err
 	}
 	touched, err := v.DiffTrees(ctx, root, s.onto, cand.Commit)
 	if err != nil {
 		return built{}, err
 	}
-	return built{Candidate: cand, touched: slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled)))), settled: settled}, nil
+	all := slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled))))
+	return built{Candidate: cand, touched: all, settled: settled, resolved: resolved, date: s.date, changed: all}, nil
+}
+
+// checkout checks commit out in a directory of its own under scratch, named from name,
+// beside a scratch directory private to it, so no hook run in another checkout can have
+// planted anything where one run here will look. On error nothing is left behind.
+func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit string) (types.Candidate, error) {
+	box, err := os.MkdirTemp(scratch, name+"-")
+	if err != nil {
+		return types.Candidate{}, err
+	}
+	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
+	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	if err := v.CreateCheckout(ctx, root, cand.Dir, commit); err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	return cand, nil
 }
 
 // discard removes a candidate's checkout and its private directory.
@@ -230,32 +361,39 @@ func discard(ctx context.Context, v types.BuildVCS, root string, cand types.Cand
 	return err
 }
 
-// mergeIn merges the change into dir and settles the generated files it conflicts in,
-// returning them.
-func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir string) ([]string, error) {
+// mergeIn merges the change into dir, whose checkout is of ours, settles the generated
+// files it conflicts in and the source files auto-resolution settles, and returns both.
+func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir, ours string) ([]string, []settledSource, error) {
 	c := s.change
 	// The queue's own identity, as on the commit concluding it: the candidate is the
 	// same commit in every job that builds it, whatever the box configures.
 	if err := v.StartMerge(ctx, dir, c.Head, candidateIdentity); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	conflicts, err := v.Conflicts(ctx, dir)
 	if err != nil || len(conflicts) == 0 {
-		return nil, err
+		return nil, nil, err
 	}
-	paths := conflictPaths(conflicts)
-	src, err := sources(ctx, s.facts, paths)
+	resolved, src, declined, err := resolveSources(ctx, v, s.facts, dir, magustypes.TreeMerge{Ours: ours, Theirs: c.Head}, conflicts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(src) > 0 {
 		if err := v.AbortMerge(ctx, dir); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return nil, &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, s.clone.Root, s.onto, c.Head, src)}}
+		return nil, nil, &conflictError{conflict: sourceConflict{change: c, paths: src, with: with(ctx, v, s.clone.Root, s.onto, c.Head, src),
+			declined: declined}}
 	}
-	var content, deleted []string
+	if err := writeResolved(ctx, v, dir, resolved); err != nil {
+		return nil, nil, err
+	}
+	var generated, content, deleted []string
 	for _, cf := range conflicts {
+		if slices.ContainsFunc(resolved, func(r settledSource) bool { return r.path == cf.Path }) {
+			continue
+		}
+		generated = append(generated, cf.Path)
 		if cf.Kind == magustypes.ConflictKindContent {
 			content = append(content, cf.Path)
 		} else {
@@ -264,18 +402,53 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir string)
 	}
 	if len(content) > 0 {
 		if err := v.KeepIncoming(ctx, dir, content); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := v.MarkResolved(ctx, dir, content); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	if len(deleted) > 0 {
 		if err := v.RemoveConflicts(ctx, dir, deleted); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return paths, nil
+	return generated, resolved, nil
+}
+
+// writeResolved writes each settled file into the checkout at dir and marks it resolved.
+// Only a regular file with no symbolic link at or above it is written, through an
+// [os.Root] on the checkout: through a link the change controls, the write would land
+// wherever the link points.
+func writeResolved(ctx context.Context, v types.BuildVCS, dir string, resolved []settledSource) error {
+	if len(resolved) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	paths := make([]string, len(resolved))
+	for i, r := range resolved {
+		at, err := linkIn(root, r.path)
+		if err != nil {
+			return err
+		}
+		info, err := root.Lstat(r.path)
+		if err != nil {
+			return err
+		}
+		if at != "" || !info.Mode().IsRegular() {
+			return &types.RefusedError{Paths: []string{r.path}, Reason: r.path + " conflicts and is opted into auto-resolution, but is not a regular file",
+				Remedy: "Merge the base branch in and resolve it by hand."}
+		}
+		if err := root.WriteFile(r.path, r.res.Content, info.Mode().Perm()); err != nil {
+			return err
+		}
+		paths[i] = r.path
+	}
+	return v.MarkResolved(ctx, dir, paths)
 }
 
 // regenerateIn runs regenerate on the generated files among b.touched and commits what
@@ -288,26 +461,47 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 	if err != nil {
 		return "", err
 	}
-	if len(regen) == 0 {
-		return b.Commit, nil
+	keep, err := regenerateWrites(ctx, v, s, b, regenerate, regen, units)
+	if err != nil || len(keep) == 0 {
+		return b.Commit, err
 	}
-	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Onto: s.onto, Change: s.change, Paths: regen, Units: units}); err != nil {
-		return "", err
+	return commitRegenerated(ctx, v, b, keep)
+}
+
+// regenerateWrites runs regenerate on regen in b's checkout and returns the declared files
+// it rewrote, uncommitted. A file the build tool maintains is put back, and a write
+// nothing declares is refused.
+func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b built, regenerate types.RegenerateFunc, regen, units []string) ([]string, error) {
+	if len(regen) == 0 {
+		return nil, nil
+	}
+	// A link the change committed would carry the base's generator's writes wherever it
+	// points, in the job that may hold the write credential.
+	linked, err := linksIn(b.Dir, slices.Concat(b.changed, regen))
+	if err != nil {
+		return nil, err
+	}
+	if len(linked) > 0 {
+		return nil, &types.RefusedError{Paths: linked, Reason: "regenerating " + strings.Join(regen, ", ") + " would write in a checkout where it holds " +
+			strings.Join(linked, ", ") + " as a symbolic link", Remedy: "Regenerate the generated files yourself and push them, or commit those paths as regular files."}
+	}
+	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Change: s.change, Paths: regen, Units: units}); err != nil {
+		return nil, err
 	}
 	written, err := v.DirtyFiles(ctx, b.Dir, nil)
 	if err != nil || len(written) == 0 {
-		return b.Commit, err
+		return nil, err
 	}
 	writes, err := s.facts.Classify(ctx, written)
 	if err != nil {
-		return "", fmt.Errorf("classify: %w", err)
+		return nil, fmt.Errorf("classify: %w", err)
 	}
 	var keep, stray []string
 	for _, p := range written {
 		switch w := writes[p]; {
 		case w.Maintained:
 			if err := restore(ctx, v, b.Candidate, p); err != nil {
-				return "", err
+				return nil, err
 			}
 		case w.Declared():
 			keep = append(keep, p)
@@ -316,30 +510,124 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 		}
 	}
 	if len(stray) > 0 {
-		return "", &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
+		return nil, &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
 	}
-	if len(keep) == 0 {
-		return b.Commit, nil
-	}
-	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: keep})
+	return keep, nil
 }
 
-// restore writes path in cand's checkout back to its content at cand's commit.
+func commitRegenerated(ctx context.Context, v types.BuildVCS, b built, keep []string) (string, error) {
+	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", b.date), Paths: keep})
+}
+
+// generationOf asks the build tool what regenerating outputs runs, against every file c
+// changed since baseCommit.
+func generationOf(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, baseCommit string, c types.Change, outputs []string) (types.Generation, error) {
+	changed, err := v.RangeFiles(ctx, root, baseCommit, c.Head, nil)
+	if err != nil {
+		return types.Generation{}, err
+	}
+	g, err := f.Generation(ctx, outputs, changed)
+	if err != nil {
+		return types.Generation{}, fmt.Errorf("generation of %s: %w", joinPaths(outputs), err)
+	}
+	return g, nil
+}
+
+// unprovenWhy says why g does not prove a regeneration runs none of a change's code, and
+// the paths that say so, falling back to outputs.
+func unprovenWhy(g types.Generation, outputs []string) (string, []string) {
+	why, paths := g.Unbounded, g.Code
+	if why == "" {
+		why = "it changes code their regeneration runs"
+	}
+	if len(paths) == 0 {
+		paths = outputs
+	}
+	return why, paths
+}
+
+// restore writes path in cand's checkout back to its content at cand's commit, as a
+// regular file. It writes through an [os.Root] on the checkout and refuses a path at or
+// under a symbolic link, so nothing the regeneration left can redirect the write.
 func restore(ctx context.Context, v types.BuildVCS, cand types.Candidate, path string) error {
 	content, err := v.ReadFileAt(ctx, cand.Dir, cand.Commit, path)
 	if err != nil {
 		return fmt.Errorf("restore %s: %w", path, err)
 	}
-	abs := filepath.Join(cand.Dir, filepath.FromSlash(path))
+	root, err := os.OpenRoot(cand.Dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if at, err := linkIn(root, path); err != nil || at != "" {
+		if err != nil {
+			return fmt.Errorf("restore %s: %w", path, err)
+		}
+		return fmt.Errorf("restore %s: %s is a symbolic link", path, at)
+	}
 	mode := os.FileMode(0o644)
-	if info, err := os.Stat(abs); err == nil {
+	if info, err := root.Lstat(path); err == nil && info.Mode().IsRegular() {
 		mode = info.Mode().Perm()
 	}
-	return os.WriteFile(abs, []byte(content), mode)
+	// Removed, then created exclusively: O_EXCL never follows a link planted between the
+	// check above and the write.
+	if err := root.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	f, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	return f.Close()
 }
 
-func queueMeta(msg string) magustypes.CommitMeta {
-	return magustypes.CommitMeta{Message: msg, Author: candidateIdentity, Committer: candidateIdentity, Date: candidateDate}
+// linksIn returns the paths, of paths within dir, that are a symbolic link or sit under
+// one, in order. A path that does not exist is none.
+func linksIn(dir string, paths []string) ([]string, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	var linked []string
+	for _, p := range slices.Compact(slices.Sorted(slices.Values(paths))) {
+		at, err := linkIn(root, p)
+		if err != nil {
+			return nil, err
+		}
+		if at != "" {
+			linked = append(linked, p)
+		}
+	}
+	return linked, nil
+}
+
+// linkIn returns the first component of the slash path p, within root, that is a
+// symbolic link, or "". The walk stops at the first component that does not exist.
+func linkIn(root *os.Root, p string) (string, error) {
+	parts := strings.Split(p, "/")
+	for i := range parts {
+		at := strings.Join(parts[:i+1], "/")
+		info, err := root.Lstat(at)
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return at, nil
+		}
+	}
+	return "", nil
+}
+
+func queueMeta(msg string, date time.Time) magustypes.CommitMeta {
+	return magustypes.CommitMeta{Message: msg, Author: candidateIdentity, Committer: candidateIdentity, Date: date}
 }
 
 // predict is the tree the base carries once the candidate built onto onto merges onto
@@ -534,6 +822,9 @@ type sourceConflict struct {
 	change types.Change // the change whose addition conflicted
 	paths  []string     // the conflicted source files
 	with   []string     // base-branch commits touching paths ("abc123 subject")
+	// declined says, for each of paths auto-resolution tried, why it stayed conflicted:
+	// the locations merge3 could not settle, or the classifier's line.
+	declined []string
 }
 
 type conflictError struct{ conflict sourceConflict }

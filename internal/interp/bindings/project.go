@@ -207,6 +207,19 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 		opts = append(opts, workspace.WithGateLowRisk(globs...))
 	}
+	if mv, ok := v.MapGet("merge_low_risk"); ok {
+		if !mv.IsList() {
+			return nil, fmt.Errorf(`magus.project: "merge_low_risk" takes a list of code globs a merge may settle without a person, e.g. ["gen_test.go", "fixtures/**"]`)
+		}
+		var globs []string
+		for _, item := range mv.ListItems() {
+			if !item.IsStr() || strings.TrimSpace(item.AsString()) == "" {
+				return nil, fmt.Errorf(`magus.project: "merge_low_risk" entries must be non-empty glob strings`)
+			}
+			globs = append(globs, strings.TrimSpace(item.AsString()))
+		}
+		opts = append(opts, workspace.WithMergeLowRisk(globs...))
+	}
 	// Only false declares anything: true is the default, and accepting it keeps a
 	// workspace that spells the default out from failing to load.
 	if iv, ok := v.MapGet("gate_inherit"); ok {

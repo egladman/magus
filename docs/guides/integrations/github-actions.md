@@ -125,8 +125,9 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 
 ## Installing magus
 
-`setup-magus` takes four inputs. `queue-app-client-id` belongs to the
-[merge queue](#merge-queue), and the interesting one is `installation-strategy`:
+`setup-magus` takes five inputs. `queue-app-client-id` belongs to the
+[merge queue](#merge-queue), `restore-history` is covered under
+[Run history](#run-history), and the interesting one is `installation-strategy`:
 
 | strategy    | what it installs                                   |
 | ----------- | -------------------------------------------------- |
@@ -160,6 +161,7 @@ jobs:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, filter: blob:none }
       - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
+        with: { restore-history: 'true' }
       - id: plan
         run: magus affected ci --plan | magus run ci-shard:gha
 
@@ -226,25 +228,29 @@ it - a composite action's `run:` steps do not see them either:
       }
 ```
 
-Everywhere else the spell reports itself disabled: it probes `GITHUB_ACTIONS` first and
-skips fetch and push entirely off a runner, so a magusfile carrying this line stays a
-no-op on a laptop. No remote calls, nothing to configure, nothing to turn off.
+A job that exports neither variable misses every read and stores nothing, and so does a
+laptop. The spell never checks whether it runs under Actions: the exported credentials are
+what switch it on (see [Told, never guessed](../../doctrine.md#told-never-guessed)).
 
 See [Remote cache](../../concepts/cache/remote.md) for what gets stored, how entries are
 keyed, and the guarantees a shared cache does and does not give you.
 
 ## Credentials
 
-The same spell carries a [secret provider](../../concepts/secrets.md). Select it only
-under Actions, since it resolves the environment a workflow injects:
+The same spell carries a [secret provider](../../concepts/secrets.md). Select it when the
+workflow asks for it, since it resolves the environment a workflow injects:
 
 ```buzz
 import "spells/github/actions" as github;
 
-if (os\env("GITHUB_ACTIONS") == "true") {
+if (os\env("SECRET_PROVIDER") == "github-actions") {
     magus\secret.provider(github);
 }
 ```
+
+and set `SECRET_PROVIDER: github-actions` in the workflow's `env:`. Selected, it prints
+`::add-mask::` for every value it resolves wherever it runs, so do not select it on a
+laptop.
 
 You do not have to. With no provider selected, magus's built-in one already reads the
 environment, which is the only way to reach a repository secret - an Actions secret is
@@ -290,11 +296,21 @@ reports a successful login without ever authenticating.
 
 ## Annotations and folded logs
 
-The same spell teaches magus how GitHub renders a job log:
+The same spell teaches magus how GitHub renders a job log. Wire it when the workflow asks:
 
 ```buzz
-magus\ci.provider(github);
+if (os\env("CI_PROVIDER") == "github-actions") {
+    magus\ci.provider(github);
+}
 ```
+
+```yaml
+env:
+  CI_PROVIDER: github-actions
+```
+
+Neither magus nor the spell detects Actions. Wired, the spell writes workflow commands to
+stdout wherever it runs, which is why the wiring waits for the workflow to ask.
 
 Failures become `::error::` annotations that surface inline on the pull request, and each
 target's output folds into its own group. A declared provider wins over magus's built-ins,
@@ -313,6 +329,7 @@ report:
     - uses: actions/checkout@v5
       with: { fetch-depth: 0, filter: blob:none }
     - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
+      with: { restore-history: 'true' }
     - uses: egladman/magus/.github/actions/ci-outcome@v0.4.0
       with:
         ci-result: ${{ needs.ci.result }}
@@ -333,6 +350,17 @@ volatility and timing data accumulate across runs - on main only, since a pull r
 history describes a branch about to disappear. `always()`, so a red run's timings are
 kept too.
 
+### Run history
+
+`restore-history: 'true'` restores the newest history the workflow saved, which is what
+`--base last-passed` and the shard forecaster read. It is off by default. The restore
+takes the newest cache entry by prefix, and any run sharing the cache scope can save one,
+including a run that executes pull-request code on main, such as a merge queue's
+validation. So turn it on only in a job that holds no secret, no write token and no
+`id-token`: the plan and the report above, never a job that signs, publishes or pushes.
+The same rule covers every other Actions cache: `jdx/mise-action` restores by default,
+so pass it `cache: false` in those jobs too.
+
 ## Pull request advice
 
 ```yaml
@@ -350,32 +378,21 @@ is an input, and every one can be silenced per pull request with a label. See
 ## Merge queue
 
 [`magus queue`](../../concepts/merge-queue.md) runs as two workflows: `queue.yaml`
-validates with a read-only token, and `queue-apply.yaml` merges with a write token and
-runs none of the changes' code. Copy both from this repository. They work unchanged on
-the job's own token, and unchanged again once you add the queue's own GitHub App.
+validates with a read-only token, and `queue-apply.yaml` merges with the queue's own
+GitHub App and runs none of the changes' code. Copy both from this repository. The queue
+runs on nothing but its app: a run or a merge the job's own token makes starts no
+workflow, so on it the queue would validate and merge nothing.
 
-Without a credential, setup is three steps:
+Setup is four steps, with no YAML edit:
 
 1. Commit the two workflows.
-2. Run what `GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main`
-   prints: allow auto-merge, and a ruleset of its own requiring `merge-queue` from GitHub
-   Actions, with "Require branches to be up to date before merging" off. On a phone:
-   Settings > General > Pull Requests > "Allow auto-merge", then Settings > Rules >
-   Rulesets > New branch ruleset.
-3. Take the required checks it lists as running on `pull_request` out of the required
-   set, or accept that a change the queue pushes to waits until someone approves those
-   runs.
-
-The queue's own GitHub App is five more steps, with no YAML edit. Add it for a second
-writer, for required `pull_request` checks you want to keep, for pull requests touching
-`.github/workflows`, or for main's `push` workflows on every merge:
-
-1. Open the registration link `describe` printed and click "Create GitHub App".
-2. Generate a private key on the app's page.
-3. Install the app on this repository alone.
-4. Run `describe --app <slug>` and run the environment, variable and secret commands it
-   prints. On a phone, paste the key into Settings > Environments > magus-queue.
-5. Apply the ruleset change it prints, pinning `merge-queue` to the app.
+2. Run `GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main`,
+   which stops with the app's registration link; open it and click "Create GitHub App".
+3. Run `describe --app <slug>` and run what it prints: allow auto-merge, install the app on
+   this repository alone, and the environment, variable and secret commands. On a
+   phone, paste the key into Settings > Environments > magus-queue.
+4. Apply the ruleset change it prints, requiring `merge-queue` from the app, with
+   "Require branches to be up to date before merging" off.
 
 The apply job takes the app through `setup-magus`. The client id is an input, since it is
 not a secret; the key is never an input, and reaches the action through the calling
@@ -395,23 +412,20 @@ jobs:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
       - run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"
         env:
-          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
-          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
+          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
           APP: ${{ steps.magus.outputs.queue-app-slug }}
           COMMITTER: ${{ steps.magus.outputs.queue-committer }}
 ```
 
-With neither the variable nor the secret, `setup-magus` mints nothing, its outputs are
-empty, and the job runs on its own token. With one and not the other it fails the job,
-since a queue that quietly fell back would post a status its ruleset does not count. The
-token is an output, never an environment variable, because `setup-magus` also runs in
-jobs that execute pull-request code. The mode reaches the queue as explicit flags: with
-`--app` and `--committer` set, apply writes as the app and dispatches nothing, since the
-app's merges start main's workflows themselves; with the two empty, it runs on the job's
-token and dispatches after a merge of its own. Nothing reads the runner's environment to
-guess.
+With neither the variable nor the secret, `setup-magus` mints nothing and its outputs are
+empty; this repository's apply job then fails before the queue starts, and
+`gha-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
+other `setup-magus` fails the job. The token is an output, never an environment
+variable, because `setup-magus` also runs in jobs that execute pull-request code. The app
+reaches the queue as explicit flags; nothing reads the runner's environment to guess.
 
 ## Permissions
 
@@ -421,6 +435,7 @@ guess.
 | advice                            | `pull-requests: write`                                       |
 | advice with `fix-generated-drift` | `contents: write`                                            |
 | queue validation                  | `contents: read`, `pull-requests: read`                      |
+| queue dispatch                    | `contents: read`, `actions: write`                           |
 | queue apply                       | `contents`, `pull-requests`, `statuses` and `actions: write` |
 
 On a pull request from a fork the default token is read-only whatever you declare, so the

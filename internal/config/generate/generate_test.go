@@ -14,7 +14,7 @@ import (
 )
 
 // schemaFixture is a stand-in for internal/config/config.go carrying one field
-// per branch the walk has to decide: every scalar kind, both `cli` options, a
+// per branch the walk has to decide: every scalar kind, the `cli` options, a
 // nested struct, and the shapes that must be skipped. "@" stands in for a
 // backtick so the struct tags can live in a raw string literal.
 const schemaFixture = `package config
@@ -29,7 +29,8 @@ type Config struct {
 	Secret   string @yaml:"-"@
 	// Not a flag.
 	Internal string @yaml:"internal" cli:"-"@
-	Retries  int
+	Retries  int @cli:"floor"@
+	Level    types.Level @yaml:"level" cli:"floor"@
 	Ratio    float64
 	Verbose  bool
 	Timeout  time.Duration @yaml:"timeout"@
@@ -46,7 +47,8 @@ type Config struct {
 
 type CacheConfig struct {
 	// Directory holding cached artifacts.
-	Dir string @yaml:"dir"@
+	Dir  string @yaml:"dir"@
+	Mode string @yaml:"mode" cli:"name=cache"@
 }
 
 type Embedded struct {
@@ -87,6 +89,7 @@ func TestParseConfigFlagsDerivesEveryScalarKind(t *testing.T) {
 		{Flag: "verbose", EnvVar: "MAGUS_VERBOSE", Kind: "bool", GoPath: "cfg.Verbose", YamlPath: "verbose", Usage: "MAGUS_VERBOSE"},
 		{Flag: "timeout", EnvVar: "MAGUS_TIMEOUT", Kind: "duration", GoPath: "cfg.Timeout", YamlPath: "timeout", Usage: "MAGUS_TIMEOUT"},
 		{Flag: "cache-dir", EnvVar: "MAGUS_CACHE_DIR", Kind: "string", GoPath: "cfg.Cache.Dir", YamlPath: "cache.dir", Usage: "MAGUS_CACHE_DIR: Directory holding cached artifacts."},
+		{Flag: "cache", EnvVar: "MAGUS_CACHE", Kind: "string", GoPath: "cfg.Cache.Mode", YamlPath: "cache.mode", Usage: "MAGUS_CACHE"},
 	} {
 		got, ok := defByYamlPath(defs, want.YamlPath)
 		require.True(t, ok, "no def for yaml path %q", want.YamlPath)
@@ -294,21 +297,29 @@ func TestCliOptions(t *testing.T) {
 		return &ast.Field{Tag: &ast.BasicLit{Value: "`" + tag + "`"}}
 	}
 
-	optOut, short := cliOptions(field(""))
-	assert.False(t, optOut)
-	assert.Equal(t, "", short)
+	assert.Equal(t, cliOpts{}, cliOptions(field("")))
+	assert.Equal(t, cliOpts{}, cliOptions(field(`yaml:"x"`)))
+	assert.Equal(t, cliOpts{short: "c"}, cliOptions(field(`cli:"short=c"`)))
+	assert.Equal(t, cliOpts{optOut: true, short: "c"}, cliOptions(field(`cli:"-,short=c"`)),
+		"opting out and naming a short flag are independent")
+	assert.Equal(t, cliOpts{name: "sandbox", short: "s"}, cliOptions(field(`cli:"name=sandbox,short=s"`)))
+	assert.Equal(t, cliOpts{name: "sandbox", floor: true}, cliOptions(field(`cli:"name=sandbox,floor"`)))
+}
 
-	optOut, short = cliOptions(field(`yaml:"x"`))
-	assert.False(t, optOut)
-	assert.Equal(t, "", short)
-
-	optOut, short = cliOptions(field(`cli:"short=c"`))
-	assert.False(t, optOut)
-	assert.Equal(t, "c", short)
-
-	optOut, short = cliOptions(field(`cli:"-,short=c"`))
-	assert.True(t, optOut)
-	assert.Equal(t, "c", short, "opting out and naming a short flag are independent")
+// A floor env var keeps the stronger of the configured value and its own, and a
+// floor on a kind with no ordering is ignored rather than emitted.
+func TestFloorReachesOnlyTextKindsAndTheEnvTemplate(t *testing.T) {
+	defs, err := parseConfigFlags(writeSchema(t))
+	require.NoError(t, err)
+	level, ok := defByYamlPath(defs, "level")
+	require.True(t, ok)
+	assert.True(t, level.Floor)
+	plain, ok := defByYamlPath(defs, "cache.dir")
+	require.True(t, ok)
+	assert.False(t, plain.Floor)
+	floored, ok := defByYamlPath(defs, "retries")
+	require.True(t, ok)
+	assert.False(t, floored.Floor, "an int has no WeakerThan to floor by")
 }
 
 func TestYamlTagOf(t *testing.T) {

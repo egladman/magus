@@ -326,7 +326,7 @@ func TestSaplingMergeDriverInstall(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, registered, "a fresh repo has no driver registered")
 
-	changed, err := v.EnsureMergeDriver(t.Context(), dir, []string{"gen/**"})
+	changed, err := v.EnsureMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
 	require.NoError(t, err, "EnsureMergeDriver")
 	assert.True(t, changed, "the first install changes the config")
 
@@ -334,11 +334,11 @@ func TestSaplingMergeDriverInstall(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, registered)
 
-	changed, err = v.EnsureMergeDriver(t.Context(), dir, []string{"gen/**"})
+	changed, err = v.EnsureMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
 	require.NoError(t, err)
 	assert.False(t, changed, "re-running with the same globs must be a no-op")
 
-	changed, err = v.EnsureMergeDriver(t.Context(), dir, []string{"gen/**", "dist/**"})
+	changed, err = v.EnsureMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**", "dist/**"}})
 	require.NoError(t, err)
 	assert.True(t, changed, "a new declared glob has to reach the config")
 

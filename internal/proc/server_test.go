@@ -1,9 +1,10 @@
 package proc
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +36,7 @@ func TestSubmitJobRunsAsync(t *testing.T) {
 	})
 
 	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Magic: jobMagic, Args: []string{"graph", "build"}}, &reply))
+	require.NoError(t, s.submitJob(jobRequest{Args: []string{"graph", "build"}}, &reply))
 	assert.NotEmpty(t, reply.Inv, "an accepted job returns an invocation id")
 
 	select {
@@ -58,7 +60,7 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 	}
 
 	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Magic: jobMagic, Args: []string{"reindex"}}, &reply))
+	require.NoError(t, s.submitJob(jobRequest{Args: []string{"reindex"}}, &reply))
 
 	select {
 	case got := <-done:
@@ -67,16 +69,6 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("onJobDone was not called for a background job")
 	}
-}
-
-func TestSubmitJobIgnoresBadMagic(t *testing.T) {
-	var ran bool
-	s := newJobService(func(context.Context, []string) error { ran = true; return nil })
-	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Magic: "wrong", Args: []string{"x"}}, &reply))
-	assert.Empty(t, reply.Inv, "an unauthenticated submission is ignored")
-	time.Sleep(50 * time.Millisecond)
-	assert.False(t, ran, "the handler never runs for a bad-magic request")
 }
 
 func TestSubmitJobCoalescesDuplicates(t *testing.T) {
@@ -91,7 +83,7 @@ func TestSubmitJobCoalescesDuplicates(t *testing.T) {
 		return nil
 	})
 
-	req := jobRequest{Magic: jobMagic, Args: []string{"graph", "build"}}
+	req := jobRequest{Args: []string{"graph", "build"}}
 	var r1, r2 jobReply
 	require.NoError(t, s.submitJob(req, &r1))
 	// Give the first job's goroutine a moment to register as in-flight.
@@ -166,26 +158,46 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 	}
 }
 
-// TestRunRequestLeaseCrossesTheWire pins the field on the frame rather than on the struct: a
-// tag typo would leave every assertion above green while the server still saw nothing. The
-// missing-field case is the compatibility half: an older client sends no lease and must
-// decode to "" rather than failing the frame.
+// TestRunRequestLeaseCrossesTheWire pins the field on the encoded body rather than on the
+// struct: a tag typo would leave every assertion above green while the server still saw
+// nothing. A body with no lease decodes to "" rather than failing.
 func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeFrame(&buf, typeRun, runRequest{
-		Args: []string{"run", "build"}, Cwd: "/w", Protocol: protocolV2, Lease: "fleet/f3",
-	}))
-
-	typ, line, err := readFrame(&buf)
+	raw, err := json.Marshal(runRequest{Args: []string{"run", "build"}, Cwd: "/w", Lease: "fleet/f3"})
 	require.NoError(t, err)
-	require.Equal(t, typeRun, typ)
+	assert.Contains(t, string(raw), `"lease":"fleet/f3"`)
 	var got runRequest
-	require.NoError(t, json.Unmarshal(line, &got))
+	require.NoError(t, json.Unmarshal(raw, &got))
 	assert.Equal(t, "fleet/f3", got.Lease)
 
-	var old runRequest
-	require.NoError(t, json.Unmarshal([]byte(`{"type":"run","args":["run","build"],"cwd":"/w"}`), &old))
-	assert.Empty(t, old.Lease)
+	var none runRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"args":["run","build"],"cwd":"/w"}`), &none))
+	assert.Empty(t, none.Lease)
+}
+
+// TestSandboxFloorCrossesTheWire: a client running sandboxed says under which mode, and
+// the adopted handler sees it, so it can decline rather than run the work under less.
+// Each run also gets an env overlay of its own.
+func TestSandboxFloorCrossesTheWire(t *testing.T) {
+	srv, err := New(Options{Handler: func(ctx context.Context, args []string) error {
+		if environ.From(ctx) == nil {
+			return errors.New("no env overlay on the adopted run")
+		}
+		if got, want := SandboxFloorFromContext(ctx), types.SandboxMode(args[len(args)-1]); got != want {
+			return fmt.Errorf("floor = %v, want %v", got, want)
+		}
+		return nil
+	}})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	t.Setenv(SocketEnv, srv.Addr())
+
+	code, err := Forward(WithSandboxFloor(t.Context(), types.SandboxModeRequired), []string{"run", "build", "required"}, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	code, err = Forward(t.Context(), []string{"run", "build", "off"}, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
 }
 
 // TestRunWithholdsReportedError pins that a failure the handler already explained does not
@@ -325,7 +337,7 @@ func TestForwardVersionGate(t *testing.T) {
 // TestForwardDevDifferentFingerprintRefused proves the core fix at the wire level: a dev
 // server (identity fingerprinted from its build) refuses a forwarded run whose version is a
 // DIFFERENT dev fingerprint. Two distinct dev builds can't coexist in one test process, so
-// the mismatching client frame is hand-crafted with a fabricated "dev-*" identity that
+// the mismatching client request is hand-crafted with a fabricated "dev-*" identity that
 // cannot equal this binary's own. This is the stale-server incident in miniature.
 func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	var called atomic.Bool
@@ -339,26 +351,19 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
-	conn, err := ep.Dial(context.Background())
-	require.NoError(t, err)
-	defer conn.Close()
-
 	// A dev identity that provably differs from any real fingerprint of this binary.
-	frame := `{"type":"run","args":["run","build","x"],"version":"dev-0000000000000000deadbeef","cwd":"/tmp","protocol":"v2"}` + "\n"
-	_, err = conn.Write([]byte(frame))
+	body := `{"args":["run","build","x"],"version":"dev-0000000000000000deadbeef","cwd":"/tmp"}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, socketURL(pathRun), strings.NewReader(body))
 	require.NoError(t, err)
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
+	req.Header.Set(tokenHeader, srv.Token())
+	resp, err := socketClient(ep).Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	var envelope struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, json.Unmarshal(bytes.TrimRight(buf[:n], "\n"), &envelope))
-	assert.Equal(t, "error", envelope.Type)
-	assert.Equal(t, ErrVersionMismatch.Error(), envelope.Message, "a mismatched dev fingerprint is refused as a version mismatch")
+	var refusal errorReply
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&refusal))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode, "a not-adopted refusal is a 409")
+	assert.Equal(t, ErrVersionMismatch.Error(), refusal.Message, "a mismatched dev fingerprint is refused as a version mismatch")
 	assert.False(t, called.Load(), "the refused run must not execute")
 }
 
@@ -370,7 +375,7 @@ func TestSubmitJobVersionGate(t *testing.T) {
 	t.Run("mismatched version refused", func(t *testing.T) {
 		var reply jobReply
 		s := &service{gateVersion: "v1.0.0", parentCtx: context.Background()}
-		err := s.submitJob(jobRequest{Magic: jobMagic, Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
+		err := s.submitJob(jobRequest{Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
 		assert.ErrorIs(t, err, ErrVersionMismatch)
 		assert.Empty(t, reply.Inv, "a refused job returns no invocation id")
 	})

@@ -225,8 +225,8 @@ func hashHex(newHash func() hash.Hash, data string) string {
 // read policy is enforced, matching archive.* and fs.read_file.
 func hashFile(ctx context.Context, label string, newHash func() hash.Hash, path string) (string, error) {
 	path = resolvePath(ctx, path)
-	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckReadCtx(ctx, path); err != nil {
+	if p := sandbox.PolicyFromContext(ctx); p != nil {
+		if err := p.CheckRead(ctx, path); err != nil {
 			return "", fmt.Errorf("%s: %w", label, err)
 		}
 	}

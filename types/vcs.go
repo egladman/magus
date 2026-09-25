@@ -156,6 +156,7 @@ type VCSDriver interface {
 	ChurnReporter
 	BranchChangeReporter
 	RangeReporter
+	RegionReporter
 	AncestryReporter
 	ConflictResolver
 	RevisionFileReader
@@ -386,6 +387,7 @@ const (
 	CapChurnReporter         VCSCapability = "ChurnReporter"
 	CapBranchChangeReporter  VCSCapability = "BranchChangeReporter"
 	CapRangeReporter         VCSCapability = "RangeReporter"
+	CapRegionReporter        VCSCapability = "RegionReporter"
 	CapAncestryReporter      VCSCapability = "AncestryReporter"
 	CapConflictResolver      VCSCapability = "ConflictResolver"
 	CapRevisionFileReader    VCSCapability = "RevisionFileReader"
@@ -422,15 +424,33 @@ func (e *VCSUnsupportedError) Unwrap() error { return ErrVCSUnsupported }
 // is given but no built-in or registered implementation matches it.
 var ErrVCSUnknown = errors.New("vcs: unknown VCS")
 
+// MergeDriverGlobs are the workspace-relative globs a merge driver registration routes
+// to magus.
+type MergeDriverGlobs struct {
+	// Outputs are declared outputs, which the backend also marks generated where it can.
+	Outputs []string
+	// AutoResolve are the source files magus.yaml's vcs.auto_resolve opts into low-risk
+	// conflict resolution. They are source, and are never marked generated.
+	AutoResolve []string
+}
+
 // MergeDriverInstaller is the capability to register magus as the merge driver for
-// declared output globs.
+// declared output globs and the globs opted into auto-resolution, and to run it where the
+// VCS does not run it during the operation.
 type MergeDriverInstaller interface {
-	InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error
+	// RunMergeDriver runs the registered driver over paths, content conflicts in the
+	// working copy at root. A path the driver does not settle stays conflicted, and is
+	// no error. git, hg and Sapling ran the driver during the merge that left the
+	// conflicts, so they have nothing to run; jj records a conflict in the commit and
+	// runs a tool only through `jj resolve`.
+	RunMergeDriver(ctx context.Context, root string, paths []string) error
+	InstallMergeDriver(ctx context.Context, root string, globs MergeDriverGlobs) error
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
 	// EnsureMergeDriver re-installs only when the registration is missing or the
-	// declared globs have moved on, reporting whether it changed anything. Callers
-	// run it routinely, so it must be cheap and silent in the steady state.
-	EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error)
+	// globs have moved on, reporting whether it changed anything. Callers run it
+	// routinely, so it must be cheap and silent in the steady state. No globs at all
+	// installs nothing.
+	EnsureMergeDriver(ctx context.Context, root string, globs MergeDriverGlobs) (bool, error)
 	// MergeDriverCommand returns the command line the VCS runs for a conflict in a declared
 	// output, as the backend's effective config for root holds it, or "" when none is
 	// registered. It reads what CheckMergeDriver only confirms is present, so a caller can
@@ -619,15 +639,6 @@ const (
 	ChangeRenamed  ChangeStatus = "renamed"
 )
 
-// FileChange is one path a commit touched. Path is the name AFTER the commit;
-// PrevPath is set only on a rename and carries the name before it, which is the
-// edge a reader follows to reassemble a file's lineage.
-type FileChange struct {
-	Path     string
-	PrevPath string
-	Status   ChangeStatus
-}
-
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
@@ -730,6 +741,38 @@ type RangeReporter interface {
 	// those with more than one parent. paths, when non-empty, keeps only the commits that
 	// changed one of those literal repository-relative paths.
 	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
+}
+
+// RegionReporter is the capability to say where inside each file a change landed: the
+// declaration (a function, a type, a doc heading, a target) enclosing every changed line,
+// as the file's diff driver names it. It is the footprint two concurrent changes are
+// compared by, finer than a path and computed from the edits themselves, never guessed.
+type RegionReporter interface {
+	// Regions refines files, as ChangedFiles returned them for base, into the
+	// declarations each one's changed lines land in.
+	//
+	// It compares the working tree with the merge base of base and the checkout's head, as
+	// ChangedFiles does, and returns one region per declaration each hunk touches, ordered
+	// by path, then side, then line. Deleted lines are placed through the merge base's
+	// version of the file and added or modified lines through the working tree's, so a new
+	// declaration is named as itself, never as the one above it.
+	//
+	// Only files are read, so an empty files returns no regions: there is nothing to
+	// refine. A file with no diff driver still yields its regions, with Driver and
+	// Declaration empty: which lines changed is known even when what encloses them is not.
+	// An unresolvable base is an error, not an empty answer.
+	Regions(ctx context.Context, root, base string, files []FileChange) ([]RegionChange, error)
+	// RegionsBetween is Regions for two versions of one file the caller holds, such as a
+	// file and the edit about to be written over it: the regions of path that before and
+	// after differ in, placed by path's diff driver as root's attributes name it. Neither
+	// version is read from the checkout. A nil before is an empty file, so every line of
+	// after is a RegionNew region, which is how a caller reads where each declaration of a
+	// file lies.
+	RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]RegionChange, error)
+	// Drivers names the diff driver root's attributes give each of paths, the one Regions
+	// would place its lines with. A path with none is absent from the map: Regions reports
+	// its lines with no Declaration.
+	Drivers(ctx context.Context, root string, paths []string) (map[string]string, error)
 }
 
 // AncestryReporter is the capability to answer whether one revision is reachable from
@@ -942,6 +985,10 @@ type TreeMerger interface {
 	// reported in TreeMergeResult.Conflicts, never an error; an error means the merge could
 	// not run (an unknown revision, a backend too old to merge trees).
 	MergeTrees(ctx context.Context, root string, m TreeMerge) (TreeMergeResult, error)
+	// MergeBase returns the merge base a plain merge of a and b takes. ok is false when
+	// they have none, or several (a criss-cross), since no one commit is then the base
+	// either side's changes are measured from.
+	MergeBase(ctx context.Context, root, a, b string) (base string, ok bool, err error)
 }
 
 // GeneratedPathReporter is the capability to report which paths a REVISION marks as

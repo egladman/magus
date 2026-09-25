@@ -397,6 +397,8 @@ const (
 	FlagQueryURL = "url"
 	// queue apply: --app
 	FlagQueueApplyApp = "app"
+	// queue apply: --base
+	FlagQueueApplyBase = "base"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -411,12 +413,20 @@ const (
 	FlagQueueApplyRegenerate = "regenerate"
 	// queue apply: --remote
 	FlagQueueApplyRemote = "remote"
+	// queue apply: --reproduce-gate
+	FlagQueueApplyReproduceGate = "reproduce-gate"
+	// queue apply: --reproduce-regenerate
+	FlagQueueApplyReproduceRegenerate = "reproduce-regenerate"
+	// queue apply: --scratch-env
+	FlagQueueApplyScratchEnv = "scratch-env"
 	// queue apply: --status-context
 	FlagQueueApplyStatusContext = "status-context"
 	// queue apply: --target
 	FlagQueueApplyTarget = "target"
 	// queue apply: --vcs
 	FlagQueueApplyVCS = "vcs"
+	// queue apply: --workflow
+	FlagQueueApplyWorkflow = "workflow"
 	// queue describe: --app
 	FlagQueueDescribeApp = "app"
 	// queue describe: --base
@@ -469,12 +479,18 @@ const (
 	FlagQueueValidateRegenerate = "regenerate"
 	// queue validate: --remote
 	FlagQueueValidateRemote = "remote"
+	// queue validate: --remote-cache-read
+	FlagQueueValidateRemoteCacheRead = "remote-cache-read"
+	// queue validate: --scratch-env
+	FlagQueueValidateScratchEnv = "scratch-env"
 	// queue validate: --target
 	FlagQueueValidateTarget = "target"
 	// queue validate: --vcs
 	FlagQueueValidateVCS = "vcs"
 	// queue validate: --verdicts
 	FlagQueueValidateVerdicts = "verdicts"
+	// refs: --definition
+	FlagRefsDefinition = "definition"
 	// refs: --limit
 	FlagRefsLimit = "limit"
 	// refs: --no-generated
@@ -483,6 +499,8 @@ const (
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
 	FlagRefsRefresh = "refresh"
+	// refs: --source
+	FlagRefsSource = "source"
 	// refs: --text
 	FlagRefsText = "text"
 	// run: --depth
@@ -1096,6 +1114,8 @@ func BindPath(fs *flag.FlagSet) *PathFlags {
 type RefsFlags struct {
 	Refresh     bool // --refresh
 	Occurrences bool // --occurrences
+	Definition  bool // --definition
+	Source      bool // --source
 	Text        bool // --text
 	Limit       int  // --limit
 }
@@ -1105,6 +1125,8 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	var f RefsFlags
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
 	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
+	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
+	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
 	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	return &f
@@ -1207,8 +1229,8 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
-	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only)")
-	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session")
+	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
+	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
@@ -1272,7 +1294,7 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
 	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
-	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App, required with a --status-context)")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
@@ -1317,7 +1339,7 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1 document is written to")
 	fs.IntVar(&f.Depth, FlagQueuePlanDepth, 3, "Candidates of one partition that validate at once")
 	fs.IntVar(&f.Parallel, FlagQueuePlanParallel, 0, "Changes admitted at once; 0 is one per CPU")
-	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueuePlanTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueuePlanRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueuePlanVCS, "git", "Version control `backend` of the checkout at --root")
@@ -1325,29 +1347,34 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 }
 
 // QueueValidateFlags are the flags declared for `magus queue validate`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueValidateFlags struct {
-	Plan       string // --plan
-	Gate       string // --gate
-	Regenerate string // --regenerate
-	Verdicts   string // --verdicts
-	Only       string // --only
-	Parallel   int    // --parallel
-	Facts      string // --facts
-	Target     string // --target
-	Remote     string // --remote
-	VCS        string // --vcs
+	Plan            string // --plan
+	Gate            string // --gate
+	Regenerate      string // --regenerate
+	Verdicts        string // --verdicts
+	Only            string // --only
+	Parallel        int    // --parallel
+	RemoteCacheRead bool   // --remote-cache-read
+	Facts           string // --facts
+	Target          string // --target
+	Remote          string // --remote
+	VCS             string // --vcs
 }
 
 // BindQueueValidate registers `magus queue validate`'s flags on fs and returns the destination.
 func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	var f QueueValidateFlags
 	fs.StringVar(&f.Plan, FlagQueueValidatePlan, "", "The mergequeue.plan/v1 `file`")
-	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` run in each candidate's checkout; exit 0 is green")
-	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` run in a candidate with the generated files to rewrite listed on stdin")
+	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green")
+	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin")
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
-	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key")
+	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueValidateVCS, "git", "Version control `backend` of the checkout at --root")
@@ -1355,31 +1382,42 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 }
 
 // QueueApplyFlags are the flags declared for `magus queue apply`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueApplyFlags struct {
-	Provider      string        // --provider
-	StatusContext string        // --status-context
-	Once          bool          // --once
-	Interval      time.Duration // --interval
-	Committer     string        // --committer
-	App           string        // --app
-	Regenerate    string        // --regenerate
-	Facts         string        // --facts
-	Target        string        // --target
-	Remote        string        // --remote
-	VCS           string        // --vcs
+	Provider            string        // --provider
+	Base                string        // --base
+	Workflow            string        // --workflow
+	StatusContext       string        // --status-context
+	Once                bool          // --once
+	Interval            time.Duration // --interval
+	Committer           string        // --committer
+	App                 string        // --app
+	Regenerate          string        // --regenerate
+	ReproduceGate       string        // --reproduce-gate
+	ReproduceRegenerate string        // --reproduce-regenerate
+	Facts               string        // --facts
+	Target              string        // --target
+	Remote              string        // --remote
+	VCS                 string        // --vcs
 }
 
 // BindQueueApply registers `magus queue apply`'s flags on fs and returns the destination.
 func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	var f QueueApplyFlags
 	fs.StringVar(&f.Provider, FlagQueueApplyProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueApplyBase, "", "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it")
+	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)")
 	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
-	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)")
-	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it")
-	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
+	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it")
+	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
+	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")
+	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueApplyRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueApplyVCS, "git", "Version control `backend` of the checkout at --root")

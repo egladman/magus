@@ -3,6 +3,7 @@ package mergequeue
 import (
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/mergequeue/types"
@@ -60,9 +61,11 @@ type capabilitiesDoc struct {
 	StackMerge   types.StackMerge    `json:"stack_merge"`
 	LinearStacks bool                `json:"linear_stacks"`
 	Methods      []types.MergeMethod `json:"methods"`
-	QueueLabel   string              `json:"queue_label,omitempty"`
-	Committer    *personDoc          `json:"committer,omitempty"`
-	Setup        *types.Setup        `json:"setup,omitempty"`
+	// Never omitted: zero is the fact a reader most needs to see.
+	RequiredApprovals int          `json:"required_approvals"`
+	QueueLabel        string       `json:"queue_label,omitempty"`
+	Committer         *personDoc   `json:"committer,omitempty"`
+	Setup             *types.Setup `json:"setup,omitempty"`
 }
 
 type personDoc struct {
@@ -77,7 +80,7 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
 	}
 	doc := capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
-		LinearStacks: c.LinearStacks, Methods: c.Methods, QueueLabel: c.QueueLabel}
+		LinearStacks: c.LinearStacks, Methods: c.Methods, RequiredApprovals: c.RequiredApprovals, QueueLabel: c.QueueLabel}
 	if c.Setup != nil {
 		s := *c.Setup
 		// [] rather than null for a reader iterating them.
@@ -175,9 +178,37 @@ func find(p types.Plan, id string) (partition, pos int, ok bool) {
 	return 0, 0, false
 }
 
-// kickOf is the kick-back v decides.
-func kickOf(v types.Verdict) types.Kick {
-	return types.Kick{Code: v.Code, Report: v.Report, Paths: v.Paths, With: v.With, CandidateCommit: v.CandidateCommit}
+// kickOf is the kick-back v, read from a plan or a validation run, decides on base.
+// Whatever wrote v may have run a change's code, so v's words reach the author only as
+// the Claim, and the Report is the queue's own, from facts apply checked against the
+// plan and commit ids [types.Verdict.Check] vouched for.
+func kickOf(base string, v types.Verdict) types.Kick {
+	c := v.Change
+	k := types.Kick{Code: v.Code, Paths: v.Paths, With: v.With, CandidateCommit: v.CandidateCommit}
+	switch {
+	case v.Code == types.CodeKickConflict:
+		k.Report = conflictReport(base, c.Head)
+	case v.Code == types.CodeKickRefused && c.Fork:
+		k.Report = forkReport
+	case v.Code == types.CodeKickRed && v.Onto != "":
+		k.Report, k.Claim = failureReport(base, c.Head, v.Onto, v.After, "the gate failed on it and passed without it", ""), claim(v.Reason)
+	default:
+		k.Report, k.Claim = "The merge queue cannot merge this change at `"+short(c.Head)+"`.\n", claim(v.Reason)
+	}
+	return k
+}
+
+// claim bounds s to [types.MaxClaim] bytes, cut at a rune boundary.
+func claim(s string) string {
+	if len(s) <= types.MaxClaim {
+		return s
+	}
+	const cut = "\n[cut]"
+	n := types.MaxClaim - len(cut)
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + cut
 }
 
 // proven reports whether c's affected set bounds everything it can reach.

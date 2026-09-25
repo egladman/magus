@@ -124,7 +124,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-command.sh",
+            "command": "sh docs/guides/integrations/agents/magus-command.sh --agent-name codex",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -134,7 +134,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-path.sh",
+            "command": "sh docs/guides/integrations/agents/magus-path.sh --agent-name codex",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -144,7 +144,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-command.sh",
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-command.sh --agent-name codex",
             "statusMessage": "magus guard: checking MCP tool call"
           }
         ]
@@ -154,7 +154,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-observe.sh",
+            "command": "sh docs/guides/integrations/agents/magus-observe.sh --agent-name codex",
             "statusMessage": "magus: recording read"
           }
         ]
@@ -166,7 +166,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-command.sh",
+            "command": "sh docs/guides/integrations/agents/magus-command.sh --agent-name codex",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -189,7 +189,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+            "command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\" --agent-name codex",
             "statusMessage": "magus: recording where the work stands"
           }
         ]

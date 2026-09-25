@@ -61,6 +61,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 // Only the claim used to count, so a worker `magus job exec` bound, with no BAGGAGE, could
 // rewire the hooks that grade it.
 func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, "")
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
@@ -88,7 +89,7 @@ func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("not a lease id!\n"), 0o644))
 	err = agentHarnessInstallCmd(context.Background(), root, nil)
 	require.Error(t, err, "a binding that does not read refuses, never reads as unbound")
 	assert.Contains(t, err.Error(), "not a lease id")

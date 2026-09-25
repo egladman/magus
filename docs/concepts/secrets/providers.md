@@ -116,15 +116,19 @@ Allow" is what keeps later runs unattended.
 ### The GitHub Actions provider
 
 magus also ships `spells/github/actions`, the same spell that carries the Actions cache
-provider and CI provider. Wire it as a third contract:
+provider and CI provider. Wire it as a third contract, when the workflow asks for it with
+`SECRET_PROVIDER: github-actions` in its `env:`:
 
 ```buzz
 import "spells/github/actions" as github;
 
-if (os\env("GITHUB_ACTIONS") == "true") {
+if (os\env("SECRET_PROVIDER") == "github-actions") {
     magus\secret.provider(github);
 }
 ```
+
+The condition is the caller asking, not magus noticing it runs under Actions; see
+[Told, never guessed](../../doctrine.md#told-never-guessed).
 
 It exists because an Actions secret is **write-only**. Nothing running inside a job can
 fetch one; interpolating it into a step's `env:` block is the only path there has ever
@@ -226,15 +230,19 @@ pushes with the wrong credential. That failure is invisible - everything is gree
 is strictly worse than an error naming the reference and the provider. Secrets are the one
 place where "try harder to succeed" is the wrong instinct.
 
-So provider selection is an **environment** decision, made once:
+So provider selection is the **caller's** decision, made once:
 
 ```buzz
 // CI reaches nothing but its own environment, and the built-in provider is already
-// that, so CI selects nothing at all. A laptop opts into 1Password.
-if (os\env("CI") == null) {
+// that, so CI asks for nothing at all. A laptop asks for 1Password by name.
+if (os\env("SECRET_PROVIDER") == "1password") {
     magus\secret.provider(onepassword);
 }
 ```
+
+The condition is something the person sets, not a check for whether this is CI:
+magus and its magusfiles never guess where they run
+([Told, never guessed](../../doctrine.md#told-never-guessed)).
 
 ### Keeping one reference across providers
 

@@ -12,8 +12,11 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // fakePlanSource is a Source returning a canned target graph and status report, the two
 // halves the handler joins.

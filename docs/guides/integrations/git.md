@@ -10,7 +10,7 @@ aliases: [guides/git]
 magus writes three things into a repository, and no more:
 
 - a managed section in `.gitattributes`, marking every declared output as generated
-  and routing it to magus's merge driver;
+  and routing it, and every file auto-resolution may settle, to magus's merge driver;
 - a `merge.magus.driver` registration in the clone's own git config, because a driver
   cannot be committed;
 - the refresh, drift-notice and owed-regeneration hooks below, when the server starts.
@@ -194,6 +194,70 @@ You never run that command yourself. `linguist-generated` is the other half, and
 the half that always works: it collapses the file in GitHub's diff view and keeps it out
 of language statistics.
 
+### Diff drivers
+
+The same managed block opens with a diff driver for each source language magus reads:
+
+```gitattributes
+*.go diff=golang
+*.ts diff=typescript
+*.buzz diff=buzz
+```
+
+A diff driver's hunk-header pattern is how git names the declaration a change lands in,
+the text after the second `@@` of each hunk. A job's footprint reads those names to say
+which functions, types and tests a change touched, and `git diff` prints them for people
+too. `golang`, `python`, `rust` and `markdown` ship with git. `typescript` and `buzz` do
+not, so magus registers their patterns as `diff.typescript.xfuncname` and
+`diff.buzz.xfuncname` in git config, beside `merge.magus.driver` and in the same scope.
+Each attribute resolves to the last line that sets it, and a driver line sets only `diff`,
+so a generated `.go` file keeps `merge=magus` and gains `diff=golang`. A workspace load
+restores a missing line or registration, and `magus doctor` fails its
+`merge-driver-loads-workspace` check when one is still missing.
+
+### Auto-resolving source files
+
+A source file conflicts for real more often than not, but some conflict in ways nobody
+has to think about: two branches each appending an entry to `CHANGELOG.md`. The driver
+settles such a file when two things hold, the same two the
+[merge queue](../../concepts/merge-queue.md#auto-resolving-source-conflicts) checks:
+
+- the merge settles. Each side's edits are hunks placed by the file's diff driver, and a
+  region both sides changed settles only when both made the same change, one side's
+  change holds the other's, or both only added lines where the base had none (ours
+  first, then theirs).
+- the change is low risk by magus's one change classifier, the ci gate's: generated,
+  prose (`gate_low_risk`, markdown by default) or comment-only. Code qualifies only where
+  its project lists it in `merge_low_risk`.
+
+Anything else leaves the whole file conflicted, with conflict markers the driver writes
+itself (git keeps whatever a failed driver left in the file, so without them the other
+side's change would vanish), and a message naming each region that did not settle as
+`path#declaration`, or the classifier's line. A file both sides added, a binary file and
+a symlink are never settled.
+
+Every declared `gate_low_risk` and `merge_low_risk` glob gets its own line in the managed
+section, `merge=magus` without `linguist-generated`, since the file is source and review
+has to show it. A glob with no slash is written anchored, because git would otherwise
+match it at any depth. The built-in markdown defaults are not written, so a workspace
+that declares neither key keeps the `.gitattributes` it had: declare
+`"gate_low_risk": ["**/*.md"]` to route markdown to the driver. A comment-only edit has
+no glob either, so git and hg reach one only through the queue or `magus vcs resolve`.
+
+Each VCS reaches the driver its own way, and the decision is the driver's in all of them:
+
+| VCS                | Registration                                         | When it runs                                                      |
+| ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| git                | `.gitattributes` and `merge.magus.driver`            | during `git merge`, `rebase` and `cherry-pick`                    |
+| Mercurial, Sapling | `[merge-patterns]` and `[merge-tools]` in the config | during `hg merge` and `sl` merges                                 |
+| Jujutsu            | `merge-tools.magus` in the repository's config       | `magus vcs resolve`, or `jj resolve --tool magus <files>` by hand |
+
+jj records a conflict in the commit and never runs a tool on its own, so `magus vcs
+resolve` runs `jj resolve --tool magus` over each conflicted source file before it
+settles the rest, and the driver decides each, comment-only code included. The registration (`jj config set --repo`) leaves `ui.merge-editor`
+alone, and tells jj that exit status 1 means the file still conflicts, so jj keeps its
+own markers for a file the driver does not settle.
+
 ### Regeneration after the merge
 
 The driver keeps the current version of the file and does not regenerate it. git calls
@@ -249,7 +313,8 @@ magus vcs resolve
 `magus vcs resolve` classifies every conflicted path at once, regenerates once instead of
 once per file, settles the deletions a driver is never called for, and stages everything
 the regeneration touched so `git rebase --continue` does not refuse on a dirty tree.
-Conflicts in files magus does not generate are reported and left for you.
+Conflicts in files magus does not generate are reported and left for you, after the
+driver has had its turn at them.
 
 To settle a branch against its base without merging first, hand it the ref:
 

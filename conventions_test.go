@@ -285,12 +285,12 @@ const (
 )
 
 // handAuthoredSkills live beside the installed ones and are NOT written by
-// `magus agent install`. Both are tracked through explicit .gitignore negations,
+// `magus agent install`. Each is tracked through an explicit .gitignore negation,
 // and magus-workspace-rules tells readers to put local rules in exactly this
 // shape, so a declaration that claims them tells an author the one file they are
 // supposed to edit is generated, and hands it to the regenerating merge driver
 // on a conflict.
-var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development"}
+var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development", "land-pull-requests"}
 
 // skillOutputGlob matches the declared-output patterns in skills_generate. The
 // install calls in the same body name a bare destination directory with no
@@ -1222,7 +1222,7 @@ func TestCursorGuardAnnouncesAMissingJq(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 
-	cmd := exec.Command("sh", script)
+	cmd := exec.Command("sh", script, "--agent-name", "cursor")
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"PATH=" + bin, "TMPDIR=" + t.TempDir()}
 	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeShellExecution","command":"rm -rf /","cwd":"/ws"}`)
@@ -2196,6 +2196,246 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 	}
 }
 
+// environmentDetectionVars are the variables that say WHERE magus runs: which CI system,
+// which runner, which hosting platform or agent host. Reading one to change WHAT magus does
+// (a default, a result, which provider or feature is on) is sniffing; docs/doctrine.md,
+// "Told, never guessed", is the rule.
+//
+// Terminal and interaction variables (TERM, TERM_SESSION_ID, WINDOWID, SSH_TTY and the like)
+// are deliberately absent. They describe the terminal in front of the person, and adapting
+// how magus talks to that terminal (color, links, hover, which prompt it can show, which
+// window a once-only notice belongs to) is the interaction the doctrine keeps. A variable a
+// person sets to state what they want (NO_COLOR, MAGUS_*) is configuration, not detection.
+var environmentDetectionVars = []string{
+	"CI", "GITHUB_ACTIONS", "GITHUB_WORKFLOW_REF", "RUNNER_ENVIRONMENT", "RUNNER_OS",
+	"GITLAB_CI", "BUILDKITE", "CIRCLECI", "TRAVIS", "JENKINS_URL", "JENKINS_HOME",
+	"TEAMCITY_VERSION", "TF_BUILD", "BITBUCKET_BUILD_NUMBER", "CODEBUILD_BUILD_ID", "DRONE",
+	"APPVEYOR", "KUBERNETES_SERVICE_HOST", "container",
+	"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CURSOR_TRACE_ID", "CODEX_SANDBOX",
+}
+
+// environmentDetectionAllowed maps "<path>:<variable>" to why that read is not sniffing.
+// Each entry reads a listed variable as INPUT, after the caller already chose the code that
+// reads it, and switches nothing on it.
+var environmentDetectionAllowed = map[string]string{
+	"spells/github/actions/spell.buzz:GITHUB_WORKFLOW_REF": "input, not detection: the Actions provider, wired only when the workflow asks, reads which workflow's runs last_green_run should search",
+}
+
+// environmentDetectionSkipDirs are trees the rule does not govern: generated output,
+// vendored code, fixtures, and history. docs is scanned, because the agent glue and every
+// example a reader copies live there.
+var environmentDetectionSkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "gen": true, "testdata": true, "blog": true, "releases": true,
+	"manpage": true, "schema": true,
+}
+
+var (
+	environmentDetectionNames = strings.Join(environmentDetectionVars, "|")
+	// A call whose callee spells env or lookup (os.Getenv, os.LookupEnv, os\env, env\get,
+	// a local getenv or envOr) with a listed name as its first argument.
+	environmentDetectionCall = regexp.MustCompile(
+		`(?i:env|lookup)[\w\\]*\s*\(\s*"(` + environmentDetectionNames + `)"\s*[,)]`)
+	environmentDetectionProcessEnv = regexp.MustCompile(
+		`process\.env(?:\.|\[\s*["'])(` + environmentDetectionNames + `)\b`)
+	environmentDetectionShell = regexp.MustCompile(`\$\{?(` + environmentDetectionNames + `)\b`)
+)
+
+// environmentDetectionReads returns every listed variable one line reads.
+func environmentDetectionReads(path, line string) []string {
+	matchers := []*regexp.Regexp{environmentDetectionCall, environmentDetectionProcessEnv}
+	if strings.HasSuffix(path, ".sh") {
+		matchers = append(matchers, environmentDetectionShell)
+	}
+	var names []string
+	for _, re := range matchers {
+		for _, m := range re.FindAllStringSubmatch(line, -1) {
+			names = append(names, m[1])
+		}
+	}
+	return names
+}
+
+// TestNoEnvironmentSniffing fails on any read of a known environment-detection variable
+// outside environmentDetectionAllowed, in Go, Buzz, shell, TypeScript and the docs a reader
+// copies from. Test files are exempt, since a test sets these to prove they are ignored.
+func TestNoEnvironmentSniffing(t *testing.T) {
+	t.Parallel()
+
+	var files []string
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if environmentDetectionSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".test.ts") ||
+			path == "CHANGELOG.md" || path == filepath.Join("docs", "changelog.md") {
+			return nil
+		}
+		switch filepath.Ext(path) {
+		case ".go", ".buzz", ".sh", ".ts", ".js", ".mjs", ".md":
+			files = append(files, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	found := make([][]string, len(files))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, path := range files {
+		g.Go(func() error {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			slashed := filepath.ToSlash(path)
+			for n, line := range strings.Split(string(data), "\n") {
+				for _, name := range environmentDetectionReads(path, line) {
+					if _, ok := environmentDetectionAllowed[slashed+":"+name]; ok {
+						continue
+					}
+					found[i] = append(found[i], fmt.Sprintf("%s:%d: reads %s: %s",
+						slashed, n+1, name, strings.TrimSpace(line)))
+				}
+			}
+			return nil
+		})
+	}
+	require.NoError(t, g.Wait())
+	var violations []string
+	for _, lines := range found {
+		violations = append(violations, lines...)
+	}
+
+	assert.Empty(t, violations,
+		"magus must not detect where it runs (docs/doctrine.md, \"Told, never guessed\").\n"+
+			"Reading one of these variables to pick a default, an output or a provider makes the same\n"+
+			"command behave differently on a laptop, a runner and inside an agent's shell, and nobody\n"+
+			"can see why. Take a flag, a charm or a magus.yaml key instead, and have the caller pass\n"+
+			"it: a workflow sets the variable or passes the flag on purpose. Code that reads one as\n"+
+			"input after the caller chose it, switching nothing on it, goes in\n"+
+			"environmentDetectionAllowed with its reason.\n\nviolations:\n%s",
+		strings.Join(violations, "\n"))
+}
+
+// harnessSpellName reads the one identity a harness spell declares, its mgs_getName().
+func harnessSpellName(t *testing.T, id string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("spells", "harness", id, "spell.buzz"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`export fun mgs_getName\(\) > str \{ return "([^"]+)"; \}`).FindSubmatch(body)
+	require.NotNil(t, m, "spells/harness/%s declares no mgs_getName", id)
+	return string(m[1])
+}
+
+// namedGlue matches a hook command that reaches glue which reads its host from the argv.
+// rehydrate reads none, and is left out on purpose.
+var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.(sh|buzz)|cursor-hook\.sh`)
+
+// hookCommands collects every "command" string in a host's hook config.
+func hookCommands(t *testing.T, path string) []string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var doc any
+	require.NoError(t, json.Unmarshal(body, &doc), "parse %s", path)
+	var out []string
+	var walk func(any)
+	walk = func(node any) {
+		switch v := node.(type) {
+		case map[string]any:
+			if cmd, ok := v["command"].(string); ok {
+				out = append(out, cmd)
+			}
+			for _, child := range v {
+				walk(child)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child)
+			}
+		}
+	}
+	walk(doc)
+	return out
+}
+
+// TestShippedHostConfigsNameTheirHost pins the host name onto every glue command a shipped
+// config carries, as the harness spell's own mgs_getName() renders it. The glue reads the
+// host from that argument and nowhere else, and refuses a call without it (MGS3024), so a
+// config that lost it would refuse every call; one naming another host would answer in
+// that host's dialect. docs/doctrine.md, "Told, never guessed".
+func TestShippedHostConfigsNameTheirHost(t *testing.T) {
+	for _, tc := range []struct{ id, config string }{
+		{"claude-code", filepath.Join(".claude", "settings.json")},
+		{"codex", filepath.Join(".codex", "hooks.json")},
+		{"codex", filepath.Join(hookTemplateDir, "codex-hooks.json")},
+		{"cursor", filepath.Join(".cursor", "hooks.json")},
+	} {
+		want := "--agent-name " + harnessSpellName(t, tc.id)
+		var glue int
+		for _, cmd := range hookCommands(t, tc.config) {
+			if !namedGlue.MatchString(cmd) {
+				continue
+			}
+			glue++
+			assert.Contains(t, cmd, want, "%s: a glue command must name its host", tc.config)
+			assert.Equal(t, 1, strings.Count(cmd, "--agent-name"), "%s: one host per command: %s", tc.config, cmd)
+			assert.NotContains(t, cmd, "AGENT_NAME=", "%s: the host rides on argv, never in the environment", tc.config)
+		}
+		assert.NotZero(t, glue, "%s wires no glue this test recognizes; the matcher stopped matching", tc.config)
+	}
+}
+
+// TestOpenCodePluginNamesTheSpellsHost ties the one host name magus writes by hand, the
+// OpenCode plugin's, to the harness spell that declares it. The plugin is TypeScript that
+// magus does not render, so this is what keeps the two from drifting apart.
+func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
+	name := harnessSpellName(t, "opencode")
+	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
+	require.NoError(t, err)
+	named := regexp.MustCompile(`"--agent-name",\s*"([^"]*)"`).FindAllStringSubmatch(string(body), -1)
+	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
+	for _, m := range named {
+		assert.Equal(t, name, m[1], "opencode-plugin.ts names a host its harness spell does not declare")
+	}
+}
+
+// TestEnvironmentDetectionMatcher grades the matcher against lines, because a tree scan
+// that finds nothing is equally consistent with a matcher that matches nothing.
+func TestEnvironmentDetectionMatcher(t *testing.T) {
+	for _, tc := range []struct {
+		path, line string
+		want       []string
+	}{
+		{"a.go", `if os.Getenv("GITHUB_ACTIONS") == "true" {`, []string{"GITHUB_ACTIONS"}},
+		{"a.go", `v, ok := os.LookupEnv("CI")`, []string{"CI"}},
+		{"a.go", `return getenv("GITHUB_ACTIONS") == "" && getenv("RUNNER_ENVIRONMENT") == ""`, []string{"GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"}},
+		{"a.buzz", `fun in_ci() > bool { return os\env("GITLAB_CI") == "true"; }`, []string{"GITLAB_CI"}},
+		{"a.buzz", `final host = env\get("CLAUDECODE") catch "";`, []string{"CLAUDECODE"}},
+		{"a.ts", `if (process.env.CI) {`, []string{"CI"}},
+		{"a.sh", `[ -n "${CI:-}" ] && exit 0`, []string{"CI"}},
+
+		// The terminal in front of the person is not where magus runs.
+		{"a.go", `return os.Getenv("SSH_TTY") == ""`, nil},
+		{"a.go", `if os.Getenv("TERM") != "dumb" {`, nil},
+		{"a.go", `"ci": "CI", "json": "JSON",`, nil},
+		{"a.go", `os.Getenv("CI_PROVIDER")`, nil},
+		{"a.buzz", `final path = os\env("GITHUB_STEP_SUMMARY");`, nil},
+		{"a.go", `tags: []string{"docker", "container", "image"},`, nil},
+		{"a.buzz", `echo "$CI"`, nil},
+	} {
+		assert.Equal(t, tc.want, environmentDetectionReads(tc.path, tc.line),
+			"environmentDetectionReads(%q, %q)", tc.path, tc.line)
+	}
+}
+
 // The test above is one layer shallower than the rule it enforces. A branch keyed
 // on a host's TOOL VOCABULARY rather than its name (`switch tool { case "Read":
 // ... case "Bash": }`) is a per-host branch in everything but spelling, and no
@@ -2843,6 +3083,8 @@ var establishedCompoundNames = map[string]bool{
 	"jsonv2":  true, // names the GOEXPERIMENT
 	"libproc": true, // the Darwin API
 	"vmstat":  true, // the Darwin tool
+	// GNU make's name for the token protocol internal/proc/run implements.
+	"jobserver": true,
 }
 
 // grandfatheredCompoundNames are concatenations already in the tree when this check
@@ -3626,8 +3868,11 @@ func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
 	assert.Equal(t, "inputs.queue-app-client-id != ''", mint.If)
 	assert.Equal(t, "${{ env.MAGUS_QUEUE_APP_PRIVATE_KEY }}", mint.With["private-key"])
 	assert.Equal(t, "${{ github.event.repository.name }}", mint.With["repositories"], "this repository alone")
-	for _, perm := range []string{"contents", "pull-requests", "statuses", "actions", "workflows"} {
-		assert.Equal(t, "write", mint.With["permission-"+perm], perm)
+	// Apply follows the validation run and dispatches nothing; the dispatch job mints its
+	// own actions: write token.
+	want := map[string]string{"contents": "write", "pull-requests": "write", "statuses": "write", "actions": "read", "workflows": "write"}
+	for perm, level := range want {
+		assert.Equal(t, level, mint.With["permission-"+perm], perm)
 	}
 	for _, out := range []string{"queue-token", "queue-committer", "queue-app-slug"} {
 		assert.Contains(t, action.Outputs, out)
@@ -3655,6 +3900,172 @@ func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
 	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", setup.With["queue-app-client-id"])
 	assert.NotContains(t, string(raw), "github.token", "a workflow names the token as secrets.GITHUB_TOKEN")
 	assert.NotContains(t, string(raw), "GH_TOKEN", "gh reads GITHUB_TOKEN")
+	assert.NotContains(t, string(raw), "|| secrets.GITHUB_TOKEN",
+		"the queue writes only as its app: a run or a merge the job's own token makes starts no workflow")
+
+	// A run the Actions token dispatches fires no workflow_run, so no apply would follow
+	// it: dispatch holds the app's token, minted for dispatching alone.
+	dispatch := workflow.Jobs["dispatch"]
+	assert.Equal(t, "magus-queue", dispatch.Environment, "the key is released to main's runs alone")
+	var dispatchMint *actionStep
+	for i := range dispatch.Steps {
+		if strings.HasPrefix(dispatch.Steps[i].Uses, "actions/create-github-app-token@") {
+			dispatchMint = &dispatch.Steps[i]
+		}
+	}
+	require.NotNil(t, dispatchMint, "dispatch mints the queue app's token")
+	assert.Equal(t, "${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}", dispatchMint.With["private-key"])
+	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", dispatchMint.With["client-id"])
+	assert.Equal(t, "write", dispatchMint.With["permission-actions"])
+	assert.NotContains(t, dispatchMint.With, "permission-contents", "dispatching needs actions alone")
+}
+
+// A job holding a secret, a write token or id-token restores no Actions cache. main's
+// cache scope is writable by any main-scoped run, and the merge queue validates
+// pull-request code in one; a hook that escapes can read the runtime token and plant an
+// entry every branch and tag run restores. queue.yaml restores nothing either: its
+// verdicts decide merges. See docs/concepts/merge-queue.md, Trust model.
+func TestTrustedJobsRestoreNoActionsCache(t *testing.T) {
+	// The input that turns an action's restore off, and whether off is its default.
+	type restoreSwitch struct {
+		input        string
+		offByDefault bool
+	}
+	switches := map[string]restoreSwitch{
+		"jdx/mise-action@":              {input: "cache"},
+		"./.github/actions/setup-magus": {input: "restore-history", offByDefault: true},
+		"docker/setup-qemu-action@":     {input: "cache-image"},
+		"docker/setup-buildx-action@":   {input: "cache-binary"},
+		"msys2/setup-msys2@":            {input: "cache"},
+		"actions/setup-go@":             {input: "cache"},
+	}
+	// Restores only on a pull request, where a secret gated off pull requests is absent.
+	const prOnly = "${{ github.event_name == 'pull_request' }}"
+	const prOnlyIf = "github.event_name == 'pull_request'"
+	const offPR = "github.event_name != 'pull_request'"
+	alwaysUntrusted := map[string]bool{"queue.yaml": true}
+	// TODO: queue-apply.yaml belongs to another change; delete this entry once its
+	// mise-action carries cache: false. The test fails when the entry is no longer needed.
+	exempt := map[string]string{
+		"queue-apply.yaml/apply": "jdx/mise-action restores main's scope beside the queue's write token",
+	}
+
+	grantsWrite := func(n *yaml.Node) bool {
+		switch n.Kind {
+		case 0:
+			// Undeclared means the repository default, which can be write.
+			return true
+		case yaml.ScalarNode:
+			return n.Value == "write-all"
+		case yaml.MappingNode:
+			for i := 1; i < len(n.Content); i += 2 {
+				if n.Content[i].Value == "write" {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	exprRe := regexp.MustCompile(`\$\{\{(.*?)\}\}`)
+	secretRe := regexp.MustCompile(`secrets\.(\w+)`)
+	// secrets reports whether the nodes name a secret other than GITHUB_TOKEN, and
+	// whether every such mention sits in an expression that is empty on a pull request.
+	secrets := func(nodes ...*yaml.Node) (found, gated bool) {
+		gated = true
+		var walk func(*yaml.Node)
+		walk = func(n *yaml.Node) {
+			if n.Kind == yaml.ScalarNode {
+				for _, m := range exprRe.FindAllStringSubmatch(n.Value, -1) {
+					for _, s := range secretRe.FindAllStringSubmatch(m[1], -1) {
+						if s[1] == "GITHUB_TOKEN" {
+							continue
+						}
+						found = true
+						if !strings.Contains(m[1], offPR) {
+							gated = false
+						}
+					}
+				}
+			}
+			for _, c := range n.Content {
+				walk(c)
+			}
+		}
+		for _, n := range nodes {
+			walk(n)
+		}
+		return found, gated
+	}
+
+	paths, err := filepath.Glob(filepath.Join(".github", "workflows", "*.yaml"))
+	require.NoError(t, err)
+	require.NotEmpty(t, paths)
+	used := map[string]bool{}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var wf struct {
+			Permissions yaml.Node            `yaml:"permissions"`
+			Env         yaml.Node            `yaml:"env"`
+			Jobs        map[string]yaml.Node `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal(raw, &wf), path)
+		file := filepath.Base(path)
+		for name, node := range wf.Jobs {
+			var job struct {
+				Permissions yaml.Node    `yaml:"permissions"`
+				Steps       []actionStep `yaml:"steps"`
+			}
+			require.NoError(t, node.Decode(&job), "%s/%s", file, name)
+			perms := &job.Permissions
+			if perms.Kind == 0 {
+				perms = &wf.Permissions
+			}
+			found, gated := secrets(&node, &wf.Env)
+			always := alwaysUntrusted[file] || grantsWrite(perms) || (found && !gated)
+			// Trusted off pull requests only: a secret every mention of which is gated.
+			prAllowed := !always && found
+			if !always && !found {
+				continue
+			}
+
+			var violations []string
+			for _, step := range job.Steps {
+				if strings.HasPrefix(step.Uses, "actions/cache@") || strings.HasPrefix(step.Uses, "actions/cache/restore@") {
+					if prGated := prAllowed && step.If == prOnlyIf; !prGated {
+						violations = append(violations, step.Uses)
+					}
+					continue
+				}
+				for prefix, sw := range switches {
+					if !strings.HasPrefix(step.Uses, prefix) {
+						continue
+					}
+					v, set := step.With[sw.input]
+					restores := !sw.offByDefault
+					if set {
+						restores = v != "false"
+					}
+					if prGated := prAllowed && v == prOnly; restores && !prGated {
+						violations = append(violations, fmt.Sprintf("%s (%s: %q)", step.Uses, sw.input, v))
+					}
+				}
+			}
+
+			key := file + "/" + name
+			if _, ok := exempt[key]; ok {
+				used[key] = true
+				assert.NotEmpty(t, violations, "%s no longer restores a cache; delete its exemption", key)
+				continue
+			}
+			assert.Empty(t, violations,
+				"%s holds a secret, a write token or id-token (or is the queue), so it restores no Actions cache;\n"+
+					"turn each restore off (mise-action cache: false, setup-magus restore-history unset)", key)
+		}
+	}
+	for key := range exempt {
+		assert.True(t, used[key], "exemption %s names no trusted job; delete it", key)
+	}
 }
 
 // sockdirPackage is the one place magus resolves the per-user runtime directory, where
@@ -3665,7 +4076,7 @@ const sockdirPackage = "github.com/egladman/magus/internal/proc/sockdir"
 // runs on. A test binary that links the socket directory can resolve the person's real
 // one, and then Open dials their broker, claims capacity from it, and prints the
 // not-arbitrated warning when none is up; a run binds its pool beside their server.
-// internal/testenv points the process at a private directory and pins the broker off, and
+// libs/testkit points the process at a private directory and pins the broker off, and
 // this holds every such binary to calling it from TestMain.
 //
 // The link graph is go list's, not a hand-kept list: the binaries that can reach the
@@ -3685,15 +4096,15 @@ func TestTestBinariesNeverReachTheUserRuntimeDir(t *testing.T) {
 		}
 		checked++
 		assert.True(t, testMainIsolates(t, dir),
-			"%s links %s but no TestMain in %s calls internal/testenv, so its tests can reach the "+
-				"person's real runtime directory: add `func TestMain(m *testing.M) { testenv.Main(m) }`",
+			"%s links %s but no TestMain in %s calls testkit.Main or testkit.Isolated, so its tests "+
+				"can reach the person's real runtime directory: add `func TestMain(m *testing.M) { testkit.Main(m) }`",
 			strings.TrimSuffix(path, ".test"), sockdirPackage, dir)
 	}
 	require.NotZero(t, checked, "no test binary links %s; this gate went quiet rather than red", sockdirPackage)
 }
 
-// testMainIsolates reports whether a TestMain among dir's test files calls into
-// internal/testenv.
+// testMainIsolates reports whether a TestMain among dir's test files calls testkit.Main
+// or testkit.Isolated.
 func testMainIsolates(t *testing.T, dir string) bool {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
@@ -3709,7 +4120,8 @@ func testMainIsolates(t *testing.T, dir string) bool {
 			found := false
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				if sel, ok := n.(*ast.SelectorExpr); ok {
-					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "testenv" {
+					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "testkit" &&
+						(sel.Sel.Name == "Main" || sel.Sel.Name == "Isolated") {
 						found = true
 					}
 				}
@@ -3721,4 +4133,143 @@ func testMainIsolates(t *testing.T, dir string) bool {
 		}
 	}
 	return false
+}
+
+// envNameLiteralRe matches a string literal that is exactly a MAGUS_* name, or a
+// NAME=value pair handed to a child: the shapes a read (os.Getenv("NAME"), a const) and
+// an export take. Prose naming a variable inside a longer message does not match.
+var envNameLiteralRe = regexp.MustCompile(`^(MAGUS_[A-Z0-9_]*[A-Z0-9])(=.*)?$`)
+
+// buzzEnvLiteralRe is envNameLiteralRe for a quoted Buzz string.
+var buzzEnvLiteralRe = regexp.MustCompile("[\"`](MAGUS_[A-Z0-9_]*[A-Z0-9])(?:=[^\"`\\n]*)?[\"`]")
+
+// envRegistrySkipDirs are trees whose MAGUS_* names are not reads: VCS and cache state,
+// installed agent copies, dependencies, and fixtures. gen/ is walked on purpose, since the
+// generated ApplyEnv is where every config-derived variable is read.
+var envRegistrySkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "testdata": true,
+}
+
+// envNamesNeverInEnvironment are MAGUS_* literals in shipped code that name something other
+// than a variable magus reads, each with what it is. Registering one would admit a
+// variable nothing reads.
+var envNamesNeverInEnvironment = map[string]string{
+	"MAGUS_QUEUE_APP_CLIENT_ID":   "a GitHub Actions variable the merge queue's GitHub provider sets up; workflows read it as vars.MAGUS_QUEUE_APP_CLIENT_ID",
+	"MAGUS_QUEUE_APP_PRIVATE_KEY": "the GitHub Actions secret the merge queue's GitHub provider stores the queue app's key under; the setup-magus action reads it, magus never does",
+}
+
+// repoToolingPrefixes are the paths this repository builds and releases itself with,
+// which ship to nobody. A MAGUS_* name only they read is theirs, not magus's.
+var repoToolingPrefixes = []string{
+	"cmd/magus-utils/", "tools/", ".github/", "benchmarks/", "hack/", "magusfile.buzz",
+}
+
+// shipsWithMagus reports whether slash (a slash-separated repo path) is code that ships:
+// not the repository's own tooling, and not the docs site except the agent glue a reader
+// installs.
+func shipsWithMagus(slash string) bool {
+	for _, p := range repoToolingPrefixes {
+		if strings.HasPrefix(slash, p) {
+			return false
+		}
+	}
+	return !strings.HasPrefix(slash, "docs/") || strings.HasPrefix(slash, "docs/guides/integrations/agents/")
+}
+
+// TestEveryReadMagusEnvVarIsRegistered holds config.EnvVarDocs complete for what ships, and
+// keeps this repository's own tooling clear of MGS1046. A name shipped code reads and
+// nobody registered is one doctor calls unknown and a near miss of it is not caught; a
+// tooling name a typo away from a registered one would stop every magus command in the
+// job that sets it.
+func TestEveryReadMagusEnvVarIsRegistered(t *testing.T) {
+	t.Parallel()
+
+	found := map[string]string{}
+	tooling := map[string]string{}
+	note := func(name, where string) {
+		into := found
+		if !shipsWithMagus(where) {
+			into = tooling
+		}
+		if _, ok := into[name]; !ok {
+			into[name] = where
+		}
+	}
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if envRegistrySkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		slash := filepath.ToSlash(path)
+		switch {
+		case strings.HasSuffix(slash, ".buzz"):
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, m := range buzzEnvLiteralRe.FindAllStringSubmatch(string(body), -1) {
+				note(m[1], slash)
+			}
+		// retired.go names exactly what magus stopped reading; MGS1046 reports those by
+		// name, so they are the one set that must NOT be registered.
+		case strings.HasSuffix(slash, ".go") && !strings.HasSuffix(slash, "_test.go") && slash != "internal/config/retired.go":
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				return nil //nolint:nilerr // a file that does not parse is the build's finding, not this gate's
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				s, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					return true
+				}
+				if m := envNameLiteralRe.FindStringSubmatch(s); m != nil {
+					note(m[1], fmt.Sprintf("%s:%d", slash, fset.Position(lit.Pos()).Line))
+				}
+				return true
+			})
+		}
+		return nil
+	})
+	require.NoError(t, err, "walk")
+	require.Contains(t, found, "MAGUS_CACHE_DIR", "the scan found nothing it should have; it is broken, not green")
+
+	var missing []string
+	for name, where := range found {
+		_, notEnv := envNamesNeverInEnvironment[name]
+		assert.False(t, notEnv && config.KnownEnvVar(name), "%s is registered, so drop it from envNamesNeverInEnvironment", name)
+		if !notEnv && !config.KnownEnvVar(name) {
+			missing = append(missing, fmt.Sprintf("%s (%s)", name, where))
+		}
+	}
+	for name := range envNamesNeverInEnvironment {
+		assert.Contains(t, found, name, "%s is named nowhere any more; drop it from envNamesNeverInEnvironment", name)
+	}
+	slices.Sort(missing)
+	assert.Empty(t, missing,
+		"these MAGUS_* names are read or exported by shipped code but missing from config.EnvVarDocs;\n"+
+			"register each with its doc, or rename it off the prefix:\n%s",
+		strings.Join(missing, "\n"))
+
+	var refused []string
+	for name, where := range tooling {
+		if msg, bad := config.EnvVarProblem(name); bad {
+			refused = append(refused, fmt.Sprintf("%s (%s)", msg, where))
+		}
+	}
+	slices.Sort(refused)
+	assert.Empty(t, refused,
+		"this repository's own tooling uses MAGUS_* names every magus command refuses (MGS1046);\n"+
+			"rename them off the prefix:\n%s",
+		strings.Join(refused, "\n"))
 }

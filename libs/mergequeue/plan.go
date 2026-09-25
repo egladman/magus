@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/libs/mergequeue/types"
 )
@@ -73,8 +74,12 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 	if err := r.checkMerged(ctx); err != nil {
 		return types.Plan{}, err
 	}
-	plan := types.Plan{Schema: types.SchemaPlan, Base: in.Base, RemoteURL: in.RemoteURL, BaseCommit: tip, Depth: max(1, p.Depth),
-		Merged: in.Merged, Unqueued: in.Unqueued}
+	date, err := newestDate(ctx, p.vcs, p.clone.Root, time.Time{}, tip)
+	if err != nil {
+		return types.Plan{}, err
+	}
+	plan := types.Plan{Schema: types.SchemaPlan, Base: in.Base, RemoteURL: in.RemoteURL, BaseCommit: tip, CommitDate: date, Depth: max(1, p.Depth),
+		Merged: in.Merged, Unqueued: in.Unqueued, Closed: in.Closed}
 	if len(in.Changes) == 0 {
 		p.Events.Emit(Event{Kind: EventNotice, Reason: "no change carries merge intent against " + in.Base})
 		return plan, nil
@@ -124,8 +129,28 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 			ids[i] = c.ID
 		}
 		p.Events.Emit(Event{Kind: EventPartition, Partition: partitionOf(gi), Changes: ids})
+		for _, c := range g {
+			if plan.CommitDate, err = newestDate(ctx, p.vcs, p.clone.Root, plan.CommitDate, c.Head); err != nil {
+				return types.Plan{}, err
+			}
+		}
 	}
 	return plan, nil
+}
+
+// newestDate is the later of date and rev's commit date, in UTC.
+func newestDate(ctx context.Context, v types.ReadVCS, root string, date time.Time, rev string) (time.Time, error) {
+	c, err := v.FindCommit(ctx, root, rev)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("date %s: %w", short(rev), err)
+	}
+	if c.Date.IsZero() {
+		return time.Time{}, fmt.Errorf("date %s: the version control recorded no date", short(rev))
+	}
+	if c.Date.After(date) {
+		return c.Date.UTC(), nil
+	}
+	return date, nil
 }
 
 // each runs fn for 0..n-1, Parallel at once, stopping at the first error, which it
@@ -217,7 +242,7 @@ func (r *planning) fetch(ctx context.Context, c types.Change) (*types.Verdict, m
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("commits of %s: %w", c.Label(), err)
 	}
-	top, err := r.ownTop(ctx, c.Head)
+	top, err := ownTop(ctx, r.vcs, r.clone.Root, r.tip, c.Head)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("commits of %s: %w", c.Label(), err)
 	}
@@ -232,23 +257,23 @@ func (r *planning) unqueuedTop(ctx context.Context, u types.UnqueuedChange) (str
 	if err := r.vcs.FetchCommit(ctx, r.clone.Root, r.clone.Remote, u.Head); err != nil {
 		return "", fmt.Errorf("fetch the head of the unqueued #%s: %w", u.ID, err)
 	}
-	top, err := r.ownTop(ctx, u.Head)
+	top, err := ownTop(ctx, r.vcs, r.clone.Root, r.tip, u.Head)
 	if err != nil {
 		return "", fmt.Errorf("commits of the unqueued #%s: %w", u.ID, err)
 	}
 	return top, nil
 }
 
-// ownTop is head with the merges of the base into it peeled off: GitHub's "Update
-// branch", or an update commit the queue pushed. A change stacked on this one before
-// such a merge carries the top, not the head, and is still stacked on it.
-func (r *planning) ownTop(ctx context.Context, head string) (string, error) {
+// ownTop is head with the merges of the base at tip into it peeled off: GitHub's
+// "Update branch", or an update commit the queue pushed. A change stacked on this one
+// before such a merge carries the top, not the head, and is still stacked on it.
+func ownTop(ctx context.Context, v types.ReadVCS, root, tip, head string) (string, error) {
 	for range reviewDepth {
-		cm, err := r.vcs.FindCommit(ctx, r.clone.Root, head)
+		cm, err := v.FindCommit(ctx, root, head)
 		if err != nil || len(cm.Parents) != 2 {
 			return head, err
 		}
-		onBase, err := r.vcs.IsAncestor(ctx, r.clone.Root, cm.Parents[1], r.tip)
+		onBase, err := v.IsAncestor(ctx, root, cm.Parents[1], tip)
 		if err != nil || !onBase {
 			return head, err
 		}
@@ -312,8 +337,11 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 			if !ok {
 				return nil, fmt.Errorf("merge %s onto %s: %w", c.Label(), r.in.Base, err)
 			}
-			v := decided(*c, types.DecisionKick, types.CodeKickConflict, "", conflictReport(r.in.Base, c.Head, conf))
+			v := decided(*c, types.DecisionKick, types.CodeKickConflict, "", conflictReport(r.in.Base, c.Head))
 			v.Reason, v.Paths, v.With = firstLine(v.Report), conf.paths, conf.with
+			if note := declinedNote(conf.declined); note != "" {
+				v.Report += "\n" + note + "\n"
+			}
 			return v, nil
 		}
 	}
@@ -326,7 +354,40 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 		}
 		c.Affected, c.UnboundedBy = affected, unboundedBy
 	}
+	regen, err := authorRegenerates(ctx, r.facts, paths)
+	if err != nil {
+		return nil, fmt.Errorf("regeneration of %s: %w", c.Label(), err)
+	}
+	// A new project is the author's to name, and every hook takes the units as arguments.
+	for _, u := range c.Affected {
+		if err := types.CheckUnit(u); err != nil {
+			return refused(*c, "its affected set: "+err.Error()), nil //nolint:nilerr // a unit no hook can take refuses the change, not the plan
+		}
+	}
+	if len(regen) > 0 {
+		v := decided(*c, types.DecisionKick, types.CodeKickRegeneration, "", regenerationReport(joinPaths(regen)))
+		v.Reason, v.Paths = firstLine(v.Report), regen
+		return v, nil
+	}
 	return nil, nil //nolint:nilnil // no verdict is planning's answer that c is admitted
+}
+
+// authorRegenerates returns the generated files among changed whose regeneration the
+// build tool cannot prove runs none of changed: the proof applying needs before it
+// regenerates them itself.
+func authorRegenerates(ctx context.Context, f types.BuildFacts, changed []string) ([]string, error) {
+	generated, err := outputs(ctx, f, changed)
+	if err != nil || len(generated) == 0 {
+		return nil, err
+	}
+	g, err := f.Generation(ctx, generated, changed)
+	if err != nil {
+		return nil, fmt.Errorf("generation of %s: %w", joinPaths(generated), err)
+	}
+	if regenerationProven(g) {
+		return nil, nil
+	}
+	return generated, nil
 }
 
 // planRefs is every change in is a listed change may carry the head of.
@@ -346,21 +407,19 @@ const forkReport = "The merge queue does not merge changes from forks: it cannot
 	"update commits, and it runs only code whose author can push to this repository. " +
 	"Ask a maintainer to push the branch here.\n"
 
-func conflictReport(base, commit string, conf sourceConflict) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "The merge queue could not merge this change at `%s`: it conflicts with `%s` in files that are not generated.\n\n", short(commit), base)
-	b.WriteString("Conflicting files:\n")
-	for _, p := range conf.paths {
-		fmt.Fprintf(&b, "- `%s`\n", p)
-	}
-	if len(conf.with) > 0 {
-		fmt.Fprintf(&b, "\nCommits on `%s` that changed them:\n", base)
-		for _, w := range conf.with {
-			fmt.Fprintf(&b, "- %s\n", w)
-		}
-	}
-	fmt.Fprintf(&b, "\nMerge `%s` into this branch, resolve these by hand, push, and queue the change again.\n", base)
-	return b.String()
+// conflictReport says what conflicts on which commits; the files and the base's commits
+// that touched them travel beside it in the verdict's Paths and With.
+func conflictReport(base, commit string) string {
+	return fmt.Sprintf("The merge queue could not merge this change at `%s`: it conflicts with `%s` outside the generated files.\n\n"+
+		"Merge `%s` into this branch and resolve the conflict by hand.\n", short(commit), base, base)
+}
+
+// regenerationReport says why the queue will not merge a change whose own code changes
+// what regenerates paths: it cannot prove that regeneration runs none of the change.
+func regenerationReport(paths string) string {
+	return "The merge queue cannot merge this change: it changes what regenerates " + paths +
+		", so the queue cannot prove regenerating them runs none of its code.\n\n" +
+		"Regenerate them yourself, push, and merge it by hand once it is reviewed.\n"
 }
 
 func reasonSuffix(reason string) string {

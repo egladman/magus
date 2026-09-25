@@ -152,6 +152,15 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	}
 	out := g.Output()
 	fmt.Fprintf(os.Stderr, "knowledge graph rebuilt: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
+	// Not fatal: without the index the guard's graph-backed rules stay silent, which is
+	// the state they were in before the build.
+	if ws, err := inspectWorkspace(ctx, root); err == nil {
+		if m, ok := ws.(*magus.Magus); ok {
+			if err := m.WriteGuardIndex(ctx); err != nil {
+				interactive.Emit(os.Stderr, "guard index not written: "+err.Error())
+			}
+		}
+	}
 	return nil
 }
 

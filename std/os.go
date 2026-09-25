@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -191,8 +190,8 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 // in these modules:
 //
 //	try { final vhs = proc\which("vhs"); ... } catch (e) { magus\log.info("vhs not installed"); }
-func OsWhich(_ context.Context, cmd string) (string, error) {
-	path, err := exec.LookPath(cmd)
+func OsWhich(ctx context.Context, cmd string) (string, error) {
+	path, err := run.LookPath(ctx, cmd)
 	if err != nil {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", cmd)
 	}

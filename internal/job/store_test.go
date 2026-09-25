@@ -323,6 +323,25 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	}
 }
 
+// Dropping one declaration claim releases that declaration, digested over the lines the
+// footprint places in it now, so a later edit elsewhere in the file leaves it unchanged.
+func TestStorePutReleasesADeclaration(t *testing.T) {
+	t.Parallel()
+
+	const src = "package run\n\nfunc A() {\n\ta()\n}\n\nfunc B() {\n\tb()\n}\n"
+	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src})
+	s := tmpStore(t, root)
+	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#A", "run.go#B", "run.go#Gone"}, State: types.StateRunning})
+
+	stored := seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#B"}, State: types.StateRunning})
+
+	require.Len(t, stored.Releases, 2)
+	sum := sha256.Sum256([]byte("func A() {\n\ta()\n}\n\n"))
+	assert.Equal(t, types.JobRelease{Path: "run.go#A", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: stored.Releases[0].ReleasedAt}, stored.Releases[0],
+		"the declaration's own lines, the blank line git places in it included")
+	assert.Equal(t, types.DigestAbsent, stored.Releases[1].Digest, "a declaration no line is placed in any more is absent")
+}
+
 // A release is the store's to say, not the caller's: a put that does not name
 // write_paths releases nothing, and one that owns a path again stops claiming to have
 // released it.

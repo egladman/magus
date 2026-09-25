@@ -3,9 +3,7 @@ package client
 import (
 	"context"
 	"errors"
-	"path"
 	"slices"
-	"strings"
 	"sync"
 
 	magus "github.com/egladman/magus"
@@ -133,8 +131,9 @@ func (w *Workspace) Classify(ctx context.Context, paths []string) (map[string]ty
 }
 
 // Generation names the projects declaring outputs as the units that regenerate them,
-// and proves from the project graph which of changed their regeneration could run. A
-// changed path is code unless it is documentation, text or an image, and a code path
+// and proves from the project graph which of changed their regeneration could run. Every
+// changed path counts, whatever its extension: CMakeLists.txt or requirements.txt is
+// code to the tool reading it, and a generator can run what a document holds. A path
 // runs in the regeneration when a generating project declares it as a source or input
 // (`magus describe file`), or when it reaches one through the affected closure (`magus
 // affected --plan --stdin`). A path the closure cannot bound, such as a magusfile, a
@@ -155,15 +154,14 @@ func (w *Workspace) Generation(ctx context.Context, outputs, changed []string) (
 		g.Units = append(g.Units, e.OutputOf...)
 	}
 	g.Units = slices.Compact(slices.Sorted(slices.Values(g.Units)))
-	code := slices.DeleteFunc(slices.Clone(changed), isData)
-	if len(code) == 0 {
+	if len(changed) == 0 {
 		return g, nil
 	}
-	declared, err := w.m.ClassifyFiles(ctx, code)
+	declared, err := w.m.ClassifyFiles(ctx, changed)
 	if err != nil {
 		return types.Generation{}, err
 	}
-	for i, p := range code {
+	for i, p := range changed {
 		if slices.ContainsFunc(declared[i].SourceOf, func(u string) bool { return slices.Contains(g.Units, u) }) {
 			g.Code = append(g.Code, p)
 			continue
@@ -183,14 +181,15 @@ func (w *Workspace) Generation(ctx context.Context, outputs, changed []string) (
 	return g, nil
 }
 
-// dataExtensions are what a regeneration reads and never runs. Anything else, a format
-// this list does not know included, counts as code.
-var dataExtensions = []string{".md", ".markdown", ".txt", ".rst", ".adoc", ".csv", ".tsv",
-	".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf"}
-
-func isData(p string) bool {
-	return slices.Contains(dataExtensions, strings.ToLower(path.Ext(p)))
+// AutoResolvable is magus's change classifier on the merge (Magus.AutoResolvable): low
+// risk by the classes the ci gate uses, or code a project's merge_low_risk opts in.
+func (w *Workspace) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
+	verdict, ok := w.m.AutoResolvable(ctx, path, base, merged)
+	return verdict, ok, nil
 }
+
+// AllUnits is "/", the project reference magus reads as every project.
+func (w *Workspace) AllUnits(context.Context) ([]string, error) { return []string{"/"}, nil }
 
 // Close releases the workspace.
 func (w *Workspace) Close() error { return w.m.Close() }

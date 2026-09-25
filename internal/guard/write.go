@@ -213,6 +213,11 @@ type writeGrade struct {
 	// empty for the job-store advisories that report a live collision: those describe THIS
 	// write against a boundary that moves, so the second one is a second fact.
 	Kind hint.MarkerKind
+	// Key is the marker Kind is held under when that is narrower than the kind itself, as
+	// leasedPathKey is; empty holds it under Kind.
+	Key hint.MarkerKind
+	// Rule names the catalogued rule a deny came from, "" for the path-lease denies.
+	Rule string
 }
 
 // gradeLeasedWrite judges a file write against the job store's declared write
@@ -236,12 +241,25 @@ type writeGrade struct {
 // that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
 // not block a tool call.
 func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
+	return gradeLeasedEdit(ctx, deps, actingLease, writePath, writeFields{})
+}
+
+// gradeLeasedEdit is gradeLeasedWrite for a write whose payload says what it changes. A
+// write inside the acting lease's own paths is graded once more, by declaration, when
+// another live lease claims a declaration of that file; see gradeClaimedDeclarations.
+func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
 		return writeGrade{}
 	}
 	location := hookLocation(ctx, deps)
 	if location.cacheDir == "" {
+		return writeGrade{}
+	}
+	// The store's paths are workspace-relative, so a write outside the workspace has
+	// nothing to be graded against, and nothing to be told about the store either.
+	rel, inside := workspaceRelative(location.workspace, writePath)
+	if !inside {
 		return writeGrade{}
 	}
 	leases, err := leaseRows(ctx, location)
@@ -259,12 +277,6 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	if len(live) == 0 {
 		return adviseUnleasedWorker(actingLease)
 	}
-	rel, inside := workspaceRelative(location.workspace, writePath)
-	if !inside {
-		// The store's paths are workspace-relative, so a write outside the workspace has
-		// nothing to be graded against.
-		return writeGrade{}
-	}
 
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
 	// The notice that says so is adviseInvalidLease, fired from Judge so both surfaces
@@ -277,7 +289,15 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
 			return writeGrade{Decision: "deny", Reason: reason}
 		}
-		return gradeAgainstOwnLease(me, owningLeases(leases, live), rel)
+		owners := owningLeases(leases, live)
+		g := gradeAgainstOwnLease(me, owners, rel)
+		if g.Decision == "deny" {
+			return g
+		}
+		if claimed := gradeClaimedDeclarations(ctx, location.workspace, me, owners, rel, fields); claimed.Decision != "" {
+			return claimed
+		}
+		return g
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
@@ -295,7 +315,9 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		// fails open and a store that would not accept a note must not cost somebody a save.
 		_ = job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).
 			RecordUnattributedWrite(ctx, owner.ID, rel)
-		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
+		// Held once per session per lease: the second write into the same lease's paths
+		// repeats a fact the writer already has, while a different lease is a new one.
+		return writeGrade{Decision: "advise", Kind: advisoryLeasedPath, Key: leasedPathKey(owner.ID), Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
 			owner.ID, envHookLease, owner.ID, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State)}
@@ -516,7 +538,10 @@ func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 func declarationCovering(decls []string, rel string) (string, bool, error) {
 	var firstErr error
 	for _, raw := range decls {
-		decl := path.Clean(strings.TrimSpace(raw))
+		// A claim on one declaration (`run.go#executeStages`) covers its file at this, the
+		// path, level; gradeClaimedDeclarations is where the declaration is read.
+		file, _ := types.SplitClaim(raw)
+		decl := path.Clean(file)
 		if decl == "." || decl == "/" {
 			// A blank entry, or one that names the whole tree by naming nothing, would put
 			// its lease on every path in the plan. types.pathsIntersect refuses the same

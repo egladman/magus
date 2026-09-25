@@ -1,6 +1,10 @@
 package types
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 // Schema names. Each document carries its own under "schema"; a reader refuses any
 // other, so a format change is a new name rather than a silent misread.
@@ -24,6 +28,8 @@ type Changes struct {
 	Merged []MergedChange `json:"merged,omitempty"`
 	// Unqueued are the open changes carrying no merge intent.
 	Unqueued []UnqueuedChange `json:"unqueued,omitempty"`
+	// Closed are the closed changes still showing a queue label.
+	Closed []ClosedChange `json:"closed,omitempty"`
 }
 
 // Check reports whether c is a document the queue can plan: a valid base, every record
@@ -66,6 +72,15 @@ func (c Changes) Check() error {
 		}
 		seen[u.ID] = true
 	}
+	for i, cl := range c.Closed {
+		if err := CheckID(cl.ID); err != nil {
+			return fmt.Errorf("closed[%d]: %w", i, err)
+		}
+		if seen[cl.ID] {
+			return fmt.Errorf("closed[%d]: id %q appears twice", i, cl.ID)
+		}
+		seen[cl.ID] = true
+	}
 	return nil
 }
 
@@ -104,10 +119,14 @@ const (
 	CodeWaitWithdrawn       Code = "WAIT_WITHDRAWN"        // its merge intent was withdrawn since it was listed
 	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the commits of an open change nobody queued
 	CodeWaitNoCommitter     Code = "WAIT_NO_COMMITTER"     // it needs an update commit, and nothing names who commits it
+	CodeWaitBaseRed         Code = "WAIT_BASE_RED"         // the gate was red on its candidate and on what that was built onto
 
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
-	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate
+	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate and green on what that was built onto
 	CodeKickRefused  Code = "KICK_REFUSED"  // something the author has to fix that is neither
+	// CodeKickRegeneration: its own code changes what regenerates generated files it
+	// needs regenerated, so the queue cannot prove that regeneration runs none of it.
+	CodeKickRegeneration Code = "KICK_REGENERATION"
 )
 
 // decision is the decision c goes with, or "" for a code outside the set.
@@ -115,9 +134,10 @@ func (c Code) decision() Decision {
 	switch c {
 	case CodeWaitNotApproved, CodeWaitHeadMoved, CodeWaitBehind, CodeWaitConflictAhead, CodeWaitRevalidate,
 		CodeWaitBranchMoved, CodeWaitProviderRefused, CodeWaitBelow, CodeWaitBelowKicked, CodeWaitRestack,
-		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter:
+		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter,
+		CodeWaitBaseRed:
 		return DecisionWait
-	case CodeKickConflict, CodeKickRed, CodeKickRefused:
+	case CodeKickConflict, CodeKickRed, CodeKickRefused, CodeKickRegeneration:
 		return DecisionKick
 	}
 	return ""
@@ -129,6 +149,11 @@ type Plan struct {
 	Base       string `json:"base"`
 	RemoteURL  string `json:"remote_url,omitempty"` // URL of the remote the provider names its repository by
 	BaseCommit string `json:"base_commit"`          // tip of Base every candidate is built on
+	// CommitDate dates every commit the queue writes: the newest commit date of the base
+	// commit and each admitted head. It is read from the commits rather than a clock, so
+	// the same queue plans the same candidates and nothing a cache keys on moves, and no
+	// admitted commit is newer, so a build reading HEAD's date as "now" finds none ahead.
+	CommitDate time.Time `json:"commit_date"`
 	// Depth is how many candidates of one partition validate at once.
 	Depth int `json:"depth"`
 	// Partitions hold the admitted changes in queue order, every change after the one
@@ -142,11 +167,14 @@ type Plan struct {
 	// head's approval has to be carried over.
 	Merged   []MergedChange   `json:"merged,omitempty"`
 	Unqueued []UnqueuedChange `json:"unqueued,omitempty"`
+	// Closed are the listing's closed changes still showing a queue label, for an applier
+	// to clear.
+	Closed []ClosedChange `json:"closed,omitempty"`
 }
 
 // Check reports whether p is a plan the queue can validate and apply: a valid base and
 // base commit, every change once, each after the change it is stacked on, and planning's
-// verdicts deciding anything but merge.
+// verdicts deciding anything but merge, with no gate, and a commit date.
 func (p Plan) Check() error {
 	if err := checkBranch(p.Base); err != nil {
 		return fmt.Errorf("base: %w", err)
@@ -186,8 +214,11 @@ func (p Plan) Check() error {
 		if err := add(v.Change); err != nil {
 			return err
 		}
-		if v.Decision == DecisionMerge {
+		switch {
+		case v.Decision == DecisionMerge:
 			return fmt.Errorf("planning decides merge for %s, which only validation decides", v.Change.Label())
+		case v.Gate != "":
+			return fmt.Errorf("planning's verdict on %s names a gate, which only validation runs", v.Change.Label())
 		}
 		if err := v.Check(); err != nil {
 			return err
@@ -202,6 +233,14 @@ func (p Plan) Check() error {
 		if err := u.check(); err != nil {
 			return fmt.Errorf("unqueued: %w", err)
 		}
+	}
+	for _, cl := range p.Closed {
+		if err := CheckID(cl.ID); err != nil {
+			return fmt.Errorf("closed: %w", err)
+		}
+	}
+	if p.CommitDate.IsZero() {
+		return errors.New("the plan records no commit date")
 	}
 	return nil
 }
@@ -228,17 +267,20 @@ type Verdict struct {
 	// one plus this one, generated files regenerated. An applier builds it again from
 	// the change's head and the base's own regeneration, and merges only what matches.
 	CandidateCommit string      `json:"candidate_commit,omitempty"`
-	Method          MergeMethod `json:"method,omitempty"`  // the merge method it was validated under
-	Message         string      `json:"message,omitempty"` // squash body: the change's own commits
+	Method          MergeMethod `json:"method,omitempty"` // the merge method it was validated under
 	// Depth is the candidate's speculation depth when its gate started: 1 ran on
 	// validated commits alone, 2 on top of one unvalidated candidate, and so on.
 	Depth      int   `json:"depth,omitempty"`
 	DurationMS int64 `json:"duration_ms,omitempty"` // gate wall time
+	// Gate and Regenerate are the hook command lines validation ran, recorded so a
+	// kick-back can say how to run them again; planning's verdicts carry neither.
+	Gate       string `json:"gate,omitempty"`
+	Regenerate string `json:"regenerate,omitempty"`
 }
 
 // Check reports whether v is a verdict an applier can act on: a valid change, commit ids
-// where it names commits, a code of its decision's class on every wait and kick, and
-// what a merge needs rebuilt on a merge.
+// where it names commits, a regeneration only beside a gate, a code of its decision's
+// class on every wait and kick, and what a merge needs rebuilt on a merge.
 func (v Verdict) Check() error {
 	if err := v.Change.Check(); err != nil {
 		return err
@@ -247,6 +289,9 @@ func (v Verdict) Check() error {
 		if id.v != "" && !IsObjectID(id.v) {
 			return fmt.Errorf("verdict on %s: %s %q is not a commit id", v.Change.Label(), id.name, id.v)
 		}
+	}
+	if v.Regenerate != "" && v.Gate == "" {
+		return fmt.Errorf("verdict on %s names a regeneration but no gate", v.Change.Label())
 	}
 	if v.After != "" {
 		if err := CheckID(v.After); err != nil {

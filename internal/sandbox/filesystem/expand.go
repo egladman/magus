@@ -1,34 +1,66 @@
 package filesystem
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// ExpandUserRule resolves a magus.yaml sandbox.allow entry to a Rule.
-// rawPath may use ~ for the user's home directory and may contain $VAR
-// references resolved against the current environment.
-// User-allowlisted paths default to Exec: true so that toolchain directories
-// (e.g. $GOPATH/bin, $CARGO_HOME/bin) remain executable, matching the
-// behavior before the Read/Exec access split was introduced.
-func ExpandUserRule(rawPath string, read, write bool) (Rule, error) {
-	expanded := os.ExpandEnv(rawPath)
-	if len(expanded) > 0 && expanded[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			expanded = filepath.Join(home, expanded[1:])
-		}
+// ModeRule maps a sandbox.allow mode to the grants it spells: r for read, w for
+// write, x for exec. The empty mode is ro. Anything else is an error, so a typo such
+// as RW cannot quietly grant less, or more, than was meant.
+func ModeRule(mode string) (Rule, error) {
+	switch mode {
+	case "", "ro":
+		return Rule{Read: true}, nil
+	case "rw":
+		return Rule{Read: true, Write: true}, nil
+	case "rx":
+		return Rule{Read: true, Exec: true}, nil
+	case "rwx":
+		return Rule{Read: true, Write: true, Exec: true}, nil
 	}
-	abs, err := filepath.Abs(expanded)
+	return Rule{}, fmt.Errorf("sandbox: unknown mode %q (want ro, rw, rx or rwx)", mode)
+}
+
+// ErrUnsetVariable is wrapped by ExpandUserRule when rawPath names a variable that
+// is unset or empty.
+var ErrUnsetVariable = errors.New("variable is unset or empty")
+
+// ExpandUserRule resolves a magus.yaml sandbox.allow entry to a Rule granting what
+// mode spells (see ModeRule). rawPath may start with ~ for home and may reference
+// $VAR or ${VAR}, looked up with lookupEnv.
+//
+// A variable that is unset or empty is an error rather than an empty string:
+// "$UNSET/" would otherwise grant "/". A relative result is an error too, since it
+// would be resolved against whatever directory magus happens to run in.
+func ExpandUserRule(rawPath, mode, home string, lookupEnv func(string) (string, bool)) (Rule, error) {
+	rule, err := ModeRule(mode)
 	if err != nil {
 		return Rule{}, err
 	}
-	clean := filepath.Clean(abs)
-	// Resolve symlinks so the containment check is consistent with how the
-	// workspace root is stored. If the path does not exist yet, keep the
-	// lexical form (same tolerance as normalizePath).
-	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
-		clean = resolved
+	var unset []string
+	expanded := os.Expand(rawPath, func(name string) string {
+		v, ok := lookupEnv(name)
+		if !ok || v == "" {
+			unset = append(unset, name)
+		}
+		return v
+	})
+	if len(unset) > 0 {
+		return Rule{}, fmt.Errorf("sandbox: %q: %w: %s", rawPath, ErrUnsetVariable, strings.Join(unset, ", "))
 	}
-	return Rule{Path: clean, Read: read, Write: write, Exec: true}, nil
+	if expanded == "~" || strings.HasPrefix(expanded, "~/") {
+		if home == "" {
+			return Rule{}, fmt.Errorf("sandbox: %q: ~ needs a home directory and none is known", rawPath)
+		}
+		expanded = filepath.Join(home, expanded[1:])
+	}
+	if !filepath.IsAbs(expanded) {
+		return Rule{}, fmt.Errorf("sandbox: %q: path must be absolute", rawPath)
+	}
+	rule.Path = ResolveRulePath(expanded)
+	return rule, nil
 }

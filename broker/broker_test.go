@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -18,7 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/testenv"
+	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -32,7 +34,7 @@ func TestMain(m *testing.M) {
 	if addr := os.Getenv(holderEnv); addr != "" {
 		os.Exit(holdUntilKilled(addr))
 	}
-	testenv.Main(m)
+	testkit.Main(m)
 }
 
 func holdUntilKilled(addr string) int {
@@ -199,6 +201,94 @@ func TestHoldersReassertOnANewBroker(t *testing.T) {
 	c.Release(t.Context(), v.ID)
 	assert.Eventually(t, func() bool { return len(holders(t, addr)) == 0 }, 2*time.Second, 10*time.Millisecond,
 		"the id the holder kept still releases the claim on the new broker")
+}
+
+// replyGate forwards connections from its own socket to a broker, and on every
+// connection after the first holds back claim replies until open closes. A reassert
+// the gate is holding is recorded on the broker while the client has not yet read it.
+type replyGate struct {
+	addr     string
+	recorded chan struct{}
+	open     chan struct{}
+}
+
+func newReplyGate(t *testing.T, upstream string) *replyGate {
+	t.Helper()
+	g := &replyGate{addr: testAddr(t), recorded: make(chan struct{}), open: make(chan struct{})}
+	ln, err := Listen(t.Context(), g.addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	up, err := endpoint.Parse(upstream)
+	require.NoError(t, err)
+	var once sync.Once
+	go func() {
+		for n := 0; ; n++ {
+			down, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			conn, err := up.Dial(context.Background())
+			if err != nil {
+				_ = down.Close()
+				continue
+			}
+			hold := n > 0
+			go func() {
+				_, _ = io.Copy(conn, down)
+				_ = conn.Close()
+			}()
+			go func() {
+				defer func() { _ = down.Close(); _ = conn.Close() }()
+				r, w := newFrameReader(conn), &frameWriter{w: down}
+				for {
+					f, err := r.read()
+					if err != nil {
+						return
+					}
+					if hold && f.Type == typeClaimReply {
+						once.Do(func() { close(g.recorded) })
+						<-g.open
+					}
+					if w.write(f.Type, f.ID, f.Body) != nil {
+						return
+					}
+				}
+			}()
+		}
+	}()
+	return g
+}
+
+// TestAReleaseDuringReassertReachesTheNewBroker releases a claim after the new broker
+// recorded its reassert but before the client read the reply. The client has no
+// connection to send that release on, yet the successor must not keep the claim until
+// the process exits.
+func TestAReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
+	old := redialEvery
+	redialEvery = 20 * time.Millisecond
+	t.Cleanup(func() { redialEvery = old })
+
+	addr := testAddr(t)
+	stopFirst, _ := serve(t, addr, WithCapacity(1000, 4))
+	gate := newReplyGate(t, addr)
+	c := dial(t, gate.addr)
+	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+
+	stopFirst()
+	serve(t, addr, WithCapacity(1000, 4))
+	select {
+	case <-gate.recorded:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the holder never re-asserted on the new broker")
+	}
+	require.Len(t, holders(t, addr), 1)
+
+	c.Release(t.Context(), v.ID)
+	close(gate.open)
+	assert.Eventually(t, func() bool { return len(holders(t, addr)) == 0 }, 2*time.Second, 10*time.Millisecond,
+		"a release that lands mid-reassert still frees the claim on the new broker")
 }
 
 // TestIdleExitWaitsForWhatIsHeld pins the one lifetime rule: the broker exits once it

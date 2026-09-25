@@ -102,6 +102,50 @@ The server also serves `/livez`, `/readyz`, and `/healthz` on the same port. If 
 With `mcp.enabled: false` the server still keeps the knowledge graph and symbol indexes
 current; turning off MCP turns off the endpoint and nothing else.
 
+## Which transport when
+
+The same tools answer on each transport. What differs is who can reach them and what
+proves who they are:
+
+| Transport                 | Where                                    | Credential                                  | Use it for                                                                                          |
+| ------------------------- | ---------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| stdio                     | `magus mcp`, launched by the host        | none; the host launched the process as you  | one host driving the workspace it opens, with no server running                                     |
+| Streamable HTTP, socket   | `/mcp` on the server's own `server.sock` | the kernel's word that the peer runs as you | a local client that speaks HTTP over a unix socket and should share the server's warm graph         |
+| Streamable HTTP, loopback | `http://127.0.0.1:7391/mcp`              | a bearer token holding `mcp=write`          | a client that only takes a URL, runs as another user, or reaches the server through a tunnel or TLS |
+
+Whichever the transport, each tool call is held to `mcp=write` again, and a caller
+below it gets [MGS9015](../../reference/codes/auth/MGS9015.md) as a tool error.
+
+## MCP over the server socket
+
+The server has one unix socket, `server.sock` in the private (`0700`) runtime directory,
+and it speaks HTTP. `/mcp` is one path on it, beside the Connect APIs and the control
+operations the CLI uses (see [the server's socket](server.md#two-transports)):
+
+```text
+$XDG_RUNTIME_DIR/magus/server.sock      # else <user cache dir>/magus/run/, else /tmp/magus-<uid>/
+```
+
+It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP,
+and it takes no token. What admits a caller is the user it runs as: for every connection
+the server asks the kernel for the peer's uid (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on
+macOS) and admits only its own. Any other peer, root included, gets `403`
+[MGS9022](../../reference/codes/auth/MGS9022.md). An admitted call carries the
+`socket-peer` credential, which holds `mcp=write` and `console=write` but never token
+management, and the activity trail records each call under it. On a platform where magus
+cannot read a peer's uid, the socket carries the control operations alone and MCP stays
+on loopback.
+
+To check it by hand, send a handshake with curl:
+
+```sh
+curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+```
+
+`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike.
+
 ## Available tools
 
 Both transports expose these tools. This list is authoritative at the time of writing;
@@ -130,6 +174,34 @@ Run:
 | `magus_run_affected`     | Run a target on only the VCS-affected projects                             |
 | `magus_affected_plan`    | Emit a provider-neutral CI shard plan for the affected set                 |
 | `magus_affected_explain` | Explain why a project is in the affected set                               |
+| `magus_buzz`             | Run a Buzz program (`magus buzz`) over `stdin` and return its output       |
+
+`magus_buzz` is the tool for transforming another tool's output, in place of a shell
+one-liner. Pass the earlier result as `stdin` and the script reads it with
+`io\stdin.readAll()`; its `main` receives `args`. This call keeps the spell ids from a
+`magus_query` result:
+
+```json
+{
+  "script": "import \"std\"; import \"io\"; import \"encoding/json\";\nfun main(args: [str]) > void !> any {\n    final q = json\\parse(io\\stdin.readAll() ?? \"null\") as {str: any};\n    final ids = mut [<str>];\n    foreach (m in q[\"matches\"] as [any]) {\n        final hit = m as {str: any};\n        if (hit[\"kind\"] == args[0]) { ids.append(hit[\"id\"] as str); }\n    }\n    std\\print(json\\stringify({\"kind\": args[0], \"ids\": ids}));\n}",
+  "args": "spell",
+  "stdin": "<the magus_query result text>",
+  "write": true
+}
+```
+
+The reply carries the script's stdout and, because that stdout is JSON, the same value
+parsed under `json`:
+
+```json
+{"exit_code":0,"stdout":"{\"ids\":[\"spell:go\",\"spell:golangci\"],\"kind\":\"spell\"}\n","json":{"ids":["spell:go","spell:golangci"],"kind":"spell"}}
+```
+
+A compile or runtime error comes back as a tool error carrying the diagnostic, such as
+`[BZZ1005] buzz: line 1:32: ...`. `magus buzz` has no read-only mode, so a script
+reaches whatever its `fs`, `proc` and `http` modules can; every call must pass
+`write: true` to accept that, and one without it is refused before anything runs. A
+run is bounded by `target_timeout`, or five minutes when that is unset.
 
 Inspect:
 
@@ -325,6 +397,10 @@ logs and history). How you connect depends on the client:
 - **The Claude API "MCP connector"** cannot reach this server: it requires a
   public `https://` URL and rejects `http://` and loopback addresses. Front the
   server with a TLS tunnel first if you need that path.
+
+The [server socket](#mcp-over-the-server-socket) reads no token; the kernel's report of
+the peer's uid stands in for it, so anything running as you reaches it, just as it
+could read your operator token.
 
 Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default, refuses any other address without `mcp.insecure_bind: true`, and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
 

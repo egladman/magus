@@ -62,15 +62,22 @@ One implementation per guard surface. A host sets overrides and delegates:
 | `HOST_EVENT_RAW`               | (the `.sh` copies only) hand the whole event instead of one `HOST_EVENT_PATH` field - for a surface like MCP whose payload is a tool name plus a params object, not one string. The `.buzz` ports read this off the event instead; see below |
 | `HOST_SESSION_PATH`            | dot-path to the session id inside your host's event JSON                                                                                                                                                                                     |
 | `HOST_RESPONSE`                | Go template rendering your host's reply from the verdict                                                                                                                                                                                     |
-| `__MAGUS_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                                                                                                                                                             |
 | `__MAGUS_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance                                                                                                                                              |
 | `__MAGUS_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence                                                                                                                                     |
 | `__MAGUS_BIN`                  | absolute path to magus when it is not on PATH                                                                                                                                                                                                |
 
-`__MAGUS_AGENT_NAME` and `HOST_SESSION_PATH` feed `magus session hook --agent-name` and
-`--session`, which are pure attribution: they label the recorded observation and
-cannot change a verdict. A host that supplies neither is judged identically and
-simply records less about itself.
+The host is not a variable. Every command names it as an argument, `--agent-name <host>`
+(`sh magus-command.sh --agent-name codex`, or `magus buzz -s magus-command.buzz --
+--agent-name claude-code`), and the template reads it from there and nowhere else: not
+from the event's shape, not from the environment, never by default. The configuration
+`magus agent harness apply` writes renders it from the harness spell's own name. A
+template given none refuses the call
+([MGS3024](../../../reference/codes/sandbox/MGS3024.md)) rather than answer in a guessed
+host's dialect, because a reply shaped for the wrong host can let a call through.
+
+To magus, the name and `HOST_SESSION_PATH` are attribution: they label the recorded
+observation and cannot change a verdict. The template does read the name for one thing,
+which reply shape its host can parse.
 
 `__MAGUS_BIN` avoids the `MAGUS_*` prefix on purpose. That space is magus's
 own configuration surface, and a variable these templates invent must not look
@@ -101,8 +108,9 @@ that vary PER ENTRY move accordingly:
   shape exists to avoid, and so is a guard that refuses to answer because an entry was
   typed wrong.
 
-The host-level variables in the table - `HOST_RESPONSE`, `__MAGUS_AGENT_NAME`,
-`__MAGUS_BIN`, the two notice overrides - are unchanged in both forms. A host sets those
+The host name rides on the argv in both forms, after `--` for a `.buzz` port. The
+host-level variables in the table - `HOST_RESPONSE`, `__MAGUS_BIN`, the two notice
+overrides - are unchanged in both forms. A host sets those
 once; they do not distinguish one entry from another.
 
 ## `magus-command.sh`

@@ -82,6 +82,14 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			decided = decidedByBuiltin
 		}
 	}
+	// A continuation carries a brief as much as a spawn does, so both are graded.
+	if verdict.Decision != "deny" {
+		deps.scope = scopeAt(at)
+		if v := denyBriefCommand(deps, env.Value); v.Deny != "" {
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+			decided = decidedByBuiltin
+		}
+	}
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
 	if verdict.Decision != "deny" {

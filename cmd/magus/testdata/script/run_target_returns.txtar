@@ -5,11 +5,10 @@
 # invoker hardcoded nil (magusfile.go), and the run path discarded InvokeResponse three
 # times (run.go). `> void` was a convention, not a mechanism.
 #
-# The rule for what may be returned: every type is either TERMINAL (renders and stops)
-# or CHAINABLE (carries CLI verbs). Today that is void, str and [str]; File and
-# Directory join as the chainable pair. A map is refused despite serializing perfectly
-# well, because it carries no verbs and so can never chain - allowing it invites
-# targets to return structures that dead-end at the CLI.
+# The rule for what may be returned: void, str and [str], each of which renders as it
+# is and reaches the stage after the run as a run.target.value record. A map is refused
+# despite serializing perfectly well: allowing it invites targets to return structures
+# that dead-end at the CLI.
 #
 # There is no error return and that is not a gap: a target already signals failure
 # out-of-band, so a second, ignorable failure channel would only compete with it.
@@ -42,26 +41,22 @@ stdout '"value": "v1.2.3"'
 exec magus run listy -o json
 stdout '"alpha"'
 
-# `--then value` is the bare-scalar form, for substitution straight into another
-# command: VER=$(magus run describe --then value). No label, nothing to strip - the
-# same contract `magus where` keeps for a path.
-exec magus run describe --then value
-stdout '^v1\.2\.3$'
+# A stage downstream in a pipe reads the value from the run's run.target.value record,
+# so a script substitutes it without scraping prose.
+[!windows] exec bash -c 'set -o pipefail; magus run describe | magus buzz value.buzz'
+[!windows] stdout '^v1\.2\.3$'
 
-# A [str] comes back one per line, so it pipes. This is also the REPLAYED value: the
-# script already ran listy above, so this is a cache hit, and a hit round-trips
-# through the manifest's JSON where a []string arrives back as []any. Untreated it
-# rendered as "[alpha beta]" on the replay and one-per-line on the fresh run, which
-# defeats storing it at all - a hit is meant to be indistinguishable from a miss.
-exec magus run listy --then value
-stdout '^alpha$'
-stdout '^beta$'
-! stdout '\[alpha beta\]'
+# A [str] arrives as a list. This is also the REPLAYED value: the script already ran
+# listy above, so this is a cache hit, and a hit round-trips through the manifest's
+# JSON where a []string arrives back as []any. A hit is meant to be indistinguishable
+# from a miss.
+[!windows] exec bash -c 'set -o pipefail; magus run listy | magus buzz value.buzz'
+[!windows] stdout '^alpha$'
+[!windows] stdout '^beta$'
 
-# A void target is not an error to RUN, but asking for a value it never produced is a
-# usage error - printing an empty line would look like the value was the empty string.
-! exec magus run voidy --then value
-stderr 'returned nothing'
+# A void target records no value, so a script reading one finds none.
+[!windows] exec bash -c 'set -o pipefail; magus run voidy | magus buzz value.buzz'
+[!windows] ! stdout .
 
 # A map is refused, and the message names the type it got AND the set it accepts, so
 # the fix is in the error rather than in the docs.
@@ -73,6 +68,25 @@ stderr 'a target may return str, \[str\], or nothing; got a map'
 ! exec magus run booly
 stderr 'got a bool'
 
+-- value.buzz --
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.value") {
+            final v = pipe\value(rec);
+            final items = v as? [any];
+            if (items != null) {
+                foreach (item in items!) {
+                    std\print("{item}");
+                }
+            } else {
+                std\print("{v}");
+            }
+        }
+    }
+}
 -- magus.yaml --
 concurrency: 2
 -- magusfile.buzz --

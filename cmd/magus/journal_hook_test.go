@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func firstPayload(t *testing.T, fold sessions.Fold, kind string) string {
 }
 
 func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	// Every TargetResult below carries the lease off the environment, so a developer or
 	// CI job that exported one would fail this test over its own baggage.
 	t.Setenv(trail.EnvBaggage, "")
@@ -97,7 +98,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 // command produced it. Comparing the raw payload bytes is what pins that: a field added
 // to one path and not the other would diverge here before anyone noticed in the view.
 func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	runRoot, affectedRoot := t.TempDir(), t.TempDir()
 
 	result := journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusCached, DurationMs: 7, Ref: "out9"}
@@ -138,7 +139,7 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 // is: `magus session` is a view of the repository, and a lease that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
 func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
 
 	for verb, args := range map[string][]string{
@@ -170,13 +171,14 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 // outranks the claim here as it does for the guard: before, a worker bound to one job that
 // exported another's id recorded every run against the other job.
 func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/claimed")
 	root := t.TempDir()
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, job.LeaseMarkerName), []byte("fleet/bound\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
+	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("fleet/bound\n"), 0o644))
 
 	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"ci"})
 	require.Len(t, handlers, 1)
@@ -200,7 +202,7 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 // started the server. Without the preference every server-adopted run in a fleet is attributed
 // to one stranger, or to nobody: the defect this wiring exists to close.
 func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/server-env")
 	root := t.TempDir()
 
@@ -225,7 +227,7 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 // environment channel must still be read. A context-only implementation would leave every
 // unadopted run unattributed, which is the same bug with the cases swapped.
 func TestWithInvocationJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
 	root := t.TempDir()
 
@@ -251,7 +253,7 @@ func TestWithInvocationJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t 
 // environment is read; the note explaining it is asserted in internal/trail, where the one-time
 // gate can be reset. Here the observable fact is that nothing was attributed.
 func TestWithInvocationJournalDropsAnInvalidLease(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
 	root := t.TempDir()
 
@@ -274,7 +276,7 @@ func TestWithInvocationJournalDropsAnInvalidLease(t *testing.T) {
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
 // that reported an error here would be a build failure caused by bookkeeping.
 func TestWithInvocationJournalSurvivesAnUnwritableStore(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 
 	// A regular file where the store directory belongs: MkdirAll then fails for a reason

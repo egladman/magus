@@ -25,7 +25,6 @@
 #                    front of the PERSON through the host's own approval prompt
 #   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
 #                    an advise renders nothing rather than a reply it rejects
-#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 #   __MAGUS_SHELL_FLAGS  extra `magus shell` flags this wiring declares about itself,
 #                    space-separated. Capabilities, not policy: a config that also
 #                    matches its host's skill tool passes --observes-skill-loads, and
@@ -40,11 +39,18 @@
 #
 # The defaults are Claude Code's event and response shape.
 #
-# __MAGUS_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
-# its activity event so a reader can tell which host produced an observation;
+# REQUIRED argument: `--agent-name <host>`, the host this entry is wired into, which the
+# configuration `magus agent harness apply` writes on the command
+# (`sh magus-command.sh --agent-name codex`). It is the only place this file learns the
+# host, and without it `magus shell` refuses the call (MGS3024).
+#
+# The host name and the session are ATTRIBUTION to magus, not policy. magus records them
+# on its activity event so a reader can tell which host produced an observation;
 # neither one can change the verdict, and a host whose event carries no session
 # id records none and is judged exactly the same. The subagent id is the exception:
-# magus grades a subagent it saw spawned under that spawn's job.
+# magus grades a subagent it saw spawned under that spawn's job. This file does read the
+# host name for one thing, which reply shape its host can parse, and that is why it must
+# be given.
 #
 # __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 # magus's own configuration surface, so a variable this template invents must stay
@@ -70,7 +76,7 @@
 # denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 # permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 # names the person's own terminal.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -90,7 +96,17 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The host this entry is wired into, from the entry's own argv and nowhere else: never the
+# event's shape, never the environment, never a default. Without it `magus shell` refuses
+# the call (MGS3024). See --agent-name in magus-command.buzz.
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
 # The one arm here that does not fail open; see the truncated-envelope check below. Plain
 # assignment for the same reason as the rest: a `}` would end a ${...}.
 [ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
@@ -212,19 +228,9 @@ codex_cannot_prompt() {
   printf 'no .codex/rules/magus.rules carries the prompt rule for this push, which magus agent harness apply --id codex writes'
 }
 
-# Codex is recognized by its event as well as by name, so a Codex wiring that forgot
-# __MAGUS_AGENT_NAME still never receives permissionDecision "ask", which it would run
-# unasked. turn_id is a required field of Codex's published PreToolUse input
-# (testdata/hosts/codex/pre-tool-use.command.input.schema.json) and of its
-# PermissionRequest input; no vendored Claude Code or Cursor schema names it.
-#
-# The two are kept apart rather than or-ed, because the arms below trust them differently.
-codex_named=
-codex_inferred=
-[ "$__MAGUS_AGENT_NAME" = codex ] && codex_named=1
-[ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ] && codex_inferred=1
+# Codex is the host the entry names, never one the event's shape suggests.
 codex=
-{ [ -n "$codex_named" ] || [ -n "$codex_inferred" ]; } && codex=1
+[ "$agent_name" = codex ] && codex=1
 
 # renders_ask is the --renders-ask claim: this call's reply puts an ask in front of the
 # person, or refuses it, and never lets it through unasked. Only a reply this file assembled
@@ -237,16 +243,7 @@ renders_ask=
 # header for why this file never sends Codex permissionDecision "ask".
 if [ -z "$HOST_ASK_BRANCH" ]; then
   if [ -n "$codex" ]; then
-    # Only a wiring that NAMED itself Codex may render an ask as context the agent is free
-    # to skip. Inferring the host from a turn_id key is a guess over an envelope nobody
-    # schema-types, and the two ways of being wrong are not equal: the context arm turns an
-    # ask into a note that is silently ignored, while the deny arm turns it into a refusal
-    # the person can act on. A host that adds turn_id therefore costs a deny, not a pass.
-    if [ -n "$codex_named" ]; then
-      ask_blocker=$(codex_cannot_prompt)
-    else
-      ask_blocker='this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here'
-    fi
+    ask_blocker=$(codex_cannot_prompt)
     if [ -z "$ask_blocker" ]; then
       HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}'
     else
@@ -368,7 +365,7 @@ guard_failure_notice() {
 # --transport sh names this form as the caller; the Buzz port says buzz. magus keeps a
 # deny's full text and its once-per-session notices per host, transport and session.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

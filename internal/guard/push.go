@@ -2,8 +2,11 @@ package guard
 
 import (
 	"bufio"
+	"context"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -11,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // Refusing a push that no green gate covers.
@@ -266,4 +270,320 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 		return "deny", head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate
 	}
 	return "ask", head + "Approving publishes it as it stands. " + gate
+}
+
+// pushCoverage is what the gate record says about the revision the push on command
+// publishes, read in the checkout that push runs in, and that revision. gateUnknown when
+// the line relocates the push somewhere this cannot name, so the push keeps its advisory:
+// refusing it would grade a tree nobody proved it publishes.
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (gateCoverage, string) {
+	push, located := locatePush(command, d, cwd)
+	if !located {
+		return gateUnknown, ""
+	}
+	at := hook
+	if push.relocated {
+		at = hookLocationAt(deps, push.dir)
+	}
+	commit := deps.revision(ctx, push.dir, push.rev)
+	cover := gateVerdictAt(at.workspace, commit)
+	if cover == gateUnknown {
+		cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), commit)
+	}
+	return cover, commit
+}
+
+// pushSite is where a push runs and what it publishes.
+type pushSite struct {
+	// dir is the directory the push runs in: absolute when relocated, otherwise the
+	// hook's own, "" for the process's working directory.
+	dir       string
+	relocated bool
+	// rev is the source of the single refspec a git push names, "" for the checkout's
+	// current revision.
+	rev string
+}
+
+// locatePush reads where the first push on command runs, starting from cwd and following
+// a cd earlier on the line and the backend's relocation flags (git -C, hg -R, jj -R).
+// False when the line pushes nothing this can find, or when the directory is not knowable
+// without running anything: a variable, a substitution, a cd whose success decides what
+// runs next, or a relocation inside a wrapper's script.
+func locatePush(command string, d Dialect, cwd string) (pushSite, bool) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return pushSite{}, false
+	}
+	w := pushWalk{d: d}
+	w.stmts(f.Stmts, shellDir{dir: cwd, known: true})
+	if !w.found || !w.located {
+		return pushSite{}, false
+	}
+	if w.site.relocated && !filepath.IsAbs(w.site.dir) {
+		abs, err := filepath.Abs(w.site.dir)
+		if err != nil {
+			return pushSite{}, false
+		}
+		w.site.dir = abs
+	}
+	return w.site, true
+}
+
+// shellDir is the working directory a shell line has reached at one point in it.
+type shellDir struct {
+	dir   string
+	moved bool
+	known bool
+}
+
+// pushWalk follows a line's statements in the order the shell runs them, carrying the
+// working directory, until it reaches a push.
+type pushWalk struct {
+	d       Dialect
+	found   bool
+	located bool
+	site    pushSite
+}
+
+func (w *pushWalk) stmts(list []*syntax.Stmt, at shellDir) shellDir {
+	for _, s := range list {
+		if w.found {
+			break
+		}
+		at = w.stmt(s, at)
+	}
+	return at
+}
+
+func (w *pushWalk) stmt(s *syntax.Stmt, at shellDir) shellDir {
+	if s == nil || s.Cmd == nil || w.found {
+		return at
+	}
+	if s.Background {
+		w.cmd(s.Cmd, at)
+		return at
+	}
+	return w.cmd(s.Cmd, at)
+}
+
+func (w *pushWalk) cmd(c syntax.Command, at shellDir) shellDir {
+	switch c := c.(type) {
+	case *syntax.CallExpr:
+		return w.call(c, at)
+	case *syntax.BinaryCmd:
+		switch c.Op {
+		case syntax.AndStmt:
+			return w.stmt(c.Y, w.stmt(c.X, at))
+		case syntax.OrStmt:
+			// The right side runs only when the left failed, so a cd on the left leaves it,
+			// and everything after, in a directory that depends on that failure.
+			if after := w.stmt(c.X, at); after != at {
+				at.known = false
+			}
+			w.stmt(c.Y, at)
+			return at
+		default:
+			// Each side of a pipeline runs in its own subshell.
+			w.stmt(c.X, at)
+			w.stmt(c.Y, at)
+			return at
+		}
+	case *syntax.Subshell:
+		w.stmts(c.Stmts, at)
+		return at
+	case *syntax.Block:
+		return w.stmts(c.Stmts, at)
+	}
+	// Conditionals, loops and functions are not followed: a push inside one is found but
+	// not located, and a cd inside one leaves the directory unknown.
+	syntax.Walk(c, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok && !w.found {
+			for _, inv := range peelWrappers(literalWords(call.Args), w.d) {
+				switch {
+				case isPush(inv):
+					w.found = true
+				case changesDir(inv):
+					at.known = false
+				}
+			}
+		}
+		return !w.found
+	})
+	return at
+}
+
+func (w *pushWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
+	words := literalWords(c.Args)
+	if len(words) == 0 {
+		return at
+	}
+	invs := peelWrappers(words, w.d)
+	if len(invs) == 1 && invs[0].Name == path.Base(words[0]) {
+		switch inv := invs[0]; {
+		case isCdInvocation(inv):
+			return cdInto(c.Args[1:], at)
+		case changesDir(inv):
+			at.known = false
+		case isPush(inv):
+			w.found = true
+			w.site, w.located = pushFrom(inv.Name, c.Args[1:], at)
+		}
+		return at
+	}
+	// A wrapper's arguments reach this only as rendered text, which cannot tell a literal
+	// from a variable, so a relocation inside one is never followed.
+	for _, inv := range invs {
+		switch {
+		case changesDir(inv):
+			at.known = false
+		case isPush(inv):
+			w.found = true
+			w.located = at.known && !vcsRelocates(inv.Name, inv.Args)
+			w.site = pushSite{dir: at.dir, relocated: at.moved}
+			return at
+		}
+	}
+	return at
+}
+
+// changesDir reports a builtin that moves the shell's working directory.
+func changesDir(c hint.Invocation) bool {
+	return isCdInvocation(c) || c.Name == "pushd" || c.Name == "popd"
+}
+
+// cdInto is the directory after `cd` with args, unknown unless they name one literal path.
+func cdInto(args []*syntax.Word, at shellDir) shellDir {
+	var target string
+	operands := 0
+	for _, w := range args {
+		lit, ok := literalArg(w.Parts)
+		switch {
+		case !ok:
+			at.known = false
+			return at
+		case operands == 0 && (lit == "-L" || lit == "-P" || lit == "--"):
+			continue
+		}
+		target = lit
+		operands++
+	}
+	// No operand is $HOME, `-` is $OLDPWD, and `~` expands from the environment.
+	if operands != 1 || target == "" || target == "-" || strings.HasPrefix(target, "~") {
+		at.known = false
+		return at
+	}
+	return moveTo(at, target)
+}
+
+// moveTo is at after changing into target. An absolute target is known wherever at was.
+func moveTo(at shellDir, target string) shellDir {
+	if filepath.IsAbs(target) {
+		return shellDir{dir: filepath.Clean(target), moved: true, known: true}
+	}
+	at.dir, at.moved = filepath.Join(at.dir, target), true
+	return at
+}
+
+// relocatingFlags are, per backend, the options naming the checkout a command runs
+// against. git reads -C before its subcommand only; the others accept theirs anywhere.
+var relocatingFlags = map[string][]string{
+	"git": {"-C"},
+	"hg":  {"-R", "--repository", "--repo", "--cwd"},
+	"sl":  {"-R", "--repository", "--repo", "--cwd"},
+	"jj":  {"-R", "--repository"},
+}
+
+// opaqueGitFlags point git at a repository by a path that need not be the checkout's own
+// directory, so no workspace can be read off them.
+var opaqueGitFlags = []string{"--git-dir", "--work-tree"}
+
+// vcsRelocates reports whether rendered args carry a flag moving the program off its
+// working directory.
+func vcsRelocates(program string, args []string) bool {
+	if program == "git" {
+		_, rest := vcsSubcommand(hint.Invocation{Name: program, Args: args})
+		args = args[:len(args)-len(rest)]
+	}
+	for _, a := range args {
+		name, _, _ := strings.Cut(a, "=")
+		if slices.Contains(relocatingFlags[program], name) || program == "git" && slices.Contains(opaqueGitFlags, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// pushFrom is where a push spelled with args runs, starting from at, and the revision a
+// git push publishes. False when a relocating operand is not one literal path.
+func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool) {
+	valued := vcsGlobalValueFlags[program]
+	moving := relocatingFlags[program]
+	var rest []*syntax.Word
+	for i := 0; i < len(args); i++ {
+		lit, ok := literalArg(args[i].Parts)
+		if !ok {
+			if program == "git" {
+				// Where git's options end, a variable may be the subcommand itself.
+				return pushSite{}, false
+			}
+			continue
+		}
+		name, value, joined := strings.Cut(lit, "=")
+		if program == "git" && slices.Contains(opaqueGitFlags, name) {
+			return pushSite{}, false
+		}
+		if !strings.HasPrefix(lit, "-") {
+			if program == "git" {
+				rest = args[i+1:]
+				break
+			}
+			continue
+		}
+		if !joined && slices.Contains(valued, name) {
+			i++
+			if i >= len(args) {
+				return pushSite{}, false
+			}
+			value, ok = literalArg(args[i].Parts)
+		}
+		if !slices.Contains(moving, name) {
+			continue
+		}
+		if !ok || value == "" || strings.HasPrefix(value, "~") {
+			return pushSite{}, false
+		}
+		at = moveTo(at, value)
+	}
+	if !at.known {
+		return pushSite{}, false
+	}
+	return pushSite{dir: at.dir, relocated: at.moved, rev: pushedRev(rest)}, true
+}
+
+// pushedRev is the source of the one refspec a `git push` names, or "" for the checkout's
+// current revision: no refspec or several, HEAD itself, a deletion, a whole-namespace
+// push, or a word that is not literal.
+func pushedRev(args []*syntax.Word) string {
+	lits := make([]string, 0, len(args))
+	for _, w := range args {
+		lit, ok := literalArg(w.Parts)
+		if !ok {
+			return ""
+		}
+		lits = append(lits, lit)
+	}
+	for _, flag := range []string{"-d", "--delete", "--all", "--branches", "--mirror", "--tags"} {
+		if slices.Contains(lits, flag) {
+			return ""
+		}
+	}
+	ops := operands(lits, "o")
+	if len(ops) != 2 {
+		return ""
+	}
+	src, _, _ := strings.Cut(strings.TrimPrefix(ops[1], "+"), ":")
+	if src == "HEAD" || src == "@" || strings.HasPrefix(src, "-") {
+		return ""
+	}
+	return src
 }

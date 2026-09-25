@@ -176,6 +176,7 @@ func TestIsServerRun(t *testing.T) {
 // ancestry. The same rule submitJob already applies to a job's context.
 func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/parent.sock")
+	t.Setenv("MAGUS_PROC_TOKEN", "parent-secret")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_KEEP_ME", "yes")
@@ -187,6 +188,7 @@ func TestDetachedChildEnvDropsInheritedInvocationState(t *testing.T) {
 		}
 	}
 	assert.NotContains(t, got, "MAGUS_PROC_SOCKET", "a child inheriting it binds no socket of its own")
+	assert.NotContains(t, got, "MAGUS_PROC_TOKEN", "the parent socket's secret leaves with its address")
 	assert.NotContains(t, got, "MAGUS_INVOCATION_ANCESTORS", "a background process is nobody's descendant")
 	assert.NotContains(t, got, "MAGUS_LEVEL", "nor is it nested inside the run that happened to start it")
 	assert.Equal(t, "yes", got["MAGUS_KEEP_ME"], "everything else is inherited as before")

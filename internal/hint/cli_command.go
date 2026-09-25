@@ -119,6 +119,7 @@ var (
 	Clean               = cmd("clean")
 	Doctor              = cmd("doctor")
 	Where               = cmd("where")
+	Buzz                = cmd("buzz")
 	X                   = cmd("x")
 	Ls                  = cmd("ls")
 	LsTargets           = cmd("ls", "targets")
@@ -200,7 +201,7 @@ var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, BrokerStatus, BrokerStop, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs, Shell,
+	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, Explain, Path, Diff, Init, Clean, Doctor, Where, Buzz, X, Ls, LsTargets, LsJobs, Refs, Shell,
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,

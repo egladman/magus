@@ -304,6 +304,10 @@ func TestCodexHookEventsAreNamedByItsSchema(t *testing.T) {
 // wiring sets, the event it sends, and whether a Codex prompt rule sits in the project.
 type templateArrangement struct {
 	label string
+	// host is the name the wiring passes as --agent-name, the only place a template reads
+	// one. Every arrangement names one: a template given none never assembles a reply for
+	// magus to render, because magus refuses it (MGS3024), which the transport cases pin.
+	host  string
 	env   []string
 	event string
 	rules bool
@@ -312,21 +316,22 @@ type templateArrangement struct {
 	codex bool
 	// ownResponse is a reader-written HOST_RESPONSE, which cannot claim --renders-ask.
 	ownResponse bool
+	// wantsAsk marks an arrangement whose ask must render as the host's own prompt.
+	wantsAsk bool
 }
 
 var templateArrangements = []templateArrangement{
-	{label: "claude-code", event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "claude-code without the advise arm", env: []string{"__MAGUS_NO_ADVISE=1"}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex with no prompt rule", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex with its prompt rule", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex in a mode that never prompts", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex approval request for a push", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push origin HEAD"}}`},
-	{label: "codex approval request for anything else", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`},
-	// A Codex wiring that forgot __MAGUS_AGENT_NAME. turn_id, required by Codex's published
-	// input schema and named by no other vendored host schema, is what gives it away.
-	{label: "codex by event shape alone", codex: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "codex by event shape alone, with its prompt rule", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
-	{label: "a reader's own HOST_RESPONSE", ownResponse: true, env: []string{`HOST_RESPONSE={{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}`}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "claude-code", host: "claude-code", event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "claude-code without the advise arm", host: "claude-code", env: []string{"__MAGUS_NO_ADVISE=1"}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex with no prompt rule", host: "codex", codex: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex with its prompt rule", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex in a mode that never prompts", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex approval request for a push", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push origin HEAD"}}`},
+	{label: "codex approval request for anything else", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`},
+	// The payload never overrides the name: an event carrying Codex's turn_id, under a
+	// wiring that names claude-code, gets Claude Code's ask. Checked by wantsAsk below.
+	{label: "claude-code named, Codex-shaped event", host: "claude-code", wantsAsk: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "a reader's own HOST_RESPONSE", host: "claude-code", ownResponse: true, env: []string{`HOST_RESPONSE={{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}`}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
 }
 
 // templateEcho stands in for magus: it prints the template it was handed and nothing else,
@@ -367,7 +372,7 @@ func assembledTemplates(t *testing.T, path string) []renderedTemplate {
 			require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
 		}
 		record := filepath.Join(dir, "renders-ask")
-		cmd := exec.Command("sh", script)
+		cmd := exec.Command("sh", script, "--agent-name", a.host)
 		cmd.Dir = dir
 		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "TMPDIR=" + t.TempDir(), "__MAGUS_BIN=" + bin, "RENDERS_ASK_RECORD=" + record}, a.env...)
 		cmd.Stdin = strings.NewReader(a.event)
@@ -421,6 +426,10 @@ func guardResponses(t *testing.T, path, body string) []string {
 				if a.codex {
 					assert.NotContains(t, text, `"permissionDecision":"ask"`,
 						"%s (%s): Codex parses a hook ask, marks the hook failed, and runs the call", name, a.label)
+				}
+				if a.wantsAsk {
+					assert.Contains(t, text, `"permissionDecision":"ask"`,
+						"%s (%s): the wiring's host decides the arm, never the event's shape", name, a.label)
 				}
 			}
 			if strings.HasPrefix(text, "{") {

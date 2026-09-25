@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,7 +56,7 @@ func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root,
 	// The ledger now lives in the per-repository state directory, and the guard resolves
 	// it with no seam a test can reach, so the environment is what keeps this off the
 	// developer's own ledger.
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root, cacheDir = t.TempDir(), t.TempDir()
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
@@ -774,8 +775,7 @@ func TestReadGuardInputRefusesAnOversizePayload(t *testing.T) {
 }
 
 // TestHookCmdAdvisesOncePerSession is the same rule through the command the host actually
-// runs. The graph-beats-grep hint is the measured case: it fired dozens of times in one
-// session with byte-identical text.
+// runs: a held advisory prints its full text once per session and its brief after.
 func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	base, root := t.TempDir(), t.TempDir()
@@ -785,59 +785,20 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 		// The display flags live on a package global, so one case must not leak into the
 		// next; TestHookCmd resets the same way and for the same reason.
 		global = globalFlags{}
-		require.NoError(t, shellStdin(ctx, strings.NewReader("rg needle"), &out, []string{"--session", session}))
+		require.NoError(t, shellStdin(ctx, strings.NewReader("cat handler.go"), &out, []string{"--session", session}))
 		return out.String()
 	}
 
 	first := run("session-1")
-	require.True(t, strings.HasPrefix(first, "advise [code-search]: "))
-	assert.Contains(t, first, "knowledge graph")
+	require.True(t, strings.HasPrefix(first, "advise [source-read]: "))
+	assert.Contains(t, first, "SCIP symbol indexes")
 
 	repeat := run("session-1")
-	assert.NotContains(t, repeat, "knowledge graph", "the repeat drops the full text")
+	assert.NotContains(t, repeat, "SCIP symbol indexes", "the repeat drops the full text")
 	assert.Contains(t, repeat, "magus refs", "the repeat still names the command, which is what converts")
 	assert.Less(t, len(repeat), len(first)/4, "a repeat nobody has to read around")
 
-	assert.Contains(t, run("session-2"), "knowledge graph", "a fresh session is owed the fact once")
-}
-
-// TestHookCmdScopesSearchAdviceFromManifest pins the wiring from the knowledge
-// manifest to the advisory text: a search pointed at a project directory gets a
-// project=-scoped query suggestion, and a workspace with no manifest gets the
-// unscoped advice it always got.
-func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	run := func(t *testing.T, base, command string) string {
-		t.Helper()
-		ctx := guard.WithLocation(t.Context(), base, t.TempDir(), "")
-		var out strings.Builder
-		global = globalFlags{}
-		require.NoError(t, shellStdin(ctx, strings.NewReader(command), &out, []string{"--session", "session-1"}))
-		return out.String()
-	}
-
-	t.Run("manifest projects scope the suggestion", func(t *testing.T) {
-		base := t.TempDir()
-		man := fmt.Sprintf(`{"schema_version":%d,"shards":{"docs":{},".":{},"@runtime":{},"docs@symbols":{}}}`,
-			types.KnowledgeSchemaVersion)
-		require.NoError(t, os.MkdirAll(filepath.Join(base, "knowledge"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(base, "knowledge", "manifest.json"), []byte(man), 0o644))
-
-		got := run(t, base, "grep -rn Foo docs/")
-		require.True(t, strings.HasPrefix(got, "advise [code-search]: "))
-		assert.Contains(t, got, `magus query Foo 'project=~^docs(/|$)'`)
-	})
-
-	t.Run("no manifest stays unscoped", func(t *testing.T) {
-		got := run(t, t.TempDir(), "grep -rn Foo docs/")
-		require.True(t, strings.HasPrefix(got, "advise [code-search]: "))
-		// The closing backtick is what carries the assertion: it proves no matcher
-		// follows the pattern. The generic reason below the lead documents the
-		// `project=<p>` grammar in prose, so a bare `project=` is present either way
-		// and asserting its absence could never fail.
-		assert.Contains(t, got, "`magus query Foo` - ")
-		assert.NotContains(t, got, "project=~", "only the scoped path emits a regex project matcher")
-	})
+	assert.Contains(t, run("session-2"), "SCIP symbol indexes", "a fresh session is owed the fact once")
 }
 
 // TestHookCmdShortensARepeatedDenial pins both forms of a deny. A refusal explains itself
@@ -845,8 +806,7 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 // first firing in a session spends the full text: the repeat is one line, the ref that
 // holds the full verdict, and the rule's page, and the ref must resolve to that verdict.
 func TestHookCmdShortensARepeatedDenial(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	base, root := t.TempDir(), t.TempDir()
 	ctx := guard.WithLocation(t.Context(), base, root, "")
 	run := func(command, session string) string {
@@ -1042,8 +1002,7 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 // checkout, and the lease bound there scopes the verdict, whatever the hook process's own
 // directory is.
 func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))

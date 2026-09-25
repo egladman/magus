@@ -34,7 +34,7 @@ apply report what would merge and call nothing on the provider.
 .RS
 .TP
 \fB\-\-app\fR \fIslug\fR
-`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential
+`slug` of the app apply writes with (github: a GitHub App, required with a \-\-status\-context)
 .TP
 \fB\-\-base\fR \fIbranch\fR
 `branch` the queue merges into
@@ -76,7 +76,7 @@ The mergequeue.changes/v1 `document`, or \- for stdin
 Candidates of one partition that validate at once
 .TP
 \fB\-\-facts\fR \fIcommand\fR
-`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
+`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
 .TP
 \fB\-\-out\fR \fIfile\fR
 `file` the mergequeue.plan/v1 document is written to
@@ -100,10 +100,10 @@ Version control `backend` of the checkout at \-\-root
 .RS
 .TP
 \fB\-\-facts\fR \fIcommand\fR
-`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
+`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
 .TP
 \fB\-\-gate\fR \fIcommand\fR
-`command` run in each candidate's checkout; exit 0 is green
+`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green
 .TP
 \fB\-\-only\fR \fIchange\fR
 Validate this one `change`; the changes beneath it in its partition are merged under it but not gated
@@ -115,10 +115,16 @@ Candidates built or gated at once across every partition; 0 is one per CPU
 The mergequeue.plan/v1 `file`
 .TP
 \fB\-\-regenerate\fR \fIcommand\fR
-`command` run in a candidate with the generated files to rewrite listed on stdin
+`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-remote\-cache\-read\fR
+Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand\-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
+.TP
+\fB\-\-scratch\-env\fR \fINAME=DIR\fR
+`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
 .TP
 \fB\-\-target\fR \fItarget\fR (default: ci)
 magus `target` the affected set is computed for; not with \-\-facts
@@ -133,13 +139,16 @@ Version control `backend` of the checkout at \-\-root
 .RS
 .TP
 \fB\-\-app\fR \fIslug\fR
-`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires \-\-status\-context from another integration (MGS3019)
+`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires \-\-status\-context from another integration (MGS3019)
+.TP
+\fB\-\-base\fR \fIbranch\fR
+`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
 .TP
 \fB\-\-committer\fR \fIstring\fR
 "Name <email>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
 .TP
 \fB\-\-facts\fR \fIcommand\fR
-`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
+`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
 .TP
 \fB\-\-interval\fR \fIduration\fR (default: 10s)
 How often <source> is read while following it
@@ -151,10 +160,19 @@ Apply what <source> holds now and stop, rather than following it until it is com
 `provider`: a built\-in name (github) or a .buzz file
 .TP
 \fB\-\-regenerate\fR \fIcommand\fR
-The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it
+The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-reproduce\-gate\fR \fIcommand\fR
+The `command` validate's \-\-gate is given, shown on each kick\-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict
+.TP
+\fB\-\-reproduce\-regenerate\fR \fIcommand\fR
+The `command` validate's \-\-regenerate is given, shown beside \-\-reproduce\-gate
+.TP
+\fB\-\-scratch\-env\fR \fINAME=DIR\fR
+`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable
 .TP
 \fB\-\-status\-context\fR \fIstring\fR (default: merge\-queue)
 Commit status the queue posts; branch protection requires it
@@ -164,6 +182,9 @@ magus `target` the affected set is computed for; not with \-\-facts
 .TP
 \fB\-\-vcs\fR \fIbackend\fR (default: git)
 Version control `backend` of the checkout at \-\-root
+.TP
+\fB\-\-workflow\fR \fIdefinition\fR
+`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -211,19 +232,19 @@ magus queue plan --provider github --out plan.json < changes.json
 \fIValidate every candidate\fR
 .PP
 .EX
-magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'
+magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'
 .EE
 .PP
 \fIMerge the green ones as they arrive\fR
 .PP
 .EX
-magus queue apply --provider github verdicts
+magus queue apply --provider github --base main verdicts
 .EE
 .PP
 \fIMerge from a validation run's artifacts\fR
 .PP
 .EX
-magus queue apply --provider github run:acme/widgets/runs/7
+magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7
 .EE
 .PP
 \fIPlan with a provider of your own\fR

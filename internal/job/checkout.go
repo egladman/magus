@@ -13,19 +13,60 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
-// LeaseMarkerName is the file, in a checkout's cache dir, that binds a lease to that
-// checkout for a caller that reports NO session. It exists because the environment cannot
-// carry a lease into a hook: a host runs its hooks with its own environment, so a worker
-// exporting BAGGAGE for its shell is invisible to the guard judging its commands. A file
-// in the checkout is the one channel the worker's shell, the host's hook and the sandbox
-// all read. See [LeaseQuery.Resolve] for where it ranks.
+// LeaseMarkerName is the file that binds a lease to a checkout for a caller that reports
+// NO session. It exists because the environment cannot carry a lease into a hook: a host
+// runs its hooks with its own environment, so a worker exporting BAGGAGE for its shell is
+// invisible to the guard judging its commands. A file keyed by the checkout is the one
+// channel the worker's shell, the host's hook and the sandbox all read. See
+// [LeaseQuery.Resolve] for where it ranks, and [MarkerPath] for where it lives.
 const LeaseMarkerName = "lease"
+
+// markerKind is the user state directory's subdirectory the markers live under.
+const markerKind = "checkouts"
+
+// MarkerPath is where the checkout-wide marker for the checkout whose cache dir is
+// cacheDir lives, or "" when there is no cache dir or no user state dir.
+//
+// NOT in the cache dir. The sandbox grants a run write access to its workspace, and the
+// cache dir sits inside it by default, so a marker there is one a confined run could
+// rewrite to name a broader lease, or delete, and the next run in the checkout, sandbox
+// and guard alike, would act on what it wrote. The sandbox grants the user state dir to
+// nobody.
+func MarkerPath(cacheDir string) string {
+	dir := markerDir(cacheDir)
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, LeaseMarkerName)
+}
+
+// markerDir holds this checkout's markers: under the user state dir, in a directory
+// named for the cache dir's resolved path, since that is what identifies a checkout here.
+func markerDir(cacheDir string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	base, err := config.UserStateDir()
+	if err != nil {
+		return ""
+	}
+	key, err := filepath.Abs(cacheDir)
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(key); err == nil {
+		key = resolved
+	}
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(base, "magus", markerKind, hex.EncodeToString(sum[:12]))
+}
 
 // leaseMarkerDir holds the per-session markers, one file each.
 //
@@ -54,14 +95,15 @@ type Checkout struct {
 // to the same value: it is a host-chosen string that may hold anything at all, separators
 // included, and a filename assembled from one is a filename the input picked.
 func (c Checkout) marker() string {
-	if c.CacheDir == "" {
+	dir := markerDir(c.CacheDir)
+	if dir == "" {
 		return ""
 	}
 	if c.Session == "" {
-		return filepath.Join(c.CacheDir, LeaseMarkerName)
+		return filepath.Join(dir, LeaseMarkerName)
 	}
 	sum := sha256.Sum256([]byte(c.Session))
-	return filepath.Join(c.CacheDir, leaseMarkerDir, hex.EncodeToString(sum[:12]))
+	return filepath.Join(dir, leaseMarkerDir, hex.EncodeToString(sum[:12]))
 }
 
 // Marker reads the lease bound to this session in this checkout, or "" when none is bound.
@@ -178,7 +220,7 @@ func (c Checkout) Bind(id string) error {
 	}
 	path := c.marker()
 	if path == "" {
-		return fmt.Errorf("job: bind lease: no cache dir to write the marker into")
+		return fmt.Errorf("job: bind lease: no cache dir or user state dir to key the marker by")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("job: bind lease: %w", err)
@@ -239,22 +281,23 @@ func readMarker(path string) (string, error) {
 // sorted and deduplicated. It is what lets a fork see the workers already here, which no
 // single session can answer about the others.
 func BoundLeases(cacheDir string) []string {
-	if cacheDir == "" {
+	dir := markerDir(cacheDir)
+	if dir == "" {
 		return nil
 	}
 	// A marker that does not read is skipped here: this lists who is bound, and every
 	// resolution through that marker reports it as the error it is.
 	seen := map[string]bool{}
-	if id, _ := readMarker(filepath.Join(cacheDir, LeaseMarkerName)); id != "" {
+	if id, _ := readMarker(filepath.Join(dir, LeaseMarkerName)); id != "" {
 		seen[id] = true
 	}
-	entries, err := os.ReadDir(filepath.Join(cacheDir, leaseMarkerDir))
+	entries, err := os.ReadDir(filepath.Join(dir, leaseMarkerDir))
 	if err == nil {
 		for _, e := range entries {
 			if e.IsDir() {
 				continue
 			}
-			if id, _ := readMarker(filepath.Join(cacheDir, leaseMarkerDir, e.Name())); id != "" {
+			if id, _ := readMarker(filepath.Join(dir, leaseMarkerDir, e.Name())); id != "" {
 				seen[id] = true
 			}
 		}
@@ -389,7 +432,7 @@ func RefuseDirectoryWritePaths(store *Store, id string, candidate types.Job) err
 // claimedDirs returns the existing directories, workspace-relative, that the write path
 // decl claims whole. See [RefuseDirectoryWritePaths] for how a glob is read.
 func claimedDirs(root, decl string) []string {
-	decl = strings.TrimSpace(decl)
+	decl, _ = types.SplitClaim(decl)
 	if decl == "" {
 		return nil
 	}

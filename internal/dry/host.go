@@ -448,6 +448,10 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		// stops resolving.
 		return vm.ListValue(nil), nil
 	}))
+	// The skill catalog is internal/agent's, which the sandbox does not link either.
+	m.MapSet("skills", fn("magus.skills", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
 
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to

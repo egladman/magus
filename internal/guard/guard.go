@@ -20,7 +20,6 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -104,14 +103,25 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
-	// HeadCommit is this checkout's current revision, abbreviated, or "" when there is no
-	// VCS to ask. The push gate matches it against the commit each recorded gate run was
-	// built from; with no answer that rule stands down rather than refusing on an absence.
-	HeadCommit func(ctx context.Context) string
+	// Revision is the revision rev names in the checkout holding dir, abbreviated, or ""
+	// when there is no VCS to ask or rev names nothing. Empty rev is the checkout's current
+	// revision; empty dir is the process's working directory. The push gate matches it
+	// against the commit each recorded gate run was built from; with no answer that rule
+	// stands down rather than refusing on an absence.
+	Revision func(ctx context.Context, dir, rev string) string
+	// GraphIDs lists the ids of every knowledge-graph node of kind, from the graph
+	// `magus query` would answer from. definitive is false when the graph could not be
+	// loaded, which proves nothing. It can build the graph, so a rule calls it only for a
+	// command it has already found a translation candidate.
+	GraphIDs func(ctx context.Context, kind string) (ids []string, definitive bool)
 	// CheckoutBase is the checkout at root as `magus vcs checkpoint -o name` prints it:
 	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
 	// base an attributed spawn records for its job, the value `magus job exec` records.
 	CheckoutBase func(ctx context.Context, root string) string
+
+	// scope is where the judged call runs. Judge fills it from the location it resolved,
+	// so Evaluate can tell a path outside the workspace without reading anything itself.
+	scope workspaceScope
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -139,11 +149,11 @@ func (d Dependencies) graphStaleAdvice(ctx context.Context) string {
 	return d.GraphStaleAdvice(ctx)
 }
 
-func (d Dependencies) headCommit(ctx context.Context) string {
-	if d.HeadCommit == nil {
+func (d Dependencies) revision(ctx context.Context, dir, rev string) string {
+	if d.Revision == nil {
 		return ""
 	}
-	return d.HeadCommit(ctx)
+	return d.Revision(ctx, dir, rev)
 }
 
 func (d Dependencies) checkoutBase(ctx context.Context, root string) string {
@@ -169,6 +179,15 @@ func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
 	return d.SymbolDefined(ident)
 }
 
+// graphIDs answers not-definitive for an unset resolver, so a caller that supplies none
+// never gains a deny.
+func (d Dependencies) graphIDs(ctx context.Context, kind string) ([]string, bool) {
+	if d.GraphIDs == nil {
+		return nil, false
+	}
+	return d.GraphIDs(ctx, kind)
+}
+
 // Request is one call the guard was asked to judge: the payload, plus what the caller's
 // own flags said about it. A host envelope arriving as Input still answers the same
 // questions, and an explicit flag wins over what the envelope implies.
@@ -179,7 +198,8 @@ type Request struct {
 	Observe bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
-	// The attribution the caller knows about itself. No verdict reads any of it.
+	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
+	// reads only whether installed glue (a non-empty Form) named a Host at all.
 	Host string
 	// Form is the form of the installed hook that called, such as sh or buzz, as that form
 	// declares it (`magus shell --transport`). Two forms wired into one session are two
@@ -240,12 +260,35 @@ type Verdict struct {
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
 }
 
+// hostUnnamed refuses a call from installed hook glue that did not say which agent host
+// it answers. The glue picks the reply its host can parse from that name, so a call
+// without it cannot be answered correctly for any host, and defaulting to one would
+// hand another host a reply it drops, which on some hosts runs the call unguarded.
+//
+// The reason names no form, so the sh and Buzz forms of one template reply alike.
+func hostUnnamed() Verdict {
+	return Verdict{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      "deny",
+		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
+			"this hook did not pass --agent-name, so magus cannot tell which agent host it is "+
+				"answering, and nothing was judged. Run `magus agent harness apply` to rewrite "+
+				"the host's hook configuration; the commands it writes name the host."),
+	}
+}
+
 // Judge evaluates one request against this workspace's rules and reports the verdict.
+//
+// A request from installed glue (Form set) that names no Host is refused with
+// MGS3024 before anything is judged.
 //
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because
 // nothing here saw it.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
+	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
+		return hostUnnamed()
+	}
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
@@ -311,6 +354,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// session on that host would share the anonymous bucket. The acting lease is resolved
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	location := hookLocation(ctx, deps)
+	deps.scope = scopeAt(location)
 	policyDigest := recordPolicy(ctx, deps, location, false)
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
@@ -408,12 +452,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		denyUndeclared("")
 		if verdict.Decision != "deny" {
-			switch g := gradeLeasedWrite(ctx, deps, actingLease, input); g.Decision {
+			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case "deny":
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
+				verdict.Rule = g.Rule
 			case "advise":
-				advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
+				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), g.Kind, true
 			}
 		}
 		if verdict.Decision != "deny" {
@@ -433,6 +478,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if reason := denyBuzzWriteWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				verdict.Decision, verdict.Reason = "deny", reason
 				verdict.Rule = string(denyBuzzUnbriefed)
+			}
+		}
+		// A script is judged by what running it would be judged by, and the write is the
+		// last moment that costs nothing to change.
+		if verdict.Decision != "deny" {
+			if v := denyScriptWrite(deps, input, write); v.Deny != "" {
+				verdict.Decision, verdict.Reason, verdict.Rule = "deny", v.Deny, v.RuleName()
 			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
@@ -455,6 +507,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if text := adviseInstalledSkillWrite(input); text != "" {
 				advice, adviceKind, spoken = text, advisoryInstalledSkill, true
 			}
+		}
+		// Every rung below advises about THIS workspace, so a write outside it (a scratch
+		// file, a user-level config) is none of their business. The two rungs above still
+		// speak: host wiring and an installed skill live outside a workspace by design.
+		if deps.scope.outside(input) {
+			spoken = true
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseMemoryWrite(input); text != "" {
@@ -519,7 +577,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if callDir == "" {
 			callDir = location.dir
 		}
-		v := rankOwnBuild(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), ownBuildVerdict(deps, callDir, input, shellD))
+		v := rankOwnBuild(Evaluate(deps, input), ownBuildVerdict(deps, callDir, input, shellD))
+		v = rankScriptContent(v, denyScriptContent(deps, callDir, input, shellD))
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
@@ -581,11 +640,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			commit := deps.headCommit(ctx)
-			cover := gateVerdictAt(location.workspace, commit)
-			if cover == gateUnknown {
-				cover = gateCoverageAt(workspaceRunsDir(location.cacheDir), commit)
-			}
+			cover, commit := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			switch decision, reason := gradePushWithoutGate(cover, commit, actingLease); decision {
 			case "ask":
 				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
@@ -767,6 +822,30 @@ func envelopeString(input map[string]any, key string) string {
 	return s
 }
 
+// envelopeEdits reads an `edits` list of replacements, each shaped like a single edit's
+// fields. A list with any entry magus cannot read is no list at all: applying the entries
+// it could read would compute a file the host is not about to write.
+func envelopeEdits(input map[string]any) []textEdit {
+	list, ok := input["edits"].([]any)
+	if !ok {
+		return nil
+	}
+	edits := make([]textEdit, 0, len(list))
+	for _, item := range list {
+		fields, ok := item.(map[string]any)
+		if !ok {
+			return nil
+		}
+		oldText, okOld := fields["old_string"].(string)
+		newText, okNew := fields["new_string"].(string)
+		if !okOld || !okNew {
+			return nil
+		}
+		edits = append(edits, textEdit{OldText: oldText, NewText: newText, ReplaceAll: fields["replace_all"] == true})
+	}
+	return edits
+}
+
 // envelopeWritePath is the file an edit tool is about to write, or "".
 //
 // `file_path` is the documented spelling and the others are what the same hosts use for
@@ -823,9 +902,10 @@ const (
 // file_path), so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
-// A payload carrying a PROMPT rather than either is a spawn: it is RECORDED and EXEMPT from
-// judgment. There is no command and no path to judge, only a context transfer to note, and a
-// prompt that merely MENTIONS a denied command would otherwise block the spawn describing it.
+// A payload carrying a PROMPT rather than either is a spawn: it is RECORDED, and never judged
+// as a shell line. A prompt that merely MENTIONS a denied command would otherwise block the
+// spawn describing it; the commands it presents as ones to run are graded on their own
+// (internal/guard/brief.go).
 //
 // Anything that is not an object with a usable tool_input is left alone and judged as the
 // literal text it is: the bare-command form keeps working exactly as before.
@@ -863,9 +943,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// Read by shape, like the path: a whole-file write carries its content, an edit the
 		// text it replaces and the replacement. Another shape leaves all three empty.
 		req.Write = writeFields{
-			Content: envelopeString(env.ToolInput, "content"),
-			OldText: envelopeString(env.ToolInput, "old_string"),
-			NewText: envelopeString(env.ToolInput, "new_string"),
+			Content:    envelopeString(env.ToolInput, "content"),
+			OldText:    envelopeString(env.ToolInput, "old_string"),
+			NewText:    envelopeString(env.ToolInput, "new_string"),
+			ReplaceAll: env.ToolInput["replace_all"] == true,
+			Edits:      envelopeEdits(env.ToolInput),
 		}
 	case envelopeString(env.ToolInput, "skill") != "":
 		// A skill load carries nothing to judge; it is recorded so a later spawn can ask
@@ -1215,21 +1297,6 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Context:       req.Value,
 		DeclaredModel: req.DeclaredModel,
 	})
-}
-
-// hookSearchHints builds the search translator scoped to the projects the
-// knowledge manifest records, so a caught search can be answered with a
-// project=-scoped query. An absent or unreadable manifest yields the unscoped
-// default, identical to a workspace that never built a graph.
-func hookSearchHints(cacheDir string) *hint.Translator {
-	if cacheDir == "" {
-		return searchHints
-	}
-	paths := knowledge.ProjectPaths(cacheDir)
-	if len(paths) == 0 {
-		return searchHints
-	}
-	return hint.NewTranslator(hint.WithProjects(paths))
 }
 
 // hookLocation resolves the local workspace cache because a hook runs as a short-lived

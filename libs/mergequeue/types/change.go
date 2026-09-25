@@ -138,7 +138,11 @@ func (m MergedChange) check() error {
 // its head waits: merging it would merge this one's commits, which nobody queued.
 type UnqueuedChange struct {
 	ID   string `json:"id"`
+	Repo string `json:"repo,omitempty"` // provider's name for the repository, handed back to [Provider.Mark]
 	Head string `json:"head"`
+	// Mark is the mark the change shows now. An applier clears [MarkQueued] from it: the
+	// change left the queue without the queue seeing it go.
+	Mark Mark `json:"mark,omitempty"`
 }
 
 func (u UnqueuedChange) check() error {
@@ -148,7 +152,17 @@ func (u UnqueuedChange) check() error {
 	if !IsObjectID(u.Head) {
 		return fmt.Errorf("#%s: head %q is not a full commit id", u.ID, u.Head)
 	}
+	if !u.Mark.Valid() {
+		return fmt.Errorf("#%s: mark %q, want queued, kicked_back, needs_regeneration or none", u.ID, u.Mark)
+	}
 	return nil
+}
+
+// ClosedChange is a closed change still showing a queue label, merged or closed where
+// the queue did not see it go. An applier marks it [MarkNone].
+type ClosedChange struct {
+	ID   string `json:"id"`
+	Repo string `json:"repo,omitempty"` // provider's name for the repository, handed back to [Provider.Mark]
 }
 
 // CheckID accepts 1 to 128 ASCII letters, digits, '.', '_' and '-', not starting with
@@ -162,6 +176,17 @@ func CheckID(id string) error {
 		if b := id[i]; !idByte(b) {
 			return fmt.Errorf("change id %q holds %q, want letters, digits, '.', '_' and '-'", id, b)
 		}
+	}
+	return nil
+}
+
+// CheckUnit accepts a unit a hook can take as an argument: not empty, and not starting
+// with '-'. The queue appends units after the hook's own arguments with no "--" between
+// (magus reads what follows "--" as a tool's arguments, not projects), so a unit a
+// change's author named "-x" or "--gate=..." would read as an option.
+func CheckUnit(u string) error {
+	if u == "" || u[0] == '-' {
+		return fmt.Errorf("unit %q is empty or starts with '-', which a hook would read as an option", u)
 	}
 	return nil
 }

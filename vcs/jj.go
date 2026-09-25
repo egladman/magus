@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -842,4 +843,151 @@ func (v jjVCS) Preserve(ctx context.Context, dir string) (string, error) {
 // maintains for its undo.
 func (v jjVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
 	return nil, nil
+}
+
+// jjMergeTool is the merge tool the jj backend registers in the repository's config, as
+// `jj config list` prints it. jj passes the ancestor, both sides, the marker length, the
+// path and a separate output file, which it fills with its own conflict markers first
+// (merge-tool-edits-conflict-markers), so a driver that exits 1 without writing leaves
+// the conflict exactly as it was. ui.merge-editor is left to the user: magus runs only
+// through `jj resolve --tool magus`.
+var jjMergeTool = []struct{ key, value string }{
+	{"merge-tools.magus.program", `"magus"`},
+	{"merge-tools.magus.merge-args", `["vcs", "merge-driver", "$base", "$left", "$right", "$marker_length", "$path", "$output"]`},
+	{"merge-tools.magus.merge-conflict-exit-codes", `[1]`},
+	{"merge-tools.magus.merge-tool-edits-conflict-markers", `true`},
+}
+
+// InstallMergeDriver implements types.MergeDriverInstaller by registering jjMergeTool in
+// the repository's config through `jj config set --repo`, which knows where this jj keeps
+// it (outside the working copy since jj 0.2x). The globs select nothing here: jj has no
+// per-path tool setting, and RunMergeDriver names the files at resolve time.
+func (v jjVCS) InstallMergeDriver(ctx context.Context, root string, _ types.MergeDriverGlobs) error {
+	for _, kv := range jjMergeTool {
+		cmd := vcsExec(ctx, "jj", "config", "set", "--repo", kv.key, kv.value)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("jj config set --repo %s: %w\n%s", kv.key, err, strings.TrimSpace(string(out)))
+		}
+	}
+	return nil
+}
+
+// EnsureMergeDriver implements types.MergeDriverInstaller. Only auto-resolution has a use
+// for the tool on jj (a declared output is settled by `magus vcs resolve` with no tool),
+// so without auto-resolve globs it registers nothing and reads nothing.
+func (v jjVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
+	if len(globs.AutoResolve) == 0 {
+		return false, nil
+	}
+	current, err := v.repoMergeTool(ctx, root)
+	if err != nil {
+		return false, err
+	}
+	if current == jjMergeToolListing() {
+		return false, nil
+	}
+	return true, v.InstallMergeDriver(ctx, root, globs)
+}
+
+// CheckMergeDriver implements types.MergeDriverInstaller: the tool is in the repository's
+// config exactly as jjMergeTool registers it.
+func (v jjVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
+	current, err := v.repoMergeTool(ctx, root)
+	return err == nil && current == jjMergeToolListing(), err
+}
+
+// MergeDriverCommand implements types.MergeDriverInstaller with the program and arguments
+// the effective config holds, "" when no magus tool is registered.
+func (v jjVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
+	out, err := vcsOutput(ctx, root, "jj", "config", "list", "merge-tools.magus")
+	if err != nil {
+		return "", fmt.Errorf("jj config list merge-tools.magus: %w", err)
+	}
+	var program string
+	var args []string
+	for _, line := range strings.Split(out, "\n") {
+		key, value, ok := strings.Cut(line, " = ")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(key) {
+		case "merge-tools.magus.program":
+			program, _ = strconv.Unquote(value)
+		case "merge-tools.magus.merge-args":
+			for _, arg := range strings.Split(strings.Trim(value, "[]"), ", ") {
+				if s, err := strconv.Unquote(arg); err == nil {
+					args = append(args, s)
+				}
+			}
+		}
+	}
+	if program == "" {
+		return "", nil
+	}
+	return strings.Join(append([]string{program}, args...), " "), nil
+}
+
+// RunMergeDriver implements types.MergeDriverInstaller: `jj resolve --tool magus`, one
+// path at a time, because jj stops a batch at the first file a tool leaves unchanged. A
+// file the driver does not settle, or one jj's tools cannot take (more than two sides),
+// stays conflicted; any other failure is an error carrying what jj said.
+//
+// The tool is passed on the command line, naming the magus the git backend would
+// register (driverExe), so a resolve works whether or not the repository registered one.
+func (v jjVCS) RunMergeDriver(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	var config []string
+	for _, kv := range jjMergeTool {
+		value := kv.value
+		if kv.key == "merge-tools.magus.program" {
+			value = strconv.Quote(driverExe(ctx, root))
+		}
+		config = append(config, "--config", kv.key+"="+value)
+	}
+	for _, p := range paths {
+		argv := slices.Concat(config, []string{"resolve", "--tool", "magus", "--", "root-file:" + strconv.Quote(p)})
+		cmd := vcsExec(ctx, "jj", argv...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			continue
+		}
+		said := string(out)
+		if strings.Contains(said, "unchanged or empty") || strings.Contains(said, "At most 2 sides are supported") {
+			continue
+		}
+		return fmt.Errorf("jj resolve --tool magus %s: %w\n%s", p, err, strings.TrimSpace(said))
+	}
+	return nil
+}
+
+// repoMergeTool is the magus tool as the repository's own config holds it, one sorted
+// "key = value" line per key.
+func (v jjVCS) repoMergeTool(ctx context.Context, root string) (string, error) {
+	cmd := vcsExec(ctx, "jj", "config", "list", "--repo", "merge-tools.magus")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("jj config list --repo merge-tools.magus: %w", err)
+	}
+	var lines []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	slices.Sort(lines)
+	return strings.Join(lines, "\n"), nil
+}
+
+func jjMergeToolListing() string {
+	lines := make([]string, len(jjMergeTool))
+	for i, kv := range jjMergeTool {
+		lines[i] = kv.key + " = " + kv.value
+	}
+	slices.Sort(lines)
+	return strings.Join(lines, "\n")
 }

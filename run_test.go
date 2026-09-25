@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
@@ -1754,4 +1755,112 @@ func TestCharmsForCI(t *testing.T) {
 	given := []string{types.CharmReadWrite, "race"}
 	CharmsForCI(given)
 	assert.Equal(t, []string{types.CharmReadWrite, "race"}, given)
+}
+
+// A parent's un-rooted output glob matched a nested project's generated file, so the
+// parent's cache entry snapshotted it and every hit restored it: stale bytes over the
+// child's own output, reported as MGS3001 against the parent's composer. Nothing in the
+// child ran, which is why the dispatch set never had anything to mark.
+func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
+	const spellName = "zzz-nested-output-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("gen"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			return nil, os.WriteFile(filepath.Join(req.Dir, "gen", "own.txt"), []byte("parent"), 0o644)
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+	childOut := filepath.Join(root, "leaf", "gen", "child.txt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(childOut), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(childOut, []byte("child v1"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("**/gen/*.txt"))
+	reg.RegisterProject("leaf")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	require.NotNil(t, m.Get("leaf"), "the nested project must resolve")
+
+	gen := []types.Target{{Path: ".", Name: "gen"}}
+	require.NoError(t, m.Run(context.Background(), gen, WithWrite()), "first run records the entry")
+
+	// The child regenerates its own output between the parent's runs.
+	require.NoError(t, os.WriteFile(childOut, []byte("child v2, regenerated"), 0o644))
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(childOut, later, later))
+
+	require.NoError(t, m.Run(context.Background(), gen, WithWrite()),
+		"a hit on the parent must not restore a file the nested project owns")
+	got, err := os.ReadFile(childOut)
+	require.NoError(t, err)
+	assert.Equal(t, "child v2, regenerated", string(got), "the child's own bytes survive the parent's replay")
+}
+
+// A directly selected step that hits the cache never enters runTarget, so no audit window
+// was open while its replay wrote. The glob here is rooted in the nested project, so the
+// boundary keeps the record, and the replay overwrites the child's own bytes.
+func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
+	const spellName = "zzz-direct-hit-audit-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("gen"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	childOut := filepath.Join(root, "leaf", "gen", "child.txt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(childOut), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(childOut, []byte("child v1"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("leaf/gen/*.txt"))
+	reg.RegisterProject("leaf")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	gen := []types.Target{{Path: ".", Name: "gen"}}
+	require.NoError(t, m.Run(context.Background(), gen, WithWrite()), "the miss writes nothing, so it passes")
+
+	require.NoError(t, os.WriteFile(childOut, []byte("child v2, regenerated"), 0o644))
+	err = m.Run(context.Background(), gen, WithWrite())
+	require.ErrorIs(t, err, types.DescendantBoundaryCrossed, "the hit's replay wrote into leaf")
+	assert.Contains(t, err.Error(), `wrote into descendant project "leaf"`)
+	assert.Contains(t, err.Error(), "cache replay")
+}
+
+// The drift gate and the race replay hash a target's outputs through outputGlobsByRoot,
+// and must claim what the cache snapshot claims: nothing inside a nested project that
+// the glob is not rooted in.
+func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"magusfile.buzz", "leaf/magusfile.buzz", "gen/own.txt", "leaf/gen/child.txt"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
+	}
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithOutputs("**/gen/*.txt"))
+	reg.RegisterProject("leaf")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	snap, err := diff.HashContent(context.Background(), outputGlobsByRoot(m.ws, m.Get("."), "gen"))
+	require.NoError(t, err)
+
+	var got []string
+	for path := range snap {
+		got = append(got, path)
+	}
+	assert.Equal(t, []string{filepath.Join(m.Root(), "gen", "own.txt")}, got)
 }

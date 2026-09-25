@@ -280,7 +280,7 @@ Four subsystems accept one, and each detects its ops by name:
 
 One spell may carry several of these, and several spells may serve one vendor. Which shape is
 right is decided by RUNTIME, not by the vendor's name: `spells/github/actions` carries the
-first three and is inert outside a CI runner, so the review ops live in `spells/github/review`
+first three and needs the credentials only a CI job exports, so the review ops live in `spells/github/review`
 instead, and a workspace that wants all four imports both.
 
 A review provider may implement a SUBSET. Reading threads and publishing are separable, so a

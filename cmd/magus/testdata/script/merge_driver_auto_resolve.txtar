@@ -1,0 +1,85 @@
+# A low-risk file goes through the merge driver during a plain `git merge`: loading the
+# workspace registers the declared gate_low_risk and merge_low_risk globs in
+# .gitattributes, without the linguist-generated mark an output carries, and the driver
+# settles what merge3 settles and the classifier allows.
+# CHANGELOG.md, where both sides only added lines at one place, merges with both;
+# NOTES.md, where both edited one line differently, stays conflicted with both sides in
+# markers, and the driver names the heading the region sits under.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git checkout -b main
+
+exec magus ls
+grep '^\*\*/\*\.md merge=magus$' .gitattributes
+grep '^fixtures/\*\* merge=magus$' .gitattributes
+! grep 'md merge=magus linguist-generated' .gitattributes
+exec git config merge.magus.driver
+stdout 'vcs merge-driver %O %A %B %L %P'
+
+# A second load finds the registration current and rewrites nothing.
+exec git add magusfile.buzz .gitattributes CHANGELOG.md NOTES.md
+exec git commit -m initial
+exec magus ls
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+exec git checkout -b other
+cp CHANGELOG.other.md CHANGELOG.md
+cp NOTES.other.md NOTES.md
+exec git commit -am other-side
+
+exec git checkout main
+cp CHANGELOG.main.md CHANGELOG.md
+cp NOTES.main.md NOTES.md
+exec git commit -am main-side
+
+! exec git merge --no-edit other
+stdout 'CONFLICT \(content\): Merge conflict in NOTES.md'
+! stdout 'CONFLICT.*CHANGELOG.md'
+stderr 'merge-driver: not auto-resolved: NOTES.md### Status: not settled'
+stderr 'merge-driver: auto-resolved path=CHANGELOG.md verdict=CHANGELOG.md: prose \(matches "\*\*/\*.md" \(gate_low_risk of project .\)\); CHANGELOG.md## Changes: kind 2'
+cmp CHANGELOG.md CHANGELOG.want.md
+cmp NOTES.md NOTES.want.md
+exec git status --porcelain --untracked-files=no
+stdout '^M  CHANGELOG.md$'
+stdout '^UU NOTES.md$'
+
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "acme-root", "gate_low_risk": ["**/*.md"], "merge_low_risk": ["fixtures/**"]});
+-- CHANGELOG.md --
+# Changes
+- the first entry
+-- CHANGELOG.main.md --
+# Changes
+- the first entry
+- main's entry
+-- CHANGELOG.other.md --
+# Changes
+- the first entry
+- other's entry
+-- CHANGELOG.want.md --
+# Changes
+- the first entry
+- main's entry
+- other's entry
+-- NOTES.md --
+## Status
+status: draft
+-- NOTES.main.md --
+## Status
+status: ready
+-- NOTES.other.md --
+## Status
+status: blocked
+-- NOTES.want.md --
+## Status
+<<<<<<< ours
+status: ready
+||||||| base
+status: draft
+=======
+status: blocked
+>>>>>>> theirs

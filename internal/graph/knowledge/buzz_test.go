@@ -38,6 +38,10 @@ fun helper() > void {}
 	build, _ := nodeByID(out, "function:a.buzz:build")
 	assert.Equal(t, "true", build.Attrs["exported"])
 
+	b, _ := nodeByID(out, "file:b.buzz")
+	assert.Equal(t, map[string]string{"language": "buzz", AttrLines: "1", AttrBytes: "29"}, b.Attrs,
+		"a buzz file node is sized from the read that parsed it")
+
 	assert.True(t, hasEdge(out, "file:a.buzz", "function:a.buzz:build", types.RelationContains))
 	assert.True(t, hasEdge(out, "function:a.buzz:build", "function:a.buzz:helper", types.RelationCalls))
 

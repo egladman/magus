@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +19,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
 )
@@ -110,7 +114,10 @@ func (r ExecResult) BuzzObject() types.BuzzObject {
 	}
 }
 
-// Exec runs a subprocess with the current sandbox policy and output writers.
+// Exec runs a subprocess with the current sandbox policy and output writers. Under a
+// policy the child starts confined by the kernel where the host has landlock (see
+// sandbox.Command), and a required policy on a host that cannot confine it is refused
+// (MGS2012) before anything starts.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
 	if types.Tracing(ctx) {
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
@@ -136,32 +143,38 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
 		})
 	}
-	c := exec.CommandContext(ctx, name, args...)
-	c.Dir = opts.Dir
-	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
-	c.WaitDelay = 5 * time.Second
-
-	policy := sandbox.FromContext(ctx)
+	policy := sandbox.PolicyFromContext(ctx)
+	confined, err := policy.KernelConfines()
+	if err != nil {
+		return ExecResult{Code: -1}, err
+	}
+	env, withheld := childEnv(ctx, policy, opts.Env)
+	resolved, lookErr := lookPath(name, envValue(env, "PATH"))
+	if lookErr != nil {
+		return ExecResult{Code: -1}, classifyMissingBinary(lookErr, name, false)
+	}
 	if policy != nil {
-		resolved, err := exec.LookPath(name)
-		if err != nil {
-			resolved = name // let exec.Cmd surface the real lookup error
-		}
-		if err := policy.CheckExecCtx(ctx, resolved); err != nil {
-			sandbox.EmitDenyHint(policy, "ro", resolved)
+		if err := policy.CheckExec(ctx, resolved); err != nil {
+			sandbox.EmitDenyHint(policy, filesystem.Exec, resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
-	env, withheld := childEnv(ctx, policy, opts.Env)
+	c, ruleset, err := command(ctx, policy, confined, name, resolved, args)
+	if err != nil {
+		return ExecResult{Code: -1}, err
+	}
+	c.Dir = opts.Dir
+	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
+	c.WaitDelay = 5 * time.Second
 	c.Env = env
 	if js := jobserverFrom(ctx); js != nil {
-		c.ExtraFiles = js.files()
+		c.ExtraFiles = append(c.ExtraFiles, js.files()...)
 	}
-	sandbox.RecordEnvDropped(ctx, name, policy)
-	sandbox.EmitShimHint(name, policy)
+	sandbox.RecordEnvDropped(ctx, policy, name)
+	sandbox.EmitShimHint(policy, name)
 	if len(withheld) > 0 {
 		slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
-			"withheld magus socket pointer(s) from op subprocess (done regardless of sandbox.enabled)"),
+			"withheld magus socket pointer(s) from op subprocess (done regardless of sandbox.mode)"),
 			"vars", withheld)
 	}
 	if opts.Stdin != "" {
@@ -188,12 +201,22 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	// the sampler is handed it. Behaviorally identical (Run is Start plus Wait);
 	// the split exists only so nothing reads c.Process concurrently.
 	sampler := newTreeSampler()
+	started := sampler.follow
+	if ruleset != nil {
+		// This process's copy of the ruleset serves nothing once the launcher holds its
+		// own; the defer covers a Start that failed.
+		defer ruleset.Close()
+		started = func(pid int) {
+			_ = ruleset.Close()
+			sampler.follow(pid)
+		}
+	}
 	var runErr error
 	if opts.TTY {
-		runErr = runOnPTY(ctx, c, outW, &outBuf, opts, sampler.follow)
+		runErr = runOnPTY(ctx, c, outW, &outBuf, opts, started)
 	} else {
 		if runErr = c.Start(); runErr == nil {
-			sampler.follow(c.Process.Pid)
+			started(c.Process.Pid)
 			runErr = c.Wait()
 		}
 	}
@@ -271,20 +294,59 @@ func classifyMissingBinary(err error, name string, started bool) error {
 }
 
 // ProcForwardVars never reach ordinary op subprocesses: the proc-server socket a magus
-// child forwards to, and the address `magus server` listens on. Both are unauthenticated
-// sockets, so only a recursive magus is handed them.
-var ProcForwardVars = []string{"MAGUS_PROC_SOCKET", "MAGUS_SERVER_ADDRESS"}
+// child forwards to, the token that socket demands, and the address `magus server`
+// listens on. Only a recursive magus is handed them.
+var ProcForwardVars = []string{"MAGUS_PROC_SOCKET", "MAGUS_PROC_TOKEN", "MAGUS_SERVER_ADDRESS"}
+
+// SandboxEnvVar carries a sandboxed run's mode to every child, so a nested magus runs
+// under that mode or a stronger one: it is the sandbox.mode setting's own variable, and
+// a nested magus refuses a flag that weakens it (MGS2010). childEnv sets it after the
+// caller's overrides.
+const SandboxEnvVar = "MAGUS_SANDBOX"
+
+// command builds the Cmd that runs resolved as name. A confined child starts through
+// the sandbox launcher, and ruleset is this process's copy of the descriptor it rides
+// in, for the caller to close once the child has started. A policy the kernel does not
+// confine runs the child plainly, under the binding checks and env allowlist alone.
+func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, resolved string, args []string) (c *exec.Cmd, ruleset *os.File, err error) {
+	if !confined {
+		if policy != nil {
+			sandbox.RecordLaunch(ctx, 0, "unsupported")
+		}
+		c = exec.CommandContext(ctx, resolved, args...)
+		c.Args[0] = name
+		return c, nil, nil
+	}
+	start := time.Now()
+	c, err = sandbox.Command(ctx, policy, resolved, args...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sandbox: confine %s: %w", name, err)
+	}
+	sandbox.RecordLaunch(ctx, time.Since(start).Seconds(), "applied")
+	// Args ends with the command's own argv; its argv[0] is the name as the target wrote it.
+	c.Args[len(c.Args)-len(args)-1] = name
+	return c, c.ExtraFiles[0], nil
+}
+
+// jobserverFD is the descriptor a jobserver pipe appended to a child's ExtraFiles lands
+// on: after the launcher's ruleset when the child is confined.
+func jobserverFD(confined bool) int {
+	if confined {
+		return firstExtraFD + sandbox.LauncherFiles
+	}
+	return firstExtraFD
+}
 
 // childEnv layers self-reference variables and caller overrides over the base environment.
+//
+// Under a policy the base is its BaseEnv even when that is empty: a sandboxed child
+// never falls back to the host's environment.
 func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (env, withheld []string) {
-	var base []string
+	root := os.Environ()
 	if policy != nil {
-		base = policy.BaseEnv
+		root = policy.BaseEnv
 	}
-	root := base
-	if root == nil {
-		root = os.Environ()
-	}
+	root = environ.From(ctx).Apply(root)
 	for _, name := range ProcForwardVars {
 		if hasEnvVar(root, name) && !hasEnvVar(overrides, name) {
 			withheld = append(withheld, name)
@@ -298,10 +360,78 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	env = append(env, SelfVars(ctx)...)
 	// Ahead of the overrides, so a target that sets MAKEFLAGS itself keeps its own.
 	if js := jobserverFrom(ctx); js != nil {
-		env = append(env, js.environ(env)...)
+		// An error here is a required policy the kernel cannot confine; Exec refuses
+		// that child before it would start, so the answer is never used.
+		confined, _ := policy.KernelConfines()
+		env = append(env, js.environ(env, jobserverFD(confined))...)
 	}
 	env = append(env, overrides...)
+	if policy != nil {
+		// Last, after the caller's overrides, so a target cannot hand a child a weaker value.
+		env = append(withoutEnvVars(env, []string{SandboxEnvVar}), SandboxEnvVar+"="+policy.Mode.String())
+		for _, name := range nestedMagusVars {
+			if v, ok := environ.Lookup(ctx, name); ok && !hasEnvVar(env, name) {
+				env = append(env, name+"="+v)
+			}
+		}
+	}
 	return env, withheld
+}
+
+// nestedMagusVars are what a magus nested in a sandboxed run needs to act on the same
+// cache and job store, and that the scrubbed BaseEnv drops: a different cache dir is a
+// different cache and lease marker, and the state dir holds the job store the lease
+// narrowing reads. A value the caller set wins; these locate, they do not confine.
+//
+// Not in the sandbox's env allowlist, which testkit also isolates tests with: a stray
+// MAGUS_CACHE_DIR reaching a test is the failure that list exists to stop.
+var nestedMagusVars = []string{"MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "XDG_STATE_HOME"}
+
+// WithEnvOverlay gives ctx an environment overlay of its own; see environ.With. It is
+// here so an entry point that already starts runs through this package need not import
+// a second one to begin a run.
+func WithEnvOverlay(ctx context.Context) context.Context { return environ.With(ctx) }
+
+// LookPath resolves name against the PATH a child of this run would get, the same answer
+// Exec acts on.
+func LookPath(ctx context.Context, name string) (string, error) {
+	env, _ := childEnv(ctx, sandbox.PolicyFromContext(ctx), nil)
+	return lookPath(name, envValue(env, "PATH"))
+}
+
+// envValue is name's value in env, the last entry winning as it does for exec.Cmd.
+func envValue(env []string, name string) string {
+	prefix := name + "="
+	for i := len(env) - 1; i >= 0; i-- {
+		if v, ok := strings.CutPrefix(env[i], prefix); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// lookPath resolves name against path, the PATH the child will run with, rather than
+// this process's: in the server one run's PATH is not another's (see environ.Overlay). A
+// name holding a separator is returned as given, for exec to resolve against the dir.
+func lookPath(name, path string) (string, error) {
+	if runtime.GOOS == "windows" {
+		// PATHEXT resolution is exec.LookPath's alone to get right.
+		return exec.LookPath(name)
+	}
+	if strings.ContainsRune(name, os.PathSeparator) {
+		return name, nil
+	}
+	for _, dir := range filepath.SplitList(path) {
+		// A relative entry is skipped, as exec.LookPath refuses one with ErrDot.
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		p := filepath.Join(dir, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", &exec.Error{Name: name, Err: exec.ErrNotFound}
 }
 
 func withoutEnvVars(env, drop []string) []string {

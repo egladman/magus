@@ -55,6 +55,7 @@ secret
 secret.endpoint
 secret.provider
 secret.read
+skills
 targets
 where
 workspace

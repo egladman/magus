@@ -117,6 +117,26 @@ Write paths name files. An existing directory is refused
 ([MGS3018](../../../reference/codes/sandbox/MGS3018.md)) unless it is the root
 of a project the job owns whole, or does not exist yet because the job creates it.
 
+A write path can also claim one declaration of a file, so two jobs can start on
+one file: `run.go#executeStages`, `docs/scope.md#The knobs`. The part after the
+`#` names the declaration line git's diff driver matches for that file (the
+`diff=` attribute in `.gitattributes`): the whole line, or any run of it that
+starts and ends on a word boundary, so `executeStages` names
+`func (m *Magus) executeStages(ctx context.Context) error {` and `execute` does
+not. `fork` refuses a claim nothing could grade
+([MGS3031](../../../reference/codes/sandbox/MGS3031.md)): an empty declaration,
+a glob, or a file whose extension has no diff driver. Two claims on different
+declarations of one file do not overlap, and the lines above a file's first
+declaration (its package clause and imports) belong to no claim. A doc comment
+directly above a declaration is that declaration's, and in Go a top-level `var`,
+`const` or `type` (a single one or a `(` block) is a declaration of its own.
+
+A path that itself contains `#` is spelled so the `#` cannot start a claim:
+`./notes/a#b.md` (with a leading `./` the whole entry is the path) or
+`notes/a\#b.md` (escaped, which also allows `notes/a\#b.md#Intro`). `fork`
+refuses an unescaped entry that names an existing path, and names both
+spellings.
+
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `criteria` (the prose half; the machine-checkable half is `completion_gates`),
 `checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
@@ -124,8 +144,12 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `read_only`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), and `write_proof`, all output-only: a
-timestamp a client sent would be a fact about that client's clock.
+outside it wrote, noticed by the guard), `write_proof`, `checkout_root` (where
+`magus job exec` took the job), and `end_reason` (why magus ended it, see
+[jobs magus ends itself](#jobs-magus-ends-itself)), all output-only: a
+timestamp a client sent would be a fact about that client's clock. `updated`
+moves only on the job's own writes; the guard recording an unattributed write
+leaves it alone.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
 is `declared`; a holder moves its own job with `magus job exec` and
@@ -203,8 +227,8 @@ the `--stdin` record or the `magus_job` call) has the store stamp a `deadline`
 on the row at fork time; nothing accepts a deadline directly. It is unset by
 default, and a job with acceptance criteria needs no bound. Past the deadline the
 guard denies every write graded under that lease and its write paths stop
-blocking other jobs, while the row stays live: magus never transitions it, and
-`magus ls jobs` marks it `overdue`.
+blocking other jobs, while the row stays live: a deadline alone never ends it,
+and `magus ls jobs` marks it `overdue`.
 
 **Limits exist only when the workspace sets them**, in magus.yaml:
 
@@ -213,11 +237,11 @@ jobs:
   max_depth: 3 # levels below the root job; 0 = unlimited
   max_live: 12 # live jobs under one root; 0 = unlimited
   default_timeout: 2h # applies when fork names no --timeout
-  stale_after: 30m # flag live jobs untouched this long
+  stale_after: 30m # end untaken jobs untouched this long; default 2h, 0 = never
 ```
 
-Every key is unset by default. `magus job fork` refuses past `max_depth` or
-`max_live`, naming the key that set the limit.
+Every key but `stale_after` is unset by default. `magus job fork` refuses past
+`max_depth` or `max_live`, naming the key that set the limit.
 
 ### Two answers the store gives back
 
@@ -231,7 +255,9 @@ the read and stored nowhere, so it cannot go out of date with the rows. A path
 is compared by containment (a job owning `internal/job` overlaps one owning
 `internal/job/store.go`) and a glob is judged by the directories it names, which
 over-reports rather than misses a pair. A job in a terminal state is in no pair,
-because a finished or released job is not competing for anything.
+because a finished or released job is not competing for anything. Two jobs
+claiming different declarations of one file are still listed, with
+`claims: disjoint`: the pair is an integration order, not a wait.
 
 **Releases.** Shrinking `write_paths` is how a job announces it has finished
 editing a path, and the store records each dropped path with the digest that
@@ -242,13 +268,14 @@ be hashed. `absent` and `unreadable` are deliberately not the same answer: "the
 releaser deleted it" and "something is there nobody could read" send you to
 different places. Hand the digest to the job taking the path over; one that no
 longer matches at verification time means that job built on a tree the releaser
-never saw.
+never saw. Dropping a declaration claim (`run.go#executeStages`) releases that
+declaration, digested over the lines it spans now, so another job editing the
+rest of the file does not change it.
 
-**Jobs nobody is waiting on.** A list also marks a live job an `orphan` when its
-root job has ended, and `stale` when it was not updated within
-`jobs.stale_after` (only when that key is set), naming `magus job exit <id>` for
-each. `magus doctor`'s **job-tree** check reports the same two. Both are
-reports: ending the row stays yours.
+**Jobs a holder went quiet on.** A list marks a live job `stale` when it was not
+updated within `jobs.stale_after`, naming `magus job exit <id>` for each, and
+`magus doctor`'s **job-tree** check reports the same. These are the jobs magus
+could not prove dead, so ending them stays yours.
 
 Three doors write the store and they reach one set of rules: `magus job` is the
 person's, `magus_job` is the agent's, and `magus\job` is a magusfile's.
@@ -258,6 +285,39 @@ magus ls jobs                # every job, parents above the ones they forked
 magus ls jobs -o json        # the same records, overlaps included
 magus describe job <job>     # one job's terms
 ```
+
+### Jobs magus ends itself
+
+Every read of the store (`magus ls jobs`, `magus job fork`, the guard's lease
+lookup, `magus doctor`, the `magus_job` tool) first ends each live job magus can
+prove nobody holds, as `no_return` with an `end_reason`, and prints one line per
+job on stderr:
+
+```text
+ended fleet/w2: taken in /src/app/.worktrees/w2, which no longer exists
+```
+
+A job is ended when:
+
+1. **An ancestor ended** in `pass`, `fail`, or `no_return`. The tree dies with
+   its root, children and grandchildren alike.
+2. **Its checkout is gone.** `magus job exec` records the checkout it took the
+   job in; once that directory no longer exists, nobody can be working there.
+   An `exited` job is spared: its holder already returned, and removing the
+   worktree is the normal end of that.
+3. **Nobody took it.** It is still `declared`, no `magus job exec` ever took it,
+   it was not updated within `jobs.stale_after`, and no live job hangs under it,
+   so a root outlives the children still working. The window is read from the
+   workspace's own `magus.yaml`: 2h by default, `0` for never.
+
+A job whose liveness cannot be decided stays live: a checkout path on a mount
+that cannot be read is not a path that is gone. The server's own maintenance
+jobs are never ended this way. Ending a row moves its `updated`; nothing else
+magus does for a job does, so a job other agents keep writing near still ages.
+
+Two habits follow. Remove a worker's worktree only once its job is done, and
+advance a root row you are still forking under, since an untaken root with no
+live children is as dead as any other untaken job.
 
 ## Give the holder its terms
 
@@ -349,6 +409,7 @@ file write and every command. It denies:
 | any write, by a job that gathers evidence and writes nothing | `read_only`                      |
 | a write covered by this job's own deny list                  | `deny_paths`                     |
 | a write covered by another live job's write list             | `write_paths` (that job's)       |
+| an edit landing in a declaration another live job claims     | `write_paths` (that job's `#`)   |
 | a write outside every entry in this job's own write list     | `write_paths`                    |
 | a command running the `ci` gate                              | `check`                          |
 | a READ of a path outside the projects this job may read      | `read_paths`, else `write_paths` |
@@ -365,6 +426,15 @@ cannot see.
 A denial for another job's path also says how long ago that job was last
 updated and names `magus job exit <id>`, which releases a job nobody holds any
 more. A job past its deadline owns nothing against other jobs.
+
+The declaration row ([claimed-declaration](../../../reference/rules/claimed-declaration.md))
+reads the edit itself. When the host's payload carries the replacement (an
+`old_string`/`new_string` pair, or a list of them), the guard applies it to the
+file in memory and places the changed lines the way the job footprint does. An
+edit landing only in your own claims, in a declaration nobody claims, or above a
+file's first declaration passes. A payload carrying no edit, such as a
+whole-file write, is graded by path alone, and the rule reads nothing unless
+another live job claims a declaration of that file.
 
 The read row is the write paths read the other way. `write_paths` stands in when
 `read_paths` is empty, because a holder leased to edit a project was pointed at
@@ -401,7 +471,7 @@ and, for a worker, denies the tool call that crosses it. The
 same job row rather than a second declaration, because a boundary written twice
 is a boundary that disagrees with itself.
 
-When `sandbox.enabled` is true and the acting lease resolves to a live row with
+When `sandbox.mode` is not `off` and the acting lease resolves to a live row with
 a `parent` and non-empty `write_paths`, every target run and every `magus buzz`
 script in that checkout gets a filesystem WRITE grant of exactly:
 
@@ -411,18 +481,19 @@ script in that checkout gets a filesystem WRITE grant of exactly:
   it was forked to create and the guard already admits that write; only a glob
   keeps the existing-files-only rule, since a typo in a glob is the case that
   rule protects against;
-- the workspace cache directory and `$TMPDIR`, which a target needs to produce
-  output at all.
+- the workspace cache directory and the sandbox's private temp dir (every
+  child's `TMPDIR`), which a target needs to produce output at all.
 
-Reads are untouched: the row declares a write boundary, and a holder has to read
+Write grants outside the checkout, such as `/dev/null` and the tool caches, are
+kept. Reads are untouched: the row declares a write boundary, and a holder has to read
 the tree it is changing. A refusal is recorded on the trail as a
 `sandbox_denial` carrying the job id, so a reader can say whose boundary was hit
 rather than only that something was blocked.
 
 Nothing narrows for a ROOT job (a row with no parent is the orchestrator, and it
 owns the checkout), for a job id that names no live row, for a writable row with
-no write paths, or when the sandbox is off. A `read_only` row narrows to the
-cache directory and `$TMPDIR` alone, which is the sandbox's reading of the guard
+no write paths, or when the sandbox is off. A `read_only` row narrows the checkout to
+the cache directory and the private temp dir alone, which is the sandbox's reading of the guard
 refusing every write under such a job.
 
 Both tiers resolve the acting lease the same way, in this order: an explicit
@@ -623,8 +694,9 @@ jobs they forked.
 
 A job in a reported overlap is marked on both rows. A live row carries how long
 since it was last touched, and the released paths and their digests read in the
-detail beside the row. No row transitions itself: every state was written by an
-agent or a person, which is why a row that has gone quiet is a job YOU decide is
+detail beside the row. Beyond the jobs magus
+[ends itself](#jobs-magus-ends-itself), every state was written by an agent or a
+person, which is why a row that has merely gone quiet is a job YOU decide is
 possibly dead.
 
 The service behind it is `magus.job.v1alpha1.JobService`, the server's one
@@ -686,6 +758,12 @@ into something you can check.
 4. Regenerate declared outputs once, centrally, after the source work converges,
    then run the release gate yourself.
 
+`magus job wait` prints the job's footprint: the declaration each changed line
+of its diff since the checkpoint lands in. For a file the job claims only by
+declaration, every declaration the diff touched that none of those claims names
+is a violation, and so is a footprint magus could not read for a job that
+claims declarations at all.
+
 The same object serves review time. If you recorded a checkpoint when you
 stopped reading, the delta since then is the incremental-review flow on the
 [agents hub](../agents.md#incremental-review): handing work out and picking
@@ -696,8 +774,10 @@ review back up read the same identity.
 - Block a writer it cannot attribute. Only a process that named a live job is
   graded against a declared boundary; anyone else editing this workspace is
   advised at most, because a human in their own checkout names no job either.
-- Transition a row, or derive a state or a completion from one. Every state was
-  written by the agent or the person that put it there.
+- Transition a row on a guess. magus ends a job only on a fact it can prove
+  ([jobs magus ends itself](#jobs-magus-ends-itself)), always as `no_return`,
+  and never derives a pass or a completion; every other state was written by the
+  agent or the person that put it there.
 - Judge a delegation prompt, or let one change a guard verdict.
 - Mint anything for a checkpoint: no tag, no stash, no ref, no file.
 - Inject any of this into an agent's context. Every surface here is pull-based,

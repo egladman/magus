@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -30,15 +31,19 @@ func outputDst() (io.Writer, func() error, error) {
 }
 
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
-// --tee) and stderr; close flushes it and closes the tee.
-func openSink(opts OutputOptions) (*magus.Sink, func() error, error) {
+// --tee) and stderr; close flushes it and closes the tee. A text sink whose stdout a
+// magus stage reads also writes its records there (see pipeRecordStage).
+func openSink(ctx context.Context, opts OutputOptions) (*magus.Sink, func() error, error) {
 	stdout := io.Writer(os.Stdout)
 	tee := &lazyFile{path: global.tee}
 	if global.tee != "" {
 		stdout = io.MultiWriter(os.Stdout, tee)
 	}
-	sink, err := magus.NewSink(magus.Format(opts.Format), stdout, os.Stderr,
-		magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter))
+	sinkOpts := []magus.SinkOption{magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter)}
+	if opts.Format == outputText && pipeStageOf(ctx).writesRecords() {
+		sinkOpts = append(sinkOpts, magus.WithSinkRecords(stdout))
+	}
+	sink, err := magus.NewSink(magus.Format(opts.Format), stdout, os.Stderr, sinkOpts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -47,8 +52,8 @@ func openSink(opts OutputOptions) (*magus.Sink, func() error, error) {
 
 // openRunSink is openSink for a command that runs targets on m, which records its graph
 // traversal on the same sink.
-func openRunSink(m *magus.Magus, opts OutputOptions) (*magus.Sink, func() error, error) {
-	sink, closeSink, err := openSink(opts)
+func openRunSink(ctx context.Context, m *magus.Magus, opts OutputOptions) (*magus.Sink, func() error, error) {
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return nil, nil, err
 	}

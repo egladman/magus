@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func (w *jobNamespaceWorkspace) Root() string     { return w.root }
 // direct-binding path. Buzz materializes an omitted optional map as {}, so testing the
 // Go callable directly would miss the only call shape that matters to a script author.
 func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	ctx := types.WithWorkspace(t.Context(), workspace)
 	sess := buzz.NewSession(ctx)

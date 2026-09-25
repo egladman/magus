@@ -1,10 +1,11 @@
-# An upstream that fails prints nothing; the reader still gets the project once the
-# writer is gone, and fails on its own terms: no plan on stdin, never a lock refusal.
+# An upstream that fails prints nothing, and the reader starts nothing: the pipeline
+# stops at its first failed stage with MGS3030, never a lock refusal.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
 
 ! exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms | magus run consume .'
 stderr 'MGS3020'
-stderr 'consume: no plan on stdin'
+stderr 'MGS3030'
+! stderr 'consume: no plan on stdin'
 ! stderr 'locked by another magus process'
 
 exec magus status -o json

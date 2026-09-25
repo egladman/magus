@@ -1035,7 +1035,7 @@ func renderIndex(a api) string {
 	b.WriteString("- An enum serializes as its value name (`\"TOKEN_SCOPE_CONNECTOR\"`), not its number.\n\n")
 	b.WriteString("```sh\n")
 	if s, m, ok := firstUnary(a); ok {
-		fmt.Fprintf(&b, "curl -X POST \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Authorization: Bearer $MAGUS_TOKEN\" \\\n  -d '%s' \\\n  http://127.0.0.1:7391/%s.%s/%s\n", a.exampleJSON(m.Input), s.Package, s.Name, m.Name)
+		fmt.Fprintf(&b, "curl -X POST \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Authorization: Bearer $TOKEN\" \\\n  -d '%s' \\\n  http://127.0.0.1:7391/%s.%s/%s\n", a.exampleJSON(m.Input), s.Package, s.Name, m.Name)
 	}
 	b.WriteString("```\n\n")
 	b.WriteString("The path is always `/<package>.<Service>/<Method>`, which every page below states per method. A request body shown as `{}` takes no fields; a longer one is a shallow skeleton (top-level scalar and enum fields only) and does not attempt to satisfy every field's constraints - a `string.pattern` rule still needs a value matching that pattern.\n\n")

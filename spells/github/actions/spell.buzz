@@ -4,9 +4,17 @@
 //   import "spells/github/actions" as github
 //   magus\cache.remote(github)
 //
-// It carries two more contracts further down, each wired the same way and each inert
-// outside Actions: a CI provider (magus\ci.provider) and a secret provider
-// (magus\secret.provider). Three contracts, one runtime.
+// It carries two more contracts further down, each wired the same way: a CI provider
+// (magus\ci.provider) and a secret provider (magus\secret.provider). Three contracts, one
+// runtime.
+//
+// The spell never asks whether it is running under Actions. Wiring it IS the statement
+// that it is, so a workspace wires each contract only when its caller asks, under a
+// setting the workflow sets:
+//
+//   if (os\env("CI_PROVIDER") == "github-actions") { magus\ci.provider(github); }
+//
+// See "Told, never guessed" in docs/doctrine.md.
 //
 // The REVIEW contract for this vendor lives in spells/github/review instead, and the split is
 // the runtime rather than the vendor: every op here checks for the Actions token first, which
@@ -18,7 +26,6 @@
 // bool that the remote-cache subsystem detects by name and invokes with the
 // work-unit Target and an input callback cb, reading the boolean result of:
 //
-//   enabled(target, cb)      -> bool   active here? (gates fetch/push; ignores cb)
 //   get_artifact(target, cb) -> bool   download artifact into dest; true=hit, false=miss
 //   has_artifact(target, cb) -> bool   stored? without downloading
 //   put_artifact(target, cb) -> bool   upload artifact at src; true=uploaded, false=already present
@@ -41,8 +48,9 @@
 // primitives), os.env for the runner environment, and serialize for JSON — so
 // everything GitHub-specific stays out of the Go tree.
 //
-// Auth and endpoint come from the runner environment:
-//   GITHUB_ACTIONS         — "true" only under GitHub Actions (gates the provider)
+// Auth and endpoint come from the environment the workflow exports (the runner hands
+// them only to a JavaScript action, so a step has to re-export them); a job that
+// exports neither gets a miss on every read and stores nothing:
 //   ACTIONS_RESULTS_URL    — cache service base URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
@@ -61,22 +69,14 @@ import "std"
 // around it to supply the vendor. See CONTRIBUTING.md#naming.
 export fun mgs_getName() > str { return "github-actions"; }
 
-// A cache provider exports the well-known cache-contract functions below (enabled
-// / get_artifact / put_artifact), which the remote-cache subsystem detects by name
+// A cache provider exports the well-known cache-contract functions below
+// (get_artifact / put_artifact), which the remote-cache subsystem detects by name
 // and invokes via magus\cache.remote(github). It declares no mgs_listTargets - a
 // cache provider contributes no operations a target could compose.
-
-// in_actions is the one condition the whole provider gates on. A private predicate
-// rather than a call to enabled() because enabled is a spell OP - it takes the op
-// signature - so the internal guards below cannot reuse it directly.
-fun in_actions() > bool { return getenv("GITHUB_ACTIONS") == "true"; }
-
-// enabled gates the whole provider on running under GitHub Actions. The cache
-// probes this once and skips fetch/push entirely when false, so wiring this spell
-// in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.
-export fun enabled(target: Target, cb: fun(any)) > bool {
-    return in_actions();
-}
+//
+// It declares no enabled() op either, so every contract is active once wired. The
+// op is shared by all three contracts, and an answer about the cache's credentials
+// would have switched the CI provider's annotations off in a job that exports none.
 
 // getenv reads one environment variable, returning "" when unset (os.env returns
 // null for an unset var; the callers below test against "").
@@ -108,8 +108,8 @@ fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 // meaningful difference.
 fun token() > str !> any { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); }
 
-// has_token reports presence WITHOUT resolving, so enabled() and the cache-path guards
-// stay cheap and cannot prompt.
+// has_token reports presence WITHOUT resolving, so the cache-path guards stay cheap and
+// cannot prompt.
 fun has_token() > bool { return getenv("ACTIONS_RUNTIME_TOKEN") != ""; }
 
 // cache_key derives the cache key from the spec hash. The hash already folds in
@@ -176,10 +176,10 @@ fun download_url(hash: str) > str !> any {
 }
 
 // get_artifact downloads the cache artifact for payload.hash into payload.dest: true on
-// a hit (dest written), false on a miss or when not running under Actions. A failed
-// request throws.
+// a hit (dest written), false on a miss or when the step exports no cache service. A
+// failed request throws.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (!in_actions() or base() == "" or !has_token()) { return false; }
+    if (base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
     final loc = download_url("{io["hash"]}");
@@ -195,7 +195,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
 // has_artifact reports whether the service holds payload.hash, without downloading it:
 // the lookup half of get_artifact.
 export fun has_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (!in_actions() or base() == "" or !has_token()) { return false; }
+    if (base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
     return download_url("{io["hash"]}") != "";
@@ -205,8 +205,8 @@ export fun has_artifact(target: Target, cb: fun(any)) > bool !> any {
 // uploaded, false when the entry is already stored (a 409) or another job holds the
 // reservation (ok=false), neither of which is a failure. A failed request throws.
 export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (!in_actions() or base() == "" or !has_token()) {
-        cache_fail("put_artifact", "not running under GitHub Actions with a cache token");
+    if (base() == "" or !has_token()) {
+        cache_fail("put_artifact", "this step exports no ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN");
     }
     final io = {};
     cb(io);
@@ -251,8 +251,8 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
 // --- CI provider contract ----------------------------------------------------
 //
 // Wired with magus\ci.provider(github), alongside magus\cache.remote(github):
-// one spell per vendor, two contracts. Both gate on the same enabled() above,
-// so outside Actions this whole half is inert.
+// one spell per vendor, two contracts. Wired, it writes workflow commands to
+// stdout wherever it runs, which is why the wiring is conditional on the caller.
 //
 // magus core knows none of this syntax. It calls generic verbs (see
 // internal/ci/annotate) and every "::" below lives here, in Buzz.
@@ -341,12 +341,11 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
 // internal/ci/annotate.RunSource) and everything GitHub-shaped - the runs
 // API, the event and workflow environment - stays here.
 //
-// null, never an error, whenever the question has no answer: outside Actions,
-// on a non-PR event, without a token (the workflow must export GITHUB_TOKEN
-// and grant actions: read), or when no green run of this workflow exists for
-// the branch. The plan then fans out normally.
+// null, never an error, whenever the question has no answer: on a non-PR
+// event, without the run's workflow and repository, without a token (the
+// workflow must export GITHUB_TOKEN and grant actions: read), or when no green
+// run of this workflow exists for the branch. The plan then fans out normally.
 export fun last_green_run(target: Target, cb: fun(any)) > any !> any {
-    if (!in_actions()) { return null; }
     if (getenv("GITHUB_EVENT_NAME") != "pull_request") { return null; }
     final branch = getenv("GITHUB_HEAD_REF");
     final api = getenv("GITHUB_API_URL");
@@ -416,11 +415,11 @@ export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
 //                     the output magus captures - and on a miss says which line
 //                     to add to the workflow rather than that a variable is unset.
 //
-// Selecting it is an environment decision, the same one docs/concepts/secrets.md
-// draws for every provider - there is no fallback chain, so a workspace picks
-// this under Actions and something else on a laptop:
+// Selecting it is the caller's decision, the same one docs/concepts/secrets.md
+// draws for every provider - there is no fallback chain, so the workflow asks for
+// this and a laptop asks for something else:
 //
-//   if (os\env("GITHUB_ACTIONS") == "true") { magus\secret.provider(github); }
+//   if (os\env("SECRET_PROVIDER") == "github-actions") { magus\secret.provider(github); }
 
 final OIDC_PREFIX = "oidc:";
 
@@ -457,23 +456,20 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
 // std\print rather than anything magus captures, for the same reason group_start
 // above uses it: a workflow command is only a command if the runner reads it.
 //
-// THE GATE IS SPOOFABLE, AND THAT IS SAFE ONLY BECAUSE OF AN INVARIANT. This
-// command has to carry the secret in the clear - that is the only way the runner
-// can learn which bytes to mask - and GITHUB_ACTIONS is an ordinary environment
-// variable anyone can set, so `GITHUB_ACTIONS=true magus run ...` on a laptop makes
-// magus print a credential to a terminal. It escalates nothing TODAY because every
-// value that reaches here was derived from the very environment the gate reads:
-// workflowEnv returns a variable the caller already had, and oidcToken returns what
-// an endpoint named by that same environment answered. Whoever can spoof the gate
-// could only ever be shown what they themselves supplied.
+// THIS PRINTS THE SECRET, AND THAT IS SAFE ONLY BECAUSE OF AN INVARIANT. The
+// command has to carry the secret in the clear, since that is the only way the
+// runner can learn which bytes to mask, and it prints wherever the provider is
+// selected, a laptop included. It escalates nothing because every value that reaches here
+// came from this process's own environment: workflowEnv returns a variable the
+// caller already had, and oidcToken returns what an endpoint named by that same
+// environment answered. Whoever selects this provider could only ever be shown
+// what they themselves supplied.
 //
 // So the rule a future branch must keep: a value sourced from anywhere OTHER than
 // this process's environment - a file, a keychain, a second provider - must not reach
-// this function, because for that value the invariant is false and the gate is all
-// that stands between it and a terminal.
+// this function, because for that value the invariant is false.
 fun maskInRunnerLog(value: str) > void {
     if (value == "") { return; }
-    if (getenv("GITHUB_ACTIONS") != "true") { return; }
     std\print("::add-mask::" + escapeData(value));
 }
 
@@ -483,17 +479,12 @@ fun maskInRunnerLog(value: str) > void {
 fun workflowEnv(name: str) > str {
     final value = getenv(name);
     if (value != "") { return value; }
-    if (getenv("GITHUB_ACTIONS") != "true") {
-        throw "github-actions: $" + name + " is not set, and GITHUB_ACTIONS is not "
-            + "\"true\", so this is not an Actions runner. This provider resolves the "
-            + "environment a workflow injects; select it only under Actions, and select "
-            + "a provider a workstation can reach for local runs.";
-    }
     throw "github-actions: $" + name + " is not set in this step's environment.\n"
         + "  An Actions secret is only readable through the workflow file - nothing\n"
         + "  running inside the job can fetch one. Add it to the step:\n"
         + "      env:\n"
-        + "        " + name + ": $\{\{ secrets." + name + " \}\}";
+        + "        " + name + ": $\{\{ secrets." + name + " \}\}\n"
+        + "  Outside a workflow, select a secret provider the machine can reach instead.";
 }
 
 // oidcToken mints an OIDC token for audience from the runner's token endpoint.

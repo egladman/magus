@@ -20,7 +20,6 @@ import (
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -57,11 +56,12 @@ type gateRedundancy struct {
 }
 
 // gateFinding is one redundancy match: the green gate, and either an identical
-// fingerprint (Delta empty, Identical true) or an all-low-risk delta.
+// fingerprint (no delta, identical true) or an all-low-risk delta, as the change
+// classifier's verdict line per path.
 type gateFinding struct {
 	rec       sessions.GateRecord
 	identical bool
-	delta     internalci.GateDelta
+	delta     []string
 }
 
 // isGateInvocation reports whether this invocation is THE gate: the ci target, run whole
@@ -202,11 +202,11 @@ func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 	if err != nil {
 		return gateFinding{}, false
 	}
-	delta := g.classifier().Classify(ctx, changed, rec.Commit)
+	delta := g.m.ChangeClassifier(g.readAt(), g.readWorking).Classify(ctx, changed, rec.Commit)
 	if !delta.LowRiskOnly() {
 		return gateFinding{}, false
 	}
-	return gateFinding{rec: rec, delta: delta}, true
+	return gateFinding{rec: rec, delta: delta.Lines()}, true
 }
 
 // renderFinding prints every input a reader needs to reconstruct the decision:
@@ -228,46 +228,32 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 		b.WriteString("\n  delta since that gate: none; this run's input fingerprint " + shortFingerprint(g.fp) + " matches it exactly")
 		return b.String()
 	}
-	if len(f.delta.Paths) == 0 {
+	if len(f.delta) == 0 {
 		b.WriteString("\n  delta since that gate: no changed paths")
 		return b.String()
 	}
 	b.WriteString("\n  delta since that gate, every file:")
-	for _, line := range f.delta.Lines() {
+	for _, line := range f.delta {
 		b.WriteString("\n    " + line)
 	}
 	return b.String()
 }
 
-// classifier adapts the workspace to the risk classifier: describe-file roles,
-// the effective gate_low_risk prose globs, blob-at-revision reads, and
-// working-tree reads.
-func (g *gateRedundancy) classifier() internalci.ChangeClassifier {
-	c := internalci.ChangeClassifier{
-		Role: func(ctx context.Context, paths []string) (map[string]string, error) {
-			entries, err := g.m.ClassifyFiles(ctx, paths)
-			if err != nil {
-				return nil, err
-			}
-			roles := make(map[string]string, len(entries))
-			for _, e := range entries {
-				roles[e.Path] = e.Role
-			}
-			return roles, nil
-		},
-		Prose:  internalci.ProseScopes(g.m.All()),
-		Syntax: spells.CommentSyntaxIndex(resolvedSpells(g.m.All())),
-		Working: func(p string) (string, error) {
-			b, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(p)))
-			return string(b), err
-		},
+// readAt reads a file at a revision through the VCS, the older side of the delta the
+// change classifier compares; nil without a VCS.
+func (g *gateRedundancy) readAt() func(ctx context.Context, rev, p string) (string, error) {
+	if g.drv == nil {
+		return nil
 	}
-	if g.drv != nil {
-		c.At = func(ctx context.Context, rev, p string) (string, error) {
-			return g.drv.ReadFileAt(ctx, g.root, rev, p)
-		}
+	return func(ctx context.Context, rev, p string) (string, error) {
+		return g.drv.ReadFileAt(ctx, g.root, rev, p)
 	}
-	return c
+}
+
+// readWorking reads a file from the working tree, the newer side of the delta.
+func (g *gateRedundancy) readWorking(p string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(p)))
+	return string(b), err
 }
 
 // record files the gate's verdict in the per-repository session store, so a
@@ -276,15 +262,6 @@ func (g *gateRedundancy) classifier() internalci.ChangeClassifier {
 // interrupted or timed-out run records nothing: neither is a verdict on the
 // inputs. Store errors are logged, never returned: a store that can fail a
 // build is worse than none.
-// resolvedSpells flattens every project's resolved spells so the syntax index
-// covers workspace spells alongside the built-ins.
-func resolvedSpells(projects []*types.Project) []*spells.Spell {
-	var out []*spells.Spell
-	for _, p := range projects {
-		out = append(out, p.ResolvedSpells...)
-	}
-	return out
-}
 
 // record persists this run's verdict, so a later gate on the same inputs can defer to it.
 //
@@ -389,7 +366,7 @@ func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFin
 		Changed: func(ctx context.Context, green string) ([]string, error) {
 			return g.drv.ChangedFiles(ctx, g.root, green)
 		},
-		Classifier: g.classifier(),
+		Classifier: m.ChangeClassifier(g.readAt(), g.readWorking),
 	}
 	finding, ok := probe.Evaluate(ctx)
 	if !ok {

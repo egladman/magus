@@ -78,19 +78,20 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 `magus\project({...})` is **optional**. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:
 
-| Key             | Effect                                                                                                                                                                                                                                                |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `spells`        | binds spell handles to the project, contributing their ops, sources, and outputs                                                                                                                                                                      |
-| `depends_on`    | declares upstream project paths this project depends on (repo-relative or project-relative)                                                                                                                                                           |
-| `outputs`       | declares the project-relative file globs this project produces                                                                                                                                                                                        |
-| `sources`       | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
-| `exclusive`     | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
-| `watch_ignore`  | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
-| `no_language`   | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                           |
-| `gate_low_risk` | project-relative globs the ci-gate redundancy check ([MGS3010](../reference/codes/sandbox/MGS3010.md)) classifies as prose; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off           |
-| `gate_inherit`  | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta classifies; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                  |
-| `tools`         | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
-| `targets`       | a per-target policy table (see below)                                                                                                                                                                                                                 |
+| Key              | Effect                                                                                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spells`         | binds spell handles to the project, contributing their ops, sources, and outputs                                                                                                                                                                      |
+| `depends_on`     | declares upstream project paths this project depends on (repo-relative or project-relative)                                                                                                                                                           |
+| `outputs`        | declares the project-relative file globs this project produces                                                                                                                                                                                        |
+| `sources`        | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
+| `exclusive`      | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
+| `watch_ignore`   | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
+| `no_language`    | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                           |
+| `gate_low_risk`  | project-relative globs the ci-gate redundancy check ([MGS3010](../reference/codes/sandbox/MGS3010.md)) classifies as prose; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off           |
+| `gate_inherit`   | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta classifies; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                  |
+| `merge_low_risk` | project-relative globs of code a merge may settle without a person when merge3 settles it; prose, generated and comment-only edits qualify without it (see below)                                                                                     |
+| `tools`          | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
+| `targets`        | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
 other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
@@ -177,6 +178,22 @@ because inheritance is one decision over the plan rather than a per-project one.
 ```buzz
 magus\project({
     "gate_inherit": false,
+});
+```
+
+`merge_low_risk` applies the same classifier to a merge conflict. The merge queue and
+magus's merge driver settle a conflicted source file when every region both sides
+changed settles (the same change, one side's change holding the other's, or both only
+adding lines at one place) and the edit from the merge base to the merge classifies low
+risk. Code never does on its own; `merge_low_risk` lists the code a project accepts that
+for, with globs relative to the project like `gate_low_risk`'s. Nothing is listed by
+default, and the name pairs with `gate_low_risk` because each key says which decision
+treats its globs as low risk. See the
+[merge queue](merge-queue.md#auto-resolving-source-conflicts).
+
+```buzz
+magus\project({
+    "merge_low_risk": ["testdata/golden/**"],
 });
 ```
 

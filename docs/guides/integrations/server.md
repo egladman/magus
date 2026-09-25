@@ -157,13 +157,36 @@ what it holds. The log directory is `$XDG_STATE_HOME/magus/detached/`, one file 
 
 ## Two transports
 
-The server has two listeners, one per audience. A **Unix domain socket** is the local
-control plane (the proc RPC that dispatches jobs, answers status, and adopts nested calls
-into one concurrency pool); it is fast and private (`0700`), and the local CLI -
-including the `--probe=liveness` and `--probe=readiness` checks - uses it. An **HTTP
-server** on `mcp.address` serves the clients that cannot reach a Unix socket: agents over
-[MCP](mcp.md) at `/mcp`, and orchestrators or scripts at the `/livez`, `/readyz`, and
+The server has two listeners, one per audience. Its **Unix domain socket**,
+`<sock-dir>/server.sock`, speaks HTTP, and everything a local process asks of the server
+is a path on it:
+
+| Path                                  | What it does                                                        |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| `POST /proc/v1/run`                   | run a forwarded or adopted command in the server's pool, and wait   |
+| `POST /proc/v1/jobs`                  | start a background job and return its invocation at once            |
+| `GET /proc/v1/status`                 | the pool, its running calls, the workspaces held, the listeners     |
+| `POST /proc/v1/reload`                | drop the workspaces held open so the next command re-reads config   |
+| `POST /proc/v1/shutdown`              | stop the server, as `magus server stop` does                        |
+| `/mcp`                                | [MCP](mcp.md#mcp-over-the-server-socket), when `mcp.enabled` allows |
+| `/magus.<pkg>.v1alpha1.<Service>/...` | every Connect API the console uses                                  |
+
+It takes no token. The socket sits in a private (`0700`) directory, and on Linux and macOS
+the server also asks the kernel for each connection's peer uid and admits only its own;
+anyone else gets `403` [MGS9022](../../reference/codes/auth/MGS9022.md). An admitted
+caller holds the `socket-peer` credential, `mcp=write` and `console=write`, and each path is
+held to the same need as on loopback. Where the platform cannot name a peer, the directory
+is the only boundary and the socket carries the `/proc/` paths alone. A per-process pool's
+`magus-<pid>-<rand>.sock` speaks the same `/proc/` paths.
+
+An **HTTP server** on `mcp.address` serves the clients that cannot reach a Unix socket:
+the console and other browsers, agents that take only a URL over [MCP](mcp.md) at `/mcp`
+with a bearer token, and orchestrators or scripts at the `/livez`, `/readyz`, and
 `/healthz` probe routes.
+
+A magus from before the socket spoke HTTP cannot talk to this one. A command that meets a
+server started by an older magus says so with
+[MGS3025](../../reference/codes/sandbox/MGS3025.md) and names the restart.
 
 <!--diagram:server-socket-->
 

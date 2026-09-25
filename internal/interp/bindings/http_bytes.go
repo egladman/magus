@@ -44,7 +44,7 @@ func registerHTTPBytes() vm.Value {
 		if err != nil {
 			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
 		}
-		if err := sandbox.FromContext(ctx).CheckReadCtx(ctx, path); err != nil {
+		if err := sandbox.PolicyFromContext(ctx).CheckRead(ctx, path); err != nil {
 			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
 		}
 		fi, err := os.Stat(path)
@@ -82,7 +82,7 @@ func httpUploadChunked(ctx context.Context, method, url, src string, chunkSize i
 	if err != nil {
 		return 0, "", fmt.Errorf("http.upload_chunked: %w", err)
 	}
-	if err := sandbox.FromContext(ctx).CheckReadCtx(ctx, src); err != nil {
+	if err := sandbox.PolicyFromContext(ctx).CheckRead(ctx, src); err != nil {
 		return 0, "", fmt.Errorf("http.upload_chunked: %w", err)
 	}
 	f, err := os.Open(src)

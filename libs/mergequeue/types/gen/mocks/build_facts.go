@@ -118,6 +118,152 @@ func (_c *MockBuildFacts_Affected_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// AllUnits provides a mock function for the type MockBuildFacts
+func (_mock *MockBuildFacts) AllUnits(ctx context.Context) ([]string, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AllUnits")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]string, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []string); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBuildFacts_AllUnits_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AllUnits'
+type MockBuildFacts_AllUnits_Call struct {
+	*mock.Call
+}
+
+// AllUnits is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockBuildFacts_Expecter) AllUnits(ctx interface{}) *MockBuildFacts_AllUnits_Call {
+	return &MockBuildFacts_AllUnits_Call{Call: _e.mock.On("AllUnits", ctx)}
+}
+
+func (_c *MockBuildFacts_AllUnits_Call) Run(run func(ctx context.Context)) *MockBuildFacts_AllUnits_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildFacts_AllUnits_Call) Return(strings []string, err error) *MockBuildFacts_AllUnits_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockBuildFacts_AllUnits_Call) RunAndReturn(run func(ctx context.Context) ([]string, error)) *MockBuildFacts_AllUnits_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AutoResolvable provides a mock function for the type MockBuildFacts
+func (_mock *MockBuildFacts) AutoResolvable(ctx context.Context, path string, base []byte, merged []byte) (string, bool, error) {
+	ret := _mock.Called(ctx, path, base, merged)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AutoResolvable")
+	}
+
+	var r0 string
+	var r1 bool
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []byte, []byte) (string, bool, error)); ok {
+		return returnFunc(ctx, path, base, merged)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []byte, []byte) string); ok {
+		r0 = returnFunc(ctx, path, base, merged)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []byte, []byte) bool); ok {
+		r1 = returnFunc(ctx, path, base, merged)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, []byte, []byte) error); ok {
+		r2 = returnFunc(ctx, path, base, merged)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockBuildFacts_AutoResolvable_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AutoResolvable'
+type MockBuildFacts_AutoResolvable_Call struct {
+	*mock.Call
+}
+
+// AutoResolvable is a helper method to define mock.On call
+//   - ctx context.Context
+//   - path string
+//   - base []byte
+//   - merged []byte
+func (_e *MockBuildFacts_Expecter) AutoResolvable(ctx interface{}, path interface{}, base interface{}, merged interface{}) *MockBuildFacts_AutoResolvable_Call {
+	return &MockBuildFacts_AutoResolvable_Call{Call: _e.mock.On("AutoResolvable", ctx, path, base, merged)}
+}
+
+func (_c *MockBuildFacts_AutoResolvable_Call) Run(run func(ctx context.Context, path string, base []byte, merged []byte)) *MockBuildFacts_AutoResolvable_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []byte
+		if args[2] != nil {
+			arg2 = args[2].([]byte)
+		}
+		var arg3 []byte
+		if args[3] != nil {
+			arg3 = args[3].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildFacts_AutoResolvable_Call) Return(verdict string, ok bool, err error) *MockBuildFacts_AutoResolvable_Call {
+	_c.Call.Return(verdict, ok, err)
+	return _c
+}
+
+func (_c *MockBuildFacts_AutoResolvable_Call) RunAndReturn(run func(ctx context.Context, path string, base []byte, merged []byte) (string, bool, error)) *MockBuildFacts_AutoResolvable_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Classify provides a mock function for the type MockBuildFacts
 func (_mock *MockBuildFacts) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
 	ret := _mock.Called(ctx, paths)

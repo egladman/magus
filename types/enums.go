@@ -98,3 +98,9 @@ var conflictKinds = enum.Set[ConflictKind]{"content", "deleted", "both-deleted"}
 func (v ConflictKind) Values() []string { return conflictKinds.Strings() }
 func (v ConflictKind) Valid() bool      { return conflictKinds.Valid(v) }
 func (v ConflictKind) String() string   { return enum.String(v) }
+
+// SandboxMode's String names the zero value as off rather than unset (see sandbox.go).
+var sandboxModes = enum.Set[SandboxMode]{SandboxModeOff, SandboxModeBestEffort, SandboxModeRequired}
+
+func (v SandboxMode) Values() []string { return sandboxModes.Strings() }
+func (v SandboxMode) Valid() bool      { return sandboxModes.Valid(v) }

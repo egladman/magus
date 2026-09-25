@@ -21,7 +21,7 @@ func detachRun(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	sink, closeSink, err := openSink(opts)
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return err
 	}

@@ -572,12 +572,44 @@ func busyWaitFires(command string, d Dialect) bool {
 		if found {
 			return false
 		}
-		if loop, ok := n.(*syntax.WhileClause); ok && bodyOnlySleeps(loop.Do, d) {
+		if body, ok := pollingLoop(n, d); ok && bodyOnlySleeps(body, d) {
 			found = true
 			return false
 		}
 		return true
 	})
+	return found
+}
+
+// pollingLoop reports whether n is a loop that polls, with its body. A while or until loop
+// always repeats; a for loop polls when its body sleeps between passes, since one over a
+// list without a sleep reads each item once. busy-wait and a command's Repeats both ask
+// this, so the engine holds one notion of a polling loop.
+func pollingLoop(n syntax.Node, d Dialect) ([]*syntax.Stmt, bool) {
+	switch n := n.(type) {
+	case *syntax.WhileClause:
+		return n.Do, true
+	case *syntax.ForClause:
+		return n.Do, sleepsIn(n.Do, d)
+	}
+	return nil, false
+}
+
+// sleepsIn reports whether body runs sleep anywhere, nested commands included.
+func sleepsIn(body []*syntax.Stmt, d Dialect) bool {
+	found := false
+	for _, stmt := range body {
+		syntax.Walk(stmt, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok {
+				for _, inv := range peelWrappers(literalWords(call.Args), d) {
+					if path.Base(inv.Name) == "sleep" {
+						found = true
+					}
+				}
+			}
+			return !found
+		})
+	}
 	return found
 }
 
@@ -740,7 +772,10 @@ var scriptedRewriteInterpreters = map[string]bool{
 // deliberately the only rule that reads heredoc text: for this rule the heredoc IS the
 // program, while for every other rule it is data, and folding it into the shared command
 // words would make a heredoc that merely quotes `sed -i` a refused edit.
-func scriptedRewriteFires(command string, d Dialect) bool {
+//
+// A script whose every named path lands outside the workspace is not this rule's
+// business, which is the promise the refusal text makes about scratch paths.
+func scriptedRewriteFires(command string, d Dialect, scope workspaceScope) bool {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return scriptedRewriteRe.MatchString(command)
@@ -763,11 +798,14 @@ func scriptedRewriteFires(command string, d Dialect) bool {
 				continue
 			}
 			if hasFlag(c.Args, 'i', "in-place") && path.Base(c.Name) != "node" {
-				found = true
-				return false
+				if !allOutside(scope, inPlaceFiles(c.Args)) {
+					found = true
+					return false
+				}
+				continue
 			}
-			script := strings.Join(c.Args, "\n") + "\n" + heredocText(st)
-			if substitutes(script) && strings.Contains(script, ".write(") {
+			script := interpreterScript(c.Args, heredocText(st))
+			if scriptRewrites(script) && !allOutside(scope, scriptPaths(script)) {
 				found = true
 				return false
 			}
@@ -794,6 +832,42 @@ func heredocText(st *syntax.Stmt) string {
 	return b.String()
 }
 
+// scriptRewrites reports a program that substitutes and writes the result back.
+func scriptRewrites(script string) bool {
+	return substitutes(script) && strings.Contains(script, ".write(")
+}
+
+// inPlaceFiles are the files a `perl -i`/`ruby -i` edits: its operands after the program,
+// which is the first operand unless -e supplied it.
+func inPlaceFiles(args []string) []string {
+	ops := operands(args, "eEIM")
+	if !hasFlag(args, 'e', "") && !hasFlag(args, 'E', "") && len(ops) > 0 {
+		ops = ops[1:]
+	}
+	return ops
+}
+
+// scriptPaths are the quoted strings in a program that read as paths: a separator or an
+// extension, and no whitespace.
+func scriptPaths(script string) []string {
+	var out []string
+	for _, lit := range quotedLiterals(script) {
+		if strings.ContainsAny(lit, " \t\n") {
+			continue
+		}
+		if strings.Contains(lit, "/") || path.Ext(lit) != "" {
+			out = append(out, lit)
+		}
+	}
+	return out
+}
+
+// allOutside reports a non-empty set of paths every one of which lands outside the
+// workspace. An empty set proves nothing, so it is never outside.
+func allOutside(scope workspaceScope, paths []string) bool {
+	return len(paths) > 0 && !slices.ContainsFunc(paths, func(p string) bool { return !scope.outside(p) })
+}
+
 // substitutes reports whether a script performs a regex or string substitution.
 func substitutes(script string) bool {
 	for _, call := range []string{"re.sub", "re.subn", "str.replace", ".replace("} {
@@ -804,73 +878,19 @@ func substitutes(script string) bool {
 	return false
 }
 
-// codeSearchFires reports a repo-wide CONTENT search: a recursive grep, or a bare ripgrep
-// or ag, both effectively always repo-wide. A plain `grep pattern file` reads one file and
-// is left alone.
-func codeSearchFires(cmds []hint.Invocation) bool {
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		switch path.Base(c.Name) {
-		case "grep", "egrep", "fgrep":
-			return hasFlag(c.Args, 'r', "recursive") || hasFlag(c.Args, 'R', "dereference-recursive")
-		case "rg", "ag":
-			return true
-		}
-		return false
-	})
-}
-
-// fileFindFires reports a repo-wide search for a file by NAME. `find . -type d` and `fd -t
-// d` list a tree rather than look a name up, and stay silent; fd is recursive by default,
-// so its admitting shapes are the name query itself.
-func fileFindFires(cmds []hint.Invocation) bool {
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		switch path.Base(c.Name) {
-		case "find":
-			return slices.Contains(c.Args, "-name") || slices.Contains(c.Args, "-iname")
-		case "fd":
-			return hasFlag(c.Args, 'e', "extension") || hasFlag(c.Args, 'g', "glob") ||
-				len(operands(c.Args, fdValueFlags)) > 0
-		}
-		return false
-	})
-}
-
-// docReaders are the commands that read or search a file's text.
-var docReaders = map[string]bool{
-	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,
-	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
-}
-
-// sourceReaders dump a whole file into context. Grep/rg are the code-search family
-// instead: those already route to refs when they look like a symbol hunt.
+// sourceReaders dump a whole file into context. A grep is not one: the symbol-search rule
+// answers a search that names an indexed symbol.
 var sourceReaders = map[string]bool{
 	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,
 }
 
 // sourceExt is the set of suffixes whose definition/use sites SCIP indexes answer
-// better than an unbounded read. Markdown is intentionally absent: docSearchFires
-// owns prose. A path that merely CONTAINS one of these strings in a flag value
+// better than an unbounded read. Markdown is absent: no symbol index answers prose. A path that merely CONTAINS one of these strings in a flag value
 // does not count; only operands do.
 var sourceExt = map[string]bool{
 	".go": true, ".buzz": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true,
 	".rs": true, ".py": true, ".c": true, ".h": true, ".cc": true, ".cpp": true,
 	".java": true, ".kt": true, ".swift": true, ".rb": true, ".cs": true, ".zig": true,
-}
-
-// docSearchFires reports a read or search pointed at a markdown file. Markdown headings are
-// indexed as doc-section nodes, so the answer is a section query rather than a whole-file
-// scan. It asks whether an OPERAND is markdown, so a pattern that merely contains ".md"
-// does not count.
-func docSearchFires(cmds []hint.Invocation) bool {
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		if !docReaders[path.Base(c.Name)] {
-			return false
-		}
-		// grep's -e/-f take a value, so a pattern file is not read as the target.
-		return slices.ContainsFunc(operands(c.Args, "ef"), func(a string) bool {
-			return strings.HasSuffix(a, ".md")
-		})
-	})
 }
 
 // sourceReadFires reports an unbounded dump of a source file (cat/head/less of a

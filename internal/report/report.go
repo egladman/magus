@@ -31,6 +31,7 @@ const Schema = 5
 // Type values stamped on every event line; stable across versions.
 const (
 	TypeTargetResult          = "run.target.result"
+	TypeTargetValue           = "run.target.value"
 	TypeGraphBuild            = "graph.build"
 	TypeGraphQuery            = "graph.query"
 	TypeGraphError            = "graph.error"
@@ -81,6 +82,15 @@ type TargetResult struct {
 	// field, because the printed line was measured converting at the rate of no hint
 	// at all.
 	Next []hint.Next `json:"next,omitempty"`
+}
+
+// TargetValue is what a target returned for one project, a str or a [str], once the run
+// has finished. A `> void` target records none. It is how a stage downstream in a pipe
+// reads a value (pipe.value) rather than scraping it from prose.
+type TargetValue struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	Value   any    `json:"value"`
 }
 
 // GraphBuild is one graph construction event, emitted once per Build.
@@ -184,6 +194,9 @@ type DiagnosticEmitted struct {
 type RunScope struct {
 	Label  string `json:"label"`
 	Source string `json:"source,omitempty"`
+	// Projects are the selected projects' workspace paths, "." for the root. A magus run
+	// reading this record from the stage upstream of it runs on them when it names none.
+	Projects []string `json:"projects,omitempty"`
 }
 
 // RunCharms reports the charms mixed into a run (e.g. magus.yaml default_charms),
@@ -327,6 +340,7 @@ func LevelName(l slog.Level) string {
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
 	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
 	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
+	reflect.TypeOf(TargetValue{}):           TypeTargetValue,
 	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
 	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
 	reflect.TypeOf(GraphError{}):            TypeGraphError,

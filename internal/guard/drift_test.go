@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -124,7 +125,7 @@ func TestScopeDriftRecordsNothingWithoutABase(t *testing.T) {
 // A worker writing inside the write paths its orchestrator declared is in scope by
 // declaration, whatever the graph says about the projects those paths span.
 func TestLeaseCoversWrite(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	base, root := t.TempDir(), t.TempDir()
 	location := location{cacheDir: base, workspace: root}
 	store := job.NewStore(job.Location{CacheDir: base, Root: root})

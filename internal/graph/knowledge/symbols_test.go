@@ -176,6 +176,53 @@ func TestSymbolsShardNaming(t *testing.T) {
 	assert.False(t, isSymbolsShard(runtimeShardName))
 }
 
+// A defining file carries the size FingerprintBodies counted; a file only referenced was
+// never read, so it carries none rather than a guessed zero.
+func TestAssembleSymbolsSizesDefiningFiles(t *testing.T) {
+	syms := []types.KnowledgeSymbol{{
+		Key: "example.com/foo Bar#", Label: "Bar", Language: "go", Source: "pkg/foo/foo.go:11",
+		SourceLines: 40, SourceBytes: 812,
+		Defs: []string{"pkg/foo/foo.go"},
+		Refs: []types.KnowledgeSymbolRef{{Path: "pkg/foo/use.go", Count: 1, Lines: []int{3}}},
+	}}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)}).Output()
+
+	def, ok := nodeByID(out, "file:pkg/foo/foo.go")
+	require.True(t, ok)
+	assert.Equal(t, map[string]string{"language": "go", AttrLines: "40", AttrBytes: "812"}, def.Attrs)
+	use, ok := nodeByID(out, "file:pkg/foo/use.go")
+	require.True(t, ok)
+	assert.Equal(t, map[string]string{"language": "go"}, use.Attrs)
+}
+
+func TestGraphDefinitions(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11", DefEndLine: 20, BodyDigest: "abc", Defs: []string{"pkg/foo/foo.go"}},
+		{Key: "example.com/foo Baz.", Label: "Baz", Source: "pkg/foo/foo.go:30", Defs: []string{"pkg/foo/foo.go"}},
+	}
+	g := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)})
+
+	out, ok := g.Definitions("symbol:example.com/foo Bar#")
+	require.True(t, ok)
+	assert.Equal(t, types.KnowledgeDefinitionsOutput{
+		Definition:    types.KnowledgeDefinitionsDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Symbol:        "symbol:example.com/foo Bar#",
+		Label:         "Bar",
+		Definitions: []types.KnowledgeDefinitionSite{{
+			File: "pkg/foo/foo.go", StartLine: 11, EndLine: 20, Status: types.DefinitionUnverified,
+		}},
+	}, out)
+
+	// No enclosing range was recorded: the end stays 0 rather than a guess.
+	out, ok = g.Definitions("symbol:example.com/foo Baz.")
+	require.True(t, ok)
+	assert.Equal(t, []types.KnowledgeDefinitionSite{{File: "pkg/foo/foo.go", StartLine: 30, Status: types.DefinitionUnverified}}, out.Definitions)
+
+	_, ok = g.Definitions("symbol:example.com/foo Nope#")
+	assert.False(t, ok)
+}
+
 // TestAssembleSymbolsRefOnly: a symbol seen only as a reference (its definition is in
 // another index) still yields a node, with no def edge.
 func TestAssembleSymbolsRefOnly(t *testing.T) {

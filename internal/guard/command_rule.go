@@ -3,7 +3,6 @@ package guard
 import (
 	"cmp"
 	"context"
-	"path/filepath"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -57,8 +56,8 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	if deps.CheckoutState != nil {
-		if dir, ok := gitPushDir(req.Commands, cmp.Or(at.dir, at.workspace)); ok {
-			req.Checkout = deps.CheckoutState(ctx, dir)
+		if push, ok := locatePush(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
+			req.Checkout = deps.CheckoutState(ctx, push.dir)
 		}
 	}
 	bind := func(rule workspace.CommandRule) ruleCall {
@@ -107,30 +106,6 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 	}
 }
 
-// gitPushDir is the directory the first `git push` on a line runs in, the one command whose
-// rule needs the checkout's state: dir, moved by each `-C` git is given, as git
-// applies them. False when the line pushes nothing.
-func gitPushDir(cmds []types.CommandInvocation, dir string) (string, bool) {
-	for _, c := range cmds {
-		if c.Program != "git" {
-			continue
-		}
-		if ops := operands(c.Args, "C"); len(ops) == 0 || ops[0] != "push" {
-			continue
-		}
-		for i := 0; i+1 < len(c.Args) && c.Args[i] != "push"; i++ {
-			if c.Args[i] == "-C" {
-				dir = filepath.Join(dir, c.Args[i+1])
-				if filepath.IsAbs(c.Args[i+1]) {
-					dir = c.Args[i+1]
-				}
-			}
-		}
-		return dir, true
-	}
-	return "", false
-}
-
 // actingRole is where a caller acting under lease stands, and the lease's job row. A bound
 // id the job store does not carry comes back with only its ID set, so the rule can tell a
 // dangling binding from no binding.
@@ -153,8 +128,8 @@ func actingRole(ctx context.Context, at location, lease string) (types.AgentRole
 }
 
 // commandInvocations resolves a shell line into the programs it runs, the way
-// ParseCommandsDialect does, and marks each one a while or until loop repeats. Nil when
-// the line does not parse.
+// ParseCommandsDialect does, and marks each one a polling loop repeats (pollingLoop). Nil
+// when the line does not parse.
 //
 // A loop inside a wrapper's script (`sh -c 'while ...'`) is not marked: the wrapper's
 // payload is parsed on its own, outside the loop walk.
@@ -168,9 +143,8 @@ func commandInvocations(command string, d Dialect) []types.CommandInvocation {
 	visit = func(root syntax.Node, repeats bool) {
 		syntax.Walk(root, func(n syntax.Node) bool {
 			switch n := n.(type) {
-			case *syntax.WhileClause:
-				// WhileClause is also the until loop.
-				if !repeats && syntax.Node(n) != root {
+			case *syntax.WhileClause, *syntax.ForClause:
+				if _, polls := pollingLoop(n, d); polls && !repeats && n != root {
 					visit(n, true)
 					return false
 				}

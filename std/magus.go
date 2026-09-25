@@ -300,6 +300,22 @@ var Magus = Module{
 			Extern:  true,
 		},
 		{
+			Name: "skills",
+			Doc: "Every skill this workspace offers an agent, sorted by name then form: each {name, description, source, form, body, current}. " +
+				"source is `shipped` for magus's own catalog, which yields a `short` and a `full` entry per skill, or `local` for a hand-authored " +
+				"skill found in an installed skills directory (a wired harness's skill paths, where `magus agent install` writes), which yields one entry with form `full`. " +
+				"body is exactly what an agent loads: the SKILL.md text with its frontmatter excluded, the generated footer kept. " +
+				"current is true when every installed copy of that entry is byte-equal to what this magus would install, false when one differs or none is installed, and always true for a local skill. " +
+				"opts.name selects one skill and raises on a name nothing offers, naming the near matches; opts.form (`short`, `full`, or `both`, the default) narrows the shipped entries and leaves local ones alone. " +
+				"An unknown option raises. Pair it with magus\\job.put and magus\\describe([\"job\", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. " +
+				"Read from the workspace on the context; raises MGS1022 in a script run outside one.",
+			// Extern because the catalog lives in internal/agent, which imports std.
+			Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Skill]"}},
+			Raises:  true,
+			Extern:  true,
+		},
+		{
 			Name:    "canonical_name",
 			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
 			Args:    []Arg{{Name: "name", Type: TypeString}},
@@ -765,6 +781,25 @@ var magusMCPTools = []MCPTool{
 			{Name: "target", Type: TypeString, Required: true, Doc: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
 			{Name: "base", Type: TypeString, Doc: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
 			{Name: "dry_run", Type: TypeBool, Doc: "Print what would run without executing."},
+		},
+	},
+	{
+		// No Member: the tool is the CLI verb itself, forked, so a script sees exactly
+		// the host surface `magus buzz` gives it and cannot reach the server's stdio.
+		Name: hint.ToolBuzz.String(),
+		Doc: "Run a Buzz program and return its stdout, stderr and exit status; stdout that parses as JSON also comes back parsed under `json`. " +
+			"It is `" + hint.Buzz.String() + "`, forked in the workspace root: the whole magus host surface (fs, encoding/json, encoding/yaml, vcs, strings, the magus namespace's graph and workspace reads) with no dependency install; `" + hint.Describe.With("modules") + "` lists the import paths. " +
+			"Use it to transform another tool's output instead of a shell one-liner: pass that output as stdin and read it with io\\stdin.readAll(). " +
+			"Parsing is upstream-strict, and a top-level fun main(args: [str]) runs automatically with args. " +
+			"A compile or runtime error is a tool error carrying the diagnostic (BZZ code, line:col). " +
+			"`" + hint.Buzz.String() + "` has no read-only mode, so a script reaches whatever its fs, proc and http modules can: every call must pass write=true to accept that, and a call without it is refused before anything runs. " +
+			"Bounded by the workspace target_timeout, or five minutes when that is unset.",
+		Params: []MCPParam{
+			{Name: "script", Type: TypeString, Doc: "Inline Buzz source, run as `magus buzz -e`. Exactly one of script or path."},
+			{Name: "path", Type: TypeString, Doc: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
+			{Name: "args", Type: TypeString, Doc: "The script's argv, the [str] main receives: space-separated, or a JSON array of strings when an argument holds whitespace."},
+			{Name: "stdin", Type: TypeString, Doc: "Text fed to the script's standard input, e.g. a prior tool's JSON result. Omit for an empty stdin."},
+			{Name: "write", Type: TypeBool, Doc: "Required true: accepts that the script may write, since `magus buzz` cannot confine it to reads. The call is refused without it."},
 		},
 	},
 	{
@@ -1624,8 +1659,8 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // object) when the child can't launch or exits non-zero, mirroring proc.exec. label
 // names the calling method for error messages.
 //
-// The child runs in the working directory carried by ctx (WithCwd), so a nested project
-// describes its own project rather than the root workspace. opts may carry "root",
+// The child runs in the working directory carried by ctx (WithCwd) but loads the whole
+// workspace, so a command scoped to one project names it. opts may carry "root",
 // emitted as the global --root flag, which precedes the subcommand.
 // nestedExecOptions is how a nested magus is launched: where it runs, what it inherits, and
 // what it is fed.

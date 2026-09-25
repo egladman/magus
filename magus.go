@@ -29,11 +29,13 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -173,7 +175,7 @@ type Magus struct {
 // the console and its API routes. The CLI injects it under `magus server` ONLY, so
 // ordinary command paths never construct one, and it is an interface so the root magus
 // package need not import the handler packages that depend on it. The concrete
-// *serverhttp.Server satisfies it.
+// *server.Server satisfies it.
 type Server interface {
 	Serve(ctx context.Context) error
 }
@@ -875,6 +877,89 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
+// ChangeClassifier is the workspace's change risk classifier (internal/risk), the one the
+// ci gate, CI verdict inheritance and merge auto-resolution share: describe-file roles,
+// the effective gate_low_risk prose globs, and the comment syntax the projects' spells
+// declare. at reads a file at the revision a delta is measured from and working its
+// changed content; with either nil, a comment-only edit classifies as code.
+func (m *Magus) ChangeClassifier(at func(ctx context.Context, rev, path string) (string, error), working func(path string) (string, error)) risk.Classifier {
+	var resolved []*spells.Spell
+	for _, p := range m.All() {
+		resolved = append(resolved, p.ResolvedSpells...)
+	}
+	return risk.Classifier{
+		At:      at,
+		Working: working,
+		Role: func(ctx context.Context, paths []string) (map[string]string, error) {
+			entries, err := m.ClassifyFiles(ctx, paths)
+			if err != nil {
+				return nil, err
+			}
+			roles := make(map[string]string, len(entries))
+			for _, e := range entries {
+				roles[e.Path] = e.Role
+			}
+			return roles, nil
+		},
+		Prose:  risk.ProseScopes(m.All()),
+		Syntax: spells.CommentSyntaxIndex(resolved),
+	}
+}
+
+// AutoResolvable reports whether a conflicted path a three-way merge settled may be
+// settled without a person: the edit from base, the merge base's content, to merged is
+// low risk by ChangeClassifier (generated, prose, comment-only), or path is code a
+// project's merge_low_risk claims. verdict is the classifier's line for the path,
+// `<path>: <class> (<why>)`, either way.
+func (m *Magus) AutoResolvable(ctx context.Context, path string, base, merged []byte) (verdict string, ok bool) {
+	v, ok := m.ChangeClassifier(nil, nil).Merge(ctx, path, string(base), string(merged), risk.MergeScopes(m.All()))
+	return v.Line(), ok
+}
+
+// AutoResolve settles a conflicted path the way the merge queue does: merge3 settles every
+// region both sides changed, by the same rule, and AutoResolvable allows the result. It
+// returns the merge when it settles; report names the path's class and why, and each
+// region as a location (path#declaration) with how it settled, either way.
+func (m *Magus) AutoResolve(ctx context.Context, path string, base, ours, theirs []byte) (merged []byte, report string, ok bool) {
+	res, ok := merge3.Resolve(path, base, ours, theirs)
+	if !ok {
+		if len(res.Regions) == 0 {
+			return nil, path + ": binary, or too far from the merge base to merge by line", false
+		}
+		return nil, res.Label(), false
+	}
+	verdict, ok := m.AutoResolvable(ctx, path, base, res.Content)
+	report = verdict + "; " + res.Label()
+	if !ok {
+		return nil, report, false
+	}
+	return res.Content, report, true
+}
+
+// MergeMarkers is the three-way merge a person finishes by hand: what AutoResolve's merge
+// settles, and every other region between conflict markers markerSize wide. It reports
+// false for input no line merge applies to.
+func MergeMarkers(base, ours, theirs []byte, markerSize int) ([]byte, bool) {
+	return merge3.Markers(base, ours, theirs, markerSize)
+}
+
+// AutoResolveGlobs are the workspace-relative globs a merge driver registration routes to
+// magus for auto-resolution: the declared gate_low_risk and merge_low_risk globs, sorted
+// and deduplicated, since they are rendered into tracked VCS config. The built-in
+// markdown defaults are not routed: a workspace that declares nothing keeps the VCS
+// config it had, and the queue, which needs no routing, still applies them. A
+// comment-only edit has no glob, so a VCS that picks its tool by path reaches it only in
+// a routed file.
+func (m *Magus) AutoResolveGlobs() []string {
+	var globs []string
+	for _, s := range slices.Concat(risk.ProseScopes(m.All()), risk.MergeScopes(m.All())) {
+		if s.Origin != risk.ProseOriginDefault {
+			globs = append(globs, s.WorkspaceGlobs()...)
+		}
+	}
+	return slices.Compact(slices.Sorted(slices.Values(globs)))
+}
+
 // DiffTUIEnabled reports whether `magus diff` may open its viewer, per workspace config.
 //
 // One question rather than an exported Config accessor: the caller needs this answer, not the
@@ -1003,6 +1088,28 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string
 			types.ErrVCSUnsupported)
 	}
 	return res.VCS.RangeDiff(ctx, m.ws.Root, base, head, paths)
+}
+
+// Regions is the workspace's footprint since base: files, as ChangedFiles reported them,
+// refined into the declaration every changed line of the working tree falls in, per
+// [types.RegionReporter]. It is the one implementation the job store's overlap report and
+// the merge queue's independence proof both read, so two callers comparing footprints are
+// comparing the same computation.
+//
+// Refused, never answered empty, for the reason RangeDiff gives: an empty footprint reads as
+// "this change touched nothing".
+func (m *Magus) Regions(ctx context.Context, base string, files []types.FileChange) ([]types.RegionChange, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the version control backend: %w", err)
+	}
+	if res.VCS == nil {
+		return nil, fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so there is no diff to place"),
+			types.ErrVCSUnsupported)
+	}
+	return res.VCS.Regions(ctx, m.ws.Root, base, files)
 }
 
 // RevisionCheckpoint resolves a revision expression to the checkpoint that names it.

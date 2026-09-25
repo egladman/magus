@@ -141,6 +141,24 @@ func WithGateLowRisk(globs ...string) ProjectOption {
 	}
 }
 
+// WithMergeLowRisk declares the code globs a merge may settle without a person
+// (magus.project's "merge_low_risk"). Escaping globs are refused for
+// WithGateLowRisk's reason.
+func WithMergeLowRisk(globs ...string) ProjectOption {
+	return func(p *types.Project) error {
+		for _, raw := range globs {
+			glob := path.Clean(raw)
+			rooted := types.RootGlob(p.Path, glob)
+			if rooted == ".." || strings.HasPrefix(rooted, "../") {
+				return fmt.Errorf("magus: project %q: merge_low_risk glob %q escapes the workspace root "+
+					"(it resolves to %q); it would opt nothing in", p.Path, raw, rooted)
+			}
+			p.MergeLowRisk = append(p.MergeLowRisk, glob)
+		}
+		return nil
+	}
+}
+
 // WithGateInheritOff declares that this workspace's CI plan never inherits a
 // green run's verdict (magus.project's "gate_inherit": false). Off is the only
 // declaration that exists: on is the default, and a switch that restates it

@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +48,7 @@ func stubPool(t *testing.T, saturated bool) {
 // must let a reader reconstruct the decision: the green gate's run ref, branch
 // and timestamp, the finding, the pool state, the override, the alternative.
 func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
@@ -76,7 +77,7 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 // record pointing at the green gate, and that record never shadows the green
 // verdict: the next evaluation still finds it and still refuses.
 func TestGateRefusalRecordsDeferral(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
@@ -119,7 +120,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 // from the server, ordinary commands run without a persistent one, so the idle branch was
 // the one every real redundant gate took.
 func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
@@ -136,7 +137,7 @@ func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 // TestGateEvaluateInertWithoutRecord: the first gate on a branch always runs,
 // even under load, with no output from the feature at all.
 func TestGateEvaluateInertWithoutRecord(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	stubPool(t, true)
 
@@ -147,7 +148,7 @@ func TestGateEvaluateInertWithoutRecord(t *testing.T) {
 // TestGateEvaluateOverride: --no-redundancy-check runs under load with a green
 // gate on record.
 func TestGateEvaluateOverride(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
@@ -160,7 +161,7 @@ func TestGateEvaluateOverride(t *testing.T) {
 // TestGateEvaluateOtherBranch: a record for another branch says nothing about
 // this one.
 func TestGateEvaluateOtherBranch(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
@@ -173,7 +174,7 @@ func TestGateEvaluateOtherBranch(t *testing.T) {
 // TestGateEvaluateFailedRecord: a recorded FAIL never defers, whatever the
 // fingerprint says.
 func TestGateEvaluateFailedRecord(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
@@ -191,7 +192,7 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 // TestGateEvaluateNestedNeverRefuses: a magus under another magus reads its
 // own ancestors' claims as load, so it advises instead of refusing.
 func TestGateEvaluateNestedNeverRefuses(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "1")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
@@ -211,18 +212,18 @@ func TestGateRenderFindingDelta(t *testing.T) {
 			GateResult: sessions.GateResult{Ref: "b", Commit: "c1", Fingerprint: "fp-1", Inv: "inv123"},
 			At:         time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC),
 		},
-		delta: internalci.GateDelta{Paths: []internalci.ClassifiedPath{
-			{Path: "docs/a.md", Class: internalci.ClassProse, Why: `matches "**/*.md" (built-in default)`},
-			{Path: "gen/kg.json", Class: internalci.ClassGenerated, Why: "a declared output glob claims it"},
-			{Path: "run.go", Class: internalci.ClassCommentOnly, Why: "only comments differ from the green gate's revision"},
-		}},
+		delta: risk.Delta{Paths: []risk.Classified{
+			{Path: "docs/a.md", Class: risk.ClassProse, Why: `matches "**/*.md" (built-in default)`},
+			{Path: "gen/kg.json", Class: risk.ClassGenerated, Why: "a declared output glob claims it"},
+			{Path: "run.go", Class: risk.ClassCommentOnly, Why: "only comments differ from the revision compared against"},
+		}}.Lines(),
 	}
 	got := g.renderFinding(f)
 	assert.Contains(t, got, "green gate: run inv123, branch b, commit c1, recorded 2026-09-03T10:00:00Z")
 	assert.Contains(t, got, "delta since that gate, every file:")
 	assert.Contains(t, got, `docs/a.md: prose (matches "**/*.md" (built-in default))`, "names the classifying glob and its origin")
 	assert.Contains(t, got, "gen/kg.json: generated (a declared output glob claims it)")
-	assert.Contains(t, got, "run.go: comment-only (only comments differ from the green gate's revision)")
+	assert.Contains(t, got, "run.go: comment-only (only comments differ from the revision compared against)")
 	lines := strings.Split(got, "\n")
 	assert.Len(t, lines, 5, "one line per file, plus the header lines; never a summary")
 }
@@ -268,7 +269,7 @@ func TestGateRenderFindingNamesTheUndeclaredSeeds(t *testing.T) {
 // run had nothing left to add, so testing runErr alone saw a clean finish. MGS3010 then
 // refused every later gate on that commit, citing a pass over nine projects nothing ran.
 func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
@@ -296,7 +297,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 // full re-run of a gate that genuinely passed. The context is cancelled here to prove the
 // decision no longer turns on it.
 func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)

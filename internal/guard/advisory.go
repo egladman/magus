@@ -13,8 +13,6 @@ import (
 
 const (
 	advisoryStaleBinary   hint.MarkerKind = "stale-binary"
-	advisoryCodeSearch    hint.MarkerKind = "code-search"
-	advisoryDocSearch     hint.MarkerKind = "doc-search"
 	advisorySourceRead    hint.MarkerKind = "source-read"
 	advisoryPrecedent     hint.MarkerKind = "precedent-search"
 	advisoryStageClassify hint.MarkerKind = "stage-classify"
@@ -28,6 +26,10 @@ const (
 	advisoryNewFile       hint.MarkerKind = "new-file"
 	advisoryLeaseTerminal hint.MarkerKind = "lease-terminal"
 	advisoryLeaseInvalid  hint.MarkerKind = "lease-invalid"
+	// advisoryLeasedPath is a write into paths a live lease owns, by a caller naming no
+	// lease. It was the most served advisory in the 2026-09-24 audit, 8,419 of 16,240, one
+	// per edit; it is held per lease, see leasedPathKey.
+	advisoryLeasedPath hint.MarkerKind = "leased-path"
 	// advisorySplitRun covers two shapes of the same mistake: `magus run` (or `affected`)
 	// takes one target and many projects, so the same target run twice on different
 	// project sets is usually one call typed twice. On ONE line it is a denyRuleName,
@@ -90,4 +92,12 @@ const (
 func advisoryFocusPath(rel string) hint.MarkerKind {
 	sum := sha256.Sum256([]byte(rel))
 	return advisoryFocus + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+}
+
+// leasedPathKey holds the leased-path advisory once per session per LEASE, hashed for the
+// reason advisoryFocusPath is. The subject is the lease, not the file: a second path the
+// same lease owns teaches nothing the first did not.
+func leasedPathKey(lease string) hint.MarkerKind {
+	sum := sha256.Sum256([]byte(lease))
+	return advisoryLeasedPath + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
 }

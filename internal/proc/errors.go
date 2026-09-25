@@ -16,11 +16,14 @@ var (
 
 	// ErrCycleDetected is set in runReply.Err when the same (target, project) pair is already in-flight.
 	ErrCycleDetected = errors.New("proc: cycle detected in nested magus invocation")
+
+	// ErrTokenRefused answers a /proc/ request that did not carry the server's token.
+	ErrTokenRefused = errors.New("proc: request refused: it does not carry this server's token")
 )
 
 // notAdoptedError is a proc sentinel for a forwarded call the server did not adopt:
 // the server is alive and answered, but will not take this call: its subcommand does
-// not adopt a server, or the client's build/protocol is incompatible with the
+// not adopt a server, or the client's build is incompatible with the
 // server's. The caller runs the command locally, quietly, rather than warning. The
 // classification lives ON the error (a NotAdopted() bool method, in the spirit of
 // net.Error's Temporary()/Timeout() and Temporal's application errors), so callers ask
@@ -40,13 +43,10 @@ var (
 
 	// ErrVersionMismatch: the client's build version differs from the server's.
 	ErrVersionMismatch error = &notAdoptedError{"proc: version mismatch between parent and child magus"}
-
-	// ErrProtocolMismatch: the client sent an unrecognized non-empty Protocol value.
-	ErrProtocolMismatch error = &notAdoptedError{"proc: protocol version mismatch"}
 )
 
 // NotAdopted reports whether err (or any error it wraps) is a call the server did
-// not adopt (a non-adoptable subcommand, or a build/protocol mismatch on an otherwise
+// not adopt (a non-adoptable subcommand, or a build mismatch on an otherwise
 // adoptable one): the server answered but will not take the call, so a caller runs it
 // locally and quietly instead of treating it as a failure. Prefer this over matching
 // the individual sentinels: it stays correct as reasons are added and sees through
@@ -93,12 +93,12 @@ func ExitCode(err error) (int, bool) {
 // unrecognized message becomes a plain error.
 func decodeWireError(msg string) error {
 	switch msg {
-	case ErrProtocolMismatch.Error():
-		return ErrProtocolMismatch
 	case ErrVersionMismatch.Error():
 		return ErrVersionMismatch
 	case ErrCycleDetected.Error():
 		return ErrCycleDetected
+	case ErrTokenRefused.Error():
+		return ErrTokenRefused
 	}
 	if strings.HasPrefix(msg, ErrNotAdoptable.Error()+":") {
 		return fmt.Errorf("%w%s", ErrNotAdoptable, strings.TrimPrefix(msg, ErrNotAdoptable.Error()))

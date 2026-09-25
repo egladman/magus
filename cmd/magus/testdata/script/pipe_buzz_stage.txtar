@@ -1,0 +1,133 @@
+# A `magus buzz` script is a stage of a magus pipe: it reads the records of the run
+# before it as typed values and emits records the run after it reads.
+[windows] skip 'no kernel API proves the peers of an anonymous pipe'
+
+# A failures filter in place of `| grep FAIL`. The run failed, so the pipeline does too,
+# with the failed stage's status, after the script has listed what failed.
+! exec bash -c 'magus run test | magus buzz failures.buzz'
+stdout '^FAIL b:test  magus query output out[0-9a-f]+$'
+! stdout 'a:test'
+stderr 'MGS3030'
+
+# run | buzz | run: a script passing every record on hands the run after it the
+# projects the first run ran on.
+rm log/order
+exec bash -c 'set -o pipefail; magus run format a | magus buzz relay.buzz | magus run lint'
+cmp log/order want-relay
+
+# A script choosing the projects emits a run.scope naming them.
+rm log/order
+exec bash -c 'set -o pipefail; magus run format a | magus buzz pick.buzz | magus run lint'
+cmp log/order want-pick
+
+# A stage whose stdout is its product, like a plan, writes no records; a script reads it
+# from stdin as it is, and its own records still steer the run after it.
+rm log/order
+exec bash -c 'set -o pipefail; magus affected lint --plan --stdin < changed | magus buzz plan.buzz | magus run lint'
+cmp log/order want-plan
+
+# A script that fails fails the pipeline, and the run after it starts nothing.
+rm log/order
+! exec bash -c 'magus buzz boom.buzz | magus run lint'
+stderr 'MGS3030'
+! exists log/order
+
+# Read without a magus stage feeding it records, a script raises rather than reading
+# nothing and passing for "no failures".
+! exec bash -c 'echo x | magus buzz failures.buzz'
+stderr 'no magus stage writing records feeds'
+
+-- changed --
+b/magusfile.buzz
+-- want-relay --
+format a
+lint a
+-- want-pick --
+format a
+lint b
+-- want-plan --
+lint b
+-- failures.buzz --
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    while (pipe\more()) {
+        final rec = pipe\next();
+        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+            std\print("FAIL {rec.project}:{rec.target}  magus query output {rec.ref}");
+        }
+    }
+}
+-- relay.buzz --
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        pipe\emit(rec);
+    }
+}
+-- pick.buzz --
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    pipe\all();
+    pipe\emit(pipe\PipeRecord{ @"type" = "run.scope", projects = ["b"] });
+}
+-- plan.buzz --
+import "io";
+import "pipe";
+import "serialize";
+
+fun main(args: [str]) > void !> any {
+    final plan = serialize\jsonDecode(io\stdin.readAll());
+    final projects: mut [str] = mut [];
+    foreach (p in plan.q("affected").listValue()) {
+        projects.append(p.stringValue());
+    }
+    pipe\emit(pipe\PipeRecord{ @"type" = "run.scope", projects = projects });
+}
+-- boom.buzz --
+fun main(args: [str]) > void !> any {
+    throw "boom";
+}
+-- log/.keep --
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "pipe-root"});
+-- a/magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({"targets": {
+    "format": {"skip_cache": "logs per invocation"},
+    "lint": {"skip_cache": "logs per invocation"},
+    "test": {"skip_cache": "logs per invocation"},
+}});
+
+fun mark(what: str) > void !> any {
+    proc\exec("sh", ["-c", "echo {what} >> ../log/order"]);
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void !> any { mark("format a"); }
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { mark("lint a"); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { }
+-- b/magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({"targets": {
+    "lint": {"skip_cache": "logs per invocation"},
+    "test": {"skip_cache": "fails per invocation"},
+}});
+
+fun mark(what: str) > void !> any {
+    proc\exec("sh", ["-c", "echo {what} >> ../log/order"]);
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { mark("lint b"); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { throw "b is broken"; }

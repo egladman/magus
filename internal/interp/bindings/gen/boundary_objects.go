@@ -1081,6 +1081,43 @@ func ObjectDriftResult(v types.DriftResult) vm.Value {
 	return out
 }
 
+func ObjectPipeRecord(v types.PipeRecord) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("schema", vm.IntValue(int64(v.Schema)))
+	out.MapSet("type", vm.StrValue(v.Type))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("status", vm.StrValue(v.Status))
+	out.MapSet("error", vm.StrValue(v.Error))
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	itemsProjects := make([]vm.Value, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = vm.StrValue(v.Projects[indexProjects])
+	}
+	out.MapSet("projects", vm.ListValue(itemsProjects))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectTargetArtifact(v types.TargetArtifact) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	out.MapSet("project", vm.StrValue(v.ProjectPath))
+	return out
+}
+
+func ObjectArtifactVersion(v types.ArtifactVersion) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("blob", vm.StrValue(v.Blob))
+	out.MapSet("short", vm.StrValue(v.Short))
+	out.MapSet("size", vm.IntValue(int64(v.Size)))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("created", vm.StrValue(v.Created))
+	out.MapSet("entry", vm.StrValue(v.Entry))
+	return out
+}
+
 func ObjectShellCommand(v types.ShellCommand) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("bin", vm.StrValue(v.Bin))
@@ -1201,6 +1238,11 @@ func ObjectCommand(v spells.Command) vm.Value {
 		itemsDefaultArgs[indexDefaultArgs] = vm.StrValue(v.DefaultArgs[indexDefaultArgs])
 	}
 	out.MapSet("defaultArgs", vm.ListValue(itemsDefaultArgs))
+	itemsTrailingArgs := make([]vm.Value, len(v.TrailingArgs))
+	for indexTrailingArgs := range v.TrailingArgs {
+		itemsTrailingArgs[indexTrailingArgs] = vm.StrValue(v.TrailingArgs[indexTrailingArgs])
+	}
+	out.MapSet("trailingArgs", vm.ListValue(itemsTrailingArgs))
 	mappedCharms := vm.NewMap()
 	for keyCharms, itemCharms := range v.Charms {
 		mappedCharms.MapSet(keyCharms, ObjectCharm(itemCharms))
@@ -1569,6 +1611,8 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
+	out.MapSet("checkoutRoot", vm.StrValue(v.CheckoutRoot))
+	out.MapSet("endReason", vm.StrValue(v.EndReason))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))
 	out.MapSet("deadline", vm.IntValue(int64(v.Deadline)))
@@ -1595,6 +1639,40 @@ func ObjectJob(v types.Job) vm.Value {
 	return out
 }
 
+func ObjectFileChange(v types.FileChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("prevPath", vm.StrValue(v.PrevPath))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	return out
+}
+
+func ObjectRegionChange(v types.RegionChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", ObjectFileChange(v.File))
+	out.MapSet("side", vm.StrValue(string(v.Side)))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.IntValue(int64(v.Lines[indexLines]))
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	out.MapSet("declaration", vm.StrValue(v.Declaration))
+	out.MapSet("driver", vm.StrValue(v.Driver))
+	return out
+}
+
+func ObjectJobOverlapFootprint(v types.JobOverlapFootprint) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("verdict", vm.StrValue(v.Verdict))
+	itemsShared := make([]vm.Value, len(v.Shared))
+	for indexShared := range v.Shared {
+		itemsShared[indexShared] = vm.StrValue(v.Shared[indexShared])
+	}
+	out.MapSet("shared", vm.ListValue(itemsShared))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
 func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("jobA", vm.StrValue(v.JobA))
@@ -1609,6 +1687,12 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 		itemsPathsB[indexPathsB] = vm.StrValue(v.PathsB[indexPathsB])
 	}
 	out.MapSet("pathsB", vm.ListValue(itemsPathsB))
+	out.MapSet("claims", vm.StrValue(v.Claims))
+	optFootprint := vm.Null
+	if v.Footprint != nil {
+		optFootprint = ObjectJobOverlapFootprint((*v.Footprint))
+	}
+	out.MapSet("footprint", optFootprint)
 	return out
 }
 
@@ -1693,6 +1777,18 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])
 	}
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
+	itemsFootprint := make([]vm.Value, len(v.Footprint))
+	for indexFootprint := range v.Footprint {
+		itemsFootprint[indexFootprint] = ObjectRegionChange(v.Footprint[indexFootprint])
+	}
+	out.MapSet("footprint", vm.ListValue(itemsFootprint))
+	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))
+	out.MapSet("footprintReason", vm.StrValue(v.FootprintReason))
+	itemsFootprintUnclaimed := make([]vm.Value, len(v.FootprintUnclaimed))
+	for indexFootprintUnclaimed := range v.FootprintUnclaimed {
+		itemsFootprintUnclaimed[indexFootprintUnclaimed] = vm.StrValue(v.FootprintUnclaimed[indexFootprintUnclaimed])
+	}
+	out.MapSet("footprintUnclaimed", vm.ListValue(itemsFootprintUnclaimed))
 	return out
 }
 
@@ -1813,5 +1909,16 @@ func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
+func ObjectSkill(v types.Skill) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("form", vm.StrValue(v.Form))
+	out.MapSet("body", vm.StrValue(v.Body))
+	out.MapSet("current", vm.BoolValue(v.Current))
 	return out
 }

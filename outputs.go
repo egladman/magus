@@ -18,22 +18,6 @@ func (m *Magus) ResolveProjects(targets []types.Target) []*types.Project {
 	return m.targetProjects(targets)
 }
 
-// TargetArtifact is one file a target actually produced: a declared output glob
-// expanded against the working tree. Glob is carried alongside Path because the
-// declaration is what makes the file a build artifact rather than an incidental
-// file, and a reader chasing an unexpected artifact needs to know which
-// ctx.writesFiles(...) claimed it.
-type TargetArtifact struct {
-	Path string // workspace-relative
-	Glob string // the declaration it matched
-	// ProjectPath is the project whose target DECLARED the glob, not necessarily the
-	// project the file sits in, since a target may declare an output into another
-	// project's tree. Recorded here because this is the only place that knows it: a
-	// consumer re-deriving attribution from Path has to guess, and the guess fails
-	// outright for a file no project's tree claims.
-	ProjectPath string
-}
-
 // ResolveTargetOutputs expands the output globs target declares for each project
 // into the files that exist on disk right now.
 //
@@ -43,8 +27,8 @@ type TargetArtifact struct {
 //
 // This is the question an agent otherwise has to guess at: a build says it passed,
 // and where the artifact landed is left to be inferred from the target's name.
-func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Project, target string) ([]TargetArtifact, error) {
-	var found []TargetArtifact
+func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Project, target string) ([]types.TargetArtifact, error) {
+	var found []types.TargetArtifact
 	// buildStep's Outputs are WORKSPACE-relative ("api/dist/*.txt"), unlike
 	// Project.AllOutputs which is project-relative. Globbing them against the project
 	// dir looked for api/api/dist/*.txt and silently found nothing, and the root
@@ -71,12 +55,12 @@ func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Proj
 				if err != nil {
 					continue
 				}
-				found = append(found, TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, ProjectPath: p.Path})
+				found = append(found, types.TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, ProjectPath: p.Path})
 			}
 		}
 	}
-	slices.SortFunc(found, func(a, b TargetArtifact) int { return cmp.Compare(a.Path, b.Path) })
-	return slices.CompactFunc(found, func(a, b TargetArtifact) bool { return a.Path == b.Path }), nil
+	slices.SortFunc(found, func(a, b types.TargetArtifact) int { return cmp.Compare(a.Path, b.Path) })
+	return slices.CompactFunc(found, func(a, b types.TargetArtifact) bool { return a.Path == b.Path }), nil
 }
 
 // CleanOutputs removes files matched by each project's declared Outputs globs.

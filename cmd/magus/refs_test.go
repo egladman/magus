@@ -2,14 +2,113 @@ package main
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// checkDefinitions is what stands between a recorded range and a wrong edit. A file older
+// than its index verifies; a newer one keeps the range only as unverified; a start line
+// that no longer names the symbol is changed; a range past the end of the file is
+// unreadable rather than silently truncated.
+func TestCheckDefinitions(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("a.go", "package a\n\nfunc F() {\n\treturn\n}\n\nfunc FF() {}\n")
+	w.Write("b.go", "package a\n\nfunc F() {\n\treturn\n}\n")
+	info, err := os.Stat(w.Path("a.go"))
+	require.NoError(t, err)
+	indexedAt := func(file string) (time.Time, bool) {
+		switch file {
+		case "a.go":
+			return info.ModTime(), true
+		case "b.go":
+			return info.ModTime().Add(-time.Hour), true
+		}
+		return time.Time{}, false
+	}
+	site := func(file string, start, end int) types.KnowledgeDefinitionSite {
+		return types.KnowledgeDefinitionSite{File: file, StartLine: start, EndLine: end, Status: types.DefinitionUnverified}
+	}
+	sites := []types.KnowledgeDefinitionSite{
+		site("a.go", 3, 5), site("b.go", 3, 5), site("a.go", 7, 0),
+		site("a.go", 3, 40), site("gone.go", 1, 0), site("other.go", 0, 0),
+	}
+	checkDefinitions(w.Root(), "F", sites, indexedAt, true)
+
+	fn := "func F() {\n\treturn\n}"
+	assert.Equal(t, []types.KnowledgeDefinitionSite{
+		{File: "a.go", StartLine: 3, EndLine: 5, Status: types.DefinitionVerified, Source: fn},
+		{File: "b.go", StartLine: 3, EndLine: 5, Status: types.DefinitionUnverified, Source: fn},
+		{File: "a.go", StartLine: 7, Status: types.DefinitionChanged, Source: "func FF() {}"},
+		{File: "a.go", StartLine: 3, EndLine: 40, Status: types.DefinitionUnreadable},
+		{File: "gone.go", StartLine: 1, Status: types.DefinitionUnreadable},
+		{File: "other.go", Status: types.DefinitionUnverified},
+	}, sites)
+}
+
+func TestEmitDefinitionsText(t *testing.T) {
+	out := types.KnowledgeDefinitionsOutput{
+		Symbol: "symbol:a F().", Label: "F",
+		Definitions: []types.KnowledgeDefinitionSite{
+			{File: "a.go", StartLine: 3, EndLine: 5, Status: types.DefinitionVerified, Source: "func F() {\n\treturn\n}"},
+			{File: "b.go", StartLine: 9, Status: types.DefinitionVerified, Source: "var F = 1"},
+			{File: "c.go"},
+		},
+		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}
+	var err error
+	got := captureStdout(t, func() { err = emitDefinitions(os.Stdout, OutputOptions{Format: FormatText}, out) })
+	require.NoError(t, err)
+	assert.Equal(t, "symbol: symbol:a F().  (F)\n"+
+		"a.go:3-5  verified\nfunc F() {\n\treturn\n}\n"+
+		"\nb.go:9  verified  (the index recorded no end line; the declaration line alone)\nvar F = 1\n"+
+		"c.go  (the index recorded no line in this file)\n", got)
+}
+
+// A changed range still prints, marked, but the exit status says the lines are not the
+// symbol's; -o name withholds it, since a bare range has nowhere to carry the mark.
+func TestEmitDefinitionsChangedExitsOne(t *testing.T) {
+	out := types.KnowledgeDefinitionsOutput{
+		Symbol: "symbol:a F().", Label: "F",
+		Definitions: []types.KnowledgeDefinitionSite{
+			{File: "a.go", StartLine: 3, EndLine: 5, Status: types.DefinitionChanged},
+			{File: "b.go", StartLine: 1, EndLine: 2, Status: types.DefinitionVerified},
+		},
+		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}
+	var err error
+	got := captureStdout(t, func() { err = emitDefinitions(os.Stdout, OutputOptions{Format: FormatText}, out) })
+	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Contains(t, got, "a.go:3-5  changed  (edited since indexing; refresh with `")
+
+	got = captureStdout(t, func() { err = emitDefinitions(os.Stdout, OutputOptions{Format: outputName}, out) })
+	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Equal(t, "b.go:1-2\n", got)
+}
+
+// A stale index fails a refs answer, but a digest-verified definition is proof of itself:
+// the notice still prints, and only an answer with an unverified site exits 1 for it.
+func TestEmitDefinitionsStaleIndex(t *testing.T) {
+	answer := types.KnowledgeAnswer{Verdict: types.VerdictFound, StaleIndexes: []string{"."}}
+	site := types.KnowledgeDefinitionSite{File: "a.go", StartLine: 3, EndLine: 5, Status: types.DefinitionVerified}
+	out := types.KnowledgeDefinitionsOutput{Symbol: "symbol:a F().", Definitions: []types.KnowledgeDefinitionSite{site}, Answer: answer}
+
+	var err error
+	got := captureStdout(t, func() { err = emitDefinitions(os.Stdout, OutputOptions{Format: FormatText}, out) })
+	require.NoError(t, err)
+	assert.Contains(t, got, staleIndexNotice(answer.StaleIndexes))
+
+	out.Definitions[0].Status = types.DefinitionUnverified
+	captureStdout(t, func() { err = emitDefinitions(os.Stdout, OutputOptions{Format: FormatText}, out) })
+	assert.Equal(t, errSilent{exitCode: 1}, err)
+}
 
 // TestRefsTextPrintsMatchingLines pins the output shape: path:line:text, the one
 // every grep-shaped tool and every agent already parses. classify is nil (the

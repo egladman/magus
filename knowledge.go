@@ -592,6 +592,17 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	}), true
 }
 
+// SymbolIndexedAt reports when the cached SCIP index of the project at projectAbsDir was
+// written under cacheDir, and false when there is none. A knowledge.symbols override that
+// points at an index in the tree is not consulted.
+func SymbolIndexedAt(cacheDir, projectAbsDir string) (time.Time, bool) {
+	info, err := os.Stat(symbols.IndexPath(cacheDir, projectAbsDir))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
 // SymbolOccurrences returns every exact source range where the symbol keyed by key
 // appears, with each range verified against the file on disk. It reads the SAME declared
 // indexes the graph is built from, so it can never disagree with `magus refs` about which
@@ -1304,6 +1315,20 @@ func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph
 		return nil, err
 	}
 	return g, nil
+}
+
+// WriteGuardIndex writes the file a guard hook answers graph questions from (see
+// knowledge.WriteGuardIndex), from a cache-first graph with symbols merged. Called where
+// indexes are rebuilt: `magus graph build` and the server's auto-indexer.
+func (m *Magus) WriteGuardIndex(ctx context.Context) error {
+	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return err
+	}
+	fresh := !slices.ContainsFunc(m.SymbolIndexStatus(ctx), func(s types.SymbolIndexStatus) bool {
+		return s.Freshness == types.SymbolIndexStale
+	})
+	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh)
 }
 
 // KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus_refs: it

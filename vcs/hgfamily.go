@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -36,13 +37,17 @@ func hgUsername(as types.Person) ([]string, error) {
 	return []string{"--config", "ui.username=" + as.Name + " <" + as.Email + ">"}, nil
 }
 
-// writeHgFamilyMergeDriverSection routes outputGlobs to the magus merge tool in the
-// hg-family config at path. The caller holds withRepoLock.
-func writeHgFamilyMergeDriverSection(path string, outputGlobs []string) (bool, error) {
+// writeHgFamilyMergeDriverSection routes the output and auto-resolve globs to the magus
+// merge tool in the hg-family config at path, each glob once. The caller holds
+// withRepoLock.
+func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[merge-patterns]\n")
-	for _, glob := range outputGlobs {
-		fmt.Fprintf(&body, "glob:%s = magus\n", glob)
+	all := slices.Concat(globs.Outputs, globs.AutoResolve)
+	for i, glob := range all {
+		if !slices.Contains(all[:i], glob) {
+			fmt.Fprintf(&body, "glob:%s = magus\n", glob)
+		}
 	}
 	body.WriteString("\n[merge-tools]\n")
 	body.WriteString("magus.executable = magus\n")

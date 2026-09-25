@@ -286,10 +286,10 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 
 func TestInstallableAndInstaller(t *testing.T) {
 	names := InstallableVCSes()
-	// git, hg and sl implement MergeDriverInstaller; jj does not. Sapling registers the
-	// driver in .sl/config, the same [merge-patterns]/[merge-tools] pair hg writes to
-	// .hg/hgrc.
-	want := map[string]bool{"git": true, "hg": true, "sl": true}
+	// Every backend implements MergeDriverInstaller. Sapling registers the driver in
+	// .sl/config, the same [merge-patterns]/[merge-tools] pair hg writes to .hg/hgrc, and
+	// jj a merge tool in the repository's config for `jj resolve`.
+	want := map[string]bool{"git": true, "hg": true, "sl": true, "jj": true}
 	require.Lenf(t, names, len(want), "Installable() = %v, want keys %v", names, want)
 	for _, n := range names {
 		assert.Truef(t, want[n], "Installable() returned unexpected %q", n)
@@ -297,11 +297,8 @@ func TestInstallableAndInstaller(t *testing.T) {
 		assert.Truef(t, ok, "Installer(%q): got !ok, want an installer", n)
 	}
 
-	// jj is a known VCS but exposes no merge-driver installer.
-	_, ok := Installer("jj")
-	assert.False(t, ok, "Installer(\"jj\"): got ok, want false (no installer)")
 	// Unknown VCS name yields no installer.
-	_, ok = Installer("svn")
+	_, ok := Installer("svn")
 	assert.False(t, ok, "Installer(\"svn\"): got ok, want false (unknown VCS)")
 }
 

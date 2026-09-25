@@ -383,8 +383,7 @@ func TestArchiveCompressSandboxReadDenied(t *testing.T) {
 
 	// Policy that allows writes but blocks all reads.
 	p := &sandbox.Policy{
-		Workspace: t.TempDir(),
-		FS:        filesystem.Ruleset{Rules: []filesystem.Rule{{Path: filepath.Dir(dest), Write: true}}},
+		FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: filepath.Dir(dest), Write: true}}},
 	}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
@@ -398,8 +397,7 @@ func TestArchiveCompressSandboxWriteDenied(t *testing.T) {
 
 	// Policy that allows reads of src but blocks writes entirely.
 	p := &sandbox.Policy{
-		Workspace: t.TempDir(),
-		FS:        filesystem.Ruleset{Rules: []filesystem.Rule{{Path: src, Read: true}}},
+		FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: src, Read: true}}},
 	}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
@@ -670,7 +668,7 @@ func TestArchiveListRespectsSandboxRead(t *testing.T) {
 	src := makeTar(t, map[string]string{"a.txt": "alpha"})
 	// A policy with no read rule for src: listing must be gated the same way
 	// uncompress is, or a read-only walk would be a way around the sandbox.
-	p := &sandbox.Policy{Workspace: t.TempDir()}
+	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
 	_, err := ArchiveList(ctx, src, nil)

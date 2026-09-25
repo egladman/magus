@@ -1,4 +1,11 @@
 # BEGIN magus-generated - do not edit this section manually
+*.go diff=golang
+*.py diff=python
+*.rs diff=rust
+*.md diff=markdown
+*.ts diff=typescript
+*.tsx diff=typescript
+*.buzz diff=buzz
 **/gen/mocks/*.go merge=magus linguist-generated
 .agents/skills/magus-architecture-review*/** merge=magus linguist-generated
 .agents/skills/magus-buzz-review*/** merge=magus linguist-generated

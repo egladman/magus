@@ -387,6 +387,7 @@ func servingSuffix(st *proc.StatusReply) string {
 //
 // MAGUS_PROC_SOCKET: a child inheriting it believes it is already adopted, binds no
 // socket, and reports the parent's, leaving a server `server stop` cannot find.
+// MAGUS_PROC_TOKEN goes with it: it is the secret for that socket and no other.
 //
 // The invocation ancestry and recursion depth, because A BACKGROUND PROCESS DESCENDS FROM
 // NOBODY: the same rule submitJob already applies to a job's context. A run starts the
@@ -396,7 +397,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -625,6 +626,9 @@ func serverStop(ctx context.Context, args []string) error {
 	// server.address, or a stale socket), so a failed status query means nothing to stop.
 	addr := resolveServerAddr(tf.Socket)
 	st, qerr := proc.QueryStatus(ctx, addr)
+	if proc.ServerOutdated(qerr) {
+		return qerr
+	}
 	if qerr != nil {
 		fmt.Fprintf(os.Stderr, "magus: no server is running at %s\n", addr)
 		return errSilent{exitCode: 1}
@@ -988,8 +992,11 @@ func serverReload(ctx context.Context, args []string) error {
 	// sure nothing is holding an old config", and nothing is.
 	addr := resolveServerAddr(socket)
 	if _, qerr := proc.QueryStatus(ctx, addr); qerr != nil {
+		if proc.ServerOutdated(qerr) {
+			return qerr
+		}
 		fmt.Fprintln(os.Stderr, "magus: no server is running; every command already reads the current config")
-		return nil //nolint:nilerr // no server is the success case here: nothing is holding an old config
+		return nil
 	}
 
 	dropped, busy, err := proc.ReloadConfig(ctx, addr)

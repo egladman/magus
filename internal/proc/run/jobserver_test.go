@@ -9,6 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
 // drainJobserver closes the write end and counts what is left in the pipe.
@@ -65,14 +68,14 @@ func TestJobserverMakeflagsReplacesOnlyTheJobFlags(t *testing.T) {
 		{name: "variables stay last", inherited: "s -j2 -- CC=clang CFLAGS=-j9", want: "s " + pool + " -- CC=clang CFLAGS=-j9"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, j.makeflags(tc.inherited))
+			assert.Equal(t, tc.want, j.makeflags(tc.inherited, firstExtraFD))
 		})
 	}
 }
 
 func TestJobserverEnvironReadsTheEffectiveMakeflags(t *testing.T) {
 	j := &Jobserver{}
-	got := j.environ([]string{"MAKEFLAGS=-j2", "PATH=/bin", "MAKEFLAGS=k"})
+	got := j.environ([]string{"MAKEFLAGS=-j2", "PATH=/bin", "MAKEFLAGS=k"}, firstExtraFD)
 	assert.Equal(t, []string{
 		"MAKEFLAGS=k -j --jobserver-fds=3,4 --jobserver-auth=3,4",
 		"CARGO_MAKEFLAGS=-j --jobserver-fds=3,4 --jobserver-auth=3,4",
@@ -88,6 +91,22 @@ func TestChildEnvCarriesTheJobserverUnderTheTargetsOverrides(t *testing.T) {
 
 	env, _ = childEnv(ctx, nil, []string{"MAKEFLAGS=-j1"})
 	assert.Equal(t, "-j1", lookupEnv(env, "MAKEFLAGS"), "a target's own MAKEFLAGS wins")
+}
+
+// A child the sandbox launcher starts gets the pipe after the ruleset's slot, which the
+// launcher closes, and its MAKEFLAGS has to say so or make reads a closed descriptor.
+func TestChildEnvNamesTheJobserverWhereTheLauncherPutsIt(t *testing.T) {
+	p := sandbox.BuildPolicy(sandbox.PolicyOptions{Mode: types.SandboxModeBestEffort, Workspace: t.TempDir()})
+	ctx := WithJobserver(context.Background(), &Jobserver{})
+	env, _ := childEnv(ctx, p, nil)
+
+	want := "-j --jobserver-fds=3,4 --jobserver-auth=3,4"
+	if confined, _ := p.KernelConfines(); confined {
+		want = "-j --jobserver-fds=4,5 --jobserver-auth=4,5"
+	}
+	assert.Equal(t, want, lookupEnv(env, "CARGO_MAKEFLAGS"))
+	assert.Equal(t, 4, jobserverFD(true), "the launcher's ruleset takes descriptor 3")
+	assert.Equal(t, 3, jobserverFD(false))
 }
 
 func TestSeatJobserverSizesThePoolToTheSlots(t *testing.T) {

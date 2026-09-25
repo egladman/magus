@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,7 +84,7 @@ func TestAcquireKeepsAFailedWorkspaceWithoutReopening(t *testing.T) {
 // End to end through a real load: the status names the file, position and BZZ code the
 // magusfile stopped on, which is what the console and the Connect error carry.
 func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))

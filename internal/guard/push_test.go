@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,7 +141,7 @@ var backendRevisions = map[string]struct{ short, full string }{
 func TestGateMatchesEachBackendsRevision(t *testing.T) {
 	for backend, rev := range backendRevisions {
 		t.Run(backend, func(t *testing.T) {
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			testkit.Isolate(t)
 			root := t.TempDir()
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
@@ -173,7 +174,7 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 			assert.Equal(t, gateUnknown, gateCoverageAt(runs, id))
 			assert.False(t, builtFrom("v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", id))
 
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			testkit.Isolate(t)
 			root := t.TempDir()
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
@@ -202,7 +203,7 @@ func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...
 	if gate != "" {
 		runLog(t, runs, "a.jsonl", "v0.4.3-97-gabc1234", gate, "affected", "ci")
 	}
-	deps := Dependencies{HeadCommit: func(context.Context) string { return "abc1234" }}
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 	return Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease, RendersAsk: rendersAsk})
 }
 
@@ -254,4 +255,127 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 func TestGatedPushIsNeverAsked(t *testing.T) {
 	v := judgePush(t, "pass", "")
 	assert.Contains(t, []string{"pass", "advise"}, v.Decision)
+}
+
+// TestLocatePushFollowsTheLine pins which directory a push runs in, and that a directory
+// only knowable by running the line is not located at all.
+func TestLocatePushFollowsTheLine(t *testing.T) {
+	t.Parallel()
+
+	here := pushSite{dir: "/w"}
+	at := func(dir string) pushSite { return pushSite{dir: dir, relocated: true} }
+	for command, want := range map[string]pushSite{
+		"git push":                                  here,
+		"git push origin HEAD:refs/heads/x":         here,
+		"git push origin --delete topic":            here,
+		`git push origin "$BR"`:                     here,
+		"git push -u origin topic":                  {dir: "/w", rev: "topic"},
+		"git push origin +main:main":                {dir: "/w", rev: "main"},
+		"git -c core.x=y push origin topic":         {dir: "/w", rev: "topic"},
+		"git -C /b push":                            at("/b"),
+		"git -C ../b push origin HEAD:refs/heads/x": at("/b"),
+		"git -C b -C c push":                        at("/w/b/c"),
+		"cd /b && git push":                         at("/b"),
+		"cd /b; git push":                           at("/b"),
+		"cd b && git -C c push":                     at("/w/b/c"),
+		`cd "$T" && git -C /b push`:                 at("/b"),
+		"(cd /b && make); git push":                 here,
+		"(cd /b && git push)":                       at("/b"),
+		"bash -c 'git push'":                        here,
+		"> out; git push":                           here,
+		"hg -R /b push":                             at("/b"),
+		"jj git push -R /b":                         at("/b"),
+	} {
+		got, ok := locatePush(command, DialectBash, "/w")
+		assert.True(t, ok, command)
+		assert.Equal(t, want, got, command)
+	}
+	for _, command := range []string{
+		`git -C "$T" push`,
+		`git -C "$T/x" push`,
+		`cd "$T" && git push`,
+		"cd ~/b && git push",
+		"cd /b || git push",
+		"bash -c 'git -C /b push'",
+		"git --git-dir=/b/.git push",
+		"if true; then git push; fi",
+		"echo git push",
+		"git status",
+	} {
+		_, ok := locatePush(command, DialectBash, "/w")
+		assert.False(t, ok, command)
+	}
+}
+
+// judgeRelocatedPush judges command, built from checkout B's path, in checkout A. A's HEAD
+// is abc1234 and B's is def5678; each holds a run log, with a green gate at its HEAD when
+// gated says so.
+func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string) string) Verdict {
+	t.Helper()
+	ctx, _ := fleetFixture(t)
+	runsA := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
+	b, cacheB := t.TempDir(), t.TempDir()
+	runsB := filepath.Join(cacheB, cache.RunsDir)
+	require.NoError(t, os.WriteFile(filepath.Join(b, "magus.yaml"), nil, 0o644))
+	for runs, gate := range map[string]struct {
+		on     bool
+		commit string
+	}{runsA: {gatedA, "abc1234"}, runsB: {gatedB, "def5678"}} {
+		require.NoError(t, os.MkdirAll(runs, 0o755))
+		if gate.on {
+			runLog(t, runs, "a.jsonl", "v0.4.3-97-g"+gate.commit, "pass", "affected", "ci")
+		}
+	}
+	deps := Dependencies{
+		CacheDir: func(root string) (string, error) {
+			if root != b {
+				return "", os.ErrNotExist
+			}
+			return cacheB, nil
+		},
+		Revision: func(_ context.Context, dir, _ string) string {
+			if dir == b {
+				return "def5678"
+			}
+			return "abc1234"
+		},
+	}
+	return Judge(ctx, deps, Request{Input: command(b), RendersAsk: true})
+}
+
+// TestRelocatedPushGradesTheCheckoutItRunsIn pins that a push another directory runs is
+// graded by THAT checkout's revision and gate record, not the hook's.
+func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
+	dashC := func(b string) string { return "git -C " + b + " push origin HEAD:refs/heads/x" }
+
+	t.Run("an ungated checkout is asked about, though the hook's own is gated", func(t *testing.T) {
+		v := judgeRelocatedPush(t, true, false, dashC)
+		assert.Equal(t, "ask", v.Decision)
+		assert.Equal(t, string(denyRulePushUngated), v.Rule)
+		assert.Contains(t, v.Reason, "def5678")
+		assert.NotContains(t, v.Reason, "abc1234")
+	})
+
+	t.Run("a gated checkout passes, though the hook's own is not", func(t *testing.T) {
+		v := judgeRelocatedPush(t, false, true, dashC)
+		assert.Contains(t, []string{"pass", "advise"}, v.Decision)
+	})
+
+	t.Run("a leading cd relocates it the same way", func(t *testing.T) {
+		v := judgeRelocatedPush(t, true, false, func(b string) string { return "cd " + b + " && git push" })
+		assert.Equal(t, "ask", v.Decision)
+		assert.Contains(t, v.Reason, "def5678")
+	})
+
+	t.Run("a plain push still grades the hook's checkout", func(t *testing.T) {
+		v := judgeRelocatedPush(t, false, true, func(string) string { return "git push" })
+		assert.Equal(t, "ask", v.Decision)
+		assert.Contains(t, v.Reason, "abc1234")
+	})
+
+	t.Run("a directory only the shell knows keeps the advisory", func(t *testing.T) {
+		v := judgeRelocatedPush(t, false, false, func(string) string { return `git -C "$T" push` })
+		assert.Equal(t, "advise", v.Decision)
+		assert.Equal(t, string(advisoryPushGate), v.Rule)
+	})
 }
