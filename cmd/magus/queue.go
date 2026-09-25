@@ -456,7 +456,7 @@ func queueScratch(prefix string) (string, func(), error) {
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
 	var vars queueScratchVars
-	f, _, fs, err := queueParse(e, "validate", "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]", args,
+	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args,
 		func(fs *flag.FlagSet) *gen.QueueValidateFlags {
 			fs.Var(&vars, gen.FlagQueueValidateScratchEnv, "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable")
 			return gen.BindQueueValidate(fs)
@@ -464,7 +464,10 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("validate", [2]string{"plan", f.Plan}, [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
+	if !f.Stdin {
+		return usagef("magus queue validate: --stdin is required; the plan is read from stdin (< plan.json)")
+	}
+	if err := queueRequired("validate", [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
 		return err
 	}
 	if f.Parallel < 0 {
@@ -498,9 +501,9 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if f.Only == "" {
 		defer func() { err = errors.Join(err, dir.MarkDone()) }()
 	}
-	pl, err := queue.ReadPlanFile(e.path(f.Plan))
+	pl, err := queue.ReadPlan(e.stdin)
 	if err != nil {
-		return err
+		return fmt.Errorf("magus queue validate: stdin: %w", err)
 	}
 	// Before any verdict, so apply following the directory can check each one.
 	if err := dir.WritePlan(pl); err != nil {

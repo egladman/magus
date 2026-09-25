@@ -214,7 +214,9 @@ import (
 // 87: magus-multi-agent no longer says magus transitions nothing. Every read of the job
 // store ends a live job it can prove dead (an ended ancestor, a vanished checkout, an
 // untaken job past jobs.stale_after), so a worktree is removed only once its job is done.
-const SkillVersion = 87
+// 88: magus-run's plan pipe runs the plan's shards with `magus run --stdin`; the ci-shard
+// target it named is gone.
+const SkillVersion = 88
 
 const skillLicense = "GPL-3.0-or-later"
 

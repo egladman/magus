@@ -181,7 +181,7 @@ A shell pipe between two magus runs is supported, including when both need the s
 project:
 
 ```sh
-magus affected ci --plan --preflight generate | magus run ci-shard:gha
+magus run generate:rw . | magus run test .
 ```
 
 The two stages start together, so without help one of them reaches the lock first and
@@ -192,7 +192,7 @@ its targets read the same bytes afterwards. When the wait is for a real conflict
 the run says so:
 
 ```text
-magus: waiting for pid 40118 (magus affected ci --plan --preflight generate), upstream
+magus: waiting for pid 40118 (magus run generate:rw .), upstream
 of this run in a pipe, to finish with the projects this run needs before taking their locks.
 ```
 

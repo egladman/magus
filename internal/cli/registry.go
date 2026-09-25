@@ -235,8 +235,19 @@ those targets as done, so nothing runs twice and no cache key changes.
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
-the rw charm (e.g. 'magus run format:rw') to mutate files.`,
-	Usage: "magus run <target> [flags] [project...]",
+the rw charm (e.g. 'magus run format:rw') to mutate files.
+
+--stdin runs a saved shard plan instead of a selection: the document magus
+affected <target> --plan printed, piped in or redirected from a file (< plan.json).
+The plan names the target and each shard's projects, so the target positional is
+optional (give it to add charms, as in ci:gha) and project positionals are
+refused. --shard <id> runs that one shard; without it every shard runs here. A
+malformed plan, a shard id the plan does not have, a target other than the
+plan's, or an --n-shards other than its count is refused before anything runs
+(MGS3029). Under the global --dry-run nothing runs: the plan is checked and
+printed, and -o json, yaml or template renders the document as read, so a saved
+plan renders more than once without being computed again.`,
+	Usage: "magus run <target> [flags] [project...] | magus run [<target>] --stdin [--shard <id>] < plan.json",
 	Flags: []Flag{
 		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the selected scope instead of executing"},
 		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
@@ -250,12 +261,13 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
 		{Name: "race", Kind: FlagString, Doc: "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock."},
 		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
+		{Name: "stdin", Kind: FlagBool, Doc: "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects"},
 		// A STRING, not an int: the shard id is passed through as a label (it reaches
 		// RecordShardTotal as text and defaults from MAGUS_SHARD), and the man page
 		// documented it as an int for as long as the two lists were written apart.
 		// The drift test compared names only, so a type could disagree indefinitely.
-		{Name: "shard", Kind: FlagString, Doc: "This run's shard index within a CI matrix; paired with --n-shards"},
-		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
+		{Name: "shard", Kind: FlagString, Doc: "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing"},
+		{Name: "n-shards", Kind: FlagInt, Doc: "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
@@ -274,11 +286,14 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Graph in Mermaid format", "magus run build --graph -o mermaid"},
 		{"Graph dependents of api/gateway", "magus run build api/gateway --graph --upstream"},
 		{"Stream JSONL target events to a file", "magus run build -o jsonl --tee build.jsonl"},
+		{"Run every shard of the affected ci plan here", "magus affected ci --plan | magus run --stdin"},
+		{"Run one shard of a saved plan", "magus run ci:gha --stdin --shard 2 < plan.json"},
+		{"Render a saved plan's summary without computing it again", "magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json"},
 	},
 	ExitStatus: []ExitCode{
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
-		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a --preflight target the invoked target never reaches (MGS3021)."},
+		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3029)."},
 		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
@@ -1755,9 +1770,9 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 		{
 			Name:  "validate",
 			Short: "Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)",
-			Usage: "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]",
+			Usage: "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json",
 			Flags: append(append([]Flag{
-				{Name: "plan", Kind: FlagString, Doc: "The mergequeue.plan/v1 `file`"},
+				{Name: "stdin", Kind: FlagBool, Doc: "Read the mergequeue.plan/v1 document from stdin; required"},
 				{Name: "gate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green"},
 				{Name: "regenerate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin"},
 				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
@@ -1792,7 +1807,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
-		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'"},
+		{"Validate every candidate", "magus queue validate --stdin --verdicts verdicts --gate 'magus run ci' < plan.json"},
 		{"Merge the green ones as they arrive", "magus queue apply --provider github --base main verdicts"},
 		{"Merge from a validation run's artifacts", "magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7"},
 		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},
