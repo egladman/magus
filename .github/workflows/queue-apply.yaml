@@ -34,15 +34,14 @@ name: Queue apply
 # The write credential is the queue's own GitHub App (the MAGUS_QUEUE_APP_CLIENT_ID
 # variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret), and
 # nothing bypasses a rule. Without the app both jobs that need a token fail: a run the
-# Actions token dispatches starts no workflow_run, so the queue would validate and merge
-# nothing.
+# Actions token dispatches starts no workflow_run, and a merge it makes starts no
+# workflow, so the queue would validate and merge nothing.
+#
 # merge-queue is main's only required status; the queue posts success on it right before
 # a merge, once main is still at the tip the merge was predicted onto, and GitHub's
-# auto-merge then merges the pull request on behalf of whoever enabled it, which starts
-# main's workflows. Only when GitHub has not merged it within a minute does the queue
-# merge it itself. The Actions token's merges start no workflow, so on it the job then
-# dispatches ci.yaml, cd.yaml and the queue's next run on main; the app's merges and
-# pushes start them themselves, so on it nothing is dispatched.
+# auto-merge then merges the pull request on behalf of whoever enabled it. Only when
+# GitHub has not merged it within a minute does the queue merge it itself, as the app.
+# Either merge pushes main and starts its workflows, the queue's next run included.
 #
 # The environment's branch policy releases the key to main alone, and a pull_request
 # run is evaluated against its merge ref, so no pull request's workflow can read it. A
@@ -64,11 +63,9 @@ concurrency:
     'queue-apply' || format('queue-apply-other-{0}', github.event.workflow_run.id) }}
   cancel-in-progress: false
 
+# apply's own token only checks out main: every write is the queue app's.
 permissions:
-  contents: write # merge, and push a regeneration onto a queued branch
-  pull-requests: write # comment on a kick-back and disable its auto-merge
-  statuses: write # merge-queue
-  actions: write # follow the validation run, download its artifacts, dispatch main's runs
+  contents: read
 
 env:
   MISE_SAFE: '1'
@@ -199,8 +196,8 @@ jobs:
           MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
 
       # git pushes a regeneration to a queued branch with whatever GITHUB_TOKEN the
-      # pushing step holds: the app's token when there is one, so the push starts the
-      # branch's workflows rather than waiting for approval.
+      # pushing step holds: the app's, so the push starts the branch's workflows rather
+      # than waiting for approval.
       - name: Let git push with the step's token
         run: gh auth setup-git
         env:

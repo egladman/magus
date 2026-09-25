@@ -3657,6 +3657,8 @@ func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
 	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", setup.With["queue-app-client-id"])
 	assert.NotContains(t, string(raw), "github.token", "a workflow names the token as secrets.GITHUB_TOKEN")
 	assert.NotContains(t, string(raw), "GH_TOKEN", "gh reads GITHUB_TOKEN")
+	assert.NotContains(t, string(raw), "|| secrets.GITHUB_TOKEN",
+		"the queue writes only as its app: a run or a merge the job's own token makes starts no workflow")
 
 	// A run the Actions token dispatches fires no workflow_run, so no apply would follow
 	// it: dispatch holds the app's token, minted for dispatching alone.
