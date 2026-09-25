@@ -154,3 +154,21 @@ type FlagParse struct {
 	// like. A leading dash does not make a word a flag here: only declaring it does.
 	Unknown []string
 }
+
+// Skill mirrors one element of magus\skills's result: a skill this workspace offers an
+// agent, as the text the agent loads.
+//
+// Source is "shipped" (magus's own catalog) or "local" (hand-authored in an installed
+// skills directory). Form is "short" or "full"; a local skill has one body and reports
+// "full", since nothing was withheld from it. Body is the SKILL.md text after its
+// frontmatter. Current reports whether every installed copy of this form is byte-equal
+// to what this binary would write, and is false when no install carries it; a local
+// skill is always current, since nothing ships a newer copy.
+type Skill struct {
+	Name        string
+	Description string
+	Source      string
+	Form        string
+	Body        string
+	Current     bool
+}

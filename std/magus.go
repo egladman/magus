@@ -300,6 +300,22 @@ var Magus = Module{
 			Extern:  true,
 		},
 		{
+			Name: "skills",
+			Doc: "Every skill this workspace offers an agent, sorted by name then form: each {name, description, source, form, body, current}. " +
+				"source is `shipped` for magus's own catalog, which yields a `short` and a `full` entry per skill, or `local` for a hand-authored " +
+				"skill found in an installed skills directory (a wired harness's skill paths, where `magus agent install` writes), which yields one entry with form `full`. " +
+				"body is exactly what an agent loads: the SKILL.md text with its frontmatter excluded, the generated footer kept. " +
+				"current is true when every installed copy of that entry is byte-equal to what this magus would install, false when one differs or none is installed, and always true for a local skill. " +
+				"opts.name selects one skill and raises on a name nothing offers, naming the near matches; opts.form (`short`, `full`, or `both`, the default) narrows the shipped entries and leaves local ones alone. " +
+				"An unknown option raises. Pair it with magus\\job.put and magus\\describe([\"job\", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. " +
+				"Read from the workspace on the context; raises MGS1022 in a script run outside one.",
+			// Extern because the catalog lives in internal/agent, which imports std.
+			Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Skill]"}},
+			Raises:  true,
+			Extern:  true,
+		},
+		{
 			Name:    "canonical_name",
 			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
 			Args:    []Arg{{Name: "name", Type: TypeString}},

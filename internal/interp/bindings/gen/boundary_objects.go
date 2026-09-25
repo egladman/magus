@@ -1815,3 +1815,14 @@ func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out.MapSet("reason", vm.StrValue(v.Reason))
 	return out
 }
+
+func ObjectSkill(v types.Skill) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("form", vm.StrValue(v.Form))
+	out.MapSet("body", vm.StrValue(v.Body))
+	out.MapSet("current", vm.BoolValue(v.Current))
+	return out
+}
