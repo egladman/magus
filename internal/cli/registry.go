@@ -1751,6 +1751,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
 				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable"},
+				{Name: "remote-cache-read", Kind: FlagBool, Doc: "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key"},
 			}, queueFacts...), queueCheckout...),
 		},
 		{

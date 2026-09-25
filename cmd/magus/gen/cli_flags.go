@@ -479,6 +479,8 @@ const (
 	FlagQueueValidateRegenerate = "regenerate"
 	// queue validate: --remote
 	FlagQueueValidateRemote = "remote"
+	// queue validate: --remote-cache-read
+	FlagQueueValidateRemoteCacheRead = "remote-cache-read"
 	// queue validate: --scratch-env
 	FlagQueueValidateScratchEnv = "scratch-env"
 	// queue validate: --target
@@ -1347,16 +1349,17 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 // It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type QueueValidateFlags struct {
-	Plan       string // --plan
-	Gate       string // --gate
-	Regenerate string // --regenerate
-	Verdicts   string // --verdicts
-	Only       string // --only
-	Parallel   int    // --parallel
-	Facts      string // --facts
-	Target     string // --target
-	Remote     string // --remote
-	VCS        string // --vcs
+	Plan            string // --plan
+	Gate            string // --gate
+	Regenerate      string // --regenerate
+	Verdicts        string // --verdicts
+	Only            string // --only
+	Parallel        int    // --parallel
+	RemoteCacheRead bool   // --remote-cache-read
+	Facts           string // --facts
+	Target          string // --target
+	Remote          string // --remote
+	VCS             string // --vcs
 }
 
 // BindQueueValidate registers `magus queue validate`'s flags on fs and returns the destination.
@@ -1368,6 +1371,7 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
+	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key")
 	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")

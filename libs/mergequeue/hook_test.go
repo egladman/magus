@@ -93,21 +93,21 @@ func TestGateGetsExactlyItsWordsAndUnitsAndNoQueueEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "x.go"), nil, 0o644))
 	var log bytes.Buffer
-	g := CommandGate(Command{"printf", `[%s]\n`, "*", "$HOME"}, nil, NewHookLog(&log))
+	g := CommandGate(Command{"printf", `[%s]\n`, "*", "$HOME"}, HookEnv{}, NewHookLog(&log))
 	res, err := g.Validate(context.Background(), types.Candidate{Commit: "s1", Change: "7", Dir: dir}, []string{"libs/a b", "$HOME", "*", "/"})
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 	assert.Equal(t, []string{"[s1 #7] [*]", "[s1 #7] [$HOME]", "[s1 #7] [libs/a b]", "[s1 #7] [$HOME]", "[s1 #7] [*]", "[s1 #7] [/]"}, lines(&log))
 
 	log.Reset()
-	_, err = CommandGate(script(`env`), nil, NewHookLog(&log)).Validate(context.Background(), types.Candidate{Commit: "s1", Change: "7", Dir: dir}, hookUnits)
+	_, err = CommandGate(script(`env`), HookEnv{}, NewHookLog(&log)).Validate(context.Background(), types.Candidate{Commit: "s1", Change: "7", Dir: dir}, hookUnits)
 	require.NoError(t, err)
 	assert.NotContains(t, log.String(), "MERGEQUEUE_")
 }
 
 func TestGateIsGreenOnExitZeroAndRedOtherwise(t *testing.T) {
 	dir := t.TempDir()
-	g := CommandGate(script(`test -f ok`), nil, nil)
+	g := CommandGate(script(`test -f ok`), HookEnv{}, nil)
 	cand := types.Candidate{Commit: "s1", Change: "7", Dir: dir}
 	res, err := g.Validate(context.Background(), cand, hookUnits)
 	require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestHooksNeverSeeTheQueuesCredentials(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "read")
 	t.Setenv("KEPT", "yes")
 	var log bytes.Buffer
-	g := CommandGate(script(`echo "[$MERGEQUEUE_TOKEN][$GITHUB_TOKEN][$KEPT]"`), nil, NewHookLog(&log))
+	g := CommandGate(script(`echo "[$MERGEQUEUE_TOKEN][$GITHUB_TOKEN][$KEPT]"`), HookEnv{}, NewHookLog(&log))
 	_, err := g.Validate(context.Background(), types.Candidate{Commit: "s", Change: "7", Dir: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"[s #7] [][][yes]"}, lines(&log))
@@ -137,24 +137,24 @@ func TestHooksNeverSeeTheQueuesCredentials(t *testing.T) {
 // base, so the interleaved log of several gates reads on its own.
 func TestGateTagsEveryOutputLineWithTheCommitAndWhatItHolds(t *testing.T) {
 	var log bytes.Buffer
-	g := CommandGate(script(`printf 'one\ntwo\n'; echo three >&2; printf 'no newline'`), nil, NewHookLog(&log))
+	g := CommandGate(script(`printf 'one\ntwo\n'; echo three >&2; printf 'no newline'`), HookEnv{}, NewHookLog(&log))
 	_, err := g.Validate(context.Background(), types.Candidate{Commit: "0123456789abcdef", Change: "7", Dir: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"[0123456789ab #7] one", "[0123456789ab #7] two", "[0123456789ab #7] three", "[0123456789ab #7] no newline"}, lines(&log))
 
 	log.Reset()
-	_, err = CommandGate(script(`echo one`), nil, NewHookLog(&log)).Validate(context.Background(), types.Candidate{Commit: "fedcba9876543210", Dir: t.TempDir()}, hookUnits)
+	_, err = CommandGate(script(`echo one`), HookEnv{}, NewHookLog(&log)).Validate(context.Background(), types.Candidate{Commit: "fedcba9876543210", Dir: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"[fedcba987654 base] one"}, lines(&log))
 }
 
 func TestGateRunsATemporaryFailureAgainAndThenCallsItRed(t *testing.T) {
-	g := CommandGate(script(`echo x >> tries; test "$(wc -l < tries)" -ge 3 || exit 75`), nil, nil)
+	g := CommandGate(script(`echo x >> tries; test "$(wc -l < tries)" -ge 3 || exit 75`), HookEnv{}, nil)
 	res, err := g.Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 
-	res, err = CommandGate(script(`exit 75`), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	res, err = CommandGate(script(`exit 75`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
 	require.NoError(t, err, "the change's processes chose the exit status, so it proves nothing about the machine")
 	assert.False(t, res.Green)
 	assert.Equal(t, "the gate exited 75 (temporary failure) 3 times", res.Summary)
@@ -168,7 +168,7 @@ func TestAGateKilledByASignalIsTheChangesRedVerdict(t *testing.T) {
 		`sh -c 'kill -KILL $$'; exit $?`: "exited 137",
 		`exit 143`:                       "exited 143",
 	} {
-		res, err := CommandGate(script(body), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+		res, err := CommandGate(script(body), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
 		require.NoError(t, err, body)
 		assert.False(t, res.Green)
 		assert.Contains(t, res.Summary, why, body)
@@ -179,7 +179,7 @@ func TestAGateKilledByASignalIsTheChangesRedVerdict(t *testing.T) {
 // the gate returned, into the next candidate and past the verdict it led to.
 func TestAHooksProcessesDoNotOutliveIt(t *testing.T) {
 	dir := t.TempDir()
-	res, err := CommandGate(script(`(sleep 0.3; touch late) & echo started`), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	res, err := CommandGate(script(`(sleep 0.3; touch late) & echo started`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 	time.Sleep(600 * time.Millisecond)
@@ -187,7 +187,7 @@ func TestAHooksProcessesDoNotOutliveIt(t *testing.T) {
 }
 
 func TestARegenerationGetsItsUnitsAsArgumentsAndIsRefusedWhenItFails(t *testing.T) {
-	regen := CommandRegenerate(script(`cat > got; printf '[%s]' "$@" > units`), nil, nil)
+	regen := CommandRegenerate(script(`cat > got; printf '[%s]' "$@" > units`), HookEnv{}, nil)
 	dir := t.TempDir()
 	require.NoError(t, regen(context.Background(), types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"app/gen/a", "app/gen/b"}, Units: []string{"app", "lib"}}))
 	got, err := os.ReadFile(filepath.Join(dir, "got"))
@@ -197,18 +197,18 @@ func TestARegenerationGetsItsUnitsAsArgumentsAndIsRefusedWhenItFails(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "[app][lib]", string(units))
 
-	err = CommandRegenerate(script(`exit 3`), nil, nil)(context.Background(), types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
+	err = CommandRegenerate(script(`exit 3`), HookEnv{}, nil)(context.Background(), types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
 	var refused *types.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, &types.RefusedError{Reason: "the regeneration exited 3", Paths: []string{"x"}}, refused)
 
-	err = CommandRegenerate(script(`kill -KILL $$`), nil, nil)(context.Background(), types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
+	err = CommandRegenerate(script(`kill -KILL $$`), HookEnv{}, nil)(context.Background(), types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, refused.Reason, "was killed")
 }
 
 func TestScratchVarsPointIntoEachHooksOwnScratchDirectory(t *testing.T) {
-	vars := []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}, {Name: "XDG_CACHE_HOME", Dir: "cache/xdg"}}
+	vars := HookEnv{Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}, {Name: "XDG_CACHE_HOME", Dir: "cache/xdg"}}}
 	dir, scratch := t.TempDir(), t.TempDir()
 	res, err := CommandGate(script(`echo "$GOCACHE $XDG_CACHE_HOME" > seen; test -d "$XDG_CACHE_HOME"`), vars, nil).
 		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
@@ -249,9 +249,9 @@ func TestParseScratchVarRefusesWhatWouldLeaveTheScratchDirectory(t *testing.T) {
 // A hook that cannot start is a machine failure: a checkout gone, or a program nothing
 // provides, which no change's code chose.
 func TestAHookThatCannotStartIsTheMachinesFailure(t *testing.T) {
-	_, err := CommandGate(Command{"true"}, nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: filepath.Join(t.TempDir(), "gone")}, hookUnits)
+	_, err := CommandGate(Command{"true"}, HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: filepath.Join(t.TempDir(), "gone")}, hookUnits)
 	require.ErrorContains(t, err, "gate on `s`")
-	_, err = CommandGate(Command{"no-such-gate-program"}, nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	_, err = CommandGate(Command{"no-such-gate-program"}, HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
 	require.ErrorContains(t, err, "gate on `s`")
 }
 
@@ -329,7 +329,7 @@ func TestHooksNeverSeeWhatSteersALaterStep(t *testing.T) {
 	}
 	t.Setenv("GITHUB_SHA", "kept")
 	dir := t.TempDir()
-	_, err := CommandGate(script(`env > seen`), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	_, err := CommandGate(script(`env > seen`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
 	require.NoError(t, err)
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
@@ -344,7 +344,7 @@ func TestHooksNeverSeeWhatSteersALaterStep(t *testing.T) {
 func TestAUnitAHookCouldReadAsAnOptionIsNeverAppended(t *testing.T) {
 	for _, unit := range []string{"-x", "--gate=sh", ""} {
 		dir := t.TempDir()
-		_, err := CommandGate(script(`touch ran`), nil, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, []string{"app", unit})
+		_, err := CommandGate(script(`touch ran`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, []string{"app", unit})
 		require.ErrorContains(t, err, "which a hook would read as an option", "%q", unit)
 		assert.NoFileExists(t, filepath.Join(dir, "ran"), "%q", unit)
 	}
@@ -356,7 +356,7 @@ func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
 	ctx := context.Background()
 	for _, broken := range []string{"gen/a\napp/main.go", "gen/a\r"} {
 		dir := t.TempDir()
-		err := CommandRegenerate(script(`cat > got`), nil, nil)(ctx, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"gen/ok", broken}, Units: hookUnits})
+		err := CommandRegenerate(script(`cat > got`), HookEnv{}, nil)(ctx, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"gen/ok", broken}, Units: hookUnits})
 		var refused *types.RefusedError
 		require.ErrorAs(t, err, &refused, "%q", broken)
 		assert.Equal(t, []string{broken}, refused.Paths)

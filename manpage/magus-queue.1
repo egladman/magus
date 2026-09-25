@@ -120,6 +120,9 @@ The mergequeue.plan/v1 `file`
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
 .TP
+\fB\-\-remote\-cache\-read\fR
+Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand\-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
+.TP
 \fB\-\-scratch\-env\fR \fINAME=DIR\fR
 `NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
 .TP

@@ -428,36 +428,46 @@ func isEnvName(s string) bool {
 	return s != ""
 }
 
-// scratchEnv creates each of vars under scratch and returns their assignments.
-func scratchEnv(scratch string, vars []ScratchVar) ([]string, error) {
-	env := make([]string, 0, len(vars))
-	for _, v := range vars {
+// HookEnv is what the queue adds to a gate's or a regeneration's environment.
+type HookEnv struct {
+	// Scratch are pointed into each candidate's scratch directory.
+	Scratch []ScratchVar
+	// Set are NAME=VALUE assignments every hook takes as given. One may name a scrubbed
+	// variable: the runner's value still reaches no hook, and the queue's own, such as a
+	// [CacheReadProxy]'s, is the queue's decision.
+	Set []string
+}
+
+// of creates each scratch variable under scratch and returns every assignment.
+func (e HookEnv) of(scratch string) ([]string, error) {
+	env := make([]string, 0, len(e.Scratch)+len(e.Set))
+	for _, v := range e.Scratch {
 		dir := filepath.Join(scratch, v.Dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
 		env = append(env, v.Name+"="+dir)
 	}
-	return env, nil
+	return append(env, e.Set...), nil
 }
 
 // CommandGate is a [types.Gate] running cmd in a checkout with the units appended as
-// arguments, and vars pointed into the checkout's scratch directory. Exit status 0 is
-// green; anything else the hook's processes do is red. Its output goes to log, each
-// line tagged with the commit gated and its change, or "base" for a commit gated as it
-// stands; a nil log discards it.
-func CommandGate(cmd Command, vars []ScratchVar, log *HookLog) types.Gate {
-	return commandGate{cmd: cmd, vars: vars, log: log}
+// arguments and env added to its environment. Exit status 0 is green; anything else the
+// hook's processes do is red. Its output goes to log, each line tagged with the commit
+// gated and its change, or "base" for a commit gated as it stands; a nil log discards
+// it.
+func CommandGate(cmd Command, env HookEnv, log *HookLog) types.Gate {
+	return commandGate{cmd: cmd, env: env, log: log}
 }
 
 type commandGate struct {
-	cmd  Command
-	vars []ScratchVar
-	log  *HookLog
+	cmd Command
+	env HookEnv
+	log *HookLog
 }
 
 func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
-	env, err := scratchEnv(cand.Scratch, g.vars)
+	env, err := g.env.of(cand.Scratch)
 	if err != nil {
 		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
@@ -479,13 +489,13 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 }
 
 // CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the
-// units appended as arguments, the generated paths on stdin, one per line, and vars
-// pointed into the checkout's scratch directory. A failure of the hook's processes is a
+// units appended as arguments, the generated paths on stdin, one per line, and hookEnv
+// added to its environment. A failure of the hook's processes is a
 // *[types.RefusedError] naming the paths: the change did not regenerate. So is a path
 // holding a line break, which the hook is never run for.
-func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
+func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
-		env, err := scratchEnv(r.Scratch, vars)
+		env, err := hookEnv.of(r.Scratch)
 		if err != nil {
 			return fmt.Errorf("regenerate %s: %w", r.Change.Label(), err)
 		}

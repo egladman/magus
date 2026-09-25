@@ -126,6 +126,17 @@ generated file, a candidate tree or a review proof from a verdict.
   keys on every read, so a planted entry is refused. The jobs that still restore, the CI
   plan and report, hold only read tokens; a planted run history can make main's own CI
   run gate less, never reach a secret.
+- **Validation reads the signed cache through a read-only proxy.** With
+  `validate --remote-cache-read`, the queue reads the runner's cache service URL and
+  runtime token itself and serves hooks a loopback proxy in their place, with a random
+  stand-in token that authenticates nothing but the proxy. The proxy forwards only
+  `GetCacheEntryDownloadURL`, the lookup whose answer is a pre-signed blob URL the hook
+  downloads with no credential, and refuses every other method, so no write reaches the
+  cache service through it. Hooks get the base's trusted keys, verification on and
+  remote writes off, so an entry replays only when main's key signed it. This removes
+  the token from a hook's environment and nothing more: the real one is in the
+  environment of the validate process that started the hook, and a hook that goes
+  looking can read it there as it can from the runner.
 - **Nothing in a hook's environment steers a later step.** GitHub Actions' file commands
   (`GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, `GITHUB_STATE`, `GITHUB_STEP_SUMMARY`),
   the event a later action reads (`GITHUB_EVENT_PATH`), and where the runner keeps what
