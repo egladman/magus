@@ -172,6 +172,7 @@ var affectedOnlyFlags = map[string]string{
 	"target":              "pairs with --bisect",
 
 	"impact": "mode selector: reports the changeset's blast radius instead of running",
+	"risk":   "mode selector: classifies the changeset and prints its reduced gate instead of running",
 }
 
 // TestRunAffectedFlagParity ensures that `magus run` and `magus affected`

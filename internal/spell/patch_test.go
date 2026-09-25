@@ -372,6 +372,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 					{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 				}},
 			}}},
+			"go-test-packages": {Command: spells.Command{Bin: "go", Args: []string{"test"}, Hints: goldenGoModHints, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+			}}},
 			// tidy checks by default (--diff exits non-zero if go.mod/go.sum need
 			// changes — safe for CI gating); update applies the changes. update rather
 			// than rw because tidy re-resolves against the proxy.

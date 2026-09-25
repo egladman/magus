@@ -175,6 +175,15 @@ fun goTest(target: Target) > Command {
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
 }
+// go-test with no default package list: the packages forwarded after `--` are the whole
+// scope, which is how `magus affected --risk` narrows a gate from the command line.
+// Forwarding to go-test cannot do it, because forwarded args land after `./...`. With
+// nothing forwarded, `go test` tests the package in the project directory alone.
+fun goTestPackages(target: Target) > Command {
+    return Command{bin = "go", args = ["test"], hints = GO_MOD_HINTS, charms = {
+        "debug": append(["-v"]),
+    }};
+}
 // Tidy resolves against the module proxy, and an import go.mod does not require yet
 // arrives at latest, so its result turns on what upstream serves today rather than on
 // this tree alone. The write charm is therefore update, not rw.
@@ -226,6 +235,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-fmt": goFmt,
         "golangci-lint": golangCILint,
         "go-test": goTest,
+        "go-test-packages": goTestPackages,
         "go-mod-tidy": goModTidy,
         "go-mod-edit": goModEdit,
         "go-mod-json": goModJSON,

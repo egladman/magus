@@ -74,6 +74,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if hasModeFlag(args, "impact") {
 		return affectedImpact(ctx, root, args)
 	}
+	if hasModeFlag(args, "risk") {
+		return affectedRisk(ctx, root, args)
+	}
 
 	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
 	// mirrors `magus run`. rest carries the hoisted flags for cmdParse below.
@@ -403,6 +406,7 @@ func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "       magus affected --explain <project> [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected --impact [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected <target> --plan [--max-shards N]")
+	fmt.Fprintln(os.Stderr, "       magus affected <target> --risk [--base <ref> | --stdin]")
 	fmt.Fprintln(os.Stderr, "       magus affected --bisect <project> [--target <target>] [--good <sha>]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets (same as 'run' but project set comes from VCS diff):")
@@ -414,6 +418,7 @@ func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "  --explain <project>  show why a project is in the affected set")
 	fmt.Fprintln(os.Stderr, "  --impact             report the blast radius of the changeset (changed files, seeds, affected)")
 	fmt.Fprintln(os.Stderr, "  <target> --plan      emit a provider-neutral JSON CI shard plan for <target> (e.g. ci)")
+	fmt.Fprintln(os.Stderr, "  <target> --risk      classify the change by risk and print the reduced gate for <target>")
 	fmt.Fprintln(os.Stderr, "  --bisect <project>   drive VCS bisect to find a regression's culprit commit")
 	fmt.Fprintln(os.Stderr, "  --base <ref>         override VCS base ref (default: MAGUS_VCS_BASE_REF or origin/main)")
 	fmt.Fprintln(os.Stderr, "")
@@ -1112,6 +1117,107 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	}
 
 	return printImpactText(out)
+}
+
+// affectedRisk is `magus affected <target> --risk`: read-only, it classifies the
+// changeset and prints the reduced gate for target. With --stdin the diff comes
+// from the pipe, and --base, if also given, is only where base-side content is
+// read; without it nothing can be proven comment- or format-only.
+func affectedRisk(ctx context.Context, root string, args []string) error {
+	usage := func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus affected <target> --risk [--base <ref> | --stdin [--base <ref>]]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Classify the changeset as trivial, mechanical, scoped or full, with the")
+		fmt.Fprintln(os.Stderr, "evidence for every file, and print the gate that suffices for it as magus")
+		fmt.Fprintln(os.Stderr, "commands. <target> is what a full gate runs. Read-only - it runs nothing.")
+	}
+	rawTarget, rest, ok := splitTargetFromArgs(args, func(fs *flag.FlagSet) { gen.BindAffectedRisk(fs) })
+	if !ok {
+		usage()
+		return usagef("magus affected --risk: name the target a full gate runs (e.g. `magus affected ci --risk`)")
+	}
+	_, targetStr := parseTarget(rawTarget)
+	parsed, err := types.ParseTarget(targetStr)
+	if err != nil {
+		return err
+	}
+	target := canonicalTarget(parsed.Name)
+
+	var rf *gen.AffectedRiskFlags
+	if _, err := cmdParse("affected "+target+" --risk", rest, func(fs *flag.FlagSet) {
+		rf = gen.BindAffectedRisk(fs)
+		fs.Usage = func() {
+			usage()
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags:")
+			fs.PrintDefaults()
+		}
+	}); err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+
+	ro := magus.RiskOptions{
+		Base:        rf.Base,
+		HistoryPath: globalCfg.HistoryPath,
+		MinRuns:     globalCfg.CI.RiskMinRuns,
+		Window:      globalCfg.CI.RiskWindow,
+	}
+	if rf.Stdin {
+		paths, err := readAffectedPlanPaths(os.Stdin, rf.Null)
+		if err != nil {
+			return err
+		}
+		ro.ChangedPaths = append([]string{}, paths...)
+	}
+	rep, err := m.Risk(ctx, target, ro)
+	if err != nil {
+		return err
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, rep)
+	}
+	printRiskText(rep)
+	return nil
+}
+
+func printRiskText(rep types.RiskReport) {
+	fmt.Printf("tier: %s (base %s, target %s)\n", rep.Tier, rep.Base, rep.Target)
+	fmt.Println("evidence:")
+	for _, e := range rep.Evidence {
+		subject := e.Path
+		if subject == "" {
+			subject = strings.Trim(e.Project+" "+e.Target, " ")
+		}
+		fmt.Printf("  %s: %s (%s)\n", subject, e.Tier, e.Why)
+	}
+	if len(rep.Gate) == 0 {
+		fmt.Println("gate: none")
+	} else {
+		fmt.Println("gate:")
+		for _, g := range rep.Gate {
+			fmt.Println("  " + strings.Join(g.Argv, " "))
+		}
+	}
+	if len(rep.Risk) > 0 {
+		fmt.Println("risk:")
+		for _, r := range rep.Risk {
+			verdict := "kept"
+			if r.Pruned {
+				verdict = "pruned"
+			}
+			fmt.Printf("  %s %s: %.2f (%d of %d runs failed, %s) %s\n", r.Project, r.Target, r.Rate, r.Failures, r.Runs, r.Window, verdict)
+		}
+	}
 }
 
 // impactFileCap bounds how many changed files are listed per seed project in text

@@ -35,7 +35,10 @@ Forensic modes reason about the affected set instead of executing a target.
 --explain shows why a project is in the set. --plan emits a provider-neutral
 JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
 plan of proposed paths before editing. --bisect drives VCS bisect using run
-history to find the commit that introduced a regression.
+history to find the commit that introduced a regression. \<target\> --risk
+classifies the change (trivial, mechanical, scoped, full) with per-file
+evidence and prints the reduced gate that suffices for it, as runnable magus
+commands.
 
 --preflight works as it does for magus run: the named targets run first across
 the affected set, a failure stops everything with exit 3 (MGS3020), and a name
@@ -105,6 +108,9 @@ green, so a CI workflow that fans shards out from the plan starts none.
 
 **--race** *string*
 : Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
+
+**--risk**
+: Classify the changeset by risk (trivial, mechanical, scoped, full) and print the reduced gate that suffices for it (read-only; runs nothing)
 
 **--stdin**
 : Read changed file paths from stdin instead of running a VCS diff
@@ -227,6 +233,12 @@ magus affected ci --plan --preflight generate
 
 ```sh
 magus affected test --plan --max-shards 4
+```
+
+*Classify the branch by risk and print the reduced gate*
+
+```sh
+magus affected ci --risk --base origin/main -o json
 ```
 
 *Bisect a regression in myapp*
