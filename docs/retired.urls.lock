@@ -343,3 +343,8 @@ tags/fingerprint/
 # person-only was renamed agent-sign-off, named for what it catches like the other rules.
 # A rule page is generated per shipped rule, so the old page retires rather than aliases.
 reference/rules/person-only/
+
+# The code-search and doc-search advisories were deleted once symbol-search denied a search
+# the graph answers exactly. A rule page is generated per shipped rule, so both retire.
+reference/rules/code-search/
+reference/rules/doc-search/
