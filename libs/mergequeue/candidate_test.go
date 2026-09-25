@@ -67,15 +67,15 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, onto).Return("tip tree", nil)
 	recorded := head("recorded")
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
-		CommitMeta: magustypes.CommitMeta{Message: "merge queue: #2 is stacked on " + parent.Head[:12], Author: candidateIdentity, Committer: candidateIdentity, Date: candidateDate},
+		CommitMeta: magustypes.CommitMeta{Message: "merge queue: #2 is stacked on " + parent.Head[:12], Author: candidateIdentity, Committer: candidateIdentity, Date: when},
 		Tree:       "tip tree", Parents: []string{onto, parent.Head}}).Return(recorded, nil)
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).Return(nil)
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil)
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
-	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #2")}).Return(head("cand"), nil)
+	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #2", when)}).Return(head("cand"), nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, onto, head("cand")).Return([]string{"lib/x.txt"}, nil)
 
-	b, err := buildMerge(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: onto, change: c, scratch: t.TempDir()})
+	b, err := buildMerge(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: onto, change: c, scratch: t.TempDir(), date: when})
 	require.NoError(t, err)
 	assert.Equal(t, head("cand"), b.Commit)
 	assert.Equal(t, []string{"lib/x.txt"}, b.touched)
@@ -156,7 +156,7 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
-			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}}
+			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}, date: when}
 			regenerate := func(_ context.Context, r types.Regeneration) error {
 				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
 				return nil
@@ -173,7 +173,7 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 				d.vcs.EXPECT().ReadFileAt(mock.Anything, dir, head("cand"), ".gitattributes").Return("the change's\n", nil)
 			}
 			if tc.committed != nil {
-				d.vcs.EXPECT().Commit(mock.Anything, dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: tc.committed}).Return(tc.want, nil)
+				d.vcs.EXPECT().Commit(mock.Anything, dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", when), Paths: tc.committed}).Return(tc.want, nil)
 			}
 			got, err := regenerateIn(t.Context(), d.vcs, s, b, regenerate, []string{"gen"})
 			if restored {

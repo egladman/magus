@@ -21,7 +21,7 @@ import (
 )
 
 func planOf(groups ...[]types.Change) types.Plan {
-	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 3, Partitions: groups}
+	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 3, Partitions: groups}
 }
 
 // validating wires a Validator to d, answering each change's fetch.

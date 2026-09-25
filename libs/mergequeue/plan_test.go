@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -106,7 +107,7 @@ func TestPlanOfNoChangesSaysSo(t *testing.T) {
 	p.Events = NewEvents(&out)
 	plan, err := p.Run(t.Context(), changes())
 	require.NoError(t, err)
-	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1}, plan)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 1}, plan)
 	assert.Contains(t, out.String(), "no change carries merge intent against main")
 }
 
@@ -124,7 +125,7 @@ func TestPlanCarriesTheMarkEachUnqueuedChangeShows(t *testing.T) {
 	}
 	plan, err := planner(t, d).Run(t.Context(), in)
 	require.NoError(t, err)
-	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1, Unqueued: in.Unqueued}, plan)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 1, Unqueued: in.Unqueued}, plan)
 	require.NoError(t, plan.Check())
 }
 
@@ -190,6 +191,22 @@ func (d doubles) admit(c types.Change, a admitting) {
 	if len(outputs) > 0 {
 		d.facts.EXPECT().Generation(mock.Anything, outputs, changed).Return(a.generation, nil)
 	}
+}
+
+// The date comes from the commits the plan names, never a clock, so planning the same
+// queue again builds the same candidates.
+func TestPlanDatesItsCommitsAsTheNewestAdmittedCommit(t *testing.T) {
+	later := when.Add(time.Hour)
+	c := change("1", "a")
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, c.Head).
+		Return(magustypes.Commit{ID: c.Head, Parents: []string{base}, Author: author, Date: later.In(time.FixedZone("CET", 3600))}, nil)
+	d.admit(c, admitting{})
+	plan, err := planner(t, d).Run(t.Context(), changes(c))
+	require.NoError(t, err)
+	assert.Equal(t, later, plan.CommitDate)
 }
 
 func TestPlanAdmission(t *testing.T) {

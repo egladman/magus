@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 
@@ -115,10 +116,14 @@ func newDoubles(t *testing.T) doubles {
 	}
 }
 
-// tip answers a fetch of the base branch with commit.
+// tip answers a fetch of the base branch with commit, dated when.
 func (d doubles) tip(commit string) {
 	d.vcs.EXPECT().FetchRef(mock.Anything, clone.Root, clone.Remote, "refs/heads/main").Return(commit, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Date: when}, nil).Maybe()
 }
+
+// when dates every commit the doubles name, and so every plan.
+var when = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
 // bot is the committer the provider names, and author wrote every change's head.
 var (
@@ -145,7 +150,7 @@ func (d doubles) caps(methods ...types.MergeMethod) {
 
 // plain says commit has one parent, so a review of it covers it, and author wrote it.
 func (d doubles) plain(commit string) {
-	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Parents: []string{base}, Author: author}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Parents: []string{base}, Author: author, Date: when}, nil)
 }
 
 // noCheckouts is the cleanup a validator or an applier runs, finding nothing left.

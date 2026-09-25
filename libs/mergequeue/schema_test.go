@@ -12,7 +12,7 @@ import (
 )
 
 func TestPlanRoundTrips(t *testing.T) {
-	p := types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 3,
+	p := types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 3,
 		Partitions: [][]types.Change{{change("1", "a")}},
 		Verdicts:   []types.Verdict{waiting("2"), {Change: change("3"), Decision: types.DecisionMerged, Reason: "its head is already on main"}},
 		Merged:     []types.MergedChange{{ID: "4", Head: head("4"), Commit: head("m4"), Method: types.MethodSquash}},
@@ -26,7 +26,7 @@ func TestPlanRoundTrips(t *testing.T) {
 
 func TestAnEmptyPlanWritesItsPartitionsAsAList(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, WritePlan(&buf, types.Plan{Base: "main", BaseCommit: base, Depth: 1}))
+	require.NoError(t, WritePlan(&buf, types.Plan{Base: "main", BaseCommit: base, CommitDate: when, Depth: 1}))
 	assert.Contains(t, buf.String(), `"partitions": []`)
 }
 

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/libs/mergequeue/types"
 )
@@ -73,7 +74,11 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 	if err := r.checkMerged(ctx); err != nil {
 		return types.Plan{}, err
 	}
-	plan := types.Plan{Schema: types.SchemaPlan, Base: in.Base, RemoteURL: in.RemoteURL, BaseCommit: tip, Depth: max(1, p.Depth),
+	date, err := newestDate(ctx, p.vcs, p.clone.Root, time.Time{}, tip)
+	if err != nil {
+		return types.Plan{}, err
+	}
+	plan := types.Plan{Schema: types.SchemaPlan, Base: in.Base, RemoteURL: in.RemoteURL, BaseCommit: tip, CommitDate: date, Depth: max(1, p.Depth),
 		Merged: in.Merged, Unqueued: in.Unqueued}
 	if len(in.Changes) == 0 {
 		p.Events.Emit(Event{Kind: EventNotice, Reason: "no change carries merge intent against " + in.Base})
@@ -124,8 +129,28 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 			ids[i] = c.ID
 		}
 		p.Events.Emit(Event{Kind: EventPartition, Partition: partitionOf(gi), Changes: ids})
+		for _, c := range g {
+			if plan.CommitDate, err = newestDate(ctx, p.vcs, p.clone.Root, plan.CommitDate, c.Head); err != nil {
+				return types.Plan{}, err
+			}
+		}
 	}
 	return plan, nil
+}
+
+// newestDate is the later of date and rev's commit date, in UTC.
+func newestDate(ctx context.Context, v types.ReadVCS, root string, date time.Time, rev string) (time.Time, error) {
+	c, err := v.FindCommit(ctx, root, rev)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("date %s: %w", short(rev), err)
+	}
+	if c.Date.IsZero() {
+		return time.Time{}, fmt.Errorf("date %s: the version control recorded no date", short(rev))
+	}
+	if c.Date.After(date) {
+		return c.Date.UTC(), nil
+	}
+	return date, nil
 }
 
 // each runs fn for 0..n-1, Parallel at once, stopping at the first error, which it
