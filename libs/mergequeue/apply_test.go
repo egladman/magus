@@ -1327,8 +1327,8 @@ func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 		credential types.Integration
 		pinned     string
 	}{
-		"pinned to the Actions token, holding an app's": {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "15368"},
-		"pinned to an app, holding the Actions token":   {credential: types.Integration{ID: "15368", Name: "GitHub Actions"}, pinned: "812"},
+		"pinned to GitHub Actions, holding the queue app's": {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "15368"},
+		"pinned to another app, holding the queue app's":   {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "977"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -1349,16 +1349,16 @@ func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 }
 
 func TestCheckCredentialPassesWhatTheProviderCounts(t *testing.T) {
-	actions := types.Integration{ID: "15368"}
+	app := types.Integration{ID: "812"}
 	for name, s := range map[string]*types.Setup{
 		"no setup reported": nil,
-		"pinned to the credential": {StatusContext: "merge-queue", Credential: actions,
-			RequiredChecks: []types.RequiredCheck{{Context: "merge-queue", Integration: "15368"}}},
-		"required from anyone": {StatusContext: "merge-queue", Credential: actions,
+		"pinned to the credential": {StatusContext: "merge-queue", Credential: app,
+			RequiredChecks: []types.RequiredCheck{{Context: "merge-queue", Integration: "812"}}},
+		"required from anyone": {StatusContext: "merge-queue", Credential: app,
 			RequiredChecks: []types.RequiredCheck{{Context: "merge-queue"}}},
-		"not required": {StatusContext: "merge-queue", Credential: actions},
-		"another context pinned elsewhere": {StatusContext: "merge-queue", Credential: actions,
-			RequiredChecks: []types.RequiredCheck{{Context: "deploy", Integration: "812"}}},
+		"not required": {StatusContext: "merge-queue", Credential: app},
+		"another context pinned elsewhere": {StatusContext: "merge-queue", Credential: app,
+			RequiredChecks: []types.RequiredCheck{{Context: "deploy", Integration: "977"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.NoError(t, checkCredential(s, "main"))
