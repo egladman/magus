@@ -429,18 +429,17 @@ reaches the queue as explicit flags; nothing reads the runner's environment to g
 
 ## Permissions
 
-| job                               | needs                                                        |
-| --------------------------------- | ------------------------------------------------------------ |
-| running targets                   | `contents: read`                                             |
-| advice                            | `pull-requests: write`                                       |
-| advice with `fix-generated-drift` | `contents: write`                                            |
-| queue validation                  | `contents: read`, `pull-requests: read`                      |
-| queue dispatch                    | `contents: read`, `actions: write`                           |
-| queue apply                       | `contents`, `pull-requests`, `statuses` and `actions: write` |
+| job               | needs                                                        |
+| ------------------ | ------------------------------------------------------------ |
+| running targets   | `contents: read`                                             |
+| advice            | `pull-requests: write`                                       |
+| queue validation  | `contents: read`, `pull-requests: read`                      |
+| queue dispatch    | `contents: read`, `actions: write`                           |
+| queue apply       | `contents`, `pull-requests`, `statuses` and `actions: write` |
 
 On a pull request from a fork the default token is read-only whatever you declare, so the
-advice comment and the drift autofix both fail there. That is the platform's rule, not
-magus's, and the advisors say so rather than failing silently.
+advice comment fails there. That is the platform's rule, not magus's, and the advisors say
+so rather than failing silently.
 
 ## See also
 

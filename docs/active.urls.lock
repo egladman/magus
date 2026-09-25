@@ -457,6 +457,7 @@ reference/codes/magusfile/MGS1042/
 reference/codes/magusfile/MGS1043/
 reference/codes/magusfile/MGS1044/
 reference/codes/magusfile/MGS1045/
+reference/codes/magusfile/MGS1046/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -508,11 +509,13 @@ reference/codes/sandbox/MGS3020/
 reference/codes/sandbox/MGS3021/
 reference/codes/sandbox/MGS3022/
 reference/codes/sandbox/MGS3023/
+reference/codes/sandbox/MGS3024/
 reference/codes/sandbox/MGS3025/
 reference/codes/sandbox/MGS3026/
 reference/codes/sandbox/MGS3027/
 reference/codes/sandbox/MGS3028/
 reference/codes/sandbox/MGS3030/
+reference/codes/sandbox/MGS3031/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -575,6 +578,7 @@ reference/remote-spells/
 reference/rules/
 reference/rules/agent-sign-off/
 reference/rules/backtick-substitution/
+reference/rules/brief-command/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
 reference/rules/cache-dir-write/
@@ -583,6 +587,7 @@ reference/rules/cd/
 reference/rules/chained-run/
 reference/rules/checkpoint-state/
 reference/rules/ci-watch/
+reference/rules/claimed-declaration/
 reference/rules/code-search/
 reference/rules/credential-verb/
 reference/rules/doc-search/
@@ -597,6 +602,7 @@ reference/rules/installed-skill/
 reference/rules/interpreter-rewrite/
 reference/rules/lease-invalid/
 reference/rules/lease-terminal/
+reference/rules/leased-path/
 reference/rules/memory-write/
 reference/rules/merge-side-checkout/
 reference/rules/new-file/
@@ -615,6 +621,7 @@ reference/rules/regen-source/
 reference/rules/revert-classify/
 reference/rules/scope-drift/
 reference/rules/scripted-rewrite/
+reference/rules/search-translation/
 reference/rules/sed-in-place/
 reference/rules/shared-stash/
 reference/rules/sibling-checkout/
@@ -628,6 +635,7 @@ reference/rules/stale-binary/
 reference/rules/symbol-search/
 reference/rules/throwaway-copy/
 reference/rules/token-state/
+reference/rules/unknown-env/
 reference/rules/unleased-write/
 reference/rules/whole-tree/
 reference/rules/worktree-remove/
@@ -792,6 +800,7 @@ tags/fingerprint/
 tags/fish/
 tags/flags/
 tags/footprint/
+tags/fork/
 tags/format/
 tags/formatter/
 tags/fs/
@@ -1011,6 +1020,7 @@ tags/troubleshooting/
 tags/tty/
 tags/tui/
 tags/typescript/
+tags/typo/
 tags/update/
 tags/upgrade/
 tags/uv/
@@ -1029,6 +1039,7 @@ tags/workspace-provider/
 tags/workspace-providers/
 tags/workspace/
 tags/worktrees/
+tags/write-paths/
 tags/write/
 tags/writes-files/
 tags/zsh/

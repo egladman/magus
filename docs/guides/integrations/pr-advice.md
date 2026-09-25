@@ -132,8 +132,6 @@ for the same reason: it reads the pull request's review state and labels.
 | `api-surface`         | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
 | `first-contribution`  | the author has no merged pull request here yet                                                                                                           |
 | `merge-queue`         | off by default; the pull request is approved and could join `magus queue` but has not, naming the label and the methods the provider allows              |
-| `fix-generated-drift` | off by default; regenerates drifted files and pushes them, and only with a label                                                                         |
-| `fix-merge-conflict`  | off by default; merges the base in, settles conflicts in generated files by regenerating, and pushes                                                     |
 
 `merge-queue` appears only while the pull request is open, approved, targets
 `merge-queue-base` (the default branch unless set), comes from this repository, and
@@ -245,14 +243,11 @@ the keyboard.
 
 ## What it costs
 
-The advisors run after your checks and never gate them. `fix-generated-drift` and
-`fix-merge-conflict` are the only ones that write anything, and each needs both the input
-and a label on the pull request before it will.
-
-Both regenerate with the pull request's own code while the job holds `contents: write`,
-so that code can push anything the token can. Turn them on only where you would hand
-that token to everyone who can push a branch here. magus's own CI leaves them off and
-lets the [merge queue](../../concepts/merge-queue.md) regenerate from main's code instead.
+The advisors run after your checks and never gate them, and none of them writes to the
+pull request: the action needs `pull-requests: write` for its comment and nothing more.
+Regenerated files reach the base branch through [`magus queue`](../../concepts/merge-queue.md),
+which settles generated-file conflicts at merge time in a job that runs no pull request
+code.
 
 ## See also
 
