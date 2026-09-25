@@ -16,9 +16,9 @@ export object Advisor {
     script: str = "",
 }
 
-// The read-only advisors. Their order is the order their sections first appear in the
-// comment, and the order `magus diff` runs its local subset in (cmd/magus/diff.go,
-// localAdvisors, which a test holds to this list).
+// Every advisor, all read-only: none pushes to the pull request. Their order is the order
+// their sections first appear in the comment, and the order `magus diff` runs its local
+// subset in (cmd/magus/diff.go, localAdvisors, which a test holds to this list).
 final reading = [
     Advisor{input = "merge-conflicts", script = "merge-conflict.buzz"},
     Advisor{input = "target-outputs", script = "target-outputs.buzz"},
@@ -34,15 +34,6 @@ final reading = [
     Advisor{input = "merge-queue", script = "merge-queue.buzz"},
 ];
 
-// The advisors that PUSH, after every reader: a push moves the head the readers report on.
-// The merge comes first, because regenerating before the base is merged in measures drift
-// against a tree that is about to change, and the merge would then conflict with the commit
-// that measurement produced.
-final writing = [
-    Advisor{input = "fix-merge-conflict", script = "fix-merge-conflict.buzz"},
-    Advisor{input = "fix-generated-drift", script = "fix-generated-drift.buzz"},
-];
-
 // requireToken throws unless the calling step set GITHUB_TOKEN. Every advisor reads and
 // writes the comment through gh, which authenticates from it.
 export fun requireToken(token: str) > void !> str {
@@ -51,18 +42,16 @@ export fun requireToken(token: str) > void !> str {
         + "uses this action: `GITHUB_TOKEN: $\{\{ secrets.GITHUB_TOKEN \}\}`";
 }
 
-// enabled returns the advisors whose input is "true", readers before writers. Throws on a
-// switch that is missing or reads as anything but "true" or "false": a misspelled value
-// silently turning an advisor off is the failure this refuses.
+// enabled returns the advisors whose input is "true", in comment order. Throws on a switch
+// that is missing or reads as anything but "true" or "false": a misspelled value silently
+// turning an advisor off is the failure this refuses.
 export fun enabled(inputs: {str: str}) > [Advisor] !> str {
     final on = mut [<Advisor>];
-    foreach (group in [reading, writing]) {
-        foreach (a in group) {
-            final value = inputs[a.input] ?? "";
-            if (value == "true") { on.append(a); continue; }
-            if (value != "false") {
-                throw "advice: input " + a.input + " must be 'true' or 'false', got '" + value + "'";
-            }
+    foreach (a in reading) {
+        final value = inputs[a.input] ?? "";
+        if (value == "true") { on.append(a); continue; }
+        if (value != "false") {
+            throw "advice: input " + a.input + " must be 'true' or 'false', got '" + value + "'";
         }
     }
     return on;
@@ -112,34 +101,25 @@ fun main() > void !> any {
     if (message != "") { throw message; }
 }
 
-test "enabled keeps the switched-on advisors, readers first" {
+test "enabled keeps the switched-on advisors, in comment order" {
     final inputs = mut {<str: str>};
-    foreach (group in [reading, writing]) {
-        foreach (a in group) { inputs[a.input] = "false"; }
-    }
-    inputs["fix-generated-drift"] = "true";
+    foreach (a in reading) { inputs[a.input] = "false"; }
+    inputs["api-surface"] = "true";
     inputs["doctor"] = "true";
     final on = enabled(inputs);
     assert\equal(on.len(), want: 2, message: "only the two switched on");
-    assert\equal(on[0].script, want: "doctor.buzz", message: "the reader first");
-    assert\equal(on[1].script, want: "fix-generated-drift.buzz", message: "the writer last");
+    assert\equal(on[0].script, want: "doctor.buzz", message: "doctor first");
+    assert\equal(on[1].script, want: "api-surface.buzz", message: "api-surface after it");
 }
 
 test "enabled refuses a switch it cannot read" {
     final inputs = mut {<str: str>};
-    foreach (group in [reading, writing]) {
-        foreach (a in group) { inputs[a.input] = "false"; }
-    }
+    foreach (a in reading) { inputs[a.input] = "false"; }
     inputs["doctor"] = "yes";
     final garbled = enabled(inputs) catch [Advisor{script = "refused"}];
     assert\equal(garbled[0].script, want: "refused", message: "'yes' is not a switch value");
     final none = enabled({<str: str>}) catch [Advisor{script = "refused"}];
     assert\equal(none[0].script, want: "refused", message: "a missing switch is not off");
-}
-
-test "the merge fixer runs before the drift fixer" {
-    assert\equal(writing[0].script, want: "fix-merge-conflict.buzz",
-        message: "merge before regenerating, or the regeneration measures a tree about to change");
 }
 
 test "requireToken names the fix" {
