@@ -403,3 +403,66 @@ func TestMarkedMidRunIsNotAViolation(t *testing.T) {
 	assert.NoError(t, a.Finish(ctx, "build"),
 		"a descendant that ran its own target mid-run owns its writes; the parent must not be blamed")
 }
+
+// A composer's window holds its composed steps' writes, so MGS3001 names the composer.
+// When a declared output of the parent matches the files, the report names that target
+// too; without it `generate` read as the writer of mocks its mocks-generate restored.
+func TestFinishNamesTheTargetWhoseOutputMatches(t *testing.T) {
+	tmp := t.TempDir()
+	parentDir := filepath.Join(tmp, "api")
+	childDir := filepath.Join(parentDir, "docs")
+	mocks := filepath.Join(childDir, "gen", "mocks")
+	require.NoError(t, os.MkdirAll(mocks, 0o755))
+	t1 := time.Unix(1_700_000_000, 0)
+	t2 := time.Unix(1_700_000_100, 0)
+	writeFile(t, filepath.Join(mocks, "gate.go"), "package mocks", t1)
+	writeFile(t, filepath.Join(childDir, "guide.md"), "# old", t1)
+
+	parent := &types.Project{Path: "api", Dir: parentDir, TargetOutputs: map[string][]types.OutputRef{
+		"mocks-generate": {{Glob: "**/gen/mocks/*.go"}},
+	}}
+	child := &types.Project{Path: "api/docs", Dir: childDir}
+	ctx := types.WithWorkspace(context.Background(), &fakeWS{projects: []*types.Project{parent, child}})
+
+	a := Begin(ctx, parent, true)
+	require.NotNil(t, a)
+	writeFile(t, filepath.Join(mocks, "gate.go"), "package mocks // stale", t2)
+	err := a.Finish(ctx, "generate")
+	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
+	assert.Contains(t, err.Error(), `writer: likely "api" target "mocks-generate", whose declared output "**/gen/mocks/*.go" matches these files`)
+
+	a = Begin(ctx, parent, true)
+	require.NotNil(t, a)
+	writeFile(t, filepath.Join(childDir, "guide.md"), "# new", t2.Add(time.Minute))
+	err = a.Finish(ctx, "format")
+	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
+	assert.NotContains(t, err.Error(), "writer:", "no declared output matches, so the report guesses nothing")
+}
+
+// A cache replay removes the file and clones the blob in its place, and clonefile(2)
+// carries the blob's mtime over. Same size, same mtime: only the file's identity moved,
+// and a comparison of mtime and size alone read the write as no change at all.
+func TestFinishCatchesAReplacementThatKeepsMtimeAndSize(t *testing.T) {
+	tmp := t.TempDir()
+	parentDir := filepath.Join(tmp, "api")
+	childDir := filepath.Join(parentDir, "docs")
+	t1 := time.Unix(1_700_000_000, 0)
+	target := filepath.Join(childDir, "gen", "gate.go")
+	writeFile(t, target, "package v1", t1)
+
+	parent := &types.Project{Path: "api", Dir: parentDir}
+	child := &types.Project{Path: "api/docs", Dir: childDir}
+	ctx := types.WithWorkspace(context.Background(), &fakeWS{projects: []*types.Project{parent, child}})
+
+	a := Begin(ctx, parent, true)
+	require.NotNil(t, a)
+	// The link outside the tree keeps the old inode allocated; ext4 would otherwise hand
+	// the same number straight back to the new file.
+	require.NoError(t, os.Link(target, filepath.Join(tmp, "old-inode")))
+	require.NoError(t, os.Remove(target))
+	writeFile(t, target, "package v2", t1)
+
+	err := a.Finish(ctx, "generate")
+	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
+	assert.Contains(t, err.Error(), "modified=[gen/gate.go]")
+}

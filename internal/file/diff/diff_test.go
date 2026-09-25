@@ -208,3 +208,16 @@ func TestHashContent_MalformedGlobErrorsWithNoMatchAndNoFiles(t *testing.T) {
 	require.Error(t, err, "an unmatched malformed glob must not hide behind an earlier one")
 	assert.Contains(t, err.Error(), "[a-")
 }
+
+// HashContent claims what the cache snapshot claims: a nested project's files belong to it.
+func TestHashContentStopsAtNestedProjects(t *testing.T) {
+	dir := t.TempDir()
+	for _, rel := range []string{"gen/own.txt", "leaf/gen/child.txt"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, rel), []byte(rel), 0o644))
+	}
+	snap, err := HashContent(t.Context(), []OutputGlobs{{Root: dir, Globs: []string{"**/gen/*.txt", "gen"}, Nested: []string{"leaf"}}})
+	require.NoError(t, err)
+	assert.Len(t, snap, 1)
+	assert.Contains(t, snap, filepath.Join(dir, "gen", "own.txt"))
+}

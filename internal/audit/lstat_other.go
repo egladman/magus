@@ -6,15 +6,15 @@ import (
 	"os"
 )
 
-// lstatMtimeSize is the portable fallback for the linux fast path. See
+// lstatFile is the portable fallback for the linux fast path. See
 // lstat_linux.go for the contract and rationale. This path does not
 // achieve the alloc reduction of the linux variant; the win is gated on
 // syscall.Stat_t's per-OS shape, and on 32-bit Linux additionally on a
 // syscall number and Mtim width that differ from the 64-bit arches.
-func lstatMtimeSize(pathBuf []byte) (modTimeNs int64, size int64, ok bool) {
+func lstatFile(pathBuf []byte) (fileState, bool) {
 	info, err := os.Lstat(string(pathBuf))
 	if err != nil {
-		return 0, 0, false
+		return fileState{}, false
 	}
-	return info.ModTime().UnixNano(), info.Size(), true
+	return fileState{modTimeNs: info.ModTime().UnixNano(), size: info.Size(), ino: inodeOf(info)}, true
 }

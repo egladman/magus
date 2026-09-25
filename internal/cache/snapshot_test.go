@@ -420,14 +420,14 @@ func TestSnapshotOneRefusesANonRegularFile(t *testing.T) {
 // TestExpandOutputGlobsRejectsAbsolute verifies absolute output globs are
 // rejected before any filesystem access.
 func TestExpandOutputGlobsRejectsAbsolute(t *testing.T) {
-	_, err := expandOutputGlobs([]string{"/etc/passwd"}, t.TempDir())
+	_, err := expandOutputGlobs([]string{"/etc/passwd"}, t.TempDir(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "repo-relative")
 }
 
 // TestExpandOutputGlobsRejectsDotDot verifies ".." escapes are rejected.
 func TestExpandOutputGlobsRejectsDotDot(t *testing.T) {
-	_, err := expandOutputGlobs([]string{"../escape"}, t.TempDir())
+	_, err := expandOutputGlobs([]string{"../escape"}, t.TempDir(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "repo-relative")
 }
@@ -442,7 +442,7 @@ func TestExpandOutputGlobsExpandsDirectory(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "b.js"), []byte("b"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "sub", "a.js"), []byte("a"), 0o644))
 
-	out, err := expandOutputGlobs([]string{"dist"}, root)
+	out, err := expandOutputGlobs([]string{"dist"}, root, nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -460,7 +460,7 @@ func TestExpandOutputGlobsDedupsAcrossGlobs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "dist"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "a.js"), []byte("a"), 0o644))
 
-	out, err := expandOutputGlobs([]string{"dist", "dist/a.js"}, root)
+	out, err := expandOutputGlobs([]string{"dist", "dist/a.js"}, root, nil)
 	require.NoError(t, err)
 
 	count := 0
@@ -475,9 +475,51 @@ func TestExpandOutputGlobsDedupsAcrossGlobs(t *testing.T) {
 // TestExpandOutputGlobsNoMatch verifies a glob that matches nothing yields an
 // empty result without error (the caller decides how to treat a no-match).
 func TestExpandOutputGlobsNoMatch(t *testing.T) {
-	out, err := expandOutputGlobs([]string{"nonexistent/*.txt"}, t.TempDir())
+	out, err := expandOutputGlobs([]string{"nonexistent/*.txt"}, t.TempDir(), nil)
 	require.NoError(t, err)
 	assert.Empty(t, out)
+}
+
+// A nested project's files are its own: an un-rooted glob stops at its boundary, and a
+// glob rooted inside it (a declared cross-project output) still reaches in, directory
+// literals included.
+func TestExpandOutputGlobsStopsAtNestedProjects(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"gen/own.go", "leaf/gen/child.go", "leaf/deep/gen/deeper.go", "leaf/out/x.go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
+	}
+	nested := []string{"leaf", "leaf/deep"}
+	rels := func(globs ...string) []string {
+		out, err := expandOutputGlobs(globs, root, nested)
+		require.NoError(t, err)
+		var got []string
+		for _, ra := range out {
+			got = append(got, ra.rel)
+		}
+		return got
+	}
+
+	assert.Equal(t, []string{"gen/own.go"}, rels("**/gen/*.go"))
+	assert.Equal(t, []string{"leaf/gen/child.go"}, rels("leaf/**/gen/*.go"),
+		"rooted in leaf, but leaf/deep is a project of its own")
+	assert.Equal(t, []string{"leaf/out/x.go"}, rels("leaf/out"))
+	assert.Equal(t, []string{"leaf/gen/child.go"}, rels("leaf/gen/child.go"))
+}
+
+// An entry that recorded a nested project's file, before the boundary held or from a
+// remote tier, must not write it back on a hit.
+func TestOwnedOutputsDropsNestedRecords(t *testing.T) {
+	m := &Manifest{Outputs: []OutputRecord{
+		{Path: "gen/own.go"}, {Path: "leaf/gen/child.go"}, {Path: "leaf/out/x.go"},
+	}}
+	s := Step{Outputs: []string{"**/gen/*.go", "leaf/out/*.go"}, NestedDirs: []string{"leaf"}}
+
+	got := ownedOutputs(m, s)
+
+	assert.Equal(t, []OutputRecord{{Path: "gen/own.go"}, {Path: "leaf/out/x.go"}}, got.Outputs)
+	assert.Len(t, m.Outputs, 3, "the stored manifest is not mutated")
+	assert.Same(t, m, ownedOutputs(m, Step{Outputs: s.Outputs}), "no nested projects, nothing to narrow")
 }
 
 // TestReplaySymlink verifies replay restores a symlink record as a symlink

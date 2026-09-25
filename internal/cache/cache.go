@@ -144,6 +144,11 @@ type Step struct {
 	// not own. Ordinary outputs stay lenient: a glob that legitimately matches nothing
 	// is common, and only a total miss is suspicious.
 	RequiredOutputs []string
+	// NestedDirs are the workspace-relative dirs of the projects nested under this one.
+	// A file inside one belongs to that project, so an output glob stops at its boundary
+	// unless the glob itself is rooted inside it (a declared cross-project output).
+	// Unhashed: it narrows what a snapshot records and a replay writes, never the key.
+	NestedDirs []string
 
 	// OutputsDeclared reports that Outputs came from the TARGET (ctx.writesFiles) rather than
 	// being inherited from the project or a bound spell. Only then does producing nothing mean
@@ -258,6 +263,8 @@ type runCtx struct {
 	onHit   func(*Result)
 	onMiss  func(*Result)
 	onError func(error)
+	// auditReplay judges the paths a hit just wrote; see AuditReplay.
+	auditReplay func(ctx context.Context, s Step, written []string) error
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -552,6 +559,11 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			if r, ok := c.replayHit(ctx, rc, s, hash, e, start, netRec); ok {
 				e.done()
 				c.backfill(ctx, s, hash, i)
+				if rc.auditReplay != nil {
+					if err := rc.auditReplay(ctx, s, r.Outputs); err != nil {
+						return r, err
+					}
+				}
 				return r, nil
 			}
 			e.done()
@@ -572,7 +584,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
 	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
 	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
-	paths, err := c.replayFrom(replayCtx, e.manifest, s.WorkspaceRoot, e.root)
+	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s), s.WorkspaceRoot, e.root)
 	endReplay(err)
 	result.Duration = time.Since(start)
 	if err != nil {
