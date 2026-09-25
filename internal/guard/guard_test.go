@@ -299,6 +299,63 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotEqual(t, "deny", edit("- old\n", "- old, fixed\n").Decision, "a released section's fix passes")
 	})
 
+	// The binary rules read the trees a line names, so each case builds its own.
+	judgeIn := func(t *testing.T, ws, command string) Verdict {
+		t.Helper()
+		testkit.Isolate(t)
+		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
+		deps := Dependencies{CommandRule: m.CommandRule(), SpawnRule: m.SpawnRule(), WriteRule: m.WriteRule()}
+		return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Bash",
+			"tool_input": map[string]any{"command": command},
+		})})
+	}
+	checkout := func(t *testing.T, withBinary bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module github.com/egladman/magus\n\ngo 1.25\n"), 0o644))
+		if withBinary {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "magus"), []byte("binary"), 0o755))
+		}
+		return dir
+	}
+
+	covered["foreign-binary"] = true
+	t.Run("foreign-binary", func(t *testing.T) {
+		built, here := checkout(t, true), checkout(t, false)
+		v := judgeIn(t, here, filepath.Join(built, "magus")+" run lint .")
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Contains(t, v.Reason, "another checkout of magus")
+	})
+
+	covered["go-into-checkout"] = true
+	t.Run("go-into-checkout", func(t *testing.T) {
+		other := checkout(t, true)
+		v := judgeIn(t, checkout(t, false), "go -C "+other+" test ./...")
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
+
+		bare := checkout(t, false)
+		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
+			"the bootstrap link into a checkout with no binary passes")
+	})
+
+	// The binary answering this hook is the test binary, so a workspace whose ./magus is it
+	// stands in for a checkout's own build.
+	covered["stale-binary"] = true
+	t.Run("stale-binary", func(t *testing.T) {
+		exe, err := os.Executable()
+		require.NoError(t, err)
+		ws := checkout(t, false)
+		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
+		v := judgeIn(t, ws, "ls")
+		assert.Equal(t, "advise", v.Decision, v.Reason)
+		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Contains(t, v.Reason+v.Context, "./magus run go-build .")
+	})
+
 	source, err := os.ReadFile(filepath.Join(root, "tools", "policy", "guard.buzz"))
 	require.NoError(t, err)
 	listed := policyRule.FindAllStringSubmatch(string(source), -1)
