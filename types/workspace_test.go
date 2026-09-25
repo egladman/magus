@@ -96,3 +96,34 @@ func TestWorkspaceUnderPath(t *testing.T) {
 	// ("webhook/" does not have the prefix "web/").
 	assert.Equal(t, []string{"web", "web/admin", "web/studio"}, got)
 }
+
+func TestWorkspaceNestedDirs(t *testing.T) {
+	ws := &Workspace{Projects: map[string]*Project{
+		".":         {Path: ".", Dir: "/w"},
+		"leaf":      {Path: "leaf", Dir: "/w/leaf"},
+		"leaf/deep": {Path: "leaf/deep", Dir: "/w/leaf/deep"},
+		"sibling":   {Path: "sibling", Dir: "/w/sibling"},
+	}}
+	assert.Equal(t, []string{"leaf", "leaf/deep", "sibling"}, ws.NestedDirs("/w"))
+	assert.Equal(t, []string{"deep"}, ws.NestedDirs("/w/leaf"))
+	assert.Empty(t, ws.NestedDirs("/w/sibling"))
+}
+
+func TestGlobClaims(t *testing.T) {
+	nested := []string{"leaf", "leaf/deep"}
+	for _, tc := range []struct {
+		glob, rel string
+		want      bool
+	}{
+		{"**/gen/*.go", "gen/a.go", true},
+		{"**/gen/*.go", "leaf/gen/a.go", false},
+		{"leaf/**/gen/*.go", "leaf/gen/a.go", true},
+		{"leaf/**/gen/*.go", "leaf/deep/gen/a.go", false},
+		{"leaf/deep/gen/*.go", "leaf/deep/gen/a.go", true},
+		{"leaf/out", "leaf/out/x.go", true},
+		{"leaf/gen/a.go", "leaf/gen/a.go", true},
+		{"lea*/gen/a.go", "leaf/gen/a.go", false},
+	} {
+		assert.Equal(t, tc.want, GlobClaims(tc.glob, tc.rel, nested), "%s claims %s", tc.glob, tc.rel)
+	}
+}

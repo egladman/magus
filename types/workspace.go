@@ -70,6 +70,57 @@ func (w *Workspace) UnderPath(prefix string) []*Project {
 	return out
 }
 
+// NestedDirs returns the directories of the projects nested under the absolute dir,
+// slash-separated and relative to it: the boundaries [GlobClaims] stops a glob rooted at
+// dir from crossing. A project at dir itself is not nested.
+func (w *Workspace) NestedDirs(dir string) []string {
+	if w == nil {
+		return nil
+	}
+	var out []string
+	for _, p := range w.All() {
+		if rel, err := filepath.Rel(dir, p.Dir); err == nil && rel != "." && filepath.IsLocal(rel) {
+			out = append(out, filepath.ToSlash(rel))
+		}
+	}
+	return out
+}
+
+// GlobClaims reports whether an output glob may claim rel, both relative to the same root:
+// rel lies outside every one of nested, or the glob is rooted inside the deepest of them
+// holding rel. A file inside a nested project is that project's, so `**/gen/*.go` claims
+// the root's gen/ and not a nested project's, while a declared cross-project output such as
+// `leaf/gen/*.go` still reaches in. A literal glob is rooted where it points, file or
+// directory.
+//
+// The cache snapshot, the replay, the drift gate and the race replay all ask this, so all
+// four agree on what a target's output is.
+func GlobClaims(glob, rel string, nested []string) bool {
+	owner := NestedOwner(rel, nested)
+	if owner == "" {
+		return true
+	}
+	base := glob
+	if i := strings.IndexAny(glob, "*?[{"); i >= 0 {
+		base = ""
+		if j := strings.LastIndex(glob[:i], "/"); j >= 0 {
+			base = glob[:j]
+		}
+	}
+	return base == owner || strings.HasPrefix(base, owner+"/")
+}
+
+// NestedOwner returns the deepest of nested that holds rel, or "" when none does.
+func NestedOwner(rel string, nested []string) string {
+	owner := ""
+	for _, d := range nested {
+		if len(d) > len(owner) && strings.HasPrefix(rel, d+"/") {
+			owner = d
+		}
+	}
+	return owner
+}
+
 // Get returns the project with the given path, or nil.
 func (w *Workspace) Get(path string) *Project {
 	if w == nil {

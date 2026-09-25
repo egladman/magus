@@ -5,7 +5,7 @@
 // the portable os.Lstat path in lstat_other.go instead. The tag is the exact
 // complement of lstat_other.go's, so a future 64-bit linux port lands here and a
 // future 32-bit one lands there, rather than matching neither file and failing to
-// build on an undefined lstatMtimeSize.
+// build on an undefined lstatFile.
 //go:build !386 && !arm && !mips && !mipsle
 
 package audit
@@ -24,10 +24,11 @@ var atFDCWD = func() uintptr {
 	return uintptr(v)
 }()
 
-// lstatMtimeSize fills mtime (nanoseconds since epoch) and size for pathBuf via SYS_NEWFSTATAT;
-// does not follow symlinks. Requires cap(pathBuf) > len(pathBuf) (invariant held by walkDir)
-// to null-terminate in-place without reallocation. Returns ok=false on any error.
-func lstatMtimeSize(pathBuf []byte) (modTimeNs int64, size int64, ok bool) {
+// lstatFile fills mtime (nanoseconds since epoch), size and inode for pathBuf via
+// SYS_NEWFSTATAT; does not follow symlinks. Requires cap(pathBuf) > len(pathBuf) (invariant
+// held by walkDir) to null-terminate in-place without reallocation. Returns ok=false on any
+// error.
+func lstatFile(pathBuf []byte) (fileState, bool) {
 	// Write a null terminator one past the logical end.
 	pathBuf = pathBuf[:len(pathBuf)+1]
 	pathBuf[len(pathBuf)-1] = 0
@@ -41,7 +42,7 @@ func lstatMtimeSize(pathBuf []byte) (modTimeNs int64, size int64, ok bool) {
 		0, 0,
 	)
 	if errno != 0 {
-		return 0, 0, false
+		return fileState{}, false
 	}
-	return st.Mtim.Sec*1_000_000_000 + st.Mtim.Nsec, st.Size, true
+	return fileState{modTimeNs: st.Mtim.Sec*1_000_000_000 + st.Mtim.Nsec, size: st.Size, ino: st.Ino}, true
 }

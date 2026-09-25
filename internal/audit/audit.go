@@ -16,12 +16,23 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fileState records mtime+size for a snapshot entry; seen is marked in-place during diff to avoid allocs.
-// Snapshot must not be shared across goroutines: diff() mutates it.
+// fileState records mtime, size and inode for a snapshot entry; seen is marked in-place during
+// diff to avoid allocs. Snapshot must not be shared across goroutines: diff() mutates it.
+//
+// The inode catches a file replaced wholesale with its mtime and size kept, which is what a
+// cache replay does on APFS: it removes the file and clonefile(2)s the blob, carrying the
+// blob's mtime. It comes from the lstat the walk already makes, so it costs no syscall and
+// no read; zero means the platform reports none, and then mtime and size decide alone.
 type fileState struct {
 	modTimeNs int64
 	size      int64
+	ino       uint64
 	seen      bool
+}
+
+// changed reports whether cur differs from s in any recorded property.
+func (s fileState) changed(cur fileState) bool {
+	return s.modTimeNs != cur.modTimeNs || s.size != cur.size || s.ino != cur.ino
 }
 
 type snapshot map[string]fileState
@@ -99,7 +110,36 @@ func (a *Audit) Finish(ctx context.Context, target string) error {
 	if len(changes) == 0 {
 		return nil
 	}
-	return report(ctx, a.project, target, a.descs, changes)
+	return report(ctx, a.project, target, a.descs, changes, "")
+}
+
+// Replayed judges the absolute paths a cache hit of p's target restored, with the rule a
+// Begin/Finish window applies to a run: a path inside a descendant that is not running a
+// target of its own is a write across the boundary. A hit runs no body, so the paths the
+// replay wrote are the whole of what it did, and no tree walk is needed to learn them.
+// Nil-safe on p; write is the same charm gate Begin takes.
+func Replayed(ctx context.Context, p *types.Project, target string, written []string, write bool) error {
+	if !write || p == nil || len(written) == 0 {
+		return nil
+	}
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil
+	}
+	descs := descendantsOf(ws, p, types.ActiveDispatchFromContext(ctx))
+	if len(descs) == 0 {
+		return nil
+	}
+	changes := make([]change, 0, len(written))
+	for _, path := range written {
+		changes = append(changes, change{path: path, kind: changeModified})
+	}
+	project := p.Path
+	if project == "" {
+		project = "."
+	}
+	writer := fmt.Sprintf("the cache replay of %q target %q, restoring the outputs its entry recorded", project, target)
+	return report(ctx, p, target, descs, changes, writer)
 }
 
 func descendantsOf(ws types.WorkspaceReader, parent *types.Project, active *types.ActiveDispatch) []descendant {
@@ -147,12 +187,12 @@ outer:
 
 // walkFiles iterates regular files under root; buf passed to fn is reused (callers must copy to retain).
 // Skips tool/VCS metadata dirs (see isMetaDir); no symlink follow; checks ctx cancellation between directories.
-func walkFiles(ctx context.Context, root string, fn func(buf []byte, modTimeNs, size int64)) error {
+func walkFiles(ctx context.Context, root string, fn func(buf []byte, st fileState)) error {
 	// 256 B handles paths up to /tmp/... TempDir + small subtree without
 	// realloc; longer paths grow naturally via append.
 	buf := make([]byte, 0, 256)
 	buf = append(buf, root...)
-	buf = ensureSpare(buf, 1) // spare byte for lstatMtimeSize's null terminator (Linux)
+	buf = ensureSpare(buf, 1) // spare byte for lstatFile's null terminator (Linux)
 	return walkDir(ctx, buf, fn)
 }
 
@@ -166,7 +206,7 @@ func ensureSpare(buf []byte, n int) []byte {
 }
 
 // walkDir is the recursive worker for walkFiles; buf must have cap > len on entry (lstat null-terminator).
-func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, modTimeNs, size int64)) error {
+func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, st fileState)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -188,8 +228,8 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, modTimeNs, siz
 				errAcc = err
 			}
 		case dentRegular:
-			if mt, sz, ok := lstatMtimeSize(buf); ok {
-				fn(buf, mt, sz)
+			if st, ok := lstatFile(buf); ok {
+				fn(buf, st)
 			}
 		}
 		buf = buf[:base]
@@ -216,7 +256,7 @@ func isMetaDir(name []byte) bool {
 	return false
 }
 
-// take walks each descendant root once and records (mtime, size) per
+// take walks each descendant root once and records (mtime, size, inode) per
 // regular file. Tool/VCS metadata dirs are skipped wholesale; symlinks are not followed.
 // Missing roots are tolerated. roots must already be deduped against
 // nesting via topmostRoots so each file is walked exactly once.
@@ -224,9 +264,9 @@ func take(ctx context.Context, roots []descendant) (snapshot, error) {
 	snap := make(snapshot, 256)
 	var errs []error
 	for _, d := range roots {
-		err := walkFiles(ctx, d.dir, func(buf []byte, mt, sz int64) {
+		err := walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
 			// Map insertion requires a stable key; copy buf into a new string.
-			snap[string(buf)] = fileState{modTimeNs: mt, size: sz}
+			snap[string(buf)] = st
 		})
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			errs = append(errs, err)
@@ -242,14 +282,14 @@ func take(ctx context.Context, roots []descendant) (snapshot, error) {
 func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
 	var out []change
 	for _, d := range roots {
-		_ = walkFiles(ctx, d.dir, func(buf []byte, mt, sz int64) {
+		_ = walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
 			key := string(buf)
 			prev, existed := pre[key]
 			if !existed {
 				out = append(out, change{path: string(buf), kind: changeAdded})
 				return
 			}
-			if prev.modTimeNs != mt || prev.size != sz {
+			if prev.changed(st) {
 				out = append(out, change{path: string(buf), kind: changeModified})
 			}
 			prev.seen = true
@@ -278,7 +318,8 @@ func dirOf(descs []descendant, path string) (string, bool) {
 }
 
 // report buckets changes by descendant project and returns actionable failures.
-func report(ctx context.Context, p *types.Project, target string, descs []descendant, changes []change) error {
+// A non-empty writer names who wrote; otherwise report infers one from p's declared outputs.
+func report(ctx context.Context, p *types.Project, target string, descs []descendant, changes []change, writer string) error {
 	by := make(map[string]*changeBucket, len(descs))
 	for _, c := range changes {
 		bestIdx, bestLen := -1, -1
@@ -338,7 +379,13 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 			continue
 		}
 		summary := changeSummary(b)
-		message := fmt.Sprintf("project %q target %q wrote into descendant project %q: %s\nfix: move this work to %q or exclude that path from the parent target", project, target, desc, summary, desc)
+		message := fmt.Sprintf("project %q target %q wrote into descendant project %q: %s", project, target, desc, summary)
+		if writer != "" {
+			message += "\nwriter: " + writer
+		} else if claimer, glob, ok := outputClaim(p, desc, b); ok {
+			message += fmt.Sprintf("\nwriter: likely %q target %q, whose declared output %q matches these files", project, claimer, glob)
+		}
+		message += fmt.Sprintf("\nfix: move this work to %q or exclude that path from the parent target", desc)
 		types.EmitDiagnostic(ctx, types.DiagnosticEvent{
 			Code:    types.DescendantBoundaryCrossed,
 			Message: message,
@@ -347,6 +394,39 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 		errs = append(errs, types.DiagnosticErrorf(types.DescendantBoundaryCrossed, "%s", message))
 	}
 	return errors.Join(errs...)
+}
+
+// outputClaim names the parent's target whose declared output glob matches a changed
+// file in desc. MGS3001 fires on the target that opened the window, which for a
+// composer is not the step that wrote: `generate` was blamed for mocks its composed
+// mocks-generate restored from cache, and the report sent the reader hunting a
+// concurrent writer that did not exist.
+func outputClaim(p *types.Project, desc string, b *changeBucket) (target, glob string, ok bool) {
+	var changed []string
+	for _, rels := range [][]string{b.added, b.modified, b.removed} {
+		for _, rel := range rels {
+			changed = append(changed, desc+"/"+filepath.ToSlash(rel))
+		}
+	}
+	names := make([]string, 0, len(p.TargetOutputs))
+	for name := range p.TargetOutputs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		for _, ref := range p.TargetOutputs[name] {
+			if ref.Project != "" && ref.Project != p.Path {
+				continue
+			}
+			rooted := types.RootGlob(p.Path, ref.Glob)
+			for _, c := range changed {
+				if types.MatchesAnyGlob([]string{rooted}, c) {
+					return name, ref.Glob, true
+				}
+			}
+		}
+	}
+	return "", "", false
 }
 
 func changeSummary(b *changeBucket) string {
