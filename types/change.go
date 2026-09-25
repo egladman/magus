@@ -3,6 +3,7 @@ package types
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 
 // Location is where a change landed: a file, or a declaration inside one.
@@ -19,6 +20,87 @@ func (l Location) String() string {
 		return l.Path
 	}
 	return l.Path + "#" + l.Declaration
+}
+
+// SplitClaim is the one parser of a write path's claim grammar: `<path>#<declaration>`
+// claims one declaration of a file, and an entry with no `#` claims the path whole.
+// It cuts at the FIRST `#`, so a declaration may itself hold one (`doc.md### Usage`), and
+// trims both halves. declaration is "" for an entry with no `#`.
+//
+// A path that itself contains `#` is spelled so the `#` cannot start a claim: with a
+// leading `./` (`./notes/a#b.md`, the whole entry is the path), or with the `#` escaped
+// (`notes/a\#b.md`, and `notes/a\#b.md#Intro` claims a declaration of it). path comes
+// back unescaped and without the `./`.
+func SplitClaim(entry string) (path, declaration string) {
+	path, declaration, _ = cutClaim(entry)
+	return path, declaration
+}
+
+// HasClaim reports whether entry claims a declaration, spelled or not: `run.go#` does,
+// with an empty one, while `./a#b.md` and `a\#b.md` do not. See SplitClaim.
+func HasClaim(entry string) bool {
+	_, _, found := cutClaim(entry)
+	return found
+}
+
+func cutClaim(entry string) (path, declaration string, found bool) {
+	entry = strings.TrimSpace(entry)
+	if rest, ok := strings.CutPrefix(entry, "./"); ok && strings.Contains(rest, "#") {
+		return rest, "", false
+	}
+	for i := 0; i < len(entry); i++ {
+		switch entry[i] {
+		case '\\':
+			i++
+		case '#':
+			return unescapeClaimPath(entry[:i]), strings.TrimSpace(entry[i+1:]), true
+		}
+	}
+	return unescapeClaimPath(entry), "", false
+}
+
+func unescapeClaimPath(p string) string {
+	return strings.TrimSpace(strings.ReplaceAll(p, `\#`, "#"))
+}
+
+// NamesDeclaration reports whether a claimed declaration names the declaration line a diff
+// driver matched (a [RegionChange] Declaration). The claim names it when the claim is the
+// whole line, or any run of it whose ends do not split an identifier: `executeStages`,
+// `Magus) executeStages` and the full line all name
+// `func (m *Magus) executeStages(ctx context.Context) error {`, and `execute` does not.
+//
+// The words are the ones git's own funcname pattern matched, so no parser of any language
+// is involved; the cost is that a claim on a word every line in a file shares (`ctx`)
+// names all of them. [Preamble] is named only by itself.
+func NamesDeclaration(claimed, declaration string) bool {
+	claimed, declaration = strings.TrimSpace(claimed), strings.TrimSpace(declaration)
+	if claimed == "" || declaration == "" {
+		return false
+	}
+	if claimed == declaration {
+		return true
+	}
+	if declaration == Preamble {
+		return false
+	}
+	for from := 0; ; {
+		i := strings.Index(declaration[from:], claimed)
+		if i < 0 {
+			return false
+		}
+		start := from + i
+		end := start + len(claimed)
+		startOK := start == 0 || !identifierByte(declaration[start-1]) || !identifierByte(claimed[0])
+		endOK := end == len(declaration) || !identifierByte(declaration[end]) || !identifierByte(claimed[len(claimed)-1])
+		if startOK && endOK {
+			return true
+		}
+		from = start + 1
+	}
+}
+
+func identifierByte(b byte) bool {
+	return b == '_' || b == '$' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
 }
 
 // Locator is anything that says where it changed.

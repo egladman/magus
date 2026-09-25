@@ -83,6 +83,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			".gitattributes: *.ts diff=typescript",
 			".gitattributes: *.tsx diff=typescript",
 			".gitattributes: *.buzz diff=buzz",
+			"git config diff.golang.xfuncname",
 			"git config diff.typescript.xfuncname",
 			"git config diff.buzz.xfuncname",
 			"rewire them with `" + hint.Ls.String() + "`: any command that opens the workspace does, " +

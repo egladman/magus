@@ -101,6 +101,8 @@ const (
 	FlagBuzzEmbedded = "embedded"
 	// buzz: --no-autoload
 	FlagBuzzNoAutoload = "no-autoload"
+	// buzz: --read-only
+	FlagBuzzReadOnly = "read-only"
 	// buzz: --t
 	FlagBuzzT = "t"
 	// buzz: --test
@@ -489,6 +491,8 @@ const (
 	FlagQueueValidateVCS = "vcs"
 	// queue validate: --verdicts
 	FlagQueueValidateVerdicts = "verdicts"
+	// refs: --definition
+	FlagRefsDefinition = "definition"
 	// refs: --limit
 	FlagRefsLimit = "limit"
 	// refs: --no-generated
@@ -497,6 +501,8 @@ const (
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
 	FlagRefsRefresh = "refresh"
+	// refs: --source
+	FlagRefsSource = "source"
 	// refs: --text
 	FlagRefsText = "text"
 	// run: --depth
@@ -1116,6 +1122,8 @@ func BindPath(fs *flag.FlagSet) *PathFlags {
 type RefsFlags struct {
 	Refresh     bool // --refresh
 	Occurrences bool // --occurrences
+	Definition  bool // --definition
+	Source      bool // --source
 	Text        bool // --text
 	Limit       int  // --limit
 }
@@ -1125,6 +1133,8 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	var f RefsFlags
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
 	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
+	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
+	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
 	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	return &f
@@ -1886,6 +1896,7 @@ type BuzzFlags struct {
 	Check        bool   // --check
 	Coverprofile string // --coverprofile
 	Embedded     bool   // --embedded
+	ReadOnly     bool   // --read-only
 	NoAutoload   bool   // --no-autoload
 	C            string // -C
 }
@@ -1899,6 +1910,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
+	fs.BoolVar(&f.ReadOnly, FlagBuzzReadOnly, false, "Refuse every write and process start the script attempts (MGS2002, MGS2007); reads, stdin, stdout and stderr work")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")
 	return &f

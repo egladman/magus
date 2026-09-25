@@ -428,10 +428,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		denyUndeclared("")
 		if verdict.Decision != "deny" {
-			switch g := gradeLeasedWrite(ctx, deps, actingLease, input); g.Decision {
+			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case "deny":
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
+				verdict.Rule = g.Rule
 			case "advise":
 				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), g.Kind, true
 			}
@@ -797,6 +798,30 @@ func envelopeString(input map[string]any, key string) string {
 	return s
 }
 
+// envelopeEdits reads an `edits` list of replacements, each shaped like a single edit's
+// fields. A list with any entry magus cannot read is no list at all: applying the entries
+// it could read would compute a file the host is not about to write.
+func envelopeEdits(input map[string]any) []textEdit {
+	list, ok := input["edits"].([]any)
+	if !ok {
+		return nil
+	}
+	edits := make([]textEdit, 0, len(list))
+	for _, item := range list {
+		fields, ok := item.(map[string]any)
+		if !ok {
+			return nil
+		}
+		oldText, okOld := fields["old_string"].(string)
+		newText, okNew := fields["new_string"].(string)
+		if !okOld || !okNew {
+			return nil
+		}
+		edits = append(edits, textEdit{OldText: oldText, NewText: newText, ReplaceAll: fields["replace_all"] == true})
+	}
+	return edits
+}
+
 // envelopeWritePath is the file an edit tool is about to write, or "".
 //
 // `file_path` is the documented spelling and the others are what the same hosts use for
@@ -894,9 +919,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// Read by shape, like the path: a whole-file write carries its content, an edit the
 		// text it replaces and the replacement. Another shape leaves all three empty.
 		req.Write = writeFields{
-			Content: envelopeString(env.ToolInput, "content"),
-			OldText: envelopeString(env.ToolInput, "old_string"),
-			NewText: envelopeString(env.ToolInput, "new_string"),
+			Content:    envelopeString(env.ToolInput, "content"),
+			OldText:    envelopeString(env.ToolInput, "old_string"),
+			NewText:    envelopeString(env.ToolInput, "new_string"),
+			ReplaceAll: env.ToolInput["replace_all"] == true,
+			Edits:      envelopeEdits(env.ToolInput),
 		}
 	case envelopeString(env.ToolInput, "skill") != "":
 		// A skill load carries nothing to judge; it is recorded so a later spawn can ask

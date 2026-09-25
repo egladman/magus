@@ -389,7 +389,7 @@ func RefuseDirectoryWritePaths(store *Store, id string, candidate types.Job) err
 // claimedDirs returns the existing directories, workspace-relative, that the write path
 // decl claims whole. See [RefuseDirectoryWritePaths] for how a glob is read.
 func claimedDirs(root, decl string) []string {
-	decl = strings.TrimSpace(decl)
+	decl, _ = types.SplitClaim(decl)
 	if decl == "" {
 		return nil
 	}

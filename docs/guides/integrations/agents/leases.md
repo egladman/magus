@@ -117,6 +117,26 @@ Write paths name files. An existing directory is refused
 ([MGS3018](../../../reference/codes/sandbox/MGS3018.md)) unless it is the root
 of a project the job owns whole, or does not exist yet because the job creates it.
 
+A write path can also claim one declaration of a file, so two jobs can start on
+one file: `run.go#executeStages`, `docs/scope.md#The knobs`. The part after the
+`#` names the declaration line git's diff driver matches for that file (the
+`diff=` attribute in `.gitattributes`): the whole line, or any run of it that
+starts and ends on a word boundary, so `executeStages` names
+`func (m *Magus) executeStages(ctx context.Context) error {` and `execute` does
+not. `fork` refuses a claim nothing could grade
+([MGS3031](../../../reference/codes/sandbox/MGS3031.md)): an empty declaration,
+a glob, or a file whose extension has no diff driver. Two claims on different
+declarations of one file do not overlap, and the lines above a file's first
+declaration (its package clause and imports) belong to no claim. A doc comment
+directly above a declaration is that declaration's, and in Go a top-level `var`,
+`const` or `type` (a single one or a `(` block) is a declaration of its own.
+
+A path that itself contains `#` is spelled so the `#` cannot start a claim:
+`./notes/a#b.md` (with a leading `./` the whole entry is the path) or
+`notes/a\#b.md` (escaped, which also allows `notes/a\#b.md#Intro`). `fork`
+refuses an unescaped entry that names an existing path, and names both
+spellings.
+
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `criteria` (the prose half; the machine-checkable half is `completion_gates`),
 `checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
@@ -235,7 +255,9 @@ the read and stored nowhere, so it cannot go out of date with the rows. A path
 is compared by containment (a job owning `internal/job` overlaps one owning
 `internal/job/store.go`) and a glob is judged by the directories it names, which
 over-reports rather than misses a pair. A job in a terminal state is in no pair,
-because a finished or released job is not competing for anything.
+because a finished or released job is not competing for anything. Two jobs
+claiming different declarations of one file are still listed, with
+`claims: disjoint`: the pair is an integration order, not a wait.
 
 **Releases.** Shrinking `write_paths` is how a job announces it has finished
 editing a path, and the store records each dropped path with the digest that
@@ -246,7 +268,9 @@ be hashed. `absent` and `unreadable` are deliberately not the same answer: "the
 releaser deleted it" and "something is there nobody could read" send you to
 different places. Hand the digest to the job taking the path over; one that no
 longer matches at verification time means that job built on a tree the releaser
-never saw.
+never saw. Dropping a declaration claim (`run.go#executeStages`) releases that
+declaration, digested over the lines it spans now, so another job editing the
+rest of the file does not change it.
 
 **Jobs a holder went quiet on.** A list marks a live job `stale` when it was not
 updated within `jobs.stale_after`, naming `magus job exit <id>` for each, and
@@ -385,6 +409,7 @@ file write and every command. It denies:
 | any write, by a job that gathers evidence and writes nothing | `read_only`                      |
 | a write covered by this job's own deny list                  | `deny_paths`                     |
 | a write covered by another live job's write list             | `write_paths` (that job's)       |
+| an edit landing in a declaration another live job claims     | `write_paths` (that job's `#`)   |
 | a write outside every entry in this job's own write list     | `write_paths`                    |
 | a command running the `ci` gate                              | `check`                          |
 | a READ of a path outside the projects this job may read      | `read_paths`, else `write_paths` |
@@ -401,6 +426,15 @@ cannot see.
 A denial for another job's path also says how long ago that job was last
 updated and names `magus job exit <id>`, which releases a job nobody holds any
 more. A job past its deadline owns nothing against other jobs.
+
+The declaration row ([claimed-declaration](../../../reference/rules/claimed-declaration.md))
+reads the edit itself. When the host's payload carries the replacement (an
+`old_string`/`new_string` pair, or a list of them), the guard applies it to the
+file in memory and places the changed lines the way the job footprint does. An
+edit landing only in your own claims, in a declaration nobody claims, or above a
+file's first declaration passes. A payload carrying no edit, such as a
+whole-file write, is graded by path alone, and the rule reads nothing unless
+another live job claims a declaration of that file.
 
 The read row is the write paths read the other way. `write_paths` stands in when
 `read_paths` is empty, because a holder leased to edit a project was pointed at
@@ -722,6 +756,12 @@ into something you can check.
    transcript cannot tell you which happened.
 4. Regenerate declared outputs once, centrally, after the source work converges,
    then run the release gate yourself.
+
+`magus job wait` prints the job's footprint: the declaration each changed line
+of its diff since the checkpoint lands in. For a file the job claims only by
+declaration, every declaration the diff touched that none of those claims names
+is a violation, and so is a footprint magus could not read for a job that
+claims declarations at all.
 
 The same object serves review time. If you recorded a checkpoint when you
 stopped reading, the delta since then is the incremental-review flow on the

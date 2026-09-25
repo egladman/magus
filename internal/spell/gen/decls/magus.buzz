@@ -648,6 +648,8 @@ export object Job {
     baseVerdict: str = "",
     registeredBy: Origin = Origin{},
     registered: int = 0,
+    checkoutRoot: str = "",
+    endReason: str = "",
     created: int = 0,
     updated: int = 0,
     deadline: int = 0,
@@ -729,6 +731,7 @@ export object JobOverlap {
     jobB: str = "",
     pathsA: [str] = [],
     pathsB: [str] = [],
+    claims: str = "",
     footprint: JobOverlapFootprint? = null,
 }
 
@@ -779,6 +782,7 @@ export object JobStatus {
     footprint: [RegionChange] = [],
     footprintKnown: bool = false,
     footprintReason: str = "",
+    footprintUnclaimed: [str] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;

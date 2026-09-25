@@ -119,6 +119,9 @@ const (
 	denySpawnUnbriefed   denyRuleName = "spawn-unbriefed"
 	denyBuzzUnbriefed    denyRuleName = "buzz-unbriefed"
 	denyRuleBriefCommand denyRuleName = "brief-command"
+	// An edit landing in a declaration another live lease claims; see
+	// internal/guard/claim.go.
+	denyRuleClaimedDeclaration denyRuleName = "claimed-declaration"
 	// Upgraded from the push-gate ADVISORY when the run log proves no green gate covers
 	// this commit; see internal/guard/push.go.
 	denyRulePushUngated denyRuleName = "push-ungated"

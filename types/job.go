@@ -416,7 +416,13 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 10
+//
+// A change to what a field MEANS bumps it too. 11 is the `<path>#<declaration>` claim
+// grammar in write_paths (see SplitClaim): no field changed, but an older binary matches
+// `run.go#RunCI` against no file, so it would stop grading the claim rather than refuse the
+// row. 10 is the field set that ends dead jobs, so a binary stopping at 10 refuses these
+// rows rather than misreading their claims.
+const JobSchemaVersion = 11
 
 // JobWriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT at the moment it was declared.
@@ -501,13 +507,18 @@ type JobStatus struct {
 	// symbol gates were graded, so a symbol verdict may be drawn from missing facts.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	// Footprint is the declaration each changed line of the job's diff since its checkpoint
-	// lands in. A REPORT and never a violation until its precision is measured: nothing
-	// here decides Verified. FootprintKnown says the regions were computed, so an empty
-	// Footprint means "touched no declaration" rather than "nobody looked", and
-	// FootprintReason says why they were not.
+	// lands in. It decides Verified only for a job claiming declarations (see
+	// FootprintUnclaimed); for any other job it is a report. FootprintKnown says the
+	// regions were computed, so an empty Footprint means "touched no declaration" rather
+	// than "nobody looked", and FootprintReason says why they were not.
 	Footprint       []RegionChange `json:"footprint,omitempty" yaml:"footprint,omitempty"`
 	FootprintKnown  bool           `json:"footprint_known" yaml:"footprint_known"`
 	FootprintReason string         `json:"footprint_reason,omitempty" yaml:"footprint_reason,omitempty"`
+	// FootprintUnclaimed are the footprint's locations, as Location strings, in a file the
+	// job claims only by declaration (`run.go#executeStages`) that none of those claims
+	// names. A file's Preamble is exempt: every job that adds an import lands there. Each
+	// is also a violation.
+	FootprintUnclaimed []string `json:"footprint_unclaimed,omitempty" yaml:"footprint_unclaimed,omitempty"`
 }
 
 // GateStatus reports verification of one completion gate.
@@ -596,7 +607,8 @@ type Job struct {
 	// reader feeds back to `magus graph diff --rev`.
 	Checkpoint string `json:"checkpoint,omitempty" yaml:"checkpoint,omitempty"`
 	// WritePaths and DenyPaths are the declared write boundary. Empty on a
-	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required.
+	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required. A write
+	// path `<file>#<declaration>` claims one declaration of the file (see SplitClaim).
 	WritePaths []string `json:"write_paths,omitempty" yaml:"write_paths,omitempty"`
 	DenyPaths  []string `json:"deny_paths,omitempty" yaml:"deny_paths,omitempty"`
 	// ReadPaths is what this lease may READ: the paths whose projects it may read,
@@ -764,7 +776,8 @@ type Declaration struct {
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
-	// WritePaths is what this lease may write, empty on a read-only row by design.
+	// WritePaths is what this lease may write, empty on a read-only row by design. An entry
+	// `<file>#<declaration>` claims one declaration of the file (see SplitClaim).
 	WritePaths []string `json:"write_paths,omitempty"`
 	// DenyPaths are the paths inside those this lease may not write.
 	DenyPaths []string `json:"deny_paths,omitempty"`
@@ -1177,11 +1190,22 @@ type JobOverlap struct {
 	// tell which lease claimed which, which is the only thing they can act on.
 	PathsA []string `json:"paths_a" yaml:"paths_a"`
 	PathsB []string `json:"paths_b" yaml:"paths_b"`
+	// Claims compares what the two sides DECLARED below the file, when either claims a
+	// declaration (`run.go#executeStages`): ClaimsDisjoint for different declarations of the
+	// files they share, ClaimsShared when a claim covers one the other side holds. Empty
+	// when neither side claims below the file.
+	Claims string `json:"claims,omitempty" yaml:"claims,omitempty"`
 	// Footprint compares what the two jobs have actually changed, declaration by
 	// declaration. Nil when no reader computed it: it needs each job's checkout and a VCS,
 	// and deriving an overlap needs neither.
 	Footprint *JobOverlapFootprint `json:"footprint,omitempty" yaml:"footprint,omitempty"`
 }
+
+// The verdicts a JobOverlap's Claims reaches.
+const (
+	ClaimsDisjoint = "disjoint"
+	ClaimsShared   = "shared"
+)
 
 // The verdicts a JobOverlapFootprint reaches.
 const (
@@ -1373,19 +1397,39 @@ func jobOverlaps(jobs []Job) []JobOverlap {
 				continue
 			}
 			if pa, pb := intersectingPaths(a.WritePaths, b.WritePaths); len(pa) > 0 {
-				out = append(out, JobOverlap{JobA: a.ID, JobB: b.ID, PathsA: pa, PathsB: pb})
+				out = append(out, JobOverlap{JobA: a.ID, JobB: b.ID, PathsA: pa, PathsB: pb, Claims: claimsVerdict(pa, pb)})
 			}
 		}
 	}
 	return out
 }
 
-// intersectingPaths collects the declared paths that cover common ground, each side
-// kept in its own list and deduped.
+// claimsVerdict is ClaimsDisjoint when the only ground two sides share is a file each
+// claims different declarations of, ClaimsShared when a declaration claim meets a claim
+// that covers it, and "" when neither side claims below the file.
+func claimsVerdict(pathsA, pathsB []string) string {
+	claimed := func(p string) bool { _, d := SplitClaim(p); return d != "" }
+	if !slices.ContainsFunc(pathsA, claimed) && !slices.ContainsFunc(pathsB, claimed) {
+		return ""
+	}
+	for _, pa := range pathsA {
+		for _, pb := range pathsB {
+			if PathsIntersect(pa, pb) {
+				return ClaimsShared
+			}
+		}
+	}
+	return ClaimsDisjoint
+}
+
+// intersectingPaths collects the declared paths that cover common ground at the file
+// level, each side kept in its own list and deduped. Two claims on different declarations
+// of one file are collected: they are an integration order, and the pair says so through
+// its Claims verdict rather than by disappearing.
 func intersectingPaths(a, b []string) (pathsA, pathsB []string) {
 	for _, pa := range a {
 		for _, pb := range b {
-			if !PathsIntersect(pa, pb) {
+			if !pathsShareGround(pa, pb) {
 				continue
 			}
 			if !slices.Contains(pathsA, pa) {
@@ -1412,7 +1456,22 @@ func intersectingPaths(a, b []string) (pathsA, pathsB []string) {
 // both reduce to "console/src"; deciding whether two arbitrary globs can ever match
 // one path is a solver, and a missed collision costs a reader far more than a pair
 // they look at and dismiss.
+//
+// Two claims on one file naming different declarations (`run.go#A`, `run.go#B`) do not
+// intersect; a claim with a declaration intersects any entry covering its file without one.
+// Declarations are compared as written, so `run.go#A` and `run.go#func A() {` read as
+// disjoint although both name one function: the footprint is what catches that pair.
 func PathsIntersect(a, b string) bool {
+	if !pathsShareGround(a, b) {
+		return false
+	}
+	_, declA := SplitClaim(a)
+	_, declB := SplitClaim(b)
+	return declA == "" || declB == "" || declA == declB
+}
+
+// pathsShareGround is PathsIntersect at the file level, declarations ignored.
+func pathsShareGround(a, b string) bool {
 	// An entry that names nothing claims nothing. It cleans to ".", which the whole-tree
 	// rule below would then read as a claim on everything, pairing a row that holds one
 	// stray blank with every other lease in the plan.
@@ -1434,9 +1493,11 @@ func PathsIntersect(a, b string) bool {
 // Exported because the focus rule asks the same question of the same declarations:
 // which project a lease's write_paths land in cannot be answered by a wildcard, and
 // two packages deriving that prefix by their own rules would disagree about a
-// declaration on the day the rules drifted.
+// declaration on the day the rules drifted. A claimed declaration (see SplitClaim) is
+// not part of the path and is dropped.
 func LiteralPrefix(p string) string {
-	p = path.Clean(strings.TrimSpace(p))
+	p, _ = SplitClaim(p)
+	p = path.Clean(p)
 	if p == "." || p == "/" {
 		return ""
 	}

@@ -457,7 +457,13 @@ const (
 	// PipeUpstreamFailed is a magus stage upstream of a run in a shell pipe that exited
 	// non-zero. A run that sees it before taking its locks starts nothing; the last stage
 	// of a pipeline that succeeded exits with it, so the pipeline fails without pipefail.
-	PipeUpstreamFailed        DiagnosticCode = "MGS3030"
+	PipeUpstreamFailed DiagnosticCode = "MGS3030"
+	// WritePathClaimUngradable is a job fork whose write path claims a declaration
+	// (`<path>#<declaration>`) that no footprint could grade: a glob or an empty
+	// declaration, a checkout whose version control does not place changed lines, or a
+	// file with no diff driver to name its declarations. Refused rather than recorded,
+	// because a claim nothing can check reads as a boundary and is none.
+	WritePathClaimUngradable  DiagnosticCode = "MGS3031"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -624,7 +630,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
-	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed,
+	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed, WritePathClaimUngradable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

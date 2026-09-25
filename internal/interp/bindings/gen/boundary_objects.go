@@ -1611,6 +1611,8 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
+	out.MapSet("checkoutRoot", vm.StrValue(v.CheckoutRoot))
+	out.MapSet("endReason", vm.StrValue(v.EndReason))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))
 	out.MapSet("deadline", vm.IntValue(int64(v.Deadline)))
@@ -1685,6 +1687,7 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 		itemsPathsB[indexPathsB] = vm.StrValue(v.PathsB[indexPathsB])
 	}
 	out.MapSet("pathsB", vm.ListValue(itemsPathsB))
+	out.MapSet("claims", vm.StrValue(v.Claims))
 	optFootprint := vm.Null
 	if v.Footprint != nil {
 		optFootprint = ObjectJobOverlapFootprint((*v.Footprint))
@@ -1781,6 +1784,11 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("footprint", vm.ListValue(itemsFootprint))
 	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))
 	out.MapSet("footprintReason", vm.StrValue(v.FootprintReason))
+	itemsFootprintUnclaimed := make([]vm.Value, len(v.FootprintUnclaimed))
+	for indexFootprintUnclaimed := range v.FootprintUnclaimed {
+		itemsFootprintUnclaimed[indexFootprintUnclaimed] = vm.StrValue(v.FootprintUnclaimed[indexFootprintUnclaimed])
+	}
+	out.MapSet("footprintUnclaimed", vm.ListValue(itemsFootprintUnclaimed))
 	return out
 }
 
@@ -1901,5 +1909,16 @@ func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
+func ObjectSkill(v types.Skill) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("form", vm.StrValue(v.Form))
+	out.MapSet("body", vm.StrValue(v.Body))
+	out.MapSet("current", vm.BoolValue(v.Current))
 	return out
 }

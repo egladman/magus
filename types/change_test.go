@@ -6,6 +6,70 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestSplitClaim(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		entry, path, declaration string
+	}{
+		{"run.go", "run.go", ""},
+		{"run.go#executeStages", "run.go", "executeStages"},
+		{" run.go # executeStages ", "run.go", "executeStages"},
+		{"docs/scope.md#The knobs", "docs/scope.md", "The knobs"},
+		{"docs/scope.md### Usage", "docs/scope.md", "## Usage"},
+		{"run.go#", "run.go", ""},
+		{"#A", "", "A"},
+		{"", "", ""},
+		{"./notes/a#b.md", "notes/a#b.md", ""},
+		{`notes/a\#b.md`, "notes/a#b.md", ""},
+		{`notes/a\#b.md#Intro`, "notes/a#b.md", "Intro"},
+		{"./run.go", "./run.go", ""},
+	} {
+		path, declaration := SplitClaim(tc.entry)
+		assert.Equal(t, [2]string{tc.path, tc.declaration}, [2]string{path, declaration}, "%q", tc.entry)
+	}
+}
+
+func TestHasClaim(t *testing.T) {
+	t.Parallel()
+
+	for entry, want := range map[string]bool{
+		"run.go#A": true, "run.go#": true, "run.go": false,
+		"./a#b.md": false, `a\#b.md`: false, `a\#b.md#A`: true,
+	} {
+		assert.Equal(t, want, HasClaim(entry), "%q", entry)
+	}
+}
+
+func TestNamesDeclaration(t *testing.T) {
+	t.Parallel()
+
+	const method = "func (m *Magus) executeStages(ctx context.Context) error {"
+	for _, tc := range []struct {
+		claimed, declaration string
+		want                 bool
+	}{
+		{"executeStages", method, true},
+		{"Magus) executeStages", method, true},
+		{method, method, true},
+		{"Magus", method, true},
+		{"execute", method, false},
+		{"Stages", method, false},
+		{"executeStages(ctx", method, true},
+		{"The knobs", "## The knobs", true},
+		{"knob", "## The knobs", false},
+		{"$init", "const $init = () => {", true},
+		{"init", "const $init = () => {", false},
+		{"target", `test "target" {`, true},
+		{Preamble, Preamble, true},
+		{"preamble", Preamble, false},
+		{"", method, false},
+		{"executeStages", "", false},
+	} {
+		assert.Equal(t, tc.want, NamesDeclaration(tc.claimed, tc.declaration), "%q names %q", tc.claimed, tc.declaration)
+	}
+}
+
 func TestLocation(t *testing.T) {
 	t.Parallel()
 

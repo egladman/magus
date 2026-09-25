@@ -436,3 +436,93 @@ func keys(m map[string]json.RawMessage) []string {
 	}
 	return out
 }
+
+func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"run.go#executeStages"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
+	placed := func(decl string) types.RegionChange {
+		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	}
+	seen := func(regions ...types.RegionChange) Observed {
+		return Observed{Changed: []string{"run.go"}, ChangedKnown: true, ChangedFrom: "abc1234", Regions: regions, RegionsKnown: true}
+	}
+	const outside = "the diff since abc1234 changed run.go#func RunCI() {, outside every declaration the job claims in run.go (executeStages)"
+
+	inside := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen(placed("func (m *Magus) executeStages() {"), placed("")))
+	assert.NotContains(t, inside.Violations, outside)
+	assert.Empty(t, inside.FootprintUnclaimed, "its own declaration and the preamble")
+
+	wandered := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen(placed("func RunCI() {")))
+	assert.Contains(t, wandered.Violations, outside)
+	assert.Equal(t, []string{"run.go#func RunCI() {"}, wandered.FootprintUnclaimed)
+
+	unread := Observed{Changed: []string{"run.go"}, ChangedKnown: true, RegionsReason: "git does not report changed regions (RegionReporter)"}
+	blind := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, unread)
+	assert.Contains(t, blind.Violations, "job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked")
+
+	whole := row
+	whole.WritePaths = []string{"run.go"}
+	assert.NotContains(t, VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, unread).Violations,
+		"job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked",
+		"a job claiming no declaration is not graded on its footprint")
+}
+
+func TestUnclaimedFootprint(t *testing.T) {
+	t.Parallel()
+
+	placed := func(path, decl string) types.RegionChange {
+		return types.RegionChange{File: types.FileChange{Path: path}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	}
+	unplaced := types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{4, 4}}
+	for _, tc := range []struct {
+		name       string
+		writePaths []string
+		regions    []types.RegionChange
+		want       []string
+	}{
+		{
+			name:       "inside the claimed declaration",
+			writePaths: []string{"run.go#executeStages"},
+			regions:    []types.RegionChange{placed("run.go", "func (m *Magus) executeStages(ctx context.Context) error {")},
+		},
+		{
+			name:       "a neighbour is outside, once however many hunks land in it",
+			writePaths: []string{"run.go#executeStages"},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {"), placed("run.go", "func RunCI() {")},
+			want:       []string{"run.go#func RunCI() {"},
+		},
+		{
+			name:       "the preamble is exempt",
+			writePaths: []string{"run.go#executeStages"},
+			regions:    []types.RegionChange{placed("run.go", "")},
+		},
+		{
+			name:       "a line no driver placed is the whole file",
+			writePaths: []string{"run.go#executeStages"},
+			regions:    []types.RegionChange{unplaced},
+			want:       []string{"run.go"},
+		},
+		{
+			name:       "a file also claimed whole is not graded by declaration",
+			writePaths: []string{"run.go#executeStages", "."},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+		},
+		{
+			name:       "a file claimed by no entry is the path rules' to report",
+			writePaths: []string{"run.go#executeStages"},
+			regions:    []types.RegionChange{placed("order.go", "func Order() {")},
+		},
+		{
+			name:       "any of several claims on the file names it",
+			writePaths: []string{"run.go#executeStages", "run.go#RunCI"},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, unclaimedFootprint(tc.writePaths, tc.regions))
+		})
+	}
+}
