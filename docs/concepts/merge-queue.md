@@ -190,7 +190,7 @@ generated file, a candidate tree or a review proof from a verdict.
   once the hook's exit is seen and before the hook is reaped, since its id can name
   another hook's group from then on; where that exit cannot be seen unreaped (anything
   but Linux, macOS and the BSDs), a hook runs without a group of its own and only its
-  own process is signalled.
+  own process is signaled.
 
 How the provider's own credential is scoped is a separate question, answered under
 [Providers](#providers).

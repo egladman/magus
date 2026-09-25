@@ -328,15 +328,22 @@ func TestHooksNeverSeeWhatSteersALaterStep(t *testing.T) {
 		t.Setenv(name, "/set/"+name)
 	}
 	t.Setenv("GITHUB_SHA", "kept")
+	t.Setenv("NOT_GITHUB_PATH", "kept")
 	dir := t.TempDir()
-	_, err := CommandGate(script(`env > seen`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	_, err := CommandGate(script(`env -0 > seen`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
 	require.NoError(t, err)
-	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+	raw, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
-	for _, name := range append([]string{"GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT", "GITHUB_STATE", "GITHUB_STEP_SUMMARY"}, scrubbed...) {
-		assert.NotContains(t, string(seen), name+"=", "%s reaches the hook", name)
+	seen := map[string]string{}
+	for kv := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\x00"), "\x00") {
+		name, value, _ := strings.Cut(kv, "=")
+		seen[name] = value
 	}
-	assert.Contains(t, string(seen), "GITHUB_SHA=kept\n", "a fact about the run stays")
+	for _, name := range append([]string{"GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT", "GITHUB_STATE", "GITHUB_STEP_SUMMARY"}, scrubbed...) {
+		assert.NotContains(t, seen, name, "%s reaches the hook", name)
+	}
+	assert.Equal(t, "kept", seen["GITHUB_SHA"], "a fact about the run stays")
+	assert.Equal(t, "kept", seen["NOT_GITHUB_PATH"], "only the exact names are removed")
 }
 
 // The queue appends units after the hook's own words with no "--" between, so a unit
