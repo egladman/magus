@@ -434,6 +434,11 @@ const (
 	// still speaking the socket protocol from before it carried HTTP: a process started by an
 	// older magus. Restarting it is the fix.
 	ServerProtocolOutdated DiagnosticCode = "MGS3025"
+	// QueueHookNotACommand is a merge queue hook flag whose value is not a command and
+	// its arguments: it holds shell syntax (a variable, a substitution, an operator, a
+	// redirection, a glob, an assignment prefix) that nothing would act on, since the
+	// queue runs a hook with no shell. Refused before anything runs.
+	QueueHookNotACommand DiagnosticCode = "MGS3026"
 	// QueueRunUntrusted is a merge queue apply asked to follow a validation run that
 	// something other than the base branch's own queue workflow started: a pull request's
 	// event, a fork, another branch or another workflow. What such a run uploads is its
@@ -613,7 +618,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
 	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,

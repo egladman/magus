@@ -158,7 +158,7 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
 			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}}
 			regenerate := func(_ context.Context, r types.Regeneration) error {
-				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Onto: base, Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
+				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
 				return nil
 			}
 			d := newDoubles(t)

@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -326,7 +327,7 @@ func (f *fakeLedgerWorkspace) Root() string     { return f.root }
 // jobStoreFromContext offers no seam to redirect it, so the environment is the only
 // thing keeping these rows out of the developer's own store.
 func TestLedgerIsServedInProcess(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
@@ -343,7 +344,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 // A guard rule runs under the rows the guard pinned: list answers from them even with a
 // workspace on the context whose store holds something else, and every write refuses.
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read"})
 	require.NoError(t, err)
@@ -425,7 +426,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 // "" hashes to the same state directory in every checkout, so these rows would land in
 // the developer's own store and the clear below would drop what it found there.
 func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
@@ -443,7 +444,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 // silently ignored; internal/job.ParseMerge is what enforces this, and this pins that
 // the Buzz binding does not swallow its error.
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"state": "passed"})
@@ -452,7 +453,7 @@ func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 }
 
 func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", nil)
@@ -470,7 +471,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 }
 
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
@@ -484,7 +485,7 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 // The captured lease is the process's claim, so a checkout bound by `magus job exec`
 // outranks it here exactly as it does for `magus job` and the guard.
 func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	require.NoError(t, job.BindLease(workspace.cacheDir, "fleet/bound"))
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")

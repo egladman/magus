@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -205,7 +206,7 @@ func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 // AttachTouches merges both stores onto the review: the trail wins for a session both hold,
 // and the loaded transcripts add the sessions no hook observed.
 func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root, base := t.TempDir(), t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolRead, Path: "from-trail.go"})
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolWrite, Path: "magus.go"})
@@ -232,7 +233,7 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 }
 
 func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	rev := types.Diff{Files: []types.DiffFile{{Path: "magus.go"}}}
 	AttachTouches(&rev, t.TempDir(), t.TempDir())
 	assert.Nil(t, rev.Files[0].Touches)

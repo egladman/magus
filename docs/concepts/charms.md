@@ -128,6 +128,48 @@ magus run generate:rw         # write derived output; touches no dependency vers
 
 The middle two are the pair worth internalizing. `rw` alone already writes a great deal, and it still will not re-resolve your dependencies. Asking for that is a second, deliberate act, and it stays separate even when you are already writing.
 
+## The `extended` charm
+
+`extended` asks for the extended test suite: the default suite plus the tests that need
+more of the host than a gate every change pays for should require, such as a C toolchain
+and its libraries, a docker daemon, or a long run. A project's `test` target keeps its
+default tier and, under `extended`, also needs the rest:
+
+```buzz
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(unit_test);
+    if (ctx.hasCharm("extended")) {
+        ctx.needs(codec_cgo_test, container_test);
+    }
+}
+```
+
+```sh
+magus run test                # the default suite: what every change pays for
+magus run test:extended       # the default suite and the extended tier
+magus run ci:extended         # the gate, with the extended tier in every project
+```
+
+It pairs with `test` and `ci` the way `cd` pairs with `ci`, and it reaches every target
+they need, so one charm on the gate turns the extended tier on in every project. `ci` does
+not strip it. This is the one built-in charm that decides which targets run rather than how
+one runs: it is the documented function-target pattern, with a name every workspace shares.
+
+The tier is defined by what a test needs, not by what kind of test it is. A cgo unit test
+and a browser end-to-end test both belong in it when the default gate cannot run them, so
+one charm covers what `e2e`, `integration` and per-tool names would split into several.
+Two rules keep it honest:
+
+- A target the extended tier pulls in fails on a missing tool rather than skipping. Whoever
+  asked for `extended` asked for that test, and a quiet skip is how an untested path stays
+  untested.
+- A test that spends money or a person's quota (a paid API, a locally signed-in agent CLI)
+  stays behind its own explicit opt-in, never behind `extended`: an agent told to make sure
+  the tests pass will reach for the extended suite unprompted.
+
+Where it runs is a workflow's choice. A scheduled job, a release, and a person before a
+risky change are the usual ones.
+
 ## Defaulting charms per workspace (`default_charms`)
 
 Every run is read-only by default. A workspace can opt into a different baseline with `default_charms` in `magus.yaml`: charms applied to every `magus run` and `magus x` automatically, so a team that wants local autofix does not type `:rw` each time:
@@ -505,6 +547,7 @@ type Charm struct {
 | **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                                                                                              |
 | **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                                                                                                |
 | **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the `ci-shard` job matrix → `$GITHUB_OUTPUT`). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
+| **`extended`**   | A built-in charm: the extended test suite. A `test` target reads it to add the tests that need more of the host than the default gate. Set via `:extended` (`magus run ci:extended`); not stripped from `ci`.                                                                     |
 | **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                                                                                              |
 | **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                                                                                                                       |
 | **Anchor**       | A value (or predicate) a `charm.*` constructor resolves to a numeric JSON Pointer at author time.                                                                                                                                                                                 |

@@ -3,8 +3,11 @@ package url
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // loopHost is the discovered server host:port the caller would pass in. It is the
 // link's ORIGIN under the server-origin grammar: http://<loopHost>/console/graph/.

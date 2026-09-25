@@ -3,9 +3,12 @@ package playground
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestCompletableCommandsAreUnique pins the dedup. ls, graph, run and version
 // exist both as playground verbs and as real subcommands, and a duplicate makes

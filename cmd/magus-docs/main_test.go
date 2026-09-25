@@ -11,8 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestModuleDocsUpToDate verifies the checked-in docs/modules/*.md are exactly
 // what magus-docs would emit today, and that the committed set matches the

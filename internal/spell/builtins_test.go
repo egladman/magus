@@ -5,6 +5,7 @@ import (
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	json "github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestBuiltins_NonEmpty(t *testing.T) {
 	m := Builtins()

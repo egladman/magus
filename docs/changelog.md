@@ -18,6 +18,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
+- **The agent guard refuses a backtick command substitution.** Inside double quotes a
+  backtick runs a command, so a literal backtick in a pattern pairs with the next one and
+  swallows everything between, file operands included. The deny names the fixes: `$(...)`
+  for a substitution, single quotes for a literal backtick.
 - **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
   other clients of the protocol it runs share the target's slots instead of
   choosing a width of their own. A target that declares no `slots` is unchanged.
@@ -62,8 +66,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Every wait and kick-back carries a code.** Verdicts, events and `kick_back` name one of
   a closed set (`WAIT_NOT_APPROVED`, `KICK_CONFLICT`, ...) beside the files at issue, and
   the GitHub provider writes them under its comment for a workflow to read.
+- **The `extended` charm**, for tests that need more of the host than the gate does.
+  A function target reads it with `ctx.hasCharm("extended")`. This repository's cgo
+  compression and shell completion tests now run only under it.
 - **A failing remote tier degrades the run to the local tier.** The first failure is
   reported and counted as failed, never missed, and the run stops asking.
+- **The agent guard refuses a filter that nothing feeds.** A `grep`, `sed`, `jq`, `head`,
+  `tr` or similar with no file operand, no pipe into it and no input redirect reads the
+  harness's stdin, which can hang past the tool timeout. Each tool's flags are modeled, and
+  a call the guard cannot classify passes.
 - **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
   `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
   `--embedded` for magusfile code.
@@ -85,6 +96,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
   fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
+- **Diff drivers in the managed `.gitattributes` block**, with funcname patterns for
+  TypeScript and Buzz. `magus doctor` reports a missing one.
+- **A job's footprint.** `magus job wait` names the declaration each changed line lands
+  in, found with git's own funcname patterns and measured from the merge base, and
+  `magus ls jobs` compares footprints when it reports overlapping write paths. Lines
+  above a file's first declaration land in its `(preamble)`.
 - **Job rows and results carry `schema_version`.** An unknown version is rejected by name
   rather than field by field. Rows record `registered_by`.
 - **A lease's declared boundary is enforced.** The guard denies writes outside
@@ -218,6 +235,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   default `agent_id`). Guard templates are at version 17; re-install them.
 - **A target whose inputs have not moved since it failed says so before rerunning.**
   Nothing is skipped (`hint_id: unchanged-failure`).
+- **`testkit.Environ`, `Isolate` and `Main` give a test an environment built from an
+  allowlist.** The sandbox's allowlist plus the Go toolchain's settings survive; HOME and
+  the XDG base directories move under a temp root; the broker and server are pinned off;
+  everything else is dropped. A package names any extra variables in its TestMain.
 - **A text filter over a backgrounded run's capture is denied like a pipe over magus.**
   Use `-o jsonl --tee <file>` for a capture a tool may consume.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
@@ -360,6 +381,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
 - **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
   --watch`.
+- **A `for` loop that sleeps between passes is a polling loop.** The `busy-wait` rule
+  denies `for i in $(seq 1 60); do sleep 10; done`, and a workspace command rule sees
+  each program inside such a loop with `repeats` set, as it already did for `while` and
+  `until`. A `for` loop over a list with no `sleep` still repeats nothing.
 - **The guard routes unbounded source dumps to `magus refs`.**
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
 - **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
@@ -559,6 +584,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
   git, including the shallow-clone deepening fetch, which re-added them. git never prompts
   for credentials, and no signing, rerere or signature line changes what magus reads.
+- **Generated docs examples read the same wherever they are regenerated.** The
+  examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
+  state dir it inherits leaks run history into the captured `magus explain` output.
 - **A failed remote-cache exchange names the step that failed.**
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
@@ -603,7 +631,7 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   five library indexes go stale.
 - **`magus session dispose` refuses without an interactive terminal and is denied to
   agents.** Disposing an attention request records that a PERSON answered it. Outside a
-  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `agent-sign-off`
   (widened from `read-ack`) denies every spelling on every agent channel.
 - **One magus can pipe into another that needs the same project, even through `jq` or
   `tee`.** The reader, proven from the kernel on linux and macOS, waits until the

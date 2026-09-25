@@ -9,8 +9,11 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // fakeInsightSource is an insightSource returning a canned view or a fixed error.
 type fakeInsightSource struct {

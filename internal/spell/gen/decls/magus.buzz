@@ -709,11 +709,18 @@ export object WriteRequest {
     newText: str = "",
 }
 
+export object JobOverlapFootprint {
+    verdict: str = "",
+    shared: [str] = [],
+    reason: str = "",
+}
+
 export object JobOverlap {
     jobA: str = "",
     jobB: str = "",
     pathsA: [str] = [],
     pathsB: [str] = [],
+    footprint: JobOverlapFootprint? = null,
 }
 
 export object JobBlock {
@@ -738,6 +745,20 @@ export object GateStatus {
     violations: [str] = [],
 }
 
+export object FileChange {
+    path: str = "",
+    prevPath: str = "",
+    status: str = "",
+}
+
+export object RegionChange {
+    file: FileChange = FileChange{},
+    side: str = "",
+    lines: [int] = [],
+    declaration: str = "",
+    driver: str = "",
+}
+
 export object JobStatus {
     job: str = "",
     verified: bool = false,
@@ -746,6 +767,9 @@ export object JobStatus {
     command: str = "",
     gates: [GateStatus] = [],
     staleIndexes: [str] = [],
+    footprint: [RegionChange] = [],
+    footprintKnown: bool = false,
+    footprintReason: str = "",
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
