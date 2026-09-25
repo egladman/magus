@@ -1580,11 +1580,20 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`while ! test -f done.marker; do sleep 5; done`,
 		`while [ ! -f done.marker ]; do sleep 1; done`,
 		`until ./magus query output ref; do sleep 30; done`,
+		// A counted for loop that only sleeps is the same wait with a bound.
+		`for i in $(seq 1 60); do sleep 10; done`,
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+	// A loop that works each pass, or a for loop over a list, is not waiting.
+	for _, cmd := range []string{
+		`for f in a b; do gofmt -l $f; done`,
+		`for i in 1 2 3; do ./magus run build .; sleep 1; done`,
+	} {
+		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDependencies(), cmd).Rule.Name, cmd)
 	}
 }
 

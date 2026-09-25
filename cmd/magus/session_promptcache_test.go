@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ func TestRenderPromptCacheShowsEveryProvider(t *testing.T) {
 }
 
 func TestPromptCacheForCheckoutReadsThisCheckoutsTrail(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, "")
 	previous := global
 	t.Cleanup(func() { global = previous })

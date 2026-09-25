@@ -5,9 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestManifestUpToDate is the gate the manifest lacked. It had drifted by eleven
 // modules: base64, csv, hex, ini, url, log, math, net, sort, term, diff were all

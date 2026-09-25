@@ -2,9 +2,13 @@ package guard
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hint"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
 	// cmd/magus/packs_interp.go does for the real binary: without it,
 	// project.DefaultSpellRegistry().All() in testDependencies below runs against a registry
@@ -13,11 +17,14 @@ import (
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // testDependencies resolves the workspace the way the CLI's hookDeps does, so a rule graded
 // here reads the same tree the hook would.
@@ -184,4 +191,119 @@ func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	assert.Equal(t, "test-host/s1", hookAttribution{Host: "test-host", Session: "s1", Window: "tty:w1"}.factsKey(),
 		"a host session wins over the window")
 	assert.Empty(t, hookAttribution{Host: "test-host"}.factsKey(), "neither leaves the gate its anonymous window")
+}
+
+// policyRule matches a rule's line in tools/policy/guard.buzz's header: `//   name (`.
+var policyRule = regexp.MustCompile(`(?m)^//   ([a-z][a-z-]+) \(`)
+
+// policyCase is one real hook input and the verdict this repository's policy owes it.
+type policyCase struct {
+	rule     string
+	name     string
+	input    map[string]any
+	decision string
+	// reason is a fragment the verdict's reason must carry, "" to check none.
+	reason string
+	// worker is the spawn title the caller was started under, "" for a person.
+	worker string
+	// checkout is what the guard reads about a pushing checkout, nil for any other line.
+	checkout *types.CheckoutState
+}
+
+func bash(command string) map[string]any {
+	return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": command}}
+}
+
+// The Buzz tests in tools/policy/guard.buzz pin each rule against argvs it builds by hand.
+// This pins the other half: the policy the root magusfile actually registers, reached
+// through the Go guard from the shell line or tool call a host sends, so a parse the Go
+// side changes, or a request field it stops filling, fails here and not in a session.
+// Every rule the header lists needs a case.
+func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
+	root, err := magus.FindRoot("")
+	require.NoError(t, err)
+	m, err := magus.LoadGuardRules(t.Context(), root, types.VCSOptions{})
+	require.NoError(t, err, "the policy loads the way the hook loads it")
+	require.NotNil(t, m.CommandRule(), "the root magusfile registers a command rule")
+	require.NotNil(t, m.SpawnRule(), "and a spawn rule")
+	require.NotNil(t, m.WriteRule(), "and a write rule")
+
+	cases := []policyCase{
+		{rule: "ci-watch", name: "gh pr checks --watch", input: bash("gh pr checks 183 --watch"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-watch", name: "a while loop over gh pr checks", input: bash("while true; do gh pr checks 183; sleep 30; done"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-watch", name: "a for loop that sleeps over gh pr checks", input: bash("for i in $(seq 1 20); do gh pr checks 183; sleep 30; done"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-watch", name: "gh run watch behind env and timeout", input: bash("GH_TOKEN=x timeout 600 gh run watch 34069443069"), decision: "deny", reason: "GREEN CHANGES NOTHING"},
+		{rule: "ci-batch-poll", name: "one pull request's checks", input: bash("gh pr checks 183"), decision: "advise", reason: "gh pr list --state open"},
+		{rule: "queue-poll", name: "the queue's runs", input: bash("gh run list --workflow queue.yaml --limit 5"), decision: "advise", reason: "magus queue ls"},
+		{rule: "admin-merge", name: "gh pr merge --admin", input: bash("gh pr merge 12 --squash --admin"), decision: "deny", reason: "--auto --squash"},
+		{rule: "pr-watch", name: "a for loop that sleeps over a pull request's state", input: bash("for i in 1 2 3; do gh pr view 300 --json state,autoMergeRequest; sleep 60; done"), decision: "deny", reason: "CI monitor"},
+		{rule: "pr-watch", name: "a while loop over the pulls endpoint", input: bash(`while true; do gh api repos/egladman/magus/pulls/300 --jq .merged; sleep 60; done`), decision: "deny", reason: "CI monitor"},
+		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: "pass"},
+		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: "deny", reason: "integrate"},
+		{rule: "worker-runs-gate", name: "an integrate worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: "pass"},
+		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
+			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "HEAD:refs/heads/guard-pr-polling"},
+		{rule: "change-role-spawn-not-isolated", name: "a feat worker sharing the checkout", input: map[string]any{
+			"tool_name": "Agent", "tool_input": map[string]any{"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet"},
+		}, decision: "deny", reason: `isolation: "worktree"`},
+		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: map[string]any{
+			"tool_name": "Agent", "tool_input": map[string]any{"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree"},
+		}, decision: "pass"},
+	}
+
+	covered := map[string]bool{}
+	for _, tc := range cases {
+		covered[tc.rule] = true
+		t.Run(tc.rule+"/"+tc.name, func(t *testing.T) {
+			ctx, cacheDir := spawnFixture(t)
+			input := map[string]any{"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse"}
+			for k, v := range tc.input {
+				input[k] = v
+			}
+			if tc.worker != "" {
+				input["agent_id"] = "a1"
+				writeSpawnedAgent(hint.NewGate(cacheDir, FactsKey("claude-code", "8f2c6a1e")), "a1", spawnedAgent{Description: tc.worker})
+			}
+			deps := Dependencies{CommandRule: m.CommandRule(), SpawnRule: m.SpawnRule(), WriteRule: m.WriteRule()}
+			if tc.checkout != nil {
+				deps.CheckoutState = func(context.Context, string) *types.CheckoutState { return tc.checkout }
+			}
+			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input)})
+			assert.Equal(t, tc.decision, v.Decision, v.Reason)
+			if tc.decision != "pass" {
+				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")
+			}
+			if tc.reason != "" {
+				assert.Contains(t, v.Reason+v.Context, tc.reason)
+			}
+		})
+	}
+
+	// changelog-unreleased-edit reads the checkout it lands in, so it gets one of its own.
+	covered["changelog-unreleased-edit"] = true
+	t.Run("changelog-unreleased-edit", func(t *testing.T) {
+		ctx, ws, _ := writeFixture(t)
+		changelog := filepath.Join(ws, "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelog, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- one\n\n## [0.4.0]\n\n- old\n"), 0o644))
+		require.NoError(t, os.MkdirAll(filepath.Join(ws, "changes", "unreleased"), 0o755))
+		edit := func(oldText, newText string) Verdict {
+			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
+				"tool_input": map[string]any{"file_path": changelog, "old_string": oldText, "new_string": newText},
+			})})
+		}
+		v := edit("- one\n", "- one\n- two\n")
+		assert.Equal(t, "deny", v.Decision)
+		assert.Equal(t, workspaceWriteRule, v.Rule)
+		assert.Contains(t, v.Reason, "changes/unreleased/")
+		assert.NotEqual(t, "deny", edit("- old\n", "- old, fixed\n").Decision, "a released section's fix passes")
+	})
+
+	source, err := os.ReadFile(filepath.Join(root, "tools", "policy", "guard.buzz"))
+	require.NoError(t, err)
+	listed := policyRule.FindAllStringSubmatch(string(source), -1)
+	require.NotEmpty(t, listed, "the header still lists its rules as `//   name (`")
+	for _, rule := range listed {
+		assert.True(t, covered[rule[1]], "%s is in the policy's header with no real-input case here", rule[1])
+	}
 }

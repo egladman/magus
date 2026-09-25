@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,7 +87,7 @@ func TestNotifyCmd(t *testing.T) {
 	// A waiting or permission event opens a real attention request, so the store is
 	// redirected here; without it these subtests would file requests into the
 	// developer's own queue.
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	run := func(stdin string, args ...string) (string, error) {
 		var out bytes.Buffer

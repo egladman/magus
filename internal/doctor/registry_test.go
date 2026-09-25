@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,7 +69,7 @@ func TestCheckCodesAreRoutable(t *testing.T) {
 // them without any check dereferencing the workspace that is not there.
 func TestRunSkipsWorkspaceChecksWhenLoadFailed(t *testing.T) {
 	// The tokens check reads the state dir; the real one says nothing about this contract.
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	report := Run(t.Context(), t.TempDir(), nil, assert.AnError)
 
 	var want int

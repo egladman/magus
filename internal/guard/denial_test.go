@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // claudeCodeBash is a Claude Code PreToolUse event for a Bash call, in the shape the
@@ -25,7 +26,7 @@ func claudeCodeBash(session, command string) string {
 // shortened a rule for a second hook form that had never been told it, and let two hosts
 // that happen to present the same id spend each other's firings.
 func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
@@ -56,7 +57,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 // runs the Buzz port and whose Task matcher runs the sh copy has read the brief once, and
 // a spawn through either form must see it.
 func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"

@@ -194,6 +194,27 @@ You never run that command yourself. `linguist-generated` is the other half, and
 the half that always works: it collapses the file in GitHub's diff view and keeps it out
 of language statistics.
 
+### Diff drivers
+
+The same managed block opens with a diff driver for each source language magus reads:
+
+```gitattributes
+*.go diff=golang
+*.ts diff=typescript
+*.buzz diff=buzz
+```
+
+A diff driver's hunk-header pattern is how git names the declaration a change lands in,
+the text after the second `@@` of each hunk. A job's footprint reads those names to say
+which functions, types and tests a change touched, and `git diff` prints them for people
+too. `golang`, `python`, `rust` and `markdown` ship with git. `typescript` and `buzz` do
+not, so magus registers their patterns as `diff.typescript.xfuncname` and
+`diff.buzz.xfuncname` in git config, beside `merge.magus.driver` and in the same scope.
+Each attribute resolves to the last line that sets it, and a driver line sets only `diff`,
+so a generated `.go` file keeps `merge=magus` and gains `diff=golang`. A workspace load
+restores a missing line or registration, and `magus doctor` fails its
+`merge-driver-loads-workspace` check when one is still missing.
+
 ### Regeneration after the merge
 
 The driver keeps the current version of the file and does not regenerate it. git calls
