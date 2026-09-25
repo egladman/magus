@@ -68,7 +68,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.Jobs.MaxDepth, "jobs-max-depth", cfg.Jobs.MaxDepth, "MAGUS_JOBS_MAX_DEPTH: MaxDepth is how many levels below its root job a fork may land.")
 	fs.IntVar(&cfg.Jobs.MaxLive, "jobs-max-live", cfg.Jobs.MaxLive, "MAGUS_JOBS_MAX_LIVE: MaxLive is how many live jobs one root's tree may hold at once, the new one included.")
 	fs.DurationVar(&cfg.Jobs.DefaultTimeout, "jobs-default-timeout", cfg.Jobs.DefaultTimeout, "MAGUS_JOBS_DEFAULT_TIMEOUT: DefaultTimeout bounds a fork that names no --timeout.")
-	fs.DurationVar(&cfg.Jobs.StaleAfter, "jobs-stale-after", cfg.Jobs.StaleAfter, "MAGUS_JOBS_STALE_AFTER: StaleAfter flags a live job nobody updated for this long, in 'magus ls jobs' and 'magus doctor'.")
+	fs.DurationVar(&cfg.Jobs.StaleAfter, "jobs-stale-after", cfg.Jobs.StaleAfter, "MAGUS_JOBS_STALE_AFTER: StaleAfter ends a declared job nobody took and nobody updated for this long, and flags a taken one in 'magus ls jobs'...")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.")
 	fs.IntVar(&cfg.Concurrency, "j", cfg.Concurrency, "Short for --concurrency")
 	fs.TextVar(&cfg.ConcurrencyProfile, "concurrency-profile", cfg.ConcurrencyProfile, "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...")

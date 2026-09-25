@@ -82,6 +82,11 @@ type Store struct {
 	// them as whoever started the process.
 	actor    *Actor
 	cacheDir string
+	// clock, staleAfter and notices are the sweep's seams (see [Store.List]); nil means
+	// time.Now, the workspace's jobs.stale_after, and stderr.
+	clock      func() time.Time
+	staleAfter *time.Duration
+	notices    io.Writer
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -366,14 +371,24 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		case i >= 0:
 			if kind != asExec {
 				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
+				row.CheckoutRoot = prev.CheckoutRoot
 			}
 			if kind != asObservation {
 				row.Unattributed = prev.Unattributed
 			}
 		case actor.Bound():
 			row.ReportedBase, row.BaseVerdict, row.Registered, row.Unattributed = "", "", 0, nil
+			row.CheckoutRoot = ""
+		}
+		// Only the sweep writes a reason, and a row brought back to life has none.
+		row.EndReason = prev.EndReason
+		if row.State.Live() {
+			row.EndReason = ""
 		}
 		row.Updated = now
+		if kind == asObservation && i >= 0 {
+			row.Updated = prev.Updated
+		}
 		row.Created = now
 		row.SchemaVersion = types.JobSchemaVersion
 		row.Releases = s.releases(ctx, prev, row, now)
@@ -399,12 +414,20 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
+//
+// Every read SWEEPS first: a live row magus can prove is dead is ended as no_return with
+// its [types.Job.EndReason], and one line per ended row goes to stderr. See [sweeper.dead]
+// for the rules. The sweep is the one write a read makes, and only when a row is dead, so
+// a plan with nothing to end is still read without either lock.
 func (s *Store) List() ([]types.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	f, _, err := s.read()
 	if err != nil {
+		return nil, err
+	}
+	if f, err = s.sweep(f); err != nil {
 		return nil, err
 	}
 	out := make([]types.Job, len(f.Jobs))

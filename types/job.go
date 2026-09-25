@@ -416,7 +416,7 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 9
+const JobSchemaVersion = 10
 
 // JobWriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT at the moment it was declared.
@@ -691,14 +691,20 @@ type Job struct {
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a
 	// fact about the client's clock.
 	Registered int64 `json:"registered,omitempty" yaml:"registered,omitempty"`
+	// CheckoutRoot is the absolute root of the checkout `magus job exec` took this job in,
+	// stamped by the store on that write. Once the directory is gone, nobody can be
+	// holding the job, and the store ends it.
+	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
+	// EndReason is why magus ended this row itself, empty when a holder or a person ended
+	// it. Store-computed; see job.Store.List for the rules that set it.
+	EndReason string `json:"end_reason,omitempty" yaml:"end_reason,omitempty"`
 	// Created and Updated are unix seconds, stamped by the store on write and
 	// output-only to callers: a client-supplied timestamp is a fact about the client's
 	// clock, not about when the row was recorded.
 	//
-	// Updated is the row's heartbeat. A lease that re-puts its row on every state change
-	// keeps it moving; a row nobody touches goes stale, and a reader may then judge the
-	// lease possibly dead. That judgment is the READER'S: nothing here transitions a row
-	// on its own, and silence has no verdict in it.
+	// Updated is the row's heartbeat, moved only by the row's own writes: the guard noting
+	// an unattributed write inside its paths leaves it alone, or a dead row would look
+	// alive for as long as other agents kept working near it.
 	Created int64 `json:"created" yaml:"created"`
 	Updated int64 `json:"updated" yaml:"updated"`
 	// Deadline is unix seconds past which the guard denies this lease's writes, zero for no
@@ -979,6 +985,12 @@ func (u Job) Overdue(now int64) bool {
 	return u.Deadline > 0 && u.State.Live() && now >= u.Deadline
 }
 
+// StaleAt reports whether the row was last updated at least after ago as of now, in unix
+// seconds. A zero or negative after is never.
+func (u Job) StaleAt(now int64, after time.Duration) bool {
+	return after > 0 && now-u.Updated >= int64(after/time.Second)
+}
+
 // quoteJoin renders a closed set for an error that has to list what it would accept.
 func quoteJoin[T ~string](items []T, sep string) string {
 	out := make([]string, len(items))
@@ -1201,8 +1213,8 @@ type JobList struct {
 	Jobs     []Job        `json:"jobs"               yaml:"jobs"`
 	Overlaps []JobOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
 	// Overdue, Orphans and Stale are live job ids a reader should look at, derived at one
-	// instant by [JobList.Flag]. Reports, never transitions: ending a row stays the
-	// orchestrator's call.
+	// instant by [JobList.Flag]. The store's read ends orphans and most untaken stale rows
+	// first (see job.Store.List), so these mostly name work a holder took.
 	Overdue []string `json:"overdue,omitempty" yaml:"overdue,omitempty"`
 	Orphans []string `json:"orphans,omitempty" yaml:"orphans,omitempty"`
 	Stale   []string `json:"stale,omitempty"   yaml:"stale,omitempty"`
@@ -1248,8 +1260,9 @@ func (b JobBlock) String() string {
 }
 
 // Flag fills Overdue, Orphans and Stale as of now, in unix seconds. Overdue is past its
-// deadline; an orphan is live while its root ancestor has ended, so nobody is left to wait
-// on it; stale was not updated within staleAfter, and a zero staleAfter flags nothing.
+// deadline; an orphan is live while an ancestor has ended (pass, fail or no_return), so
+// nobody is left to wait on it; stale was not updated within staleAfter, and a zero
+// staleAfter flags nothing.
 func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
 	l.Overdue, l.Orphans, l.Stale = nil, nil, nil
 	for _, row := range l.Jobs {
@@ -1259,14 +1272,25 @@ func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
 		if row.Overdue(now) {
 			l.Overdue = append(l.Overdue, row.ID)
 		}
-		if ancestors := JobAncestors(l.Jobs, row.ID); len(ancestors) > 0 && !ancestors[len(ancestors)-1].State.Live() {
+		if _, ended := EndedAncestor(l.Jobs, row.ID); ended {
 			l.Orphans = append(l.Orphans, row.ID)
 		}
-		if staleAfter > 0 && now-row.Updated >= int64(staleAfter/time.Second) {
+		if row.StaleAt(now, staleAfter) {
 			l.Stale = append(l.Stale, row.ID)
 		}
 	}
 	return l
+}
+
+// EndedAncestor returns the nearest ancestor of id in a terminal state. A row with no
+// state has not said it ended, so it does not count.
+func EndedAncestor(rows []Job, id string) (Job, bool) {
+	for _, a := range JobAncestors(rows, id) {
+		if a.State.Terminal() {
+			return a, true
+		}
+	}
+	return Job{}, false
 }
 
 // JobAncestors walks id's parent chain nearest first. It stops at a parent the rows do not

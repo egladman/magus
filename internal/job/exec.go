@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -47,6 +48,13 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 		cur.ReportedBase = base
 		cur.BaseVerdict = compareBase(cur.Checkpoint, base)
 		cur.Registered = now
+		// Relative would be resolved against whichever process sweeps the row later.
+		cur.CheckoutRoot = ""
+		if s.root != "" {
+			if abs, err := filepath.Abs(s.root); err == nil {
+				cur.CheckoutRoot = abs
+			}
+		}
 		return nil
 	})
 }

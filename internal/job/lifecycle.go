@@ -2,9 +2,15 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"slices"
+	"sync"
+	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 )
 
@@ -196,4 +202,165 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	// reader still sees them; only the verdict is narrowed to the question.
 	status.Verified = !slices.ContainsFunc(status.Gates, func(g types.GateStatus) bool { return !g.Verified })
 	return status, nil
+}
+
+// ending is one live row the sweep ends, and the reason it records.
+type ending struct {
+	id, reason string
+}
+
+// sweeper decides which live rows are provably dead as of one instant. It carries what
+// one sweep should compute once however many passes it makes: the stat of each bound
+// checkout, and jobs.stale_after, which is read only if some row needs it.
+type sweeper struct {
+	now    int64
+	window func() (time.Duration, error)
+	gone   map[string]bool
+}
+
+// dead returns the live rows nobody will finish, in store order, with why. Ending one row
+// can orphan another, so it repeats until a pass ends nothing. A row is dead when:
+//
+//  1. an ancestor ended (pass, fail or no_return): the tree dies with its root;
+//  2. a holder took it with `magus job exec` and that checkout's directory is gone;
+//  3. it is declared, nobody ever took it, it was not updated within jobs.stale_after,
+//     and no live child hangs under it, so a root outlives the children still working.
+//
+// Server rows are the server's own maintenance and never swept. An exited row skips rule
+// 2: its holder already returned, and removing the worktree is the normal end of that. A
+// checkout whose stat fails for any reason but absence stays live, since magus cannot
+// tell a gone directory from an unreadable mount.
+func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
+	rows = slices.Clone(rows)
+	var out []ending
+	for {
+		var round []ending
+		for _, row := range rows {
+			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer {
+				continue
+			}
+			reason, err := w.reason(rows, row)
+			if err != nil {
+				return nil, err
+			}
+			if reason != "" {
+				round = append(round, ending{id: row.ID, reason: reason})
+			}
+		}
+		if len(round) == 0 {
+			return out, nil
+		}
+		for _, e := range round {
+			i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.id })
+			rows[i].State = types.StateNoReturn
+		}
+		out = append(out, round...)
+	}
+}
+
+// reason is why row is dead, or "" when it is not. See [sweeper.dead].
+func (w *sweeper) reason(rows []types.Job, row types.Job) (string, error) {
+	if a, ok := types.EndedAncestor(rows, row.ID); ok {
+		kin := "ancestor"
+		if a.ID == row.Parent {
+			kin = "parent"
+		}
+		return fmt.Sprintf("%s %s ended as %s, and its tree ends with it", kin, a.ID, a.State), nil
+	}
+	taken := row.Registered != 0 || row.CheckoutRoot != ""
+	if row.State != types.StateExited && w.checkoutGone(row.CheckoutRoot) {
+		return fmt.Sprintf("taken in %s, which no longer exists", row.CheckoutRoot), nil
+	}
+	if taken || row.State != types.StateDeclared {
+		return "", nil
+	}
+	if slices.ContainsFunc(rows, func(r types.Job) bool { return r.Parent == row.ID && r.State.Live() }) {
+		return "", nil
+	}
+	window, err := w.window()
+	if err != nil {
+		return "", err
+	}
+	if !row.StaleAt(w.now, window) {
+		return "", nil
+	}
+	return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)",
+		time.Duration(w.now-row.Updated)*time.Second, window), nil
+}
+
+// checkoutGone reports whether root names a directory that provably does not exist.
+func (w *sweeper) checkoutGone(root string) bool {
+	if root == "" {
+		return false
+	}
+	gone, ok := w.gone[root]
+	if !ok {
+		_, err := os.Stat(root)
+		gone = errors.Is(err, fs.ErrNotExist)
+		w.gone[root] = gone
+	}
+	return gone
+}
+
+// sweep ends every row in f the [sweeper] proves dead, and returns the plan as written.
+// The verdict is reached twice: once lock-free, so a plan with nothing to end costs no
+// lock, and again under the file lock against a fresh read, so a row another process
+// revived in between is not ended on a stale view.
+func (s *Store) sweep(f jobsFile) (jobsFile, error) {
+	clock := s.clock
+	if clock == nil {
+		clock = time.Now
+	}
+	w := &sweeper{now: clock().Unix(), window: sync.OnceValues(s.resolveStaleAfter), gone: map[string]bool{}}
+	dead, err := w.dead(f.Jobs)
+	if err != nil || len(dead) == 0 {
+		return f, err
+	}
+	err = s.withFileLock(context.Background(), func() error {
+		cur, rawByID, err := s.read()
+		if err != nil {
+			return err
+		}
+		if dead, err = w.dead(cur.Jobs); err != nil {
+			return err
+		}
+		for _, e := range dead {
+			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.id })
+			cur.Jobs[i].State = types.StateNoReturn
+			cur.Jobs[i].EndReason = e.reason
+			cur.Jobs[i].Updated = w.now
+		}
+		if len(dead) > 0 {
+			if err := s.write(cur, rawByID); err != nil {
+				return err
+			}
+		}
+		f = cur
+		return nil
+	})
+	if err != nil {
+		return jobsFile{}, err
+	}
+	out := s.notices
+	if out == nil {
+		out = os.Stderr
+	}
+	for _, e := range dead {
+		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)
+	}
+	return f, nil
+}
+
+// resolveStaleAfter is jobs.stale_after from the workspace's own magus.yaml. Workspace
+// only, like every rule that acts rather than reports: a value in one person's global
+// config must not end rows in a repository that never chose it.
+func (s *Store) resolveStaleAfter() (time.Duration, error) {
+	if s.staleAfter != nil {
+		return *s.staleAfter, nil
+	}
+	cfg, err := config.LoadWorkspaceOnly(s.root)
+	if err != nil {
+		return 0, fmt.Errorf("job: read jobs.stale_after to end untaken jobs: %w", err)
+	}
+	return cfg.Jobs.StaleAfter, nil
 }

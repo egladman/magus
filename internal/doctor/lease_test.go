@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -216,7 +217,7 @@ func registeredLease(t *testing.T, id string) (cacheDir, root string) {
 	return cacheDir, root
 }
 
-func TestCheckJobTreeFlagsOrphansAndStaleJobs(t *testing.T) {
+func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 	_, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "root", State: types.StatePass})
 	seed(t, store, types.Job{ID: "root/orphan", Parent: "root", State: types.StateRunning})
@@ -224,11 +225,12 @@ func TestCheckJobTreeFlagsOrphansAndStaleJobs(t *testing.T) {
 
 	now := time.Now().Unix()
 	got := checkJobTree(root, config.Jobs{}, now)
-	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
-	details := strings.Join(got.Details, "\n")
-	assert.Contains(t, got.Message, "root/orphan")
-	assert.Contains(t, details, hint.JobExit.With("root/orphan"))
-	assert.NotContains(t, details, hint.JobExit.With("live"), "a live root is nobody's orphan, and staleness is unset")
+	assert.Equal(t, types.CheckOK, got.Status, "the read ended the orphan, so nothing is left to report: %s", got.Message)
+	rows, err := store.List()
+	require.NoError(t, err)
+	orphan := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "root/orphan" })]
+	assert.Equal(t, types.StateNoReturn, orphan.State)
+	assert.NotEmpty(t, orphan.EndReason)
 
 	stale := checkJobTree(root, config.Jobs{StaleAfter: time.Minute}, now+3600)
 	require.Equal(t, types.CheckAdvice, stale.Status)

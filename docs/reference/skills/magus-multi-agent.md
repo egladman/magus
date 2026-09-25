@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 38909
-skill_short_bytes: 29214
+skill_full_bytes: 39306
+skill_short_bytes: 29477
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `86` |
+| `agent-skill-version` | `87` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `596c6ff1d156` |
+| `skill-content` | `1a4e78885bd7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -380,13 +380,18 @@ on a tree the releaser never saw.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
-`write_paths`, and how long since each row was touched. Both are facts, not
-verdicts - magus transitions nothing, so a row that has gone quiet is a job YOU
-decide is possibly dead, and a reported overlap is a pair you either intended or
-must repartition. It also marks a live job `orphan` when its root job has ended,
-`stale` when it was not updated within `jobs.stale_after` (only when that key is
-set), and `overdue`, and names `magus job exit <id>` for each; `magus doctor`
-reports the first two. Ending the row stays yours.
+`write_paths`, and how long since each row was touched. A reported overlap is a
+pair you either intended or must repartition.
+
+magus ENDS a live job itself, as `no_return` with an `end_reason`, on every read
+of the store when it can prove nobody holds it: an ancestor ended, the checkout
+`magus job exec` took it in no longer exists, or it is still `declared`,
+nobody ever took it, and it was not updated within `jobs.stale_after` (default
+2h, `0` for never). Each ended job prints `ended <id>: <reason>` on stderr. So remove a
+worker's worktree only once its job is done, and advance a root you are still
+using. What magus cannot prove it leaves live: a taken job that went quiet reads
+`stale`, one past its timeout `overdue`, each with `magus job exit <id>`, and
+ending those stays yours.
 
 `--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
 denies every write graded under that lease, and its paths stop blocking other
@@ -1021,13 +1026,20 @@ on a tree the releaser never saw.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
-`write_paths`, and how long since each row was touched. Both are facts, not
-verdicts - magus transitions nothing, so a row that has gone quiet is a job YOU
-decide is possibly dead, and a reported overlap is a pair you either intended or
-must repartition. It also marks a live job `orphan` when its root job has ended,
-`stale` when it was not updated within `jobs.stale_after` (only when that key is
-set), and `overdue`, and names `magus job exit <id>` for each; `magus doctor`
-reports the first two. Ending the row stays yours.
+`write_paths`, and how long since each row was touched. A reported overlap is a
+pair you either intended or must repartition.
+
+magus ENDS a live job itself, as `no_return` with an `end_reason`, on every read
+of the store when it can prove nobody holds it: an ancestor ended, the checkout
+`magus job exec` took it in no longer exists, or it is still `declared`,
+nobody ever took it, and it was not updated within `jobs.stale_after` (default
+2h, `0` for never). A root outlives children still working under it;
+the guard noting somebody else's write in a job's paths does not count as an
+update. Each ended job prints `ended <id>: <reason>` on stderr. So remove a
+worker's worktree only once its job is done, and advance a root you are still
+using. What magus cannot prove it leaves live: a taken job that went quiet reads
+`stale`, one past its timeout `overdue`, each with `magus job exit <id>`, and
+ending those stays yours.
 
 `--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
 denies every write graded under that lease, and its paths stop blocking other

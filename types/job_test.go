@@ -24,7 +24,7 @@ var jobFieldNames = []string{
 	"schema_version", "id", "parent", "criteria", "checkpoint", "write_paths", "deny_paths",
 	"read_paths", "depends_on", "model", "check", "validation", "completion_gates", "state", "holder",
 	"read_only", "releases", "unattributed", "write_proof", "reported_base", "base_verdict",
-	"registered_by", "registered", "created", "updated", "deadline", "result", "attempt", "gate_attempts", "last_run",
+	"registered_by", "registered", "checkout_root", "end_reason", "created", "updated", "deadline", "result", "attempt", "gate_attempts", "last_run",
 }
 
 // TestJobSchemaVersionCoversEveryField pins Job's field set against jobFieldNames, read

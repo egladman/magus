@@ -18,9 +18,10 @@ func (r *runner) checkJobTree() types.Check {
 	return checkJobTree(r.ws.Root(), r.opts.cfg.Jobs, time.Now().Unix())
 }
 
-// checkJobTree reports live jobs nobody is left to wait on, including a job blocked on a
-// dependency that ended without passing. It only reports: magus never
-// transitions a row, so the finding names the exit command a person runs instead.
+// checkJobTree reports live jobs nobody may be waiting on, including a job blocked on a
+// dependency that ended without passing. Reading the store has already ended every row
+// magus could prove dead (see job.Store.List), so what is left is work somebody took and
+// went quiet on, and the finding names the exit command a person runs for it.
 func checkJobTree(root string, limits config.Jobs, now int64) types.Check {
 	const name = "job-tree"
 
@@ -31,9 +32,6 @@ func checkJobTree(root string, limits config.Jobs, now int64) types.Check {
 	}
 	flagged := types.NewJobList(rows).Flag(now, limits.StaleAfter)
 	var parts, details []string
-	if len(flagged.Orphans) > 0 {
-		parts = append(parts, fmt.Sprintf("%d live job(s) whose root job has ended: %s", len(flagged.Orphans), strings.Join(flagged.Orphans, ", ")))
-	}
 	if len(flagged.Stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d live job(s) not updated within jobs.stale_after (%s): %s",
 			len(flagged.Stale), limits.StaleAfter, strings.Join(flagged.Stale, ", ")))
@@ -51,13 +49,13 @@ func checkJobTree(root string, limits config.Jobs, now int64) types.Check {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "every live job has a live root and a recent update"}
 	}
 	seen := map[string]bool{}
-	for _, id := range append(append(slices.Clone(flagged.Orphans), flagged.Stale...), stuck...) {
+	for _, id := range append(slices.Clone(flagged.Stale), stuck...) {
 		if !seen[id] {
 			seen[id] = true
 			details = append(details, "if nobody holds it: "+hint.JobExit.With(id))
 		}
 	}
-	details = append(details, "magus reports these and never ends a row itself")
+	details = append(details, "magus ends a row itself only when it can prove nobody holds it; these it cannot")
 	return types.Check{Name: name, Status: types.CheckAdvice, Message: strings.Join(parts, "; "), Details: details}
 }
 

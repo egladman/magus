@@ -17,7 +17,7 @@ import (
 func loadableRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("jobs:\n  stale_after: 2h\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build() {}\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "job"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "store.go"), []byte("package job\n"), 0o644))

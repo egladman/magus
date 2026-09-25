@@ -124,8 +124,12 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `read_only`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), and `write_proof`, all output-only: a
-timestamp a client sent would be a fact about that client's clock.
+outside it wrote, noticed by the guard), `write_proof`, `checkout_root` (where
+`magus job exec` took the job), and `end_reason` (why magus ended it, see
+[jobs magus ends itself](#jobs-magus-ends-itself)), all output-only: a
+timestamp a client sent would be a fact about that client's clock. `updated`
+moves only on the job's own writes; the guard recording an unattributed write
+leaves it alone.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
 is `declared`; a holder moves its own job with `magus job exec` and
@@ -203,8 +207,8 @@ the `--stdin` record or the `magus_job` call) has the store stamp a `deadline`
 on the row at fork time; nothing accepts a deadline directly. It is unset by
 default, and a job with acceptance criteria needs no bound. Past the deadline the
 guard denies every write graded under that lease and its write paths stop
-blocking other jobs, while the row stays live: magus never transitions it, and
-`magus ls jobs` marks it `overdue`.
+blocking other jobs, while the row stays live: a deadline alone never ends it,
+and `magus ls jobs` marks it `overdue`.
 
 **Limits exist only when the workspace sets them**, in magus.yaml:
 
@@ -213,11 +217,11 @@ jobs:
   max_depth: 3 # levels below the root job; 0 = unlimited
   max_live: 12 # live jobs under one root; 0 = unlimited
   default_timeout: 2h # applies when fork names no --timeout
-  stale_after: 30m # flag live jobs untouched this long
+  stale_after: 30m # end untaken jobs untouched this long; default 2h, 0 = never
 ```
 
-Every key is unset by default. `magus job fork` refuses past `max_depth` or
-`max_live`, naming the key that set the limit.
+Every key but `stale_after` is unset by default. `magus job fork` refuses past
+`max_depth` or `max_live`, naming the key that set the limit.
 
 ### Two answers the store gives back
 
@@ -244,11 +248,10 @@ different places. Hand the digest to the job taking the path over; one that no
 longer matches at verification time means that job built on a tree the releaser
 never saw.
 
-**Jobs nobody is waiting on.** A list also marks a live job an `orphan` when its
-root job has ended, and `stale` when it was not updated within
-`jobs.stale_after` (only when that key is set), naming `magus job exit <id>` for
-each. `magus doctor`'s **job-tree** check reports the same two. Both are
-reports: ending the row stays yours.
+**Jobs a holder went quiet on.** A list marks a live job `stale` when it was not
+updated within `jobs.stale_after`, naming `magus job exit <id>` for each, and
+`magus doctor`'s **job-tree** check reports the same. These are the jobs magus
+could not prove dead, so ending them stays yours.
 
 Three doors write the store and they reach one set of rules: `magus job` is the
 person's, `magus_job` is the agent's, and `magus\job` is a magusfile's.
@@ -258,6 +261,39 @@ magus ls jobs                # every job, parents above the ones they forked
 magus ls jobs -o json        # the same records, overlaps included
 magus describe job <job>     # one job's terms
 ```
+
+### Jobs magus ends itself
+
+Every read of the store (`magus ls jobs`, `magus job fork`, the guard's lease
+lookup, `magus doctor`, the `magus_job` tool) first ends each live job magus can
+prove nobody holds, as `no_return` with an `end_reason`, and prints one line per
+job on stderr:
+
+```text
+ended fleet/w2: taken in /src/app/.worktrees/w2, which no longer exists
+```
+
+A job is ended when:
+
+1. **An ancestor ended** in `pass`, `fail`, or `no_return`. The tree dies with
+   its root, children and grandchildren alike.
+2. **Its checkout is gone.** `magus job exec` records the checkout it took the
+   job in; once that directory no longer exists, nobody can be working there.
+   An `exited` job is spared: its holder already returned, and removing the
+   worktree is the normal end of that.
+3. **Nobody took it.** It is still `declared`, no `magus job exec` ever took it,
+   it was not updated within `jobs.stale_after`, and no live job hangs under it,
+   so a root outlives the children still working. The window is read from the
+   workspace's own `magus.yaml`: 2h by default, `0` for never.
+
+A job whose liveness cannot be decided stays live: a checkout path on a mount
+that cannot be read is not a path that is gone. The server's own maintenance
+jobs are never ended this way. Ending a row moves its `updated`; nothing else
+magus does for a job does, so a job other agents keep writing near still ages.
+
+Two habits follow. Remove a worker's worktree only once its job is done, and
+advance a root row you are still forking under, since an untaken root with no
+live children is as dead as any other untaken job.
 
 ## Give the holder its terms
 
@@ -623,8 +659,9 @@ jobs they forked.
 
 A job in a reported overlap is marked on both rows. A live row carries how long
 since it was last touched, and the released paths and their digests read in the
-detail beside the row. No row transitions itself: every state was written by an
-agent or a person, which is why a row that has gone quiet is a job YOU decide is
+detail beside the row. Beyond the jobs magus
+[ends itself](#jobs-magus-ends-itself), every state was written by an agent or a
+person, which is why a row that has merely gone quiet is a job YOU decide is
 possibly dead.
 
 The service behind it is `magus.job.v1alpha1.JobService`, the server's one
@@ -696,8 +733,10 @@ review back up read the same identity.
 - Block a writer it cannot attribute. Only a process that named a live job is
   graded against a declared boundary; anyone else editing this workspace is
   advised at most, because a human in their own checkout names no job either.
-- Transition a row, or derive a state or a completion from one. Every state was
-  written by the agent or the person that put it there.
+- Transition a row on a guess. magus ends a job only on a fact it can prove
+  ([jobs magus ends itself](#jobs-magus-ends-itself)), always as `no_return`,
+  and never derives a pass or a completion; every other state was written by the
+  agent or the person that put it there.
 - Judge a delegation prompt, or let one change a guard verdict.
 - Mint anything for a checkpoint: no tag, no stash, no ref, no file.
 - Inject any of this into an agent's context. Every surface here is pull-based,

@@ -272,7 +272,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		ids   []string
 	}{
 		{"overdue: past the deadline their timeout set, so their writes are denied", report.Overdue},
-		{"orphans: live under a root job that has ended", report.Orphans},
+		{"orphans: live under a job that has ended", report.Orphans},
 		{"stale: not updated within jobs.stale_after", report.Stale},
 	} {
 		if len(section.ids) == 0 {
