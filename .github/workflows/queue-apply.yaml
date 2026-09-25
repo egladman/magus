@@ -31,9 +31,11 @@ name: Queue apply
 # rebuild is the candidate validation gated; after each, it stops unless main carries the
 # tree it predicted.
 #
-# The write credential is this job's own Actions token unless the magus-queue
-# environment holds the queue's own GitHub App (the MAGUS_QUEUE_APP_CLIENT_ID variable
-# and the MAGUS_QUEUE_APP_PRIVATE_KEY secret), and nothing bypasses a rule either way.
+# The write credential is the queue's own GitHub App (the MAGUS_QUEUE_APP_CLIENT_ID
+# variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret), and
+# nothing bypasses a rule. Without the app both jobs that need a token fail: a run the
+# Actions token dispatches starts no workflow_run, so the queue would validate and merge
+# nothing.
 # merge-queue is main's only required status; the queue posts success on it right before
 # a merge, once main is still at the tip the merge was predicted onto, and GitHub's
 # auto-merge then merges the pull request on behalf of whoever enabled it, which starts
@@ -102,9 +104,9 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      # Scoped to dispatching, unlike apply's: this job needs nothing else.
+      # Scoped to dispatching, unlike apply's: this job needs nothing else. With no app the
+      # step fails, since a dispatch on any other token is one apply never follows.
       - id: app
-        if: vars.MAGUS_QUEUE_APP_CLIENT_ID != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
@@ -115,7 +117,7 @@ jobs:
 
       - name: Start a validation run on main once the pull request's run saw merge intent
         env:
-          GITHUB_TOKEN: ${{ steps.app.outputs.token || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
         run: magus buzz tools/gha-queue.buzz -- dispatch --run "$RUN" --base "$MAIN"
@@ -209,12 +211,16 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # On the Actions token, also dispatches main's runs once the queue merged anything
-      # itself, even when applying then failed.
+      - name: Require the queue app
+        if: steps.magus.outputs.queue-token == ''
+        run: |
+          echo "::error::the merge queue needs its GitHub App: set the MAGUS_QUEUE_APP_CLIENT_ID variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret" >&2
+          exit 1
+
       - name: Merge each change as it goes green
         env:
-          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
-          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
+          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
           APP: ${{ steps.magus.outputs.queue-app-slug }}
