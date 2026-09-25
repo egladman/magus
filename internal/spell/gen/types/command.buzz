@@ -15,6 +15,7 @@ export object Command {
     bin: str = "",
     args: [str] = [],
     defaultArgs: [str] = [],
+    trailingArgs: [str] = [],
     charms: {str: Charm} = {},
     sources: [str] = [],
     external: External = External.none,

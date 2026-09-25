@@ -156,6 +156,9 @@ func newCommandRenderer(targets map[string]spells.Op) func(string, []string) (st
 		// The preview is the no-args invocation, so the declared defaults show
 		// exactly where execution appends them: after the charm-patched base.
 		args = append(args, op.DefaultArgs...)
+		// TrailingArgs land last of all in a real run; on the no-args preview
+		// nothing forwarded comes between them and DefaultArgs.
+		args = append(args, op.TrailingArgs...)
 		// A declared Sources is appended as its placeholder token: this renderer
 		// takes no project dir (magus describe has none per-target either), so it
 		// cannot run the runner's real per-project expansion; see
@@ -192,7 +195,7 @@ func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([
 		// trail every step: charms patch Args only, and execution appends the
 		// defaults after the patched base, so this is each step's real argv.
 		full := func(args []string) []string {
-			return append(append([]string{op.Bin}, args...), op.DefaultArgs...)
+			return append(append(append([]string{op.Bin}, args...), op.DefaultArgs...), op.TrailingArgs...)
 		}
 		steps := make([]spells.CharmTraceStep, 0, len(charmSteps)+1)
 		steps = append(steps, spells.CharmTraceStep{Command: full(op.Args)})

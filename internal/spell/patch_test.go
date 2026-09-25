@@ -348,7 +348,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Ops: map[string]spells.Op{
 			"go-mod-download": installOp("go", goldenGoInstallManifests, goldenGoInstall),
 			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints}},
-			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
+			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean"}, TrailingArgs: []string{"./..."}}},
 			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
