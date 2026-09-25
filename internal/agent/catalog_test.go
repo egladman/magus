@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -773,4 +775,134 @@ func TestGradeStampNeverMatchesTwoUnreadableDigests(t *testing.T) {
 
 	assert.True(t, got.Stale, "two catalogs that both failed to hash content must never grade as matching")
 	assert.Contains(t, got.Detail, "unreadable")
+}
+
+// offeredWorkspace installs the full form into the test harness's skill path and adds
+// one hand-authored skill beside it.
+func offeredWorkspace(t *testing.T) (*Catalog, string) {
+	t.Helper()
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	writeTestHarness(t, dir)
+	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
+	require.NoError(t, err)
+	writeLocalSkill(t, dir, "acme-rules", "---\nname: acme-rules\ndescription: \"Our house rules.\"\n---\n\n# Acme\n\nShip on Fridays.\n")
+	return catalog, dir
+}
+
+func writeLocalSkill(t *testing.T, dir, name, body string) {
+	t.Helper()
+	path := filepath.Join(dir, ".agents/skills", name, "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+}
+
+func TestOfferedListsBothShippedFormsAndLocalSkills(t *testing.T) {
+	catalog, dir := offeredWorkspace(t)
+
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{})
+	require.NoError(t, err)
+	require.Len(t, got, 2*len(skillSources)+1)
+
+	var names []string
+	for _, s := range got {
+		names = append(names, s.Name+"/"+s.Form)
+	}
+	for i := 1; i < len(got); i++ {
+		prev, cur := got[i-1], got[i]
+		assert.True(t, prev.Name < cur.Name || (prev.Name == cur.Name && prev.Form == "short" && cur.Form == "full"),
+			"out of order at %d: %v", i, names)
+	}
+
+	idx := slices.IndexFunc(got, func(s types.Skill) bool { return s.Name == "acme-rules" })
+	require.GreaterOrEqual(t, idx, 0)
+	assert.Equal(t, types.Skill{
+		Name:        "acme-rules",
+		Description: "Our house rules.",
+		Source:      "local",
+		Form:        "full",
+		Body:        "# Acme\n\nShip on Fridays.\n",
+		Current:     true,
+	}, got[idx])
+
+	idx = slices.IndexFunc(got, func(s types.Skill) bool { return s.Name == "magus-query" })
+	require.GreaterOrEqual(t, idx, 0)
+	description := skillSources[slices.IndexFunc(skillSources, func(s skillSource) bool { return s.name == "magus-query" })].description
+	assert.Equal(t, []types.Skill{
+		// The install carries only the full form, so no copy of the short one exists to be current.
+		{Name: "magus-query", Description: description, Source: "shipped", Form: "short", Body: "# magus-query\n" + catalog.footer("magus-query", VariantShort)},
+		{Name: "magus-query", Description: description, Source: "shipped", Form: "full", Body: "# magus-query\n" + catalog.footer("magus-query", VariantFull), Current: true},
+	}, got[idx:idx+2])
+}
+
+func TestOfferedBodyIsTheInstalledFileWithoutFrontmatter(t *testing.T) {
+	catalog, dir := offeredWorkspace(t)
+	installed, err := os.ReadFile(filepath.Join(dir, ".agents/skills", anchorSkillRel))
+	require.NoError(t, err)
+
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-query", Form: FormFull})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.True(t, strings.HasSuffix(string(installed), "\n\n"+got[0].Body), "body must be the installed file after its frontmatter")
+}
+
+func TestOfferedIsNotCurrentOnceAnInstalledCopyDrifts(t *testing.T) {
+	catalog, dir := offeredWorkspace(t)
+	path := filepath.Join(dir, ".agents/skills", anchorSkillRel)
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, append(body, "hand edit\n"...), 0o644))
+
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-query", Form: FormFull})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.False(t, got[0].Current)
+}
+
+func TestOfferedFormNarrowsShippedSkillsOnly(t *testing.T) {
+	catalog, dir := offeredWorkspace(t)
+
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Form: FormShort})
+	require.NoError(t, err)
+	require.Len(t, got, len(skillSources)+1)
+	for _, s := range got {
+		if s.Source == "shipped" {
+			assert.Equal(t, "short", s.Form, s.Name)
+		} else {
+			assert.Equal(t, "acme-rules", s.Name)
+		}
+	}
+
+	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Form: "medium"})
+	assert.ErrorContains(t, err, `unknown skill form "medium"`)
+}
+
+func TestOfferedNameSelectsOneSkillOrNamesNearMatches(t *testing.T) {
+	catalog, dir := offeredWorkspace(t)
+
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "acme-rules"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "local", got[0].Source)
+
+	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-qery"})
+	assert.EqualError(t, err, `agent: no skill named "magus-qery"; near matches: magus-query, magus-memory`)
+
+	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "zzzzzzzzzzzzzzzzzzzz"})
+	assert.ErrorContains(t, err, "none of the")
+}
+
+func TestOfferedLocalSkillsSkipStampedLitterAndRequireADescription(t *testing.T) {
+	catalog, dir := offeredWorkspace(t)
+	// An orphaned install carries the stamp: StaleSkillDirs reports it, and it is not
+	// the workspace's own skill.
+	writeLocalSkill(t, dir, "magus-retired", "---\nname: magus-retired\ndescription: old\n---\n\nold\n<!-- "+generatedSkillMarker+" -->\n")
+
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{})
+	require.NoError(t, err)
+	assert.False(t, slices.ContainsFunc(got, func(s types.Skill) bool { return s.Name == "magus-retired" }))
+
+	writeLocalSkill(t, dir, "bare", "# no frontmatter\n")
+	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{})
+	assert.EqualError(t, err, "agent: "+filepath.Join(".agents/skills", "bare", "SKILL.md")+" has no frontmatter description, so no host can list it")
 }

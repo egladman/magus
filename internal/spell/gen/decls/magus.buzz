@@ -449,6 +449,15 @@ export object Projects {
     projects: [ProjectEntry] = [],
 }
 
+export object Skill {
+    name: str = "",
+    description: str = "",
+    source: str = "",
+    form: str = "",
+    body: str = "",
+    current: bool = false,
+}
+
 export object TargetSpellUse {
     spell: str = "",
     ops: [str] = [],
@@ -793,6 +802,7 @@ export extern fun projects() > Projects !> any;
 export extern fun pry() > void;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.

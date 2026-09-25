@@ -24,6 +24,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/std"
@@ -783,6 +784,13 @@ func (c *Catalog) RenderSkill(skill AgentSkill) []byte {
 	return []byte(fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s\n", skill.Name, strconv.Quote(skill.Description), skill.Body))
 }
 
+// installBytes is the exact SKILL.md an install writes for a rendered entry. Every
+// writer and every comparison against an installed copy goes through it, so what
+// counts as current cannot drift from what install produces.
+func (c *Catalog) installBytes(skill AgentSkill) []byte {
+	return c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
+}
+
 // SkillBytes returns the rendered+stamped bytes for one named skill.
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
@@ -793,7 +801,7 @@ func (c *Catalog) SkillBytes(name string, form Form) ([]byte, error) {
 	}
 	for _, skill := range skills {
 		if skill.Name == name {
-			return c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant), nil
+			return c.installBytes(skill), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown skill %q", name)
@@ -818,7 +826,7 @@ func (c *Catalog) SkillTar(dest string, form Form) ([]byte, error) {
 	tw := tar.NewWriter(&buf)
 	epoch := time.Unix(0, 0).UTC()
 	for _, skill := range skills {
-		body := c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
+		body := c.installBytes(skill)
 		hdr := &tar.Header{
 			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
 			Mode:    0o644,
@@ -914,7 +922,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (writt
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return nil, nil, err
 		}
-		body := c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
+		body := c.installBytes(skill)
 		// A read error counts as changed: the install is about to overwrite whatever is
 		// there, and claiming "unchanged" for a file magus could not read would be the
 		// one answer that stops a reader looking.
@@ -1455,4 +1463,226 @@ func (c *Catalog) VariantSize(v Variant) (int64, error) {
 		total += int64(len(c.StampSkill(rendered.Name, c.RenderSkill(rendered), v)))
 	}
 	return total, nil
+}
+
+// The values types.Skill.Source carries.
+const (
+	skillSourceShipped = "shipped"
+	skillSourceLocal   = "local"
+)
+
+// SkillQuery narrows [Catalog.Offered]. The zero value asks for every skill in both forms.
+type SkillQuery struct {
+	// Name selects one skill by its canonical name; "" selects all.
+	Name string
+	// Form narrows the shipped entries; "" means [FormBoth]. Local skills have one body
+	// and are never narrowed by it.
+	Form Form
+}
+
+// Offered lists the skills the workspace at root offers an agent: both forms of every
+// skill magus ships, then each hand-authored skill found in a skill directory a wired
+// harness declares, sorted by name and then form ("full" after "short").
+//
+// A shipped entry's Body is its installed SKILL.md minus the frontmatter, and Current
+// compares every install location that carries that form byte for byte with what
+// install would write now; a location holding no magus-written skill does not count.
+// A directory under a skill path whose SKILL.md carries the install stamp but names a
+// skill magus no longer ships is neither: it is stale litter, which StaleSkillDirs
+// reports. A local skill without a frontmatter description is an error, since no host
+// can list it.
+//
+// An unknown q.Name errors, naming the nearest offered names.
+func (c *Catalog) Offered(ctx context.Context, root string, wired []string, q SkillQuery) ([]types.Skill, error) {
+	form := q.Form
+	if form == "" {
+		form = FormBoth
+	}
+	if _, err := ParseForm(string(form)); err != nil {
+		return nil, err
+	}
+	locations, err := HarnessSkillLocations(ctx, root, wired...)
+	if err != nil {
+		return nil, err
+	}
+	shipped, err := c.offeredShipped(root, locations, form)
+	if err != nil {
+		return nil, err
+	}
+	local, err := c.offeredLocal(root, locations)
+	if err != nil {
+		return nil, err
+	}
+	all := slices.Concat(shipped, local)
+	slices.SortStableFunc(all, func(a, b types.Skill) int {
+		if n := strings.Compare(a.Name, b.Name); n != 0 {
+			return n
+		}
+		return strings.Compare(b.Form, a.Form) // "short" before "full"
+	})
+	if q.Name == "" {
+		return all, nil
+	}
+	var picked []types.Skill
+	for _, s := range all {
+		if s.Name == q.Name {
+			picked = append(picked, s)
+		}
+	}
+	if len(picked) == 0 {
+		return nil, unknownSkillError(q.Name, all)
+	}
+	return picked, nil
+}
+
+func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, form Form) ([]types.Skill, error) {
+	defs, err := c.EmbeddedSkills()
+	if err != nil {
+		return nil, err
+	}
+	// Only locations magus has installed into grade an entry; an untouched harness
+	// directory would otherwise make every skill read as not current.
+	installs := map[HarnessSkillLocation][]AgentSkill{}
+	for _, loc := range locations {
+		if !c.hasMagusOwnedSkill(root, loc.Path) {
+			continue
+		}
+		rendered, err := c.RenderedSkills(loc.Form)
+		if err != nil {
+			return nil, err
+		}
+		installs[loc] = rendered
+	}
+	var out []types.Skill
+	for _, def := range defs {
+		for _, v := range []Variant{VariantShort, VariantFull} {
+			if form != FormBoth && form.Variant() != v {
+				continue
+			}
+			rendered, err := c.Render(def, v)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, types.Skill{
+				Name:        def.Name,
+				Description: def.Description,
+				Source:      skillSourceShipped,
+				Form:        v.String(),
+				Body:        skillBody(c.installBytes(rendered)),
+				Current:     c.installedCurrent(root, installs, def.Name, v),
+			})
+		}
+	}
+	return out, nil
+}
+
+// installedCurrent reports whether at least one install carries name in variant v and
+// every one that does holds exactly what install would write.
+func (c *Catalog) installedCurrent(root string, installs map[HarnessSkillLocation][]AgentSkill, name string, v Variant) bool {
+	carried := false
+	for loc, rendered := range installs {
+		for _, entry := range rendered {
+			if baseSkillName(entry.Name) != name || entry.Variant != v {
+				continue
+			}
+			carried = true
+			got, err := os.ReadFile(filepath.Join(root, loc.Path, entry.Name, "SKILL.md"))
+			if err != nil || !bytes.Equal(got, c.installBytes(entry)) {
+				return false
+			}
+		}
+	}
+	return carried
+}
+
+func (c *Catalog) offeredLocal(root string, locations []HarnessSkillLocation) ([]types.Skill, error) {
+	shipped, err := c.shipped(FormBoth)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var out []types.Skill
+	// locations is sorted by path, so the copy a name resolves to is stable when two
+	// harness directories carry the same local skill.
+	for _, loc := range locations {
+		entries, err := os.ReadDir(filepath.Join(root, loc.Path))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("agent: read %s: %w", loc.Path, err)
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if !e.IsDir() || shipped[name] || seen[name] {
+				continue
+			}
+			rel := filepath.Join(loc.Path, name, "SKILL.md")
+			raw, err := os.ReadFile(filepath.Join(root, rel))
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("agent: read %s: %w", rel, err)
+			}
+			if bytes.Contains(raw, []byte(generatedSkillMarker)) {
+				continue
+			}
+			fm, ok := docs.ParseFrontmatter(string(raw))
+			if !ok || fm.Description == "" {
+				return nil, fmt.Errorf("agent: %s has no frontmatter description, so no host can list it", rel)
+			}
+			seen[name] = true
+			out = append(out, types.Skill{
+				Name:        name,
+				Description: fm.Description,
+				Source:      skillSourceLocal,
+				Form:        VariantFull.String(),
+				Body:        skillBody(raw),
+				Current:     true,
+			})
+		}
+	}
+	return out, nil
+}
+
+// skillBody is what a host loads from a SKILL.md: everything after the frontmatter,
+// less the blank line that separates the two.
+func skillBody(file []byte) string {
+	return strings.TrimLeft(docs.StripFrontmatter(string(file)), "\n")
+}
+
+func unknownSkillError(name string, offered []types.Skill) error {
+	folded := strings.ToLower(name)
+	type candidate struct {
+		name string
+		dist int
+	}
+	var near []candidate
+	seen := map[string]bool{}
+	for _, s := range offered {
+		if seen[s.Name] {
+			continue
+		}
+		seen[s.Name] = true
+		other := strings.ToLower(s.Name)
+		d := hint.Distance(folded, other)
+		if d <= hint.Threshold(name) || strings.Contains(other, folded) || strings.Contains(folded, other) {
+			near = append(near, candidate{s.Name, d})
+		}
+	}
+	if len(near) == 0 {
+		return fmt.Errorf("agent: no skill named %q, and none of the %d offered is near it", name, len(seen))
+	}
+	slices.SortFunc(near, func(a, b candidate) int {
+		if a.dist != b.dist {
+			return a.dist - b.dist
+		}
+		return strings.Compare(a.name, b.name)
+	})
+	names := make([]string, len(near))
+	for i, n := range near {
+		names[i] = n.name
+	}
+	return fmt.Errorf("agent: no skill named %q; near matches: %s", name, strings.Join(names, ", "))
 }
