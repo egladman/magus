@@ -27,6 +27,9 @@ var magusExecutable = os.Executable
 // would otherwise send a path that resolves against the client's directory.
 var buzzCLI = hint.Buzz.StringAs(hint.DefaultBinaryName)
 
+// buzzReadOnlyFlag is what a call without write=true adds to the command line.
+const buzzReadOnlyFlag = "--read-only"
+
 // buzzTool runs a Buzz program by forking `magus buzz` rather than opening a session in
 // this process. In-process, io\stdin and io\stdout are the server's own stdio, which
 // over ServeStdio IS the protocol stream, and a runaway loop could only be abandoned,
@@ -51,12 +54,6 @@ func (t *buzzTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	argv, err := t.argv(req.Params)
 	if err != nil {
 		return spells.InvokeResponse{}, err
-	}
-	// Checked after argv so a malformed call reports what is malformed, and before the
-	// executable is resolved so a refused call has touched nothing.
-	if !paramBool(req.Params, "write", false) {
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: %s refused: `%s` has no read-only mode, so a script can write anything its fs, proc and http modules reach; pass write=true to run it anyway",
-			hint.ToolBuzz, buzzCLI)
 	}
 	exe, err := magusExecutable()
 	if err != nil {
@@ -89,11 +86,15 @@ func (t *buzzTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 }
 
 // argv builds the `magus buzz` command line, always ending in `--` so an argument that
-// looks like a flag reaches the script instead of being parsed by magus.
+// looks like a flag reaches the script instead of being parsed by magus. It carries
+// --read-only unless the call passed write=true.
 func (t *buzzTool) argv(params map[string]any) ([]string, error) {
 	script := paramString(params, "script", "")
 	path := paramString(params, "path", "")
 	argv := []string{hint.Buzz.Leaf()}
+	if !paramBool(params, "write", false) {
+		argv = append(argv, buzzReadOnlyFlag)
+	}
 	switch {
 	case script != "" && path != "":
 		return nil, fmt.Errorf("mcp: %s takes script or path, not both", hint.ToolBuzz)

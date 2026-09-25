@@ -138,6 +138,9 @@ func TestRenderMCPCallSpellsTheWorkTheToolDoes(t *testing.T) {
 		"the job tool":     {hint.ToolJob, map[string]any{"op": "fork", "id": "a/b"}, "magus_job op=fork id=a/b"},
 		"an elided value":  {hint.ToolJob, map[string]any{"op": "fork", "criteria": "ship the thing"}, "magus_job op=fork criteria=..."},
 		"a missing target": {hint.ToolRunAffected, map[string]any{}, "magus affected"},
+		"a read-only buzz": {hint.ToolBuzz, map[string]any{"path": "tools/ids.buzz"}, "magus buzz --read-only tools/ids.buzz"},
+		"write=false buzz": {hint.ToolBuzz, map[string]any{"script": "x", "write": false}, "magus buzz --read-only"},
+		"a writing buzz":   {hint.ToolBuzz, map[string]any{"path": "tools/gen.buzz", "write": true}, "magus buzz tools/gen.buzz"},
 	} {
 		assert.Equal(t, tc.want, renderMCPCall(tc.tool.String(), tc.input), name)
 	}

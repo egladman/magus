@@ -15,6 +15,11 @@ rm log/order
 exec bash -c 'set -o pipefail; magus run format a | magus buzz relay.buzz | magus run lint'
 cmp log/order want-relay
 
+# A read-only script is the same stage: reading and emitting records changes nothing.
+rm log/order
+exec bash -c 'set -o pipefail; magus run format a | magus buzz --read-only relay.buzz | magus run lint'
+cmp log/order want-relay
+
 # A script choosing the projects emits a run.scope naming them.
 rm log/order
 exec bash -c 'set -o pipefail; magus run format a | magus buzz pick.buzz | magus run lint'

@@ -54,6 +54,8 @@ func TestPipeRecordStage(t *testing.T) {
 		{[]string{"buzz", "failures.buzz"}, true},
 		{[]string{"buzz", "-e", "print(1)"}, true},
 		{[]string{"buzz", "pick.buzz", "--", "--test"}, true},
+		{[]string{"buzz", "--read-only", "failures.buzz"}, true},
+		{[]string{"buzz", "failures.buzz", "--read-only"}, true},
 		// An explicit -o, in any spelling or position, keeps the format asked for.
 		{[]string{"run", "test", "-o", "json"}, false},
 		{[]string{"-o", "text", "run", "test"}, false},
@@ -69,6 +71,7 @@ func TestPipeRecordStage(t *testing.T) {
 		// A script read from stdin has stdin as its source; the other modes run no script.
 		{[]string{"buzz"}, false},
 		{[]string{"buzz", "-"}, false},
+		{[]string{"buzz", "--read-only", "-"}, false},
 		{[]string{"buzz", "-t", "x.buzz"}, false},
 		{[]string{"buzz", "--check", "x.buzz"}, false},
 		{[]string{"buzz", "lsp"}, false},

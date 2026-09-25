@@ -185,8 +185,7 @@ one-liner. Pass the earlier result as `stdin` and the script reads it with
 {
   "script": "import \"std\"; import \"io\"; import \"encoding/json\";\nfun main(args: [str]) > void !> any {\n    final q = json\\parse(io\\stdin.readAll() ?? \"null\") as {str: any};\n    final ids = mut [<str>];\n    foreach (m in q[\"matches\"] as [any]) {\n        final hit = m as {str: any};\n        if (hit[\"kind\"] == args[0]) { ids.append(hit[\"id\"] as str); }\n    }\n    std\\print(json\\stringify({\"kind\": args[0], \"ids\": ids}));\n}",
   "args": "spell",
-  "stdin": "<the magus_query result text>",
-  "write": true
+  "stdin": "<the magus_query result text>"
 }
 ```
 
@@ -198,10 +197,16 @@ parsed under `json`:
 ```
 
 A compile or runtime error comes back as a tool error carrying the diagnostic, such as
-`[BZZ1005] buzz: line 1:32: ...`. `magus buzz` has no read-only mode, so a script
-reaches whatever its `fs`, `proc` and `http` modules can; every call must pass
-`write: true` to accept that, and one without it is refused before anything runs. A
-run is bounded by `target_timeout`, or five minutes when that is unset.
+`[BZZ1005] buzz: line 1:32: ...`.
+
+A call runs `magus buzz --read-only` unless it passes `write: true`. Read-only, the
+script can read files, stdin and the workspace graph, compute, and print; every host
+member that writes a file, a magus store or the network raises MGS2002, and every one
+that starts a process (`proc`, the VCS, a nested magus, `zdef`) raises MGS2007, before
+anything happens. Where landlock is available the kernel also confines the fork and its
+children to reads. Pass `write: true` for a script that has to change something; the
+caller still needs the `mcp=write` grant every tool needs. A run is bounded by
+`target_timeout`, or five minutes when that is unset.
 
 Inspect:
 

@@ -1,0 +1,91 @@
+# `magus buzz --read-only` runs a script that may read, compute and print, and refuses
+# every write (MGS2002) and every process start (MGS2007) before it happens.
+
+# a read and a print work, stdin included
+stdin in.json
+exec magus buzz --read-only transform.buzz
+stdout '^\{"ids":\["a","b"\],"note":"hello"\}$'
+! stderr .
+
+# a file write is refused and the file never appears
+! exec magus buzz --read-only write.buzz
+stderr 'MGS2002'
+stderr 'fs\\writeFile refused'
+! exists out.txt
+
+# so is a process start, even one that would write through a child
+! exec magus buzz --read-only exec.buzz
+stderr 'MGS2007'
+stderr 'proc\\exec refused'
+! exists touched.txt
+
+# and a native call through zdef()
+! exec magus buzz --read-only -e 'fun main(args: [str]) > void !> any { zdef("libc", "int unlink(char *path);"); }'
+stderr 'MGS2007'
+stderr 'zdef\("libc"\) refused'
+
+# a caught refusal is an ordinary error the script can handle
+exec magus buzz --read-only caught.buzz
+stdout 'refused, kept going'
+! exists out.txt
+
+# the same write succeeds without the flag
+exec magus buzz write.buzz
+exists out.txt
+
+# -t runs test blocks read-only too
+exec magus buzz --read-only -t --embedded tests.buzz
+stdout '1 passed, 0 failed, 0 skipped'
+
+# --coverprofile writes a file, so it cannot be combined with --read-only
+! exec magus buzz --read-only -t --coverprofile=cover.lcov tests.buzz
+stderr 'writes no --coverprofile'
+! exists cover.lcov
+
+-- in.json --
+{"items": [{"id": "a"}, {"id": "b"}]}
+-- note.txt --
+hello
+-- transform.buzz --
+import "std";
+import "io";
+import "fs";
+import "encoding/json";
+
+fun main(args: [str]) > void !> any {
+    final doc = json\parse(io\stdin.readAll() ?? "null") as {str: any};
+    final ids = mut [<str>];
+    foreach (item in doc["items"] as [any]) {
+        ids.append((item as {str: any})["id"] as str);
+    }
+    std\print(json\stringify({"ids": ids, "note": fs\readFile("note.txt").trim()}));
+}
+-- write.buzz --
+import "fs";
+
+fun main(args: [str]) > void !> any {
+    fs\writeFile("out.txt", content: "x");
+}
+-- exec.buzz --
+import "proc";
+
+fun main(args: [str]) > void !> any {
+    proc\exec("touch", args: ["touched.txt"]);
+}
+-- caught.buzz --
+import "std";
+import "fs";
+
+fun main(args: [str]) > void {
+    try {
+        fs\writeFile("out.txt", content: "x");
+    } catch (e: any) {
+        std\print("refused, kept going");
+    }
+}
+-- tests.buzz --
+import "assert";
+
+test "adds" {
+    assert\equal(1 + 1, 2, "sum is correct");
+}

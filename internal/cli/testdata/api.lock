@@ -124,6 +124,7 @@ flag buzz/coverprofile
 flag buzz/e
 flag buzz/embedded
 flag buzz/no-autoload
+flag buzz/read-only
 flag buzz/t
 flag buzz/test
 flag clean/cache

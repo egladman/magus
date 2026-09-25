@@ -162,6 +162,16 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	if bf.Coverprofile != "" && !bf.Test {
 		return usagef("magus buzz: --%s requires -%s", gen.FlagBuzzCoverprofile, gen.FlagBuzzT)
 	}
+	if bf.ReadOnly && (isRepl || bf.Coverprofile != "") {
+		return usagef("magus buzz: --%s applies to a script, -%s, -%s or --%s, and writes no --%s",
+			gen.FlagBuzzReadOnly, gen.FlagBuzzE, gen.FlagBuzzT, gen.FlagBuzzCheck, gen.FlagBuzzCoverprofile)
+	}
+	if bf.ReadOnly {
+		// Opening the workspace re-registers the merge driver, a write to .gitattributes
+		// and the git config.
+		ctx = withoutMergeDriverRefresh(ctx)
+		defer bindings.RefuseFFI()()
+	}
 	// Refused rather than ordered, because either order is a defensible reading and
 	// picking one silently gives back an answer to a question nobody asked: -t runs the
 	// file, --check is the mode that does not.
@@ -180,7 +190,12 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		if cerr != nil {
 			return cerr
 		}
-		return buzzCheck(ctx, rest, bf.Embedded)
+		if bf.ReadOnly {
+			if ctx, cerr = buzzReadOnly(ctx); cerr != nil {
+				return cerr
+			}
+		}
+		return buzzCheck(ctx, rest, bf.Embedded, bf.ReadOnly)
 	}
 
 	// No code, no file/stdin argument, and an interactive terminal: open the REPL,
@@ -205,6 +220,11 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	ctx, err = buzzScriptContext(ctx, root)
 	if err != nil {
 		return err
+	}
+	if bf.ReadOnly {
+		if ctx, err = buzzReadOnly(ctx); err != nil {
+			return err
+		}
 	}
 	// A script is a pipe stage: it reads the records a magus stage upstream writes and
 	// emits records downstream. While a magus reads its stdout, stdout carries records
@@ -248,6 +268,11 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// (which imports them) and its `test "..." {}` blocks run here: `magus buzz -t`
 	// is the spell test harness.
 	bindings.RegisterSpellSourceModules(sess)
+	if bf.ReadOnly {
+		if err := bindings.RestrictToReads(ctx, sess); err != nil {
+			return fmt.Errorf("magus buzz --%s: %w", gen.FlagBuzzReadOnly, err)
+		}
+	}
 
 	if err := sess.Exec(ctx, code); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
@@ -450,6 +475,8 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "  --check     parse and type-check the named files without running them")
 	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")
 	fmt.Fprintln(os.Stderr, "              argument labels) to match the magusfile engine")
+	fmt.Fprintln(os.Stderr, "  --read-only refuse every write (MGS2002) and process start (MGS2007);")
+	fmt.Fprintln(os.Stderr, "              reads, stdin, stdout and stderr work")
 	fmt.Fprintln(os.Stderr, "  --no-autoload  start the REPL without executing the magusfile")
 	fmt.Fprintln(os.Stderr, "  -C <dir>    working directory for the REPL's import resolution")
 	fmt.Fprintln(os.Stderr, "")
@@ -519,6 +546,25 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 	return trail.ContextWithBase(sctx, m.CacheDir()), nil
 }
 
+// buzzApplyReadOnlyKernel is the kernel half of --read-only. A variable so an in-process
+// test can replace it: landlock is permanent, and would confine every later test in the
+// binary.
+var buzzApplyReadOnlyKernel = bindings.ApplyReadOnlyKernel
+
+// buzzReadOnly narrows a script's context for --read-only: the workspace policy, or none,
+// loses every write and exec grant, and where landlock is available the kernel confines
+// this process and its children to reads.
+func buzzReadOnly(ctx context.Context) (context.Context, error) {
+	ctx = bindings.WithReadOnlyPolicy(ctx)
+	// A refusal reaches the caller as the script's error; recording it on the trail
+	// would be a write of its own.
+	ctx = context.WithValue(ctx, trailContextKey, "")
+	if err := buzzApplyReadOnlyKernel(ctx); err != nil {
+		return nil, fmt.Errorf("magus buzz --%s: %w", gen.FlagBuzzReadOnly, err)
+	}
+	return ctx, nil
+}
+
 // buzzCheck parses and type-checks each named file WITHOUT running it, printing
 // every diagnostic and failing only on errors.
 //
@@ -531,7 +577,7 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 //
 // It takes several paths because the question is almost always asked about a set:
 // the files just edited, or every glue script at once.
-func buzzCheck(ctx context.Context, files []string, embedded bool) error {
+func buzzCheck(ctx context.Context, files []string, embedded, readOnly bool) error {
 	// Sessions are NOT shared across files. Session.Diagnostics mutates session state
 	// (loadedPaths, env, importedTypes) and is documented as needing a fresh one, so a
 	// reused session would report the second file against the first file's scope and
@@ -539,7 +585,7 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 	failed := 0
 	noted := false
 	for _, path := range files {
-		diags, err := buzzCheckFile(ctx, path, embedded)
+		diags, err := buzzCheckFile(ctx, path, embedded, readOnly)
 		if err != nil {
 			return err
 		}
@@ -564,7 +610,7 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 
 // buzzCheckFile checks one path, returning its diagnostics with File set so each
 // one renders as <file>:L:C, the position shape an editor can jump to.
-func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diagnostic, error) {
+func buzzCheckFile(ctx context.Context, path string, embedded, readOnly bool) ([]buzz.Diagnostic, error) {
 	resolved := buzzResolveFile(path)
 	data, err := os.ReadFile(resolved)
 	if err != nil {
@@ -583,6 +629,11 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(os.Stderr))
 	bindings.RegisterMagusNamespace(ctx, sess)
 	bindings.RegisterSpellSourceModules(sess)
+	if readOnly {
+		if err := bindings.RestrictToReads(ctx, sess); err != nil {
+			return nil, err
+		}
+	}
 
 	diags := sess.Diagnostics(string(data))
 	for i := range diags {

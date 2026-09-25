@@ -101,6 +101,8 @@ const (
 	FlagBuzzEmbedded = "embedded"
 	// buzz: --no-autoload
 	FlagBuzzNoAutoload = "no-autoload"
+	// buzz: --read-only
+	FlagBuzzReadOnly = "read-only"
 	// buzz: --t
 	FlagBuzzT = "t"
 	// buzz: --test
@@ -1874,6 +1876,7 @@ type BuzzFlags struct {
 	Check        bool   // --check
 	Coverprofile string // --coverprofile
 	Embedded     bool   // --embedded
+	ReadOnly     bool   // --read-only
 	NoAutoload   bool   // --no-autoload
 	C            string // -C
 }
@@ -1887,6 +1890,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
+	fs.BoolVar(&f.ReadOnly, FlagBuzzReadOnly, false, "Refuse every write and process start the script attempts (MGS2002, MGS2007); reads, stdin, stdout and stderr work")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")
 	return &f

@@ -55,6 +55,11 @@ func denyHint(lease, mode, target string) string {
 // scope — it doesn't survive being raised across a script VM, so a central
 // handler could not reconstruct the target.
 func EmitDenyHint(p *Policy, mode, target string) {
+	if p != nil && p.ReadOnly {
+		// No allow entry lifts it: read-only is how the run was asked for.
+		interactive.Emit(os.Stderr, ReadOnlyHint)
+		return
+	}
 	lease := ""
 	if p != nil {
 		lease = p.Lease
