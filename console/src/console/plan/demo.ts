@@ -1,11 +1,11 @@
-// demo.ts - the Jobs view's daemon-free showcase (the shared #demo fragment).
+// demo.ts - the Jobs view's server-free showcase (the shared #demo fragment).
 //
-// It supplies the one thing the daemon would have supplied - a job listing - and nothing else
+// It supplies the one thing the server would have supplied - a job listing - and nothing else
 // changes: buildJobTree(), treeOrder(), layoutNodes(), the overlap warnings, the staleness rule and
 // the detail are all the production paths. So what a reader meets at #demo is the real view with
 // fabricated input, not a screenshot of one.
 //
-// Both holders are here, because that is the claim the view makes: the daemon's own maintenance jobs
+// Both holders are here, because that is the claim the view makes: the server's own maintenance jobs
 // and the work a session was handed are ONE list, told apart by their holder rather than by living
 // on two different screens.
 //
@@ -58,12 +58,12 @@ export function demoJobs(nowMs: number): Job[] {
   const at = (minsAgo: number): bigint => BigInt(now - minsAgo * MIN);
 
   return [
-    // The daemon's own catalog: no criteria, no parent, nothing declared it - the daemon maintains its
+    // The server's own catalog: no criteria, no parent, nothing declared it - the server maintains its
     // own house, and a reader sees that beside the work a session was handed.
     create(JobSchema, {
       name: "jobs/rotate-activities",
       id: "rotate-activities",
-      holder: JobHolder.DAEMON,
+      holder: JobHolder.SERVER,
       description: "Trim the activity trail to its cap",
       state: "pass",
       target: { sizeBytes: 2_310_144n, itemCount: 4_812n },
@@ -74,7 +74,7 @@ export function demoJobs(nowMs: number): Job[] {
     create(JobSchema, {
       name: "jobs/clear-cache",
       id: "clear-cache",
-      holder: JobHolder.DAEMON,
+      holder: JobHolder.SERVER,
       description: "Invalidate cached build entries",
       state: "running",
       running: true,
@@ -208,7 +208,7 @@ export function demoJobs(nowMs: number): Job[] {
   ];
 }
 
-// The intersection the two Go jobs declared. Reported the way the daemon reports it: each side's own
+// The intersection the two Go jobs declared. Reported the way the server reports it: each side's own
 // declaration, because "services/identity/internal/token/" and the one _test.go file inside it are
 // rarely the same string and a reader who cannot tell which job claimed which has nothing to act on.
 export function demoOverlaps(): JobOverlap[] {

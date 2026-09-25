@@ -38,7 +38,7 @@ const sessionsDefaultLimit = 20
 // reads instead of burning top-level names no person types.
 //
 // The listing is NOT the console's Activity surface: Activity reads internal/trail
-// (actions against the daemon), this reads internal/sessions (facts a session
+// (actions against the server), this reads internal/sessions (facts a session
 // produced). The stores are meant to converge; until they do, each is named after
 // what it holds.
 func sessionCmd(ctx context.Context, root string, args []string) error {

@@ -60,11 +60,20 @@ func sources(ctx context.Context, f types.BuildFacts, paths []string) ([]string,
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	out, err := f.Outputs(ctx, paths)
+	writes, err := f.Classify(ctx, paths)
 	if err != nil {
-		return nil, fmt.Errorf("outputs: %w", err)
+		return nil, fmt.Errorf("classify: %w", err)
 	}
-	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return out[p] }), nil
+	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return writes[p].Output }), nil
+}
+
+// outputs returns the paths some target declares as its output, in order.
+func outputs(ctx context.Context, f types.BuildFacts, paths []string) ([]string, error) {
+	writes, err := f.Classify(ctx, paths)
+	if err != nil {
+		return nil, fmt.Errorf("classify: %w", err)
+	}
+	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return !writes[p].Output }), nil
 }
 
 // with names the commits on onto, since head forked from it, that touched paths. It is a
@@ -270,32 +279,102 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir string)
 }
 
 // regenerateIn runs regenerate on the generated files among b.touched and commits what
-// it rewrote. A rewrite of anything no target declares as its output is refused: a
-// candidate adds only regenerated files to what was merged.
+// it rewrote. A candidate adds only declared writes to what was merged: a rewrite of
+// anything the build tool does not declare it writes is refused. A file the build tool
+// maintains is put back as the candidate holds it and left out of the commit, since the
+// build tool running here is the base's, and its rewrite would undo the change's.
 func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b built, regenerate types.RegenerateFunc, units []string) (string, error) {
-	out, err := s.facts.Outputs(ctx, b.touched)
+	regen, err := outputs(ctx, s.facts, b.touched)
 	if err != nil {
-		return "", fmt.Errorf("outputs: %w", err)
+		return "", err
 	}
-	regen := slices.DeleteFunc(slices.Clone(b.touched), func(p string) bool { return !out[p] })
+	keep, err := regenerateWrites(ctx, v, s, b, regenerate, regen, units)
+	if err != nil || len(keep) == 0 {
+		return b.Commit, err
+	}
+	return commitRegenerated(ctx, v, b, keep)
+}
+
+// regenerateWrites runs regenerate on regen in b's checkout and returns the declared files
+// it rewrote, uncommitted. A file the build tool maintains is put back, and a write
+// nothing declares is refused.
+func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b built, regenerate types.RegenerateFunc, regen, units []string) ([]string, error) {
 	if len(regen) == 0 {
-		return b.Commit, nil
+		return nil, nil
 	}
 	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Onto: s.onto, Change: s.change, Paths: regen, Units: units}); err != nil {
-		return "", err
+		return nil, err
 	}
 	written, err := v.DirtyFiles(ctx, b.Dir, nil)
 	if err != nil || len(written) == 0 {
-		return b.Commit, err
+		return nil, err
 	}
-	stray, err := sources(ctx, s.facts, written)
+	writes, err := s.facts.Classify(ctx, written)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("classify: %w", err)
+	}
+	var keep, stray []string
+	for _, p := range written {
+		switch w := writes[p]; {
+		case w.Maintained:
+			if err := restore(ctx, v, b.Candidate, p); err != nil {
+				return nil, err
+			}
+		case w.Declared():
+			keep = append(keep, p)
+		default:
+			stray = append(stray, p)
+		}
 	}
 	if len(stray) > 0 {
-		return "", &types.RefusedError{Reason: "regeneration wrote files no target declares as output: " + strings.Join(stray, ", "), Paths: stray}
+		return nil, &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
 	}
-	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: written})
+	return keep, nil
+}
+
+func commitRegenerated(ctx context.Context, v types.BuildVCS, b built, keep []string) (string, error) {
+	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: keep})
+}
+
+// generationOf asks the build tool what regenerating outputs runs, against every file c
+// changed since baseCommit.
+func generationOf(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, baseCommit string, c types.Change, outputs []string) (types.Generation, error) {
+	changed, err := v.RangeFiles(ctx, root, baseCommit, c.Head, nil)
+	if err != nil {
+		return types.Generation{}, err
+	}
+	g, err := f.Generation(ctx, outputs, changed)
+	if err != nil {
+		return types.Generation{}, fmt.Errorf("generation of %s: %w", joinPaths(outputs), err)
+	}
+	return g, nil
+}
+
+// unprovenWhy says why g does not prove a regeneration runs none of a change's code, and
+// the paths that say so, falling back to outputs.
+func unprovenWhy(g types.Generation, outputs []string) (string, []string) {
+	why, paths := g.Unbounded, g.Code
+	if why == "" {
+		why = "it changes code their regeneration runs"
+	}
+	if len(paths) == 0 {
+		paths = outputs
+	}
+	return why, paths
+}
+
+// restore writes path in cand's checkout back to its content at cand's commit.
+func restore(ctx context.Context, v types.BuildVCS, cand types.Candidate, path string) error {
+	content, err := v.ReadFileAt(ctx, cand.Dir, cand.Commit, path)
+	if err != nil {
+		return fmt.Errorf("restore %s: %w", path, err)
+	}
+	abs := filepath.Join(cand.Dir, filepath.FromSlash(path))
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(abs); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(abs, []byte(content), mode)
 }
 
 func queueMeta(msg string) magustypes.CommitMeta {

@@ -1,21 +1,55 @@
 ---
 title: MCP
-description: The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
-tags: [mcp, model-context-protocol, ai, agents, claude, codex, cursor, daemon, ide]
+description: magus serves its tools as a Model Context Protocol server, over stdio for the agent host that launches magus mcp, or over Streamable HTTP from magus server.
+tags: [mcp, model-context-protocol, ai, agents, claude, codex, cursor, server, ide, stdio]
 aliases: [guides/mcp]
 ---
 
 # MCP
 
-When the daemon is running, it also exposes an **MCP (Model Context Protocol) server** over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.
+magus serves its tools as an **MCP (Model Context Protocol) server**, so agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call them directly instead of shelling out. There are two ways to reach it:
 
-Magus targets humans first. MCP is always compiled in; it is a runtime layer you turn off with `mcp.enabled=false` (see [Enabling and disabling](#enabling-and-disabling)) when you do not want it.
+- **stdio** (`magus mcp`): the host launches magus and talks to it over its stdin and stdout. It opens the workspace it is launched in and needs no server and no token. Start here.
+- **Streamable HTTP** (`magus server`): one long-lived server at `http://127.0.0.1:7391/mcp` that several clients share, authenticated with a bearer token.
+
+Both serve the same tools. magus prints what a host needs (`magus mcp --help`) and never writes a host's config file; the snippets below are for you to place.
 
 For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, durable memory, and the drift check - see [Agents](agents.md).
 
-## Starting the daemon starts MCP
+## stdio: the host launches magus
 
-You don't need a separate process. Start the daemon as usual:
+Register magus with your MCP client as a stdio server. Most clients take a command and its arguments:
+
+```json
+{
+  "command": "magus",
+  "args": ["mcp"]
+}
+```
+
+The host starts `magus mcp` in the workspace it opens, and it serves that workspace until the host closes stdin. Stdout carries only protocol frames; logs, and one line saying what is being served, go to stderr, which most hosts keep as the server's log.
+
+There is no token to mint. The caller is the local process the host started, running as you, so every tool call is admitted with the `stdio` credential, which holds `mcp=write` and nothing past it: the same grant a connector token holds (see [Tokens and grants](../../concepts/tokens.md)). The activity trail records each call with that credential and the client's name.
+
+To check the wiring by hand, pipe a handshake in:
+
+```sh
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | magus mcp
+```
+
+Each line of output is one JSON-RPC reply. Typed at a terminal with nothing piped in, `magus mcp` waits for a host to speak; press Ctrl+C to stop it.
+
+A host that launches one process per workspace gets one `magus mcp` per workspace. When several clients should share one warm server instead, use `magus server`.
+
+A stdio server that runs a target asks the [broker](server.md) for host capacity like any other run.
+
+## Streamable HTTP: the server serves MCP
+
+When `magus server` is running, it also exposes the MCP server over Streamable HTTP. MCP is always compiled in; it is a runtime layer you turn off with `mcp.enabled=false` (see [Enabling and disabling](#enabling-and-disabling)) when you do not want it.
+
+You don't need a separate process. Start the server as usual:
 
 ```sh
 magus server start
@@ -32,9 +66,9 @@ http://127.0.0.1:7391/mcp
 ## Is MCP actually reachable?
 
 An agent host connects to the MCP endpoint over HTTP; nothing starts that endpoint on
-its own, so if the daemon is not running the tools silently disappear from the host.
+its own, so if the server is not running the tools silently disappear from the host.
 `magus status` reports the endpoint's live health as its own block, checked independently
-of the daemon's job socket:
+of the server's job socket:
 
 ```text
 mcp endpoint
@@ -48,26 +82,73 @@ The `state` is one of:
 | ------------- | ---------------------------------------------------------------- |
 | `serving`     | listening and a workspace is loaded - the tools are reachable    |
 | `not-ready`   | listening, but no workspace is loaded yet                        |
-| `unreachable` | nothing is listening; start the daemon with `magus server start` |
+| `unreachable` | nothing is listening; start the server with `magus server start` |
 | `disabled`    | turned off by `mcp.enabled=false`                                |
 
 For scripts and container probes, `magus status --probe=<kind>` exits `0` healthy / `1`
-unhealthy. The kinds are `liveness` (the daemon answers), `readiness` (a workspace is
+unhealthy. The kinds are `liveness` (the server answers), `readiness` (a workspace is
 loaded), and `mcp` (this endpoint is reachable) - and they are comma-combinable, failing
 if any listed check does:
 
 ```sh
 magus status --probe=mcp             # fail if the tools are unreachable
-magus status --probe=liveness,mcp    # fail if the daemon OR the endpoint is down
+magus status --probe=liveness,mcp    # fail if the server OR the endpoint is down
 ```
 
-The daemon also serves `/livez`, `/readyz`, and `/healthz` on the same port. If `state` is
-`unreachable` even though you expect a daemon, see
-[Keeping the daemon running](daemon.md#keeping-the-daemon-running).
+The server also serves `/livez`, `/readyz`, and `/healthz` on the same port. If `state` is
+`unreachable` even though you expect a server, see
+[Keeping the server running](server.md#keeping-the-server-running).
+
+With `mcp.enabled: false` the server still keeps the knowledge graph and symbol indexes
+current; turning off MCP turns off the endpoint and nothing else.
+
+## Which transport when
+
+The same tools answer on each transport. What differs is who can reach them and what
+proves who they are:
+
+| Transport                 | Where                                    | Credential                                  | Use it for                                                                                          |
+| ------------------------- | ---------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| stdio                     | `magus mcp`, launched by the host        | none; the host launched the process as you  | one host driving the workspace it opens, with no server running                                     |
+| Streamable HTTP, socket   | `/mcp` on the server's own `server.sock` | the kernel's word that the peer runs as you | a local client that speaks HTTP over a unix socket and should share the server's warm graph         |
+| Streamable HTTP, loopback | `http://127.0.0.1:7391/mcp`              | a bearer token holding `mcp=write`          | a client that only takes a URL, runs as another user, or reaches the server through a tunnel or TLS |
+
+Whichever the transport, each tool call is held to `mcp=write` again, and a caller
+below it gets [MGS9015](../../reference/codes/auth/MGS9015.md) as a tool error.
+
+## MCP over the server socket
+
+The server has one unix socket, `server.sock` in the private (`0700`) runtime directory,
+and it speaks HTTP. `/mcp` is one path on it, beside the Connect APIs and the control
+operations the CLI uses (see [the server's socket](server.md#two-transports)):
+
+```text
+$XDG_RUNTIME_DIR/magus/server.sock      # or $TMPDIR/magus-<uid>/server.sock without XDG_RUNTIME_DIR
+```
+
+It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP,
+and it takes no token. What admits a caller is the user it runs as: for every connection
+the server asks the kernel for the peer's uid (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on
+macOS) and admits only its own. Any other peer, root included, gets `403`
+[MGS9022](../../reference/codes/auth/MGS9022.md). An admitted call carries the
+`socket-peer` credential, which holds `mcp=write` and `console=write` but never token
+management, and the activity trail records each call under it. On a platform where magus
+cannot read a peer's uid, the socket carries the control operations alone and MCP stays
+on loopback.
+
+To check it by hand, send a handshake with curl:
+
+```sh
+curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+```
+
+`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike.
 
 ## Available tools
 
-The daemon exposes these tools. This list is authoritative at the time of writing;
+Both transports expose these tools. This list is authoritative at the time of writing;
 `magus describe mcp-tools` (or the `magus_describe` tool with `kind: mcp_tools`) prints
 the live set with full parameters, so trust that over this table if they ever differ.
 
@@ -155,7 +236,7 @@ mcp:
   enabled: false
 ```
 
-Or set `MAGUS_MCP_ENABLED=0` in the environment before starting the daemon.
+Or set `MAGUS_MCP_ENABLED=0` in the environment before starting the server.
 
 To change the listen address:
 
@@ -168,7 +249,7 @@ mcp:
 Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 A non-loopback address (`0.0.0.0:7391` for a Kubernetes health probe, say) sends
-every bearer token in cleartext, so the daemon refuses to start on one unless you
+every bearer token in cleartext, so the server refuses to start on one unless you
 also set `mcp.insecure_bind: true` (or `MAGUS_MCP_INSECURE_BIND=true`). Front such
 a listener with TLS or a tunnel.
 
@@ -176,11 +257,13 @@ a listener with TLS or a tunnel.
 
 > **Warning:** Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.
 
+`magus mcp` opens no listener: only the process that launched it can reach it, through its pipes. Everything below is about the daemon's HTTP endpoint.
+
 The endpoint requires a **bearer token** whose grant includes `mcp=write` (see
 [Tokens and grants](../../concepts/tokens.md)). Two kinds hold it:
 
 - **A connector token** (`mgs_...`) - a named, hashed-at-rest token you mint per external client (a Claude connector, an IDE). It holds `mcp=write` and nothing else. Only its SHA-256 is stored, so it is shown once at creation; rotate by minting a new one. It always expires: 90 days by default, at most 366.
-- **The operator token** (`mgo_...`) - the one retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
+- **The operator token** (`mgo_...`) - the one retrievable secret the server generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
 
 Every `/mcp` request must carry `Authorization: Bearer <token>`. A request without one, or with a token that is wrong, expired or revoked, gets `401`; a valid token without `mcp=write` (a console token) gets `403` [MGS9015](../../reference/codes/auth/MGS9015.md). Manage connector tokens with:
 
@@ -200,7 +283,7 @@ logs and history). How you connect depends on the client:
 
 - **Claude Code** connects to the loopback endpoint directly with a header. Mint
   a connector token, then register the server at `user` scope so every workspace
-  the daemon serves shares one connection (the daemon binds one loopback port for
+  the server serves shares one connection (the server binds one loopback port for
   all of them):
 
   ```text
@@ -238,7 +321,7 @@ logs and history). How you connect depends on the client:
   enabled = true
   ```
 
-  For Codex CLI, start the daemon, mint a connector token and store it as
+  For Codex CLI, start the server, mint a connector token and store it as
   `MAGUS_MCP_TOKEN` in your local secret manager (it is shown once), export it
   in the shell that will launch Codex, then check registration and endpoint
   health:
@@ -253,7 +336,7 @@ logs and history). How you connect depends on the client:
   For the ChatGPT desktop app or Codex IDE extension, set the variable through
   the OS environment before launching or restarting the client; exporting it in
   a terminal does not configure an already-running app. Start a new task after
-  the daemon comes up. `codex mcp list` confirms configuration, while
+  the server comes up. `codex mcp list` confirms configuration, while
   `magus status --probe=liveness,mcp` confirms the endpoint is live. If you
   change `mcp.address`, update the URL in `~/.codex/config.toml` too. In the
   desktop app, `/mcp` shows connected servers. Install matching guidance with
@@ -285,7 +368,11 @@ logs and history). How you connect depends on the client:
 
 - **The Claude API "MCP connector"** cannot reach this server: it requires a
   public `https://` URL and rejects `http://` and loopback addresses. Front the
-  daemon with a TLS tunnel first if you need that path.
+  server with a TLS tunnel first if you need that path.
+
+The [server socket](#mcp-over-the-server-socket) reads no token; the kernel's report of
+the peer's uid stands in for it, so anything running as you reaches it, just as it
+could read your operator token.
 
 Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default, refuses any other address without `mcp.insecure_bind: true`, and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
 

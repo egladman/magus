@@ -20,14 +20,14 @@ func HintsEnabled() bool {
 }
 
 // emitted is the set of hint texts already shown, so a fact repeated across
-// many targets/charms/calls in one run (or one long-lived daemon) teaches
+// many targets/charms/calls in one run (or one long-lived server) teaches
 // once instead of nagging on every occurrence.
 var (
 	emittedMu sync.Mutex
 	emitted   = make(map[string]struct{})
 )
 
-// maxEmittedDedupe bounds the dedupe set. The daemon hosting Emit calls never
+// maxEmittedDedupe bounds the dedupe set. The server hosting Emit calls never
 // restarts to clear it, so an unbounded map would be a slow leak; once full it
 // resets and hints start teaching again rather than growing forever.
 const maxEmittedDedupe = 4096

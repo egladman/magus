@@ -17,7 +17,7 @@ magus events --follow
 
 Every magus RUN in the workspace feeds the stream, so a build started in another
 terminal shows up here. Commands that are not runs - `ls`, `query`, `doctor` -
-write no run log and so produce no events. It needs no daemon, no token, and no
+write no run log and so produce no events. It needs no server, no token, and no
 loadable magusfile: an editor can attach to a repository whose magusfile is
 mid-edit, which is exactly when someone wants it.
 
@@ -208,14 +208,14 @@ independent: the language server is edit time, this stream is run time.
 ## See also
 
 - [design.md](design.md): why the stream is shaped this way - outbound only, no
-  daemon, and what building the first clients changed about it.
+  server, and what building the first clients changed about it.
 - [editor.md](../editor.md): the language server for `*.buzz` files.
-- [daemon.md](../daemon.md): the daemon, and why this stream does not need one.
+- [server.md](../server.md): the server, and why this stream does not need one.
 - [console.md](../../../reference/console.md): the browser surface reading the
   same underlying state. Note it documents a route called `/api/v1/events`, which
   is NOT this stream and shares nothing with it: that one is the console's own
   server-sent-events feed, bearer-gated, carrying base64 protobuf status and
-  metrics frames for the dashboard. It is daemon-internal. This page is the
+  metrics frames for the dashboard. It is server-internal. This page is the
   integration surface; do not build against the route because the names match.
 
 ## Stopping a follower
@@ -229,9 +229,9 @@ sentinel should treat those two as a normal stop.
 
 - **Poll cost scales with retained runs.** `--follow` re-reads the run-log
   directory every `--interval`, and each poll stats the logs it finds. Those logs
-  are pruned by a daemon maintenance job, so a workspace running without a daemon
+  are pruned by a server maintenance job, so a workspace running without a server
   accumulates them. On a busy repo left running for weeks, raise `--interval` or
-  start a daemon. This has not been measured; the shape of the cost is stated so
+  start a server. This has not been measured; the shape of the cost is stated so
   you can recognize it rather than as a claim about when it bites.
 - **`target.output` arrives in chunks.** Only that type is buffered (see
   [Latency](#latency)), so a subscriber to it sees bursts rather than a smooth

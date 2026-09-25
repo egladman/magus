@@ -447,9 +447,8 @@ fun footer() > str {
 fun withoutFooter(text: str) > str {
     // The LAST occurrence, not the first. compose always appends the footer last, so
     // the trailing one is the real footer; an earlier one is content. An advisor that
-    // quotes a conflicted hunk or a doc containing the marker - merge-conflict and
-    // hand-edited-generated both paste repository text - would otherwise truncate
-    // both sides at its own quoted copy, and every finding after it would compare as
+    // quotes a conflicted hunk or a doc containing the marker, as merge-conflict
+    // does, would otherwise truncate both sides at its own quoted copy, and every finding after it would compare as
     // absent, suppressing a PATCH that was genuinely needed.
     //
     // Buzz has no lastIndexOf, so this walks forward taking the last hit.
@@ -501,8 +500,7 @@ test "recomposing the same findings is a no-op under the guard" {
 }
 
 test "withoutFooter is not fooled by an advisor quoting the marker" {
-    // merge-conflict and hand-edited-generated both paste repository text into their
-    // findings, so the marker is reachable content. Truncating at the FIRST hit threw
+    // merge-conflict pastes repository text into its findings, so the marker is reachable content. Truncating at the FIRST hit threw
     // away every finding after it and suppressed a PATCH that was needed.
     final quoted = "finding one\nsomeone pasted " + footer_marker + " into a diff\nfinding two";
     final a = quoted + "\n" + footer_marker + "\n<sub>Last updated 10:00.</sub>";
@@ -523,7 +521,7 @@ test "withoutFooter tolerates a comment with no footer yet" {
 // footer on every path, so neither tells you anything. Matching the marker SHAPE rather
 // than a list of names keeps this correct as we add advisors.
 //
-// The merge-conflict and hand-edited-generated advisors paste tracked files, so quoted
+// The merge-conflict advisor pastes tracked files, so quoted
 // repository text can carry a marker of its own. hasSection keeps that comment rather
 // than risk discarding a real finding.
 fun hasSection(text: str) > bool {

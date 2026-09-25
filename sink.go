@@ -188,15 +188,15 @@ func (s *Sink) EmitShardTotal(ctx context.Context, shard string, nShards int, el
 	s.emit(ctx, report.ShardTotal{Shard: shard, NShards: nShards, DurationMs: elapsed.Milliseconds()})
 }
 
-// DetachState is where an invocation handed to the daemon with --detach stands.
+// DetachState is where an invocation handed to the server with --detach stands.
 type DetachState string
 
 // The states [Sink.EmitDetach] reports.
 const (
 	DetachCoalesced DetachState = "coalesced" // an identical invocation was already running; none was queued
-	DetachQueued    DetachState = "queued"    // handed to the daemon, not waited on
-	DetachRunning   DetachState = "running"   // handed to the daemon and waited on
-	DetachUnwatched DetachState = "unwatched" // the wait stopped; the run continues on the daemon
+	DetachQueued    DetachState = "queued"    // handed to the server, not waited on
+	DetachRunning   DetachState = "running"   // handed to the server and waited on
+	DetachUnwatched DetachState = "unwatched" // the wait stopped; the run continues on the server
 	DetachPassed    DetachState = "passed"
 	DetachFailed    DetachState = "failed"
 )

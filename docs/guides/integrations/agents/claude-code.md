@@ -324,7 +324,7 @@ hand the sub-agent.
 ## Notifications
 
 `magus session notify` turns a host event into a desktop notification. It does not
-send an event to the daemon or Console. Wire `Notification` (it fires on a
+send an event to the server or Console. Wire `Notification` (it fires on a
 permission prompt and when the agent goes idle waiting for input), and `Stop` or
 `SubagentStop` for completion.
 

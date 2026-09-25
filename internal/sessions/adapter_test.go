@@ -108,12 +108,12 @@ func TestAnAdapterIsNotAShellLine(t *testing.T) {
 		"the metacharacters are arguments to echo, never operators")
 }
 
-// TestARunawayAdapterDoesNotHangTheCaller is the one that matters for the daemon.
+// TestARunawayAdapterDoesNotHangTheCaller is the one that matters for the server.
 //
 // Writing output into a buffer makes os/exec allocate a pipe, and Wait blocks until every
 // holder of the write end closes it, while the deadline signals only the direct child. So
 // an adapter that leaves a background process holding that pipe hung the caller forever,
-// and in the daemon that wedged a run slot, which the maintenance scheduler reads as busy
+// and in the server that wedged a run slot, which the maintenance scheduler reads as busy
 // for the rest of the process's life.
 func TestARunawayAdapterDoesNotHangTheCaller(t *testing.T) {
 	t.Parallel()
@@ -139,7 +139,7 @@ func TestARunawayAdapterDoesNotHangTheCaller(t *testing.T) {
 }
 
 // TestAdapterOutputIsCapped pins that a chatty adapter cannot cost the caller its memory
-// or the daemon its log. The TAIL survives, because an adapter's summary is its last line.
+// or the server its log. The TAIL survives, because an adapter's summary is its last line.
 func TestAdapterOutputIsCapped(t *testing.T) {
 	t.Parallel()
 

@@ -36,7 +36,7 @@ import {
   buildLauncher,
   type Launchable,
 } from "./home";
-import { REQUEST_DAEMON_SETTINGS_EVENT, requireDaemon } from "./connectPrompt";
+import { REQUEST_SERVER_SETTINGS_EVENT, requireServer } from "./connectPrompt";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
   registerCommand,
@@ -71,15 +71,15 @@ import {
   parseHash,
   wantsDemo,
   getLiveToken,
-  resolveDaemonHost,
-  createDaemonTransport,
+  resolveServerHost,
+  createServerTransport,
   fetchReadiness,
   isReadOnly,
-  adoptDaemonOrigin,
+  adoptServerOrigin,
   consumeLinkCode,
   type ReadinessReport,
   type ReadinessComponent,
-} from "../lib/daemon";
+} from "../lib/server";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { mountSharePanel } from "./share";
@@ -211,23 +211,23 @@ const splitMode = splitModeCell;
 
 const registry = new Map<string, PageModule<unknown, unknown>>();
 // Every mount resolves through the registry (a launcher pick, a restored layout, a deep link, app
-// mode), so wrapping here is what keeps each of them off a daemon surface with no daemon.
+// mode), so wrapping here is what keeps each of them off a server surface with no server.
 function register(m: PageModule<unknown, unknown>): void {
-  registry.set(m.id, requireDaemon(m, SURFACES.find((s) => s.pageId === m.id)?.daemon));
+  registry.set(m.id, requireServer(m, SURFACES.find((s) => s.pageId === m.id)?.server));
 }
 
 // The surfaces the home launcher offers (and the console can open). Ordered to tell the
 // operator's story: what is magus doing now (dashboard), what just happened (activity),
 // drill into one run (logs), then understand the workspace (graph), then the meta surfaces.
 //
-// daemon marks a surface with nothing to show without one; register() wraps those in requireDaemon.
+// server marks a surface with nothing to show without one; register() wraps those in requireServer.
 // The Log Viewer and Graph Explorer open files and snapshots offline, so they carry no mark.
 const SURFACES: Launchable[] = [
   {
     pageId: "dashboard",
     label: "Dashboard",
     hint: "What magus is doing right now",
-    daemon: { purpose: "The dashboard streams a running daemon's pool, cache, and health." },
+    server: { purpose: "The dashboard streams a running server's pool, cache, and health." },
   },
   {
     pageId: "activity",
@@ -237,7 +237,7 @@ const SURFACES: Launchable[] = [
     // agent's reasoning hangs off the command it led to, "activity" still covers it.
     label: "Activity",
     hint: "Everything that happened here, and what led to it",
-    daemon: { purpose: "Activity records what the daemon did: MCP calls, jobs, config changes." },
+    server: { purpose: "Activity records what the server did: MCP calls, jobs, config changes." },
   },
   // Runs before Log Viewer, because it is the one you reach for FIRST: the viewer reads a run you
   // already have, this finds the run. The pair is deliberate - browsing history and reading one
@@ -247,7 +247,7 @@ const SURFACES: Launchable[] = [
     pageId: "runs",
     label: "Runs",
     hint: "Every run this workspace kept, no ref needed",
-    daemon: { purpose: "Runs reads the runs your local daemon has kept." },
+    server: { purpose: "Runs reads the runs your local server has kept." },
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
@@ -255,7 +255,7 @@ const SURFACES: Launchable[] = [
     pageId: "diff",
     label: "Diff",
     hint: "Read what you have changed but not committed",
-    daemon: { purpose: "Diff reads the working tree through a local daemon." },
+    server: { purpose: "Diff reads the working tree through a local server." },
   },
   // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
   // that someone who was here before you left it for you, at the spot where it matters.
@@ -263,7 +263,7 @@ const SURFACES: Launchable[] = [
     pageId: "notes",
     label: "Notes",
     hint: "What people left here for whoever comes next",
-    daemon: {
+    server: {
       purpose: "Notes are prose a person wrote about this workspace, anchored to what it is about.",
     },
   },
@@ -287,19 +287,19 @@ const SURFACES: Launchable[] = [
 ];
 
 // CLEAN_PATH_SURFACES are the surfaces reachable by the canonical clean path /console/<surface>/,
-// the form magus mints its daemon-origin deep links into. It mirrors the daemon's shared list
-// (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
+// the form magus mints its server-origin deep links into. It mirrors the server's shared list
+// (internal/service/console KnownSurfaces): the server serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
 const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "runs"];
-// JOBS_PATH is served by the daemon but is no surface of its own: it is the Dashboard's Jobs view,
+// JOBS_PATH is served by the server but is no surface of its own: it is the Dashboard's Jobs view,
 // the page every `magus job` console link prints. Routed apart so it opens that view.
 const JOBS_PATH = "plan";
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
 // the last path segment being a known surface whose parent segment is "console", so it holds at
-// both the daemon origin (/console/graph/) and the hosted origin (/magus/console/graph/).
+// both the server origin (/console/graph/) and the hosted origin (/magus/console/graph/).
 function consoleSurfaceFromPath(): string | null {
   if (typeof location === "undefined") return null;
   const segs = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
@@ -325,10 +325,10 @@ interface Mounted {
   tile: TileView;
 }
 
-// The status bar shows the connected daemon's build: its version inline, the full fingerprint on
+// The status bar shows the connected server's build: its version inline, the full fingerprint on
 // hover. Read via the StatusService GetStatus RPC (build) - the running binary reports its own
-// identity, so the bar reflects the daemon you are talking to. In the daemon-free demo it shows a demo
-// value; with no daemon and no demo the chip stays hidden. Cached once and applied to every tab's bar.
+// identity, so the bar reflects the server you are talking to. In the server-free demo it shows a demo
+// value; with no server and no demo the chip stays hidden. Cached once and applied to every tab's bar.
 let buildVersion: string | null = null;
 let buildFingerprint = "";
 
@@ -349,23 +349,23 @@ function setBuild(version: string, fingerprint: string): void {
 function loadBuildInfo(): void {
   const params = parseHash();
   if (wantsDemo(params)) {
-    // v0.0.0 on purpose. There is no daemon in the demo, so there is no build to report, and a
+    // v0.0.0 on purpose. There is no server in the demo, so there is no build to report, and a
     // plausible-looking literal would invent a version, a commit and a date - then drift behind
     // the real binary, so the showcase reads as an abandoned project. A zero version cannot go
     // stale and claims no commit that never existed.
-    setBuild("v0.0.0", "synthesized demo data; no daemon is connected");
+    setBuild("v0.0.0", "synthesized demo data; no server is connected");
     return;
   }
-  const host = resolveDaemonHost(params);
+  const host = resolveServerHost(params);
   if (!host) return;
-  const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+  const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
   client
     .getStatus({})
     .then((res) => {
       const b = res.status?.build;
       if (b?.version) setBuild(b.version, b.fingerprint || "");
     })
-    // reported: by the daemon transport; the version chip keeps its placeholder
+    // reported: by the server transport; the version chip keeps its placeholder
     .catch(() => {});
 }
 
@@ -609,16 +609,16 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
 }
 
 // notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
-// names the CONFIGURED daemon address so a disconnected user sees the target without opening Settings,
-// and always ends in the click hint (the item jumps to the daemon-address field). Empty host = unset.
+// names the CONFIGURED server address so a disconnected user sees the target without opening Settings,
+// and always ends in the click hint (the item jumps to the server-address field). Empty host = unset.
 // The last /readyz answer, so a tab switch can paint the bar that just docked without waiting out
 // the poll interval. Module-level because the poller and the tab swap are separate closures.
 let lastReadiness: { report: ReadinessReport | null; host: string; at: number } | null = null;
 
 function notConnectedHint(host: string): string {
   return host
-    ? "Not connected to " + host + ". Click to change the daemon address."
-    : "No daemon address configured. Click to set the daemon address.";
+    ? "Not connected to " + host + ". Click to change the server address."
+    : "No server address configured. Click to set the server address.";
 }
 
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
@@ -661,20 +661,20 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   // mounts; the launcher's own bar (no surface behind it) keeps "none" until the readiness poller
   // resolves a host.
   conn.dataset.state = demoing ? "demo" : "none";
-  // Clickable: a disconnected user's fastest fix is the daemon-address field, so the status pill
-  // itself is the shortcut there (openDaemonSettings, wired via the delegated listener below). role +
+  // Clickable: a disconnected user's fastest fix is the server-address field, so the status pill
+  // itself is the shortcut there (openServerSettings, wired via the delegated listener below). role +
   // tabindex make it a real keyboard-reachable control since a bare <span> is neither by default; the
   // aria-label is the static accessible name (what the click DOES), while .title carries the dynamic
   // last-probe sentence the readiness poller keeps current (what hovering SEES).
   conn.setAttribute("role", "button");
   conn.tabIndex = 0;
-  // Surface the CONFIGURED daemon address up front, so a disconnected user reads what address the console
+  // Surface the CONFIGURED server address up front, so a disconnected user reads what address the console
   // is trying without opening Settings. Both the accessible name and the hover tooltip carry it; the
   // readiness poller keeps the tooltip current once it has probed. notConnectedHint owns the wording.
   // The demo sentence is the same one the readiness poller writes, set here too so it is right from
   // the first paint rather than from the first poll tick.
   const hint = demoing
-    ? "Demo data is synthetic. Click to change the daemon address."
+    ? "Demo data is synthetic. Click to change the server address."
     : notConnectedHint(getDefaultHost());
   conn.setAttribute("aria-label", hint);
   conn.title = hint;
@@ -759,7 +759,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     right.append(panes);
   }
   // Share a read-only view: a quiet share-glyph button, loopback-console only (a read-only viewer can't
-  // trigger sharing, and the daemon rejects the loopback-guarded endpoint anyway). data-share-toggle is
+  // trigger sharing, and the server rejects the loopback-guarded endpoint anyway). data-share-toggle is
   // the hook; startConsole's one delegated click opens the share dialog for whichever tab's copy fired.
   if (!isReadOnly()) {
     const share = document.createElement("button");
@@ -802,14 +802,14 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   return bar;
 }
 
-// openDaemonSettings jumps a disconnected user straight to the fix: open the Settings surface (as a
-// tab, focusing it if already open - open() is single-instance) then focus + scroll the daemon-address
+// openServerSettings jumps a disconnected user straight to the fix: open the Settings surface (as a
+// tab, focusing it if already open - open() is single-instance) then focus + scroll the server-address
 // field once it exists. Settings activates asynchronously (its host pane mounts synchronously, but the
 // controller - and the DOM inside it - resolves via mountSurface's awaited activate() a tick or more
 // later; see settings/surface.ts), so the field is not guaranteed to exist the instant dispatchCommand
 // returns. Poll a few animation frames rather than assume a fixed delay, and give up quietly past the
 // deadline - the tab is open either way, so a user who does not get auto-focus can still find the field.
-function openDaemonSettings(): void {
+function openServerSettings(): void {
   dispatchCommand("console.open.settings");
   const deadline = Date.now() + 800;
   const tryFocus = (): void => {
@@ -826,7 +826,7 @@ function openDaemonSettings(): void {
 
 // openKeybindings jumps to the Keybindings editor embedded in the Settings surface (not the modal
 // overlay - a deep link lands on the surface's own persistent copy, which is what a return visit or
-// bookmark would find again). Same async-mount pattern as openDaemonSettings above: Settings activates
+// bookmark would find again). Same async-mount pattern as openServerSettings above: Settings activates
 // asynchronously, so poll a few animation frames for the target rather than assume a fixed delay, and
 // give up quietly past the deadline. With a cmdId, scroll to and briefly highlight that command's row
 // and focus its Record button (the row's first button) so a rebind is one click away; without one, just
@@ -879,12 +879,12 @@ function openKeybindings(cmdId?: string): void {
   requestAnimationFrame(tryFocus);
 }
 
-// ---- daemon readiness enrichment for #console-conn -------------------------
+// ---- server readiness enrichment for #console-conn -------------------------
 //
 // Beyond the SSE-derived connected/disconnected signal each surface already owns, a periodic GET
-// /readyz (daemon.fetchReadiness) gives a component-level health breakdown (workspaces, symbol index,
+// /readyz (server.fetchReadiness) gives a component-level health breakdown (workspaces, symbol index,
 // services, knowledge graph). This is purely an ENRICHMENT layer: the title (hover detail) and the
-// data-health dot color, applied to whichever status bar is currently docked. An old daemon that
+// data-health dot color, applied to whichever status bar is currently docked. An old server that
 // predates /readyz's CORS/JSON support degrades gracefully (fetchReadiness resolves null), so the UI
 // falls back to whatever the SSE-derived state already says instead of a broken tooltip.
 
@@ -908,7 +908,7 @@ function summarizeComponents(components: ReadinessComponent[]): string {
 
 // formatReadinessTitle builds the #console-conn tooltip sentence for one probe outcome. ageSec is how
 // long the check itself took to answer (fetchReadiness resolves right before this is called, so it
-// reads as "how stale is this the moment you're seeing it"). A null report - old daemon or genuinely
+// reads as "how stale is this the moment you're seeing it"). A null report - old server or genuinely
 // unreachable, indistinguishable from the browser's side - gets an actionable sentence rather than a
 // guessed cause, always ending in the click hint so the enrichment doubles as a discoverability nudge.
 function formatReadinessTitle(
@@ -920,9 +920,9 @@ function formatReadinessTitle(
     return (
       "Not connected to " +
       host +
-      ". Daemon health unavailable (update the daemon to see component status), last tried " +
+      ". Server health unavailable (update the server to see component status), last tried " +
       ageSec +
-      "s ago. Click to change the daemon address."
+      "s ago. Click to change the server address."
     );
   }
   const statusLine = report.ready ? "200 (ready)" : "503 (not ready)";
@@ -952,19 +952,19 @@ export function startConsole(
       "Console",
       "This page runs console build " +
         running +
-        " but the daemon now serves " +
+        " but the server now serves " +
         served +
         ". Reload: until then some views may be empty or wrong.",
     ),
   );
-  // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
+  // Snapshot the boot fragment BEFORE adoptServerOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
-  // Adopt the daemon origin BEFORE anything reads the fragment: on any device that opened a
+  // Adopt the server origin BEFORE anything reads the fragment: on any device that opened a
   // LAN share link (a phone, a TV, a laptop) this records own-origin adoption and stashes the
-  // token, so resolveDaemonHost returns the page's own origin and every surface connects
+  // token, so resolveServerHost returns the page's own origin and every surface connects
   // read-only over same-origin fetches to the exact LAN host it loaded from.
-  adoptDaemonOrigin();
+  adoptServerOrigin();
   const readOnly = isReadOnly();
   document.documentElement.toggleAttribute("data-read-only", readOnly);
 
@@ -977,9 +977,9 @@ export function startConsole(
   // exchange in the composition root covers every tab, and the storage it writes is what
   // the other bundles read.
   if (!readOnly) {
-    const daemonHost = resolveDaemonHost();
-    if (daemonHost)
-      void exchangeOperatorToken(daemonHost).then((outcome) => {
+    const serverHost = resolveServerHost();
+    if (serverHost)
+      void exchangeOperatorToken(serverHost).then((outcome) => {
         if (outcome !== "failed") return;
         reportFailure(
           "Sign-in",
@@ -1003,7 +1003,7 @@ export function startConsole(
   // hidden the moment a tab activates. Clicking a card opens that surface as a real tab. It gets its
   // own default status bar (identical to what the old home tab supplied: a "not connected" dot and a
   // hidden Demo chip) so the footer stays populated at zero tabs.
-  // launchDemo opens every surface in the daemon-free demo: it sets the shared #demo fragment each
+  // launchDemo opens every surface in the server-free demo: it sets the shared #demo fragment each
   // surface reads when it activates, then opens them as tabs (Dashboard last so its live-updating demo
   // is the active tab).
   //
@@ -1298,7 +1298,7 @@ export function startConsole(
   // Applications menu can never offer different sets. This runs before the ?app branch below, so an
   // app-mode window builds a rail too and console.css hides it there ([data-appmode]).
   // The rail's live pool reading. Held here rather than in the rail so the poller below owns one
-  // source of it; null until the first answer, and back to null whenever the daemon stops answering.
+  // source of it; null until the first answer, and back to null whenever the server stops answering.
   const pulse = signal<PulseView | null>(null);
   // The surface the FOCUSED pane is showing - what the rail marks as current. A tiled tab holds
   // several at once, so "the active tab's surfaces" is not an answer to "where am I"; focus is.
@@ -1308,12 +1308,12 @@ export function startConsole(
   // earns a badge and a static one does not.
   const railBadges = signal<Record<string, Badge>>({});
   // The welcome screen reads the SAME pulse the rail does, on the same 15s tick, so a console sitting
-  // at zero tabs keeps saying what the daemon is doing rather than freezing on whatever was true when
+  // at zero tabs keeps saying what the server is doing rather than freezing on whatever was true when
   // it was built. Null HIDES the row - see syncLauncherPulse for why "no answer" must not read as idle.
   // Not disposed, like the readiness interval below: startConsole runs once for the page's lifetime.
   pulse.subscribe((p) => syncLauncherPulse(launcher, p));
   syncLauncherPulse(launcher, pulse.get());
-  // The workspace scope control, in the title bar's action group. It hides itself until the daemon
+  // The workspace scope control, in the title bar's action group. It hides itself until the server
   // reports more than one workspace, so a single-workspace console never grows a control for a
   // decision with one answer.
   const actionsHost = document.getElementById("console-actions");
@@ -1348,9 +1348,9 @@ export function startConsole(
   };
 
   // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
-  // it is the ONLY thing that knows, since there is no daemon to poll.
+  // it is the ONLY thing that knows, since there is no server to poll.
   // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
-  // no daemon - but a Connect screen there would ask for a credential against a daemon that does not
+  // no server - but a Connect screen there would ask for a credential against a server that does not
   // exist, and answer its own questions with "not configured" and "No credential".
   //
   // Read from the FRAGMENT, not from #console-conn's data-state. The dashboard publishes its workspace
@@ -1369,7 +1369,7 @@ export function startConsole(
   }
 
   // Choosing a workspace is what makes it definite, so it is the other moment worth casting on - a
-  // daemon serving several never has one until someone picks.
+  // server serving several never has one until someone picks.
   onWorkspaceScope(() => castSeen(pulse.get()?.workspaces ?? []));
 
   const sidebarHost = document.getElementById("console-sidebar");
@@ -1419,7 +1419,7 @@ export function startConsole(
   // adoption), drop a HISTORY-tier note naming where it connected. History tier (kind "ok") so it
   // records silently and never lights the bell; keyed so a reload does not re-announce it. A bare #port
   // (loopback attach) reports its own value; a #token adoption has no port in the fragment, so the page's
-  // own origin is what it is talking to - its port when there is one, else the origin host (a daemon on a
+  // own origin is what it is talking to - its port when there is one, else the origin host (a server on a
   // default port has an empty location.port). No notification without an attach directive.
   const attached =
     (bootParams.port !== undefined && bootParams.port !== "") || bootParams.token !== undefined;
@@ -1429,17 +1429,17 @@ export function startConsole(
         ? "port " + bootParams.port
         : location.port
           ? "port " + location.port
-          : location.host || "the daemon origin";
+          : location.host || "the server origin";
     notify({
       source: "Console",
       kind: "ok",
-      message: "Connected to daemon on " + where + ".",
+      message: "Connected to server on " + where + ".",
       key: "console:attached:" + where,
     });
   }
 
-  // Shell-side watchers (share-connect + storage thresholds). Skipped in the daemon-free demo (they would
-  // poll a daemon that is not there and perturb the deterministic scenario) and for a read-only viewer (it
+  // Shell-side watchers (share-connect + storage thresholds). Skipped in the server-free demo (they would
+  // poll a server that is not there and perturb the deterministic scenario) and for a read-only viewer (it
   // does not manage the host's share token, and TokenService is denied there anyway).
   if (!wantsDemo(parseHash()) && !isReadOnly()) {
     checkLocalStorageAlert(notifications.store);
@@ -1649,7 +1649,7 @@ export function startConsole(
 
   // Share a read-only view: a loopback-console affordance only (the status-bar share button is likewise
   // gated out for a read-only viewer). Register the palette mirror only when NOT read-only - a device
-  // viewing over the LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
+  // viewing over the LAN is a read-only viewer and the server rejects the loopback-guarded trigger anyway.
   if (!readOnly) {
     registerCommand({
       id: "console.share",
@@ -2092,7 +2092,7 @@ export function startConsole(
     // #console-conn is rebuilt per tab (makeStatusBar) plus once more for the launcher, so this is one
     // delegated listener over the footer rather than a per-instance handler - it covers every incarnation,
     // present and future, the same way the cheat-sheet toggle above does.
-    if (t.closest("#console-conn")) openDaemonSettings();
+    if (t.closest("#console-conn")) openServerSettings();
   });
   // Keyboard activation for the same control (role="button" + tabindex="0" on #console-conn makes it
   // focusable, but a <span> has no native Enter/Space activation the way a <button> would).
@@ -2101,11 +2101,11 @@ export function startConsole(
     const t = e.target as HTMLElement;
     if (!t.closest("#console-conn")) return;
     e.preventDefault(); // Space must not also scroll the page
-    openDaemonSettings();
+    openServerSettings();
   });
-  document.addEventListener(REQUEST_DAEMON_SETTINGS_EVENT, openDaemonSettings);
+  document.addEventListener(REQUEST_SERVER_SETTINGS_EVENT, openServerSettings);
 
-  // Readiness polling: enriches whichever #console-conn is currently docked with the daemon's /readyz
+  // Readiness polling: enriches whichever #console-conn is currently docked with the server's /readyz
   // component report on a fixed interval, independent of tab switches. This is the composition root -
   // there is no console-level teardown to hook into (startConsole runs once for the page's lifetime,
   // like installKeybindings above), so the interval simply runs for as long as the page does.
@@ -2121,7 +2121,7 @@ export function startConsole(
     if (conn.dataset.state === "connected" && report) conn.dataset.health = readinessHealth(report);
     else delete conn.dataset.health;
   }
-  // Bumped on every poll that reaches the daemon, so a slow answer can tell whether it is still the
+  // Bumped on every poll that reaches the server, so a slow answer can tell whether it is still the
   // current one. Cheaper than an AbortController here because the fetch helpers already collapse every
   // failure to null; what has to be dropped is a SUCCESSFUL answer that arrived too late.
   let pollGeneration = 0;
@@ -2135,17 +2135,17 @@ export function startConsole(
       // The dot may not exist yet at #demo - it is docked by whichever surface is showing, and on the
       // zero-tab screen the launcher's own bar owns it. The pulse below does not depend on it.
       if (current) {
-        const hint = "Demo data is synthetic. Click to change the daemon address.";
+        const hint = "Demo data is synthetic. Click to change the server address.";
         current.title = hint;
         current.setAttribute("aria-label", hint);
         delete current.dataset.health;
       }
       // A SYNTHETIC pulse, not null. Everything in the demo is fabricated and says so - the status bar
       // reads "demo", the workspace menu tags its roots - so a pool reading here is consistent with the
-      // rest of it rather than a claim about a daemon. Nulling it meant the demo was the one mode where
+      // rest of it rather than a claim about a server. Nulling it meant the demo was the one mode where
       // the rail's reading, the welcome screen's live row, and the workspace sigil all stayed dark,
       // which made the parts of the console that only appear with a workspace impossible to see at all
-      // without a daemon running.
+      // without a server running.
       pulse.set({
         running: 5,
         queued: 2,
@@ -2165,13 +2165,13 @@ export function startConsole(
       syncLauncherConnectPrompt(launcher, null);
       return;
     }
-    const host = resolveDaemonHost();
+    const host = resolveServerHost();
     if (!host) {
       pollGeneration++; // nor over "no address", once the address is cleared
-      pulse.set(null); // a count with no daemon behind it outlives the thing it described
+      pulse.set(null); // a count with no server behind it outlives the thing it described
       railBadges.set({});
       syncLauncherConnectPrompt(launcher, { connection: "none" });
-      // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
+      // No server address configured at all: nothing to probe. A surface, if one is docked, owns the text;
       // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
       // not-connected "none" state - rather than leaving whatever a prior host's probe left.
       if (ws.get().activeId == null) {
@@ -2187,7 +2187,7 @@ export function startConsole(
       return;
     }
     // The rail's readings ride THIS interval rather than starting their own: the shell is already
-    // asking this daemon a question every 15s, and the rail's numbers are the same freshness.
+    // asking this server a question every 15s, and the rail's numbers are the same freshness.
     //
     // NOT gated on the rail being on screen, unlike the diff badge below. The pulse feeds two
     // consumers and only one of them is the rail: the title bar's scope picker and the Connect screen
@@ -2237,7 +2237,7 @@ export function startConsole(
     const conn = document.getElementById("console-conn");
     if (!conn) return; // momentarily absent between tab swaps
     if (conn.dataset.state === "demo") {
-      const hint = "Demo data is synthetic. Click to change the daemon address.";
+      const hint = "Demo data is synthetic. Click to change the server address.";
       conn.title = hint;
       conn.setAttribute("aria-label", hint);
       delete conn.dataset.health;
@@ -2247,12 +2247,12 @@ export function startConsole(
     // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
     conn.title = formatReadinessTitle(report, ageSec, host);
     // The poller owns any bar no surface has claimed: the launcher's zero-tab bar, and every
-    // surface with no daemon link of its own - which used to sit on "not connected" all session.
+    // surface with no server link of its own - which used to sit on "not connected" all session.
     if (!conn.dataset.owner) {
       conn.textContent = report
         ? report.ready
-          ? "daemon ready"
-          : "daemon not ready"
+          ? "server ready"
+          : "server not ready"
         : "not connected";
       conn.dataset.state = report?.ready ? "connected" : "disconnected";
     }
@@ -2263,7 +2263,7 @@ export function startConsole(
     conn.setAttribute(
       "aria-label",
       conn.dataset.state === "connected"
-        ? "Connected to " + host + ". Click to change the daemon address."
+        ? "Connected to " + host + ". Click to change the server address."
         : notConnectedHint(host),
     );
     // Health enrichment runs whoever owns the dot, gated on the (surface- or poller-set) data-state.
@@ -2273,13 +2273,13 @@ export function startConsole(
   setInterval(() => {
     // A backgrounded tab has nothing to repaint, and this tick is now three requests. Skipping while
     // hidden and catching up on the way back keeps a console left open overnight from talking to the
-    // daemon until morning for readings nobody is looking at.
+    // server until morning for readings nobody is looking at.
     if (!document.hidden) pollReadiness();
   }, READINESS_POLL_MS);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) pollReadiness();
   });
-  // A new daemon address is answered now rather than on the next tick, up to 15s later.
+  // A new server address is answered now rather than on the next tick, up to 15s later.
   subscribeDefaultHost(pollReadiness);
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
@@ -2499,7 +2499,7 @@ if (tabBarHost && outlet && statusHost) void signInThenStart(tabBarHost, outlet,
 
 // signInThenStart trades a CLI link's one-time code for its console token BEFORE anything
 // mounts, so no surface ever makes a request signed with nothing. The code is redeemed at the
-// daemon that served this page, and a code that is used or expired is said so rather than
+// server that served this page, and a code that is used or expired is said so rather than
 // leaving the console to fail call by call.
 async function signInThenStart(
   tabBarHost: HTMLElement,
@@ -2510,7 +2510,7 @@ async function signInThenStart(
   if (code && (await redeemLinkCode(location.host, code)) === "failed")
     reportFailure(
       "Sign-in",
-      "This sign-in link was already used, has expired (a link signs in once, within a minute), or the daemon could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
+      "This sign-in link was already used, has expired (a link signs in once, within a minute), or the server could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
       "link-code:failed",
     );
   startConsole(tabBarHost, outlet, statusHost);

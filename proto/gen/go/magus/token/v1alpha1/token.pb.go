@@ -5,7 +5,7 @@
 // source: magus/token/v1alpha1/token.proto
 
 // Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
-// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// surface over the server's stored tokens and its live share link. It is a second door onto
 // the same token store the CLI writes (tokens.d) and the same share manager the share
 // endpoint drives, never a second store.
 //
@@ -146,7 +146,7 @@ func (CredentialClass) EnumDescriptor() ([]byte, []int) {
 	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{1}
 }
 
-// Grant is what a token may do: one level per surface, as the daemon enforces it.
+// Grant is what a token may do: one level per surface, as the server enforces it.
 type Grant struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tokens        Level                  `protobuf:"varint,1,opt,name=tokens,proto3,enum=magus.token.v1alpha1.Level" json:"tokens,omitempty"`
@@ -370,7 +370,7 @@ func (x *ListTokensResponse) GetTokens() []*TokenInfo {
 type CreateTokenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// A human label, unique among stored tokens, that does not look like an id. Empty asks the
-	// daemon to derive one.
+	// server to derive one.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Required: when the token dies, in the future and at most 366 days out.
 	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expire_time,json=expireTime,proto3,oneof" json:"expire_time,omitempty"`

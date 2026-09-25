@@ -3,7 +3,7 @@
 /* eslint-disable */
 
 // Package magus.activity.v1alpha1 is the versioned wire contract for the magus activity trail: a
-// time-ordered record of consequential actions taken against a workspace or its daemon, for
+// time-ordered record of consequential actions taken against a workspace or its server, for
 // accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1alpha1,
 // magus.status.v1alpha1). It is deliberately NOT the execution journal (magus.viewer.v1alpha1, what a
 // build ran) nor metrics (magus.metrics.v1alpha1, aggregate counters): activity answers "who did
@@ -54,7 +54,7 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
   kind: Kind;
 
   /**
-   * the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
+   * the origin fields below as one label: "eli via claude-code", "server", "unattributed"
    *
    * @generated from field: string actor = 3;
    */
@@ -117,8 +117,8 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
   responseBytes: bigint;
 
   /**
-   * The workspace root the action pertained to; empty for a daemon-wide action not bound to one
-   * workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a
+   * The workspace root the action pertained to; empty for a server-wide action not bound to one
+   * workspace (an MCP call). The trail is a single server-wide stream, so this disambiguates a
    * job by its workspace rather than fragmenting the record across per-workspace directories.
    *
    * @generated from field: string workspace = 13;
@@ -177,8 +177,8 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
   /**
    * Where the action came from, one field per channel, so a reader never guesses which kind of
    * value a single string holds. user is the OS account the recording process ran as, read from
-   * the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
-   * credential is the bearer a daemon request presented, as the daemon verified it. agent is the
+   * the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, server).
+   * credential is the bearer a server request presented, as the server verified it. agent is the
    * host's subagent id within session. actor above is these rendered as one label for a row
    * head.
    *
@@ -471,7 +471,7 @@ export enum Kind {
   UNSPECIFIED = 0,
 
   /**
-   * an agent invoked an MCP tool over the daemon (emitted)
+   * an agent invoked an MCP tool over the server (emitted)
    *
    * @generated from enum value: KIND_MCP_TOOL_CALL = 1;
    */
@@ -482,7 +482,7 @@ export enum Kind {
    * the trail, with no schema change. A reader/dashboard selects the kinds it wants (see
    * ActivityQuery.kinds), so one stream serves the agent view, a jobs view, and a full log.
    *
-   * a daemon background job: SCIP reindex, graph build, VCS refresh (emitted)
+   * a server background job: SCIP reindex, graph build, VCS refresh (emitted)
    *
    * @generated from enum value: KIND_JOB = 2;
    */
@@ -559,7 +559,7 @@ export enum Kind {
   NOTES = 10,
 
   /**
-   * A path under a job's declared write paths changed, as the daemon's file watcher saw it.
+   * A path under a job's declared write paths changed, as the server's file watcher saw it.
    * action is the repo-relative path and unit is the job whose write paths cover it. The producer
    * is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from
    * the worker being watched, which is the whole reason a person can see what a worker is
@@ -571,7 +571,7 @@ export enum Kind {
 
   /**
    * A run magus recorded against a job: its check, one of its completion gates, or the
-   * daemon's own last run of a catalog job. action is the rendered command and preview
+   * server's own last run of a catalog job. action is the rendered command and preview
    * names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
    * kind here where the outcome is a fact about the work rather than about the recording.
    *
@@ -659,7 +659,7 @@ export const ActivityService: GenService<{
    * endpoint that question costs a full retained-window scan per second per reader.
    *
    * It merges three producers into the one envelope, which is why the filter is where it
-   * is rather than on the client: file changes the daemon's watcher saw, attributed to the
+   * is rather than on the client: file changes the server's watcher saw, attributed to the
    * job whose declared write paths cover the path; the guard's tool-call observations,
    * attributed by the lease the hook resolved; and the runs recorded against a job. A
    * reader narrows by job, session or path and gets one time-ordered stream of all three,

@@ -701,7 +701,7 @@ var Magus = Module{
 //
 // Six tools name a Member today. The rest are the gap: a knowledge-graph verb with
 // no typed Buzz member (query, explain, path, refs, stats, output), or a tool whose
-// state a member cannot reach (the run engine's Options, the daemon's live review
+// state a member cannot reach (the run engine's Options, the server's live review
 // session). Naming a Member as each one lands is what closes it.
 var magusMCPTools = []MCPTool{
 	{
@@ -863,7 +863,7 @@ var magusMCPTools = []MCPTool{
 	},
 	{
 		// No Member: magus\diff reads the WORKING TREE's uncommitted changes. This
-		// joins a live review session the daemon holds, which no Buzz member reaches.
+		// joins a live review session the server holds, which no Buzz member reaches.
 		Name: hint.ToolDiff.String(),
 		Doc: "Join the review session a person already has open and pair with them on it. " +
 			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
@@ -1624,8 +1624,8 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // object) when the child can't launch or exits non-zero, mirroring proc.exec. label
 // names the calling method for error messages.
 //
-// The child runs in the working directory carried by ctx (WithCwd), so a nested project
-// describes its own project rather than the root workspace. opts may carry "root",
+// The child runs in the working directory carried by ctx (WithCwd) but loads the whole
+// workspace, so a command scoped to one project names it. opts may carry "root",
 // emitted as the global --root flag, which precedes the subcommand.
 // nestedExecOptions is how a nested magus is launched: where it runs, what it inherits, and
 // what it is fed.
@@ -1664,7 +1664,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	}
 	full = append(full, args...)
 
-	// childEnv withholds daemon sockets from subprocesses, while a recursive Magus
+	// childEnv withholds server sockets from subprocesses, while a recursive Magus
 	// call must retain both that trusted transport and its captured lease.
 	env := recursiveMagusEnv(ctx)
 
@@ -1724,11 +1724,11 @@ func recursiveMagusEnv(ctx context.Context) []string {
 	if lease := proc.LeaseFromContext(ctx); lease != "" {
 		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
 	}
-	for _, k := range run.DaemonForwardVars {
+	for _, k := range run.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
-			slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
-				"daemon socket injected into recursive magus invocation"), "var", k)
+			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
+				"magus socket injected into recursive magus invocation"), "var", k)
 		}
 	}
 	return env

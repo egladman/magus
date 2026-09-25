@@ -14,35 +14,35 @@ name is the entry below. `magus describe rules` prints the same list.
 
 ## Refuses
 
-| Rule                                          | Catches                                                                                                      |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| [busy-wait](busy-wait.md)                     | a loop polling for work you started, which announces its own completion                                      |
-| [buzz-unbriefed](buzz-unbriefed.md)           | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill            |
-| [cache-dir-write](cache-dir-write.md)         | a write into this checkout's magus cache dir, which magus alone owns                                         |
-| [capture-filter](capture-filter.md)           | a filter over a run capture or log, which cuts the failure block apart                                       |
-| [cd](cd.md)                                   | a `cd` before a magus command, when the project is an argument                                               |
-| [credential-verb](credential-verb.md)         | an agent minting, printing, rotating or revoking a credential through the CLI                                |
-| [exit-status-echo](exit-status-echo.md)       | a trailing `echo $?`, which repeats an exit status the harness already reports                               |
-| [interpreter-rewrite](interpreter-rewrite.md) | an inline interpreter rewriting a file this tree already carries                                             |
-| [merge-side-checkout](merge-side-checkout.md) | a checkout of one merge side over a conflicted file, which discards the merge                                |
-| [notes-author](notes-author.md)               | an agent authoring a human's note, whose only provenance is who wrote it                                     |
-| [output-pipe](output-pipe.md)                 | magus output piped into a filter, when magus projects the record itself                                      |
-| [output-redirect](output-redirect.md)         | magus output redirected to a file, which the run log already holds                                           |
-| [person-only](person-only.md)                 | an agent stamping a read receipt or closing an attention request, each of which records that a PERSON did it |
-| [process-poll](process-poll.md)               | a process table inspected to wait on magus work the lock already reports                                     |
-| [push-ungated](push-ungated.md)               | a push at a commit with no green gate: the person is asked, a leased worker refused                          |
-| [raw-tool](raw-tool.md)                       | a toolchain command a spell already wraps, run outside the cache                                             |
-| [scripted-rewrite](scripted-rewrite.md)       | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                           |
-| [sed-in-place](sed-in-place.md)               | `sed -i`, whose two spellings destroy each other's work across platforms                                     |
-| [shared-stash](shared-stash.md)               | a bare stash push or pop, on a stack every worktree shares                                                   |
-| [sibling-checkout](sibling-checkout.md)       | a magus command relocated into another checkout, judging a tree nobody ships                                 |
-| [spawn-unbriefed](spawn-unbriefed.md)         | a subagent spawned before the multi-agent skill loaded                                                       |
-| [stage-all](stage-all.md)                     | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output                      |
-| [symbol-search](symbol-search.md)             | a recursive text search for a symbol the index defines and can enumerate                                     |
-| [throwaway-copy](throwaway-copy.md)           | a run inside a temp or scratchpad copy, which leaves the real tree unverified                                |
-| [token-state](token-state.md)                 | an agent reading or writing the token secrets: the operator token file or the token store                    |
-| [whole-tree](whole-tree.md)                   | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                                   |
-| [worktree-remove](worktree-remove.md)         | removing a worktree, which may hold another session's uncommitted work                                       |
+| Rule                                          | Catches                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| [busy-wait](busy-wait.md)                     | a loop polling for work you started, which announces its own completion                           |
+| [buzz-unbriefed](buzz-unbriefed.md)           | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill |
+| [cache-dir-write](cache-dir-write.md)         | a write into this checkout's magus cache dir, which magus alone owns                              |
+| [capture-filter](capture-filter.md)           | a filter over a run capture or log, which cuts the failure block apart                            |
+| [cd](cd.md)                                   | a `cd` before a magus command, when the project is an argument                                    |
+| [credential-verb](credential-verb.md)         | an agent minting, printing, rotating or revoking a credential through the CLI                     |
+| [exit-status-echo](exit-status-echo.md)       | a trailing `echo $?`, which repeats an exit status the harness already reports                    |
+| [interpreter-rewrite](interpreter-rewrite.md) | an inline interpreter rewriting a file this tree already carries                                  |
+| [merge-side-checkout](merge-side-checkout.md) | a checkout of one merge side over a conflicted file, which discards the merge                     |
+| [notes-author](notes-author.md)               | an agent authoring a human's note, whose only provenance is who wrote it                          |
+| [output-pipe](output-pipe.md)                 | magus output piped into a filter, when magus projects the record itself                           |
+| [output-redirect](output-redirect.md)         | magus output redirected to a file, which the run log already holds                                |
+| [person-only](person-only.md)                 | an agent stamping a read receipt or closing an attention request, which only a person may do      |
+| [process-poll](process-poll.md)               | a process table inspected to wait on magus work the lock already reports                          |
+| [push-ungated](push-ungated.md)               | a push at a commit with no green gate: the person is asked, a leased worker refused               |
+| [raw-tool](raw-tool.md)                       | a toolchain command a spell already wraps, run outside the cache                                  |
+| [scripted-rewrite](scripted-rewrite.md)       | a scripted substitute-and-write, which cannot tell your symbol from a dependency's                |
+| [sed-in-place](sed-in-place.md)               | `sed -i`, whose two spellings destroy each other's work across platforms                          |
+| [shared-stash](shared-stash.md)               | a bare stash push or pop, on a stack every worktree shares                                        |
+| [sibling-checkout](sibling-checkout.md)       | a magus command relocated into another checkout, judging a tree nobody ships                      |
+| [spawn-unbriefed](spawn-unbriefed.md)         | a subagent spawned before the multi-agent skill loaded                                            |
+| [stage-all](stage-all.md)                     | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output           |
+| [symbol-search](symbol-search.md)             | a recursive text search for a symbol the index defines and can enumerate                          |
+| [throwaway-copy](throwaway-copy.md)           | a run inside a temp or scratchpad copy, which leaves the real tree unverified                     |
+| [token-state](token-state.md)                 | an agent reading or writing the token secrets: the operator token file or the token store         |
+| [whole-tree](whole-tree.md)                   | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                        |
+| [worktree-remove](worktree-remove.md)         | removing a worktree, which may hold another session's uncommitted work                            |
 
 ## Explains
 

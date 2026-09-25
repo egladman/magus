@@ -699,7 +699,7 @@ func concatSource(src *interp.Source) string {
 // from.
 //
 // It exists as its own method because it is the ALLOWLIST a run triggered from outside a terminal
-// is checked against, and that check has two call sites: the console's run route and the daemon's
+// is checked against, and that check has two call sites: the console's run route and the server's
 // job dispatch. The dispatch admits only argvs the jobs registry recognises, deliberately, "so the
 // fire-and-forget job RPC can never be used to run an arbitrary command"; a console button able to
 // name any command would hand a browser-reachable surface exactly that. Both sites asking THIS is
@@ -991,7 +991,7 @@ func (m *Magus) ListProjects(ctx context.Context) (types.ProjectsOutput, error) 
 
 // Workspace returns the single-entry view of m's workspace. A *Magus is always
 // exactly one workspace; the CLI's `describe workspaces` merges these across the
-// daemon's declared roots when daemon.workspaces is set.
+// server's declared roots when server.workspaces is set.
 func (m *Magus) Workspace(ctx context.Context, cfg types.WorkspaceConfig) (types.WorkspaceEntry, error) {
 	// No per-project walk here (only a length read), so there is nothing to name a
 	// done/total against; describeCancelled reads awkwardly with both pinned at 0,

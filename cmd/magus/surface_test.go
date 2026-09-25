@@ -437,7 +437,7 @@ func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path [
 // the one strategy that is correct for both shapes without hardcoding which
 // dispatcher scopes flags where.
 //
-// A GLOBAL flag may precede the command word ("magus --daemon-address <addr>
+// A GLOBAL flag may precede the command word ("magus --server-address <addr>
 // server start" is a documented example), so globalFS (already bound with
 // the config and display flags, before any node's own) is consulted to skip
 // over those (and their value, if they take one) while searching for the

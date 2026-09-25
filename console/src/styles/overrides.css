@@ -180,7 +180,7 @@
   border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;
 }
 /* The four connection states cover every status-bar dot. Demo uses indigo so it cannot be mistaken
- * for a live daemon, while live health remains green, gold, or red. */
+ * for a live server, while live health remains green, gold, or red. */
 #console-conn[data-state="connected"] { --console-conn-dot: var(--console-status-ok); }
 #console-conn[data-state="demo"] { --console-conn-dot: var(--console-indigo); }
 #console-conn[data-state="connecting"],
@@ -189,13 +189,13 @@
 #console-conn[data-state="none"] { --console-conn-dot: var(--console-status-queued); }
 /* Health REFINES the connected color: the readiness poller (main.ts) only ever writes data-health while
  * the dot's own data-state is already "connected" (a not-connected dot has no health to report and the
- * poller clears any stale value), so a degraded daemon dims green -> gold and a down component -> red
+ * poller clears any stale value), so a degraded server dims green -> gold and a down component -> red
  * without a separate chip. Gated on [data-state="connected"] so health can never green-out or recolor a
  * dot the active surface has declared not-connected. */
 #console-conn[data-state="connected"][data-health="warn"] { --console-conn-dot: var(--console-status-warn); }
 #console-conn[data-state="connected"][data-health="fail"] { --console-conn-dot: var(--console-status-queued); }
 
-/* Clickable: #console-conn is a real (if bare) control now - it jumps to the daemon-address setting -
+/* Clickable: #console-conn is a real (if bare) control now - it jumps to the server-address setting -
  * so it needs to read as one. cursor + a hover shift toward the console accent teaches "click me"; the
  * dot's own state/health color still wins at rest, this only nudges legibility on interaction. */
 #console-conn { cursor: pointer; }

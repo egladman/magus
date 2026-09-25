@@ -11,14 +11,15 @@ afterward sits where the [XDG Base Directory spec](https://specifications.freede
 is no `magus self uninstall` because there is nothing to unwind. No root, no package
 database.
 
-Stop the daemon first so nothing writes while you delete:
+Stop the server and the broker first so nothing writes while you delete:
 
 ```sh
 magus server stop
+magus broker stop --services
 ```
 
-It exits non-zero when it finds nothing to stop, which is what you get if you never
-started one.
+Each exits non-zero when it finds nothing to stop, which is what you get if none is
+running.
 
 ## The install
 
@@ -45,11 +46,11 @@ through.
 
 ## State, config, and runtime
 
-| Path                      | Default                 | Holds                                                                                                                                                                                                                                                                                                    |
-| ------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$XDG_STATE_HOME/magus/`  | `~/.local/state/magus/` | `v1.json` under `history/` (run history, read by volatility detection, the CI forecaster, and bisect), `pry_history` (REPL history), `x/` (the `magus x` picker, one file per project), `memory/` (per-repository agent memory), `mcp_token` and `tokens.d/` (the operator token, and one file per stored token) |
-| `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../reference/config.md))                                                                                                                                                                                             |
-| `$XDG_RUNTIME_DIR/magus/` | `$TMPDIR/magus-<uid>/`  | `magus-daemon.sock`, `magus-daemon.log`, and `services/`. Recreated on the next daemon start, and cleared for you at reboot                                                                                                                                                                              |
+| Path                      | Default                 | Holds                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$XDG_STATE_HOME/magus/`  | `~/.local/state/magus/` | `v1.json` under `history/` (run history, read by volatility detection, the CI forecaster, and bisect), `pry_history` (REPL history), `x/` (the `magus x` picker, one file per project), `memory/` (per-repository agent memory), `mcp_token` and `tokens.d/` (the operator token, and one file per stored token), `broker.log` and `server.log` |
+| `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../reference/config.md))                                                                                                                                                                                                                                    |
+| `$XDG_RUNTIME_DIR/magus/` | `$TMPDIR/magus-<uid>/`  | `broker.sock`, `server.sock`, and `services/`. Recreated on the next broker or server start, and cleared for you at reboot                                                                                                                                                                                                                      |
 
 State and config are separate on purpose: config is the kind of thing you sync or
 commit to a dotfiles repo, and `mcp_token` must never ride along with it.

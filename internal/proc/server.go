@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,19 +18,19 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
 // maxArgs caps runRequest.Args to prevent OOM from untrusted callers.
 const maxArgs = 256
 
-// handshakeTimeout bounds how long an accepted connection may take to deliver its
-// request frame. Without it a client that connects and never writes parks the
-// handleConn goroutine forever inside readFrame — leaking a goroutine/fd, blocking
-// Server.Close (connWg.Wait), and letting any local caller DoS the socket.
+// handshakeTimeout bounds how long an accepted connection may take to deliver its request
+// headers. Without it a client that connects and never writes holds a connection open
+// forever, blocking Server.Close, and letting any local caller DoS the socket.
 const handshakeTimeout = 30 * time.Second
 
 type contextKey int
@@ -87,8 +87,8 @@ func WithLease(ctx context.Context, lease string) context.Context {
 // "" when it claimed none or claimed one that failed validation.
 //
 // A caller that also reads the environment channel must prefer this: it is the lease
-// of the process that ASKED for the run, while the daemon's own environment describes
-// whoever happened to start the daemon.
+// of the process that ASKED for the run, while the server's own environment describes
+// whoever happened to start the server.
 func LeaseFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(leaseCtxKey).(string); ok {
 		return v
@@ -97,14 +97,14 @@ func LeaseFromContext(ctx context.Context) string {
 }
 
 // withJob marks ctx as a background job invocation (submitJob), distinct from an adopted run.
-// The daemon's handler reads it via IsJob to route jobs through the full command set while a
+// The server's handler reads it via IsJob to route jobs through the full command set while a
 // plain adopted run stays limited to run/affected.
 func withJob(ctx context.Context) context.Context {
 	return context.WithValue(ctx, jobCtxKey, true)
 }
 
 // IsJob reports whether ctx belongs to a background job (submitted via SubmitJob) rather than
-// an adopted run. The daemon's dispatch handler branches on it.
+// an adopted run. The server's dispatch handler branches on it.
 func IsJob(ctx context.Context) bool {
 	v, _ := ctx.Value(jobCtxKey).(bool)
 	return v
@@ -118,156 +118,103 @@ type Options struct {
 	Concurrency     int                                            // ignored when Limiter is set; 0 → default
 	Version         string                                         // "" disables version-mismatch check
 	Address         string                                         // "" → auto-generate in SockDir()
-	WorkspaceLister func() []Workspace                             // optional; used by daemon Status RPC
-	ServiceLister   func() []types.StatusService                   // optional; hosted-services snapshot for the daemon Status RPC
-	ServiceHost     ServiceHost                                    // optional; hosts shared services across invocations (daemon only)
+	WorkspaceLister func() []Workspace                             // optional; used by the server's Status RPC
 	// OnJobDone, if set, is called after every BACKGROUND job (submitJob) completes, never for
 	// an adopted foreground run, with the job's args, wall-clock duration, and outcome. The
-	// ctx still carries Root/Cwd. The daemon uses it to record a KIND_JOB activity event; proc
+	// ctx still carries Root/Cwd. The server uses it to record a KIND_JOB activity event; proc
 	// stays decoupled from the trail and cache layout.
 	OnJobDone func(ctx context.Context, args []string, dur time.Duration, err error)
-	// ConfigReloader, if set, drops the workspaces the daemon is holding open so the next
+	// ConfigReloader, if set, drops the workspaces the server is holding open so the next
 	// command against each reopens it and re-reads its config. It reports how many were
-	// dropped and how many were left alone as busy. Only the daemon sets it; a per-process
+	// dropped and how many were left alone as busy. Only the server sets it; a per-process
 	// proc server holds one workspace for one invocation and has nothing to reload.
 	ConfigReloader func() (dropped, busy int)
-	// MachineBudget, if set, makes this server the arbiter of machine-wide admission:
-	// every magus on the host asks it before starting a step. Only the daemon sets it,
-	// and only one daemon exists per user, which is what makes the budget the machine's
-	// rather than a process's.
-	MachineBudget *cache.MachineBudget
+	// Server, if set, is read on every Status RPC and reported as StatusReply.Server.
+	// Only `magus server` sets it.
+	Server func() *types.StatusServer
 }
 
-// Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
+// Server serves HTTP on a Unix-domain socket: the proc routes under /proc/v1/ that child
+// processes forward work through, and whatever [Server.Mount] adds beside them.
+//
+// Where the platform reports a connection's peer uid, every request must come from a process
+// running as this one's user, and is admitted as [types.CredentialSocketPeer] and held to its
+// route's Need. Elsewhere the socket's private directory is the only boundary, as it always
+// was for these routes, and Mount refuses: nothing that needs a credential rides a socket that
+// cannot name its caller.
 type Server struct {
-	ep  endpoint.Endpoint
-	svc *service
-	// mu guards listener. Start assigns it and Close reads it, and those run on
-	// different goroutines: an RPC shutdown dispatches Close from a connection
-	// handler (service.shutdown) while the accept loop Start spawned is still
-	// live. Without the lock that pair is a data race the detector catches only
-	// intermittently, because it needs a stop to land while accept is mid-flight.
+	ep   endpoint.Endpoint
+	svc  *service
+	http *http.Server
+	// peerChecked is whether requests pass the peer-uid guard; see Server.
+	peerChecked bool
+	// extra is what Mount installed for the paths outside /proc/, nil for none.
+	extra atomic.Pointer[http.Handler]
+	// mu guards listener. Start assigns it and Close reads it, and those run on different
+	// goroutines: an RPC shutdown dispatches Close from a handler while Serve is live.
 	mu       sync.Mutex
 	listener net.Listener
-	closing  bool // set under mu once Close begins; gates connWg.Add (see trackConn)
 	cancel   context.CancelFunc
 	once     sync.Once
-	connWg   sync.WaitGroup // tracks in-flight handleConn goroutines
-	done     chan struct{}  // closed by Close to stop the signal watcher goroutine
-}
-
-// setListener publishes the bound listener under mu.
-func (s *Server) setListener(ln net.Listener) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.listener = ln
-}
-
-// currentListener reads the listener under mu.
-func (s *Server) currentListener() net.Listener {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.listener
-}
-
-// beginShutdown marks the server closing and returns the listener, clearing it so
-// only the first caller closes it. Both happen under one acquisition of mu because
-// they are one transition: publishing closing is what stops trackConn registering
-// another connection, and that is what makes Close's connWg.Wait safe.
-func (s *Server) beginShutdown() net.Listener {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closing = true
-	ln := s.listener
-	s.listener = nil
-	return ln
-}
-
-// trackConn registers an accepted connection with connWg, reporting whether the
-// caller may hand it to a handler. A false means shutdown has begun and the
-// connection must be closed instead.
-//
-// sync.WaitGroup forbids a positive Add that starts once Wait is under way, and
-// that pair is reachable here rather than theoretical: Accept can return a
-// connection accepted moments before Close shut the listener, so Add(1) lands
-// while Close is already inside connWg.Wait. The detector caught it about one run
-// in eight of TestShutdownRPC. Gating Add on the same mu that publishes closing
-// makes the two mutually exclusive.
-func (s *Server) trackConn() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closing {
-		return false
-	}
-	s.connWg.Add(1)
-	return true
+	done     chan struct{} // closed when Close begins, to stop the signal watcher goroutine
+	closed   chan struct{} // closed when Close has drained every in-flight request
 }
 
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
 func (s *Server) Addr() string { return s.ep.String() }
 
 // Done returns a channel closed when the server has been Closed, whether by an RPC
-// shutdown request or a signal. A blocking daemon loop selects on it so an RPC-driven
+// shutdown request or a signal. A blocking server loop selects on it so an RPC-driven
 // `magus server stop` unblocks the process the same way a signal does: without it the
 // shutdown handler tears down the listener but the process keeps running, since the
 // listener's context is a sibling of the process context, not its parent.
 func (s *Server) Done() <-chan struct{} { return s.done }
 
-// IdleFor reports how long since a client last asked this server for anything, and
-// whether it is doing nothing right now. A daemon nobody asked for uses the pair to
-// decide it is no longer wanted; see the admission self-exit in cmd/magus.
-//
-// Busy covers work in flight AND the machine budget, because a daemon holding claims is
-// serving runs that are not talking to it: they took their claim, went quiet for the
-// length of a build, and will come back to release it. Exiting under them would drop
-// every claim on the machine.
-func (s *Server) IdleFor(now time.Time) (idle time.Duration, busy bool) {
-	svc := s.svc
-	if snap := svc.lim.Snapshot(); snap.Running > 0 || snap.Queued > 0 {
-		return 0, true
+// Mount serves h for every path on the socket outside /proc/, each request carrying the
+// socket peer's credential, until the returned unmount runs. A later Mount replaces an
+// earlier one; an unmount whose handler was already replaced does nothing. Where the
+// platform cannot name a connection's peer it installs nothing and returns
+// [httpx.ErrPeerCredentialsUnsupported].
+func (s *Server) Mount(h http.Handler) (unmount func(), err error) {
+	if !s.peerChecked {
+		return nil, httpx.ErrPeerCredentialsUnsupported
 	}
-	if b := svc.machineBudget; b != nil {
-		m := b.Snapshot()
-		if len(m.Holders) > 0 {
-			return 0, true
-		}
-	}
-	inflight := false
-	svc.calls.Range(func(any, any) bool { inflight = true; return false })
-	if inflight {
-		return 0, true
-	}
-	return now.Sub(time.Unix(0, svc.lastActive.Load())), false
+	box := &h
+	s.extra.Store(box)
+	return func() { s.extra.CompareAndSwap(box, nil) }, nil
 }
 
-// markActive records that a client asked for something.
-func (s *service) markActive() { s.lastActive.Store(time.Now().UnixNano()) }
-
-// Close shuts down the listener, removes the socket file, and waits for all in-flight handlers.
-// Safe to call multiple times.
+// Close stops accepting, cancels the server's work, waits for every in-flight request, and
+// removes the socket file. Safe to call multiple times and concurrently; every caller
+// returns once the drain is done.
 func (s *Server) Close() {
 	s.once.Do(func() {
 		close(s.done) // unblocks watchSignals before we cancel/close
-		if s.cancel != nil {
-			s.cancel()
-		}
-		if ln := s.beginShutdown(); ln != nil {
+		s.cancel()
+		s.mu.Lock()
+		ln := s.listener
+		s.listener = nil
+		s.mu.Unlock()
+		if ln != nil {
 			_ = ln.Close()
 		}
+		// Shutdown waits for handlers, and each one runs on the context cancelled above.
+		_ = s.http.Shutdown(context.Background())
 		_ = os.Remove(s.ep.Addr)
+		close(s.closed)
 	})
-	s.connWg.Wait() // wait outside the once so concurrent callers all block
+	<-s.closed
 }
 
-// New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_DAEMON_SOCKET is set.
+// New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_PROC_SOCKET is set.
 // Call Start to bind the socket.
 func New(opts Options) (*Server, error) {
 	// Name the culprit in the error. This guard refuses to host a second proc server when
-	// MAGUS_DAEMON_SOCKET is set (a nested process must forward to the parent's pool, not open
+	// MAGUS_PROC_SOCKET is set (a nested process must forward to the parent's pool, not open
 	// its own socket). Surfacing the value turns an opaque "already adopted" (which reads as a
 	// mystery to anyone whose environment merely inherited the var) into an actionable one.
-	if sock := os.Getenv("MAGUS_DAEMON_SOCKET"); sock != "" {
-		return nil, fmt.Errorf("%w (MAGUS_DAEMON_SOCKET=%s)", ErrAlreadyAdopted, sock)
+	if sock := os.Getenv(SocketEnv); sock != "" {
+		return nil, fmt.Errorf("%w (%s=%s)", ErrAlreadyAdopted, SocketEnv, sock)
 	}
 
 	var ep endpoint.Endpoint
@@ -283,7 +230,7 @@ func New(opts Options) (*Server, error) {
 			return nil, fmt.Errorf("proc: random bytes: %w", err)
 		}
 		sockName := fmt.Sprintf("magus-%d-%s.sock", os.Getpid(), hex.EncodeToString(rnd))
-		ep = endpoint.Endpoint{Scheme: "unix", Addr: filepath.Join(sockDir(), sockName)}
+		ep = endpoint.Endpoint{Scheme: "unix", Addr: filepath.Join(SockDir(), sockName)}
 	}
 
 	lim := opts.Limiter
@@ -303,26 +250,83 @@ func New(opts Options) (*Server, error) {
 
 	svc := &service{
 		handler:         opts.Handler,
-		serviceHost:     opts.ServiceHost,
-		machineBudget:   opts.MachineBudget,
 		configReloader:  opts.ConfigReloader,
 		parentCtx:       serverCtx,
 		lim:             lim,
 		version:         opts.Version,
 		gateVersion:     adoptionIdentity(opts.Version),
 		workspaceLister: opts.WorkspaceLister,
-		serviceLister:   opts.ServiceLister,
+		serverInfo:      opts.Server,
 		onJobDone:       opts.OnJobDone,
 	}
-	svc.markActive() // a daemon that has served nobody yet is not instantly idle
 	srv := &Server{
-		ep:     ep,
-		svc:    svc,
-		cancel: cancel,
-		done:   make(chan struct{}),
+		ep:          ep,
+		svc:         svc,
+		peerChecked: httpx.PeerCredentialsSupported(),
+		cancel:      cancel,
+		done:        make(chan struct{}),
+		closed:      make(chan struct{}),
+	}
+	handler, err := srv.routes()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	// No ReadTimeout: its deadline outlives the body and would cancel a request mid-stream,
+	// and a forwarded run holds its request, an MCP or Connect stream its response, for as
+	// long as the work takes.
+	//
+	// Every request's context derives from the server's, so Close, which cancels it before it
+	// drains, ends an open stream instead of waiting on a client that will never hang up.
+	srv.http = &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: handshakeTimeout,
+		BaseContext:       func(net.Listener) context.Context { return serverCtx },
+	}
+	if srv.peerChecked {
+		srv.http.ConnContext = httpx.PeerConnContext
 	}
 	svc.shutdownFn = srv.Close
 	return srv, nil
+}
+
+// routes is the socket's whole handler: the proc routes, held to routeNeeds, a 404 for any
+// other /proc/ path, and the mounted handler for the rest, all behind the peer guard where
+// the platform has one.
+func (s *Server) routes() (http.Handler, error) {
+	proc := http.NewServeMux()
+	proc.HandleFunc("POST "+pathRun, s.svc.handleRun)
+	proc.HandleFunc("POST "+pathJobs, s.svc.handleJob)
+	proc.HandleFunc("GET "+pathStatus, s.svc.handleStatus)
+	proc.HandleFunc("POST "+pathShutdown, s.svc.handleShutdown)
+	proc.HandleFunc("POST "+pathReload, s.svc.handleReload)
+	proc.HandleFunc("/proc/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusNotFound, errorReply{Message: fmt.Sprintf("proc: no route %s %s", r.Method, r.URL.Path)})
+	})
+
+	mux := http.NewServeMux()
+	if s.peerChecked {
+		guarded, err := httpx.GrantGuard(rpcerr.FormatJSON, routeNeeds, proc)
+		if err != nil {
+			return nil, fmt.Errorf("proc: %w", err)
+		}
+		mux.Handle("/proc/", guarded)
+	} else {
+		mux.Handle("/proc/", proc)
+	}
+	mux.HandleFunc("/", s.serveExtra)
+	if !s.peerChecked {
+		return mux, nil
+	}
+	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, mux), nil
+}
+
+func (s *Server) serveExtra(w http.ResponseWriter, r *http.Request) {
+	if h := s.extra.Load(); h != nil {
+		(*h).ServeHTTP(w, r)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, errorReply{Message: fmt.Sprintf("proc: nothing is served at %s on this socket", r.URL.Path)})
 }
 
 // Start binds the socket and begins serving. Must be called once; on error the Server is unusable.
@@ -347,9 +351,11 @@ func (s *Server) Start() error {
 	}
 	// Socket security comes from the parent directory (0700 per sockdir_unix.go);
 	// a post-Listen chmod would create a brief world-accessible window.
-	s.setListener(ln)
+	s.mu.Lock()
+	s.listener = ln
+	s.mu.Unlock()
 
-	go serve(s, s.svc)
+	go func() { _ = s.http.Serve(ln) }()
 	watchSignals(s, s.cancel)
 	return nil
 }
@@ -366,240 +372,54 @@ func isSocketLive(ctx context.Context, addr string) bool {
 	return true
 }
 
-func serve(srv *Server, svc *service) {
-	// Read the listener ONCE, under the lock, and accept on the local copy. Reading
-	// srv.listener each iteration races Close, which clears the field, and Close is
-	// dispatched from a connection handler (an RPC `server stop`), so the two run
-	// concurrently by design rather than by accident. Accept on a closed listener
-	// returns an error, which is exactly the loop's existing exit condition, so
-	// holding the value across the close needs no extra signaling.
-	ln := srv.currentListener()
-	if ln == nil {
-		return // closed before the accept loop got going
+func (s *service) handleRun(w http.ResponseWriter, r *http.Request) {
+	var req runRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		refuse(w, http.StatusBadRequest, err)
+		return
 	}
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return // listener was closed
-		}
-		if !srv.trackConn() {
-			// Close is already waiting on connWg; registering now would be the
-			// Add-during-Wait the WaitGroup contract forbids. Drop the connection
-			// instead: the client sees the same closed socket it would have seen
-			// had Accept lost the race by a microsecond.
-			_ = conn.Close()
-			return
-		}
-		go handleConn(svc, conn, &srv.connWg)
+	var reply runReply
+	if err := s.run(req, &reply); err != nil {
+		refuse(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, reply)
+}
+
+func (s *service) handleJob(w http.ResponseWriter, r *http.Request) {
+	var req jobRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		refuse(w, http.StatusBadRequest, err)
+		return
+	}
+	var reply jobReply
+	if err := s.submitJob(req, &reply); err != nil {
+		refuse(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, reply)
+}
+
+func (s *service) handleStatus(w http.ResponseWriter, _ *http.Request) {
+	var reply StatusReply
+	s.status(&reply)
+	writeJSON(w, http.StatusOK, reply)
+}
+
+func (s *service) handleShutdown(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusAccepted, struct{}{})
+	if s.shutdownFn != nil {
+		// Close drains in-flight requests, this one included, so it cannot run inline.
+		go s.shutdownFn()
 	}
 }
 
-// writeErr sends an error reply; ignores send errors (best-effort on a broken connection).
-func writeErr(conn net.Conn, msg string) {
-	_ = writeFrame(conn, typeError, errorReply{Message: msg})
-}
-
-// handleConn reads one JSONL request frame, dispatches to the service, and writes the reply.
-func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
-	defer wg.Done()
-	defer func() { _ = conn.Close() }()
-
-	_ = conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
-	typ, line, err := readFrame(conn)
-	if errors.Is(err, io.EOF) {
-		return // bare liveness probe (isSocketLive dialed and closed), silent no-op
+func (s *service) handleReload(w http.ResponseWriter, _ *http.Request) {
+	var reply configReloadReply
+	if s.configReloader != nil {
+		reply.Dropped, reply.Busy = s.configReloader()
 	}
-	// Anything that got as far as a frame is a client asking for something, which is
-	// what an idle self-exit has to not interrupt. Recorded after the EOF check so a
-	// bare liveness probe (which every `magus status` and every socket check performs)
-	// does not read as use and keep an unwanted daemon alive forever.
-	svc.markActive()
-	if err != nil {
-		writeErr(conn, err.Error())
-		return
-	}
-
-	switch typ {
-	case typeRun:
-		var req runRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode run request: "+err.Error())
-			return
-		}
-		var reply runReply
-		if err := svc.run(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeRunReply, reply)
-
-	case typeJob:
-		var req jobRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode job request: "+err.Error())
-			return
-		}
-		var reply jobReply
-		if err := svc.submitJob(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeJobReply, reply)
-
-	case typeStatus:
-		var req statusRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode status request: "+err.Error())
-			return
-		}
-		var reply StatusReply
-		if err := svc.status(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeStatusReply, reply)
-
-	case typeShutdown:
-		var req shutdownRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode shutdown request: "+err.Error())
-			return
-		}
-		var reply shutdownReply
-		if err := svc.shutdown(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeShutdownReply, reply)
-
-	case typeServiceAcquire:
-		var req serviceAcquireRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode service.acquire request: "+err.Error())
-			return
-		}
-		var reply serviceAcquireReply
-		svc.serviceAcquire(req, &reply)
-		_ = writeFrame(conn, typeServiceAcquireReply, reply)
-
-	case typeServiceRelease:
-		var req serviceReleaseRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode service.release request: "+err.Error())
-			return
-		}
-		svc.serviceRelease(req)
-		_ = writeFrame(conn, typeServiceReleaseReply, serviceReleaseReply{})
-
-	case typeServiceStopAll:
-		var req serviceStopAllRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode service.stopall request: "+err.Error())
-			return
-		}
-		if req.Protocol != "" && req.Protocol != protocolV2 {
-			writeErr(conn, ErrProtocolMismatch.Error())
-			return
-		}
-		count := 0
-		if svc.serviceHost != nil {
-			count = svc.serviceHost.StopAll()
-		}
-		_ = writeFrame(conn, typeServiceStopAllReply, serviceStopAllReply{Count: count})
-
-	case typeBudgetAcquire:
-		var req budgetAcquireRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode budget.acquire request: "+err.Error())
-			return
-		}
-		var reply budgetAcquireReply
-		svc.budgetAcquire(req, &reply)
-		_ = writeFrame(conn, typeBudgetAcquireReply, reply)
-
-	case typeBudgetRelease:
-		var req budgetReleaseRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode budget.release request: "+err.Error())
-			return
-		}
-		svc.budgetRelease(req)
-		_ = writeFrame(conn, typeBudgetReleaseReply, budgetReleaseReply{})
-
-	case typeConfigReload:
-		var req configReloadRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode config.reload request: "+err.Error())
-			return
-		}
-		if req.Protocol != "" && req.Protocol != protocolV2 {
-			writeErr(conn, ErrProtocolMismatch.Error())
-			return
-		}
-		var dropped, busy int
-		if svc.configReloader != nil {
-			dropped, busy = svc.configReloader()
-		}
-		_ = writeFrame(conn, typeConfigReloadReply, configReloadReply{Dropped: dropped, Busy: busy})
-
-	default:
-		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
-	}
-}
-
-// budgetAcquire answers one request against the machine budget. A server holding no budget
-// (a per-process proc server) says so rather than granting: a client that read silence
-// as a grant would run unarbitrated against a daemon that IS arbitrating its peers.
-func (s *service) budgetAcquire(req budgetAcquireRequest, reply *budgetAcquireReply) {
-	if req.Magic != budgetMagic {
-		reply.Err = "unrecognized request"
-		return
-	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
-		reply.Err = ErrProtocolMismatch.Error()
-		return
-	}
-	if s.machineBudget == nil {
-		reply.Err = "this server does not arbitrate the machine budget"
-		return
-	}
-	reply.Verdict = s.machineBudget.Request(req.Claim)
-}
-
-// budgetRelease returns a granted claim. Silent on a server with no budget: there is
-// nothing to give back, and a teardown must not fail over it.
-func (s *service) budgetRelease(req budgetReleaseRequest) {
-	if req.Magic != budgetMagic || s.machineBudget == nil ||
-		(req.Protocol != "" && req.Protocol != protocolV2) {
-		return
-	}
-	if req.ID != "" {
-		s.machineBudget.Release(req.ID)
-	}
-}
-
-// serviceAcquire starts (or reuses) a shared service on the daemon's ServiceHost so
-// it stays warm across invocations. A daemon with no host (a per-process proc server)
-// reports that hosting is unavailable, so the client falls back to running the
-// service in-process for the current run.
-func (s *service) serviceAcquire(req serviceAcquireRequest, reply *serviceAcquireReply) {
-	if s.serviceHost == nil {
-		reply.Err = "proc: service.acquire: this server does not host shared services"
-		return
-	}
-	// The acquire runs under the daemon's own context, not the caller's, so the
-	// service outlives the requesting invocation.
-	if err := s.serviceHost.Acquire(s.parentCtx, req.Key, req.Service); err != nil {
-		reply.Err = err.Error()
-	}
-}
-
-// serviceRelease drops one dependent's hold on a shared service. Releasing an unknown
-// key, or on a server without a host, is a no-op.
-func (s *service) serviceRelease(req serviceReleaseRequest) {
-	if s.serviceHost != nil {
-		s.serviceHost.Release(req.Key)
-	}
+	writeJSON(w, http.StatusOK, reply)
 }
 
 // activeCall is the per-request state tracked for the Status RPC.
@@ -612,19 +432,16 @@ type service struct {
 	handler         func(ctx context.Context, args []string) error
 	parentCtx       context.Context
 	lim             *cache.Limiter
-	version         string // human-facing display version; surfaced as StatusReply.DaemonVersion
+	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
 	workspaceLister func() []Workspace
-	serviceLister   func() []types.StatusService
-	serviceHost     ServiceHost
-	machineBudget   *cache.MachineBudget
-	lastActive      atomic.Int64 // unix nanoseconds of the last client frame; read by IdleFor
+	serverInfo      func() *types.StatusServer
 	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting
 	nextID          atomic.Uint64
-	shutdownFn      func() // called by shutdown handler; set by New to srv.Close
+	shutdownFn      func() // called by the shutdown route; set by New to srv.Close
 }
 
 // versionAdmits reports whether a request carrying reqVersion may be adopted by this
@@ -636,14 +453,11 @@ func (s *service) versionAdmits(reqVersion string) bool {
 	return s.gateVersion == "" || reqVersion == "" || reqVersion == s.gateVersion
 }
 
-// admitWork refuses a request to run magus that this daemon must not execute: one over the
-// argument limit, one speaking another protocol, or one from a different build.
-func (s *service) admitWork(request string, args []string, protocol, version string) error {
+// admitWork refuses a request to run magus that this server must not execute: one over the
+// argument limit, or one from a different build.
+func (s *service) admitWork(request string, args []string, version string) error {
 	if len(args) > maxArgs {
 		return fmt.Errorf("proc: %s.Args exceeds limit (%d > %d)", request, len(args), maxArgs)
-	}
-	if protocol != "" && protocol != protocolV2 {
-		return ErrProtocolMismatch
 	}
 	if !s.versionAdmits(version) {
 		return ErrVersionMismatch
@@ -651,7 +465,7 @@ func (s *service) admitWork(request string, args []string, protocol, version str
 	return nil
 }
 
-// trackCall adds a pool entry for work this daemon is running, so status and the Dashboard
+// trackCall adds a pool entry for work this server is running, so status and the Dashboard
 // see it. The caller runs untrack when the work ends.
 func (s *service) trackCall(args []string, workspace, inv string) (call *activeCall, untrack func()) {
 	id := s.nextID.Add(1)
@@ -664,10 +478,12 @@ func (s *service) trackCall(args []string, workspace, inv string) (call *activeC
 }
 
 func (s *service) run(req runRequest, reply *runReply) error {
-	if err := s.admitWork("runRequest", req.Args, req.Protocol, req.Version); err != nil {
+	if err := s.admitWork("runRequest", req.Args, req.Version); err != nil {
 		return err
 	}
 
+	// The server's context, not the request's: a client that disconnects mid-run does not
+	// cancel the work it started.
 	ctx, cancel := context.WithCancel(s.parentCtx)
 	defer cancel()
 
@@ -675,7 +491,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	ctx = WithCwd(ctx, req.Cwd)
 	ctx = WithLease(ctx, req.Lease)
 	// Adopt the client's ancestry (BeginInvocation appends the id minted below), so a run
-	// this daemon executes for a nested client recognizes the lock it holds for that
+	// this server executes for a nested client recognizes the lock it holds for that
 	// client's parent as its own ancestor's rather than waiting on itself forever.
 	ctx = types.WithInvocationAncestors(ctx, req.Ancestors)
 
@@ -713,8 +529,6 @@ func (s *service) run(req runRequest, reply *runReply) error {
 		if errors.Is(err, ErrNotAdoptable) { // propagate so client falls back to local execution
 			return err
 		}
-		// os.exit(code) from a magusfile: honor the requested code in the reply
-		// rather than collapsing every failure to 1. Code 0 is a clean early exit.
 		var exitErr types.ExitError
 		if errors.As(err, &exitErr) {
 			// os.exit(code) from a magusfile: honor the code and say nothing. The message
@@ -728,7 +542,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 		reply.ExitCode = 1
 		// A failure that names its own status keeps it. Collapsing everything to 1 made
 		// the documented split (1 the work failed, 2 the invocation was wrong) depend on
-		// whether a daemon happened to be running.
+		// whether a server happened to be running.
 		if code, ok := ExitCode(err); ok {
 			reply.ExitCode = code
 		}
@@ -751,10 +565,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 // starts, so a rapid series of checkouts collapses to one refresh. The job's own
 // success/failure is observed via the Dashboard/logs, not the reply.
 func (s *service) submitJob(req jobRequest, reply *jobReply) error {
-	if req.Magic != jobMagic {
-		return nil // ignore unauthenticated submissions, matching status/shutdown
-	}
-	if err := s.admitWork("jobRequest", req.Args, req.Protocol, req.Version); err != nil {
+	if err := s.admitWork("jobRequest", req.Args, req.Version); err != nil {
 		return err
 	}
 
@@ -768,7 +579,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	}
 
 	// The Dashboard labels the job by workspace; when the caller left Root empty (the
-	// daemon resolves it from Cwd), fall back to Cwd so the label is never blank.
+	// server resolves it from Cwd), fall back to Cwd so the label is never blank.
 	workspace := req.Root
 	if workspace == "" {
 		workspace = req.Cwd
@@ -777,8 +588,8 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	call, untrack := s.trackCall(req.Args, workspace, inv)
 	reply.Inv = inv
 
-	// Run on the server's context, not the connection's: the job must outlive the
-	// socket round-trip that submitted it.
+	// Run on the server's context, not the request's: the job must outlive the round-trip
+	// that submitted it.
 	go func() {
 		defer s.inflight.Delete(key)
 		defer untrack()
@@ -790,8 +601,8 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
-		// A job descends from nobody. parentCtx carries whatever ancestry the DAEMON's
-		// process environment had (which is a real value when the daemon was started from
+		// A job descends from nobody. parentCtx carries whatever ancestry the SERVER's
+		// process environment had (which is a real value when the server was started from
 		// inside a magus target), and inheriting it would attribute this job's locks to a
 		// stranger, and tell every process it forks that it descends from one.
 		ctx = types.WithInvocationAncestors(ctx, nil)
@@ -814,25 +625,13 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	return nil
 }
 
-func (s *service) status(req statusRequest, reply *StatusReply) error {
-	if req.Magic != statusMagic {
-		return nil
-	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
-		return ErrProtocolMismatch
-	}
+func (s *service) status(reply *StatusReply) {
 	reply.ParentPID = os.Getpid()
-	reply.DaemonVersion = s.version
-	if s.workspaceLister != nil {
-		reply.Mode = "daemon"
-	} else {
-		reply.Mode = "proc"
-	}
+	reply.Version = s.version
 	snap := s.lim.Snapshot()
 	reply.Capacity, reply.Running, reply.Queued = snap.Capacity, snap.Running, snap.Queued
-	if s.machineBudget != nil {
-		m := s.machineBudget.Snapshot()
-		reply.Machine = &m
+	if s.serverInfo != nil {
+		reply.Server = s.serverInfo()
 	}
 	s.calls.Range(func(_, v any) bool {
 		c, ok := v.(*activeCall)
@@ -850,23 +649,6 @@ func (s *service) status(req statusRequest, reply *StatusReply) error {
 	if s.workspaceLister != nil {
 		reply.Workspaces = s.workspaceLister()
 	}
-	if s.serviceLister != nil {
-		reply.Services = s.serviceLister()
-	}
-	return nil
-}
-
-func (s *service) shutdown(req shutdownRequest, _ *shutdownReply) error {
-	if req.Magic != shutdownMagic {
-		return nil
-	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
-		return ErrProtocolMismatch
-	}
-	if s.shutdownFn != nil {
-		go s.shutdownFn()
-	}
-	return nil
 }
 
 func cycleKey(root, cwd string, args []string) string {

@@ -85,7 +85,7 @@ var (
 // because the thing it guards IS process-global: there is one terminal behind
 // stderr, and a second Zone over it would recreate exactly the two-owners
 // problem [Zone] exists to end. Consumers that cannot see each other (the
-// cache's log handler, a Buzz notify call, a daemon job) have to arrive at the
+// cache's log handler, a Buzz notify call, a server job) have to arrive at the
 // same owner without being introduced.
 //
 // Tests build their own with [NewZone] instead of reaching for this.

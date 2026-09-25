@@ -1,0 +1,51 @@
+# A nested run never waits on the run it is nested in, even when that run writes its
+# stdin: the ancestor is blocked on it, so the ordinary MGS3007 refusal stands.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+# The outer run feeds the nested one's stdin (magus.run's stdin option).
+! exec magus run outerstdin .
+stderr 'MGS3007'
+
+# A pipe inside a target: the nested reader waits out its sibling writer, then meets
+# the project its own ancestor holds.
+! exec magus run outerpipe .
+stderr 'MGS3007'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "outerstdin": {"skip_cache": "nests a run"},
+        "outerpipe": {"skip_cache": "nests a pipe"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+export fun outerstdin(ctx: magus\Context, args: [str]) > void !> any {
+    magus\run(["consume", "."], {"stdin": "x"});
+}
+
+export fun outerpipe(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("bash", ["-c", "set -o pipefail; magus run emit b | magus run consume ."]);
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdin.readAll();
+}
+-- b/magusfile.buzz --
+import "magus";
+import "io";
+
+magus\project({"targets": {"emit": {"skip_cache": "writes stdout per invocation"}}});
+
+export fun emit(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdout.write("x\n");
+}

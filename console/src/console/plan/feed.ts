@@ -6,7 +6,7 @@
 // going", which is the question somebody actually has at 4pm when a worker has been quiet
 // for twenty minutes and interrupting it would cost it the turn it is in.
 //
-// THREE PRODUCERS, ONE SUBSCRIPTION. The daemon merges file changes attributed by write
+// THREE PRODUCERS, ONE SUBSCRIPTION. The server merges file changes attributed by write
 // lane, the guard's tool-call observations attributed by lease, and the runs recorded
 // against the job, and it time-orders them before they reach here (see
 // magus.activity.v1alpha1.ActivityService.WatchActivityEvents). A client stitching three
@@ -15,7 +15,7 @@
 import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind, Outcome } from "@wire/activity/v1alpha1/activity_pb";
 import type { ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
-import { createDaemonTransport, getLiveToken } from "../../lib/daemon";
+import { createServerTransport, getLiveToken } from "../../lib/server";
 import { h } from "../view";
 
 // BACKFILL is what the drawer asks for when it opens. A stream that started at "now" would
@@ -41,7 +41,7 @@ export interface FeedRow {
 
 // rowOf projects one wire event onto a line. An event whose kind this console does not know
 // still renders, as "other" with its action: a feed that silently dropped what it could not
-// classify would go quiet exactly when the daemon grew something new to say.
+// classify would go quiet exactly when the server grew something new to say.
 export function rowOf(e: ActivityEvent): FeedRow {
   const at = e.time ? Number(e.time.seconds) * 1000 + Math.floor(e.time.nanos / 1e6) : 0;
   const failed = e.outcome === Outcome.ERROR;
@@ -121,7 +121,7 @@ export class JobFeed {
   }
 
   // stop ends the subscription. Called when the selection moves and when the surface is
-  // unmounted: a stream nobody is reading is a stream the daemon is still writing to.
+  // unmounted: a stream nobody is reading is a stream the server is still writing to.
   stop(): void {
     this.abort?.abort();
     this.abort = null;
@@ -129,7 +129,7 @@ export class JobFeed {
 
   private async stream(host: string, job: string, signal: AbortSignal): Promise<void> {
     try {
-      const client = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
+      const client = createClient(ActivityService, createServerTransport(host, getLiveToken()));
       const stream = client.watchActivityEvents(
         { backfill: BACKFILL, filter: { units: [job] } },
         { signal },
@@ -138,7 +138,7 @@ export class JobFeed {
         if (this.job !== job) return; // the selection moved while this was in flight
         this.push(rowOf(e));
       }
-      // The stream ended without an error: the daemon closed it, or the page is going away.
+      // The stream ended without an error: the server closed it, or the page is going away.
       // Said plainly rather than left looking live, because a feed that stopped and still
       // looks like a feed is how a person concludes a worker went quiet.
       if (this.job === job) {

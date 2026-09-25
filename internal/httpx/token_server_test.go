@@ -10,7 +10,7 @@ import (
 )
 
 // Every route of a per-run page server holds its one page's token and nothing else: no token
-// and any other token, a daemon operator token included, are refused, and the page's own is
+// and any other token, a server operator token included, are refused, and the page's own is
 // admitted by header or by the query an EventSource sends.
 func TestTokenServerRoutesAdmitOnlyThePageToken(t *testing.T) {
 	t.Parallel()

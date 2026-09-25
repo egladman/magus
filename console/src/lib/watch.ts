@@ -1,35 +1,35 @@
 // watch.ts - the shell-side notification watchers. These are the notifications the console cannot derive
 // from a surface it happens to have open: they must be observed at the SHELL so they fire whether or not
-// you are looking (the "unwatched" half of the admission doctrine). Three daemon-dependent watchers poll
+// you are looking (the "unwatched" half of the admission doctrine). Three server-dependent watchers poll
 // on a slow ticker over the console's existing authenticated transport - no new backend push:
 //   - share-connect: a device first exercising the share token records a TOKEN_LIFECYCLE "share.open"
 //     trail event; surfaced as a BELL-tier notification with a one-click "Revoke share" action.
-//   - daemon storage: the daemon cache crossing its size threshold; a warn that rings once.
+//   - server storage: the server cache crossing its size threshold; a warn that rings once.
 //   - review merged: a review you took part in has landed, so its conversation can be kept. The forge
 //     is asked by the check-review JOB on the maintenance schedule, not here; this reads what it
 //     recorded, so a merge is noticed even when the console was shut when it happened.
-// A third watcher (localStorage size) needs no daemon and runs on mount. All are best-effort: an
-// unreachable daemon just means the poll no-ops until the next tick.
+// A third watcher (localStorage size) needs no server and runs on mount. All are best-effort: an
+// unreachable server just means the poll no-ops until the next tick.
 
 import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { CredentialClass, TokenService } from "@wire/token/v1alpha1/token_pb";
-import { createDaemonTransport, getLiveToken, resolveDaemonHost, surfaceLink } from "./daemon";
+import { createServerTransport, getLiveToken, resolveServerHost, surfaceLink } from "./server";
 import { showToast } from "./refresh-toast";
 import { mergedNotice, saidNotice } from "./review-notice";
 import {
   type NotificationStore,
   estimateStorageBytes,
   humanBytes,
-  daemonCacheOverThreshold,
+  serverCacheOverThreshold,
   LOCALSTORAGE_WARN_BYTES,
 } from "./notifications";
 
 const POLL_MS = 30_000;
 
 // checkLocalStorageAlert warns once when the console's own localStorage footprint nears the browser quota.
-// Runs on mount regardless of daemon connectivity - it is the console's storage, not the daemon's.
+// Runs on mount regardless of server connectivity - it is the console's storage, not the server's.
 export function checkLocalStorageAlert(
   store: NotificationStore,
   area: Pick<Storage, "length" | "key" | "getItem"> = localStorage,
@@ -57,11 +57,11 @@ export function checkLocalStorageAlert(
   });
 }
 
-// revokeActiveShareToken lists the daemon's tokens, finds the active share token, and revokes it - which
+// revokeActiveShareToken lists the server's tokens, finds the active share token, and revokes it - which
 // also closes the phone-share LAN listener server-side. It reuses the TokenService the Settings token
 // section speaks to; the notification's action button calls this.
 async function revokeActiveShareToken(host: string): Promise<void> {
-  const tokens = createClient(TokenService, createDaemonTransport(host, getLiveToken()));
+  const tokens = createClient(TokenService, createServerTransport(host, getLiveToken()));
   try {
     const resp = await tokens.listTokens({});
     const share = resp.tokens.find((t) => t.class === CredentialClass.SHARE);
@@ -88,7 +88,7 @@ async function pollShareConnect(
   store: NotificationStore,
   baselineMs: number,
 ): Promise<void> {
-  const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
+  const activity = createClient(ActivityService, createServerTransport(host, getLiveToken()));
   const resp = await activity.listActivityEvents({
     pageSize: 20,
     filter: { kinds: [Kind.TOKEN_LIFECYCLE], actions: ["share.open"], actors: [] },
@@ -111,23 +111,23 @@ async function pollShareConnect(
   }
 }
 
-// pollDaemonStorage warns once when the daemon cache crosses its threshold (85% of a configured cap, or an
+// pollServerStorage warns once when the server cache crosses its threshold (85% of a configured cap, or an
 // absolute fallback when uncapped), read off the live status snapshot the dashboard already consumes.
-async function pollDaemonStorage(host: string, store: NotificationStore): Promise<void> {
-  const status = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+async function pollServerStorage(host: string, store: NotificationStore): Promise<void> {
+  const status = createClient(StatusService, createServerTransport(host, getLiveToken()));
   const resp = await status.getStatus({});
   const cache = resp.status?.pool?.cache;
   if (!cache) return;
   const size = Number(cache.sizeBytes);
   const capBytes = cache.sizeCapMb * 1024 * 1024;
-  if (!daemonCacheOverThreshold(size, capBytes)) return;
+  if (!serverCacheOverThreshold(size, capBytes)) return;
   store.notify({
     source: "Dashboard",
     kind: "warn",
     important: true,
-    key: "storage:daemon",
+    key: "storage:server",
     message:
-      "The daemon cache is large (" +
+      "The server cache is large (" +
       humanBytes(size) +
       (capBytes > 0 ? " of a " + humanBytes(capBytes) + " cap" : "") +
       "). Run the clear-cache job (or rotate-logs) to reclaim space.",
@@ -145,14 +145,14 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
 // It READS the trail; it does not do the watching. The check-review JOB asks the forge on the
 // maintenance schedule and records what it found, which is what lets the merge be noticed while the
 // console is shut - and the console is optional, so a watcher that only runs with a tab open would
-// miss most merges. This is the same shape pollShareConnect uses for share.open: the daemon records,
+// miss most merges. This is the same shape pollShareConnect uses for share.open: the server records,
 // the console reads.
 //
 // HISTORY tier, deliberately. The admission doctrine in notifications.ts gives the bell to things that
 // change what you can TRUST about the workspace; a merge changes nothing you were relying on. It is
 // worth recording and not worth interrupting for, which is exactly what the silent tier is.
 async function pollReviewMerged(host: string, store: NotificationStore): Promise<void> {
-  const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
+  const activity = createClient(ActivityService, createServerTransport(host, getLiveToken()));
   const resp = await activity.listActivityEvents({
     // Sized for TWO actions, not one. The job appends a review.said on every run while remarks
     // stay unread, so a handful of ticks would push the rarer review.merged off a newest-first
@@ -201,20 +201,20 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
   }
 }
 
-// startShellWatch begins the daemon-dependent watchers on a slow ticker and returns a stop function. It
-// resolves the daemon host per tick (an attach can happen after boot) and no-ops when none is resolved.
+// startShellWatch begins the server-dependent watchers on a slow ticker and returns a stop function. It
+// resolves the server host per tick (an attach can happen after boot) and no-ops when none is resolved.
 export function startShellWatch(store: NotificationStore): () => void {
   const baselineMs = Date.now();
   let stopped = false;
   const tick = async (): Promise<void> => {
     if (stopped) return;
-    const host = resolveDaemonHost();
+    const host = resolveServerHost();
     if (!host) return;
-    // Each watcher is independent and best-effort: one failing (or the daemon being unreachable) must not
+    // Each watcher is independent and best-effort: one failing (or the server being unreachable) must not
     // stop the other or tear down the ticker.
     await Promise.allSettled([
       pollShareConnect(host, store, baselineMs),
-      pollDaemonStorage(host, store),
+      pollServerStorage(host, store),
       pollReviewMerged(host, store),
     ]);
   };

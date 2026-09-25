@@ -174,7 +174,7 @@ func TestPlanHandler_PassAndFailComeFromTheMostRecentOutput(t *testing.T) {
 	}
 }
 
-// A node the daemon reports as running must not render as the green it was last time.
+// A node the server reports as running must not render as the green it was last time.
 func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
 	src := fakePlanSource{
 		graph: planFixture(),
@@ -205,7 +205,7 @@ func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
 	}
 }
 
-// A run the daemon did not adopt emits no journal events, so only the pool sees it. The
+// A run the server did not adopt emits no journal events, so only the pool sees it. The
 // match is by target name alone, which lights every project's copy of that anchor.
 func TestPlanHandler_PoolEntryMarksTheInvokedTargetRunning(t *testing.T) {
 	src := fakePlanSource{
@@ -345,7 +345,7 @@ func TestPlanHandler_EmptyPlanIsNeverNull(t *testing.T) {
 	}
 }
 
-// The error names the daemon's workspace path, so it stays in the log.
+// The error names the server's workspace path, so it stays in the log.
 func TestPlanHandler_ErrorReturns500(t *testing.T) {
 	h := NewHandler(fakePlanSource{graphErr: errors.New("/Users/dev/repo/magusfile.buzz: extract boom")}, fakePlanOutputs{}, "", nil)
 	w := httptest.NewRecorder()

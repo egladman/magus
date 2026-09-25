@@ -52,13 +52,69 @@ func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) (*stat
 	for _, run := range r.Runs {
 		s.Runs = append(s.Runs, runToProto(run))
 	}
-	for _, svc := range r.Services {
-		s.Services = append(s.Services, serviceToProto(svc))
+	s.BrokerPolicy = string(r.BrokerPolicy)
+	if r.Broker != nil {
+		s.Broker = brokerToProto(r.Broker)
+		for _, svc := range r.Broker.Services {
+			s.Services = append(s.Services, serviceToProto(svc))
+		}
+	}
+	if r.Server != nil {
+		s.Server = serverToProto(r.Server)
 	}
 	for _, l := range r.Locks {
 		s.Locks = append(s.Locks, lockToProto(l))
 	}
 	return s, dropped
+}
+
+// brokerToProto maps the broker's report onto the wire. Its services ride Status.services,
+// where the dashboard already reads them.
+func brokerToProto(b *types.StatusBroker) *statusv1.Broker {
+	c := b.Capacity
+	out := &statusv1.Broker{
+		Pid:        int32(b.PID),
+		Version:    b.Version,
+		Protocol:   int32(b.Protocol),
+		Socket:     b.Socket,
+		Executable: b.Executable,
+		StartTime:  tsFromTime(b.StartTime),
+		Capacity: &statusv1.Capacity{
+			BudgetMb:    int32(c.BudgetMB),
+			HeldMb:      int32(c.HeldMB),
+			BudgetSlots: int32(c.BudgetSlots),
+			HeldSlots:   int32(c.HeldSlots),
+		},
+		IdleExitSeconds: int32(b.IdleExitSeconds),
+	}
+	for _, h := range c.Holders {
+		out.Capacity.Holders = append(out.Capacity.Holders, &statusv1.Claim{
+			Project:   h.Project,
+			Target:    h.Target,
+			Pid:       int32(h.PID),
+			MemoryMb:  int32(h.MemoryMB),
+			Slots:     int32(h.Slots),
+			Dir:       h.Dir,
+			Command:   h.Command,
+			StartTime: tsFromTime(h.Since),
+		})
+	}
+	return out
+}
+
+func serverToProto(s *types.StatusServer) *statusv1.Server {
+	out := &statusv1.Server{
+		Pid:        int32(s.PID),
+		Version:    s.Version,
+		Socket:     s.Socket,
+		Executable: s.Executable,
+		StartTime:  tsFromTime(s.StartTime),
+		Watch:      s.Watch,
+	}
+	for _, l := range s.Listeners {
+		out.Listeners = append(out.Listeners, &statusv1.Listener{Kind: string(l.Kind), Address: l.Address})
+	}
+	return out
 }
 
 // lockToProto maps one held workspace lock onto the wire message. It deliberately
@@ -71,7 +127,7 @@ func lockToProto(l types.StatusLock) *statusv1.Lock {
 		Command: l.Command,
 		Dir:     l.Dir,
 		// The pair is what a renderer needs: the age alone says nothing without the
-		// threshold the daemon judges it by. Dropping the threshold left every console
+		// threshold the server judges it by. Dropping the threshold left every console
 		// row comparing against zero, so no held lock ever read as possibly abandoned.
 		AcquireTime:       tsFromTime(l.AcquireTime),
 		StaleAfterSeconds: int32(l.StaleAfterSeconds),
@@ -179,13 +235,12 @@ func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
 func poolToProto(p *types.StatusOutput) (*statusv1.Pool, error) {
 	var dropped []error
 	out := &statusv1.Pool{
-		ParentPid:     int32(p.ParentPID),
-		DaemonVersion: p.DaemonVersion,
-		Mode:          p.Mode,
-		Capacity:      int32(p.Capacity),
-		Running:       int32(p.Running),
-		Queued:        int32(p.Queued),
-		Affected:      p.Affected,
+		ParentPid:    int32(p.ParentPID),
+		OwnerVersion: p.Version,
+		Capacity:     int32(p.Capacity),
+		Running:      int32(p.Running),
+		Queued:       int32(p.Queued),
+		Affected:     p.Affected,
 	}
 	for _, c := range p.RunningTargets {
 		out.RunningTargets = append(out.RunningTargets, &statusv1.RunningTarget{

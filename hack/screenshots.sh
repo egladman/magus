@@ -54,8 +54,8 @@ find_chrome() {
 # A key only lands if the surface has focus, which is why each of these surfaces focuses its own
 # root once it is ready. A binding added without that comes out here as a silent recapture of the
 # resting state.
-# The #demo fragment is what each surface reads to enter the daemon-free showcase, so
-# these need no daemon and no workspace.
+# The #demo fragment is what each surface reads to enter the server-free showcase, so
+# these need no server and no workspace.
 # Only what the site actually shows. Adding a surface here is the whole cost of adding a
 # screenshot; committing one nothing references is just weight in the repo.
 #

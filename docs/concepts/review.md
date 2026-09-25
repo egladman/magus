@@ -261,7 +261,7 @@ not know your build.
 Three things keep it honest:
 
 - **It runs what the magusfile declares, and nothing else.** The console names a target and a
-  project, never a command. The daemon admits the run only if that project declares that target,
+  project, never a command. The server admits the run only if that project declares that target,
   so a browser-reachable button is strictly less capable than a terminal.
 - **A verdict is about a TREE STATE.** Edit anything and the answer greys out and says
   `passed - since edited`, because a green tick over code you have since changed is a wrong
@@ -315,9 +315,9 @@ magus ranked these by what they can break, consequence first.
 
 ## Conformance
 
-magus could not check this change against the workspace's conventions. Nothing below means nothing was found.
+Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.
 
-- [MGS7003] no symbol index loaded for ., so the conformance checks could not run; build it with `magus graph build`
+- not checked: `.` (no symbol indexer)
 
 ## What magus could not measure
 

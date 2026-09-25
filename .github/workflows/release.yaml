@@ -90,14 +90,8 @@ jobs:
           # newer than the last release.
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
-      - name: Install codec build dependencies
+      - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
-        # Install first, update only on failure; see the note in ci.yaml for why update is the
-        # expensive half and why the image's cached index already satisfies both packages.
-        run: |
-          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
-            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
-                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
       # chance of replaying a cached (unsigned) artifact into a release.
@@ -137,14 +131,8 @@ jobs:
         with:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
-      - name: Install codec build dependencies
+      - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
-        # Install first, update only on failure; see the note in ci.yaml for why update is the
-        # expensive half and why the image's cached index already satisfies both packages.
-        run: |
-          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
-            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
-                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms --concurrency-profile aggressive
 
@@ -269,6 +257,9 @@ jobs:
           msystem: MINGW64
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
           path-type: inherit
+          # A tag run restores main's cache scope, and this toolchain links a binary
+          # publish signs.
+          cache: false
 
       - name: Point go build at the MSYS2 mingw toolchain
         if: ${{ inputs.include_dynamic_builds }}
@@ -334,10 +325,15 @@ jobs:
       # dies on `[MGS3003] "pnpm" is not on PATH` - which is how v0.4.3 shipped six
       # signed binaries and no index. It must stay AHEAD of setup-magus so that job's
       # actions/setup-go keeps outranking mise's Go, exactly as in ci.yaml.
+      #
+      # cache: false: a tag run restores main's cache scope, which any main-scoped run can
+      # write, the merge queue's validation of pull-request code included, and this job
+      # holds MAGUS_SIGNING_KEY.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
+          cache: false
 
       - uses: ./.github/actions/setup-magus  # provides the Go toolchain for the magus-utils calls below
         with:
@@ -473,9 +469,17 @@ jobs:
           # v3+ defaults this true, which would export mise.toml's GOEXPERIMENT here. ci,
           # cd and audit set it at workflow level; this is the one job that does not.
           env: false
+          # id-token and packages: write; see the publish job.
+          cache: false
 
+      # Both cache what they download in the Actions cache by default; this job holds
+      # id-token and packages: write, so neither restores. The binfmt image runs privileged.
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          cache-image: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          cache-binary: false
 
       # WHICH registries to authenticate against is not written here, and neither is
       # any parsing of them. image-login reads the same registry table image-build

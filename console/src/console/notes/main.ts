@@ -38,12 +38,12 @@ import {
 import {
   parseHash,
   wantsDemo,
-  resolveDaemonHostOrRemembered,
+  resolveServerHostOrRemembered,
   isUnreachable,
-  adoptDaemonOrigin,
+  adoptServerOrigin,
   consumeLiveToken,
-  createDaemonTransport,
-} from "../../lib/daemon";
+  createServerTransport,
+} from "../../lib/server";
 import { persisted } from "../../lib/persist";
 import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../view";
@@ -710,10 +710,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // instead of painted over the current one.
   let loadGeneration = 0;
 
-  async function loadLive(daemonHost: string): Promise<void> {
+  async function loadLive(serverHost: string): Promise<void> {
     const generation = ++loadGeneration;
     const superseded = (): boolean => stale || generation !== loadGeneration;
-    const client = createClient(NotesService, createDaemonTransport(daemonHost));
+    const client = createClient(NotesService, createServerTransport(serverHost));
     try {
       const resp = await client.listNotes({});
       if (superseded()) return;
@@ -725,10 +725,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (superseded()) return;
       const msg = e instanceof Error ? e.message : String(e);
       if (!isUnreachable(e)) {
-        showNotesError("The daemon at " + daemonHost + " answered with an error (" + msg + ").");
+        showNotesError("The server at " + serverHost + " answered with an error (" + msg + ").");
         return;
       }
-      showConnectPrompt({ connection: "disconnected", host: daemonHost, reason: msg });
+      showConnectPrompt({ connection: "disconnected", host: serverHost, reason: msg });
     }
   }
 
@@ -742,25 +742,25 @@ export function activate(host: HTMLElement): SurfaceInstance {
     show(demo.notes, demo.stores, (n) => Promise.resolve(demo.body(n.name)));
   }
 
-  // load resolves what to read: an explicit #demo, then resolveDaemonHostOrRemembered (a #port
-  // link, the daemon-origin console, the Settings address, or the last daemon the dashboard reached).
+  // load resolves what to read: an explicit #demo, then resolveServerHostOrRemembered (a #port
+  // link, the server-origin console, the Settings address, or the last server the dashboard reached).
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
-    // adoptDaemonOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
-    // lib/daemon's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
-    // does not make it true in here, and daemonAttach then returns null on a console served by
-    // that very daemon. Without this the surface works only after the dashboard has persisted a
+    // adoptServerOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
+    // lib/server's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
+    // does not make it true in here, and serverAttach then returns null on a console served by
+    // that very server. Without this the surface works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
-    adoptDaemonOrigin();
+    adoptServerOrigin();
     if (wantsDemo(params)) {
       loadDemo();
       return;
     }
-    const daemonHost = resolveDaemonHostOrRemembered(params);
-    if (daemonHost) {
-      showConnectPrompt({ connection: "connecting", host: daemonHost });
-      void loadLive(daemonHost);
+    const serverHost = resolveServerHostOrRemembered(params);
+    if (serverHost) {
+      showConnectPrompt({ connection: "connecting", host: serverHost });
+      void loadLive(serverHost);
       return;
     }
     loadGeneration++; // any load still out belongs to an address that no longer resolves
@@ -771,7 +771,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   refs.main.hidden = true;
   refs.bar.hidden = true;
   load();
-  // A new address is followed only while no notes are on screen: an open note keeps the daemon it
+  // A new address is followed only while no notes are on screen: an open note keeps the server it
   // came from until the tab is reopened.
   const unsubscribeHost = subscribeDefaultHost(() => {
     if (refs.main.hidden) load();

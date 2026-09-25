@@ -117,7 +117,7 @@ var denyRuleDocs = []RuleDoc{
 			"This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files."},
 	{Name: string(denyRuleTokenState), Decision: "deny",
 		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
-		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the daemon checks, so reading one hands a session a grant and writing one mints a token. " +
+		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. " +
 			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
 			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
@@ -141,7 +141,7 @@ var denyRuleDocs = []RuleDoc{
 			"Once the binary exists the deny applies again and names `./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
 	{Name: string(denyRulePersonOnly), Decision: "deny",
-		Catches: "an agent stamping a read receipt or closing an attention request, each of which records that a PERSON did it",
+		Catches: "an agent stamping a read receipt or closing an attention request, which only a person may do",
 		Why: "This is not a permission an agent is missing: there is no spelling of either an agent may use, because an agent stamping the changeset or closing its own block would make the measure mean nothing for everybody, including the human relying on it. " +
 			"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on. " +
 			"Waiting on a request instead: say you are waiting on its id and hand it back; `magus session dispose <id>` is a person's to run."},

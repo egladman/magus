@@ -235,15 +235,15 @@ func (t textEncoder) detach(ctx context.Context, e report.RunDetach) {
 	took := cache.FormatDuration(time.Duration(e.DurationMs) * time.Millisecond)
 	switch DetachState(e.State) {
 	case DetachCoalesced:
-		t.say(ctx, "magus: the daemon is already running this exact command; not queued twice\n")
+		t.say(ctx, "magus: the server is already running this exact command; not queued twice\n")
 	case DetachQueued:
 		t.say(ctx, "magus: detached as %s\n%s", e.Invocation, readIt)
 	case DetachRunning:
-		t.say(ctx, "magus: running as %s on the daemon\n", e.Invocation)
+		t.say(ctx, "magus: running as %s on the server\n", e.Invocation)
 	case DetachUnwatched:
 		// Ctrl-C detaches the watcher, not the run: say how to pick it up again rather
 		// than implying it was cancelled.
-		t.say(ctx, "\nmagus: stopped waiting; %s is still running on the daemon\n%s", e.Invocation, readIt)
+		t.say(ctx, "\nmagus: stopped waiting; %s is still running on the server\n%s", e.Invocation, readIt)
 	case DetachPassed:
 		t.say(ctx, "magus: %s passed (%s)\n%s", e.Invocation, took, readIt)
 	case DetachFailed:

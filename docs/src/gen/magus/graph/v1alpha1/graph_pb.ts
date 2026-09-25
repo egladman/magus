@@ -2,7 +2,7 @@
 // @generated from file magus/graph/v1alpha1/graph.proto (package magus.graph.v1alpha1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the daemon
+// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the server
 // serves to the browser Graph Explorer. Two surfaces share it: the bulk subgraph document behind
 // GET /api/v1/graph (Graph/Node/Edge, mirroring types.KnowledgeGraphOutput - field names match
 // that type's JSON so a protojson encoding is wire-compatible with what the page already
@@ -880,7 +880,7 @@ export const AnswerSchema: GenMessage<Answer> = /*@__PURE__*/
 /**
  * SymbolGap is one project whose declared symbol index magus could not read: the evidence behind
  * an unknown verdict. The project is flattened to its two wire fields rather than nested,
- * because ProjectRef's third field is an absolute host path that never leaves the daemon.
+ * because ProjectRef's third field is an absolute host path that never leaves the server.
  *
  * @generated from message magus.graph.v1alpha1.SymbolGap
  */
@@ -951,9 +951,9 @@ export const EdgeDirectionSchema: GenEnum<EdgeDirection> = /*@__PURE__*/
  * GraphService answers the questions the CLI's query/explain/path/stats verbs answer, over the
  * same knowledge graph. It exists so the browser stops reimplementing them: the Graph Explorer's
  * filter was a second, divergent copy of the query grammar, scoring by raw degree over a payload
- * the daemon had already sent whole.
+ * the server had already sent whole.
  *
- * Every verb is read-only, so the daemon mounts the service behind the console read bearer.
+ * Every verb is read-only, so the server mounts the service behind the console read bearer.
  *
  * The definition and schema_version fields every domain output carries are deliberately absent
  * here. The proto package IS the version and buf-breaking gates it, so a second version number

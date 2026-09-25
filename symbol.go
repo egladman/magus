@@ -23,7 +23,7 @@ import (
 )
 
 // Background symbol auto-indexing keeps each symbol-capable project's SCIP index fresh
-// without a manual `magus run ::scip`. It lives ONLY in the daemon (a one-shot CLI has
+// without a manual `magus run ::scip`. It lives ONLY in the server (a one-shot CLI has
 // no long-lived loop to schedule it) and is deliberately unobtrusive: it never runs on
 // the query path, coalesces a burst of edits into one run (the quiet window), caps how
 // often a project re-indexes (the min interval), and runs one project at a time. Each run
@@ -57,7 +57,7 @@ type projIndexState struct {
 	backoffTill time.Time // do not retry before this instant
 }
 
-// symbolIndexer is the daemon's background auto-indexer. Its collaborators are injected
+// symbolIndexer is the server's background auto-indexer. Its collaborators are injected
 // as closures so the scheduling logic is testable without a live workspace, watcher, or
 // run pipeline.
 type symbolIndexer struct {
@@ -196,7 +196,7 @@ func (si *symbolIndexer) execute(ctx context.Context, proj string) {
 		return
 	}
 	if err != nil && ctx.Err() != nil {
-		// The daemon is shutting down, not a failure: leave lastRun alone and re-mark
+		// The server is shutting down, not a failure: leave lastRun alone and re-mark
 		// dirty so the next start picks it up. No backoff.
 		st.dirty = true
 		return
@@ -278,9 +278,9 @@ func matchProject(absPath string, projects []capableProject) (string, bool) {
 	return best, ok
 }
 
-// WatchSymbolIndexing starts the daemon's background symbol auto-indexer: a file watcher
+// WatchSymbolIndexing starts the server's background symbol auto-indexer: a file watcher
 // that re-runs each symbol-capable project's scip op when its sources change, throttled
-// and contention-gated (see symbolIndexer). It returns a stop function; the daemon
+// and contention-gated (see symbolIndexer). It returns a stop function; the server
 // calls it once at startup, alongside WatchKnowledgeGraph. A no-op (never an error) when
 // disabled by config or when no project is symbol-capable, so nothing is spun up need-
 // lessly. A one-shot CLI never calls it and so never auto-indexes.
@@ -378,7 +378,7 @@ func (m *Magus) symbolCapableProjects() []capableProject {
 // symbolStatusCache memoizes SymbolIndexStatus so a dashboard status push does not
 // re-stat every project's sources on each tick. Like the warm graph, the cache is
 // trusted only while a watcher invalidates it (watched); without one (a one-shot CLI,
-// or the daemon with auto-indexing disabled) every call recomputes, so it can never go
+// or the server with auto-indexing disabled) every call recomputes, so it can never go
 // stale.
 type symbolStatusCache struct {
 	mu      sync.Mutex
@@ -422,7 +422,7 @@ func (c *symbolStatusCache) setWatched(on bool) {
 }
 
 // SymbolIndexStatus reports, for each symbol-capable project, whether its cached SCIP
-// index reflects current sources: fresh, out-of-date, or not-indexed. In the daemon it
+// index reflects current sources: fresh, out-of-date, or not-indexed. In the server it
 // answers from a watcher-invalidated memo (a status push does not re-stat source trees);
 // elsewhere it recomputes each call. Powers `magus status` and the dashboard.
 func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
@@ -527,7 +527,7 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 // project's cached SCIP index. A project whose indexer is missing or fails is reported
 // with an actionable install hint but does not stop the rest. It returns how many
 // projects were reindexed and the joined errors. This is the manual counterpart to the
-// daemon's background auto-indexer, invoked by `magus graph build`.
+// server's background auto-indexer, invoked by `magus graph build`.
 func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	capable := m.symbolCapableProjects()
 	var errs []error

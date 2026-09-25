@@ -14,6 +14,11 @@ name: Queue
 # credential and executes no pull-request code. It cannot post statuses either, which is
 # why verdicts travel as artifacts: a job running pull-request code with statuses: write
 # could set the very status branch protection requires.
+#
+# Only a run on main started by a push or a dispatch plans and validates. A pull request
+# event runs the pull request's own copy of this file, which could upload any plan and any
+# verdict, so apply follows no such run: there the intent job alone runs, and
+# queue-apply.yaml answers it by dispatching this workflow on main.
 
 on:
   # No branches filter: a stacked pull request targets the branch below it, not main.
@@ -31,9 +36,12 @@ on:
   workflow_dispatch:
 
 # One validation at a time; a newer event waits rather than cancelling a run whose
-# verdicts apply is already following.
+# verdicts apply is already following. A pull request event validates nothing, so it
+# waits on no validation.
 concurrency:
-  group: queue-validate
+  group: >-
+    ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'queue-validate' ||
+    format('queue-intent-{0}', github.run_id) }}
   cancel-in-progress: false
 
 permissions:
@@ -49,15 +57,27 @@ env:
   CI_PROVIDER: github-actions
 
 jobs:
+  # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
+  # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
+  # forks too and the plan refuses them by name; skipping them here only saves a run
+  # nobody's change can use.
+  intent:
+    name: queue intent
+    if: >-
+      github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
+       startsWith(github.event.label.name, 'queue: '))
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Merge intent; queue-apply.yaml starts the run on main that validates it
+        run: 'true'
+
   plan:
     name: queue plan
-    # The provider lists forks too and the plan refuses them by name; skipping the event
-    # here only saves a run nobody's change can use.
-    if: >-
-      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-        startsWith(github.event.label.name, 'queue: ')))
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -72,11 +92,13 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
+      # No restore and no save: main's cache scope is writable by a validate job's
+      # escaped hook, and the plan decides what apply merges.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
-          cache_save: false
+          cache: false
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -89,16 +111,14 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # Every step's logic is tools/gha-queue.buzz, selected by QUEUE_STEP.
-      # Speculation depth: the first DEPTH changes of each partition get a validate job;
+      # Every step's logic is tools/gha-queue.buzz, one subcommand each.
+      # Speculation depth 3: the first three changes of each partition get a validate job;
       # the rest wait for the run the next merge starts.
       - id: plan
         name: Plan the queue
         env:
-          QUEUE_STEP: plan
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPTH: '3'
-        run: magus buzz tools/gha-queue.buzz
+        run: magus buzz tools/gha-queue.buzz -- plan --depth 3
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -123,12 +143,17 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      # cache_save: false because validation runs queued pull requests' code.
+      # No save: validation runs queued pull requests' code. No restore either: an entry
+      # an earlier run's hook planted would decide this verdict. cache_save: false alone
+      # stops only the action's own save, not a hook holding the runtime token.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
-          cache_save: false
+          cache: false
+
+      # The gate runs the same `ci` a shard does, compress-cgo-test included.
+      - uses: ./.github/actions/codec-deps
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -152,9 +177,8 @@ jobs:
       # gate replays as green.
       - name: Validate #${{ matrix.change }}
         env:
-          QUEUE_STEP: validate
           CHANGE: ${{ matrix.change }}
-        run: magus buzz tools/gha-queue.buzz
+        run: magus buzz tools/gha-queue.buzz -- validate --change "$CHANGE"
 
       # The directory's contents become the artifact's root: verdict.json.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

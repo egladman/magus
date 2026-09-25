@@ -23,7 +23,7 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "console-1"}}, "eli via token console-1 (3fa9c1d2)"},
 		{Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: Credential{Class: ClassOperator, ID: "0badf00d"}}, "eli via claude-code via the operator token"},
 		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassShare, ID: "9b2e04aa"}}, "eli via share link 9b2e04aa"},
-		{Origin{User: "eli", EntryPoint: EntryPointDaemon}, "daemon"},
+		{Origin{User: "eli", EntryPoint: EntryPointServer}, "server"},
 		{Origin{Host: "codex"}, "codex"},
 		{Origin{}, "unattributed"},
 	}

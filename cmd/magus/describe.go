@@ -112,7 +112,7 @@ func describeUsage() {
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  project      ", "directories recognized as units of work; `project <path>` details one")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  workspace    ", "the active workspace root and its config")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  module       ", "magus stdlib modules; `module <name>` lists its methods + signatures")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP daemon")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP server")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  rule         ", "the guard rules enforced here; `rule <name>` details the one a verdict named")
@@ -132,6 +132,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A trailing list of project paths scopes the graph to those projects")
 			fmt.Fprintln(os.Stderr, "(cross-project edges to projects left out are dropped); default is all.")
+			fmt.Fprintln(os.Stderr, "A scoped -o markdown index leaves out the workspace-wide routing tables.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -160,17 +161,15 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	// A trailing list of project paths scopes the graph to those projects; the
 	// cross-project edge pass in the renderer drops edges to projects left out.
 	if len(pos) > 0 {
-		want := make(map[string]bool, len(pos))
+		known := namesOf(out.Projects, func(p types.TargetGraphProject) string { return p.Path })
 		for _, a := range pos {
-			want[a] = true
-		}
-		kept := out.Projects[:0]
-		for _, p := range out.Projects {
-			if want[p.Path] {
-				kept = append(kept, p)
+			if !slices.Contains(known, a) {
+				return unknownEntity("project", a, known)
 			}
 		}
-		out.Projects = kept
+		out.Projects = slices.DeleteFunc(out.Projects, func(p types.TargetGraphProject) bool {
+			return !slices.Contains(pos, p.Path)
+		})
 	}
 
 	switch opts.Format {
@@ -194,15 +193,16 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		// dispatch plan (that is `magus describe target <name>` away), so the static
 		// graph is all the renderer needs: no per-target evaluation here.
 		//
-		// Build the knowledge graph to drive MAGUS.md's "query first" routing
-		// section; best-effort, so a graph build failure just omits the section.
+		// The routing tables are workspace-wide, so only an unscoped index carries them:
+		// in a scoped one they would move with changes to projects `magus affected` never
+		// attributes to it. Best-effort, so a graph build failure just omits the tables.
 		var routing *types.KnowledgeRouting
-		if g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil); err == nil {
-			r := g.Routing()
-			routing = &r
-		}
-		if routing != nil {
-			routing.CatalogFingerprint = magus.CatalogFingerprint()
+		if len(pos) == 0 {
+			if g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil); err == nil {
+				r := g.Routing()
+				r.CatalogFingerprint = magus.CatalogFingerprint()
+				routing = &r
+			}
 		}
 		return render.WriteTargetGraphMarkdown(os.Stdout, out, routing, graphExplorerLink(ctx, root), globalCfg.DefaultCharms)
 	}
@@ -1395,10 +1395,10 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 }
 
 // describeWorkspacesOutput builds the "describe workspaces" view: the single
-// active workspace by default, or one entry per workspace the daemon is declared
-// to serve (daemon.workspaces / MAGUS_DAEMON_WORKSPACES) when that list is set.
+// active workspace by default, or one entry per workspace the server is declared
+// to serve (server.workspaces / MAGUS_SERVER_WORKSPACES) when that list is set.
 func describeWorkspacesOutput(ctx context.Context, root string) ([]types.WorkspaceEntry, error) {
-	declared := resolveDeclaredWorkspaces(globalCfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
+	declared := resolveDeclaredWorkspaces(globalCfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
 	if len(declared) == 0 {
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {

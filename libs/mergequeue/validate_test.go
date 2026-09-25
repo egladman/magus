@@ -22,19 +22,13 @@ func planOf(groups ...[]types.Change) types.Plan {
 	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 3, Partitions: groups}
 }
 
-// validating wires a Validator to d, answering each change's fetch and squash message.
+// validating wires a Validator to d, answering each change's fetch.
 func validating(t *testing.T, d doubles, plan types.Plan) (*Validator, *VerdictDir) {
 	t.Helper()
 	d.noCheckouts()
 	for _, g := range plan.Partitions {
 		for _, c := range g {
 			d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil).Maybe()
-			from := base
-			if c.StackBase != "" {
-				from = c.StackBase
-			}
-			d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, from, c.Head, []string(nil)).
-				Return([]magustypes.Commit{{ID: c.Head, Subject: "change " + c.ID, Parents: []string{from}}}, nil).Maybe()
 		}
 	}
 	dir := &VerdictDir{Path: t.TempDir()}
@@ -80,7 +74,7 @@ func redFor(ids ...string) func(types.Change) types.GateResult {
 	return func(c types.Change) types.GateResult {
 		for _, id := range ids {
 			if c.ID == id {
-				return types.GateResult{Summary: "`make test` exited 1"}
+				return types.GateResult{Summary: "the gate exited 1"}
 			}
 		}
 		return types.GateResult{Green: true}
@@ -143,7 +137,6 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 		assert.Equal(t, want.Onto, v.Onto, id)
 		assert.Equal(t, want.CandidateCommit, v.CandidateCommit, id)
 		assert.Equal(t, want.Depth, v.Depth, id)
-		assert.Equal(t, "* change "+id, v.Message, id)
 	}
 	assert.ElementsMatch(t, []string{"1@" + base, "2@" + c1, "3@" + c2}, g.runs, "each gate runs on what its candidate was built onto")
 }
@@ -157,15 +150,21 @@ func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
 	d.gates(redFor("2"))
 	plan := planOf([]types.Change{one, two, three})
 	v, dir := validating(t, d, plan)
+	v.Reproduce = types.Reproduction{Gate: `make test BASE="$MERGEQUEUE_ONTO"`}
 	require.NoError(t, v.Run(t.Context(), plan))
 
 	got := recorded(t, dir)
+	c1 := candidateOf(base, one.Head)
 	assert.Equal(t, types.DecisionMerge, got["1"].Decision)
 	assert.Equal(t, types.DecisionKick, got["2"].Decision)
 	assert.Equal(t, types.CodeKickRed, got["2"].Code)
-	assert.Equal(t, "the gate failed: `make test` exited 1", got["2"].Reason)
-	assert.Contains(t, got["2"].Report, "Push a fix and queue the change again.")
-	c1 := candidateOf(base, one.Head)
+	assert.Equal(t, "the gate exited 1", got["2"].Reason)
+	assert.Equal(t, "The merge queue built this change at `"+short(two.Head)+"` onto the candidate of #1 (`"+short(c1)+"`), and the gate exited 1.\n",
+		got["2"].Report, "what failed on which commits, and no hook line")
+	for id, vd := range got {
+		assert.Equal(t, `make test BASE="$MERGEQUEUE_ONTO"`, vd.Gate, "every verdict records the gate it ran: %s", id)
+		assert.Empty(t, vd.Regenerate, id)
+	}
 	assert.Equal(t, types.DecisionMerge, got["3"].Decision)
 	assert.Equal(t, "1", got["3"].After, "rebuilt onto what validated")
 	assert.Equal(t, c1, got["3"].Onto)
@@ -199,7 +198,7 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 	d := newDoubles(t)
 	one, two, three := change("1", "a"), change("2", "a"), change("3", "a")
 	d.builds(building{touched: []string{"a/x.go"}, conflicts: map[string][]magustypes.Conflict{two.Head: {{Path: "a/x.go", Kind: magustypes.ConflictKindContent}}}})
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"a/x.go"}).Return(map[string]bool{}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(map[string]types.Writes{}, nil)
 	c1 := candidateOf(base, one.Head)
 	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, two.Head, c1, []string{"a/x.go"}).Return(nil, nil)
 	d.gates(allGreen)
@@ -221,7 +220,7 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 	d := newDoubles(t)
 	one, two := change("1", "a"), change("2", "b")
 	d.builds(building{touched: []string{"gen/x.go"}})
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(nil, nil).Maybe()
 	d.gates(allGreen)
 	plan := planOf([]types.Change{one}, []types.Change{two})
@@ -238,7 +237,8 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 	assert.Equal(t, types.CodeKickRefused, got["1"].Code)
 	assert.Equal(t, "building its candidate failed: `make gen` exited 2", got["1"].Reason)
 	assert.Equal(t, []string{"gen/x.go"}, got["1"].Paths)
-	assert.Contains(t, got["1"].Report, "`make gen` exited 2. Run `make gen` and push.")
+	assert.Equal(t, "The merge queue built this change at `"+short(one.Head)+"` onto `main` at `"+short(base)+"`, and building its candidate failed: `make gen` exited 2.\n\nRun `make gen` and push.\n",
+		got["1"].Report)
 	assert.Equal(t, types.DecisionMerge, got["2"].Decision)
 }
 
@@ -247,7 +247,7 @@ func TestEveryCandidateGetsAPrivateScratchDirectory(t *testing.T) {
 	d := newDoubles(t)
 	one, two := change("1", "a"), change("2", "a")
 	d.builds(building{touched: []string{"gen/x.go"}})
-	d.facts.EXPECT().Outputs(mock.Anything, []string{"gen/x.go"}).Return(map[string]bool{"gen/x.go": true}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(nil, nil)
 	d.gates(allGreen)
 	plan := planOf([]types.Change{one, two})
@@ -268,6 +268,57 @@ func TestEveryCandidateGetsAPrivateScratchDirectory(t *testing.T) {
 	for _, s := range scratches {
 		assert.True(t, strings.HasPrefix(s, v.scratch), "%s is under the validator's scratch", s)
 		assert.NoDirExists(t, s, "removed with its checkout")
+	}
+}
+
+// Validation commits a regeneration only where an Applier can reproduce it with the
+// base's own. A change to generator code merges when its committed outputs are already
+// what its regeneration makes on top of the base, and is refused before its gate when
+// they are not.
+func TestValidationRegeneratesOnlyWhatApplyingCanReproduce(t *testing.T) {
+	touched := []string{"gen/gen.go", "gen/x.go"}
+	for name, tc := range map[string]struct {
+		written    []string
+		generation types.Generation
+		want       types.Decision
+		wantReason string
+	}{
+		"a generator change whose outputs are fresh": {want: types.DecisionMerge},
+		"a generator change whose outputs are stale": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
+			want:       types.DecisionKick,
+			wantReason: "building its candidate failed: gen/x.go are stale on top of " + base[:12] + ", and it changes code their regeneration runs (gen/gen.go), so the queue cannot regenerate them for it"},
+		"a change the regeneration runs none of": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}}, want: types.DecisionMerge},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			c := change("1", "gen")
+			d.builds(building{touched: touched})
+			d.facts.EXPECT().Classify(mock.Anything, touched).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+			d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(tc.written, nil)
+			if len(tc.written) > 0 {
+				d.facts.EXPECT().Classify(mock.Anything, tc.written).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+				d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
+				d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).Return(tc.generation, nil)
+			}
+			g := d.gates(allGreen)
+			plan := planOf([]types.Change{c})
+			v, dir := validating(t, d, plan)
+			v.Regenerate = func(context.Context, types.Regeneration) error { return nil }
+			require.NoError(t, v.Run(t.Context(), plan))
+
+			got := recorded(t, dir)["1"]
+			assert.Equal(t, tc.want, got.Decision)
+			if tc.want == types.DecisionKick {
+				assert.Equal(t, types.CodeKickRefused, got.Code)
+				assert.Equal(t, tc.wantReason, got.Reason)
+				assert.Equal(t, []string{"gen/x.go"}, got.Paths)
+				assert.Contains(t, got.Report, "Merge `main` in, regenerate, commit what it writes, push, and queue it again.")
+				assert.Zero(t, g.count("1"), "no gate runs on a tree that could never merge")
+				return
+			}
+			assert.Equal(t, candidateOf(base, c.Head), got.CandidateCommit)
+			assert.Equal(t, 1, g.count("1"))
+		})
 	}
 }
 

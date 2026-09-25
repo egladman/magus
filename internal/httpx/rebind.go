@@ -53,7 +53,7 @@ func GuardRebind(format rpcerr.Format, allowed AllowedSet, next http.Handler) ht
 var hostNotAllowed = rpcerr.Error{
 	Code:    connect.CodePermissionDenied,
 	Reason:  types.HostNotAllowed,
-	Message: "the daemon serves only loopback hosts and the configured console origin; this request named another host in its Host or Origin header",
+	Message: "the server serves only loopback hosts and the configured console origin; this request named another host in its Host or Origin header",
 }
 
 // Allow returns a copy of a that additionally accepts the given hostname, for a

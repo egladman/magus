@@ -168,10 +168,10 @@ func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
 	assert.Contains(t, n.Body, "mine")
 }
 
-// The daemon accelerates and never gates. A person who wrote remarks in `magus diff` with no
-// daemon running has them on disk, and capture refusing because no daemon is up would lose the
+// The server accelerates and never gates. A person who wrote remarks in `magus diff` with no
+// server running has them on disk, and capture refusing because no server is up would lose the
 // one artifact nothing can recreate.
-func TestCaptureReadsTheStoreWhenNoDaemonIsRunning(t *testing.T) {
+func TestCaptureReadsTheStoreWhenNoServerIsRunning(t *testing.T) {
 	cache := t.TempDir()
 	root := filepath.Join(cache, "ws")
 	written := changeset.NewStore(cache)
@@ -182,7 +182,7 @@ func TestCaptureReadsTheStoreWhenNoDaemonIsRunning(t *testing.T) {
 	require.Len(t, sess.Comments, 1, "the drafts the store persisted are the transcript")
 	assert.Equal(t, "mine", sess.Comments[0].Body)
 	// Digested from the patch exactly as attachDiffReview digests it, so a capture taken with
-	// no daemon names the note a daemon-attached one would have named.
+	// no server names the note a server-attached one would have named.
 	assert.Equal(t, changeset.PatchDigest("diff --git a/a.go b/a.go\n"), sess.AsOf)
 	assert.Equal(t, "review-"+sess.AsOf[:12], captureName(sess))
 }
@@ -196,9 +196,9 @@ func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
 }
 
 // A colleague's remark is a fact about the review, not about whether a background process is
-// up. Without a daemon the forge is asked directly rather than the reader being shown a review
+// up. Without a server the forge is asked directly rather than the reader being shown a review
 // with nobody else in it.
-func TestReviewThreadsReachTheForgeWithNoDaemon(t *testing.T) {
+func TestReviewThreadsReachTheForgeWithNoServer(t *testing.T) {
 	withFakeReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
 	})
@@ -208,14 +208,14 @@ func TestReviewThreadsReachTheForgeWithNoDaemon(t *testing.T) {
 	require.Len(t, threads, 1)
 	assert.Equal(t, "theirs", threads[0].Body)
 	assert.Empty(t, reason)
-	// Nothing has been on screen here, so the whole conversation is new: the mark the daemon
+	// Nothing has been on screen here, so the whole conversation is new: the mark the server
 	// would have applied, taken from the watermark the store persists rather than from a session.
 	assert.True(t, threads[0].New)
 }
 
-// The watermark outlives the daemon that normally reads it, so a thread already seen does not
-// come back marked new the moment the daemon is stopped.
-func TestASeenThreadIsNotNewWithoutADaemon(t *testing.T) {
+// The watermark outlives the server that normally reads it, so a thread already seen does not
+// come back marked new the moment the server is stopped.
+func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
 	withFakeReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
 	})
@@ -258,7 +258,7 @@ func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
 	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
 }
 
-// withFakeReviewProvider wires a review provider for this test, so the daemon-free read path
+// withFakeReviewProvider wires a review provider for this test, so the server-free read path
 // can be exercised against threads instead of only against an unwired workspace.
 func withFakeReviewProvider(t *testing.T, threads []any) {
 	t.Helper()

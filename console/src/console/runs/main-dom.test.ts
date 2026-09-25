@@ -8,7 +8,7 @@
 //   - THE FACETS ARE THE ANSWER to "what do I type". They list only values that occur, and clicking
 //     one writes its term into the VISIBLE query box - that is what teaches the syntax, so a
 //     refactor that applied the filter without showing it would defeat the surface.
-//   - THE EMPTY STATES STAY APART. "no daemon", "nothing kept yet" and "your filter matched
+//   - THE EMPTY STATES STAY APART. "no server", "nothing kept yet" and "your filter matched
 //     nothing" are three different facts and only the last is the reader's to fix; the last one
 //     also gets a CONTROL, because the way out of an over-narrow query should not be text editing.
 //   - THE THREE COUNTS AGREE. The header, the status facet and what a click leaves are all RUNS. An
@@ -36,7 +36,7 @@ beforeEach(() => {
 
 // The default-host cell is module state shared with every other DOM test in this process (the suite
 // runs with --experimental-test-isolation=none), so it is restored rather than left pointing a
-// sibling's surface at a daemon that is not there. The mount is torn down for the same reason: it
+// sibling's surface at a server that is not there. The mount is torn down for the same reason: it
 // holds an interval, and a leaked one keeps firing against another file's document.
 afterEach(() => {
   mounted?.deactivate();
@@ -57,7 +57,7 @@ async function settleFilter(): Promise<void> {
   await settle();
 }
 
-// serve answers the two run feeds and refuses everything else, which is what a daemon that is not
+// serve answers the two run feeds and refuses everything else, which is what a server that is not
 // there looks like from the browser. The SSE stream is among the refusals on purpose: the surface
 // must paint from the feeds alone, with the stream only keeping it current afterwards.
 function serve(outputs: unknown[], runs: unknown[]): void {
@@ -83,7 +83,7 @@ function serve(outputs: unknown[], runs: unknown[]): void {
         json: () => Promise.resolve({ invocations: runs }),
       } as unknown as Response);
     }
-    // A daemon with nothing kept still answers its liveness route, which is what separates it from
+    // A server with nothing kept still answers its liveness route, which is what separates it from
     // an address with nothing behind it.
     if (url.endsWith("/livez")) {
       return Promise.resolve({ ok: true, status: 200 } as unknown as Response);
@@ -92,7 +92,7 @@ function serve(outputs: unknown[], runs: unknown[]): void {
   }) as typeof fetch;
 }
 
-// serveNothing is a configured daemon address with nothing listening behind it.
+// serveNothing is a configured server address with nothing listening behind it.
 function serveNothing(): void {
   setDefaultHost(HOST);
   globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
@@ -101,7 +101,7 @@ function serveNothing(): void {
 const NOW = Date.now();
 
 // The wire shape, in protobuf JSON: a Timestamp is RFC3339, a Duration is a seconds string, and an
-// enum is its declared name. Written as the daemon actually serializes it so a fixture cannot pass
+// enum is its declared name. Written as the server actually serializes it so a fixture cannot pass
 // while the real feed would not parse.
 function output(over: Record<string, unknown> = {}): unknown {
   return {
@@ -137,7 +137,7 @@ async function mount(): Promise<HTMLElement> {
 }
 
 // remount tears the current surface down before mounting the next, for a test that walks several
-// daemon states in one go. The teardown lives here rather than inline because a surface left
+// server states in one go. The teardown lives here rather than inline because a surface left
 // running keeps an interval alive against a document the next mount has replaced.
 async function remount(): Promise<HTMLElement> {
   mounted?.deactivate();
@@ -248,10 +248,10 @@ test("the detail pane names the run's facts and links its targets into the viewe
   assert.ok(links.some((a) => a.getAttribute("href")?.includes("ref=out1111")));
 });
 
-test("no daemon, nothing kept, and nothing matching are three different empty states", async () => {
-  // No daemon at all: the host never resolves, so nothing is fetched.
+test("no server, nothing kept, and nothing matching are three different empty states", async () => {
+  // No server at all: the host never resolves, so nothing is fetched.
   const cold = await mount();
-  assert.match(text(cold.querySelector(".console-runs__empty-title")), /No daemon connected/);
+  assert.match(text(cold.querySelector(".console-runs__empty-title")), /No server connected/);
 
   serve([], []);
   const bare = await remount();
@@ -262,7 +262,7 @@ test("no daemon, nothing kept, and nothing matching are three different empty st
   const dead = await remount();
   assert.match(
     text(dead.querySelector(".console-runs__empty-title")),
-    /Could not reach the daemon/,
+    /Could not reach the server/,
   );
   const labels = [
     ...dead.querySelectorAll(".console-runs__empty [data-empty-way] .pf-v6-c-button"),
@@ -271,7 +271,7 @@ test("no daemon, nothing kept, and nothing matching are three different empty st
     labels.map((b) => text(b)),
     ["Retry", "Change address", "Setup guide"],
   );
-  // Retry against a daemon still down repaints the same prompt, and must keep the button the reader
+  // Retry against a server still down repaints the same prompt, and must keep the button the reader
   // pressed rather than drop their focus with a rebuilt one.
   (labels[0] as HTMLElement).click();
   await settle();

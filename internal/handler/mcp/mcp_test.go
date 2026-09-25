@@ -166,7 +166,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	assert.Equal(t, trail.OutcomeError, tel.calls[0].Outcome, "the metric must also see error")
 }
 
-// A daemon whose workspace failed to load keeps every tool listed, so an agent's tool list
+// A server whose workspace failed to load keeps every tool listed, so an agent's tool list
 // does not change shape, and each call answers the diagnostic as a tool error.
 func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	srv := server.NewMCPServer("magus", "test")
@@ -180,7 +180,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(context.Background(), callRequest(d.Name, nil))
+		res, err := st.Handler(trail.ContextWithCredential(context.Background(), types.CredentialStdio), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
@@ -435,4 +435,39 @@ func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn ha
 	return wrap(quietLogger(), func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} },
 		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
 		nil, fn)
+}
+
+func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
+	ok := func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		return mcplib.NewToolResultText("ran"), nil
+	}
+	req := mcplib.CallToolRequest{}
+	req.Params.Name = "magus_status"
+
+	cases := map[string]struct {
+		cred    types.Credential
+		allowed bool
+	}{
+		"socket peer":   {types.CredentialSocketPeer, true},
+		"connector":     {types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}, true},
+		"operator":      {types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}, true},
+		"console token": {types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}, false},
+		"no credential": {types.Credential{}, false},
+		"viewer grant":  {types.Credential{Class: types.ClassSocketPeer, Grant: types.GrantViewer}, false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			res, err := authorize(ok)(trail.ContextWithCredential(t.Context(), c.cred), req)
+			require.NoError(t, err)
+			text := allText(res)
+			if c.allowed {
+				assert.False(t, res.IsError, text)
+				assert.Equal(t, "ran", text)
+				return
+			}
+			assert.True(t, res.IsError)
+			assert.Contains(t, text, string(types.GrantInsufficient))
+			assert.Contains(t, text, "magus_status needs mcp=write")
+		})
+	}
 }

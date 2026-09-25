@@ -80,12 +80,16 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 // supersession in both directions: it may take a lock from an earlier gate on this same
 // tree, and a later one may take its locks (MGS3014). See projectLocker.acquire for
 // which other contentions queue and which are refused.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer) (*projectHold, error) {
+//
+// stdio, when the invocation runs in this process, first holds the acquisition back
+// while a magus upstream of it in a shell pipe still needs one of these projects (see
+// ProcessStdio), and publishes the finished lock set for the stage downstream.
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer, stdio *ProcessStdio) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
 	}
-	// The CLI and the daemon stamp invocation ancestry at their own entry points; a
+	// The CLI and the server stamp invocation ancestry at their own entry points; a
 	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantErr
 	// could never fire for it and a re-entrant acquire hung instead of reporting
 	// MGS3007. The env var is already in this process; read it here so the third
@@ -97,14 +101,59 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if gate {
 		lopts = append(lopts, asGate())
 	}
+	if stdio != nil {
+		lopts = append(lopts, withStdio(stdio))
+	}
 	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, lopts...)
-	unlock, err := l.acquireAll(ctx, paths)
+	unlock, _, err := l.takeRunLocks(ctx, paths)
 	if err != nil {
 		return nil, err
 	}
 	hold := &projectHold{locker: l, paths: paths, unlock: unlock}
 	hold.stopWatchdog = watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, hold.unlockOnce)
 	return hold, nil
+}
+
+// takeRunLocks is one invocation's whole acquisition: wait out a pipe upstream (see
+// awaitUpstream), take every lock, then publish the set for the stage downstream. The
+// spool is non-nil when stdin was held back and is now relayed from it.
+func (l *projectLocker) takeRunLocks(ctx context.Context, paths []string) (func(), *stdinSpool, error) {
+	sp, ups, err := l.awaitUpstream(ctx, paths)
+	if err != nil {
+		return nil, nil, err
+	}
+	unlock, err := l.acquireAll(ctx, paths)
+	// An upstream that has stopped writing is exiting, and the kernel closes its pipe
+	// before its lock files. The flock it still holds for that instant is not contention.
+	for deadline := time.Now().Add(upstreamExitGrace); err != nil && l.heldByUpstream(err, ups) && time.Now().Before(deadline); {
+		select {
+		case <-ctx.Done():
+			return nil, sp, fmt.Errorf("workspace lock: gave up waiting on an exiting upstream: %w", ctx.Err())
+		case <-time.After(lockPollEvery):
+		}
+		unlock, err = l.acquireAll(ctx, paths)
+	}
+	if err != nil {
+		return nil, sp, err
+	}
+	retract := l.publishHolds(ctx, paths)
+	return func() { retract(); unlock() }, sp, nil
+}
+
+// upstreamExitGrace bounds how long a run retries a lock still held by an upstream stage
+// that has stopped writing its pipe. Exit takes milliseconds; an upstream that closed
+// its stdout and kept running past this is refused like any other holder.
+const upstreamExitGrace = 2 * time.Second
+
+// heldByUpstream reports a refusal whose holder is one of this run's proven upstream
+// stages.
+func (l *projectLocker) heldByUpstream(err error, ups []upstreamStage) bool {
+	var c *lockContendedError
+	if !errors.As(err, &c) {
+		return false
+	}
+	holder := l.readOwner(c.Project).PID
+	return holder != 0 && slices.ContainsFunc(ups, func(u upstreamStage) bool { return u.pid == holder })
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
@@ -130,7 +179,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 	stopped := make(chan struct{})
 	var once sync.Once
 	// Joins the goroutine. Closing done alone only narrows the race: a goroutine already past the inner select still reaches
-	// release(), and in the daemon (one long-lived process running many invocations),
+	// release(), and in the server (one long-lived process running many invocations),
 	// that late release lands on whatever the NEXT run holds.
 	stop := func() {
 		once.Do(func() { close(done) })
@@ -221,6 +270,9 @@ type projectLocker struct {
 	// which would otherwise be free text on a stream a caller is parsing. The lock is
 	// taken before Run wraps ctx with the writer, so it is threaded in directly.
 	rw *report.Writer
+	// stdio is the invocation's own standard streams, set only when it runs in this
+	// process. See ProcessStdio.
+	stdio *ProcessStdio
 }
 
 // lockPollEvery paces the two acquires that wait on another process's flock, which has no
@@ -281,7 +333,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 // The deadlock a plain wait cannot survive: a target running magus against a project its
 // own invocation already locked produces a holder waiting for the waiter. Neither flock
 // nor a timeout can tell that from ordinary contention; ancestry can, and it is the only
-// signal that also covers the daemon, where holder and waiter are threads of one process.
+// signal that also covers the server, where holder and waiter are threads of one process.
 //
 // Best-effort by design: no sidecar, or an ancestry that never reached this process,
 // yields nil and the contention is judged like any other. Over-detecting would refuse a
@@ -324,7 +376,7 @@ type lockContendedError struct {
 // a broken build, so a harness has to retry genuine failures or never retry at all.
 const lockContendedExit = 75
 
-// ExitCode is read by the local exit-code seam and by the daemon, which forwards an
+// ExitCode is read by the local exit-code seam and by the server, which forwards an
 // adopted run's status by asking the error rather than naming a type it cannot import.
 func (e *lockContendedError) ExitCode() int { return lockContendedExit }
 
@@ -455,7 +507,7 @@ func (l *projectLocker) sameRun(ctx context.Context, projectPath string) bool {
 
 // processLocks arbitrates project locks among the invocations of THIS process. flock
 // conflicts per open file description, so without it two invocations of one process
-// (the daemon's adopted runs, its symbol indexer) refuse each other as strangers. Only
+// (the server's adopted runs, its symbol indexer) refuse each other as strangers. Only
 // the invocation holding a lock's slot touches that lock's flock.
 //
 // Package state on purpose: the contention it arbitrates spans every Magus the process
@@ -486,7 +538,7 @@ func (ls *localLocks) join(path string) *localLock {
 	return e
 }
 
-// leave drops the caller's count, and the slot with the last one, so a daemon serving
+// leave drops the caller's count, and the slot with the last one, so a server serving
 // many worktrees keeps no slot for a lock nobody is using.
 func (ls *localLocks) leave(path string, e *localLock) {
 	ls.mu.Lock()
@@ -590,7 +642,7 @@ type processRecord struct {
 	Dir     string    `record:"dir"`
 	Started time.Time `record:"started,omitempty"`
 	// Inv is the invocation that took the lock. It is what makes a holder identifiable to
-	// a DESCENDANT of it: a pid cannot, since under the daemon the holder and the waiter
+	// a DESCENDANT of it: a pid cannot, since under the server the holder and the waiter
 	// share one. Empty for a subcommand with no invocation record (clean), and for a
 	// sidecar written by an older magus; an acquirer then has nothing to match.
 	Inv string `record:"invocation,omitempty"`
@@ -769,7 +821,7 @@ func (l *projectLocker) pendingYield(projectPath string) (processRecord, bool) {
 // signal carries no identity, so the aborted run could not name who superseded it, and
 // nothing could tell this from the Ctrl-C or the supervisor SIGTERM the CLI already
 // handles as an interrupt; SIGTERM is not deliverable on Windows at all; and under the
-// daemon the holder and the waiter can be threads of one process, where signalling the
+// server the holder and the waiter can be threads of one process, where signalling the
 // pid means signalling yourself. The marker carries the successor's pid, command and
 // start time, which is the whole of MGS3014's message.
 func (l *projectLocker) askHolderToYield(ctx context.Context, projectPath string) func() {

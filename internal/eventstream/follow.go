@@ -23,9 +23,9 @@ const runLogExt = ".jsonl"
 // The directory IS the bus, and that is the design rather than a fallback. Every
 // magus process in a workspace already appends its invocation to
 // <cacheDir>/runs/<inv>.jsonl, so a follower reading that directory sees runs
-// started from any terminal, any editor, and the daemon alike: with no daemon
+// started from any terminal, any editor, and the server alike: with no server
 // required, no socket to discover, and no token to provision. A subscriber that
-// wants lower latency than a poll can take the daemon socket instead; it learns
+// wants lower latency than a poll can take the server socket instead; it learns
 // the same events.
 //
 // Two properties bound what a follower sees, and both are deliberate:

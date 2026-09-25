@@ -1410,7 +1410,8 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
 // content-generate target). This root magusfile only owns the roff manpages
 // (man-generate above), which are a distribution artifact rather than site content.
 
-// Renders MAGUS.md via `magus describe graph`.
+// Renders MAGUS.md via `magus describe graph`. Unscoped, so it is the one index carrying
+// the workspace-wide routing tables; every other project's is scoped to that project.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
@@ -1422,8 +1423,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // adapter expects. Written into gen/ because they are generated, not authored: the
 // knowledge graph previously sat at docs/graph.json as a hand-run export with no
 // generating target at all, which made it stale by construction with nothing to say so.
-// Whole-workspace scope is why this lives at the root rather than in docs/ - a describe
-// from inside a project only sees that project.
+// Whole-workspace scope is why this lives at the root rather than in docs/, whose index
+// is scoped to docs alone.
 export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared although gitignored: console's build needs this target and copies the
     // pair, so the files are an output it consumes, not residue it happens to find.
@@ -1581,7 +1582,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // from a tool's own stdout - so the diff is CAPTURED and printed by the
         // magusfile, which is what actually survives into the log. A name alone was
         // not enough twice running: the drift that sent us here turned out to be a
-        // daemon auth token captured into a docs example, invisible from a filename.
+        // server auth token captured into a docs example, invisible from a filename.
         var body = vcs\dirtyDiff(changed);
         // A generated JSON blob can be megabytes on one line; bound it so it
         // cannot bury a small, readable drift somewhere else in the list.
@@ -2762,9 +2763,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
     // test inputs.
     ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
-    // The setup action and the queue's apply workflow: the release trust anchor and the
-    // queue app's credential rules are asserted against them.
-    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/queue-apply.yaml");
+    // The setup action and the workflows: the release trust anchor, the queue app's
+    // credential rules and the no-cache rule for trusted jobs are asserted against them.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/*.yaml");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -3209,7 +3210,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     //
     // The stock go toolchain, not TinyGo: it is already pinned, it is fast, and the
     // failures worth catching are unresolved symbols under the wasm build tags, which
-    // both compilers see identically. Not ./... either - the daemon and internal/proc
+    // both compilers see identically. Not ./... either - the server and internal/proc
     // legitimately do not build for wasm (syscall.SIGHUP), so only the playground's
     // own dependency tree is graded.
     os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
@@ -3394,7 +3395,7 @@ fun publish_report(agent: str, results: str, provider: str) > void !> any {
             + "` carries " + "{count}" + " (" + models + ")";
     }
     // The magus that ran the trials, from the first run's own record; the version
-    // string carries a second line when a daemon of another build was up.
+    // string carries a second line when a server of another build was up.
     var version = "unknown";
     foreach (entry in fs\listDir(fs\join(agent, results))) {
         final meta = fs\join(agent, results, entry, "meta.json");

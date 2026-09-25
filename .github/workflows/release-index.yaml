@@ -51,10 +51,14 @@ jobs:
       # the manual escape hatch for a failed publish, so it had to be fixed alongside
       # release.yaml rather than after it: both were missing the toolchain, which is why
       # v0.4.2's index was never republished by hand either.
+      #
+      # cache: false: this job holds MAGUS_SIGNING_KEY, and main's cache scope is writable
+      # by any main-scoped run, the merge queue's validation of pull-request code included.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
+          cache: false
 
       - uses: ./.github/actions/setup-magus
         with:

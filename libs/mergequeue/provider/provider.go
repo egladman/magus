@@ -4,14 +4,15 @@
 // A provider script exports these functions, each taking one record and returning one:
 //
 //	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}
-//	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [unqueued]}
+//	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
 //	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
 //	kick_back(change + {commit, code, report, paths, with, candidate_commit}) > bool
-//	list_artifacts({source})                       > {complete, artifacts: [{name, url}], headers?}
+//	mark(change + {mark})                          > bool
+//	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
 //
 // Every op but list_artifacts is required; list_artifacts is required of a provider
 // apply follows a validation run through. A change record carries the fields of
@@ -20,7 +21,9 @@
 // status_context, carries [types.Setup] as status_context, credential {id, name?},
 // required_checks [{context, integration?, events?}], settings [{name, value, want}],
 // app? {slug, id, client_id?, registration_url?, install_url?, environment?, variable?,
-// secret?} and steps [{title, command? or url?}]. Every key the contract lists
+// secret?} and steps [{title, command? or url?}]. list_artifacts' run carries
+// [types.RunOrigin] as repo, head_repo, head_branch, event, branch_event and
+// definition. Every key the contract lists
 // without a "?" is required: a missing one is an error, never a zero value, since a
 // missing "fork" or "queued" read as false would admit what the provider meant to
 // refuse. Other keys a record carries are ignored. The reads run in planning and apply;
@@ -66,13 +69,14 @@ const (
 	opRetarget      = "retarget"
 	opMergeChange   = "merge_change"
 	opKickBack      = "kick_back"
+	opMark          = "mark"
 	opListArtifacts = "list_artifacts"
 )
 
 // Every op but list_artifacts is required: branch protection requires the queue's status
 // once it is wired, so a provider that can list changes but not merge them would hold
 // every change forever.
-var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack}
+var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark}
 
 // Script is a [types.Provider] backed by a Buzz script, and a
 // [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
@@ -314,9 +318,11 @@ func (p *Script) ListChanges(ctx context.Context, q types.ListQuery) (types.Chan
 	}
 	for _, row := range unqueued {
 		var u types.UnqueuedChange
-		if err := row.decode(required("id", &u.ID), required("head", &u.Head)); err != nil {
+		var mark string
+		if err := row.decode(required("id", &u.ID), required("head", &u.Head), optional("repo", &u.Repo), optional("mark", &mark)); err != nil {
 			return types.Changes{}, err
 		}
+		u.Mark = types.Mark(mark)
 		out.Unqueued = append(out.Unqueued, u)
 	}
 	// The same checks the document gets when it is read back, here where the script
@@ -457,7 +463,21 @@ func (p *Script) KickBack(ctx context.Context, c types.Change, commit string, k 
 	params["paths"] = k.Paths
 	params["with"] = k.With
 	params["candidate_commit"] = k.CandidateCommit
+	params["source"] = k.Source
+	if k.Reproduce != nil {
+		params["reproduce"] = map[string]string{"gate": k.Reproduce.Gate, "regenerate": k.Reproduce.Regenerate}
+	}
 	return p.acknowledged(ctx, opKickBack, params)
+}
+
+// Mark calls mark. A mark outside the three is refused before the script sees it.
+func (p *Script) Mark(ctx context.Context, c types.Change, m types.Mark) error {
+	if !m.Valid() {
+		return fmt.Errorf("%s: mark %q, want queued, rejected or none", p.where(opMark), m)
+	}
+	params := changeParams(c)
+	params["mark"] = string(m)
+	return p.acknowledged(ctx, opMark, params)
 }
 
 // ListArtifacts calls list_artifacts.
@@ -468,7 +488,13 @@ func (p *Script) ListArtifacts(ctx context.Context, source string) (types.Artifa
 	}
 	var out types.ArtifactListing
 	var rows []record
-	if err := r.decode(required("complete", &out.Complete), required("artifacts", &rows), optional("headers", &out.Headers)); err != nil {
+	var run *record
+	if err := r.decode(required("run", &run), required("complete", &out.Complete), required("artifacts", &rows), optional("headers", &out.Headers)); err != nil {
+		return types.ArtifactListing{}, err
+	}
+	o := &out.Run
+	if err := run.decode(required("repo", &o.Repo), required("head_repo", &o.HeadRepo), required("head_branch", &o.HeadBranch),
+		required("event", &o.Event), required("branch_event", &o.BranchEvent), required("definition", &o.Definition)); err != nil {
 		return types.ArtifactListing{}, err
 	}
 	for _, row := range rows {
@@ -601,7 +627,7 @@ func (r record) set(f field, v any) error {
 }
 
 // toValue converts the records the bridge builds, whose values are strings, bools, lists
-// of strings and lists of string records, into Buzz values.
+// of strings, string records and lists of them, into Buzz values.
 func toValue(params map[string]any) (vm.Value, error) {
 	m := vm.NewMap()
 	for k, v := range params {
@@ -616,14 +642,12 @@ func toValue(params map[string]any) (vm.Value, error) {
 				items[i] = vm.StrValue(s)
 			}
 			m.MapSet(k, vm.ListValue(items))
+		case map[string]string:
+			m.MapSet(k, stringRecord(x))
 		case []map[string]string:
 			items := make([]vm.Value, len(x))
 			for i, rec := range x {
-				rm := vm.NewMap()
-				for rk, rv := range rec {
-					rm.MapSet(rk, vm.StrValue(rv))
-				}
-				items[i] = rm
+				items[i] = stringRecord(rec)
 			}
 			m.MapSet(k, vm.ListValue(items))
 		default:
@@ -631,6 +655,14 @@ func toValue(params map[string]any) (vm.Value, error) {
 		}
 	}
 	return m, nil
+}
+
+func stringRecord(rec map[string]string) vm.Value {
+	m := vm.NewMap()
+	for k, v := range rec {
+		m.MapSet(k, vm.StrValue(v))
+	}
+	return m
 }
 
 // fromValue converts a Buzz value a script returned into plain Go values.

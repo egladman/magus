@@ -36,9 +36,9 @@ type Health int32
 
 const (
 	Health_HEALTH_UNSPECIFIED Health = 0
-	Health_HEALTH_HEALTHY     Health = 1 // daemon reachable, pool nominal
+	Health_HEALTH_HEALTHY     Health = 1 // server reachable, pool nominal
 	Health_HEALTH_DEGRADED    Health = 2 // reachable but something is off (pool error, saturation)
-	Health_HEALTH_DOWN        Health = 3 // no daemon / pool
+	Health_HEALTH_DOWN        Health = 3 // no server / pool
 )
 
 // Enum value maps for Health.
@@ -146,10 +146,10 @@ func (x TargetRun_State) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TargetRun_State.Descriptor instead.
 func (TargetRun_State) EnumDescriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{4, 0}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{9, 0}
 }
 
-// State is where the daemon's copy of this workspace sits. Output only; values may be added.
+// State is where the server's copy of this workspace sits. Output only; values may be added.
 type Workspace_State int32
 
 const (
@@ -199,18 +199,21 @@ func (x Workspace_State) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Workspace_State.Descriptor instead.
 func (Workspace_State) EnumDescriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{8, 0}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{13, 0}
 }
 
 // Status is the live snapshot.
 type Status struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Health        Health                 `protobuf:"varint,1,opt,name=health,proto3,enum=magus.status.v1alpha1.Health" json:"health,omitempty"`
-	Pool          *Pool                  `protobuf:"bytes,2,opt,name=pool,proto3" json:"pool,omitempty"`         // live concurrency; absent when no daemon/pool is running
-	Runs          []*Run                 `protobuf:"bytes,4,rep,name=runs,proto3" json:"runs,omitempty"`         // runs the daemon is executing right now (adopted dispatches)
-	Services      []*Service             `protobuf:"bytes,5,rep,name=services,proto3" json:"services,omitempty"` // long-running shared services the daemon is hosting right now
-	Build         *BuildInfo             `protobuf:"bytes,6,opt,name=build,proto3" json:"build,omitempty"`       // the running daemon's build identity
-	Locks         []*Lock                `protobuf:"bytes,7,rep,name=locks,proto3" json:"locks,omitempty"`       // per-project workspace locks held right now
+	Pool          *Pool                  `protobuf:"bytes,2,opt,name=pool,proto3" json:"pool,omitempty"`                                      // live concurrency; absent when no server/pool is running
+	Runs          []*Run                 `protobuf:"bytes,4,rep,name=runs,proto3" json:"runs,omitempty"`                                      // runs the server is executing right now (adopted dispatches)
+	Services      []*Service             `protobuf:"bytes,5,rep,name=services,proto3" json:"services,omitempty"`                              // shared services the broker is hosting right now; the same list as broker.services
+	Build         *BuildInfo             `protobuf:"bytes,6,opt,name=build,proto3" json:"build,omitempty"`                                    // the running server's build identity
+	Locks         []*Lock                `protobuf:"bytes,7,rep,name=locks,proto3" json:"locks,omitempty"`                                    // per-project workspace locks held right now
+	Broker        *Broker                `protobuf:"bytes,8,opt,name=broker,proto3" json:"broker,omitempty"`                                  // the broker holding this host's capacity; absent when none is running
+	Server        *Server                `protobuf:"bytes,9,opt,name=server,proto3" json:"server,omitempty"`                                  // the server itself; absent when none is running
+	BrokerPolicy  string                 `protobuf:"bytes,10,opt,name=broker_policy,json=brokerPolicy,proto3" json:"broker_policy,omitempty"` // required | best-effort | off: what a missing broker means
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -287,6 +290,454 @@ func (x *Status) GetLocks() []*Lock {
 	return nil
 }
 
+func (x *Status) GetBroker() *Broker {
+	if x != nil {
+		return x.Broker
+	}
+	return nil
+}
+
+func (x *Status) GetServer() *Server {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
+func (x *Status) GetBrokerPolicy() string {
+	if x != nil {
+		return x.BrokerPolicy
+	}
+	return ""
+}
+
+// Broker is the per-user process holding this host's capacity (concurrency slots and
+// declared memory) and the services every magus on it shares. It listens on a unix
+// socket only and exits once it has held nothing for its idle window.
+type Broker struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Pid             int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	Version         string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Protocol        int32                  `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"` // the broker wire version it speaks
+	Socket          string                 `protobuf:"bytes,4,opt,name=socket,proto3" json:"socket,omitempty"`
+	Executable      string                 `protobuf:"bytes,5,opt,name=executable,proto3" json:"executable,omitempty"` // the binary it runs from
+	StartTime       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	Capacity        *Capacity              `protobuf:"bytes,7,opt,name=capacity,proto3" json:"capacity,omitempty"`
+	IdleExitSeconds int32                  `protobuf:"varint,8,opt,name=idle_exit_seconds,json=idleExitSeconds,proto3" json:"idle_exit_seconds,omitempty"` // how long it stays up once it holds nothing
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Broker) Reset() {
+	*x = Broker{}
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Broker) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Broker) ProtoMessage() {}
+
+func (x *Broker) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Broker.ProtoReflect.Descriptor instead.
+func (*Broker) Descriptor() ([]byte, []int) {
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Broker) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *Broker) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *Broker) GetProtocol() int32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *Broker) GetSocket() string {
+	if x != nil {
+		return x.Socket
+	}
+	return ""
+}
+
+func (x *Broker) GetExecutable() string {
+	if x != nil {
+		return x.Executable
+	}
+	return ""
+}
+
+func (x *Broker) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *Broker) GetCapacity() *Capacity {
+	if x != nil {
+		return x.Capacity
+	}
+	return nil
+}
+
+func (x *Broker) GetIdleExitSeconds() int32 {
+	if x != nil {
+		return x.IdleExitSeconds
+	}
+	return 0
+}
+
+// Capacity is the host's whole budget, what is held, and every claim holding it.
+type Capacity struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BudgetMb      int32                  `protobuf:"varint,1,opt,name=budget_mb,json=budgetMb,proto3" json:"budget_mb,omitempty"` // 0 = unmeasured
+	HeldMb        int32                  `protobuf:"varint,2,opt,name=held_mb,json=heldMb,proto3" json:"held_mb,omitempty"`
+	BudgetSlots   int32                  `protobuf:"varint,3,opt,name=budget_slots,json=budgetSlots,proto3" json:"budget_slots,omitempty"` // 0 = unmeasured
+	HeldSlots     int32                  `protobuf:"varint,4,opt,name=held_slots,json=heldSlots,proto3" json:"held_slots,omitempty"`
+	Holders       []*Claim               `protobuf:"bytes,5,rep,name=holders,proto3" json:"holders,omitempty"` // oldest first
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Capacity) Reset() {
+	*x = Capacity{}
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Capacity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Capacity) ProtoMessage() {}
+
+func (x *Capacity) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Capacity.ProtoReflect.Descriptor instead.
+func (*Capacity) Descriptor() ([]byte, []int) {
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Capacity) GetBudgetMb() int32 {
+	if x != nil {
+		return x.BudgetMb
+	}
+	return 0
+}
+
+func (x *Capacity) GetHeldMb() int32 {
+	if x != nil {
+		return x.HeldMb
+	}
+	return 0
+}
+
+func (x *Capacity) GetBudgetSlots() int32 {
+	if x != nil {
+		return x.BudgetSlots
+	}
+	return 0
+}
+
+func (x *Capacity) GetHeldSlots() int32 {
+	if x != nil {
+		return x.HeldSlots
+	}
+	return 0
+}
+
+func (x *Capacity) GetHolders() []*Claim {
+	if x != nil {
+		return x.Holders
+	}
+	return nil
+}
+
+// Claim is one step holding capacity, and who is running it.
+type Claim struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Pid           int32                  `protobuf:"varint,3,opt,name=pid,proto3" json:"pid,omitempty"`
+	MemoryMb      int32                  `protobuf:"varint,4,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
+	Slots         int32                  `protobuf:"varint,5,opt,name=slots,proto3" json:"slots,omitempty"`
+	Dir           string                 `protobuf:"bytes,6,opt,name=dir,proto3" json:"dir,omitempty"`                              // where the holding run was started
+	Command       string                 `protobuf:"bytes,7,opt,name=command,proto3" json:"command,omitempty"`                      // the holder's argv
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // when the claim was granted
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Claim) Reset() {
+	*x = Claim{}
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Claim) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Claim) ProtoMessage() {}
+
+func (x *Claim) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Claim.ProtoReflect.Descriptor instead.
+func (*Claim) Descriptor() ([]byte, []int) {
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Claim) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *Claim) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *Claim) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *Claim) GetMemoryMb() int32 {
+	if x != nil {
+		return x.MemoryMb
+	}
+	return 0
+}
+
+func (x *Claim) GetSlots() int32 {
+	if x != nil {
+		return x.Slots
+	}
+	return 0
+}
+
+func (x *Claim) GetDir() string {
+	if x != nil {
+		return x.Dir
+	}
+	return ""
+}
+
+func (x *Claim) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *Claim) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+// Server is the person-started process serving MCP, the console, the APIs and jobs.
+type Server struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pid           int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Socket        string                 `protobuf:"bytes,3,opt,name=socket,proto3" json:"socket,omitempty"`
+	Executable    string                 `protobuf:"bytes,4,opt,name=executable,proto3" json:"executable,omitempty"`
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	Listeners     []*Listener            `protobuf:"bytes,6,rep,name=listeners,proto3" json:"listeners,omitempty"`
+	Watch         []string               `protobuf:"bytes,7,rep,name=watch,proto3" json:"watch,omitempty"` // workspace roots whose graph and symbols it keeps current
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Server) Reset() {
+	*x = Server{}
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Server) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Server) ProtoMessage() {}
+
+func (x *Server) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Server.ProtoReflect.Descriptor instead.
+func (*Server) Descriptor() ([]byte, []int) {
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Server) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *Server) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *Server) GetSocket() string {
+	if x != nil {
+		return x.Socket
+	}
+	return ""
+}
+
+func (x *Server) GetExecutable() string {
+	if x != nil {
+		return x.Executable
+	}
+	return ""
+}
+
+func (x *Server) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *Server) GetListeners() []*Listener {
+	if x != nil {
+		return x.Listeners
+	}
+	return nil
+}
+
+func (x *Server) GetWatch() []string {
+	if x != nil {
+		return x.Watch
+	}
+	return nil
+}
+
+// Listener is one address the server accepts connections on.
+type Listener struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // socket | http
+	Address       string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Listener) Reset() {
+	*x = Listener{}
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Listener) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Listener) ProtoMessage() {}
+
+func (x *Listener) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Listener.ProtoReflect.Descriptor instead.
+func (*Listener) Descriptor() ([]byte, []int) {
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Listener) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Listener) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
 // Lock is one held per-project workspace lock and the process holding it.
 //
 // A held lock is the NORMAL state of a mutating run, so this is state and never a
@@ -309,7 +760,7 @@ type Lock struct {
 
 func (x *Lock) Reset() {
 	*x = Lock{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[1]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -321,7 +772,7 @@ func (x *Lock) String() string {
 func (*Lock) ProtoMessage() {}
 
 func (x *Lock) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[1]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -334,7 +785,7 @@ func (x *Lock) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Lock.ProtoReflect.Descriptor instead.
 func (*Lock) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{1}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Lock) GetProject() string {
@@ -381,7 +832,7 @@ func (x *Lock) GetStaleAfterSeconds() int32 {
 
 // BuildInfo identifies the running magus binary: the version tag, the commit it was built
 // from, the build date, and the full human fingerprint (what `magus --version` prints).
-// Reported so a dashboard shows exactly which daemon it is talking to. All fields are
+// Reported so a dashboard shows exactly which server it is talking to. All fields are
 // "unknown" for an unstamped dev build.
 type BuildInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -395,7 +846,7 @@ type BuildInfo struct {
 
 func (x *BuildInfo) Reset() {
 	*x = BuildInfo{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[2]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +858,7 @@ func (x *BuildInfo) String() string {
 func (*BuildInfo) ProtoMessage() {}
 
 func (x *BuildInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[2]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +871,7 @@ func (x *BuildInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildInfo.ProtoReflect.Descriptor instead.
 func (*BuildInfo) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{2}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BuildInfo) GetVersion() string {
@@ -451,7 +902,7 @@ func (x *BuildInfo) GetFingerprint() string {
 	return ""
 }
 
-// Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
+// Run is one in-flight invocation the server has adopted - a `magus run`/`affected`
 // dispatch, keyed by its invocation id. It carries the per-target execution state a
 // dashboard renders as a live run row, so the SAME status stream that shows the pool
 // also shows what each run's targets are doing.
@@ -467,7 +918,7 @@ type Run struct {
 
 func (x *Run) Reset() {
 	*x = Run{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[3]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +930,7 @@ func (x *Run) String() string {
 func (*Run) ProtoMessage() {}
 
 func (x *Run) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[3]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,7 +943,7 @@ func (x *Run) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Run.ProtoReflect.Descriptor instead.
 func (*Run) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{3}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Run) GetInv() string {
@@ -541,7 +992,7 @@ type TargetRun struct {
 
 func (x *TargetRun) Reset() {
 	*x = TargetRun{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[4]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -553,7 +1004,7 @@ func (x *TargetRun) String() string {
 func (*TargetRun) ProtoMessage() {}
 
 func (x *TargetRun) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[4]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -566,7 +1017,7 @@ func (x *TargetRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TargetRun.ProtoReflect.Descriptor instead.
 func (*TargetRun) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{4}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TargetRun) GetProject() string {
@@ -618,7 +1069,7 @@ func (x *TargetRun) GetDurationMs() int64 {
 	return 0
 }
 
-// Service is one long-running shared service the daemon is hosting right now, kept warm
+// Service is one long-running shared service the server is hosting right now, kept warm
 // across invocations. It carries the derived identity (id/label/command/ports), the live
 // state a dashboard renders, and how many targets currently depend on it.
 type Service struct {
@@ -636,7 +1087,7 @@ type Service struct {
 
 func (x *Service) Reset() {
 	*x = Service{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[5]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -648,7 +1099,7 @@ func (x *Service) String() string {
 func (*Service) ProtoMessage() {}
 
 func (x *Service) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[5]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -661,7 +1112,7 @@ func (x *Service) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Service.ProtoReflect.Descriptor instead.
 func (*Service) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{5}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Service) GetId() string {
@@ -717,8 +1168,7 @@ func (x *Service) GetStartTime() *timestamppb.Timestamp {
 type Pool struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ParentPid      int32                  `protobuf:"varint,1,opt,name=parent_pid,json=parentPid,proto3" json:"parent_pid,omitempty"`
-	DaemonVersion  string                 `protobuf:"bytes,2,opt,name=daemon_version,json=daemonVersion,proto3" json:"daemon_version,omitempty"`
-	Mode           string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`                                           // "daemon" | "proc" | ""
+	OwnerVersion   string                 `protobuf:"bytes,11,opt,name=owner_version,json=ownerVersion,proto3" json:"owner_version,omitempty"`      // the build of the process that owns the pool
 	Capacity       int32                  `protobuf:"varint,4,opt,name=capacity,proto3" json:"capacity,omitempty"`                                  // total concurrency slots (0 = unlimited)
 	Running        int32                  `protobuf:"varint,5,opt,name=running,proto3" json:"running,omitempty"`                                    // slots currently running
 	Queued         int32                  `protobuf:"varint,6,opt,name=queued,proto3" json:"queued,omitempty"`                                      // targets queued for a slot
@@ -732,7 +1182,7 @@ type Pool struct {
 
 func (x *Pool) Reset() {
 	*x = Pool{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[6]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -744,7 +1194,7 @@ func (x *Pool) String() string {
 func (*Pool) ProtoMessage() {}
 
 func (x *Pool) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[6]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -757,7 +1207,7 @@ func (x *Pool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pool.ProtoReflect.Descriptor instead.
 func (*Pool) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{6}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Pool) GetParentPid() int32 {
@@ -767,16 +1217,9 @@ func (x *Pool) GetParentPid() int32 {
 	return 0
 }
 
-func (x *Pool) GetDaemonVersion() string {
+func (x *Pool) GetOwnerVersion() string {
 	if x != nil {
-		return x.DaemonVersion
-	}
-	return ""
-}
-
-func (x *Pool) GetMode() string {
-	if x != nil {
-		return x.Mode
+		return x.OwnerVersion
 	}
 	return ""
 }
@@ -844,7 +1287,7 @@ type RunningTarget struct {
 
 func (x *RunningTarget) Reset() {
 	*x = RunningTarget{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[7]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -856,7 +1299,7 @@ func (x *RunningTarget) String() string {
 func (*RunningTarget) ProtoMessage() {}
 
 func (x *RunningTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[7]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -869,7 +1312,7 @@ func (x *RunningTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunningTarget.ProtoReflect.Descriptor instead.
 func (*RunningTarget) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{7}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RunningTarget) GetArgs() []string {
@@ -907,7 +1350,7 @@ func (x *RunningTarget) GetInvocation() string {
 	return ""
 }
 
-// Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
+// Workspace is one workspace the server holds: loading, loaded, or failed to load.
 type Workspace struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Root           string                 `protobuf:"bytes,1,opt,name=root,proto3" json:"root,omitempty"`
@@ -933,7 +1376,7 @@ type Workspace struct {
 
 func (x *Workspace) Reset() {
 	*x = Workspace{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[8]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -945,7 +1388,7 @@ func (x *Workspace) String() string {
 func (*Workspace) ProtoMessage() {}
 
 func (x *Workspace) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[8]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -958,7 +1401,7 @@ func (x *Workspace) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Workspace.ProtoReflect.Descriptor instead.
 func (*Workspace) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{8}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Workspace) GetRoot() string {
@@ -1026,7 +1469,7 @@ type Cache struct {
 	//
 	// It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded
 	// counts toward hits and adds nothing here, so a reader must not present this as the cache's
-	// lifetime saving - it is what this daemon has saved since it started.
+	// lifetime saving - it is what this server has saved since it started.
 	SavedMs       int64 `protobuf:"varint,6,opt,name=saved_ms,json=savedMs,proto3" json:"saved_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1034,7 +1477,7 @@ type Cache struct {
 
 func (x *Cache) Reset() {
 	*x = Cache{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[9]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1046,7 +1489,7 @@ func (x *Cache) String() string {
 func (*Cache) ProtoMessage() {}
 
 func (x *Cache) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[9]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1059,7 +1502,7 @@ func (x *Cache) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cache.ProtoReflect.Descriptor instead.
 func (*Cache) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{9}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Cache) GetHits() int64 {
@@ -1112,7 +1555,7 @@ type GetStatusRequest struct {
 
 func (x *GetStatusRequest) Reset() {
 	*x = GetStatusRequest{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[10]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1124,7 +1567,7 @@ func (x *GetStatusRequest) String() string {
 func (*GetStatusRequest) ProtoMessage() {}
 
 func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[10]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1137,25 +1580,25 @@ func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetStatusRequest) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{10}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{15}
 }
 
 type GetStatusResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Status *Status                `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	// observe_start_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
-	// are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
+	// are static per server session (Status stays "what is happening right now"), so a dashboard reads them
 	// once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
 	// the deprecated JSON /api/v1/status route used to carry.
-	ObserveStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observe_start_time,json=observeStartTime,proto3" json:"observe_start_time,omitempty"` // when this daemon began observing (its start)
-	Config           *Config                `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`                                               // the daemon's resolved, read-only configuration
+	ObserveStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observe_start_time,json=observeStartTime,proto3" json:"observe_start_time,omitempty"` // when this server began observing (its start)
+	Config           *Config                `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`                                               // the server's resolved, read-only configuration
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
 	*x = GetStatusResponse{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[11]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1167,7 +1610,7 @@ func (x *GetStatusResponse) String() string {
 func (*GetStatusResponse) ProtoMessage() {}
 
 func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[11]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1180,7 +1623,7 @@ func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetStatusResponse) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{11}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetStatusResponse) GetStatus() *Status {
@@ -1204,8 +1647,8 @@ func (x *GetStatusResponse) GetConfig() *Config {
 	return nil
 }
 
-// Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
-// the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
+// Config is the server's resolved, read-only configuration a dashboard shows so an operator can see what
+// the server is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
 // (the one-shot), never the live Status frame.
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1218,7 +1661,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[12]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1230,7 +1673,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[12]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1243,7 +1686,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{12}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Config) GetDefaultCharms() []string {
@@ -1275,7 +1718,7 @@ type StreamStatusRequest struct {
 
 func (x *StreamStatusRequest) Reset() {
 	*x = StreamStatusRequest{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[13]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1287,7 +1730,7 @@ func (x *StreamStatusRequest) String() string {
 func (*StreamStatusRequest) ProtoMessage() {}
 
 func (x *StreamStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[13]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1300,7 +1743,7 @@ func (x *StreamStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamStatusRequest.ProtoReflect.Descriptor instead.
 func (*StreamStatusRequest) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{13}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{18}
 }
 
 type StreamStatusResponse struct {
@@ -1312,7 +1755,7 @@ type StreamStatusResponse struct {
 
 func (x *StreamStatusResponse) Reset() {
 	*x = StreamStatusResponse{}
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[14]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1324,7 +1767,7 @@ func (x *StreamStatusResponse) String() string {
 func (*StreamStatusResponse) ProtoMessage() {}
 
 func (x *StreamStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[14]
+	mi := &file_magus_status_v1alpha1_status_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1337,7 +1780,7 @@ func (x *StreamStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamStatusResponse.ProtoReflect.Descriptor instead.
 func (*StreamStatusResponse) Descriptor() ([]byte, []int) {
-	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{14}
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *StreamStatusResponse) GetStatus() *Status {
@@ -1351,14 +1794,61 @@ var File_magus_status_v1alpha1_status_proto protoreflect.FileDescriptor
 
 const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\n" +
-	"\"magus/status/v1alpha1/status.proto\x12\x15magus.status.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xdc\x02\n" +
+	"\"magus/status/v1alpha1/status.proto\x12\x15magus.status.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xef\x03\n" +
 	"\x06Status\x125\n" +
 	"\x06health\x18\x01 \x01(\x0e2\x1d.magus.status.v1alpha1.HealthR\x06health\x12/\n" +
 	"\x04pool\x18\x02 \x01(\v2\x1b.magus.status.v1alpha1.PoolR\x04pool\x12.\n" +
 	"\x04runs\x18\x04 \x03(\v2\x1a.magus.status.v1alpha1.RunR\x04runs\x12:\n" +
 	"\bservices\x18\x05 \x03(\v2\x1e.magus.status.v1alpha1.ServiceR\bservices\x126\n" +
 	"\x05build\x18\x06 \x01(\v2 .magus.status.v1alpha1.BuildInfoR\x05build\x121\n" +
-	"\x05locks\x18\a \x03(\v2\x1b.magus.status.v1alpha1.LockR\x05locksJ\x04\b\x03\x10\x04R\rmagus_version\"\xdc\x01\n" +
+	"\x05locks\x18\a \x03(\v2\x1b.magus.status.v1alpha1.LockR\x05locks\x125\n" +
+	"\x06broker\x18\b \x01(\v2\x1d.magus.status.v1alpha1.BrokerR\x06broker\x125\n" +
+	"\x06server\x18\t \x01(\v2\x1d.magus.status.v1alpha1.ServerR\x06server\x12#\n" +
+	"\rbroker_policy\x18\n" +
+	" \x01(\tR\fbrokerPolicyJ\x04\b\x03\x10\x04R\rmagus_version\"\xac\x02\n" +
+	"\x06Broker\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
+	"\bprotocol\x18\x03 \x01(\x05R\bprotocol\x12\x16\n" +
+	"\x06socket\x18\x04 \x01(\tR\x06socket\x12\x1e\n" +
+	"\n" +
+	"executable\x18\x05 \x01(\tR\n" +
+	"executable\x129\n" +
+	"\n" +
+	"start_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
+	"\bcapacity\x18\a \x01(\v2\x1f.magus.status.v1alpha1.CapacityR\bcapacity\x12*\n" +
+	"\x11idle_exit_seconds\x18\b \x01(\x05R\x0fidleExitSeconds\"\xba\x01\n" +
+	"\bCapacity\x12\x1b\n" +
+	"\tbudget_mb\x18\x01 \x01(\x05R\bbudgetMb\x12\x17\n" +
+	"\aheld_mb\x18\x02 \x01(\x05R\x06heldMb\x12!\n" +
+	"\fbudget_slots\x18\x03 \x01(\x05R\vbudgetSlots\x12\x1d\n" +
+	"\n" +
+	"held_slots\x18\x04 \x01(\x05R\theldSlots\x126\n" +
+	"\aholders\x18\x05 \x03(\v2\x1c.magus.status.v1alpha1.ClaimR\aholders\"\xe5\x01\n" +
+	"\x05Claim\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12\x10\n" +
+	"\x03pid\x18\x03 \x01(\x05R\x03pid\x12\x1b\n" +
+	"\tmemory_mb\x18\x04 \x01(\x05R\bmemoryMb\x12\x14\n" +
+	"\x05slots\x18\x05 \x01(\x05R\x05slots\x12\x10\n" +
+	"\x03dir\x18\x06 \x01(\tR\x03dir\x12\x18\n" +
+	"\acommand\x18\a \x01(\tR\acommand\x129\n" +
+	"\n" +
+	"start_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"\xfc\x01\n" +
+	"\x06Server\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
+	"\x06socket\x18\x03 \x01(\tR\x06socket\x12\x1e\n" +
+	"\n" +
+	"executable\x18\x04 \x01(\tR\n" +
+	"executable\x129\n" +
+	"\n" +
+	"start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12=\n" +
+	"\tlisteners\x18\x06 \x03(\v2\x1f.magus.status.v1alpha1.ListenerR\tlisteners\x12\x14\n" +
+	"\x05watch\x18\a \x03(\tR\x05watch\"8\n" +
+	"\bListener\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\"\xdc\x01\n" +
 	"\x04Lock\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\x05R\x03pid\x12\x18\n" +
@@ -1405,12 +1895,11 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"dependents\x18\x06 \x01(\x05R\n" +
 	"dependents\x129\n" +
 	"\n" +
-	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"\x8f\x03\n" +
+	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"\x9b\x03\n" +
 	"\x04Pool\x12\x1d\n" +
 	"\n" +
-	"parent_pid\x18\x01 \x01(\x05R\tparentPid\x12%\n" +
-	"\x0edaemon_version\x18\x02 \x01(\tR\rdaemonVersion\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x1a\n" +
+	"parent_pid\x18\x01 \x01(\x05R\tparentPid\x12#\n" +
+	"\rowner_version\x18\v \x01(\tR\fownerVersion\x12\x1a\n" +
 	"\bcapacity\x18\x04 \x01(\x05R\bcapacity\x12\x18\n" +
 	"\arunning\x18\x05 \x01(\x05R\arunning\x12\x16\n" +
 	"\x06queued\x18\x06 \x01(\x05R\x06queued\x12M\n" +
@@ -1420,7 +1909,7 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"workspaces\x12\x1a\n" +
 	"\baffected\x18\t \x03(\tR\baffected\x122\n" +
 	"\x05cache\x18\n" +
-	" \x01(\v2\x1c.magus.status.v1alpha1.CacheR\x05cache\"\xb0\x01\n" +
+	" \x01(\v2\x1c.magus.status.v1alpha1.CacheR\x05cacheJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\x0edaemon_versionR\x04mode\"\xb0\x01\n" +
 	"\rRunningTarget\x12\x12\n" +
 	"\x04args\x18\x01 \x03(\tR\x04args\x12\x1c\n" +
 	"\tworkspace\x18\x02 \x01(\tR\tworkspace\x129\n" +
@@ -1486,65 +1975,78 @@ func file_magus_status_v1alpha1_status_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_status_v1alpha1_status_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_magus_status_v1alpha1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_magus_status_v1alpha1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_magus_status_v1alpha1_status_proto_goTypes = []any{
 	(Health)(0),                   // 0: magus.status.v1alpha1.Health
 	(TargetRun_State)(0),          // 1: magus.status.v1alpha1.TargetRun.State
 	(Workspace_State)(0),          // 2: magus.status.v1alpha1.Workspace.State
 	(*Status)(nil),                // 3: magus.status.v1alpha1.Status
-	(*Lock)(nil),                  // 4: magus.status.v1alpha1.Lock
-	(*BuildInfo)(nil),             // 5: magus.status.v1alpha1.BuildInfo
-	(*Run)(nil),                   // 6: magus.status.v1alpha1.Run
-	(*TargetRun)(nil),             // 7: magus.status.v1alpha1.TargetRun
-	(*Service)(nil),               // 8: magus.status.v1alpha1.Service
-	(*Pool)(nil),                  // 9: magus.status.v1alpha1.Pool
-	(*RunningTarget)(nil),         // 10: magus.status.v1alpha1.RunningTarget
-	(*Workspace)(nil),             // 11: magus.status.v1alpha1.Workspace
-	(*Cache)(nil),                 // 12: magus.status.v1alpha1.Cache
-	(*GetStatusRequest)(nil),      // 13: magus.status.v1alpha1.GetStatusRequest
-	(*GetStatusResponse)(nil),     // 14: magus.status.v1alpha1.GetStatusResponse
-	(*Config)(nil),                // 15: magus.status.v1alpha1.Config
-	(*StreamStatusRequest)(nil),   // 16: magus.status.v1alpha1.StreamStatusRequest
-	(*StreamStatusResponse)(nil),  // 17: magus.status.v1alpha1.StreamStatusResponse
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
-	(*status.Status)(nil),         // 19: google.rpc.Status
+	(*Broker)(nil),                // 4: magus.status.v1alpha1.Broker
+	(*Capacity)(nil),              // 5: magus.status.v1alpha1.Capacity
+	(*Claim)(nil),                 // 6: magus.status.v1alpha1.Claim
+	(*Server)(nil),                // 7: magus.status.v1alpha1.Server
+	(*Listener)(nil),              // 8: magus.status.v1alpha1.Listener
+	(*Lock)(nil),                  // 9: magus.status.v1alpha1.Lock
+	(*BuildInfo)(nil),             // 10: magus.status.v1alpha1.BuildInfo
+	(*Run)(nil),                   // 11: magus.status.v1alpha1.Run
+	(*TargetRun)(nil),             // 12: magus.status.v1alpha1.TargetRun
+	(*Service)(nil),               // 13: magus.status.v1alpha1.Service
+	(*Pool)(nil),                  // 14: magus.status.v1alpha1.Pool
+	(*RunningTarget)(nil),         // 15: magus.status.v1alpha1.RunningTarget
+	(*Workspace)(nil),             // 16: magus.status.v1alpha1.Workspace
+	(*Cache)(nil),                 // 17: magus.status.v1alpha1.Cache
+	(*GetStatusRequest)(nil),      // 18: magus.status.v1alpha1.GetStatusRequest
+	(*GetStatusResponse)(nil),     // 19: magus.status.v1alpha1.GetStatusResponse
+	(*Config)(nil),                // 20: magus.status.v1alpha1.Config
+	(*StreamStatusRequest)(nil),   // 21: magus.status.v1alpha1.StreamStatusRequest
+	(*StreamStatusResponse)(nil),  // 22: magus.status.v1alpha1.StreamStatusResponse
+	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*status.Status)(nil),         // 24: google.rpc.Status
 }
 var file_magus_status_v1alpha1_status_proto_depIdxs = []int32{
 	0,  // 0: magus.status.v1alpha1.Status.health:type_name -> magus.status.v1alpha1.Health
-	9,  // 1: magus.status.v1alpha1.Status.pool:type_name -> magus.status.v1alpha1.Pool
-	6,  // 2: magus.status.v1alpha1.Status.runs:type_name -> magus.status.v1alpha1.Run
-	8,  // 3: magus.status.v1alpha1.Status.services:type_name -> magus.status.v1alpha1.Service
-	5,  // 4: magus.status.v1alpha1.Status.build:type_name -> magus.status.v1alpha1.BuildInfo
-	4,  // 5: magus.status.v1alpha1.Status.locks:type_name -> magus.status.v1alpha1.Lock
-	18, // 6: magus.status.v1alpha1.Lock.acquire_time:type_name -> google.protobuf.Timestamp
-	18, // 7: magus.status.v1alpha1.Run.start_time:type_name -> google.protobuf.Timestamp
-	7,  // 8: magus.status.v1alpha1.Run.targets:type_name -> magus.status.v1alpha1.TargetRun
-	1,  // 9: magus.status.v1alpha1.TargetRun.state:type_name -> magus.status.v1alpha1.TargetRun.State
-	18, // 10: magus.status.v1alpha1.TargetRun.start_time:type_name -> google.protobuf.Timestamp
-	18, // 11: magus.status.v1alpha1.TargetRun.end_time:type_name -> google.protobuf.Timestamp
-	18, // 12: magus.status.v1alpha1.Service.start_time:type_name -> google.protobuf.Timestamp
-	10, // 13: magus.status.v1alpha1.Pool.running_targets:type_name -> magus.status.v1alpha1.RunningTarget
-	11, // 14: magus.status.v1alpha1.Pool.workspaces:type_name -> magus.status.v1alpha1.Workspace
-	12, // 15: magus.status.v1alpha1.Pool.cache:type_name -> magus.status.v1alpha1.Cache
-	18, // 16: magus.status.v1alpha1.RunningTarget.start_time:type_name -> google.protobuf.Timestamp
-	18, // 17: magus.status.v1alpha1.Workspace.load_time:type_name -> google.protobuf.Timestamp
-	18, // 18: magus.status.v1alpha1.Workspace.last_access_time:type_name -> google.protobuf.Timestamp
-	12, // 19: magus.status.v1alpha1.Workspace.cache:type_name -> magus.status.v1alpha1.Cache
-	2,  // 20: magus.status.v1alpha1.Workspace.state:type_name -> magus.status.v1alpha1.Workspace.State
-	19, // 21: magus.status.v1alpha1.Workspace.error:type_name -> google.rpc.Status
-	3,  // 22: magus.status.v1alpha1.GetStatusResponse.status:type_name -> magus.status.v1alpha1.Status
-	18, // 23: magus.status.v1alpha1.GetStatusResponse.observe_start_time:type_name -> google.protobuf.Timestamp
-	15, // 24: magus.status.v1alpha1.GetStatusResponse.config:type_name -> magus.status.v1alpha1.Config
-	3,  // 25: magus.status.v1alpha1.StreamStatusResponse.status:type_name -> magus.status.v1alpha1.Status
-	13, // 26: magus.status.v1alpha1.StatusService.GetStatus:input_type -> magus.status.v1alpha1.GetStatusRequest
-	16, // 27: magus.status.v1alpha1.StatusService.StreamStatus:input_type -> magus.status.v1alpha1.StreamStatusRequest
-	14, // 28: magus.status.v1alpha1.StatusService.GetStatus:output_type -> magus.status.v1alpha1.GetStatusResponse
-	17, // 29: magus.status.v1alpha1.StatusService.StreamStatus:output_type -> magus.status.v1alpha1.StreamStatusResponse
-	28, // [28:30] is the sub-list for method output_type
-	26, // [26:28] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	14, // 1: magus.status.v1alpha1.Status.pool:type_name -> magus.status.v1alpha1.Pool
+	11, // 2: magus.status.v1alpha1.Status.runs:type_name -> magus.status.v1alpha1.Run
+	13, // 3: magus.status.v1alpha1.Status.services:type_name -> magus.status.v1alpha1.Service
+	10, // 4: magus.status.v1alpha1.Status.build:type_name -> magus.status.v1alpha1.BuildInfo
+	9,  // 5: magus.status.v1alpha1.Status.locks:type_name -> magus.status.v1alpha1.Lock
+	4,  // 6: magus.status.v1alpha1.Status.broker:type_name -> magus.status.v1alpha1.Broker
+	7,  // 7: magus.status.v1alpha1.Status.server:type_name -> magus.status.v1alpha1.Server
+	23, // 8: magus.status.v1alpha1.Broker.start_time:type_name -> google.protobuf.Timestamp
+	5,  // 9: magus.status.v1alpha1.Broker.capacity:type_name -> magus.status.v1alpha1.Capacity
+	6,  // 10: magus.status.v1alpha1.Capacity.holders:type_name -> magus.status.v1alpha1.Claim
+	23, // 11: magus.status.v1alpha1.Claim.start_time:type_name -> google.protobuf.Timestamp
+	23, // 12: magus.status.v1alpha1.Server.start_time:type_name -> google.protobuf.Timestamp
+	8,  // 13: magus.status.v1alpha1.Server.listeners:type_name -> magus.status.v1alpha1.Listener
+	23, // 14: magus.status.v1alpha1.Lock.acquire_time:type_name -> google.protobuf.Timestamp
+	23, // 15: magus.status.v1alpha1.Run.start_time:type_name -> google.protobuf.Timestamp
+	12, // 16: magus.status.v1alpha1.Run.targets:type_name -> magus.status.v1alpha1.TargetRun
+	1,  // 17: magus.status.v1alpha1.TargetRun.state:type_name -> magus.status.v1alpha1.TargetRun.State
+	23, // 18: magus.status.v1alpha1.TargetRun.start_time:type_name -> google.protobuf.Timestamp
+	23, // 19: magus.status.v1alpha1.TargetRun.end_time:type_name -> google.protobuf.Timestamp
+	23, // 20: magus.status.v1alpha1.Service.start_time:type_name -> google.protobuf.Timestamp
+	15, // 21: magus.status.v1alpha1.Pool.running_targets:type_name -> magus.status.v1alpha1.RunningTarget
+	16, // 22: magus.status.v1alpha1.Pool.workspaces:type_name -> magus.status.v1alpha1.Workspace
+	17, // 23: magus.status.v1alpha1.Pool.cache:type_name -> magus.status.v1alpha1.Cache
+	23, // 24: magus.status.v1alpha1.RunningTarget.start_time:type_name -> google.protobuf.Timestamp
+	23, // 25: magus.status.v1alpha1.Workspace.load_time:type_name -> google.protobuf.Timestamp
+	23, // 26: magus.status.v1alpha1.Workspace.last_access_time:type_name -> google.protobuf.Timestamp
+	17, // 27: magus.status.v1alpha1.Workspace.cache:type_name -> magus.status.v1alpha1.Cache
+	2,  // 28: magus.status.v1alpha1.Workspace.state:type_name -> magus.status.v1alpha1.Workspace.State
+	24, // 29: magus.status.v1alpha1.Workspace.error:type_name -> google.rpc.Status
+	3,  // 30: magus.status.v1alpha1.GetStatusResponse.status:type_name -> magus.status.v1alpha1.Status
+	23, // 31: magus.status.v1alpha1.GetStatusResponse.observe_start_time:type_name -> google.protobuf.Timestamp
+	20, // 32: magus.status.v1alpha1.GetStatusResponse.config:type_name -> magus.status.v1alpha1.Config
+	3,  // 33: magus.status.v1alpha1.StreamStatusResponse.status:type_name -> magus.status.v1alpha1.Status
+	18, // 34: magus.status.v1alpha1.StatusService.GetStatus:input_type -> magus.status.v1alpha1.GetStatusRequest
+	21, // 35: magus.status.v1alpha1.StatusService.StreamStatus:input_type -> magus.status.v1alpha1.StreamStatusRequest
+	19, // 36: magus.status.v1alpha1.StatusService.GetStatus:output_type -> magus.status.v1alpha1.GetStatusResponse
+	22, // 37: magus.status.v1alpha1.StatusService.StreamStatus:output_type -> magus.status.v1alpha1.StreamStatusResponse
+	36, // [36:38] is the sub-list for method output_type
+	34, // [34:36] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_magus_status_v1alpha1_status_proto_init() }
@@ -1558,7 +2060,7 @@ func file_magus_status_v1alpha1_status_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_status_v1alpha1_status_proto_rawDesc), len(file_magus_status_v1alpha1_status_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   15,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

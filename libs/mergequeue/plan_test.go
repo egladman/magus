@@ -110,12 +110,30 @@ func TestPlanOfNoChangesSaysSo(t *testing.T) {
 	assert.Contains(t, out.String(), "no change carries merge intent against main")
 }
 
+// An applier clears the queued mark from what left the queue, reading the marks the
+// listing reported out of the plan, even one that admits nothing.
+func TestPlanCarriesTheMarkEachUnqueuedChangeShows(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	in := changes()
+	in.Unqueued = []types.UnqueuedChange{
+		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
+		{ID: "5", Repo: "acme/acme", Head: head("5"), Mark: types.MarkRejected},
+		{ID: "6", Repo: "acme/acme", Head: head("6")},
+	}
+	plan, err := planner(t, d).Run(t.Context(), in)
+	require.NoError(t, err)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1, Unqueued: in.Unqueued}, plan)
+	require.NoError(t, plan.Check())
+}
+
 // admitting is one change's way through admission as far as want says it gets.
 type admitting struct {
 	onBase    bool
 	approval  *types.Approval
 	conflicts []magustypes.Conflict
-	outputs   map[string]bool
+	outputs   map[string]types.Writes
 	affected  []string
 	factsErr  error
 }
@@ -139,7 +157,7 @@ func (d doubles) admit(c types.Change, a admitting) {
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
 		Return(magustypes.TreeMergeResult{Tree: "t", Conflicts: a.conflicts}, nil)
 	if len(a.conflicts) > 0 {
-		d.facts.EXPECT().Outputs(mock.Anything, conflictPaths(a.conflicts)).Return(a.outputs, nil)
+		d.facts.EXPECT().Classify(mock.Anything, conflictPaths(a.conflicts)).Return(a.outputs, nil)
 	}
 	if len(a.conflicts) > len(a.outputs) {
 		d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, c.Head, base, mock.Anything).
@@ -167,9 +185,9 @@ func TestPlanAdmission(t *testing.T) {
 		"a head on the base has merged": {c: change("1", "a"), admit: &admitting{onBase: true}, want: types.DecisionMerged},
 		"an unapproved change waits": {c: change("1", "a"), admit: &admitting{approval: &types.Approval{Head: head("1"), Base: "main", Method: types.MethodSquash, Queued: true}},
 			want: types.DecisionWait, wantCode: types.CodeWaitNotApproved},
-		"a conflict in source is kicked back": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/x.go"}}, outputs: map[string]bool{}},
+		"a conflict in source is kicked back": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/x.go"}}, outputs: map[string]types.Writes{}},
 			want: types.DecisionKick, wantCode: types.CodeKickConflict},
-		"a conflict in a declared output is regeneration's": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/gen.go"}}, outputs: map[string]bool{"a/gen.go": true}},
+		"a conflict in a declared output is regeneration's": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/gen.go"}}, outputs: map[string]types.Writes{"a/gen.go": {Output: true}}},
 			wantSet: []string{"a"}},
 		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
 		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},
@@ -200,7 +218,10 @@ func TestPlanAdmission(t *testing.T) {
 			if v.Code == types.CodeKickConflict {
 				assert.Equal(t, []string{"a/x.go"}, v.Paths)
 				assert.Equal(t, []string{head("x")[:12] + " change a/x.go"}, v.With)
-				assert.Contains(t, v.Report, "Merge `main` into this branch, resolve these by hand")
+				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.\n\n"+
+					"Merge `main` into this branch and resolve the conflict by hand.\n", v.Report, "the files travel in paths and with, not in the prose")
+				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.", v.Reason)
+				assert.Empty(t, v.Gate, "planning runs no hook")
 			}
 		})
 	}

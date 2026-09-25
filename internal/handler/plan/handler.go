@@ -35,7 +35,7 @@ type planOutputs interface {
 }
 
 // The four states a plan node can be in. There is deliberately no QUEUED state: the pool
-// reports queuing as a daemon-wide COUNT (cache.Limiter.Snapshot's Queued is "slots
+// reports queuing as a server-wide COUNT (cache.Limiter.Snapshot's Queued is "slots
 // currently blocked in Acquire"), never as the identity of the work waiting, so only the
 // invoking process knows which target is next. A fifth state nothing can populate honestly
 // is worse than four that can.
@@ -106,7 +106,7 @@ type Handler struct {
 	root    string
 }
 
-// NewHandler returns the GET /api/v1/plan handler. root is the workspace this daemon
+// NewHandler returns the GET /api/v1/plan handler. root is the workspace this server
 // fronts, used to drop pool entries belonging to another workspace; empty disables that
 // filter (every pool entry then counts, which is the honest degradation for a caller that
 // cannot say which tree it is serving).
@@ -374,12 +374,12 @@ func lastOutcomes(descs []cache.OutputDescriptor) map[planKey]cache.OutputDescri
 	return out
 }
 
-// runningNodes is the PRECISE half of the running overlay: the daemon's run registry folds
+// runningNodes is the PRECISE half of the running overlay: the server's run registry folds
 // each adopted run's journal events into per-target state keyed by project and target, which
 // is exactly a plan node's identity.
 //
 // It carries no workspace, so a run in a second workspace whose project and target both
-// match this one's would light a node here. That is a daemon serving one console for two
+// match this one's would light a node here. That is a server serving one console for two
 // trees at once; the pool half below can be filtered and this one cannot.
 //
 // Queued targets are reported as idle: the wire contract has no queued state (see above),
@@ -400,7 +400,7 @@ func runningNodes(runs []types.StatusRun) map[planKey]bool {
 // never the node executing inside it, so it can only answer "a run of target X is in
 // flight". Every node with that target name is therefore marked running, which is true of
 // an anchor dispatched across the workspace, and deliberately loose about which project's
-// step holds a slot at this instant. It exists so a run the daemon did not adopt (no journal
+// step holds a slot at this instant. It exists so a run the server did not adopt (no journal
 // events, so nothing in runningNodes) still shows as live rather than as idle.
 func runningInvocations(pool *types.StatusOutput, root string) map[string]bool {
 	out := map[string]bool{}

@@ -256,7 +256,7 @@ func TestShutdownWaitsForInFlightStart(t *testing.T) {
 
 // TestShutdownRespectsCtx is the regression test for D5: before the fix, Shutdown
 // took no ctx and stop() blocked on <-e.ready unconditionally, so one entry whose
-// Start never completes could hang daemon teardown forever. Shutdown must instead
+// Start never completes could hang broker teardown forever. Shutdown must instead
 // return once ctx expires, even with a permanently in-flight Start.
 func TestShutdownRespectsCtx(t *testing.T) {
 	sr := &slowRunner{entered: make(chan struct{}), proceed: make(chan struct{})}
@@ -288,7 +288,7 @@ func TestShutdownRespectsCtx(t *testing.T) {
 
 func TestSuperviseGating(t *testing.T) {
 	f := &fakeRunner{}
-	sess := NewSession(New(f, time.Hour), nil, nil) // in-process only (no daemon)
+	sess := NewSession(New(f, time.Hour), nil, nil) // in-process only (no broker)
 	s := svc()
 
 	// No session in context: not handled, so the caller forks it in the foreground.
@@ -313,7 +313,7 @@ func TestSuperviseGating(t *testing.T) {
 	assert.Equal(t, 1, started)
 }
 
-func TestSessionRoutesToDaemonWhenPresent(t *testing.T) {
+func TestSessionRoutesToBrokerWhenPresent(t *testing.T) {
 	f := &fakeRunner{}
 	var acquired, released []string
 	sess := NewSession(New(f, time.Hour),
@@ -329,18 +329,18 @@ func TestSessionRoutesToDaemonWhenPresent(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, handled)
 
-	// Routed to the daemon closure, NOT started in-process.
+	// Routed to the broker closure, NOT started in-process.
 	started, _ := f.counts()
-	assert.Equal(t, 0, started, "daemon-hosted, not started in-process")
+	assert.Equal(t, 0, started, "broker-hosted, not started in-process")
 	assert.Equal(t, []string{"pg"}, acquired)
 
-	// ReleaseAll releases the daemon-held key (kept warm) and shuts the local registry.
+	// ReleaseAll releases the broker-held key (kept warm) and shuts the local registry.
 	sess.ReleaseAll(context.Background())
 	assert.Equal(t, []string{"pg"}, released)
 }
 
-// TestSessionReleaseAllMatchesAcquireCount is the regression test for the daemon
-// ref-leak: the daemon-side Registry ref-counts per Acquire, so two acquires of the
+// TestSessionReleaseAllMatchesAcquireCount is the regression test for the broker
+// ref-leak: the broker-side Registry ref-counts per Acquire, so two acquires of the
 // same key in one run must be released twice, not deduped to one release.
 func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 	f := &fakeRunner{}
@@ -361,13 +361,13 @@ func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 	require.Equal(t, 2, acquireCount, "test acquired the same key twice")
 
 	sess.ReleaseAll(context.Background())
-	assert.Equal(t, acquireCount, releaseCount, "every daemon acquire must be matched by a release")
+	assert.Equal(t, acquireCount, releaseCount, "every broker acquire must be matched by a release")
 }
 
-// The daemon release is an RPC to a socket that may be wedged, so ReleaseAll's bounded
+// The broker release is an RPC to a socket that may be wedged, so ReleaseAll's bounded
 // teardown ctx has to reach it. While it took no ctx at all there was no bound anywhere
-// on that path and a wedged daemon hung every run at exit.
-func TestSessionReleaseAllPassesItsContextToTheDaemon(t *testing.T) {
+// on that path and a wedged broker hung every run at exit.
+func TestSessionReleaseAllPassesItsContextToTheBroker(t *testing.T) {
 	f := &fakeRunner{}
 	var got context.Context
 	sess := NewSession(New(f, time.Hour),
@@ -383,31 +383,31 @@ func TestSessionReleaseAllPassesItsContextToTheDaemon(t *testing.T) {
 	defer cancel()
 	sess.ReleaseAll(teardown)
 
-	require.NotNil(t, got, "the daemon release must be reachable by a cancellation")
+	require.NotNil(t, got, "the broker release must be reachable by a cancellation")
 	_, ok := got.Deadline()
 	assert.True(t, ok, "ReleaseAll's bound is what stops a wedged socket hanging exit")
 }
 
-func TestSessionFallsBackToInProcessOnDaemonFailure(t *testing.T) {
+func TestSessionFallsBackToInProcessOnBrokerFailure(t *testing.T) {
 	f := &fakeRunner{}
 	var released []string
 	sess := NewSession(New(f, time.Hour),
-		func(context.Context, string, spells.Service) error { return errors.New("daemon gone") },
+		func(context.Context, string, spells.Service) error { return errors.New("broker gone") },
 		func(_ context.Context, key string) { released = append(released, key) },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))
 
-	// Daemon acquire fails: degrade to in-process rather than aborting the run.
+	// Broker acquire fails: degrade to in-process rather than aborting the run.
 	handled, err := TrySupervise(ctx, "pg", svc())
 	require.NoError(t, err)
 	assert.True(t, handled)
 	started, _ := f.counts()
-	assert.Equal(t, 1, started, "daemon failed, so the service is hosted in-process")
+	assert.Equal(t, 1, started, "broker failed, so the service is hosted in-process")
 
-	// The fallback is NOT recorded as a daemon key, so ReleaseAll does not release it
+	// The fallback is NOT recorded as a broker key, so ReleaseAll does not release it
 	// remotely; the in-process registry stops it on Shutdown instead.
 	sess.ReleaseAll(context.Background())
-	assert.Empty(t, released, "in-process fallback is not released to the daemon")
+	assert.Empty(t, released, "in-process fallback is not released to the broker")
 }
 
 func TestConcurrentAcquireStartsOnce(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 
 // emitMagusHint prints msg through the shared hint channel, honoring the user
 // hints preference. Advisory only, never fatal. No dedup — it would mean
-// process-global state that leaks across runs in the daemon.
+// process-global state that leaks across runs in the server.
 func emitMagusHint(msg string) {
 	if !interactive.HintsEnabled() {
 		return

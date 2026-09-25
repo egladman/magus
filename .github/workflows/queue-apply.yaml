@@ -10,7 +10,17 @@ name: Queue apply
 # verdict artifact as its validation job uploads it, so a green change merges while
 # slower ones are still validating. `completed` would wait for the slowest job of the
 # whole run. workflow_run always runs this file as main has it, with its own token and
-# secrets, which a pull request cannot reach.
+# secrets.
+#
+# That does NOT make the run it follows trusted. workflow_run matches workflows by name,
+# and fires for every run of one: a pull request's event runs the pull request's own
+# copy of queue.yaml (a fork's included), and any file named Queue triggers it, so such a
+# run can upload any plan and any verdict. planned and apply therefore follow only a run
+# of .github/workflows/queue.yaml that a push or a dispatch started on the default branch
+# of this repository, and `magus queue apply` checks the same of the run it reads
+# (--base, --workflow) before it downloads anything. For a same-repository pull
+# request's run, dispatch waits for its intent job and starts queue.yaml on main instead,
+# with a token that can do nothing else.
 #
 # It never executes pull-request code: it builds magus, which runs the queue, from main,
 # reads only verdicts from the artifacts, and rebuilds each candidate itself from the
@@ -41,8 +51,15 @@ on:
     workflows: [Queue]
     types: [requested]
 
+# One apply at a time. Any other run gets a group of its own, so it can never take the
+# pending place of an apply waiting its turn.
 concurrency:
-  group: queue-apply
+  group: >-
+    ${{ (github.event.workflow_run.path == '.github/workflows/queue.yaml' &&
+    github.event.workflow_run.head_repository.full_name == github.repository &&
+    github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+    (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')) &&
+    'queue-apply' || format('queue-apply-other-{0}', github.event.workflow_run.id) }}
   cancel-in-progress: false
 
 permissions:
@@ -56,8 +73,86 @@ env:
   GOEXPERIMENT: jsonv2
 
 jobs:
+  # Runs for a same-repository pull request's Queue run, which apply never follows: once
+  # its intent job ran, it starts queue.yaml on main, which plans and validates the whole
+  # queue. The intent job is the pull request's own file, so it is a hint; the worst a
+  # forged one does is start one more run on main.
+  dispatch:
+    name: queue dispatch
+    if: >-
+      github.event.workflow_run.path == '.github/workflows/queue.yaml' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_review')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # check out main's gha-queue.buzz
+      actions: write # read the run's jobs, dispatch queue.yaml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Start a validation run on main once the pull request's run saw merge intent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.event.workflow_run.id }}
+          MAIN: ${{ github.event.repository.default_branch }}
+        run: magus buzz tools/gha-queue.buzz -- dispatch --run "$RUN" --base "$MAIN"
+
+  # Follows only a run main's own queue.yaml made: a push or a dispatch, on main, of this
+  # repository. Queue's plan job is skipped on a run cancelled before it started, and
+  # apply is skipped with it, outside the magus-queue environment, so such a run records
+  # no deployment.
+  planned:
+    name: queue planned
+    if: >-
+      github.event.workflow_run.path == '.github/workflows/queue.yaml' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ran: ${{ steps.plan.outputs.ran }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - id: plan
+        name: Wait for validation's plan to run or be skipped
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: magus buzz tools/gha-queue.buzz -- planned --run "$RUN"
+
   apply:
     name: queue apply
+    needs: planned
+    # planned's condition again, so the job holding the write credential never rests on
+    # another job's alone.
+    if: >-
+      needs.planned.outputs.ran == 'true' &&
+      github.event.workflow_run.path == '.github/workflows/queue.yaml' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: magus-queue
     # Validation's own ceiling plus the plan job's.
@@ -104,12 +199,10 @@ jobs:
       # itself, even when applying then failed.
       - name: Merge each change as it goes green
         env:
-          QUEUE_STEP: apply
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
-          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
-          APP: ${{ steps.magus.outputs.queue-app-slug }}
-          DISPATCH: ${{ steps.magus.outputs.queue-token == '' }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: magus buzz tools/gha-queue.buzz
+          APP: ${{ steps.magus.outputs.queue-app-slug }}
+          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
+        run: magus buzz tools/gha-queue.buzz -- apply --run "$RUN" --base "$MAIN" --app "$APP" --committer "$COMMITTER"

@@ -36,10 +36,10 @@ type FactHandler struct {
 // be resolved, which the fan-out treats as "no handler": a machine with no usable state
 // directory still runs builds.
 //
-// It lives HERE rather than in the CLI because the daemon executes adopted runs itself
+// It lives HERE rather than in the CLI because the server executes adopted runs itself
 // (cmd/magus/main.go dispatchAdopted), so "who produces an invocation's facts" is not a
 // CLI-only question. start.Lease is read by the CALLER for that reason; see
-// cmd/magus/journal_hook.go, which documents what the daemon gets wrong today.
+// cmd/magus/journal_hook.go, which documents what the server gets wrong today.
 func NewFactHandler(root string, start InvocationStart) slog.Handler {
 	dir, err := Dir(root)
 	if err != nil {
