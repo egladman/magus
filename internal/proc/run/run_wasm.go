@@ -12,4 +12,8 @@ import "os/exec"
 func SetupProcessGroup(c *exec.Cmd)    {}
 func TerminateGroup(c *exec.Cmd) error { return nil }
 func KillGroup(c *exec.Cmd)            {}
-func setCancel(c *exec.Cmd)            {}
+
+type procGroup struct{ c *exec.Cmd }
+
+func setCancel(c *exec.Cmd) *procGroup { return &procGroup{c: c} }
+func (g *procGroup) wait() error       { return g.c.Wait() }
