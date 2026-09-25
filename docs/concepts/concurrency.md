@@ -204,6 +204,61 @@ with its own. A read-only upstream, like `magus ls` or `magus status --watch`, n
 holds a reader back. Three or more magus stages work the same way: each stage
 considers every magus stage upstream of it.
 
+Magus stages also pass each other typed records rather than text. A run, an
+`affected` run or a `magus buzz` script whose stdout another magus reads writes the
+records [`-o jsonl`](../reference/manpage/magus-run.md) writes there, and prints its
+usual prose on stderr, so a person still reads the run. Nothing changes when the reader
+is a terminal, a file or another tool like `jq`, and an explicit `-o` always wins.
+Projects flow forward: a run that names no projects runs on the projects its upstream
+ran on, the way `xargs` takes its arguments, and one that names projects runs exactly
+those.
+
+```sh
+magus run format libs/x | magus run lint | magus run test
+```
+
+runs all three on `libs/x`, each after the one before it. Bytes a target writes to its
+stdout still reach the targets of the stage downstream, beside the records.
+
+A `magus buzz` script can sit anywhere in the pipeline. The
+[`pipe`](../reference/buzz/pipe.md) module reads the records of the stage before it as
+typed values and emits records for the stage after it, and while a magus reads the
+script's stdout, what it prints goes to stderr. This one, `docs/concepts/failures.buzz`
+in the magus repository, replaces `| grep FAIL`:
+
+```buzz
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    while (pipe\more()) {
+        final rec = pipe\next();
+        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+            std\print("FAIL {rec.project}:{rec.target}  magus query output {rec.ref}");
+        }
+    }
+}
+```
+
+```sh
+magus run test . | magus buzz failures.buzz
+```
+
+A script that emits a `run.scope` record chooses the projects the run after it runs on,
+so `magus run test . | magus buzz retry.buzz | magus run test` reruns only what failed.
+A stage whose stdout is its product, like `magus affected ci --plan`, writes no
+records; a script reads it from stdin as it is. A script's exit status counts in the
+pipeline like any stage's.
+
+A pipeline of runs stops at its first failed stage, and the last stage exits with it,
+so `magus run generate:rw . | magus run test .` is a chain you can trust without
+`set -o pipefail`: several targets on one line, concurrent where their projects are
+disjoint and ordered where they overlap. A run starts nothing once a magus stage
+upstream of it has failed, and a run that succeeded waits for every magus stage
+upstream of it to end, then fails if one did. Both refusals are
+[MGS3030](../reference/codes/sandbox/MGS3030.md), exiting with the failed stage's own
+status. A read-only upstream like `magus ls` counts too.
+
 The upstream is proven from the kernel, never taken on trust: the run follows its stdin
 back to the processes writing it, and counts one as a magus stage only when it runs the
 same magus executable. Tools in between, like `magus ... | jq ... | magus ...` or

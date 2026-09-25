@@ -96,6 +96,11 @@ jobs:
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms --concurrency-profile aggressive
 
+      # The dynamic binary ships the cgo codecs, which only the extended suite tests.
+      - name: Test the cgo codecs
+        if: ${{ inputs.include_dynamic_builds }}
+        run: magus run compress-cgo-test . --no-default-charms
+
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms --concurrency-profile aggressive
@@ -126,6 +131,11 @@ jobs:
         if: ${{ inputs.include_dynamic_builds }}
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms --concurrency-profile aggressive
+
+      # The dynamic binary ships the cgo codecs, which only the extended suite tests.
+      - name: Test the cgo codecs
+        if: ${{ inputs.include_dynamic_builds }}
+        run: magus run compress-cgo-test . --no-default-charms
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
@@ -160,6 +170,11 @@ jobs:
         run: brew install zstd xz
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms --concurrency-profile aggressive
+
+      # The dynamic binary ships the cgo codecs, which only the extended suite tests.
+      - name: Test the cgo codecs
+        if: ${{ inputs.include_dynamic_builds }}
+        run: magus run compress-cgo-test . --no-default-charms
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
@@ -204,6 +219,11 @@ jobs:
         run: brew install zstd xz
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms --concurrency-profile aggressive
+
+      # The dynamic binary ships the cgo codecs, which only the extended suite tests.
+      - name: Test the cgo codecs
+        if: ${{ inputs.include_dynamic_builds }}
+        run: magus run compress-cgo-test . --no-default-charms
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}

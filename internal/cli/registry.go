@@ -1659,7 +1659,7 @@ var queueCheckout = []Flag{
 // queueFacts are the flags choosing who answers what a change affects and which files
 // are generated.
 var queueFacts = []Flag{
-	{Name: "facts", Kind: FlagString, Doc: "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers"},
+	{Name: "facts", Kind: FlagString, Doc: "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers"},
 	{Name: "target", Kind: FlagString, Default: "ci", Doc: "magus `target` the affected set is computed for; not with --facts"},
 }
 
@@ -1749,12 +1749,12 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 			Usage: "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]",
 			Flags: append(append([]Flag{
 				{Name: "plan", Kind: FlagString, Doc: "The mergequeue.plan/v1 `file`"},
-				{Name: "gate", Kind: FlagString, Doc: "`command` run in each candidate's checkout; exit 0 is green"},
-				{Name: "regenerate", Kind: FlagString, Doc: "`command` run in a candidate with the generated files to rewrite listed on stdin"},
+				{Name: "gate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green"},
+				{Name: "regenerate", Kind: FlagString, Doc: "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin"},
 				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
-				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to $MERGEQUEUE_SCRATCH/DIR for every hook, so the cache it names is the candidate's own; repeatable"},
+				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable"},
 			}, queueFacts...), queueCheckout...),
 		},
 		{
@@ -1770,8 +1770,8 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
 				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
-				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it"},
-				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to $MERGEQUEUE_SCRATCH/DIR for the regeneration, so the cache it names is that rebuild's own; repeatable"},
+				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it"},
+				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable"},
 			}, queueFacts...), queueCheckout...),
 		},
 	},
@@ -1781,7 +1781,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 		{"The same for a private app, whose App ID only its settings page shows", "magus queue describe --provider github --base main --app acme-magus-queue --app-id 2034567"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
-		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'"},
+		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'"},
 		{"Merge the green ones as they arrive", "magus queue apply --provider github --base main verdicts"},
 		{"Merge from a validation run's artifacts", "magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7"},
 		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},

@@ -20,8 +20,11 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func addr(s string) netip.Addr { return netip.MustParseAddr(s) }
 
@@ -125,7 +128,7 @@ func TestStartRefusesWhatTheMintingRuleRefuses(t *testing.T) {
 // stored token are 401 there even though both are valid on loopback. The operator secret
 // never crosses the LAN.
 func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	trailDir := t.TempDir()

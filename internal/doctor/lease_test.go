@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ import (
 // test run under a leased worker grades the row it planted rather than that worker's.
 func tmpLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, "")
 	cacheDir, root = t.TempDir(), t.TempDir()
 	// Pinned unbound: these rows are the orchestrator's, and resolving the actor from

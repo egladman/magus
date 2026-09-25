@@ -330,3 +330,7 @@ tags/magus-no-wait/
 reference/rules/ci-watch/
 reference/rules/read-ack/
 tags/fingerprint/
+
+# person-only was renamed agent-sign-off, named for what it catches like the other rules.
+# A rule page is generated per shipped rule, so the old page retires rather than aliases.
+reference/rules/person-only/

@@ -1,0 +1,15 @@
+import "std";
+import "pipe";
+
+// magus run test . | magus buzz failures.buzz
+// more waits for the next record, so each failure prints as the run reports it.
+try {
+    while (pipe\more()) {
+        final rec = pipe\next();
+        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+            std\print("FAIL {rec.project}:{rec.target}  magus query output {rec.ref}");
+        }
+    }
+} catch (e) {
+    std\print("no magus run is piped into this script");
+}

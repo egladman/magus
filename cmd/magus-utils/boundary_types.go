@@ -72,6 +72,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},
 	{Name: "URL", Type: reflect.TypeFor[types.URL](), RuntimeObject: true},
 	{Name: "FlagParse", Type: reflect.TypeFor[types.FlagParse](), RuntimeObject: true},
+	{Name: "PipeRecord", Type: reflect.TypeFor[types.PipeRecord](), RuntimeObject: true},
+	{Name: "Artifact", Type: reflect.TypeFor[types.TargetArtifact](), RuntimeObject: true},
+	{Name: "ArtifactVersion", Type: reflect.TypeFor[types.ArtifactVersion](), RuntimeObject: true},
 	{Name: "Tag", Type: reflect.TypeFor[types.VCSTag](), RuntimeObject: true},
 	{Name: "Affected", Type: reflect.TypeFor[types.AffectedResult](), RuntimeObject: true},
 	{Name: "Graph", Type: reflect.TypeFor[types.GraphView](), RuntimeObject: true},
@@ -175,6 +178,9 @@ var boundaryTypes = []boundaryType{
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
 	{Name: "Declaration", Type: reflect.TypeFor[types.Declaration]()},
+	{Name: "FileChange", Type: reflect.TypeFor[types.FileChange](), RuntimeObject: true},
+	{Name: "RegionChange", Type: reflect.TypeFor[types.RegionChange](), RuntimeObject: true},
+	{Name: "JobOverlapFootprint", Type: reflect.TypeFor[types.JobOverlapFootprint](), RuntimeObject: true},
 	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
 	{Name: "JobBlock", Type: reflect.TypeFor[types.JobBlock](), RuntimeObject: true},
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},

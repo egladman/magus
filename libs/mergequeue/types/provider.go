@@ -38,6 +38,9 @@ type Provider interface {
 	// Mark leaves c showing m and no other mark; [MarkNone] clears both. Marking a change
 	// that already shows m is success.
 	Mark(ctx context.Context, c Change, m Mark) error
+	// Flag shows f on c when on and clears it otherwise, leaving c's mark and other flags
+	// as they are. Either when c already shows it so is success.
+	Flag(ctx context.Context, c Change, f Flag, on bool) error
 }
 
 // Mark is which of the two states the queue tracks at a service level a change shows
@@ -56,6 +59,19 @@ const (
 func (m Mark) Valid() bool {
 	return m == MarkNone || m == MarkQueued || m == MarkRejected
 }
+
+// Flag is a property of a change the queue shows where people look (github: a label).
+// Unlike a [Mark], flags are independent of the queue's state and of each other: a
+// queued change can show any of them. A flag is a courtesy, as a mark is.
+type Flag string
+
+// FlagChangesGenerator says the queue cannot regenerate the change's generated files
+// itself, since the build tool cannot prove their regeneration runs none of the change's
+// code. When the base moves them, only the author can regenerate them.
+const FlagChangesGenerator Flag = "changes_generator"
+
+// Valid reports whether f is a flag the queue shows.
+func (f Flag) Valid() bool { return f == FlagChangesGenerator }
 
 // Approval is the review state of a change at one exact commit, and what the provider
 // says of the change now.
@@ -312,6 +328,9 @@ type Kick struct {
 	// Reproduce is how to run what validation ran on the change's candidate again; nil
 	// when validation did not decide the kick-back, as for a conflict planning found.
 	Reproduce *Reproduction
+	// Flag is the flag the change shows for the reason it was kicked back, for the report
+	// to name; empty when none explains it.
+	Flag Flag
 }
 
 // Reproduction is the hook command lines validation ran on a candidate, as given to

@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,7 +141,7 @@ var backendRevisions = map[string]struct{ short, full string }{
 func TestGateMatchesEachBackendsRevision(t *testing.T) {
 	for backend, rev := range backendRevisions {
 		t.Run(backend, func(t *testing.T) {
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			testkit.Isolate(t)
 			root := t.TempDir()
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
@@ -173,7 +174,7 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 			assert.Equal(t, gateUnknown, gateCoverageAt(runs, id))
 			assert.False(t, builtFrom("v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", id))
 
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			testkit.Isolate(t)
 			root := t.TempDir()
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)

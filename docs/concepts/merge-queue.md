@@ -36,7 +36,8 @@ From there the queue:
 - refuses changes from forks, whose branches it cannot push to.
 
 It kicks an author back only for what their own change did: a real conflict, a red gate
-on a candidate whose every change beneath is validated, a regeneration their code broke,
+on a candidate whose every change beneath is validated and whose base is green on the
+same projects, a regeneration their code broke,
 generated files only they can regenerate, or a stack it cannot merge. A gate killed by a
 signal, an OOM kill included, is that change's red. Only what the queue can prove is the
 machine's (a hook that could not start, the queue's own cancellation) stops a partition
@@ -57,17 +58,24 @@ the queue's `merge-queue` status is main's required check, auto-merge cannot fir
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
 about to see that pull request merged.
 
-| To                          | Do                                                      |
-| --------------------------- | ------------------------------------------------------- |
-| queue a pull request        | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
-| queue a stack               | label its top pull request `queue: squash`              |
-| take it out                 | `gh pr merge <n> --disable-auto`, or remove the label   |
-| list what is queued         | `magus queue ls --provider github --base main`          |
-| tell one is queued          | it carries the label `merge-queue: queued`              |
-| tell one was kicked back    | it carries the label `merge-queue: rejected`            |
-| see why one is waiting      | its `merge-queue` status, which reads `waiting: <why>`  |
-| see why one was kicked back | the queue's newest comment on it                        |
-| land it past the queue      | `gh pr merge <n> --admin`: an admin's bypass, see below |
+| To                           | Do                                                      |
+| ---------------------------- | ------------------------------------------------------- |
+| queue a pull request         | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
+| queue a stack                | label its top pull request `queue: squash`              |
+| take it out                  | `gh pr merge <n> --disable-auto`, or remove the label   |
+| list what is queued          | `magus queue ls --provider github --base main`          |
+| tell one is queued           | it carries the label `merge-queue: queued`              |
+| tell one was kicked back     | it carries the label `merge-queue: rejected`            |
+| tell one changes a generator | it carries the label `merge-queue: changes a generator` |
+| see why one is waiting       | its `merge-queue` status, which reads `waiting: <why>`  |
+| see why one was kicked back  | the queue's newest comment on it                        |
+| land it past the queue       | `gh pr merge <n> --admin`: an admin's bypass, see below |
+
+A queued pull request carries `merge-queue: changes a generator` beside
+`merge-queue: queued` when it touches generated files the queue cannot regenerate
+itself: the build tool cannot prove their regeneration runs none of the pull request's
+own code. Nothing is wrong yet, but when main moves those files the queue kicks it back,
+and only you can merge main in and regenerate.
 
 A pull request the queue kicks back gets a new comment, and its auto-merge or label is
 removed. The comment says what failed on which commits, links the validation run, and
@@ -150,8 +158,8 @@ generated file, a candidate tree or a review proof from a verdict.
 - **Apply writes its own words.** The squash message is apply's, from the change's own
   commits; a verdict carries none.
 - **Candidates share nothing.** Each candidate gets a checkout and a scratch directory
-  of its own (`MERGEQUEUE_SCRATCH`), so no change's hook can plant a cache entry another
-  candidate's gate replays; `tools/gha-queue.buzz` points magus's and Go's caches there
+  of its own, so no change's hook can plant a cache entry another candidate's gate
+  replays; `tools/gha-queue.buzz` points magus's and Go's caches there
   with `--scratch-env`. Every
   process a hook starts is killed when the hook exits, before its verdict is recorded; a
   process that leaves the hook's process group ends with the CI job.
@@ -191,16 +199,17 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
 magus queue validate --plan plan.json --verdicts verdicts \
-  --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
-  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' \
+  --gate 'magus run ci --no-default-charms' \
+  --regenerate 'magus run generate:rw' \
   --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build
 magus queue apply --provider github --base main \
-  --regenerate 'MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS' \
+  --regenerate 'magus --sandbox-enabled run generate:rw' \
   --scratch-env MAGUS_CACHE_DIR=magus verdicts
 ```
 
-`--scratch-env NAME=DIR`, on `validate` and `apply` and repeatable, sets `NAME` to
-`$MERGEQUEUE_SCRATCH/DIR` in every hook's environment, creating the directory. It keeps
+`--scratch-env NAME=DIR`, on `validate` and `apply` and repeatable, sets `NAME` to `DIR`
+inside the checkout's scratch directory in every hook's environment, creating the
+directory. It keeps
 each candidate's caches its own without the hook line saying so, which leaves the line
 one a person can paste and run; each verdict records the lines validation ran.
 
@@ -365,25 +374,39 @@ part of the run.
 
 ## Hooks on each candidate
 
-`--gate` and `--regenerate` run with `sh -c`, in a process group of their own, in the
-candidate's checkout, with:
+A hook is a command and its arguments, not a shell line. `--gate`, `--regenerate` and
+`--facts` are read once, when the flags are, as sh words: quotes and backslashes group
+and escape, and nothing else is shell. A variable, a command substitution, a pipe, `;`,
+`&&`, a redirection, a glob, a comment or a leading `NAME=value` is refused with
+[MGS3026](../reference/codes/sandbox/MGS3026.md); put such a line in a script and point
+the flag at the script. The queue runs the command directly, in a process group of its
+own, in the candidate's checkout, and appends its inputs as arguments, the way `magus
+run <target> [project...]` takes projects:
 
-| Variable                 | Value                                                           |
-| ------------------------ | --------------------------------------------------------------- |
-| `MERGEQUEUE_CHANGE`      | the change's id                                                 |
-| `MERGEQUEUE_HEAD`        | the change's head commit                                        |
-| `MERGEQUEUE_BASE`        | the branch the queue merges into                                |
-| `MERGEQUEUE_BASE_COMMIT` | the commit every partition starts on                            |
-| `MERGEQUEUE_ONTO`        | the commit this candidate was built onto                        |
-| `MERGEQUEUE_CANDIDATE`   | the candidate (gate only)                                       |
-| `MERGEQUEUE_SCRATCH`     | a directory private to this candidate, for caches               |
-| `MERGEQUEUE_UNITS`       | what regenerates the paths on stdin (apply's regeneration only) |
+| Hook                    | Arguments                                                              | Stdin                          |
+| ----------------------- | ---------------------------------------------------------------------- | ------------------------------ |
+| `validate --gate`       | the change's affected projects                                         | nothing                        |
+| `validate --regenerate` | the change's affected projects                                         | the generated paths to rewrite |
+| `apply --regenerate`    | the projects that generate those paths, proven to run no change's code | the generated paths to rewrite |
+| `--facts`               | the fact asked for: `affected`, `outputs`, `generation` or `all`       | what that fact takes           |
+
+A change whose affected set is no proof (unknown, or `unbounded_by` set) gets every
+project instead, spelled as the build tool spells it: `/` for magus, and what the facts
+command answers to `all` for another tool. A change that reaches no project has nothing
+to gate and validates green. So `magus run ci --no-default-charms` runs as `magus run ci
+--no-default-charms libs/parser apps/web`, a line a person can run as it stands.
 
 The gate is green on exit 0, and anything else its processes do is red: another exit
 status, a death by signal, or exit 75 (`EX_TEMPFAIL`, which magus returns when a lock or
-the machine budget is busy) three times running. Gating against `$MERGEQUEUE_ONTO` runs
-only what the top change adds. Each candidate is a checkout of its own (a git worktree)
-with a scratch directory of its own; keep every cache there.
+the machine budget is busy) three times running. Its projects are the top change's, so
+it runs only what that change adds. When a candidate whose every change beneath is
+validated is red, the queue gates the commit it was built onto with the same command
+and the same projects, once a run for every change that asks. Red there, the change waits
+with `WAIT_BASE_RED`, keeps its place and is told nothing; green, it is kicked back with
+`KICK_RED`. The gate's output lines on stderr are tagged with the commit and the change
+(`[4b1c0e9a2f31 #482]`), or with `base` for a commit gated as it stands. Each candidate
+is a checkout of its own (a git worktree) with a scratch directory of its own; point
+every cache there with `--scratch-env`.
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
 the generated paths on stdin; without a hook, a file either side deleted stays deleted.
@@ -459,8 +482,9 @@ a change the plan did not admit is dropped.
 | `WAIT_WITHDRAWN`        | its merge intent was withdrawn since it was listed                   |
 | `WAIT_UNQUEUED_BELOW`   | it carries the commits of an open change nobody queued               |
 | `WAIT_NO_COMMITTER`     | it needs an update commit, and nothing names who commits it          |
+| `WAIT_BASE_RED`         | the gate was red on its candidate and on what that was built onto    |
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated        |
-| `KICK_RED`              | the gate was red on its candidate                                    |
+| `KICK_RED`              | the gate was red on its candidate, green on what it was built onto   |
 | `KICK_REFUSED`          | something the author has to fix that is neither                      |
 
 ## Applying as each candidate goes green
@@ -702,6 +726,7 @@ functions, each taking one record:
 | `merge_change`   | the change plus `{commit, message, through}`                                                | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                            |
 | `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                              |
+| `flag`           | the change plus `{flag, on}`: `changes_generator`, and whether to show it                   | `true` once the change shows the flag exactly when `on`                          |
 | `list_artifacts` | `{source}`                                                                                  | `{run, complete, artifacts: [{name, url}], headers?}`                            |
 
 All but `list_artifacts` are required, and a script missing one is refused when it
@@ -743,6 +768,17 @@ from an unqueued change still showing it, marks `rejected` after a kick-back and
 the mark after a merge. A failed `mark` is a notice and applying goes on: the status and
 the comment are the record.
 
+A flag is a property the change shows beside its mark, set and cleared on its own; a
+queued change can carry any flag. `changes_generator` says the queue cannot regenerate
+the change's generated files itself. Planning records on each change it admits the
+generated files it touches whose regeneration the build tool cannot prove runs none of
+the change's code (`--facts generation`, the proof apply needs before it regenerates);
+apply flags every admitted change holding any when it starts and unflags the rest, and
+leaves a change planning held as it is. A kick-back for that same reason flags the change
+first, since apply may have needed files regenerated that the change does not touch, and
+passes `kick_back` the flag as `flag` (empty otherwise) for its comment to name. A
+failed `flag` is a notice, as a failed `mark` is.
+
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
 over 32 MiB is an error, never a shorter answer. The records a script receives hold
@@ -764,11 +800,15 @@ validation run, collapsed blocks for reproducing it (`gh run download` of the pl
 top), and one JSON line of its code and files. It then removes the intent where it
 lives: its own auto-merge, its own label, and the label on its stack's top. Last it
 minimizes as outdated its own earlier kick-back comments on the pull request; a failure
-there is printed to the apply job's log and does not fail the kick-back. Its `mark` manages
-two labels, `merge-queue: queued` and `merge-queue: rejected`, creating either with a
-description the first time a repository needs it; neither starts with `"queue: "`, so
-neither reads as merge intent. Its `describe` reports the label
-prefix `"queue: "` and the committer
+there is printed to the apply job's log and does not fail the kick-back. It shows state
+and properties as three labels, each created with a description the first time a
+repository needs it: `mark` swaps between `merge-queue: queued` and
+`merge-queue: rejected`, and `flag` adds or removes `merge-queue: changes a generator`
+for `changes_generator` beside either. A kick-back carrying that flag names the label in
+its comment. A label GitHub refuses to create for any reason but that the repository
+already has it is an error naming GitHub's reason. None of these
+labels starts with `"queue: "`, so none reads as merge intent. Its `describe` reports
+the label prefix `"queue: "` and the committer
 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`, the
 identity a workflow's token pushes as; with the queue's app, `queue-apply.yaml` passes the
 app's bot as `--committer`. Its setup reads the base's rulesets and classic branch
@@ -800,20 +840,21 @@ run with `Run`), the pure decisions they share (stack detection, partitioning, a
 carry-over), the document codecs, the verdict directory, the artifact follower and the
 command hooks.
 
-| Interface        | What it answers                                                         | magus's implementation      |
-| ---------------- | ----------------------------------------------------------------------- | --------------------------- |
-| `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)    | magus's `types.VCSDriver`   |
-| `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
-| `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
-| `BuildFacts`     | a change's affected set, how paths are written, what regenerating runs  | `client.Workspace`          |
-| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark | the `provider` Buzz scripts |
-| `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
+| Interface        | What it answers                                                               | magus's implementation      |
+| ---------------- | ----------------------------------------------------------------------------- | --------------------------- |
+| `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)          | magus's `types.VCSDriver`   |
+| `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation)       | magus's `types.VCSDriver`   |
+| `PushVCS`        | `BuildVCS` plus a leased push (applying)                                      | magus's `types.VCSDriver`   |
+| `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs       | `client.Workspace`          |
+| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark, flag | the `provider` Buzz scripts |
+| `ArtifactLister` | the artifacts a validation run uploaded                                       | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so
 which merge base a prediction takes, which conflicts are the author's and which
 differences a review need not see are decided once, whatever the version control.
-`CommandFacts` is the `BuildFacts` behind `--facts`. Asked for `outputs`, with the paths
-on stdin, the command prints `{"outputs": [path], "updated": [path], "maintained":
+`CommandFacts` is the `BuildFacts` behind `--facts`, which gets the fact it is asked for
+as its one argument. Asked for `all`, it prints `{"units": [unit]}`, how the build tool
+names every unit. Asked for `outputs`, with the paths on stdin, the command prints `{"outputs": [path], "updated": [path], "maintained":
 [path]}`: the paths a target writes whole, the ones a target rewrites in place, and the
 ones the build tool rewrites itself on every run. A missing key names none, so a command
 that prints only `outputs` declares no update and maintains nothing.
