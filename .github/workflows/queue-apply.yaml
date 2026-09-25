@@ -84,6 +84,9 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_review')
     runs-on: ubuntu-latest
+    # For the queue app's key: a run the Actions token dispatches starts no workflow_run,
+    # so this file would never follow the validation it asked for and nothing would merge.
+    environment: magus-queue
     timeout-minutes: 20
     permissions:
       contents: read # check out main's gha-queue.buzz
@@ -99,9 +102,20 @@ jobs:
           installation-strategy: source
           source-path: .
 
+      # Scoped to dispatching, unlike apply's: this job needs nothing else.
+      - id: app
+        if: vars.MAGUS_QUEUE_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+
       - name: Start a validation run on main once the pull request's run saw merge intent
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || secrets.GITHUB_TOKEN }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
         run: magus buzz tools/gha-queue.buzz -- dispatch --run "$RUN" --base "$MAIN"
