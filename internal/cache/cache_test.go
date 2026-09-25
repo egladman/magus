@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -982,10 +983,7 @@ func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
 	}
 }
 
-// hintCache opens a mutable cache whose one source file holds body, which every hint
-// test must make unique: interactive.Emit dedupes on the whole message for the life of
-// the process, and the ref inside the message derives from the cache key, so two tests
-// built on identical sources would have the second one's line silently swallowed.
+// hintCache opens a mutable cache whose one source file holds body.
 func hintCache(t *testing.T, body string) (Step, *Cache) {
 	t.Helper()
 	root, _, c := newMutableCache(t)
@@ -1026,11 +1024,91 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	// consumer counts uptake by id rather than by matching the wording above.
 	assert.Equal(t, HintUnchangedFailure, second.HintID)
 
+	var thirdRes Result
 	third := captureStderr(t, func() {
-		_, err := c.Run(context.Background(), step, fn)
+		var err error
+		thirdRes, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, third, "inputs unchanged", "once per key, not once per run")
+	assert.Empty(t, thirdRes.HintID, "no line printed, so no id to count")
+	assert.Equal(t, 3, calls)
+}
+
+// TestRunEnvironmentalFailureRerunsToAPass pins that a failure never becomes the key's
+// verdict. The step fails once for a reason outside its inputs (a tool lock held by a
+// parallel process), then passes with the key unchanged: the second run executes, its
+// pass is the result, and only that pass is replayed afterwards. The hint names the
+// failed attempt, which still resolves to the failure once the pass is recorded.
+func TestRunEnvironmentalFailureRerunsToAPass(t *testing.T) {
+	step, c := hintCache(t, "package main // environmental failure")
+	lockHeld := errors.New("parallel golangci-lint is running")
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		if calls == 1 {
+			return lockHeld
+		}
+		return nil
+	}
+
+	failed, err := c.Run(context.Background(), step, fn)
+	require.ErrorIs(t, err, lockHeld)
+	require.NotEmpty(t, failed.Ref)
+
+	var passed Result
+	out := captureStderr(t, func() {
+		passed, err = c.Run(context.Background(), step, fn)
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls, "a recorded failure is never replayed")
+	assert.False(t, passed.Hit)
+	assert.Equal(t, failed.Hash, passed.Hash, "the key did not move")
+	assert.Equal(t, HintUnchangedFailure, passed.HintID)
+	assert.Contains(t, out, "running it again")
+
+	attempts, err := c.outputs.Attempts(failed.Ref)
+	require.NoError(t, err)
+	require.Len(t, attempts, 2)
+	var failedAttempt string
+	for _, a := range attempts {
+		if a.Failed {
+			failedAttempt = a.Attempt
+		}
+	}
+	require.NotEmpty(t, failedAttempt)
+	assert.Contains(t, out, "inputs unchanged since "+failedAttempt+",")
+	assert.Contains(t, out, hint.QueryOutput.With(failedAttempt))
+
+	_, named, err := c.outputs.ByRef(failedAttempt)
+	require.NoError(t, err)
+	assert.True(t, named.Failed, "the named attempt still shows the failure")
+	_, newest, err := c.outputs.ByRef(failed.Ref)
+	require.NoError(t, err)
+	assert.False(t, newest.Failed, "the step ref moved to the pass")
+
+	replayed, err := c.Run(context.Background(), step, fn)
+	require.NoError(t, err)
+	assert.True(t, replayed.Hit, "the pass is the entry")
+	assert.Equal(t, 2, calls)
+}
+
+// TestRunDeterministicFailureNeverReplays pins the other half: a failure that recurs
+// executes every time and returns the step's own error each time, never a cached one.
+func TestRunDeterministicFailureNeverReplays(t *testing.T) {
+	step, c := hintCache(t, "package main // deterministic failure")
+	exit7 := errors.New("proc.exec sh: exit 7")
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		return exit7
+	}
+
+	for i := range 3 {
+		res, err := c.Run(context.Background(), step, fn)
+		require.ErrorIs(t, err, exit7, "run %d", i+1)
+		assert.False(t, res.Hit, "run %d", i+1)
+	}
 	assert.Equal(t, 3, calls)
 }
 
