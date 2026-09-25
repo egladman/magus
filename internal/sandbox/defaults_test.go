@@ -64,6 +64,7 @@ func TestBuildPolicyGrants(t *testing.T) {
 		{filepath.Join(root, "cache/x"), filesystem.Write, true},
 		{filepath.Join(root, "cache/x"), filesystem.Exec, false},
 		{filepath.Join(root, "tmp/go-build1/a.test"), filesystem.Exec, true},
+		{filepath.Join(root, "gocache/eb/eba0-d/magus-utils"), filesystem.Exec, true},
 		{"/usr/bin/git", filesystem.Exec, true},
 		{"/usr/lib/git-core/git-remote-http", filesystem.Exec, true},
 		{"/usr/lib/libc.so.6", filesystem.Write, false},
@@ -163,8 +164,8 @@ func TestBuildPolicyResolvesRulePaths(t *testing.T) {
 func TestBuildPolicyDefaultCachesFollowTheOS(t *testing.T) {
 	darwin := toolRules(map[string]string{}, "/Users/u", "darwin")
 	linux := toolRules(map[string]string{"XDG_CACHE_HOME": "/xdg"}, "/home/u", "linux")
-	assert.Contains(t, darwin, rw("/Users/u/Library/Caches/go-build"))
-	assert.Contains(t, linux, rw("/xdg/go-build"))
+	assert.Contains(t, darwin, rwx("/Users/u/Library/Caches/go-build"))
+	assert.Contains(t, linux, rwx("/xdg/go-build"))
 	assert.Contains(t, linux, rw("/home/u/go/pkg/mod"))
 
 	// No home and no variables: nothing under a relative path.
