@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -325,6 +327,75 @@ func TestAnUpdateCommitIsTheValidatedTreeOnTheHeadAndTheTip(t *testing.T) {
 		return nil
 	}
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+}
+
+// A change whose merge auto-resolution settles is merged through an update commit holding
+// the settled file, since the provider's own merge stops on the conflict. Apply settles
+// it itself twice, in its rebuild and against the tip, and takes nothing from the verdict
+// but the commit it compares.
+func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	c.Branch = "feature"
+	v := validated(c, base, "")
+	after := oid("after", "1")
+	update := head("update")
+	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}
+	d.caps()
+	d.bases(base, base, after)
+	d.rechecks(c, approvedAs(c))
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(func(_ context.Context, _, dir, _ string) error {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		return os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte("<<<<<<< markers\n"), 0o644)
+	}).Once()
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
+	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(conflicts, nil).Once()
+	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(optedIn, nil)
+	d.vcs.EXPECT().MergeBase(mock.Anything, mock.Anything, base, c.Head).Return(head("mb"), true, nil).Twice()
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, head("mb"), "CHANGELOG.md").Return("a\nz\n", nil).Twice()
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, base, "CHANGELOG.md").Return("a\np\nz\n", nil).Twice()
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, c.Head, "CHANGELOG.md").Return("a\nq\nz\n", nil).Twice()
+	d.vcs.EXPECT().MarkResolved(mock.Anything, mock.Anything, []string{"CHANGELOG.md"}).Return(nil).Once()
+	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #1")}).Return(v.CandidateCommit, nil).Once()
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, base, v.CandidateCommit).Return([]string{"CHANGELOG.md"}, nil).Once()
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).Return(nil).Once()
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
+		Return(magustypes.TreeMergeResult{Tree: "plain", Conflicts: conflicts}, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"CHANGELOG.md"}, nil).Twice()
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, "validated", "CHANGELOG.md").Return("a\np\nq\nz\n", nil).Once()
+	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
+		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files\n\nThe merge queue auto-resolved CHANGELOG.md (kind 2).",
+			Author: author, Committer: bot},
+		Tree: "validated", Parents: []string{c.Head, base}}).Return(update, nil)
+	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
+	success := d.green(c, update).NotBefore(push)
+	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success)
+	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	var events bytes.Buffer
+	a.Events = NewEvents(&events)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":"auto-resolved CHANGELOG.md (kind 2)","commit":"`+v.CandidateCommit+`"`)
+}
+
+// What the rebuild holds must be exactly what apply's own resolution against the tip
+// makes; anything else is a difference no review covers.
+func TestAResolutionTheTreeDoesNotHoldIsNotSettled(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+	require.NoError(t, err)
+	r := &applyRun{Applier: a}
+	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}
+	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(optedIn, nil)
+	d.sides(base, c.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, "validated", "CHANGELOG.md").Return("a\nq\np\nz\n", nil)
+	rd := &ready{v: validated(c, base, ""), tip: base, tree: "validated"}
+	same, left, err := r.settledAsValidated(t.Context(), rd, magustypes.TreeMergeResult{Tree: "plain", Conflicts: conflicts}, []string{"CHANGELOG.md", "a/x.go"})
+	require.NoError(t, err)
+	assert.Empty(t, same)
+	assert.Equal(t, []string{"CHANGELOG.md", "a/x.go"}, left)
 }
 
 // kicks expects c kicked back at its head with code, after re-reading its head.

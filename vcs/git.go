@@ -2602,6 +2602,26 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 	return parseMergeTree(string(out))
 }
 
+// MergeBase implements types.TreeMerger with `merge-base --all`, which exits 1 when a and
+// b share no history: an answer, read as one.
+func (v gitVCS) MergeBase(ctx context.Context, root, a, b string) (string, bool, error) {
+	if err := checkRequiredRev(a, b); err != nil {
+		return "", false, err
+	}
+	out, err := gitOutput(ctx, root, gitOpts{}, "merge-base", "--all", "--end-of-options", a, b)
+	switch {
+	case exitCode(err) == 1:
+		return "", false, nil
+	case err != nil:
+		return "", false, fmt.Errorf("git merge-base %s %s: %w", a, b, err)
+	}
+	bases := strings.Fields(out)
+	if len(bases) != 1 {
+		return "", false, nil
+	}
+	return bases[0], true, nil
+}
+
 // parseMergeTree reads `merge-tree --write-tree -z` output: the tree id, then one
 // "<mode> <object> <stage>\t<path>" record per conflicted index entry. Which stages a path
 // has classifies it: both sides (2 and 3) is a content conflict, the base alone is a

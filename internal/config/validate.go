@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc/endpoint"
@@ -68,6 +69,17 @@ func newValidator() *validator.Validate {
 		}
 		u, err := url.Parse("//" + s)
 		return err == nil && u.Host == s
+	})
+
+	// workspace_glob is a doublestar pattern over workspace-relative slash paths. An
+	// absolute or escaping pattern matches no path magus asks about, so it would opt
+	// nothing in without saying so.
+	_ = v.RegisterValidation("workspace_glob", func(fl validator.FieldLevel) bool {
+		s := fl.Field().String()
+		if s == "" || strings.HasPrefix(s, "/") || strings.Contains(s, `\`) || slices.Contains(strings.Split(s, "/"), "..") {
+			return false
+		}
+		return doublestar.ValidatePattern(s)
 	})
 
 	return v
@@ -235,6 +247,8 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be a directory inside the workspace, relative to magus.yaml (got %q)", f.Value)
 	case "cache_write_required":
 		return "cannot be true while cache.write.enabled is false: the remote cache tier is written from the local tier, so there would be nothing to write; enable cache.write.enabled or set this false"
+	case "workspace_glob":
+		return fmt.Sprintf("must be a glob over workspace-relative slash paths, with no leading /, no .. and no backslash (got %q)", f.Value)
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:

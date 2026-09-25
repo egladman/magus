@@ -2722,6 +2722,37 @@ func TestMergeTreesWithAnExplicitBaseMergesOnlyWhatTheirsAdded(t *testing.T) {
 	assert.Equal(t, validated, right.Tree, "merged from onto, the prediction is the validated tree")
 }
 
+func TestMergeBaseIsTheOneCommitBothSidesForkedFrom(t *testing.T) {
+	dir, revs := mergeFixture(t)
+	g := gitVCS{}
+	ctx := t.Context()
+
+	got, ok, err := g.MergeBase(ctx, dir, revs["ours"], revs["theirs"])
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, revs["base"], got)
+
+	gitRun(t, dir, "checkout", "-q", "--orphan", "unrelated")
+	writeRepoFile(t, dir, "other.txt", "o\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "unrelated")
+	_, ok, err = g.MergeBase(ctx, dir, revs["ours"], gitTestOutput(t, dir, "rev-parse", "HEAD"))
+	require.NoError(t, err, "no shared history is an answer, not an error")
+	assert.False(t, ok)
+
+	// A criss-cross: each side merged the other's first commit, so two commits are best.
+	gitRun(t, dir, "checkout", "-q", "-b", "x", revs["ours"])
+	gitRun(t, dir, "merge", "-q", "--no-edit", "-s", "ours", revs["clean"])
+	gitRun(t, dir, "checkout", "-q", "-b", "y", revs["clean"])
+	gitRun(t, dir, "merge", "-q", "--no-edit", "-s", "ours", revs["ours"])
+	_, ok, err = g.MergeBase(ctx, dir, "x", "y")
+	require.NoError(t, err)
+	assert.False(t, ok, "two best bases describe neither side")
+
+	_, _, err = g.MergeBase(ctx, dir, revs["ours"], "no-such-rev")
+	require.Error(t, err)
+}
+
 func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {
 	dir, revs := mergeFixture(t)
 	g := gitVCS{}

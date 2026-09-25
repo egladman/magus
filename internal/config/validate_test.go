@@ -29,6 +29,23 @@ func TestValidate_LogFormatRefusesJSONL(t *testing.T) {
 	assert.NoError(t, Validate(cfg))
 }
 
+// A glob that could match no workspace path would opt nothing in without saying so.
+func TestValidate_VCSAutoResolveGlobs(t *testing.T) {
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	valid.VCS.AutoResolve = []string{"CHANGELOG.md", "docs/**/*.md", "go.{mod,sum}"}
+	require.NoError(t, Validate(valid))
+
+	for _, glob := range []string{"", "/abs/*.md", "../up/*.md", "a/../b", `docs\x.md`, "[unclosed"} {
+		t.Run(glob, func(t *testing.T) {
+			cfg := valid
+			cfg.VCS.AutoResolve = []string{"ok.md", glob}
+			var ve *ValidationError
+			require.ErrorAs(t, Validate(cfg), &ve)
+			assert.Equal(t, []FieldFailure{{Field: "vcs.auto_resolve[1]", Tag: "workspace_glob", Value: glob}}, ve.Failures)
+		})
+	}
+}
+
 func TestValidationError_Error(t *testing.T) {
 	cfg := Config{Concurrency: -5}
 	err := Validate(cfg)

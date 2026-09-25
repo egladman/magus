@@ -956,6 +956,10 @@ type TreeMerger interface {
 	// reported in TreeMergeResult.Conflicts, never an error; an error means the merge could
 	// not run (an unknown revision, a backend too old to merge trees).
 	MergeTrees(ctx context.Context, root string, m TreeMerge) (TreeMergeResult, error)
+	// MergeBase returns the merge base a plain merge of a and b takes. ok is false when
+	// they have none, or several (a criss-cross), since no one commit is then the base
+	// either side's changes are measured from.
+	MergeBase(ctx context.Context, root, a, b string) (base string, ok bool, err error)
 }
 
 // GeneratedPathReporter is the capability to report which paths a REVISION marks as

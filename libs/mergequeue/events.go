@@ -16,6 +16,7 @@ const (
 	EventPartition EventKind = "partition" // planning grouped Changes into Partition
 	EventDecided   EventKind = "decided"   // planning or validation settled Change
 	EventGate      EventKind = "gate"      // a gate started on Change's candidate Commit at Depth
+	EventResolved  EventKind = "resolved"  // building Change's candidate Commit auto-resolved the source files Reason names
 	EventMerged    EventKind = "merged"    // an Applier merged Change at Commit
 	EventKicked    EventKind = "kicked"    // an Applier kicked Change back
 	EventWaiting   EventKind = "waiting"   // an Applier left Change queued for a later run

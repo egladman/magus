@@ -456,8 +456,9 @@ func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.Regen
 //	outputs     stdin: paths, one per line
 //	            prints {"outputs": [path], "updated": [path], "maintained": [path]}: the
 //	            ones some target writes whole, the ones a target rewrites in place, and
-//	            the ones the build tool rewrites itself on every run; a missing key
-//	            names none
+//	            the ones the build tool rewrites itself on every run; it may add
+//	            "auto_resolve": [path], the ones the workspace opts into low-risk
+//	            conflict resolution; a missing key names none
 //	generation  stdin: {"outputs": [path], "changed": [path]}
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
 //	all         stdin: empty
@@ -519,9 +520,10 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 		return out, nil
 	}
 	var ans struct {
-		Outputs    []string `json:"outputs"`
-		Updated    []string `json:"updated"`
-		Maintained []string `json:"maintained"`
+		Outputs     []string `json:"outputs"`
+		Updated     []string `json:"updated"`
+		Maintained  []string `json:"maintained"`
+		AutoResolve []string `json:"auto_resolve"`
 	}
 	if err := f.ask(ctx, "outputs", "outputs", strings.Join(paths, "\n")+"\n", &ans); err != nil {
 		return nil, err
@@ -538,6 +540,7 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 	mark(ans.Outputs, func(w *types.Writes) { w.Output = true })
 	mark(ans.Updated, func(w *types.Writes) { w.Updated = true })
 	mark(ans.Maintained, func(w *types.Writes) { w.Maintained = true })
+	mark(ans.AutoResolve, func(w *types.Writes) { w.AutoResolve = true })
 	return out, nil
 }
 

@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -874,6 +875,16 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 }
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
+
+// AutoResolves reports whether magus.yaml's vcs.auto_resolve opts path, a
+// workspace-relative slash path, into low-risk conflict resolution.
+func (m *Magus) AutoResolves(path string) bool {
+	return slices.ContainsFunc(m.cfg.VCS.AutoResolve, func(glob string) bool {
+		// Validated at load, so no pattern is malformed.
+		ok, _ := doublestar.Match(glob, path)
+		return ok
+	})
+}
 
 // DiffTUIEnabled reports whether `magus diff` may open its viewer, per workspace config.
 //

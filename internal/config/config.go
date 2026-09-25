@@ -507,6 +507,12 @@ type VCS struct {
 	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/sl/jj); empty = autodetect
 	// BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).
 	BaseRef string `json:"base_ref" yaml:"base_ref"`
+	// AutoResolve lists workspace-relative globs whose merge conflicts the merge queue
+	// settles when every region both sides changed is low risk: the same change on both
+	// sides, one side's change holding the other's, or both sides only adding lines at
+	// one place. The queue reads it from the base branch's magus.yaml and still gates
+	// what it settles. Empty, the default, settles nothing.
+	AutoResolve []string `json:"auto_resolve" yaml:"auto_resolve" validate:"dive,workspace_glob"`
 }
 
 // Knowledge configures the cross-workspace knowledge graph.

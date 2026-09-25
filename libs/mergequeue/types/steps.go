@@ -16,6 +16,7 @@ type ReadVCS interface {
 	magustypes.RangeReporter
 	magustypes.TreeReporter
 	magustypes.TreeMerger
+	magustypes.RevisionFileReader
 	// FindCommit is magus's VCSDriver's own; no capability carries it.
 	FindCommit(ctx context.Context, dir, rev string) (magustypes.Commit, error)
 }
@@ -28,7 +29,6 @@ type BuildVCS interface {
 	magustypes.MergeStarter
 	magustypes.ConflictResolver
 	magustypes.CommitWriter
-	magustypes.RevisionFileReader
 	// DirtyFiles is magus's VCSDriver's own; no capability carries it.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
@@ -73,9 +73,10 @@ type BuildFacts interface {
 	// reach, and, when that set is not a proof, why: the paths edit the declarations it
 	// was computed from, or files nothing claims. A nil affected set is unbounded.
 	Affected(ctx context.Context, c Change, paths []string) (affected []string, unboundedBy string, err error)
-	// Classify reports how the build tool writes each of paths. A path absent from the
-	// result is plain source. Only an Output is generated: a path a VCS attribute or
-	// anything else marks generated is source, and a reviewer has to see it.
+	// Classify reports how the build tool writes each of paths, and which of them the
+	// workspace opts into auto-resolution. A path absent from the result is plain source.
+	// Only an Output is generated: a path a VCS attribute or anything else marks
+	// generated is source, and a reviewer has to see it.
 	Classify(ctx context.Context, paths []string) (map[string]Writes, error)
 	// Generation reports what regenerating outputs runs, and which of changed it would
 	// run as code.
@@ -94,6 +95,10 @@ type Writes struct {
 	// Maintained says the build tool rewrites the file itself on every run, whatever
 	// the change holds.
 	Maintained bool
+	// AutoResolve says a conflict in the file may be settled when every region both
+	// sides changed is low risk (see internal/merge3). It is not a write: the file stays
+	// source, and the gate runs on what was settled.
+	AutoResolve bool
 }
 
 // Declared reports whether the build tool writes the path at all.

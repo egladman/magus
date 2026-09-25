@@ -109,7 +109,7 @@ func (w *Workspace) plan(ctx context.Context, paths []string) ([]string, string,
 // a project's output, an in-place update by a target the regeneration runs, or a file
 // magus maintains itself. An update by any other target, such as a formatter's, is not
 // the regeneration's to write. A path only a VCS attribute marks generated is none of
-// them.
+// them. AutoResolve is magus.yaml's vcs.auto_resolve.
 func (w *Workspace) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
 	entries, err := w.m.ClassifyFiles(ctx, paths)
 	if err != nil {
@@ -121,11 +121,12 @@ func (w *Workspace) Classify(ctx context.Context, paths []string) (map[string]ty
 	out := make(map[string]types.Writes, len(paths))
 	for i, e := range entries {
 		writes := types.Writes{
-			Output:     len(e.OutputOf) > 0,
-			Updated:    slices.ContainsFunc(e.Claims, regenerated),
-			Maintained: magustypes.IsMagusMaintained(paths[i]),
+			Output:      len(e.OutputOf) > 0,
+			Updated:     slices.ContainsFunc(e.Claims, regenerated),
+			Maintained:  magustypes.IsMagusMaintained(paths[i]),
+			AutoResolve: w.m.AutoResolves(paths[i]),
 		}
-		if writes.Declared() {
+		if writes.Declared() || writes.AutoResolve {
 			out[paths[i]] = writes
 		}
 	}

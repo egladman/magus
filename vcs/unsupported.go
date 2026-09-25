@@ -200,6 +200,10 @@ func (declines[N]) MergeTrees(context.Context, string, types.TreeMerge) (types.T
 	return types.TreeMergeResult{}, decline[N](types.CapTreeMerger)
 }
 
+func (declines[N]) MergeBase(context.Context, string, string, string) (string, bool, error) {
+	return "", false, decline[N](types.CapTreeMerger)
+}
+
 func (declines[N]) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {
 	return nil, decline[N](types.CapGeneratedPathReporter)
 }

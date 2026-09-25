@@ -668,7 +668,9 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 // a conflicted generated file, the rebuild runs the base's own regeneration, after the
 // build tool proved it runs none of the change's code; any other way, those bytes would
 // come from running the change's code in the one job that holds the write credential.
-// What does not match is kicked back, never merged.
+// What does not match is kicked back, never merged. A source file auto-resolution
+// settled is settled again here, by this job's own computation from the three versions,
+// so the commit matches only if validation settled it the same way.
 func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (string, error) {
 	c := v.Change
 	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch}
@@ -680,6 +682,9 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 		return "", err
 	}
 	defer r.discard(ctx, b.Candidate)
+	if len(b.resolved) > 0 {
+		r.Events.Emit(Event{Kind: EventResolved, Change: c.ID, Commit: b.Commit, Reason: resolvedNote(b.resolved)})
+	}
 	if b.Commit == v.CandidateCommit && len(b.settled) == 0 {
 		return b.Commit, nil
 	}
@@ -966,7 +971,10 @@ func (r *applyRun) linearOn(ctx context.Context, tip, after string) (bool, error
 // written, and for a change stacked on one that merged as a squash, in exactly what that
 // change merged. The second is proven, not assumed: merging the head onto tip from its
 // stack base must give rd.tree, so the update commit is tip plus the change's own
-// delta, the diff its reviewers approved.
+// delta, the diff its reviewers approved. It may also differ in a conflicted source file
+// the workspace opts into auto-resolution, where this job's own resolution, from the
+// base's and the change's versions, is exactly what the rebuild holds; the provider's
+// merge would stop on that conflict.
 func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	c, root := rd.v.Change, r.clone.Root
 	plain, err := r.vcs.MergeTrees(ctx, root, magustypes.TreeMerge{Ours: rd.tip, Theirs: c.Head})
@@ -981,8 +989,13 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	resolved, src, err := r.settledAsValidated(ctx, rd, plain, src)
+	if err != nil {
+		return "", err
+	}
 	stacked := false
 	if len(src) > 0 && c.StackBase != "" && (c.Below == "" || r.merged[c.Below]) {
+		resolved = nil
 		own, err := r.vcs.MergeTrees(ctx, root, magustypes.TreeMerge{Base: c.StackBase, Ours: rd.tip, Theirs: c.Head})
 		if err != nil {
 			return "", err
@@ -1001,6 +1014,13 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	outputs, err := r.vcs.DiffTrees(ctx, root, reviewed, rd.tree)
 	if err != nil {
 		return "", err
+	}
+	outputs = slices.DeleteFunc(outputs, func(p string) bool {
+		return slices.ContainsFunc(resolved, func(s settledSource) bool { return s.path == p })
+	})
+	if len(resolved) > 0 && c.Method == types.MethodRebase {
+		return "", &types.RefusedError{Paths: resolvedPaths(resolved), Reason: "its merge onto `" + r.plan.Base + "` " + resolvedNote(resolved) +
+			", and a rebase replays its commits onto `" + r.plan.Base + "`, where they still conflict", Remedy: "Pick another merge method, or rebase it onto `" + r.plan.Base + "`."}
 	}
 	if len(outputs) > 0 {
 		if _, err := r.generation(ctx, c, outputs); err != nil {
@@ -1024,6 +1044,9 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	}
 	author := head.Author
 	parents, msg := []string{c.Head, rd.tip}, "merge "+r.plan.Base+" into #"+c.ID+" and regenerate generated files"
+	if len(resolved) > 0 {
+		msg += "\n\nThe merge queue " + resolvedNote(resolved) + "."
+	}
 	switch {
 	case c.Method == types.MethodRebase:
 		// The provider replays the head's commits and then this one, whose tree is the
@@ -1099,6 +1122,43 @@ func (r *applyRun) discard(ctx context.Context, cand types.Candidate) {
 	if err := discard(ctx, r.vcs, r.clone.Root, cand); err != nil {
 		r.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkout " + cand.Dir + ": " + err.Error()})
 	}
+}
+
+// settledAsValidated takes out of src the files that conflict in plain and that
+// auto-resolution, computed here from the base at rd.tip and the change's head, settles to
+// exactly what rd.tree holds. It returns those files and what is left of src. Nothing
+// validation wrote is read: rd.tree is this job's own rebuild.
+func (r *applyRun) settledAsValidated(ctx context.Context, rd *ready, plain magustypes.TreeMergeResult, src []string) ([]settledSource, []string, error) {
+	if len(src) == 0 || len(plain.Conflicts) == 0 {
+		return nil, src, nil
+	}
+	settled, _, err := resolveSources(ctx, r.vcs, r.facts, r.clone.Root, magustypes.TreeMerge{Ours: rd.tip, Theirs: rd.v.Change.Head}, plain.Conflicts)
+	if err != nil {
+		return nil, nil, err
+	}
+	var same []settledSource
+	for _, s := range settled {
+		if !slices.Contains(src, s.path) {
+			continue
+		}
+		got, err := r.vcs.ReadFileAt(ctx, r.clone.Root, rd.tree, s.path)
+		if err != nil {
+			return nil, nil, err
+		}
+		if got == string(s.res.Content) {
+			same = append(same, s)
+		}
+	}
+	left := slices.DeleteFunc(slices.Clone(src), func(p string) bool { return slices.Contains(resolvedPaths(same), p) })
+	return same, left, nil
+}
+
+func resolvedPaths(settled []settledSource) []string {
+	out := make([]string, len(settled))
+	for i, s := range settled {
+		out[i] = s.path
+	}
+	return out
 }
 
 // unreviewed lists the paths a and b differ in that no target declares as its output.

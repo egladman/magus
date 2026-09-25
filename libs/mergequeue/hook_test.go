@@ -295,6 +295,13 @@ func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}}, writes)
 }
 
+func TestCommandFactsReadWhichPathsAutoResolve(t *testing.T) {
+	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"], "auto_resolve": ["CHANGELOG.md", "unasked.md"]}'`), t.TempDir(), nil).
+		Classify(context.Background(), []string{"gen/a", "CHANGELOG.md", "main.go"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}, "CHANGELOG.md": {AutoResolve: true}}, writes)
+}
+
 func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

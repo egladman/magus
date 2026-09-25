@@ -127,6 +127,26 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 	}
 }
 
+// Auto-resolution is opted into by path in magus.yaml and changes nothing about how a
+// file is written: an opted-in source stays source.
+func TestWorkspaceClassifyReadsAutoResolveFromTheConfig(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"magus.yaml":     "vcs:\n  auto_resolve: [\"CHANGELOG.md\", \"docs/**/*.md\"]\n",
+		"magusfile.buzz": "", "CHANGELOG.md": "# log\n", "docs/a/b.md": "b\n", "main.go": "package main\n",
+	} {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+	w, err := OpenWorkspace(t.Context(), root, "ci")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = w.Close() })
+	got, err := w.Classify(t.Context(), []string{"CHANGELOG.md", "docs/a/b.md", "main.go"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]types.Writes{"CHANGELOG.md": {AutoResolve: true}, "docs/a/b.md": {AutoResolve: true}}, got)
+}
+
 func TestOpenWorkspaceNeedsATarget(t *testing.T) {
 	_, err := OpenWorkspace(t.Context(), t.TempDir(), "")
 	require.Error(t, err)

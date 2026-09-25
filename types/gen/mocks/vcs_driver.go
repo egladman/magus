@@ -2884,6 +2884,90 @@ func (_c *MockVCSDriver_MarkResolved_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// MergeBase provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) MergeBase(ctx context.Context, root string, a string, b string) (string, bool, error) {
+	ret := _mock.Called(ctx, root, a, b)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MergeBase")
+	}
+
+	var r0 string
+	var r1 bool
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (string, bool, error)); ok {
+		return returnFunc(ctx, root, a, b)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) string); ok {
+		r0 = returnFunc(ctx, root, a, b)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) bool); ok {
+		r1 = returnFunc(ctx, root, a, b)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string, string) error); ok {
+		r2 = returnFunc(ctx, root, a, b)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockVCSDriver_MergeBase_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MergeBase'
+type MockVCSDriver_MergeBase_Call struct {
+	*mock.Call
+}
+
+// MergeBase is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+//   - a string
+//   - b string
+func (_e *MockVCSDriver_Expecter) MergeBase(ctx interface{}, root interface{}, a interface{}, b interface{}) *MockVCSDriver_MergeBase_Call {
+	return &MockVCSDriver_MergeBase_Call{Call: _e.mock.On("MergeBase", ctx, root, a, b)}
+}
+
+func (_c *MockVCSDriver_MergeBase_Call) Run(run func(ctx context.Context, root string, a string, b string)) *MockVCSDriver_MergeBase_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_MergeBase_Call) Return(base string, ok bool, err error) *MockVCSDriver_MergeBase_Call {
+	_c.Call.Return(base, ok, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_MergeBase_Call) RunAndReturn(run func(ctx context.Context, root string, a string, b string) (string, bool, error)) *MockVCSDriver_MergeBase_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // MergeDriverCommand provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) MergeDriverCommand(ctx context.Context, root string) (string, error) {
 	ret := _mock.Called(ctx, root)

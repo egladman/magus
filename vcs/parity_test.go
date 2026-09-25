@@ -1193,6 +1193,10 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapTreeMerger, "MergeTrees", func(d types.VCSDriver, dir string) error {
 			return errOf(d.MergeTrees(ctx, dir, types.TreeMerge{Ours: "-x", Theirs: "-x"}))
 		}},
+		{types.CapTreeMerger, "MergeBase", func(d types.VCSDriver, dir string) error {
+			_, _, err := d.MergeBase(ctx, dir, "-x", "-x")
+			return err
+		}},
 		{types.CapGeneratedPathReporter, "GeneratedPaths", func(d types.VCSDriver, dir string) error {
 			return errOf(d.GeneratedPaths(ctx, dir, "-x", []string{"a"}))
 		}},

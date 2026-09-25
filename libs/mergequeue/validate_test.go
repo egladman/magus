@@ -1,6 +1,7 @@
 package mergequeue
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -153,6 +154,45 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"1@" + c1, "2@" + c2, "3@" + c3}, g.runs, "a green candidate costs no gate of its base")
 	assert.Equal(t, []string{"a"}, g.unitsOf("3@"+c3), "a gate runs its change's affected set")
+}
+
+// A candidate auto-resolution settled is gated like any other, and its verdict names
+// what was settled: the reason of a merge, and a line of a kick-back's report.
+func TestAVerdictNamesWhatAutoResolutionSettled(t *testing.T) {
+	for name, red := range map[string]bool{"green": false, "red": true} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			one := change("1", "a")
+			d.builds(building{touched: []string{"CHANGELOG.md"}, files: map[string]string{"CHANGELOG.md": "<<<<<<< markers\n"},
+				conflicts: map[string][]magustypes.Conflict{one.Head: {{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}}})
+			d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(optedIn, nil)
+			d.sides(base, one.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
+			d.vcs.EXPECT().MarkResolved(mock.Anything, mock.Anything, []string{"CHANGELOG.md"}).Return(nil)
+			result := allGreen
+			if red {
+				result = redFor("1")
+			}
+			g := d.gates(result)
+			plan := planOf([]types.Change{one})
+			v, dir := validating(t, d, plan)
+			var events bytes.Buffer
+			v.Events = NewEvents(&events)
+			require.NoError(t, v.Run(t.Context(), plan))
+
+			cand := candidateOf(base, one.Head)
+			assert.Equal(t, 1, g.count("1"), "a resolution never skips the gate")
+			assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":"auto-resolved CHANGELOG.md (kind 2)","commit":"`+cand+`"`)
+			got := recorded(t, dir)["1"]
+			if !red {
+				assert.Equal(t, types.DecisionMerge, got.Decision)
+				assert.Equal(t, "auto-resolved CHANGELOG.md (kind 2)", got.Reason)
+				return
+			}
+			assert.Equal(t, types.CodeKickRed, got.Code)
+			assert.Equal(t, "The merge queue built this change at `"+short(one.Head)+"` onto `main` at `"+short(base)+"`, and the gate exited 1.\n"+
+				"\nBuilding the candidate auto-resolved CHANGELOG.md (kind 2); the gate ran on that merge.\n", got.Report)
+		})
+	}
 }
 
 // A red candidate on a green base is its change's own (everything beneath it validated),

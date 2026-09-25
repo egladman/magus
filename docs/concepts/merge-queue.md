@@ -135,6 +135,10 @@ generated file, a candidate tree or a review proof from a verdict.
   sees it. Another target's in-place update, such as a formatter's, does not count. A file magus maintains itself
   (`maintained`, such as `.gitattributes`) is rewritten by main's magus whenever a hook
   runs it, so the queue puts the change's version back and never commits main's.
+- **A resolution is main's computation.** A source conflict the workspace opts into
+  [auto-resolution](#auto-resolving-source-conflicts) is settled by apply's own magus
+  from the three versions of the file, never taken from a verdict, and the result must
+  be the commit validation gated.
 - **A review is proven in apply.** Whether a review of an older commit covers a merge of
   main into the change is a version control question apply answers itself, and a merge
   differing only in generated files is covered only when main's regeneration, run on the
@@ -414,6 +418,43 @@ The regeneration's writes to outputs and to files `generate`'s targets update in
 are committed; a file magus maintains is restored to the candidate's version and left out. A
 regeneration that fails, or writes anything nothing declares it writes, kicks that change
 back and the run goes on.
+
+## Auto-resolving source conflicts
+
+A conflict in a source file goes back to its author, unless the workspace opts the file
+in and the conflict is low risk. The opt-in is main's `magus.yaml`, by glob, and nothing
+is opted in by default:
+
+```yaml
+vcs:
+  auto_resolve: ["CHANGELOG.md", "docs/**/*.md"]
+```
+
+A malformed, absolute or escaping glob fails the load. `--facts` answers the same thing
+with an `auto_resolve` list beside `outputs`.
+
+The queue reads the file's three versions (main's, the change's and their merge base's)
+and settles each region both sides changed in one of two ways, or not at all:
+
+| Kind | Both sides changed the region by                                     | The queue keeps           |
+| ---- | -------------------------------------------------------------------- | ------------------------- |
+| 1    | the same change, or one side's lines containing the other's in order | the larger side           |
+| 2    | only adding lines where the base had none                            | main's, then the change's |
+
+Any other region, where both sides edited or deleted base lines differently, leaves the
+whole file conflicted, as does a side that only deleted lines, a file main's history
+does not share with the change, or a symlink. Lines keep their own endings, so a CRLF
+file stays CRLF and a missing final newline stays missing.
+
+A settled candidate is gated like any other; the gate's own format check is the only one
+it gets, so a resolution that breaks formatting is a red kick-back. Planning, validation
+and apply each settle the file themselves from the same three versions, and apply
+merges only when its rebuild is the commit validation gated. The provider's own merge
+would stop on the conflict, so apply hands it an update commit holding the settled file,
+after checking that its own resolution against main's tip is exactly what the rebuild
+holds; a change merging by rebase is kicked back instead. Each settled candidate writes
+a `resolved` event naming the files and their kinds, the verdict's reason says the same
+on a merge, and a kick-back's report adds a line.
 
 ## What a review covers
 

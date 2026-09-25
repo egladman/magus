@@ -7,6 +7,8 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -160,6 +162,7 @@ type building struct {
 	touched   []string
 	conflicts map[string][]magustypes.Conflict // by the head merged
 	fail      map[string]error                 // starting the merge, by the head merged
+	files     map[string]string                // written into every checkout, by path
 }
 
 // builds answers what b says, and records each checkout's commit and head.
@@ -170,6 +173,15 @@ func (d doubles) builds(b building) *checkouts {
 			co.mu.Lock()
 			defer co.mu.Unlock()
 			co.onto[dir] = rev
+			for path, content := range b.files {
+				abs := filepath.Join(dir, filepath.FromSlash(path))
+				if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+					return err
+				}
+			}
 			return nil
 		}).Maybe()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, mock.Anything, candidateIdentity).
