@@ -134,6 +134,36 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 	}
 }
 
+// A merge is allowed by magus's change classifier: prose by the built-in markdown globs,
+// code only where a project's merge_low_risk opts it in.
+func TestWorkspaceAutoResolvableIsTheChangeClassifier(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"merge_low_risk\": [\"fixtures/**\"]});\n",
+	} {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+	w, err := OpenWorkspace(t.Context(), root, "ci")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = w.Close() })
+	for path, want := range map[string]struct {
+		verdict string
+		ok      bool
+	}{
+		"CHANGELOG.md":        {`CHANGELOG.md: prose (matches "**/*.md" (built-in default))`, true},
+		"api/fixtures/a.json": {`api/fixtures/a.json: code (matches "fixtures/**" (merge_low_risk of project api))`, true},
+		"api/handler.json":    {"api/handler.json: code (no comment syntax is declared for this language; classified as code)", false},
+	} {
+		verdict, ok, err := w.AutoResolvable(t.Context(), path, []byte("a\n"), []byte("a\nb\n"))
+		require.NoError(t, err)
+		assert.Equal(t, want.ok, ok, path)
+		assert.Equal(t, want.verdict, verdict, path)
+	}
+}
+
 func TestOpenWorkspaceNeedsATarget(t *testing.T) {
 	_, err := OpenWorkspace(t.Context(), t.TempDir(), "")
 	require.Error(t, err)

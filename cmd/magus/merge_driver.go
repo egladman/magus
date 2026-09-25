@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -40,16 +41,19 @@ func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "Usage: magus vcs merge-driver %O %A %B %L %P")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "The VCS merge driver for declared output files. git and hg invoke this")
-	fmt.Fprintln(os.Stderr, "automatically during a merge when a conflicted file matches a declared")
-	fmt.Fprintln(os.Stderr, "output glob; it keeps the current version instead of writing conflict")
-	fmt.Fprintln(os.Stderr, "markers. On git it records the regeneration it owes, and the")
+	fmt.Fprintln(os.Stderr, "The VCS merge driver for declared output files and the files magus.yaml's")
+	fmt.Fprintln(os.Stderr, "vcs.auto_resolve opts in. git, hg and Sapling invoke it during a merge, and")
+	fmt.Fprintln(os.Stderr, "`"+hint.VCSResolve.String()+"` runs it through `jj resolve` on jj. An opted-in file")
+	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
+	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
+	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes, and the")
 	fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NameRegenerateOwed)+"` job the post-merge, post-rewrite and")
 	fmt.Fprintln(os.Stderr, "post-commit hooks submit runs it once the merge or rebase has finished.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
 	fmt.Fprintln(os.Stderr, "hg calls it as:   magus vcs merge-driver $base $local $other 0 $local")
+	fmt.Fprintln(os.Stderr, "jj calls it as:   magus vcs merge-driver $base $left $right $marker_length $path $output")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "To settle a conflicted merge yourself, run `"+hint.VCSResolve.String()+"`: it decides")
 	fmt.Fprintln(os.Stderr, "every conflicted path at once, regenerates once, and stages the result -")
@@ -67,9 +71,9 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 		return nil
 	}
 
-	globs := workspaceOutputGlobs(m)
-	if len(globs) == 0 {
-		slog.InfoContext(ctx, "init: no projects declare Outputs yet; re-run `"+hint.Init.String()+"` after adding them to wire the merge driver")
+	globs := workspaceMergeGlobs(m)
+	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
+		slog.InfoContext(ctx, "init: no projects declare Outputs and vcs.auto_resolve is empty; re-run `"+hint.Init.String()+"` after adding either to wire the merge driver")
 		return nil
 	}
 
@@ -96,13 +100,14 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 		return fmt.Errorf("init: install %s merge driver: %w", name, err)
 	}
 
+	n := slog.Int("globs", len(globs.Outputs)+len(globs.AutoResolve))
 	switch name {
 	case "git":
-		slog.InfoContext(ctx, "init: wired git merge driver (.gitattributes + .git/config)", slog.Int("globs", len(globs)))
+		slog.InfoContext(ctx, "init: wired git merge driver (.gitattributes + .git/config)", n)
 	case "hg":
-		slog.InfoContext(ctx, "init: wired hg merge driver (.hg/hgrc)", slog.Int("globs", len(globs)))
+		slog.InfoContext(ctx, "init: wired hg merge driver (.hg/hgrc)", n)
 	default:
-		slog.InfoContext(ctx, "init: wired merge driver", slog.String("vcs", name), slog.Int("globs", len(globs)))
+		slog.InfoContext(ctx, "init: wired merge driver", slog.String("vcs", name), n)
 	}
 	return nil
 }
@@ -159,7 +164,7 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 	if !ok {
 		return
 	}
-	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), workspaceOutputGlobs(m))
+	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), workspaceMergeGlobs(m))
 	if err != nil {
 		// Error, not Debug: a torn managed section or a stuck lock leaves the merge driver
 		// unregistered, and nothing else would say so. The command itself still runs.
@@ -171,10 +176,12 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 	}
 }
 
-// mergeDriverRun resolves a conflicted declared-output file by keeping the version the VCS
-// already staged in %A, which marks the conflict resolved without merging generated hunks by
-// hand. Args: ancestor result other markerSize path (git/hg protocol); exit non-zero falls
-// back to conflict markers.
+// mergeDriverRun settles one conflicted file. A file magus.yaml's vcs.auto_resolve opts in
+// is merged by merge3 when every region both sides changed is low risk. A declared output
+// keeps the version the VCS already staged, which marks the conflict resolved without
+// merging generated hunks by hand. Args: ancestor result other markerSize path (git and
+// hg), plus output when the VCS reads the result from a file of its own (jj). A non-zero
+// exit leaves the file conflicted, with markers.
 //
 // It deliberately does NOT regenerate. git runs a driver inside its own index
 // manipulation, once per conflicted file, while the owning project's generate target writes
@@ -186,6 +193,13 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if len(args) < 5 {
 		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
+	}
+	if len(args) > 6 {
+		return usagef("magus vcs merge-driver: expected at most 6 arguments (ancestor result other markerSize path output), got %d", len(args))
+	}
+	f := mergeFiles{base: args[0], ours: args[1], theirs: args[2], output: args[1], markerSize: args[3]}
+	if len(args) == 6 {
+		f.output = args[5]
 	}
 
 	relPath, err := mergeDriverRelPath(root, args[4])
@@ -205,10 +219,16 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	absPath := filepath.Join(m.Root(), filepath.FromSlash(relPath))
 	p := m.FindOutputProducer(absPath)
 	if p == nil {
-		// Not a declared output, so magus has no regeneration that would settle it later.
-		// Failing here lets the VCS write ordinary conflict markers rather than silently
-		// picking a side of a file a human is expected to merge.
-		return fmt.Errorf("merge-driver: no project declares %q as an output; cannot resolve", relPath)
+		// Source: settled only by the rule the merge queue applies (Magus.AutoResolve).
+		report, err := f.resolve(ctx, m, relPath)
+		switch {
+		case err != nil:
+			return fmt.Errorf("merge-driver: %s: %w", relPath, err)
+		case report.settled:
+			slog.InfoContext(ctx, "merge-driver: auto-resolved", slog.String("path", relPath), slog.String("verdict", report.line))
+			return nil
+		}
+		return f.leaveConflicted(fmt.Errorf("merge-driver: not auto-resolved: %s; resolve it by hand", report.line))
 	}
 
 	target, ok := settleTarget(p, absPath)
@@ -217,8 +237,19 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 		// With no target that writes this exact path there is no such run, so keeping one
 		// side would silently drop the other's change, and the VCS only invokes a driver
 		// when BOTH sides changed the file, so that change is never empty.
-		return fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge; resolve it by hand",
-			types.ProjectLabel(p.Path, p.Dir), relPath)
+		return f.leaveConflicted(fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge; resolve it by hand",
+			types.ProjectLabel(p.Path, p.Dir), relPath))
+	}
+	if f.output != f.ours {
+		// The VCS reads the result from its own output file, so keeping the current version
+		// means copying it there.
+		ours, err := os.ReadFile(f.ours)
+		if err != nil {
+			return fmt.Errorf("merge-driver: %w", err)
+		}
+		if err := writeKeepingMode(f.output, ours); err != nil {
+			return fmt.Errorf("merge-driver: %w", err)
+		}
 	}
 
 	// %A already holds the current version and is the file the VCS reads back, so leaving it
@@ -245,6 +276,84 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
+// mergeFiles are the files a VCS hands its merge tool. git and hg read the result back
+// from ours; jj names a separate output, which it fills with its own conflict markers
+// before the call.
+type mergeFiles struct {
+	base, ours, theirs, output string
+	markerSize                 string
+}
+
+// resolution is what resolve decided: whether path settled, and the line naming its
+// class, why, and each region's location and kind.
+type resolution struct {
+	settled bool
+	line    string
+}
+
+// resolve settles path with Magus.AutoResolve and writes the merge to output; when it
+// does not settle, output is untouched.
+func (f mergeFiles) resolve(ctx context.Context, m *magus.Magus, path string) (resolution, error) {
+	base, ours, theirs, err := f.read()
+	if err != nil {
+		return resolution{}, err
+	}
+	// git hands an empty ancestor for a file both sides added, and the queue, reading
+	// the base revision, finds no file there. Refusing both keeps the two in step.
+	if len(base) == 0 {
+		return resolution{line: path + ": the merge base has no content for it"}, nil
+	}
+	merged, report, ok := m.AutoResolve(ctx, path, base, ours, theirs)
+	if !ok {
+		return resolution{line: report}, nil
+	}
+	return resolution{settled: true, line: report}, writeKeepingMode(f.output, merged)
+}
+
+// leaveConflicted returns err, first writing conflict markers into output where the VCS
+// takes the file as the tool left it: git keeps %A as it stands when a driver fails, so
+// without them the other side's change would vanish from the working tree. jj's output
+// already holds its own markers and is left alone.
+func (f mergeFiles) leaveConflicted(err error) error {
+	if f.output != f.ours {
+		return err
+	}
+	base, ours, theirs, rerr := f.read()
+	if rerr != nil {
+		return errors.Join(err, rerr)
+	}
+	size, _ := strconv.Atoi(f.markerSize)
+	marked, ok := magus.MergeMarkers(base, ours, theirs, size)
+	if !ok {
+		// Binary, or too far apart to merge by line: the current version stays, as git
+		// leaves a binary conflict.
+		return err
+	}
+	return errors.Join(err, writeKeepingMode(f.output, marked))
+}
+
+func (f mergeFiles) read() (base, ours, theirs []byte, err error) {
+	if base, err = os.ReadFile(f.base); err != nil {
+		return nil, nil, nil, err
+	}
+	if ours, err = os.ReadFile(f.ours); err != nil {
+		return nil, nil, nil, err
+	}
+	if theirs, err = os.ReadFile(f.theirs); err != nil {
+		return nil, nil, nil, err
+	}
+	return base, ours, theirs, nil
+}
+
+// writeKeepingMode replaces path's content, keeping its permissions.
+func writeKeepingMode(path string, content []byte) error {
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(path, content, mode)
+}
+
 // mergeDriverRelPath normalizes the driver's path argument to a workspace-relative slash
 // path. git passes it repo-relative; hg passes an absolute workspace path.
 func mergeDriverRelPath(root, pathArg string) (string, error) {
@@ -260,6 +369,12 @@ func mergeDriverRelPath(root, pathArg string) (string, error) {
 		return "", fmt.Errorf("merge-driver: resolve path %q: %w", pathArg, err)
 	}
 	return filepath.ToSlash(rel), nil
+}
+
+// workspaceMergeGlobs is what the merge driver registration routes to magus: every
+// project's output globs and magus.yaml's vcs.auto_resolve, each sorted.
+func workspaceMergeGlobs(m *magus.Magus) types.MergeDriverGlobs {
+	return types.MergeDriverGlobs{Outputs: workspaceOutputGlobs(m), AutoResolve: m.AutoResolveGlobs()}
 }
 
 // workspaceOutputGlobs returns deduplicated workspace-relative output globs for all

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -166,6 +167,7 @@ type building struct {
 	touched   []string
 	conflicts map[string][]magustypes.Conflict // by the head merged
 	fail      map[string]error                 // starting the merge, by the head merged
+	files     map[string]string                // written into every checkout, by path
 }
 
 // makeCheckout creates the checkout's directory, as the version control would; the
@@ -180,7 +182,19 @@ func (d doubles) builds(b building) *checkouts {
 			co.mu.Lock()
 			defer co.mu.Unlock()
 			co.onto[dir] = rev
-			return makeCheckout(ctx, "", dir, rev)
+			if err := makeCheckout(ctx, "", dir, rev); err != nil {
+				return err
+			}
+			for path, content := range b.files {
+				abs := filepath.Join(dir, filepath.FromSlash(path))
+				if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+					return err
+				}
+			}
+			return nil
 		}).Maybe()
 	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, mock.Anything, candidateIdentity).
 		RunAndReturn(func(_ context.Context, dir, rev string, _ magustypes.Person) error {

@@ -415,3 +415,31 @@ func replaceIn(t *testing.T, dir, name, from, to string) {
 	require.Equal(t, 1, strings.Count(string(body), from), "%q in %s", from, name)
 	writeRepoFile(t, dir, name, strings.Replace(string(body), from, to, 1))
 }
+
+// The pure placement (types.DiffDriver.Declarations) names every line as git's funcname
+// matching does, for every driver magus routes files to, so a region a merge reports is
+// the region git's hunk headers, a footprint and a job claim name.
+func TestPurePlacementMatchesGit(t *testing.T) {
+	isolateGitConfig(t)
+	fixtures := map[string]string{
+		"golang":     "package a\n\nimport \"fmt\"\n\ntype T struct {\n\tA int\n}\n\nfunc (t T) M() {\n\tfmt.Println(1)\n}\n\nfunc F(x int) int {\n\treturn x\n}\n",
+		"python":     "import os\n\nclass A:\n    def m(self):\n        return 1\n\nasync def f():\n    pass\n",
+		"rust":       "use std::fmt;\n\npub struct S {\n    a: i32,\n}\n\nimpl S {\n    pub fn new() -> Self {\n        S { a: 1 }\n    }\n}\n",
+		"markdown":   "Intro line\n\n# Title\n\ntext\n\n## Section two\n\n   ### Indented heading\n\n    #### code block, not a heading\n",
+		"typescript": "import x from 'y'\n\nexport function f(a: number): number {\n  if (a) {\n    return a\n  }\n  return 0\n}\n\nclass C {\n  m(a: string): void {\n  }\n}\n",
+		"buzz":       "import \"std\";\n\nexport fun main(args: [str]) > void {\n    std\\print(\"x\");\n}\n\nobject O {\n    fun m() > void {}\n}\n\ntest \"it works\" {\n}\n",
+	}
+	var funcnames []string
+	for _, f := range gitFuncnames {
+		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+	}
+	for _, d := range types.DiffDrivers {
+		t.Run(d.Name, func(t *testing.T) {
+			body := fixtures[d.Name]
+			require.NotEmpty(t, body, "every driver needs a fixture")
+			want, err := gitPlaceLines(t.Context(), t.TempDir(), d.Name, funcnames, []byte(body))
+			require.NoError(t, err)
+			assert.Equal(t, want, d.Declarations(types.SplitLines([]byte(body))))
+		})
+	}
+}

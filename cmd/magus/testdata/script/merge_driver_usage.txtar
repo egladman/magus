@@ -14,7 +14,7 @@
 ! exec magus vcs merge-driver
 stderr 'expected 5 arguments'
 stderr 'Usage: magus vcs merge-driver %O %A %B %L %P'
-stderr 'git and hg invoke this'
+stderr 'git, hg and Sapling invoke it during a merge'
 stderr 'Wire it once per clone with .magus init.'
 stderr 'magus vcs resolve'
 
@@ -23,11 +23,13 @@ stderr 'magus vcs resolve'
 ! exec magus vcs merge-driver onlyonearg
 stderr '\[error\] magus vcs merge-driver: expected 5 arguments \(ancestor result other markerSize path\), got 1'
 
-# Five arguments naming a path no project declares as an Output. magus has no
-# regeneration that would settle it later, so it fails and lets the VCS write ordinary
-# conflict markers rather than silently picking a side of a hand-merged file.
+# Five arguments naming a path no project declares as an Output. Both sides changed its
+# one line differently, so auto-resolution does not settle it and it fails, naming the
+# location, and leaves conflict markers (git keeps a failed driver's file as it stands)
+# rather than silently picking a side of a hand-merged file.
 ! exec magus vcs merge-driver base.txt local.txt other.txt 0 local.txt
-stderr '\[error\] merge-driver: no project declares "local.txt" as an output; cannot resolve'
+stderr '\[error\] merge-driver: not auto-resolved: local.txt: not settled; resolve it by hand'
+grep '^<<<<<<< ours$' local.txt
 
 -- magus.yaml --
 concurrency: 2

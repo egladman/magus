@@ -339,6 +339,9 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 			}
 			v := decided(*c, types.DecisionKick, types.CodeKickConflict, "", conflictReport(r.in.Base, c.Head))
 			v.Reason, v.Paths, v.With = firstLine(v.Report), conf.paths, conf.with
+			if note := declinedNote(conf.declined); note != "" {
+				v.Report += "\n" + note + "\n"
+			}
 			return v, nil
 		}
 	}

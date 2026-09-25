@@ -16,6 +16,7 @@ type ReadVCS interface {
 	magustypes.RangeReporter
 	magustypes.TreeReporter
 	magustypes.TreeMerger
+	magustypes.RevisionFileReader
 	// FindCommit is magus's VCSDriver's own; no capability carries it.
 	FindCommit(ctx context.Context, dir, rev string) (magustypes.Commit, error)
 }
@@ -28,7 +29,6 @@ type BuildVCS interface {
 	magustypes.MergeStarter
 	magustypes.ConflictResolver
 	magustypes.CommitWriter
-	magustypes.RevisionFileReader
 	// DirtyFiles is magus's VCSDriver's own; no capability carries it.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
@@ -83,6 +83,11 @@ type BuildFacts interface {
 	// AllUnits is how the build tool names every unit (magus: "/"), which a hook is
 	// handed in place of an affected set that is not a proof.
 	AllUnits(ctx context.Context) ([]string, error)
+	// AutoResolvable reports whether a conflicted source path a three-way merge settled
+	// may merge without a person: base is the merge base's content and merged the
+	// settled content. verdict is the build tool's one line on the path, its class and
+	// why (magus: `<path>: <class> (<why>)`), either way.
+	AutoResolvable(ctx context.Context, path string, base, merged []byte) (verdict string, ok bool, err error)
 }
 
 // Writes is what the build tool knows about how it writes one path.

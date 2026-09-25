@@ -642,16 +642,20 @@ func slMetaDir(root string) string { return filepath.Join(root, ".sl") }
 // merging a conflicting change to a declared output invoked the named executable with
 // $base/$local/$other, and $local was the working-tree path (edited in place), which is the
 // contract magus's merge-driver subcommand is written against.
-func (v saplingVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
-	_, err := v.writeMergeDriver(ctx, root, outputGlobs)
+func (v saplingVCS) InstallMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) error {
+	_, err := v.writeMergeDriver(ctx, root, globs)
 	return err
 }
 
-func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
+func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
 	return lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyMergeDriverSection(slConfigPath(root), outputGlobs)
+		return writeHgFamilyMergeDriverSection(slConfigPath(root), globs)
 	})
 }
+
+// RunMergeDriver implements types.MergeDriverInstaller: Sapling ran the merge tool during
+// the merge, so a conflict still standing is one it did not settle.
+func (saplingVCS) RunMergeDriver(context.Context, string, []string) error { return nil }
 
 // MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
 func (v saplingVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
@@ -667,11 +671,11 @@ func (v saplingVCS) CheckMergeDriver(_ context.Context, root string) (bool, erro
 // EnsureMergeDriver implements types.MergeDriverInstaller. The config holds the glob list
 // inline, so a byte comparison of the rendered section answers both questions at once:
 // registered at all, and registered for the current globs.
-func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
-	if len(outputGlobs) == 0 {
+func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
+	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
 		return false, nil
 	}
-	return v.writeMergeDriver(ctx, root, outputGlobs)
+	return v.writeMergeDriver(ctx, root, globs)
 }
 
 // InstallRefreshHook implements types.RefreshHookInstaller with Sapling's `update` hook,

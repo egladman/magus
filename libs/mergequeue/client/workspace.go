@@ -181,6 +181,13 @@ func (w *Workspace) Generation(ctx context.Context, outputs, changed []string) (
 	return g, nil
 }
 
+// AutoResolvable is magus's change classifier on the merge (Magus.AutoResolvable): low
+// risk by the classes the ci gate uses, or code a project's merge_low_risk opts in.
+func (w *Workspace) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
+	verdict, ok := w.m.AutoResolvable(ctx, path, base, merged)
+	return verdict, ok, nil
+}
+
 // AllUnits is "/", the project reference magus reads as every project.
 func (w *Workspace) AllUnits(context.Context) ([]string, error) { return []string{"/"}, nil }
 

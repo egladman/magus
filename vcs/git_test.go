@@ -257,7 +257,7 @@ func TestInstallGitHooksOutsideARepositoryInstallNothing(t *testing.T) {
 	assert.Nil(t, installed)
 	assert.NoDirExists(t, filepath.Join(dir, ".git"))
 
-	err = gitVCS{}.InstallMergeDriver(t.Context(), dir, []string{"gen/**"})
+	err = gitVCS{}.InstallMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
 	require.EqualError(t, err, "vcs: install merge driver: "+dir+" is not in a git repository")
 	assert.NoFileExists(t, filepath.Join(dir, ".gitattributes"))
 }
@@ -1302,7 +1302,7 @@ func TestEnsureMergeDriverIdempotent(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
-	outputGlobs := []string{"gen/**", "docs/gen/**"}
+	outputGlobs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 	attrsPath := filepath.Join(repo, ".gitattributes")
 
 	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
@@ -1328,7 +1328,7 @@ func TestEnsureMergeDriverIdempotent(t *testing.T) {
 	// Re-wiring is the other reason EnsureMergeDriver exists: a project that declares an
 	// output later must be added, not left frozen at the shape the workspace had on the day
 	// init ran. The steady state above cannot show that.
-	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, []string{"gen/**", "dist/**"})
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, types.MergeDriverGlobs{Outputs: []string{"gen/**", "dist/**"}})
 	require.NoError(t, err)
 	assert.True(t, changed, "a changed glob set re-wires")
 	assertFile(t, attrsPath, generatedMarkers.section(wantDiffDriverLines+
@@ -1337,6 +1337,32 @@ func TestEnsureMergeDriverIdempotent(t *testing.T) {
 	for _, f := range gitFuncnames {
 		assert.Equal(t, f.pattern, gitConfigValue(t, repo, f.key()), "registered beside the merge driver")
 	}
+}
+
+// An auto-resolve glob routes to the driver without linguist-generated, since the file is
+// source a reviewer must see, and a slashless one is anchored at the root as magus.yaml's
+// globs are. Installing the same globs again changes nothing.
+func TestEnsureMergeDriverRoutesAutoResolveGlobs(t *testing.T) {
+	repo := t.TempDir()
+	isolateGitConfig(t)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**"}, AutoResolve: []string{"CHANGELOG.md", "docs/**/*.md"}}
+
+	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, globs)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assertFile(t, filepath.Join(repo, ".gitattributes"), generatedMarkers.section(wantDiffDriverLines+
+		"gen/** merge=magus linguist-generated\n"+
+		"/CHANGELOG.md merge=magus\n"+
+		"docs/**/*.md merge=magus\n"), 0o644)
+
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, globs)
+	require.NoError(t, err)
+	assert.False(t, changed, "installing twice is idempotent")
+
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, types.MergeDriverGlobs{AutoResolve: []string{"CHANGELOG.md"}})
+	require.NoError(t, err)
+	assert.True(t, changed, "auto-resolve globs alone are worth a registration")
 }
 
 // wantDiffDriverLines opens every managed section, spelled out rather than rendered from
@@ -1358,7 +1384,7 @@ func TestGitAttrsGeneratedGoKeepsMergeDriverAndGainsDiffDriver(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
-	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, []string{"gen/*.go"}))
+	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, types.MergeDriverGlobs{Outputs: []string{"gen/*.go"}}))
 
 	out, err := gitOutput(t.Context(), repo, gitOpts{}, "check-attr", "merge", "diff", "linguist-generated", "--",
 		"gen/api.go", "src/main.go", "web/app.tsx", "spells/go.buzz")
@@ -1474,7 +1500,7 @@ Run it.
 `,
 	}
 	gitInitRepo(t, repo, files)
-	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, nil))
+	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, types.MergeDriverGlobs{}))
 
 	for _, tc := range []struct {
 		file, line, want string
@@ -1524,7 +1550,7 @@ func TestCheckMergeDriverReportsMissingDiffDrivers(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
-	globs := []string{"gen/**"}
+	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**"}}
 	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, globs))
 
 	ok, err := gitVCS{}.CheckMergeDriver(t.Context(), repo)
@@ -1595,7 +1621,7 @@ func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
 	t.Setenv("GIT_WORK_TREE", repo)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	outputGlobs := []string{"gen/**", "docs/gen/**"}
+	outputGlobs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 
 	// Commit the section as an LF blob, the way every non-Windows contributor does.
 	_, wanted, err := gitVCS{}.gitAttrsState(repo, outputGlobs)
@@ -1648,7 +1674,7 @@ func TestEnsureMergeDriverIgnoresAmbientGitDir(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 
-	_, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, []string{"gen/**"})
+	_, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
 	require.NoError(t, err)
 
 	assert.Contains(t, gitConfigValue(t, repo, "merge.magus.driver"), gitDriverArgs,
@@ -2369,7 +2395,7 @@ func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
 	probe := &ensureRecorder{VCSDriver: gitVCS{}}
 	assert.True(t, installsMergeDriver(probe))
 	assert.False(t, probe.ensured, "the probe called EnsureMergeDriver, which may write")
-	assert.False(t, installsMergeDriver(jjVCS{}))
+	assert.True(t, installsMergeDriver(jjVCS{}), "jj registers a merge tool for jj resolve")
 }
 
 type ensureRecorder struct {
@@ -2377,7 +2403,7 @@ type ensureRecorder struct {
 	ensured bool
 }
 
-func (r *ensureRecorder) EnsureMergeDriver(context.Context, string, []string) (bool, error) {
+func (r *ensureRecorder) EnsureMergeDriver(context.Context, string, types.MergeDriverGlobs) (bool, error) {
 	r.ensured = true
 	return false, nil
 }
@@ -2720,6 +2746,37 @@ func TestMergeTreesWithAnExplicitBaseMergesOnlyWhatTheirsAdded(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, validated, wrong.Tree, "the plan base resurrects L, which is the bug")
 	assert.Equal(t, validated, right.Tree, "merged from onto, the prediction is the validated tree")
+}
+
+func TestMergeBaseIsTheOneCommitBothSidesForkedFrom(t *testing.T) {
+	dir, revs := mergeFixture(t)
+	g := gitVCS{}
+	ctx := t.Context()
+
+	got, ok, err := g.MergeBase(ctx, dir, revs["ours"], revs["theirs"])
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, revs["base"], got)
+
+	gitRun(t, dir, "checkout", "-q", "--orphan", "unrelated")
+	writeRepoFile(t, dir, "other.txt", "o\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "unrelated")
+	_, ok, err = g.MergeBase(ctx, dir, revs["ours"], gitTestOutput(t, dir, "rev-parse", "HEAD"))
+	require.NoError(t, err, "no shared history is an answer, not an error")
+	assert.False(t, ok)
+
+	// A criss-cross: each side merged the other's first commit, so two commits are best.
+	gitRun(t, dir, "checkout", "-q", "-b", "x", revs["ours"])
+	gitRun(t, dir, "merge", "-q", "--no-edit", "-s", "ours", revs["clean"])
+	gitRun(t, dir, "checkout", "-q", "-b", "y", revs["clean"])
+	gitRun(t, dir, "merge", "-q", "--no-edit", "-s", "ours", revs["ours"])
+	_, ok, err = g.MergeBase(ctx, dir, "x", "y")
+	require.NoError(t, err)
+	assert.False(t, ok, "two best bases describe neither side")
+
+	_, _, err = g.MergeBase(ctx, dir, revs["ours"], "no-such-rev")
+	require.Error(t, err)
 }
 
 func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {

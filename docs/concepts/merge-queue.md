@@ -185,6 +185,10 @@ generated file, a candidate tree or a review proof from a verdict.
   sees it. Another target's in-place update, such as a formatter's, does not count. A file magus maintains itself
   (`maintained`, such as `.gitattributes`) is rewritten by main's magus whenever a hook
   runs it, so the queue puts the change's version back and never commits main's.
+- **A resolution is main's computation.** A source conflict
+  [auto-resolution](#auto-resolving-source-conflicts) settles is settled by apply's own
+  magus from the three versions of the file and main's classification, never taken from
+  a verdict, and the result must be the commit validation gated.
 - **A review is proven in apply.** Whether a review of an older commit covers a merge of
   main into the change is a version control question apply answers itself, and a merge
   differing only in generated files is covered only when main's regeneration, run on the
@@ -490,6 +494,55 @@ The regeneration's writes to outputs and to files `generate`'s targets update in
 are committed; a file magus maintains is restored to the candidate's version and left out. A
 regeneration that fails, or writes anything nothing declares it writes, kicks that change
 back and the run goes on.
+
+## Auto-resolving source conflicts
+
+A conflict in a source file goes back to its author unless two things hold: the merge
+settles, and the change is low risk.
+
+The merge is the file's three versions (main's, the change's and their merge base's).
+Each side's edits against the merge base are hunks placed by the file's diff driver, the
+concurrent-edit model a job's footprint and claims use, and where both sides changed the
+same lines their hunks collide at a location, `path#declaration`. Each such region
+settles in one of two ways, or not at all:
+
+| Kind | Both sides changed the region by                                     | The queue keeps           |
+| ---- | -------------------------------------------------------------------- | ------------------------- |
+| 1    | the same change, or one side's lines containing the other's in order | the larger side           |
+| 2    | only adding lines where the base had none                            | main's, then the change's |
+
+Any other region, where both sides edited or deleted base lines differently, leaves the
+whole file conflicted, as does a side that only deleted lines, a file main's history
+does not share with the change, or a symlink. Lines keep their own endings, so a CRLF
+file stays CRLF and a missing final newline stays missing.
+
+Low risk is the one change classifier magus has, the one the ci gate's redundancy check
+([MGS3010](../reference/codes/sandbox/MGS3010.md)) uses, applied to the edit from the
+merge base to the merge: generated, prose (`gate_low_risk`, markdown by default) or
+comment-only. Code settles only where its project opts it in with `merge_low_risk`,
+project-relative globs beside `gate_low_risk`:
+
+```buzz
+magus\project({"merge_low_risk": ["testdata/golden/**"]});
+```
+
+Nothing is opted in by default. `--facts` answers the same question with an
+`auto_resolve` query, given the path, the merge base's content and the merge; a command
+that cannot answer it settles nothing. The same files settle the same way in a local
+merge, through magus's [merge driver](../guides/integrations/git.md#auto-resolving-source-files).
+
+A settled candidate is gated like any other; the gate's own format check is the only one
+it gets, so a resolution that breaks formatting is a red kick-back. Planning, validation
+and apply each settle the file themselves from the same three versions, and apply
+merges only when its rebuild is the commit validation gated. The provider's own merge
+would stop on the conflict, so apply hands it an update commit holding the settled file,
+after checking that its own resolution against main's tip is exactly what the rebuild
+holds; a change merging by rebase is kicked back instead. Each settled candidate writes
+a `resolved` event, and the verdict's reason says the same on a merge, one entry per file:
+the classifier's line and each region's location with its kind, as in
+`CHANGELOG.md: prose (matches "**/*.md" (built-in default)); CHANGELOG.md### Unreleased: kind 2`.
+A red kick-back's report adds that line, and a conflict's report or wait reason names why
+each file stayed conflicted: the location that did not settle, or the classifier's line.
 
 ## What a review covers
 

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -212,18 +212,18 @@ func TestGateRenderFindingDelta(t *testing.T) {
 			GateResult: sessions.GateResult{Ref: "b", Commit: "c1", Fingerprint: "fp-1", Inv: "inv123"},
 			At:         time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC),
 		},
-		delta: internalci.GateDelta{Paths: []internalci.ClassifiedPath{
-			{Path: "docs/a.md", Class: internalci.ClassProse, Why: `matches "**/*.md" (built-in default)`},
-			{Path: "gen/kg.json", Class: internalci.ClassGenerated, Why: "a declared output glob claims it"},
-			{Path: "run.go", Class: internalci.ClassCommentOnly, Why: "only comments differ from the green gate's revision"},
-		}},
+		delta: risk.Delta{Paths: []risk.Classified{
+			{Path: "docs/a.md", Class: risk.ClassProse, Why: `matches "**/*.md" (built-in default)`},
+			{Path: "gen/kg.json", Class: risk.ClassGenerated, Why: "a declared output glob claims it"},
+			{Path: "run.go", Class: risk.ClassCommentOnly, Why: "only comments differ from the revision compared against"},
+		}}.Lines(),
 	}
 	got := g.renderFinding(f)
 	assert.Contains(t, got, "green gate: run inv123, branch b, commit c1, recorded 2026-09-03T10:00:00Z")
 	assert.Contains(t, got, "delta since that gate, every file:")
 	assert.Contains(t, got, `docs/a.md: prose (matches "**/*.md" (built-in default))`, "names the classifying glob and its origin")
 	assert.Contains(t, got, "gen/kg.json: generated (a declared output glob claims it)")
-	assert.Contains(t, got, "run.go: comment-only (only comments differ from the green gate's revision)")
+	assert.Contains(t, got, "run.go: comment-only (only comments differ from the revision compared against)")
 	lines := strings.Split(got, "\n")
 	assert.Len(t, lines, 5, "one line per file, plus the header lines; never a summary")
 }

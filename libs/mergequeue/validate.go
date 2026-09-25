@@ -132,6 +132,8 @@ type flight struct {
 	depth  int
 	cancel context.CancelFunc
 	done   chan outcome
+	// resolved names the source files auto-resolution settled in cand, "" for none.
+	resolved string
 }
 
 type outcome struct {
@@ -267,7 +269,7 @@ func (r *validation) launch(ctx context.Context, group int, f *flight) (bool, er
 	if err := r.acquire(ctx); err != nil {
 		return false, err
 	}
-	cand, err := r.candidate(ctx, f.onto, f.change)
+	cand, err := r.candidate(ctx, f)
 	if err == nil {
 		f.cand = cand
 		r.start(ctx, group, f)
@@ -325,7 +327,7 @@ func (r *validation) only(ctx context.Context) error {
 			h := waitingBelow(c.Below)
 			return r.decide(types.Verdict{Change: c, Decision: types.DecisionWait, Code: h.code, Reason: h.reason})
 		}
-		cand, err := r.candidate(ctx, onto, c)
+		cand, err := r.candidate(ctx, f)
 		if err != nil {
 			if i < pos {
 				skipped[c.ID] = true
@@ -359,19 +361,26 @@ func (r *validation) only(ctx context.Context) error {
 	return nil
 }
 
-// candidate builds c's candidate onto onto, regenerated with v.Regenerate.
+// candidate builds f's change's candidate onto f.onto, regenerated with v.Regenerate.
 //
 // What the regeneration rewrites is committed only when the build tool proves it runs
 // none of c's code, the same proof an Applier needs before it can reproduce those bytes
 // with the base's own regeneration. Otherwise c's committed outputs are stale on top of
 // onto and only its author can regenerate them, so the candidate is refused before its
 // gate runs on a tree that could never merge.
-func (r *validation) candidate(ctx context.Context, onto string, c types.Change) (types.Candidate, error) {
+//
+// What auto-resolution settled is recorded on f, for its verdict to name.
+func (r *validation) candidate(ctx context.Context, f *flight) (types.Candidate, error) {
+	c := f.change
 	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
 		return types.Candidate{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
-	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}
+	s := candidateSpec{clone: r.clone, facts: r.facts, onto: f.onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}
 	b, err := buildMerge(ctx, r.vcs, s)
+	if err == nil && len(b.resolved) > 0 {
+		f.resolved = resolvedNote(b.resolved)
+		r.Events.Emit(Event{Kind: EventResolved, Change: c.ID, Commit: b.Commit, Reason: f.resolved})
+	}
 	if err != nil || r.Regenerate == nil {
 		return b.Candidate, err
 	}
@@ -514,9 +523,12 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 			v.Reason = out.summary
 		}
 		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
+		if f.resolved != "" {
+			v.Report += "\nBuilding the candidate " + f.resolved + "; the gate ran on that merge.\n"
+		}
 		return v.Decision, r.decide(v)
 	}
-	v.Decision = types.DecisionMerge
+	v.Decision, v.Reason = types.DecisionMerge, f.resolved
 	return v.Decision, r.decide(v)
 }
 
@@ -553,7 +565,11 @@ func conflictAhead(after string, conf sourceConflict) string {
 	if after != "" {
 		with = "#" + after + " ahead of it"
 	}
-	return "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
+	reason := "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
+	if note := declinedNote(conf.declined); note != "" {
+		reason += "; " + note
+	}
+	return reason
 }
 
 // failureReport says what failed on which commits. How to run it again, the files at

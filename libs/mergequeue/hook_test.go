@@ -355,6 +355,28 @@ func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}}, writes)
 }
 
+// The auto_resolve fact is the build tool's classification of one merge, asked with the
+// merge base's content and the merge; a command that cannot answer it settles nothing.
+func TestCommandFactsAnswerAutoResolve(t *testing.T) {
+	dir := t.TempDir()
+	facts := script(`case "$1" in
+	auto_resolve) cat > asked; echo '{"auto_resolve": true, "verdict": "CHANGELOG.md: prose (a glob)"}';;
+	*) exit 9;;
+	esac`)
+	verdict, ok, err := CommandFacts(facts, dir, HookEnv{}, nil).AutoResolvable(context.Background(), "CHANGELOG.md", []byte("a\n"), []byte("a\nb\n"))
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "CHANGELOG.md: prose (a glob)", verdict)
+	asked, err := os.ReadFile(filepath.Join(dir, "asked"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"path": "CHANGELOG.md", "base": "a\n", "merged": "a\nb\n"}`, string(asked))
+
+	verdict, ok, err = CommandFacts(script(`exit 9`), dir, HookEnv{}, nil).AutoResolvable(context.Background(), "x.go", nil, nil)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Equal(t, "x.go: the facts command answered no auto_resolve (auto_resolve hook: exited 9)", verdict)
+}
+
 func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

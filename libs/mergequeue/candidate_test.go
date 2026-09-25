@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/libs/mergequeue/types"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -111,6 +112,7 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 			outputs:   map[string]types.Writes{"gen/a.go": {Output: true}},
 			wantErr:   true,
 			settle: func(d doubles) {
+				d.sides(base, c.Head, "a.go", "x\n", "x1\n", "x2\n")
 				d.vcs.EXPECT().AbortMerge(mock.Anything, "/co").Return(nil)
 				d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, c.Head, base, []string{"a.go"}).Return(nil, nil)
 			},
@@ -122,7 +124,7 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 			d.vcs.EXPECT().Conflicts(mock.Anything, "/co").Return(tc.conflicts, nil)
 			d.facts.EXPECT().Classify(mock.Anything, conflictPaths(tc.conflicts)).Return(tc.outputs, nil)
 			tc.settle(d)
-			settled, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, "/co")
+			settled, resolved, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, "/co", base)
 			if tc.wantErr {
 				conf, ok := asConflict(err)
 				require.True(t, ok, "%v", err)
@@ -131,8 +133,190 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 			}
 			require.NoError(t, err)
 			assert.Equal(t, conflictPaths(tc.conflicts), settled)
+			assert.Empty(t, resolved)
 		})
 	}
+}
+
+// sides answers the three versions of path auto-resolution reads: at the merge base, the
+// base's side and the change's.
+func (d doubles) sides(ours, theirs, path, was, oursContent, theirsContent string) {
+	d.vcs.EXPECT().MergeBase(mock.Anything, mock.Anything, ours, theirs).Return(head("mb"), true, nil)
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, head("mb"), path).Return(was, nil)
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, ours, path).Return(oursContent, nil)
+	d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, theirs, path).Return(theirsContent, nil)
+}
+
+// genOutput is the build tool's answer that gen/a.go is generated and nothing else is.
+var genOutput = map[string]types.Writes{"gen/a.go": {Output: true}}
+
+// chVerdict is the build tool's line on CHANGELOG.md, and chNote how a report names its
+// kind-2 merge of "a\np\nz\n" and "a\nq\nz\n".
+const (
+	chVerdict = `CHANGELOG.md: prose (matches "**/*.md" (built-in default))`
+	chNote    = "auto-resolved " + chVerdict + "; CHANGELOG.md#(preamble): kind 2"
+)
+
+// allows answers the build tool's classification of path's merge.
+func (d doubles) allows(path, was, merged, verdict string, ok bool) {
+	d.facts.EXPECT().AutoResolvable(mock.Anything, path, []byte(was), []byte(merged)).Return(verdict, ok, nil)
+}
+
+// A conflicted source file merge3 settles and the build tool allows is settled in the
+// checkout from its three versions, beside the generated file that takes the change's
+// side, and the report names its class and each region's location and kind.
+func TestMergeInAutoResolvesALowRiskSourceFile(t *testing.T) {
+	c := change("1")
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte("<<<<<<< markers\n"), 0o640))
+	d := newDoubles(t)
+	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}, {Path: "gen/a.go", Kind: magustypes.ConflictKindContent}}
+	d.vcs.EXPECT().StartMerge(mock.Anything, dir, c.Head, candidateIdentity).Return(nil)
+	d.vcs.EXPECT().Conflicts(mock.Anything, dir).Return(conflicts, nil)
+	d.facts.EXPECT().Classify(mock.Anything, conflictPaths(conflicts)).Return(genOutput, nil)
+	d.sides(base, c.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
+	d.allows("CHANGELOG.md", "a\nz\n", "a\np\nq\nz\n", chVerdict, true)
+	d.vcs.EXPECT().MarkResolved(mock.Anything, dir, []string{"CHANGELOG.md"}).Return(nil)
+	d.vcs.EXPECT().KeepIncoming(mock.Anything, dir, []string{"gen/a.go"}).Return(nil)
+	d.vcs.EXPECT().MarkResolved(mock.Anything, dir, []string{"gen/a.go"}).Return(nil)
+
+	settled, resolved, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, dir, base)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gen/a.go"}, settled)
+	assert.Equal(t, []settledSource{{path: "CHANGELOG.md", verdict: chVerdict, res: merge3.Resolution{Content: []byte("a\np\nq\nz\n"),
+		Regions: []merge3.Region{{Locations: []magustypes.Location{{Path: "CHANGELOG.md", Declaration: magustypes.Preamble}}, Kind: merge3.BothAdded}}}}}, resolved)
+	assert.Equal(t, chNote, resolvedNote(resolved))
+	written, err := os.ReadFile(filepath.Join(dir, "CHANGELOG.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "a\np\nq\nz\n", string(written), "ours, then theirs")
+	info, err := os.Stat(filepath.Join(dir, "CHANGELOG.md"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o640), info.Mode().Perm(), "the file keeps its mode")
+}
+
+// Only what merge3 settles and the build tool allows is settled; everything else stays
+// the author's, with the reason: the location merge3 could not settle, or the build
+// tool's verdict.
+func TestMergeInLeavesWhatAutoResolutionDoesNotSettle(t *testing.T) {
+	c := change("1")
+	for name, tc := range map[string]struct {
+		kind     magustypes.ConflictKind
+		sides    func(d doubles)
+		declined []string
+	}{
+		"both sides edited one line": {kind: magustypes.ConflictKindContent,
+			sides:    func(d doubles) { d.sides(base, c.Head, "CHANGELOG.md", "a\nx\n", "a\nx1\n", "a\nx2\n") },
+			declined: []string{"CHANGELOG.md#(preamble): not settled"}},
+		"the build tool declines it": {kind: magustypes.ConflictKindContent,
+			sides: func(d doubles) {
+				d.sides(base, c.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
+				d.allows("CHANGELOG.md", "a\nz\n", "a\np\nq\nz\n", "CHANGELOG.md: code (why)", false)
+			},
+			declined: []string{"CHANGELOG.md: code (why)"}},
+		"no one merge base": {kind: magustypes.ConflictKindContent,
+			sides: func(d doubles) {
+				d.vcs.EXPECT().MergeBase(mock.Anything, mock.Anything, base, c.Head).Return("", false, nil)
+			},
+			declined: []string{"CHANGELOG.md: the sides share no one merge base"}},
+		"the base lacks the file": {kind: magustypes.ConflictKindContent,
+			sides: func(d doubles) {
+				d.vcs.EXPECT().MergeBase(mock.Anything, mock.Anything, base, c.Head).Return(head("mb"), true, nil)
+				d.vcs.EXPECT().ReadFileAt(mock.Anything, mock.Anything, head("mb"), "CHANGELOG.md").Return("", errors.New("does not exist"))
+			},
+			declined: []string{"CHANGELOG.md: absent at the merge base"}},
+		"one side deleted it": {kind: magustypes.ConflictKindDeleted, sides: func(doubles) {}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: tc.kind}}
+			d.vcs.EXPECT().StartMerge(mock.Anything, "/co", c.Head, candidateIdentity).Return(nil)
+			d.vcs.EXPECT().Conflicts(mock.Anything, "/co").Return(conflicts, nil)
+			d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
+			tc.sides(d)
+			d.vcs.EXPECT().AbortMerge(mock.Anything, "/co").Return(nil)
+			d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, c.Head, base, []string{"CHANGELOG.md"}).Return(nil, nil)
+			_, _, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, "/co", base)
+			conf, ok := asConflict(err)
+			require.True(t, ok, "%v", err)
+			assert.Equal(t, []string{"CHANGELOG.md"}, conf.paths)
+			assert.Equal(t, tc.declined, conf.declined)
+		})
+	}
+}
+
+// Writing through a symlink the change controls would land wherever the link points.
+func TestMergeInRefusesToAutoResolveASymlink(t *testing.T) {
+	c := change("1")
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.WriteFile(outside, []byte("untouched\n"), 0o600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "CHANGELOG.md")))
+	d := newDoubles(t)
+	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}
+	d.vcs.EXPECT().StartMerge(mock.Anything, dir, c.Head, candidateIdentity).Return(nil)
+	d.vcs.EXPECT().Conflicts(mock.Anything, dir).Return(conflicts, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
+	d.sides(base, c.Head, "CHANGELOG.md", "a\n", "a\np\n", "a\nq\n")
+	d.allows("CHANGELOG.md", "a\n", "a\np\nq\n", chVerdict, true)
+
+	_, _, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, dir, base)
+	var refused *types.RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, []string{"CHANGELOG.md"}, refused.Paths)
+	content, err := os.ReadFile(outside)
+	require.NoError(t, err)
+	assert.Equal(t, "untouched\n", string(content))
+}
+
+// Planning settles the same files from the same versions, so a change auto-resolution
+// settles is admitted, and one it does not is the author's conflict. A stacked change's
+// merge base is its stack base, as the merge's is.
+func TestCheckMergeAdmitsWhatAutoResolutionSettles(t *testing.T) {
+	c := change("1")
+	tip := head("tip")
+	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}
+	for name, tc := range map[string]struct {
+		theirs string
+		want   []string
+	}{
+		"settled":     {theirs: "a\nq\nz\n"},
+		"not settled": {theirs: "b\nz\n", want: []string{"CHANGELOG.md"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: tip, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "t", Conflicts: conflicts}, nil)
+			d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
+			d.sides(tip, c.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", tc.theirs)
+			if tc.want == nil {
+				d.allows("CHANGELOG.md", "a\nz\n", "a\np\nq\nz\n", chVerdict, true)
+			} else {
+				d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, c.Head, tip, tc.want).Return(nil, nil)
+			}
+			err := checkMerge(t.Context(), d.vcs, d.facts, clone.Root, tip, c)
+			if tc.want == nil {
+				require.NoError(t, err)
+				return
+			}
+			conf, ok := asConflict(err)
+			require.True(t, ok, "%v", err)
+			assert.Equal(t, tc.want, conf.paths)
+		})
+	}
+
+	t.Run("stacked", func(t *testing.T) {
+		d := newDoubles(t)
+		below := change("0")
+		s := stacked("2", below)
+		d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, below.Head, tip).Return(false, nil)
+		d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Base: below.Head, Ours: tip, Theirs: s.Head}).
+			Return(magustypes.TreeMergeResult{Tree: "t", Conflicts: conflicts}, nil)
+		d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
+		d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, below.Head, "CHANGELOG.md").Return("a\nz\n", nil)
+		d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, tip, "CHANGELOG.md").Return("a\np\nz\n", nil)
+		d.vcs.EXPECT().ReadFileAt(mock.Anything, clone.Root, s.Head, "CHANGELOG.md").Return("a\nq\nz\n", nil)
+		d.allows("CHANGELOG.md", "a\nz\n", "a\np\nq\nz\n", chVerdict, true)
+		require.NoError(t, checkMerge(t.Context(), d.vcs, d.facts, clone.Root, tip, s))
+	})
 }
 
 // A candidate adds only declared writes to what was merged: a regeneration writing
