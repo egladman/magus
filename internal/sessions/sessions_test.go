@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -433,7 +434,7 @@ func TestReadAllMissingStoreIsEmptyNotAnError(t *testing.T) {
 // Worktrees of one repo must resolve to one store, or a fact recorded in one is
 // invisible from the other and the whole feature is pointless.
 func TestDirIsSharedAcrossWorktreesOfOneRepo(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 
 	main := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git", "worktrees", "feature"), 0o755))

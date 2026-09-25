@@ -51,6 +51,7 @@ type run struct {
 	Charms            []string       // execution charms propagated via context; "rw" enables mutating targets
 	sink              *Sink          // nil reports through a text sink on stderr. See WithSink
 	report            *report.Writer // sink's record stream; nil unless its format records
+	lockReport        *report.Writer // report, unless the sink prints lock decisions as prose
 	NoVolatilityRetry bool
 	BaseRef           string
 	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
@@ -1516,7 +1517,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// no lock and starts before one is taken.
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.report, opts.stdio)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, opts.stdio)
 	if err != nil {
 		return err
 	}

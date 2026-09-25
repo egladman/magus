@@ -329,37 +329,6 @@ func splitOnDashDash(args []string) (before, after []string) {
 	return args, nil
 }
 
-// splitOnThen splits args at the chain separator, returning the run's own args and
-// the verbs to apply to what it produced.
-//
-// The separator is "--then" rather than "--" because "--" already forwards extra
-// args to spells (`magus run test -- -run TestFoo`), and it is a separator rather
-// than bare words because `magus run build web api` already takes trailing project
-// args: `magus run build file x` would otherwise be indistinguishable from a
-// project named "file".
-// found distinguishes an ABSENT separator from one with no verb after it. Without
-// it, `magus run build --then` silently ran as a plain build: the same
-// accepted-and-ignored failure this grammar exists to avoid.
-//
-// "--" is split off FIRST and outranks it, because everything after "--" is the
-// spell's verbatim argv: scanning the whole slice let `magus run test -- --then`
-// hijack an argument the spell was meant to receive. The "--" and its arguments are
-// re-attached to the run's own args, so `magus run test --then value -- -run TestFoo`
-// still forwards -run TestFoo.
-func splitOnThen(args []string) (before, after []string, found bool) {
-	head, extra := splitOnDashDash(args)
-	i := slices.Index(head, "--then")
-	if i < 0 {
-		return args, nil, false
-	}
-	before = slices.Clone(head[:i])
-	if len(head) != len(args) {
-		before = append(before, "--")
-		before = append(before, extra...)
-	}
-	return before, head[i+1:], true
-}
-
 // hintCanonicalSpelling nudges toward the canonical name when the user typed
 // another one. The fact comes off the parsed Target (Declared/DeclaredCharms), so
 // this is presentation only: types.ParseTarget stays a pure function and the

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/testenv"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	if addr := os.Getenv(holderEnv); addr != "" {
 		os.Exit(holdUntilKilled(addr))
 	}
-	testenv.Main(m)
+	testkit.Main(m)
 }
 
 func holdUntilKilled(addr string) int {

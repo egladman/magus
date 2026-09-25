@@ -304,6 +304,21 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "pipe",
+		Doc:  "Read the records a magus stage upstream in a pipe writes, and write records for the stage downstream.",
+		Methods: []Method{
+			{Name: "more", Doc: "Report whether another record is coming from the magus stage writing this script's stdin, waiting for it or for that stage to end. Errors when no magus stage writing records feeds this script.", Sig: "pipe\\more() -> bool"},
+			{Name: "next", Doc: "Return the next record from the magus stage writing this script's stdin, waiting for it. Errors past the last record, and when no magus stage writing records feeds this script.", Sig: "pipe\\next() -> PipeRecord"},
+			{Name: "all", Doc: "Return every record not yet read, once the magus stage writing this script's stdin has ended. Errors when no magus stage writing records feeds this script.", Sig: "pipe\\all() -> [PipeRecord]"},
+			{Name: "emit", Doc: "Write record to stdout for the stage downstream. A record read from upstream passes through byte for byte; one built here is written from its fields, and needs a type. A run.scope record's projects are what a run downstream that names none runs on.", Sig: "pipe\\emit(record)"},
+			{Name: "outputs", Doc: "Return the files the target of record declared as outputs and that exist on disk now, sorted by workspace-relative path. record names a project and a target, like a run.target.result.", Sig: "pipe\\outputs(record) -> [Artifact]"},
+			{Name: "export_to", Doc: "Copy artifact to dest, keeping its mode, and return dest. It writes a temporary file beside dest and renames it into place, so a symlink at dest is replaced rather than written through and an artifact exported onto itself survives.", Sig: "pipe\\exportTo(artifact, dest) -> string"},
+			{Name: "history", Doc: "Return every version of artifact the cache stored, newest first, with identical consecutive content collapsed: when its bytes changed, which its VCS history cannot say.", Sig: "pipe\\history(artifact) -> [ArtifactVersion]"},
+			{Name: "diff", Doc: "Compare artifact on disk against its most recent different cached version with your difftool: $MAGUS_DIFFTOOL, else $DIFFTOOL, else `git diff --no-index`. It renders nothing itself.", Sig: "pipe\\diff(artifact)"},
+			{Name: "value", Doc: "Return what a target returned, a str or a [str], from its run.target.value record. Errors for any other record.", Sig: "pipe\\value(record) -> any"},
+		},
+	},
+	{
 		Name: "platform",
 		Doc:  "Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin).",
 		Methods: []Method{

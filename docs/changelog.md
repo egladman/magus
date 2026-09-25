@@ -18,6 +18,13 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
+- **The agent guard refuses a backtick command substitution.** Inside double quotes a
+  backtick runs a command, so a literal backtick in a pattern pairs with the next one and
+  swallows everything between, file operands included. The deny names the fixes: `$(...)`
+  for a substitution, single quotes for a literal backtick.
+- **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
+  other clients of the protocol it runs share the target's slots instead of
+  choosing a width of their own. A target that declares no `slots` is unchanged.
 - **`broker: required | best-effort | off` decides what a run does without a broker.**
   `required` refuses a step (MGS3022, exit 69), `best-effort` (the default) runs
   unarbitrated and says so once, and `off` never starts or contacts one. Also
@@ -59,8 +66,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Every wait and kick-back carries a code.** Verdicts, events and `kick_back` name one of
   a closed set (`WAIT_NOT_APPROVED`, `KICK_CONFLICT`, ...) beside the files at issue, and
   the GitHub provider writes them under its comment for a workflow to read.
+- **The `extended` charm**, for tests that need more of the host than the gate does.
+  A function target reads it with `ctx.hasCharm("extended")`. This repository's cgo
+  compression and shell completion tests now run only under it.
 - **A failing remote tier degrades the run to the local tier.** The first failure is
   reported and counted as failed, never missed, and the run stops asking.
+- **The agent guard refuses a filter that nothing feeds.** A `grep`, `sed`, `jq`, `head`,
+  `tr` or similar with no file operand, no pipe into it and no input redirect reads the
+  harness's stdin, which can hang past the tool timeout. Each tool's flags are modeled, and
+  a call the guard cannot classify passes.
 - **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
   `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
   `--embedded` for magusfile code.
@@ -82,6 +96,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
   fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
+- **Diff drivers in the managed `.gitattributes` block**, with funcname patterns for
+  TypeScript and Buzz. `magus doctor` reports a missing one.
+- **A job's footprint.** `magus job wait` names the declaration each changed line lands
+  in, found with git's own funcname patterns and measured from the merge base, and
+  `magus ls jobs` compares footprints when it reports overlapping write paths. Lines
+  above a file's first declaration land in its `(preamble)`.
 - **Job rows and results carry `schema_version`.** An unknown version is rejected by name
   rather than field by field. Rows record `registered_by`.
 - **A lease's declared boundary is enforced.** The guard denies writes outside
@@ -121,7 +141,20 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.
+- **`magus mcp` serves MCP over stdio.** An agent host registers `{"command": "magus", "args": ["mcp"]}`
+  and gets every tool for the workspace it launches in, with no daemon and no token. Each call
+  carries a `stdio` credential holding `mcp=write`, and every MCP tool call, over either
+  transport, is refused below that with MGS9015.
 - **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
+- **A `pipe` Buzz module makes `magus buzz <script>` a stage of a magus pipe.** A
+  script reads the records of the run before it with `pipe\more`, `pipe\next` and
+  `pipe\all`, and `pipe\emit` writes records for the stage after it, so `magus run test .
+  | magus buzz failures.buzz` replaces `| grep FAIL`. Its exit status counts like any
+  stage's.
+- **Magus stages in a pipe trade typed records, and projects flow forward.** A run
+  whose stdout another magus reads writes its `-o jsonl` records there and its prose
+  on stderr, so `magus run format libs/x | magus run lint | magus run test` runs all
+  three on libs/x. Named projects still win; an explicit `-o` keeps its format.
 - **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
   `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
   turns into a token. magus runs none of it. `apply` refuses a status pinned to another
@@ -171,6 +204,13 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
   step, one writing what the other reads with no `ctx.needs` path between them, fail at
   derivation. `magus doctor` checks every composed target.
+- **The merge queue labels pull requests** `merge-queue: queued` while it holds them
+  and `merge-queue: rejected` when it kicks one back.
+- **`--scratch-env NAME=DIR` on `magus queue validate` and `magus queue apply`** points
+  a variable at a directory inside each candidate's scratch space, so cache isolation
+  lives on the queue's flags rather than on the hook's command line. It may repeat.
+- **A kick-back comment reproduces the failure.** Each kick-back is a new comment with
+  the run's link and the command that failed, runnable as written.
 - **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
   affected listings and failing results carry up to three `{id, command, argv, why}`
   entries, filtered by the acting lease's role and journaled per session.
@@ -195,6 +235,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   default `agent_id`). Guard templates are at version 17; re-install them.
 - **A target whose inputs have not moved since it failed says so before rerunning.**
   Nothing is skipped (`hint_id: unchanged-failure`).
+- **`testkit.Environ`, `Isolate` and `Main` give a test an environment built from an
+  allowlist.** The sandbox's allowlist plus the Go toolchain's settings survive; HOME and
+  the XDG base directories move under a temp root; the broker and server are pinned off;
+  everything else is dropped. A package names any extra variables in its TestMain.
 - **A text filter over a backgrounded run's capture is denied like a pipe over magus.**
   Use `-o jsonl --tee <file>` for a capture a tool may consume.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
@@ -237,6 +281,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
   `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
   `cache.Open` reads no environment.
+- **Breaking: `magus queue apply` requires `--base`, and `--workflow` with a run
+  source.** Verdicts no longer carry `message`, and a provider's `list_artifacts`
+  returns the run's origin as `run`; a provider script without it is refused.
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
   without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
   matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
@@ -250,6 +297,29 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   which the loopback daemon refuses. Stored tokens live at most 366 days and share links
   24 hours; longer, or `never`, is MGS9018. An old operator file is MGS9016, anything in
   `connectors.d` MGS9017.
+- **Breaking: the `daemon` block in `magus.yaml` is now `server`.** Every key moves as is:
+  `daemon.enabled`, `daemon.address`, `daemon.idle_ttl`, `daemon.workspaces` and
+  `daemon.maintenance.*` become `server.enabled`, `server.address`, `server.idle_ttl`,
+  `server.workspaces` and `server.maintenance.*`. The flags follow, `--daemon-*` to
+  `--server-*`. A `daemon` key is refused with an error naming its replacement.
+- **Breaking: `MAGUS_DAEMON_*` variables are now `MAGUS_SERVER_*`.** `MAGUS_DAEMON_ENABLED`,
+  `MAGUS_DAEMON_ADDRESS`, `MAGUS_DAEMON_IDLE_TTL`, `MAGUS_DAEMON_WORKSPACES` and the
+  `MAGUS_DAEMON_MAINTENANCE_*` family keep their suffix under `MAGUS_SERVER_`; setting an
+  old name is an error that names the new one. The pool pointer magus exports to its
+  children, `MAGUS_DAEMON_SOCKET`, is now `MAGUS_PROC_SOCKET`.
+- **Breaking for SDK callers: `magus.Open` refuses a broker it would never use.**
+  `WithBroker` given a nil client, or a client while `WithBrokerPolicy` or the workspace's
+  `broker` setting resolves to `off`, is an error from `Open` rather than a client silently
+  ignored. Pass one or the other.
+- **Breaking for SDK callers: the daemon names are gone from the Go API.** `magus.Daemon`,
+  `SetDaemon` and `ServeDaemon` are `Server`, `SetServer` and `Serve`;
+  `types.EntryPointDaemon`, `HolderDaemon`, `DaemonRequired` and `DaemonSocketWithheld`
+  are `EntryPointServer`, `HolderServer`, `ServerRequired` and `ProcSocketWithheld`. The
+  `internal/daemon` package is `internal/serverhttp`.
+- **Breaking: the wire says server where it said daemon.** `Pool.daemon_version` is
+  reserved and replaced by `owner_version`; `JOB_HOLDER_DAEMON` is reserved and replaced by
+  `JOB_HOLDER_SERVER`; the entry point recorded on an event is `server`, not `daemon`; and
+  the doctor check `daemon-version` is `server-version`.
 - **Breaking: sockets and logs moved.** `$XDG_RUNTIME_DIR/magus/broker.sock` and
   `server.sock` replace `magus-daemon.sock`, and a detached broker or server logs to
   `$XDG_STATE_HOME/magus/`, which survives logout, instead of beside its socket. The
@@ -311,6 +381,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
 - **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
   --watch`.
+- **A `for` loop that sleeps between passes is a polling loop.** The `busy-wait` rule
+  denies `for i in $(seq 1 60); do sleep 10; done`, and a workspace command rule sees
+  each program inside such a loop with `repeats` set, as it already did for `while` and
+  `until`. A `for` loop over a list with no `sleep` still repeats nothing.
 - **The guard routes unbounded source dumps to `magus refs`.**
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
 - **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
@@ -371,11 +445,19 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
   key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
   the hook form; the shipped sh and Buzz command and path hooks pass `sh` and `buzz`.
+- **A pipe of magus runs fails at its first failed stage, without `set -o pipefail`.**
+  A run starts nothing once a magus stage upstream of it has failed, and the last
+  stage exits with that stage's status (MGS3030), so `magus run generate:rw . | magus
+  run test .` is a chain whose exit status can be trusted.
 - **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
   a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
   the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
   caller's grant. Every mint is audited, and a revoked token ends its open streams.
 - **The PR advice comment leads with files no project claims.**
+- **The merge queue kicks back stale generated files before its gate runs.** A change
+  that edits generator code must commit outputs that are current on top of the base. If
+  they are stale, the kick-back names the stale files and says how to fix them. If they are
+  current, the change merges.
 - **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
   `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
   package leaves the command alone.
@@ -394,6 +476,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `magus session hints` as `deny-verdict`.
 - **The `run.remote` record says `stored`, not `published`,** which names output bundles
   only.
+- **`magus describe graph -o markdown <project>` renders only that project.** A scoped
+  index drops the workspace-wide kind and project tables, so a change elsewhere cannot
+  make it stale; the unscoped index keeps them. A project path that names no project is
+  now an error instead of an empty index.
 - **"Session" now means only the host's conversation; magus's per-process id is an
   invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
   `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is
@@ -423,6 +509,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Removed
 
+- **Breaking: the advice action's `hand-edited-generated` advisor and input.** It named
+  generated files as hand edits whenever no declared input of their project changed, which
+  was false for every output whose target opts out of the cache, such as a `MAGUS.md`
+  rendered from the whole graph. The drift gate already fails on a real hand edit. Delete
+  the key from `with:`.
 - **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
   `head-repo` inputs.** The action reads the pull request from the triggering event and
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
@@ -436,6 +527,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
   are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
   forking its spell's import path instead.
+- **Breaking: `magus run --then` and `magus affected --then`, with no alias.** Pipe the
+  run into a `magus buzz` script instead: `pipe\outputs`, `pipe\exportTo`,
+  `pipe\history`, `pipe\diff` and `pipe\value` act on the records it reads, and
+  `fs\readFile` and `crypto\sha256File` cover `contents` and `hash`.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
 - **The `preflight` target convention.** The starter magusfile and the docs no longer
@@ -452,6 +547,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a
   built-in one, and the idle clock follows the agent's id.
+- **Status, doctor and the console see both background processes.** The liveness probe
+  asks the configured server rather than whichever socket a run inherited; doctor's
+  `sockets` check reports `broker.sock` and `server.sock` by name; the compact status line
+  names each; and the dashboard gains broker and server tiles. `MAGUS_*` settings now
+  apply in a workspace with no `magus.yaml`.
 - **A run killed outright releases its claims and services at once.** Claims and
   service references ride the run's one broker connection, so the kernel closing it
   releases them; this replaces pid polling and the 24-hour cap. When the broker
@@ -484,6 +584,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
   git, including the shallow-clone deepening fetch, which re-added them. git never prompts
   for credentials, and no signing, rerere or signature line changes what magus reads.
+- **Generated docs examples read the same wherever they are regenerated.** The
+  examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
+  state dir it inherits leaks run history into the captured `magus explain` output.
 - **A failed remote-cache exchange names the step that failed.**
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
@@ -528,8 +631,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   five library indexes go stale.
 - **`magus session dispose` refuses without an interactive terminal and is denied to
   agents.** Disposing an attention request records that a PERSON answered it. Outside a
-  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `agent-sign-off`
   (widened from `read-ack`) denies every spelling on every agent channel.
+- **One magus can pipe into another that needs the same project, even through `jq` or
+  `tee`.** The reader, proven from the kernel on linux and macOS, waits until the
+  upstream is done with its projects, draining the pipe; before, the stage that lost
+  the race exited 75. Different projects still stream. A looping pipe is MGS3023.
 - **A `MAGUS_*` value that does not parse stops the load.** A bad number or duration was
   ignored, and `magus.Open` skipped validating the environment at all.
 - **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
@@ -589,6 +696,19 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A global flag's value (`magus --root . agent harness apply`) or a single-dash word with
   an `h` (`-o=template=hi`) hid the command from the guard. A spawn title naming a job
   outside the spawner's own lease tree is recorded as untrusted and attributes nothing.
+- **`magus queue apply` follows only the base's own validation run.** A pull
+  request's run executes its own copy of the queue workflow and could upload a forged
+  plan and verdicts that merged ungated. Apply now refuses any run but `--workflow`
+  started by a push or dispatch on `--base` of its repository (MGS3027), and
+  `queue-apply.yaml` dispatches main's run instead.
+- **`magus queue apply` checks the plan against what it reads itself.** A plan naming
+  another base or remote, a base commit the base lacks, or a stack base that is not
+  the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
+  a revert of the base. Apply writes the squash message itself.
+- **Breaking: no job holding a secret or a write token restores an Actions cache.** A
+  merge queue hook can read the runner's runtime token and plant cache entries in the
+  default branch's scope, so trusted jobs now install cold. `setup-magus` restores run
+  history only with `restore-history: 'true'`. A conventions test enforces both.
 
 ## [v0.4.3] - 2026-09-06
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +39,7 @@ func captureFactWarnings(t *testing.T, fn func()) string {
 }
 
 func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 
 	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build", Version: "test-version"})
@@ -67,7 +68,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 }
 
 func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 
 	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci"})
@@ -93,7 +94,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 // Everything that is not a target result must leave no trace, or the session store
 // becomes a second copy of the execution journal.
 func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 
 	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
@@ -116,7 +117,7 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 // Two invocations against two worktrees of one repo must land in one store, which is
 // what makes `magus session` a cross-worktree view rather than a per-checkout one.
 func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 
 	main := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git", "worktrees", "feature"), 0o755))
@@ -150,7 +151,7 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 // A store that cannot be written is the case where silence lies: nothing is recorded,
 // and `magus session` then reports in good faith that no session has run.
 func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 
 	dir, err := Dir(root)
@@ -178,7 +179,7 @@ func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 // a mid-run environment change would otherwise split one session's facts across two
 // leases, which is a history no producer could have meant.
 func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 
 	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})

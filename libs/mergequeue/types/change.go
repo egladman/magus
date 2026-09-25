@@ -56,6 +56,11 @@ type Change struct {
 	// unmerged, so it merges first.
 	StackBase string `json:"stack_base,omitempty"`
 	Below     string `json:"below,omitempty"`
+	// AuthorRegenerates is planning's too, set on every change it admits: the generated
+	// files the change touches that the build tool cannot prove regenerate without
+	// running the change's code, so only its author can regenerate them. An applier
+	// shows [FlagChangesGenerator] on an admitted change exactly when it holds any.
+	AuthorRegenerates []string `json:"author_regenerates,omitempty"`
 }
 
 // Label is how the change is named in reports.

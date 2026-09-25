@@ -39,9 +39,13 @@ type PushVCS interface {
 	magustypes.Pusher
 }
 
-// Candidate is one speculative merge commit and the checkout it was built in.
+// Candidate is one speculative merge commit and the checkout it was built in, or a
+// checkout of a commit as it stands.
 type Candidate struct {
 	Commit string
+	// Change is the id of the change merged to make Commit; empty for a checkout of a
+	// commit as it stands, such as the one a red candidate was built onto.
+	Change string
 	Dir    string
 	// Scratch is a directory private to this candidate, for the caches and temporary
 	// files of the hooks run on it: nothing another candidate's hooks wrote is in it.
@@ -54,12 +58,12 @@ type GateResult struct {
 	Summary string // one line naming what failed, for the kick-back report
 }
 
-// Gate validates a candidate. onto is the commit the candidate was built onto:
-// everything beneath it is validated by the candidates below, so a gate need run only
-// what the top change adds. An error means the gate could not run, a failure the queue
-// can prove is the machine's; anything the change's code did is a result.
+// Gate validates units, never empty, in a checkout: a candidate, or the commit a red
+// candidate was built onto, which tells whether the red is the change's. An error means
+// the gate could not run, a failure the queue can prove is the machine's; anything the
+// checkout's code did is a result.
 type Gate interface {
-	Validate(ctx context.Context, cand Candidate, onto string, c Change) (GateResult, error)
+	Validate(ctx context.Context, cand Candidate, units []string) (GateResult, error)
 }
 
 // BuildFacts is the build tool's side of the queue, read from the base's declarations,
@@ -76,6 +80,9 @@ type BuildFacts interface {
 	// Generation reports what regenerating outputs runs, and which of changed it would
 	// run as code.
 	Generation(ctx context.Context, outputs, changed []string) (Generation, error)
+	// AllUnits is how the build tool names every unit (magus: "/"), which a hook is
+	// handed in place of an affected set that is not a proof.
+	AllUnits(ctx context.Context) ([]string, error)
 }
 
 // Writes is what the build tool knows about how it writes one path.
@@ -110,11 +117,11 @@ type Generation struct {
 type Regeneration struct {
 	Dir     string // the checkout to regenerate in
 	Scratch string // a directory private to that checkout
-	Onto    string // the commit the checkout's change was merged onto
 	Change  Change
 	Paths   []string // the generated files to rewrite
-	// Units are what the build tool regenerates Paths by. Set only when the caller
-	// proved regenerating them runs none of the change's code.
+	// Units are what the build tool regenerates Paths by, handed to the hook as its
+	// arguments: the change's in validation, and in apply only units proven to run none
+	// of the change's code.
 	Units []string
 }
 
@@ -136,6 +143,9 @@ type RefusedError struct {
 	Reason string
 	Paths  []string
 	Remedy string
+	// Flag, when set, is the flag that explains the refusal: the kick-back shows it on the
+	// change and its report names it.
+	Flag Flag
 }
 
 func (e *RefusedError) Error() string { return e.Reason }

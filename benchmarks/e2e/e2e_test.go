@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -24,6 +25,8 @@ import (
 	// Link the host bindings so magusfile.buzz targets execute.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // writeProject creates root/name/magusfile.buzz with body. No magus.project
 // call is written: a bare magusfile that defines targets is expected to run via

@@ -75,9 +75,9 @@ func TestVerdictCheckRefusesAMergeThatNamesNoCandidate(t *testing.T) {
 
 func TestHookLinesBelongToValidationsVerdicts(t *testing.T) {
 	v := green("1")
-	v.Regenerate = `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`
+	v.Regenerate = "magus run generate:rw"
 	require.ErrorContains(t, v.Check(), "names a regeneration but no gate")
-	v.Gate = `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`
+	v.Gate = "magus run ci --no-default-charms"
 	require.NoError(t, v.Check())
 
 	kicked := Verdict{Change: change("1"), Decision: DecisionKick, Code: CodeKickConflict, Report: "conflicts", Gate: "true"}

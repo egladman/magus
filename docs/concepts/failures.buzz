@@ -1,0 +1,19 @@
+// Lists the targets that failed in the magus run piped into it, each with the command
+// that reads its captured output, in place of `| grep FAIL`:
+//
+//     magus run test . | magus buzz failures.buzz
+//
+// It reads the run's records, not its prose, so a failure is never missed for a
+// changed wording or a line a tool happened to print. The pipeline still exits with
+// the run's status.
+import "std";
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    while (pipe\more()) {
+        final rec = pipe\next();
+        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+            std\print("FAIL {rec.project}:{rec.target}  magus query output {rec.ref}");
+        }
+    }
+}

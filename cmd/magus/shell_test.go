@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,7 +56,7 @@ func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root,
 	// The ledger now lives in the per-repository state directory, and the guard resolves
 	// it with no seam a test can reach, so the environment is what keeps this off the
 	// developer's own ledger.
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root, cacheDir = t.TempDir(), t.TempDir()
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
@@ -845,8 +846,7 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 // first firing in a session spends the full text: the repeat is one line, the ref that
 // holds the full verdict, and the rule's page, and the ref must resolve to that verdict.
 func TestHookCmdShortensARepeatedDenial(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	base, root := t.TempDir(), t.TempDir()
 	ctx := guard.WithLocation(t.Context(), base, root, "")
 	run := func(command, session string) string {
@@ -1042,8 +1042,7 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 // checkout, and the lease bound there scopes the verdict, whatever the hook process's own
 // directory is.
 func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))

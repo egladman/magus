@@ -136,6 +136,56 @@ type URL struct {
 	Fragment string
 }
 
+// PipeRecord mirrors one record a magus stage writes to the next in a pipe: the -o jsonl
+// record, with the fields a script filters on lifted out of its body. A field the record
+// does not carry is empty; Body is the whole record, for everything else.
+type PipeRecord struct {
+	Schema int
+	// Type is the record's event type: run.scope, run.target.result, run.step, ...
+	Type    string
+	Project string
+	Target  string
+	Status  string
+	Error   string
+	// Ref is the output ref of a run.target.result, which reads its captured output.
+	Ref string
+	// Projects is a run.scope's selection: the projects a run downstream inherits.
+	Projects []string
+	// Body is the record as its JSON line, without the newline.
+	Body string
+}
+
+// TargetArtifact is one file a target actually produced: a declared output glob expanded
+// against the working tree. Glob is carried alongside Path because the declaration is
+// what makes the file a build artifact rather than an incidental file, and a reader
+// chasing an unexpected artifact needs to know which ctx.writesFiles(...) claimed it.
+// It crosses into Buzz as pipe.outputs's Artifact.
+type TargetArtifact struct {
+	Path string // workspace-relative
+	Glob string // the declaration it matched
+	// ProjectPath is the project whose target DECLARED the glob, not necessarily the
+	// project the file sits in, since a target may declare an output into another
+	// project's tree. Recorded here because this is the only place that knows it: a
+	// consumer re-deriving attribution from Path has to guess, and the guess fails
+	// outright for a file no project's tree claims.
+	ProjectPath string `buzz:"project"`
+}
+
+// ArtifactVersion mirrors one row of pipe.history: a version of an artifact the cache
+// stored, newest first. Blob is the content hash the store keys it by, the same sha256
+// crypto.sha256_file gives for the file on disk, so the two compare.
+type ArtifactVersion struct {
+	Blob  string
+	Short string
+	Size  int64
+	// Target is the target whose run produced this version.
+	Target string
+	// Created is when that run's cache entry was written, RFC 3339 in UTC.
+	Created string
+	// Entry is that cache entry's key.
+	Entry string
+}
+
 // FlagParse mirrors flags.parse's {values, positionals, unknown} object.
 //
 // Three fields rather than two because the caller, not the module, decides what an

@@ -8,7 +8,10 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestBuildSchedule_SkipsDisabledAndResolvesArgv(t *testing.T) {
 	m := config.Maintenance{
