@@ -459,16 +459,21 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 	if err != nil {
 		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
 	}
+	trailingArgs, err := o.Strs("trailingArgs")
+	if err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
+	}
 	sources, err := o.Strs("sources")
 	if err != nil {
 		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
 	}
 	c := spells.Command{
-		Args:        args,
-		DefaultArgs: defaultArgs,
-		Capture:     o.Bool("capture"),
-		Sources:     sources,
-		SourcesEach: o.Bool("sourcesEach"),
+		Args:         args,
+		DefaultArgs:  defaultArgs,
+		TrailingArgs: trailingArgs,
+		Capture:      o.Bool("capture"),
+		Sources:      sources,
+		SourcesEach:  o.Bool("sourcesEach"),
 	}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin

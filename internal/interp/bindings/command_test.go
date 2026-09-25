@@ -286,6 +286,52 @@ func TestRunCommandDefaultArgs(t *testing.T) {
 	})
 }
 
+// TestRunCommandGoCleanTrailingArgs pins the argv assembly around
+// Command.TrailingArgs: DefaultArgs' opposite, for an operand a tool refuses
+// to combine with certain flags at all, not just in the wrong order.
+// go-clean is exactly this shape (see spells/golang/spell.buzz): Args
+// ["clean"], TrailingArgs ["./..."], so `magus run go::go-clean . -- -cache`
+// produces `clean -cache` (no pattern) instead of `clean ./... -cache` (a
+// malformed import path) or even `clean -cache ./...` (go: "clean -cache
+// cannot be used with package arguments"; the flag rejects a pattern in
+// EITHER position).
+func TestRunCommandGoCleanTrailingArgs(t *testing.T) {
+	runWith := func(t *testing.T, opts commandOpts) []string {
+		t.Helper()
+		dir := t.TempDir()
+		logFile := filepath.Join(dir, "calls.log")
+		op := spells.Op{Command: spells.Command{
+			Bin:          "sh",
+			Args:         []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "clean"},
+			TrailingArgs: []string{"./..."},
+		}}
+		opts.env = map[string]string{"LOGFILE": logFile}
+		_, err := runCommand(std.WithCwd(context.Background(), dir), op, opts)
+		require.NoError(t, err)
+		lines := logLines(t, logFile)
+		require.Len(t, lines, 1)
+		return strings.Fields(lines[0])
+	}
+
+	t.Run("no args matches today's go-clean argv", func(t *testing.T) {
+		assert.Equal(t, []string{"clean", "./..."}, runWith(t, commandOpts{}))
+	})
+
+	t.Run("a forwarded flag drops the trailing operand entirely", func(t *testing.T) {
+		// The dispatchOp/ExtraArgs shape: args present, hasArgs unset. Unlike
+		// DefaultArgs (kept over forwarding), TrailingArgs disappears: go clean
+		// rejects -cache combined with any package pattern, in any order.
+		assert.Equal(t, []string{"clean", "-cache"},
+			runWith(t, commandOpts{args: []string{"-cache"}}))
+	})
+
+	t.Run("explicit args replace the trailing operand too", func(t *testing.T) {
+		assert.Equal(t, []string{"clean", "-n"},
+			runWith(t, commandOpts{args: []string{"-n"}, hasArgs: true}),
+			"a call-site args list must displace TrailingArgs the same way it displaces DefaultArgs")
+	})
+}
+
 // logInvocationOp is a Command that appends one line per invocation to a log
 // file (every arg of that invocation, space-separated) so a test can tell
 // how many times it ran and with what argv, without a real tool on PATH.
