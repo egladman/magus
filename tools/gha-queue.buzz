@@ -12,6 +12,10 @@
 //	magus buzz tools/gha-queue.buzz -- dispatch --run <id> --base <branch>
 //	                                                            start a validation run on the base once
 //	                                                            pull-request run <id> saw merge intent
+//	magus buzz tools/gha-queue.buzz -- ci-queued --run <id> --base <branch>
+//	                                                            write whether CI run <id> finished on the
+//	                                                            head of a queued pull request
+//	magus buzz tools/gha-queue.buzz -- start --base <branch>    start a validation run on the base
 //
 // The `--` hands the rest to the script; without it magus would parse the flags itself.
 // What the runner provides (GITHUB_REPOSITORY, RUNNER_TEMP, GITHUB_OUTPUT, the token) is
@@ -21,7 +25,7 @@
 //
 // Applying never runs pull-request code: the apply step runs magus, git and gh from main's
 // checkout, and main's own regeneration on a merge the workspace proved runs none of the
-// change's code.
+// change's code; any other regeneration it takes from validation's bundle, checked.
 namespace queue;
 
 import "flags";
@@ -125,8 +129,8 @@ export fun validateArgs(dir: str, change: str) > [str] {
 // which shares its hourly limit with every other request the app makes. The regeneration
 // is main's own, run in magus's sandbox on exactly the projects that generate the files a
 // merge needs regenerated; the queue runs it only once the workspace proves the change
-// touches none of their code. committer and app are the queue app's bot and slug, from
-// the workflow.
+// touches none of their code, and otherwise checks the bundle validation uploaded beside
+// the verdict. committer and app are the queue app's bot and slug, from the workflow.
 export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", SANDBOX, "--provider", "github", "--base", base, "--workflow", WORKFLOW,
         "--status-context", "merge-queue", "--interval", "15s",
@@ -215,8 +219,70 @@ fun planned(run: str) > void !> any {
 // only what the base's own queue.yaml plans.
 fun dispatch(run: str, base: str) > void !> any {
     if (awaitJob(run, job: "queue intent")) {
-        proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", need("GITHUB_REPOSITORY"), "--ref", base], opts: {});
+        start(base);
     }
+}
+
+// start starts a validation run of queue.yaml on base.
+fun start(base: str) > void !> any {
+    proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", need("GITHUB_REPOSITORY"), "--ref", base], opts: {});
+}
+
+// QUEUE_LABELS are the labels that queue a pull request, one per merge method; the
+// queue's status labels share their prefix and queue nothing.
+final QUEUE_LABELS = ["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"];
+
+// ciPulls reads `gh api repos/<repo>/actions/runs/<id>` of a CI run: the head it ran on
+// and the pull requests it ran for, which GitHub lists only for this repository's own
+// branches.
+export fun ciPulls(run: str) > CIRun !> any {
+    final r = serialize\jsonDecode(run);
+    final pulls = mut [<str>];
+    foreach (p in r.q("pull_requests").listValue()) {
+        pulls.append("{p.q("number").integerValue()}");
+    }
+    return CIRun{ head = r.q("head_sha").stringValue(), pulls = pulls };
+}
+
+object CIRun {
+    head: str,
+    pulls: [str],
+}
+
+// queuedAt reads `gh api repos/<repo>/pulls/<n>`: whether the pull request is open
+// against base with its head still at head, and carries merge intent (auto-merge, or a
+// queue label on it). A stack member's intent is its stack top's label, whose own CI run
+// starts the queue for the stack.
+export fun queuedAt(pull: str, head: str, base: str) > bool !> any {
+    final pr = serialize\jsonDecode(pull);
+    if (pr.q("state").stringValue() != "open" or pr.q("head").q("sha").stringValue() != head or pr.q("base").q("ref").stringValue() != base) {
+        return false;
+    }
+    if (pr.q("auto_merge").q("merge_method").stringValue() != "") {
+        return true;
+    }
+    foreach (l in pr.q("labels").listValue()) {
+        if (QUEUE_LABELS.indexOf(l.q("name").stringValue()) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ciQueued writes whether CI run run finished on the current head of a pull request the
+// queue holds: a change waiting on its required checks waits for exactly that, and
+// nothing else starts a validation run once they report.
+fun ciQueued(run: str, base: str) > void !> any {
+    final repo = need("GITHUB_REPOSITORY");
+    final r = ciPulls(capture("gh", args: ["api", "repos/{repo}/actions/runs/{run}"]));
+    var queued = false;
+    foreach (n in r.pulls) {
+        if (queuedAt(capture("gh", args: ["api", "repos/{repo}/pulls/{n}"]), head: r.head, base: base)) {
+            queued = true;
+            break;
+        }
+    }
+    fs\appendFile(need("GITHUB_OUTPUT"), content: "queued={queued}\n");
 }
 
 fun apply(run: str, base: str, app: str, committer: str) > void !> any {
@@ -229,7 +295,9 @@ final usage = "usage: magus buzz tools/gha-queue.buzz -- <step> <flags>\n"
     + "  validate --change <id>\n"
     + "  planned --run <id>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
-    + "  dispatch --run <id> --base <branch>";
+    + "  dispatch --run <id> --base <branch>\n"
+    + "  ci-queued --run <id> --base <branch>\n"
+    + "  start --base <branch>";
 
 // options parses one step's flags, all valued. Each name in required must be given a
 // value; optional ones may be empty. Anything the step does not declare is refused.
@@ -267,6 +335,11 @@ export fun main(args: [str]) > void !> any {
     } else if (step == "dispatch") {
         final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
         dispatch(o["--run"]!, base: o["--base"]!);
+    } else if (step == "ci-queued") {
+        final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
+        ciQueued(o["--run"]!, base: o["--base"]!);
+    } else if (step == "start") {
+        start(options(step, argv: argv, required: ["--base"], optional: [<str>])["--base"]!);
     } else {
         throw "queue: unknown step \"{step}\"\n{usage}";
     }
@@ -342,6 +415,30 @@ test "apply follows the validation run as its source, pinned to the base and que
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache",
         "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>", "--app", "q", "run:o/r/runs/99"], message: "argv");
+}
+
+test "a CI run starts the queue only when it finished on the current head of a queued pull request" {
+    final r = ciPulls(`{"head_sha": "h1", "pull_requests": [{"number": 7}, {"number": 9}]}`);
+    assert\equal([r.head, r.pulls.join(",")], want: ["h1", "7,9"], message: "the head and the pull requests it ran for");
+    assert\equal(ciPulls(`{"head_sha": "h1", "pull_requests": []}`).pulls.len(), want: 0, message: "a fork's run lists none");
+    final pull = fun (state: str, head: str, base: str, auto: str, labels: [str]) > str {
+        final named = mut [<{str: str}>];
+        foreach (l in labels) {
+            named.append({"name": l});
+        }
+        var automerge: any = null;
+        if (auto != "") {
+            automerge = {"merge_method": auto};
+        }
+        return serialize\jsonEncode(serialize\Boxed.init({"state": state, "head": {"sha": head}, "base": {"ref": base}, "auto_merge": automerge, "labels": named}));
+    };
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: true, message: "auto-merge");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: rebase"]), head: "h1", base: "main"), want: true, message: "a queue label");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: queued", "merge-queue: kicked back"]), head: "h1", base: "main"),
+        want: false, message: "a status label is no intent");
+    assert\equal(queuedAt(pull("open", head: "h2", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "CI on a head since replaced");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "release", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "another base");
+    assert\equal(queuedAt(pull("closed", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "closed");
 }
 
 test "apply refuses to run without the queue app's slug and committer" {

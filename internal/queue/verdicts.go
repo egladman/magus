@@ -18,7 +18,10 @@ import (
 const (
 	PlanFile    = "plan.json"    // the plan the verdicts were decided against
 	VerdictFile = "verdict.json" // one change's verdict, in the change's subdirectory
-	DoneFile    = ".done"        // no more verdicts will arrive
+	// CandidateBundle is the regenerated candidate beside a verdict, when validation's
+	// regeneration committed anything: a bundle of that one commit on the merge beneath it.
+	CandidateBundle = "candidate.bundle"
+	DoneFile        = ".done" // no more verdicts will arrive
 )
 
 // VerdictDir carries verdicts from validation to apply through a directory, which a CI
@@ -137,7 +140,11 @@ var _ types.VerdictSource = (*VerdictDir)(nil)
 
 // Record checks v and writes it under d.Path. Safe for concurrent use with distinct
 // changes.
-func (d *VerdictDir) Record(v types.Verdict) error {
+func (d *VerdictDir) Record(v types.Verdict) error { return d.RecordWithBundle(v, "") }
+
+// RecordWithBundle is Record, with the file at bundle copied in beside the verdict as
+// [CandidateBundle] in the same rename; "" copies none.
+func (d *VerdictDir) RecordWithBundle(v types.Verdict, bundle string) error {
 	var buf bytes.Buffer
 	if err := writeVerdict(&buf, v); err != nil {
 		return err
@@ -156,6 +163,20 @@ func (d *VerdictDir) Record(v types.Verdict) error {
 	}
 	if err := writeSynced(f, buf.Bytes()); err != nil {
 		return err
+	}
+	if bundle != "" {
+		// Copied, not renamed: the bundle may be on another filesystem.
+		content, err := os.ReadFile(bundle)
+		if err != nil {
+			return err
+		}
+		bf, err := os.OpenFile(filepath.Join(tmp, CandidateBundle), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return err
+		}
+		if err := writeSynced(bf, content); err != nil {
+			return err
+		}
 	}
 	final := filepath.Join(d.Path, v.Change.ID)
 	if err := os.RemoveAll(final); err != nil {
@@ -216,8 +237,37 @@ func (d *VerdictDir) Poll(context.Context) (types.VerdictBatch, error) {
 			continue
 		}
 		batch.Verdicts = append(batch.Verdicts, v)
+		bundle, err := d.bundle(id)
+		switch {
+		case err != nil:
+			return types.VerdictBatch{}, err
+		case bundle != "":
+			if batch.Bundles == nil {
+				batch.Bundles = map[string]string{}
+			}
+			batch.Bundles[id] = bundle
+		}
 	}
 	return batch, nil
+}
+
+// bundle returns the absolute path of id's [CandidateBundle], or "" when it has none. A
+// bundle that is not a regular file is none: extracting an artifact makes only those.
+func (d *VerdictDir) bundle(id string) (string, error) {
+	file, err := filepath.Abs(filepath.Join(d.Path, id, CandidateBundle))
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(file)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "", nil
+	case err != nil:
+		return "", err
+	case !info.Mode().IsRegular():
+		return "", nil
+	}
+	return file, nil
 }
 
 func (d *VerdictDir) read(id string) (types.Verdict, error) {
