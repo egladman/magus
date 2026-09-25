@@ -144,6 +144,9 @@ type admitting struct {
 	changed    []string
 	generated  map[string]types.Writes
 	generation types.Generation
+	// diverged are the paths the merge onto the base holds differently from the head,
+	// asked for only when generation proves nothing; nil asks nothing.
+	diverged []string
 }
 
 func (d doubles) admit(c types.Change, a admitting) {
@@ -192,6 +195,9 @@ func (d doubles) admit(c types.Change, a admitting) {
 	if len(outputs) > 0 {
 		d.facts.EXPECT().Generation(mock.Anything, outputs, changed).Return(a.generation, nil)
 	}
+	if a.diverged != nil {
+		d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "t", c.Head).Return(a.diverged, nil)
+	}
 }
 
 // The date comes from the commits the plan names, never a clock, so planning the same
@@ -232,10 +238,24 @@ func TestPlanAdmission(t *testing.T) {
 			wantSet: []string{"a"}},
 		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
 		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},
-		"generated files regenerated from the change's own code keep it out of the queue": {c: change("1", "a"), admit: &admitting{
+		"generated files the base moved, regenerated from the change's own code, keep it out of the queue": {c: change("1", "a"), admit: &admitting{
 			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
+			diverged:   []string{"docs/y.md", "gen/x.go"},
 		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
+		"so do generated files that conflict": {c: change("1", "a"), admit: &admitting{
+			conflicts: []magustypes.Conflict{{Path: "gen/x.go"}}, outputs: map[string]types.Writes{"gen/x.go": {Output: true}},
+			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
+			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
+			diverged:   []string{},
+		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
+		// The queue regenerates nothing for it, and the gate's drift check proves the
+		// change's own regenerated files match.
+		"generated files the merge leaves as the change has them are not": {c: change("1", "a"), admit: &admitting{
+			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
+			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
+			diverged:   []string{"docs/y.md"},
+		}, wantSet: []string{"a"}},
 		"generated files the base's regeneration provably makes are not": {c: change("1", "a"), admit: &admitting{
 			changed: []string{"a/x.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}},
@@ -243,6 +263,7 @@ func TestPlanAdmission(t *testing.T) {
 		"generated files no regeneration can be bounded for keep it out of the queue": {c: change("1", "a"), admit: &admitting{
 			changed: []string{"gen/x.go", "magusfile.buzz"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}, Unbounded: "magusfile.buzz edits the declarations"},
+			diverged:   []string{"gen/x.go"},
 		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
 		// Every hook takes the units as arguments after its own, with no "--" between.
 		"a project a hook would read as an option is kicked back": {c: unknown, admit: &admitting{affected: []string{"a", "--gate=sh"}},
@@ -284,7 +305,7 @@ func TestPlanAdmission(t *testing.T) {
 			if v.Code == types.CodeKickRegeneration {
 				assert.Equal(t, []string{"gen/x.go"}, v.Paths)
 				assert.Equal(t, "The merge queue cannot merge this change: it changes what regenerates `gen/x.go`, so the queue cannot prove regenerating them runs none of its code.\n\n"+
-					"Regenerate them yourself, push, and merge it by hand once it is reviewed.\n", v.Report)
+					"Merge `main` in, regenerate them, push, and queue it again.\n", v.Report)
 			}
 		})
 	}

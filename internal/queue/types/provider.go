@@ -50,7 +50,7 @@ const (
 	MarkNone              Mark = ""                   // none
 	MarkQueued            Mark = "queued"             // the queue holds the change
 	MarkKickedBack        Mark = "kicked_back"        // the queue kicked the change back
-	MarkNeedsRegeneration Mark = "needs_regeneration" // kicked back with [CodeKickRegeneration]; a person merges it
+	MarkNeedsRegeneration Mark = "needs_regeneration" // kicked back with [CodeKickRegeneration]; its author regenerates
 )
 
 // Valid reports whether m is one of the marks.

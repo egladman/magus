@@ -764,7 +764,7 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 	}
 	why, paths := unprovenWhy(g, outputs)
 	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
-		"), so only its author can regenerate them", Remedy: r.mergeBaseIn() + " Then merge it by hand once it is reviewed.", Code: types.CodeKickRegeneration}
+		"), so only its author can regenerate them", Remedy: r.mergeBaseIn() + " Then queue it again: the merge leaves them as they are.", Code: types.CodeKickRegeneration}
 }
 
 // proveOwed proves each merge of the base into c that a review covers only through

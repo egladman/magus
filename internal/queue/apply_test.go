@@ -567,7 +567,7 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.MatchedBy(func(k types.Kick) bool {
 		return k.Code == types.CodeKickRegeneration &&
 			strings.Contains(k.Report, "it changes code their regeneration runs (`gen/gen.go`), so only its author can regenerate them") &&
-			strings.Contains(k.Report, "merge it by hand")
+			strings.Contains(k.Report, "Merge `main` in, regenerate, and push. Then queue it again")
 	})).Run(func(context.Context, types.Change, string, types.Kick) { marks.add("kicked") }).Return(nil).Once()
 	a := applierFor(t, d, planOf([]types.Change{c}), v)
 	a.Regenerate = func(context.Context, types.Regeneration) error {

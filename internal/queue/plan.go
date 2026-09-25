@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/queue/types"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // Planner admits changes and partitions them. It executes no change's code and writes
@@ -354,7 +355,7 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 		}
 		c.Affected, c.UnboundedBy = affected, unboundedBy
 	}
-	regen, err := authorRegenerates(ctx, r.facts, paths)
+	regen, err := r.authorRegenerates(ctx, *c, paths)
 	if err != nil {
 		return nil, fmt.Errorf("regeneration of %s: %w", c.Label(), err)
 	}
@@ -365,29 +366,53 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 		}
 	}
 	if len(regen) > 0 {
-		v := decided(*c, types.DecisionKick, types.CodeKickRegeneration, "", regenerationReport(joinPaths(regen)))
+		v := decided(*c, types.DecisionKick, types.CodeKickRegeneration, "", regenerationReport(r.in.Base, joinPaths(regen)))
 		v.Reason, v.Paths = firstLine(v.Report), regen
 		return v, nil
 	}
 	return nil, nil //nolint:nilnil // no verdict is planning's answer that c is admitted
 }
 
-// authorRegenerates returns the generated files among changed whose regeneration the
-// build tool cannot prove runs none of changed: the proof applying needs before it
-// regenerates them itself.
-func authorRegenerates(ctx context.Context, f types.BuildFacts, changed []string) ([]string, error) {
-	generated, err := outputs(ctx, f, changed)
+// authorRegenerates returns the generated files among changed that c's merge onto the
+// base needs regenerated and whose regeneration the build tool cannot prove runs none
+// of changed: the proof applying needs before it regenerates them itself. A generated
+// file the merge leaves as c has it needs no regeneration, whatever regenerates it: the
+// gate's drift check proves it matches, so c merges like any other change.
+func (r *planning) authorRegenerates(ctx context.Context, c types.Change, changed []string) ([]string, error) {
+	generated, err := outputs(ctx, r.facts, changed)
 	if err != nil || len(generated) == 0 {
 		return nil, err
 	}
-	g, err := f.Generation(ctx, generated, changed)
+	g, err := r.facts.Generation(ctx, generated, changed)
 	if err != nil {
 		return nil, fmt.Errorf("generation of %s: %w", joinPaths(generated), err)
 	}
 	if regenerationProven(g) {
 		return nil, nil
 	}
-	return generated, nil
+	return r.regeneratedByMerge(ctx, c, generated)
+}
+
+// regeneratedByMerge returns the paths among generated that merging c onto the base
+// does not leave as c has them: a conflict, or a file the base changed since c forked.
+// Only those need regenerating on the candidate.
+func (r *planning) regeneratedByMerge(ctx context.Context, c types.Change, generated []string) ([]string, error) {
+	mb, err := mergeBase(ctx, r.vcs, r.clone.Root, r.tip, c)
+	if err != nil {
+		return nil, err
+	}
+	m, err := r.vcs.MergeTrees(ctx, r.clone.Root, magustypes.TreeMerge{Base: mb, Ours: r.tip, Theirs: c.Head})
+	if err != nil {
+		return nil, fmt.Errorf("merge %s onto %s: %w", c.Label(), r.in.Base, err)
+	}
+	moved, err := r.vcs.DiffTrees(ctx, r.clone.Root, m.Tree, c.Head)
+	if err != nil {
+		return nil, fmt.Errorf("compare the merge of %s with its head: %w", c.Label(), err)
+	}
+	for _, conf := range m.Conflicts {
+		moved = append(moved, conf.Path)
+	}
+	return slices.DeleteFunc(slices.Clone(generated), func(p string) bool { return !slices.Contains(moved, p) }), nil
 }
 
 // planRefs is every change in is a listed change may carry the head of.
@@ -414,12 +439,14 @@ func conflictReport(base, commit string) string {
 		"Merge `%s` into this branch and resolve the conflict by hand.\n", short(commit), base, base)
 }
 
-// regenerationReport says why the queue will not merge a change whose own code changes
-// what regenerates paths: it cannot prove that regeneration runs none of the change.
-func regenerationReport(paths string) string {
+// regenerationReport says why the queue will not merge a change whose merge needs paths
+// regenerated and whose own code changes what regenerates them: it cannot prove that
+// regeneration runs none of the change. Once the author has merged base in and
+// regenerated, the merge leaves the paths alone and the queue takes the change.
+func regenerationReport(base, paths string) string {
 	return "The merge queue cannot merge this change: it changes what regenerates " + paths +
 		", so the queue cannot prove regenerating them runs none of its code.\n\n" +
-		"Regenerate them yourself, push, and merge it by hand once it is reviewed.\n"
+		"Merge `" + base + "` in, regenerate them, push, and queue it again.\n"
 }
 
 func reasonSuffix(reason string) string {
