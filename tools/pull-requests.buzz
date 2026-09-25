@@ -1,0 +1,1317 @@
+// This repository's driver for landing a batch of pull requests through the magus merge
+// queue, so an orchestrator spends judgment only where a pull request needs it. It is
+// this repository's glue, not part of magus:
+//
+//	magus buzz tools/pull-requests.buzz -- status [--author <login>] [--pr <n>]...
+//	    one JSON line per pull request: its state, the action it needs, and the model
+//	    that does it (none when this script or nobody acts)
+//	magus buzz tools/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
+//	    take the actions that change no code: queue what is green on a current base, and
+//	    rerun a red run once per head when the failure is outside the change's files
+//
+// With no selector the selection is the authenticated user's open pull requests. Every
+// decision is a pure function tested at the bottom; the gh and git calls are not. Apply
+// never admin-merges, force-pushes or edits a branch: code changes are an agent's, and
+// the orchestrator pushes them.
+namespace pullrequests;
+
+import "flags";
+import "magus";
+import "proc";
+import "serialize";
+import "std";
+import "tools/commits" as commits;
+
+import "assert";
+
+// FIELDS is everything status reads, fetched for every open pull request in one call:
+// a stack's parent may be anyone's.
+final FIELDS = "number,title,state,author,headRefName,baseRefName,headRefOid,isDraft,isCrossRepository,"
+    + "mergeable,mergeStateStatus,autoMergeRequest,labels,files,statusCheckRollup,comments";
+final LIMIT = 100;
+
+// The queue's own surface: a stack's top carries QUEUE_LABEL plus a method, a kick-back
+// sets REJECTED and ends its comment with KICK_MARKER, and QUEUE_STATUS is its status.
+final QUEUE_LABEL = "queue: ";
+final REJECTED = "merge-queue: rejected";
+final KICK_MARKER = "<!-- mergequeue: ";
+final QUEUE_STATUS = "merge-queue";
+
+// HYGIENE is pr.yaml's job: the title check and the changelog fragment lint.
+final HYGIENE = "pr hygiene";
+final GREEN = ["SUCCESS", "SKIPPED", "NEUTRAL"];
+// A run that never got to judge the change; rerunning it is safe.
+final TRANSIENT = ["CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"];
+final METHODS = ["squash", "merge", "rebase"];
+
+// SENSITIVE holds the paths where a mistake is a security or queue-integrity bug, so a
+// change touching one never goes to a mechanical model.
+final SENSITIVE = ["libs/mergequeue/", "internal/guard/", ".github/", "internal/auth/", "internal/sandbox/",
+    "internal/secret/", "internal/handler/token/", "internal/selfupdate/", "spells/cosign/",
+    "spells/onepassword/", "spells/system-keychain/", "guard_policy.go", "guard_rules.go",
+    "tools/gha-queue.buzz", "tools/policy/"];
+
+object Check {
+    name: str,
+    // SUCCESS, FAILURE, a TRANSIENT one, SKIPPED, NEUTRAL, or PENDING until it completes.
+    conclusion: str,
+    run: str = "",
+    job: str = "",
+}
+
+object Kick {
+    code: str,
+    paths: [str] = [<str>],
+    url: str = "",
+}
+
+// Pull is one `gh pr view --json` record, reduced to what the decisions read.
+object Pull {
+    number: int,
+    title: str = "fix(cache): keep the key stable",
+    state: str = "OPEN",
+    author: str = "",
+    head: str = "",
+    base: str = "main",
+    oid: str = "",
+    draft: bool = false,
+    fork: bool = false,
+    mergeable: str = "MERGEABLE",
+    mergeState: str = "BLOCKED",
+    autoMerge: bool = false,
+    labels: [str] = [<str>],
+    files: [str] = [<str>],
+    checks: [Check] = [<Check>],
+    queueStatus: str = "",
+    kick: Kick? = null,
+}
+
+object Conflict {
+    path: str,
+    // A declared output or a file magus maintains: regeneration settles it.
+    generated: bool = false,
+    // Every conflicting line on both sides is an import or a list item.
+    listShaped: bool = false,
+}
+
+object Annotation {
+    path: str,
+    message: str,
+}
+
+// Facts are what status learns beyond the pull request's own record, each only for the
+// states that read it.
+object Facts {
+    conflicts: [Conflict] = [<Conflict>],
+    // Failure annotations by check job id.
+    annotations: {str: [Annotation]} = {<str: [Annotation]>},
+    // run_attempt by workflow run id; a run is one head's, so above 1 means that head
+    // was rerun already.
+    attempts: {str: int} = {<str: int>},
+    // Kick-back paths that are declared outputs.
+    generated: [str] = [<str>],
+}
+
+object Evidence {
+    failing: [str] = [<str>],
+    pending: [str] = [<str>],
+    kick: str = "",
+    kickPaths: [str] = [<str>],
+    kickUrl: str = "",
+    conflicts: [str] = [<str>],
+    parent: int? = null,
+    top: int? = null,
+    rerun: [str] = [<str>],
+    sensitive: [str] = [<str>],
+}
+
+object Record {
+    pr: int,
+    head: str,
+    base: str,
+    state: str,
+    reason: str,
+    action: str,
+    model: str,
+    evidence: Evidence,
+}
+
+object Selector {
+    prs: [int] = [<int>],
+    author: str = "",
+    method: str = "squash",
+}
+
+fun encode(doc: {str: any}) > str {
+    return serialize\jsonEncode(serialize\Boxed.init(doc));
+}
+
+// idAfter reads the number following marker in a check's details URL, "" when absent.
+fun idAfter(url: str, marker: str) > str {
+    final at = url.indexOf(marker);
+    if (at == null) {
+        return "";
+    }
+    final rest = url.sub(at! + marker.len());
+    final slash = rest.indexOf("/");
+    if (slash == null) {
+        return rest;
+    }
+    return rest.sub(0, len: slash!);
+}
+
+fun newer(a: Check, b: Check) > bool {
+    final ar = std\parseInt(a.run) ?? 0;
+    final br = std\parseInt(b.run) ?? 0;
+    if (ar != br) {
+        return ar > br;
+    }
+    return (std\parseInt(a.job) ?? 0) > (std\parseInt(b.job) ?? 0);
+}
+
+// checksOf keeps each check's newest run. The rollup lists every run on the head, and a
+// run superseded by a newer one is cancelled, which is not a red.
+export fun checksOf(rollup: [serialize\Boxed]) > [Check] {
+    final order = mut [<str>];
+    final latest = mut {<str: Check>};
+    foreach (c in rollup) {
+        var key = "";
+        var check = Check{ name = "", conclusion = "" };
+        if (c.q("__typename").stringValue() == "StatusContext") {
+            final context = c.q("context").stringValue();
+            if (context == QUEUE_STATUS) {
+                continue;
+            }
+            var state = c.q("state").stringValue();
+            if (state == "ERROR") {
+                state = "FAILURE";
+            } else if (state == "EXPECTED") {
+                state = "PENDING";
+            }
+            key = "status/" + context;
+            check = Check{ name = context, conclusion = state };
+        } else {
+            final url = c.q("detailsUrl").stringValue();
+            var conclusion = c.q("conclusion").stringValue();
+            if (c.q("status").stringValue() != "COMPLETED") {
+                conclusion = "PENDING";
+            }
+            key = c.q("workflowName").stringValue() + "/" + c.q("name").stringValue();
+            check = Check{ name = c.q("name").stringValue(), conclusion = conclusion,
+                run = idAfter(url, marker: "/runs/"), job = idAfter(url, marker: "/job/") };
+        }
+        final seen = latest[key];
+        if (seen == null) {
+            order.append(key);
+            latest[key] = check;
+        } else if (newer(check, b: seen!)) {
+            latest[key] = check;
+        }
+    }
+    final acc = mut[<Check>];
+    foreach (key in order) {
+        acc.append(latest[key]!);
+    }
+    return acc;
+}
+
+export fun queueStatusOf(rollup: [serialize\Boxed]) > str {
+    foreach (c in rollup) {
+        if (c.q("context").stringValue() == QUEUE_STATUS) {
+            return c.q("state").stringValue();
+        }
+    }
+    return "";
+}
+
+// kickOf reads the newest kick-back from the JSON line its comment ends with; the prose
+// above it is for people and may change. An unreadable marker yields an empty code,
+// which classifies as unknown.
+export fun kickOf(comments: [serialize\Boxed]) > Kick? {
+    var kick: Kick? = null;
+    foreach (c in comments) {
+        final body = c.q("body").stringValue();
+        foreach (line in body.split("\n")) {
+            final l = line.trim();
+            if (!l.startsWith(KICK_MARKER) or !l.endsWith("-->")) {
+                continue;
+            }
+            final doc = l.sub(KICK_MARKER.len(), len: l.len() - KICK_MARKER.len() - 3);
+            final url = c.q("url").stringValue();
+            try {
+                final facts = serialize\jsonDecode(doc);
+                final paths = mut [<str>];
+                foreach (p in facts.q("paths").listValue()) {
+                    paths.append(p.stringValue());
+                }
+                kick = Kick{ code = facts.q("code").stringValue(), paths = paths, url = url };
+            } catch (e) {
+                kick = Kick{ code = "", url = url };
+            }
+        }
+    }
+    return kick;
+}
+
+export fun pullOf(doc: serialize\Boxed) > Pull {
+    final labels = mut [<str>];
+    foreach (l in doc.q("labels").listValue()) {
+        labels.append(l.q("name").stringValue());
+    }
+    final files = mut [<str>];
+    foreach (f in doc.q("files").listValue()) {
+        files.append(f.q("path").stringValue());
+    }
+    final rollup = doc.q("statusCheckRollup").listValue();
+    return Pull{
+        number = doc.q("number").integerValue(),
+        title = doc.q("title").stringValue(),
+        state = doc.q("state").stringValue(),
+        author = doc.q("author").q("login").stringValue(),
+        head = doc.q("headRefName").stringValue(),
+        base = doc.q("baseRefName").stringValue(),
+        oid = doc.q("headRefOid").stringValue(),
+        draft = doc.q("isDraft").booleanValue(),
+        fork = doc.q("isCrossRepository").booleanValue(),
+        mergeable = doc.q("mergeable").stringValue(),
+        mergeState = doc.q("mergeStateStatus").stringValue(),
+        autoMerge = doc.q("autoMergeRequest").map() != null,
+        labels = labels,
+        files = files,
+        checks = checksOf(rollup),
+        queueStatus = queueStatusOf(rollup),
+        kick = kickOf(doc.q("comments").listValue()),
+    };
+}
+
+export fun pullsOf(body: str) > [Pull] !> any {
+    final acc = mut[<Pull>];
+    foreach (doc in serialize\jsonDecode(body).listValue()) {
+        acc.append(pullOf(doc));
+    }
+    return acc;
+}
+
+// parentOf is the open pull request p is stacked on: the one whose branch p targets.
+export fun parentOf(p: Pull, open: [Pull]) > Pull? {
+    foreach (o in open) {
+        if (o.number != p.number and o.state == "OPEN" and o.head == p.base) {
+            return o;
+        }
+    }
+    return null;
+}
+
+// stackTops names the top of every stack built on p, none when nothing is. depth stops a
+// pair of branches that target each other.
+export fun stackTops(p: Pull, open: [Pull], depth: int) > [int] {
+    final tops = mut [<int>];
+    if (depth > 32) {
+        return tops;
+    }
+    foreach (o in open) {
+        if (o.number == p.number or o.state != "OPEN" or o.base != p.head) {
+            continue;
+        }
+        final above = stackTops(o, open: open, depth: depth + 1);
+        if (above.len() == 0) {
+            tops.append(o.number);
+        } else {
+            foreach (t in above) {
+                tops.append(t);
+            }
+        }
+    }
+    return tops;
+}
+
+export fun hasQueueLabel(labels: [str]) > bool {
+    foreach (l in labels) {
+        if (l.startsWith(QUEUE_LABEL)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// intent is merge intent as the queue reads it: auto-merge, or the queue label on p or
+// on the top of a stack built on p.
+export fun intent(p: Pull, open: [Pull]) > bool {
+    if (p.autoMerge or hasQueueLabel(p.labels)) {
+        return true;
+    }
+    foreach (top in stackTops(p, open: open, depth: 0)) {
+        foreach (o in open) {
+            if (o.number == top and hasQueueLabel(o.labels)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fun failing(checks: [Check]) > [Check] {
+    final acc = mut[<Check>];
+    foreach (c in checks) {
+        if (GREEN.indexOf(c.conclusion) == null and c.conclusion != "PENDING") {
+            acc.append(c);
+        }
+    }
+    return acc;
+}
+
+fun names(checks: [Check], conclusion: str?) > [str] {
+    final acc = mut[<str>];
+    foreach (c in checks) {
+        if (conclusion == null or c.conclusion == conclusion) {
+            acc.append(c.name);
+        }
+    }
+    return acc;
+}
+
+// stateOf reads the first thing standing between p and a merge, from p's own record.
+export fun stateOf(p: Pull, open: [Pull]) > str {
+    if (p.state == "MERGED") {
+        return "merged";
+    }
+    if (p.state != "OPEN") {
+        return "closed";
+    }
+    if (p.draft) {
+        return "draft";
+    }
+    if (parentOf(p, open: open) != null) {
+        return "waiting-below";
+    }
+    if (p.mergeable == "CONFLICTING" or p.mergeState == "DIRTY") {
+        return "conflicting";
+    }
+    // A kick-back takes the intent away; intent back on means someone queued it again.
+    if (p.labels.indexOf(REJECTED) != null and !intent(p, open: open)) {
+        return "kicked-back";
+    }
+    if (failing(p.checks).len() > 0) {
+        return "red";
+    }
+    if (p.mergeState == "BEHIND") {
+        return "behind";
+    }
+    if (intent(p, open: open)) {
+        return "queued";
+    }
+    return "needs-queue";
+}
+
+export fun sensitivePaths(paths: [str]) > [str] {
+    final acc = mut[<str>];
+    foreach (path in paths) {
+        foreach (prefix in SENSITIVE) {
+            if (path.startsWith(prefix) or path == prefix) {
+                acc.append(path);
+                break;
+            }
+        }
+    }
+    return acc;
+}
+
+// conflictedPaths reads `git merge-tree --write-tree --name-only`: the tree, then one
+// conflicted path per line, then a blank line and messages.
+export fun conflictedPaths(merged: str) > [str] {
+    final paths = mut [<str>];
+    final lines = merged.split("\n");
+    var i = 1;
+    while (i < lines.len() and lines[i] != "") {
+        paths.append(lines[i]);
+        i = i + 1;
+    }
+    return paths;
+}
+
+// listShapedLine is a line two branches both append to without meaning to disagree:
+// an import, a list item, a quoted entry.
+export fun listShapedLine(line: str) > bool {
+    final t = line.trim();
+    if (t == "") {
+        return true;
+    }
+    foreach (prefix in ["import ", "from ", "use ", "require ", "#include ", "@import ", "- ", "* "]) {
+        if (t.startsWith(prefix)) {
+            return true;
+        }
+    }
+    var entry = t;
+    if (entry.endsWith(",")) {
+        entry = entry.sub(0, len: entry.len() - 1);
+    }
+    // A Go import with an alias: name "path".
+    final space = entry.indexOf(" ");
+    if (space != null and entry.indexOf(" ", start: space! + 1) == null) {
+        entry = entry.sub(space! + 1);
+    }
+    foreach (q in ["\"", "'", "`"]) {
+        if (entry.len() >= 2 and entry.startsWith(q) and entry.endsWith(q)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// listShaped reports whether every conflict hunk in content, a file merge-tree wrote with
+// markers, holds only list-shaped lines. A conflict with no markers (a delete, a rename,
+// a binary) is not.
+export fun listShaped(content: str) > bool {
+    var hunks = 0;
+    var inside = false;
+    foreach (line in content.split("\n")) {
+        if (line.startsWith("<<<<<<<")) {
+            inside = true;
+            hunks = hunks + 1;
+        } else if (line.startsWith(">>>>>>>")) {
+            inside = false;
+        } else if (inside and (line.startsWith("|||||||") or line == "=======")) {
+            continue;
+        } else if (inside and !listShapedLine(line)) {
+            return false;
+        }
+    }
+    return hunks > 0 and !inside;
+}
+
+// conflictModel is who resolves a base merge: sonnet only when regeneration or keeping
+// both sides settles every conflict and nothing sensitive is involved.
+export fun conflictModel(conflicts: [Conflict], sensitive: [str]) > str {
+    if (conflicts.len() == 0 or sensitive.len() > 0) {
+        return "opus";
+    }
+    foreach (c in conflicts) {
+        if (sensitivePaths([c.path]).len() > 0 or !(c.generated or c.listShaped)) {
+            return "opus";
+        }
+    }
+    return "sonnet";
+}
+
+// annotationsOf keeps a check run's failure annotations that name a file; the runner's
+// own ("Process completed with exit code 1") and magus's per-project ones name "." or
+// ".github" and say nothing about where.
+export fun annotationsOf(body: str) > [Annotation] !> any {
+    final acc = mut[<Annotation>];
+    foreach (a in serialize\jsonDecode(body).listValue()) {
+        final path = a.q("path").stringValue();
+        if (a.q("annotation_level").stringValue() != "failure" or a.q("start_line").integerValue() <= 0
+            or path == "." or path == ".github") {
+            continue;
+        }
+        acc.append(Annotation{ path = path, message = a.q("message").stringValue() });
+    }
+    return acc;
+}
+
+// mechanicalMessage is a failure a formatter or a regeneration fixes.
+fun mechanicalMessage(message: str) > bool {
+    return message.indexOf("not properly formatted") != null or message.indexOf("MGS4006") != null;
+}
+
+// checkClass says what one failing check is: transient, hygiene, elsewhere (its annotated
+// files are none the change touched), mechanical, source, or unexplained (no annotation
+// names a file).
+export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
+    if (TRANSIENT.indexOf(c.conclusion) != null) {
+        return "transient";
+    }
+    if (c.name == HYGIENE) {
+        return "hygiene";
+    }
+    final notes = facts.annotations[c.job] ?? [<Annotation>];
+    if (notes.len() == 0) {
+        return "unexplained";
+    }
+    var touched = false;
+    var mechanical = true;
+    foreach (n in notes) {
+        if (p.files.indexOf(n.path) != null) {
+            touched = true;
+        }
+        if (!mechanicalMessage(n.message)) {
+            mechanical = false;
+        }
+    }
+    if (!touched) {
+        return "elsewhere";
+    }
+    if (mechanical) {
+        return "mechanical";
+    }
+    return "source";
+}
+
+fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str], sensitive: [str]) > Evidence {
+    var kick = "";
+    var kickPaths = [<str>];
+    var kickUrl = "";
+    if (p.kick != null) {
+        kick = p.kick!.code;
+        kickPaths = p.kick!.paths;
+        kickUrl = p.kick!.url;
+    }
+    return Evidence{
+        failing = names(failing(p.checks), conclusion: null),
+        pending = names(p.checks, conclusion: "PENDING"),
+        kick = kick,
+        kickPaths = kickPaths,
+        kickUrl = kickUrl,
+        conflicts = conflicts,
+        parent = parent,
+        top = top,
+        rerun = rerun,
+        sensitive = sensitive,
+    };
+}
+
+fun recordOf(p: Pull, state: str, action: str, model: str, reason: str, evidence: Evidence) > Record {
+    return Record{ pr = p.number, head = p.head, base = p.base, state = state, reason = reason,
+        action = action, model = model, evidence = evidence };
+}
+
+fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
+    final bad = failing(p.checks);
+    final classes = mut [<str>];
+    foreach (c in bad) {
+        classes.append(checkClass(c, p: p, facts: facts));
+    }
+    final runs = mut [<str>];
+    var rerunnable = true;
+    var explained = false;
+    var source = false;
+    var hygiene = false;
+    var i = 0;
+    while (i < bad.len()) {
+        final cls = classes[i];
+        if (cls != "unexplained") {
+            explained = true;
+        }
+        if (cls != "transient" and cls != "elsewhere" and cls != "unexplained") {
+            rerunnable = false;
+        }
+        if (cls == "source") {
+            source = true;
+        }
+        if (cls == "hygiene") {
+            hygiene = true;
+        }
+        if (bad[i].run != "" and runs.indexOf(bad[i].run) == null) {
+            runs.append(bad[i].run);
+        }
+        i = i + 1;
+    }
+    final failed = names(bad, conclusion: null).join(", ");
+    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    // An unexplained failure beside an explained one is taken to follow it, the way the
+    // `ci gate` aggregate fails when a shard does. Alone, nothing says where it is.
+    if (!explained) {
+        return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
+    }
+    if (rerunnable and runs.len() > 0) {
+        foreach (run in runs) {
+            if ((facts.attempts[run] ?? 1) > 1) {
+                return recordOf(p, state: "red", action: "fix", model: "opus",
+                    reason: "red again ({failed}) after this head was rerun once", evidence: plain);
+            }
+        }
+        return recordOf(p, state: "red", action: "rerun", model: "none",
+            reason: "red ({failed}) outside the files the change touched",
+            evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: runs, sensitive: sensitive));
+    }
+    if (source or rerunnable) {
+        return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}) in the change's own source", evidence: plain);
+    }
+    // What is left is hygiene and formatting or drift, maybe beside a transient run.
+    final mechanical = classes.indexOf("mechanical") != null;
+    if (mechanical and sensitive.len() > 0) {
+        return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}) in a change to {sensitive[0]}", evidence: plain);
+    }
+    var reason = "red ({failed}): formatting or generated output drifted";
+    if (hygiene) {
+        final problem = commits\problem(p.title);
+        if (problem != "") {
+            reason = "the title is not a conventional commit: " + problem;
+        } else {
+            reason = "{HYGIENE} failed on a conventional title: the changelog fragment";
+        }
+    }
+    return recordOf(p, state: "red", action: "fix", model: "sonnet", reason: reason, evidence: plain);
+}
+
+fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
+    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    if (p.kick == null) {
+        return recordOf(p, state: "kicked-back", action: "fix", model: "opus",
+            reason: "labeled {REJECTED}, and no kick-back comment carries its facts", evidence: plain);
+    }
+    final kick = p.kick!;
+    if (kick.code == "KICK_CONFLICT") {
+        return recordOf(p, state: "kicked-back", action: "merge-base", model: "opus",
+            reason: "the queue found a conflict outside generated files", evidence: plain);
+    }
+    if (kick.code == "KICK_RED" or kick.code == "KICK_REFUSED") {
+        var generated = kick.paths.len() > 0;
+        foreach (path in kick.paths) {
+            if (facts.generated.indexOf(path) == null) {
+                generated = false;
+            }
+        }
+        if (generated and sensitive.len() == 0 and sensitivePaths(kick.paths).len() == 0) {
+            return recordOf(p, state: "kicked-back", action: "fix", model: "sonnet",
+                reason: "{kick.code}: only generated outputs are at issue; regenerate them", evidence: plain);
+        }
+        return recordOf(p, state: "kicked-back", action: "fix", model: "opus", reason: "{kick.code} on the queue's candidate", evidence: plain);
+    }
+    return recordOf(p, state: "kicked-back", action: "fix", model: "opus",
+        reason: "kicked back with code \"{kick.code}\", which this script does not know", evidence: plain);
+}
+
+// classify decides one pull request: its state, what to do and who does it. Anything it
+// cannot place goes to opus; model none is only for what this script or nobody does.
+export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
+    final state = stateOf(p, open: open);
+    final sensitive = sensitivePaths(p.files);
+    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    if (state == "merged") {
+        return recordOf(p, state: state, action: "none", model: "none", reason: "merged", evidence: Evidence{});
+    }
+    if (state == "closed") {
+        return recordOf(p, state: state, action: "none", model: "none",
+            reason: "closed without merging; reopen it or leave it out of the selection", evidence: Evidence{});
+    }
+    if (state == "draft") {
+        return recordOf(p, state: state, action: "none", model: "none", reason: "a draft; mark it ready to land it", evidence: plain);
+    }
+    if (state == "waiting-below") {
+        final parent = parentOf(p, open: open)!;
+        return recordOf(p, state: state, action: "none", model: "none",
+            reason: "stacked on #{parent.number}, which has not merged",
+            evidence: evidenceOf(p, conflicts: [<str>], parent: parent.number, top: null, rerun: [<str>], sensitive: sensitive));
+    }
+    if (state == "conflicting") {
+        final paths = mut [<str>];
+        foreach (c in facts.conflicts) {
+            paths.append(c.path);
+        }
+        final model = conflictModel(facts.conflicts, sensitive: sensitive);
+        var reason = "conflicts with {p.base} in source";
+        if (paths.len() == 0) {
+            reason = "GitHub says it conflicts with {p.base}; a local merge of origin/{p.base} named no path";
+        } else if (model == "sonnet") {
+            reason = "conflicts with {p.base} only in generated outputs or import and list lines";
+        } else if (sensitive.len() > 0) {
+            reason = "conflicts with {p.base} in a change to {sensitive[0]}";
+        }
+        return recordOf(p, state: state, action: "merge-base", model: model, reason: reason,
+            evidence: evidenceOf(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive));
+    }
+    if (state == "kicked-back") {
+        return kickRecord(p, facts: facts, sensitive: sensitive);
+    }
+    if (state == "red") {
+        return redRecord(p, facts: facts, sensitive: sensitive);
+    }
+    var mechanical = "sonnet";
+    if (sensitive.len() > 0) {
+        mechanical = "opus";
+    }
+    if (state == "behind") {
+        return recordOf(p, state: state, action: "merge-base", model: mechanical,
+            reason: "behind {p.base} with no conflict", evidence: plain);
+    }
+    if (state == "queued") {
+        var reason = "queued";
+        if (p.queueStatus != "") {
+            reason = "queued; its {QUEUE_STATUS} status is {p.queueStatus}";
+        }
+        return recordOf(p, state: state, action: "none", model: "none", reason: reason, evidence: plain);
+    }
+    if (p.fork) {
+        return recordOf(p, state: state, action: "fix", model: "opus",
+            reason: "from a fork, which the queue refuses; a person decides how it lands", evidence: plain);
+    }
+    if (plain.pending.len() > 0) {
+        return recordOf(p, state: state, action: "none", model: "none",
+            reason: "checks still running: {plain.pending.join(", ")}", evidence: plain);
+    }
+    if (p.mergeable != "MERGEABLE") {
+        return recordOf(p, state: state, action: "none", model: "none",
+            reason: "GitHub has not said whether it merges cleanly ({p.mergeable})", evidence: plain);
+    }
+    final tops = stackTops(p, open: open, depth: 0);
+    if (tops.len() > 1) {
+        return recordOf(p, state: state, action: "fix", model: "opus",
+            reason: "the stack on it branches; a person picks which top carries the queue label", evidence: plain);
+    }
+    var top: int? = null;
+    if (tops.len() == 1) {
+        top = tops[0];
+    }
+    return recordOf(p, state: state, action: "queue", model: "none", reason: "green on a current base",
+        evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: top, rerun: [<str>], sensitive: sensitive));
+}
+
+// render is the status line: the record with the evidence it holds and nothing empty.
+export fun render(r: Record) > str {
+    final e = mut {<str: any>};
+    if (r.evidence.failing.len() > 0) { e["failing_checks"] = r.evidence.failing; }
+    if (r.evidence.pending.len() > 0) { e["pending_checks"] = r.evidence.pending; }
+    if (r.evidence.kick != "" or r.evidence.kickUrl != "") {
+        e["kick_code"] = r.evidence.kick;
+        e["kick_paths"] = r.evidence.kickPaths;
+        e["kick_comment"] = r.evidence.kickUrl;
+    }
+    if (r.evidence.conflicts.len() > 0) { e["conflicts"] = r.evidence.conflicts; }
+    if (r.evidence.parent != null) { e["stack_parent"] = r.evidence.parent!; }
+    if (r.evidence.top != null) { e["stack_top"] = r.evidence.top!; }
+    if (r.evidence.rerun.len() > 0) { e["rerun_runs"] = r.evidence.rerun; }
+    // Sensitive paths explain a model, so a record with none leaves them out; a few name
+    // the reason, and the agent reads the full diff anyway.
+    if (r.model != "none" and r.evidence.sensitive.len() > 0) {
+        var shown = r.evidence.sensitive;
+        if (shown.len() > 5) {
+            shown = shown.sub(0, len: 5);
+        }
+        e["sensitive_paths"] = shown;
+    }
+    return encode({"pr": r.pr, "head": r.head, "base": r.base, "state": r.state, "reason": r.reason,
+        "action": r.action, "model": r.model, "evidence": e});
+}
+
+// applyCommands is what apply runs for r: queueing and reruns only, never a merge past
+// the queue and never a write to a branch.
+export fun applyCommands(r: Record, method: str) > [[str]] {
+    final cmds = mut [<[str]>];
+    if (r.action == "queue") {
+        if (r.evidence.top != null) {
+            cmds.append(["gh", "pr", "edit", "{r.evidence.top!}", "--add-label", QUEUE_LABEL + method]);
+        } else {
+            cmds.append(["gh", "pr", "merge", "{r.pr}", "--auto", "--" + method]);
+        }
+    } else if (r.action == "rerun") {
+        foreach (run in r.evidence.rerun) {
+            cmds.append(["gh", "run", "rerun", run, "--failed"]);
+        }
+    }
+    return cmds;
+}
+
+export fun selected(open: [Pull], prs: [int], author: str) > [Pull] {
+    final acc = mut[<Pull>];
+    foreach (p in open) {
+        if ((prs.len() == 0 or prs.indexOf(p.number) != null) and (author == "" or p.author == author)) {
+            acc.append(p);
+        }
+    }
+    return acc;
+}
+
+final usage = "usage: magus buzz tools/pull-requests.buzz -- <step> <flags>\n"
+    + "  status [--author <login>] [--pr <n>]...\n"
+    + "  apply [--author <login>] [--pr <n>]... [--method squash|merge|rebase]";
+
+// selectorOf parses a step's flags. --pr repeats, which flags\parse does not keep, so it
+// is taken out first.
+export fun selectorOf(step: str, argv: [str]) > Selector !> any {
+    final prs = mut [<int>];
+    final rest = mut [<str>];
+    var i = 0;
+    while (i < argv.len()) {
+        final a = argv[i];
+        var value: str? = null;
+        if (a == "--pr") {
+            if (i + 1 >= argv.len()) {
+                throw "pull-requests: --pr takes a number\n{usage}";
+            }
+            value = argv[i + 1];
+            i = i + 1;
+        } else if (a.startsWith("--pr=")) {
+            value = a.sub(5);
+        } else {
+            rest.append(a);
+        }
+        if (value != null) {
+            final n = std\parseInt(value!) ?? 0;
+            if (n <= 0 or "{n}" != value!) {
+                throw "pull-requests: --pr \"{value!}\" is not a pull request number\n{usage}";
+            }
+            prs.append(n);
+        }
+        i = i + 1;
+    }
+    final valued = mut ["--author"];
+    if (step == "apply") {
+        valued.append("--method");
+    }
+    final parsed = flags\parse(rest, switches: [<str>], valued: valued);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "pull-requests: {step} does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
+    }
+    final author = parsed.values["--author"];
+    if (author != null and author! == "") {
+        throw "pull-requests: --author needs a login\n{usage}";
+    }
+    final method = parsed.values["--method"] ?? "squash";
+    if (METHODS.indexOf(method) == null) {
+        throw "pull-requests: --method is one of {METHODS.join(", ")}, not \"{method}\"\n{usage}";
+    }
+    return Selector{ prs = prs, author = author ?? "", method = method };
+}
+
+// capture runs cmd without echoing its stdout, and raises with its stderr on failure.
+fun capture(cmd: str, args: [str]) > str !> any {
+    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) {
+        throw "pull-requests: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+    }
+    return res.stdout;
+}
+
+// openPulls lists every open pull request once. A full page may be missing some, and a
+// stack whose parent is missing would read as unstacked, so that is an error.
+fun openPulls() > [Pull] !> any {
+    final open = pullsOf(capture("gh", args: ["pr", "list", "--state", "open", "--limit", "{LIMIT}", "--json", FIELDS]));
+    if (open.len() >= LIMIT) {
+        throw "pull-requests: {open.len()} open pull requests fill gh's page of {LIMIT}; raise LIMIT";
+    }
+    return open;
+}
+
+// generatedOf asks this checkout's workspace which paths are declared outputs or
+// maintained by magus: main's declarations, the ones the queue reads.
+fun generatedOf(paths: [str]) > [str] !> any {
+    final acc = mut[<str>];
+    if (paths.len() == 0) {
+        return acc;
+    }
+    final report = serialize\Boxed.init(magus\describeFile(paths));
+    foreach (f in report.q("files").listValue()) {
+        final role = f.q("role").stringValue();
+        if (role == "output" or role == "maintained") {
+            acc.append(f.q("path").stringValue());
+        }
+    }
+    return acc;
+}
+
+// conflictsOf fetches each pull request's head and its base, merges them in memory with
+// git merge-tree (nothing is checked out or written to a branch), and reads each
+// conflicted file's markers.
+fun conflictsOf(pulls: [Pull]) > {int: [Conflict]} !> any {
+    final acc = mut{<int: [Conflict]>};
+    if (pulls.len() == 0) {
+        return acc;
+    }
+    final refspecs = mut [<str>];
+    foreach (p in pulls) {
+        final base = "+refs/heads/{p.base}:refs/remotes/origin/{p.base}";
+        if (refspecs.indexOf(base) == null) {
+            refspecs.append(base);
+        }
+        refspecs.append("refs/pull/{p.number}/head");
+    }
+    final fetch = mut ["fetch", "--no-tags", "--quiet", "origin"];
+    foreach (r in refspecs) {
+        fetch.append(r);
+    }
+    capture("git", args: fetch);
+    final all = mut [<str>];
+    final found = mut {<int: [str]>};
+    final contents = mut {<str: str>};
+    foreach (p in pulls) {
+        final res = proc\exec("git", args: ["merge-tree", "--write-tree", "--name-only", "origin/{p.base}", p.oid],
+            opts: {"quiet": true, "allow_failure": true});
+        // Exit 1 is a merge with conflicts; anything else is git failing.
+        if (res.code != 0 and res.code != 1) {
+            throw "pull-requests: git merge-tree for #{p.number}: exit {res.code}: {res.stderr}";
+        }
+        final paths = conflictedPaths(res.stdout);
+        final tree = res.stdout.split("\n")[0];
+        found[p.number] = paths;
+        foreach (path in paths) {
+            if (all.indexOf(path) == null) {
+                all.append(path);
+            }
+            final blob = proc\exec("git", args: ["cat-file", "-p", "{tree}:{path}"], opts: {"quiet": true, "allow_failure": true});
+            contents["{p.number}:{path}"] = blob.stdout;
+        }
+    }
+    final generated = generatedOf(all);
+    foreach (number, paths in found) {
+        final conflicts = mut [<Conflict>];
+        foreach (path in paths) {
+            conflicts.append(Conflict{ path = path, generated = generated.indexOf(path) != null,
+                listShaped = listShaped(contents["{number}:{path}"] ?? "") });
+        }
+        acc[number] = conflicts;
+    }
+    return acc;
+}
+
+// annotationsFor reads the failure annotations of p's failing check runs, one request each.
+fun annotationsFor(p: Pull) > {str: [Annotation]} !> any {
+    final acc = mut{<str: [Annotation]>};
+    foreach (c in failing(p.checks)) {
+        if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
+            continue;
+        }
+        acc[c.job] = annotationsOf(capture("gh", args: ["api", "repos/\{owner}/\{repo}/check-runs/{c.job}/annotations?per_page=100"]));
+    }
+    return acc;
+}
+
+fun attemptsOf(runs: [str]) > {str: int} !> any {
+    final acc = mut{<str: int>};
+    foreach (run in runs) {
+        acc[run] = std\parseInt(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}", "--jq", ".run_attempt"]).trim()) ?? 1;
+    }
+    return acc;
+}
+
+// records selects the pull requests, gathers the facts each state reads, and classifies.
+fun records(sel: Selector) > [Record] !> any {
+    final open = openPulls();
+    var author = sel.author;
+    if (sel.prs.len() == 0 and author == "") {
+        author = capture("gh", args: ["api", "user", "--jq", ".login"]).trim();
+    }
+    final chosen = mut [<Pull>];
+    foreach (p in selected(open, prs: sel.prs, author: author)) {
+        chosen.append(p);
+    }
+    foreach (n in sel.prs) {
+        if (selected(open, prs: [n], author: "").len() == 0) {
+            final view = pullOf(serialize\jsonDecode(capture("gh", args: ["pr", "view", "{n}", "--json", FIELDS])));
+            if (author == "" or view.author == author) {
+                chosen.append(view);
+            }
+        }
+    }
+    chosen.sort(fun (a: Pull, b: Pull) > bool => a.number < b.number);
+
+    final conflicting = mut [<Pull>];
+    foreach (p in chosen) {
+        if (stateOf(p, open: open) == "conflicting") {
+            conflicting.append(p);
+        }
+    }
+    final conflicts = conflictsOf(conflicting);
+    final acc = mut[<Record>];
+    foreach (p in chosen) {
+        final state = stateOf(p, open: open);
+        var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>] };
+        if (state == "red") {
+            facts = Facts{ annotations = annotationsFor(p) };
+        } else if (state == "kicked-back" and p.kick != null) {
+            facts = Facts{ generated = generatedOf(p.kick!.paths) };
+        }
+        var r = classify(p, open: open, facts: facts);
+        // Attempts matter only to a rerun, so only a rerun pays for them.
+        if (r.action == "rerun") {
+            r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, attempts = attemptsOf(r.evidence.rerun) });
+        }
+        acc.append(r);
+    }
+    return acc;
+}
+
+fun status(sel: Selector) > void !> any {
+    foreach (r in records(sel)) {
+        std\print(render(r));
+    }
+}
+
+fun apply(sel: Selector) > void !> any {
+    foreach (r in records(sel)) {
+        foreach (cmd in applyCommands(r, method: sel.method)) {
+            capture(cmd[0], args: cmd.sub(1));
+            std\print(encode({"pr": r.pr, "action": r.action, "command": cmd}));
+        }
+    }
+}
+
+export fun main(args: [str]) > void !> any {
+    if (args.len() == 0) {
+        throw "pull-requests: no step given\n{usage}";
+    }
+    final step = args[0];
+    if (step == "status") {
+        status(selectorOf(step, argv: args.sub(1)));
+    } else if (step == "apply") {
+        apply(selectorOf(step, argv: args.sub(1)));
+    } else {
+        throw "pull-requests: unknown step \"{step}\"\n{usage}";
+    }
+}
+
+fun green(name: str) > Check {
+    return Check{ name = name, conclusion = "SUCCESS", run = "10", job = "100" };
+}
+
+fun red(name: str, conclusion: str, job: str) > Check {
+    return Check{ name = name, conclusion = conclusion, run = "11", job = job };
+}
+
+// A `gh pr view 317 --json ...` record, trimmed: two runs of `queue advice`, a failing
+// shard, and the queue's kick-back comment.
+final SAMPLE = `{
+  "author": {"login": "egladman"}, "autoMergeRequest": null, "baseRefName": "main",
+  "headRefName": "delete-ci-shard", "headRefOid": "6d401ee42f1190d5dc092c450b7ff62764e793c0",
+  "isCrossRepository": false, "isDraft": false, "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING",
+  "number": 317, "state": "OPEN", "title": "refactor(ci)!: delete ci-shard; run a shard of a saved plan with magus run --stdin",
+  "labels": [{"id": "LA_1", "name": "merge-queue: rejected", "color": "d93f0b"}],
+  "files": [{"path": ".github/workflows/ci.yaml", "additions": 10, "deletions": 3}, {"path": "types/diagnostic.go", "additions": 1, "deletions": 1}],
+  "statusCheckRollup": [
+    {"__typename": "CheckRun", "conclusion": "CANCELLED", "detailsUrl": "https://github.com/egladman/magus/actions/runs/36064348656/job/107850475236", "name": "queue advice", "status": "COMPLETED", "workflowName": "Queue advice"},
+    {"__typename": "CheckRun", "conclusion": "SUCCESS", "detailsUrl": "https://github.com/egladman/magus/actions/runs/36074168260/job/107881557031", "name": "queue advice", "status": "COMPLETED", "workflowName": "Queue advice"},
+    {"__typename": "CheckRun", "conclusion": "FAILURE", "detailsUrl": "https://github.com/egladman/magus/actions/runs/36074168245/job/107882730394", "name": "magus shard 0: .", "status": "COMPLETED", "workflowName": "CI"},
+    {"__typename": "CheckRun", "conclusion": null, "detailsUrl": "https://github.com/egladman/magus/actions/runs/36074168245/job/107882730399", "name": "magus shard 1: docs", "status": "IN_PROGRESS", "workflowName": "CI"},
+    {"__typename": "StatusContext", "context": "merge-queue", "state": "FAILURE", "targetUrl": ""}
+  ],
+  "comments": [
+    {"author": {"login": "github-actions"}, "body": "Queue advice: nothing to say", "url": "https://github.com/egladman/magus/pull/317#issuecomment-1"},
+    {"author": {"login": "magus-queue"}, "body": "### Merge queue: kicked back\n\nIt conflicts with main outside the generated files.\n\nQueue it again once fixed: gh pr merge 317 --auto --squash\n\n<!-- mergequeue: {\"code\":\"KICK_CONFLICT\",\"paths\":[\"docs/concepts/merge-queue.md\",\"tools/gha-queue.buzz\"],\"with\":[\"f205fcc06771 fix(queue)\"],\"candidate_commit\":\"\"} -->\n", "url": "https://github.com/egladman/magus/pull/317#issuecomment-5824114275"}
+  ]
+}`;
+
+test "a gh pr view record reads into a pull request, each check at its newest run" {
+    final p = pullOf(serialize\jsonDecode(SAMPLE));
+    assert\equal(p.number, want: 317, message: "number");
+    assert\equal(p.head, want: "delete-ci-shard", message: "head");
+    assert\equal(p.author, want: "egladman", message: "author");
+    assert\equal(p.autoMerge, want: false, message: "a null autoMergeRequest is no intent");
+    assert\equal(p.labels, want: ["merge-queue: rejected"], message: "labels");
+    assert\equal(p.files, want: [".github/workflows/ci.yaml", "types/diagnostic.go"], message: "files");
+    assert\equal(p.checks.len(), want: 3, message: "queue advice once, and the queue's own status left out");
+    assert\equal(p.checks[0].conclusion, want: "SUCCESS", message: "the cancelled run was superseded");
+    assert\equal(p.checks[1].run, want: "36074168245", message: "run id");
+    assert\equal(p.checks[1].job, want: "107882730394", message: "job id");
+    assert\equal(p.checks[2].conclusion, want: "PENDING", message: "in progress");
+    assert\equal(p.queueStatus, want: "FAILURE", message: "the queue's status");
+    assert\equal(p.kick!.code, want: "KICK_CONFLICT", message: "code from the marker");
+    assert\equal(p.kick!.paths, want: ["docs/concepts/merge-queue.md", "tools/gha-queue.buzz"], message: "paths from the marker");
+    assert\equal(p.kick!.url, want: "https://github.com/egladman/magus/pull/317#issuecomment-5824114275", message: "the newest kick-back");
+}
+
+test "an unreadable kick marker is a kick with no code" {
+    final comments = serialize\jsonDecode(`[{"body": "<!-- mergequeue: {not json -->", "url": "u"}]`).listValue();
+    assert\equal(kickOf(comments)!.code, want: "", message: "unknown code");
+    assert\equal(kickOf(serialize\jsonDecode(`[{"body": "no marker"}]`).listValue()), want: null, message: "no kick-back");
+}
+
+test "state is the first thing between a pull request and its merge" {
+    final bottom = Pull{ number = 1, head = "a" };
+    final top = Pull{ number = 2, head = "b", base = "a", labels = ["queue: squash"] };
+    final open = [bottom, top];
+    final expect = fun(p: Pull, want: str) > void {
+        assert\equal(stateOf(p, open: open), want: want, message: "#{p.number} {want}");
+    };
+    final failed = [red("t", conclusion: "FAILURE", job: "1")];
+    expect(Pull{ number = 3, state = "MERGED" }, want: "merged");
+    expect(Pull{ number = 3, state = "CLOSED" }, want: "closed");
+    expect(Pull{ number = 3, draft = true, mergeable = "CONFLICTING" }, want: "draft");
+    expect(top, want: "waiting-below");
+    expect(Pull{ number = 3, mergeable = "CONFLICTING", checks = failed }, want: "conflicting");
+    expect(Pull{ number = 3, mergeState = "DIRTY" }, want: "conflicting");
+    expect(Pull{ number = 3, labels = [REJECTED], checks = failed }, want: "kicked-back");
+    expect(Pull{ number = 3, labels = [REJECTED], autoMerge = true }, want: "queued");
+    expect(Pull{ number = 3, autoMerge = true, checks = failed }, want: "red");
+    expect(Pull{ number = 3, mergeState = "BEHIND" }, want: "behind");
+    expect(Pull{ number = 3, autoMerge = true }, want: "queued");
+    expect(Pull{ number = 3, labels = ["queue: rebase"] }, want: "queued");
+    expect(bottom, want: "queued");
+    expect(Pull{ number = 3, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, want: "needs-queue");
+}
+
+test "merge-tree's name-only output lists the conflicted paths" {
+    final merged = "4b825dc\nMAGUS.md\ninternal/cli/registry.go\n\nAuto-merging MAGUS.md\nCONFLICT (content): Merge conflict in MAGUS.md\n";
+    assert\equal(conflictedPaths(merged), want: ["MAGUS.md", "internal/cli/registry.go"], message: "two paths");
+    assert\equal(conflictedPaths("4b825dc\n").len(), want: 0, message: "a clean merge");
+}
+
+test "a conflict is list-shaped only when every conflicting line is an entry" {
+    final imports = "package x\n\nimport (\n<<<<<<< ours\n\t\"fmt\"\n\tjson \"encoding/json\"\n=======\n\t\"os\"\n>>>>>>> theirs\n)\n";
+    assert\equal(listShaped(imports), want: true, message: "go imports");
+    final items = "<<<<<<< a\n- one\n||||||| base\n=======\n- two\n>>>>>>> b\n";
+    assert\equal(listShaped(items), want: true, message: "markdown items with a diff3 base");
+    final source = "<<<<<<< a\nreturn x + 1\n=======\nreturn x + 2\n>>>>>>> b\n";
+    assert\equal(listShaped(source), want: false, message: "a statement");
+    assert\equal(listShaped("no markers: a delete or a binary\n"), want: false, message: "no hunk");
+    assert\equal(listShaped("<<<<<<< a\nimport x\n"), want: false, message: "an unterminated hunk");
+}
+
+test "a base merge goes to sonnet only when regeneration or keeping both sides settles it" {
+    assert\equal(conflictModel([Conflict{ path = "MAGUS.md", generated = true }, Conflict{ path = "go.go", listShaped = true }], sensitive: [<str>]), want: "sonnet", message: "mechanical");
+    assert\equal(conflictModel([Conflict{ path = "go.go" }], sensitive: [<str>]), want: "opus", message: "source");
+    assert\equal(conflictModel([Conflict{ path = "libs/mergequeue/MAGUS.md", generated = true }], sensitive: [<str>]), want: "opus", message: "a sensitive path");
+    assert\equal(conflictModel([Conflict{ path = "MAGUS.md", generated = true }], sensitive: ["internal/guard/dir.go"]), want: "opus", message: "a sensitive change");
+    assert\equal(conflictModel([<Conflict>], sensitive: [<str>]), want: "opus", message: "paths unknown");
+}
+
+test "a conflicting record carries its paths and model" {
+    final p = Pull{ number = 5, head = "h", mergeable = "CONFLICTING", files = ["internal/cache/key.go"] };
+    final r = classify(p, open: [p], facts: Facts{ conflicts = [Conflict{ path = "MAGUS.md", generated = true }] });
+    assert\equal([r.state, r.action, r.model], want: ["conflicting", "merge-base", "sonnet"], message: "generated only");
+    assert\equal(r.evidence.conflicts, want: ["MAGUS.md"], message: "paths");
+}
+
+test "annotations keep failures that name a file" {
+    final body = `[
+      {"path": ".github", "start_line": 3918, "annotation_level": "failure", "message": "Process completed with exit code 1."},
+      {"path": ".", "start_line": 0, "annotation_level": "failure", "message": "go exited 1"},
+      {"path": "types/diagnostic.go", "start_line": 442, "annotation_level": "failure", "message": "File is not properly formatted (gofmt)"},
+      {"path": ".github", "start_line": 29, "annotation_level": "notice", "message": "."}
+    ]`;
+    final notes = annotationsOf(body);
+    assert\equal(notes.len(), want: 1, message: "one file annotation");
+    assert\equal(notes[0].path, want: "types/diagnostic.go", message: "path");
+}
+
+test "a red record says whether to rerun, and who fixes it" {
+    final files = ["internal/cache/key.go"];
+    final at = fun (path: str, message: str) > {str: [Annotation]} => {"7": [Annotation{ path = path, message = message }]};
+    final shard = red("magus shard 0: .", conclusion: "FAILURE", job: "7");
+    final gate = red("ci gate", conclusion: "FAILURE", job: "8");
+    final expect = fun(checks: [Check], facts: Facts, action: str, model: str) > void {
+        final p = Pull{ number = 4, files = files, checks = checks };
+        final r = classify(p, open: [p], facts: facts);
+        assert\equal([r.state, r.action, r.model], want: ["red", action, model], message: r.reason);
+    };
+    expect([red("t", conclusion: "CANCELLED", job: "7")], facts: Facts{}, action: "rerun", model: "none");
+    expect([red("t", conclusion: "TIMED_OUT", job: "7")], facts: Facts{ attempts = {"11": 2} }, action: "fix", model: "opus");
+    expect([shard, gate], facts: Facts{ annotations = at("types/other.go", message: "x_test.go:3: want 1") }, action: "rerun", model: "none");
+    expect([shard, gate], facts: Facts{ annotations = at("internal/cache/key.go", message: "want 1, got 2") }, action: "fix", model: "opus");
+    expect([shard, gate], facts: Facts{ annotations = at("internal/cache/key.go", message: "File is not properly formatted (gofmt)") }, action: "fix", model: "sonnet");
+    expect([shard, gate], facts: Facts{}, action: "fix", model: "opus");
+    expect([red(HYGIENE, conclusion: "FAILURE", job: "9"), red("t", conclusion: "CANCELLED", job: "7")], facts: Facts{}, action: "fix", model: "sonnet");
+    final rerun = classify(Pull{ number = 4, checks = [red("t", conclusion: "CANCELLED", job: "7")] }, open: [<Pull>], facts: Facts{});
+    assert\equal(rerun.evidence.rerun, want: ["11"], message: "the run to rerun");
+    final guard = Pull{ number = 4, files = ["internal/guard/dir.go"], checks = [shard] };
+    assert\equal(classify(guard, open: [guard], facts: Facts{ annotations = at("internal/guard/dir.go", message: "File is not properly formatted (gofmt)") }).model,
+        want: "opus", message: "formatting a guard change is still opus");
+}
+
+test "a failed hygiene check names the title or the changelog fragment" {
+    final bad = Pull{ number = 4, title = "Add a thing", checks = [red(HYGIENE, conclusion: "FAILURE", job: "9")] };
+    assert\equal(classify(bad, open: [bad], facts: Facts{}).reason.startsWith("the title is not a conventional commit"), want: true, message: "title");
+    final good = Pull{ number = 4, title = "feat(x)!: add a thing", checks = [red(HYGIENE, conclusion: "FAILURE", job: "9")] };
+    assert\equal(classify(good, open: [good], facts: Facts{}).reason.indexOf("changelog fragment") != null, want: true, message: "fragment");
+}
+
+test "a kick-back is fixed by the model its code and paths call for" {
+    final kicked = fun (code: str, paths: [str]) > Pull => Pull{ number = 6, labels = [REJECTED], kick = Kick{ code = code, paths = paths, url = "u" } };
+    final expect = fun(p: Pull, facts: Facts, action: str, model: str) > void {
+        final r = classify(p, open: [p], facts: facts);
+        assert\equal([r.state, r.action, r.model], want: ["kicked-back", action, model], message: r.reason);
+    };
+    expect(kicked("KICK_CONFLICT", paths: ["a.go"]), facts: Facts{}, action: "merge-base", model: "opus");
+    expect(kicked("KICK_RED", paths: ["a.go"]), facts: Facts{}, action: "fix", model: "opus");
+    expect(kicked("KICK_REFUSED", paths: ["MAGUS.md"]), facts: Facts{ generated = ["MAGUS.md"] }, action: "fix", model: "sonnet");
+    expect(kicked("KICK_REFUSED", paths: [<str>]), facts: Facts{}, action: "fix", model: "opus");
+    expect(kicked("KICK_NEW", paths: [<str>]), facts: Facts{}, action: "fix", model: "opus");
+    expect(Pull{ number = 6, labels = [REJECTED] }, facts: Facts{}, action: "fix", model: "opus");
+    final r = classify(kicked("KICK_RED", paths: ["a.go"]), open: [<Pull>], facts: Facts{});
+    assert\equal([r.evidence.kick, r.evidence.kickUrl], want: ["KICK_RED", "u"], message: "the kick in evidence");
+}
+
+test "a green pull request is queued, a stack by the label on its top" {
+    final lone = Pull{ number = 1, head = "a", checks = [green("t")] };
+    final r = classify(lone, open: [lone], facts: Facts{});
+    assert\equal([r.state, r.action, r.model], want: ["needs-queue", "queue", "none"], message: "lone");
+    assert\equal(applyCommands(r, method: "squash"), want: [["gh", "pr", "merge", "1", "--auto", "--squash"]], message: "auto-merge");
+
+    final mid = Pull{ number = 2, head = "b", base = "a" };
+    final top = Pull{ number = 3, head = "c", base = "b" };
+    final stacked = classify(lone, open: [lone, mid, top], facts: Facts{});
+    assert\equal(stacked.evidence.top, want: 3, message: "the top of the stack");
+    assert\equal(applyCommands(stacked, method: "rebase"), want: [["gh", "pr", "edit", "3", "--add-label", "queue: rebase"]], message: "the label on the top");
+    assert\equal(classify(mid, open: [lone, mid, top], facts: Facts{}).evidence.parent, want: 1, message: "the middle waits on the bottom");
+
+    final fork = Pull{ number = 4, head = "d", base = "a" };
+    assert\equal(classify(lone, open: [lone, mid, fork], facts: Facts{}).model, want: "opus", message: "a branching stack");
+    final pending = Pull{ number = 1, checks = [Check{ name = "t", conclusion = "PENDING" }] };
+    assert\equal(classify(pending, open: [pending], facts: Facts{}).action, want: "none", message: "checks running");
+    final unknown = Pull{ number = 1, mergeable = "UNKNOWN" };
+    assert\equal(classify(unknown, open: [unknown], facts: Facts{}).action, want: "none", message: "mergeability not computed");
+    final foreign = Pull{ number = 1, fork = true };
+    assert\equal(classify(foreign, open: [foreign], facts: Facts{}).model, want: "opus", message: "a fork");
+}
+
+test "apply only queues and reruns" {
+    final rerun = Record{ pr = 1, head = "h", base = "main", state = "red", reason = "", action = "rerun", model = "none",
+        evidence = Evidence{ rerun = ["11", "12"] } };
+    assert\equal(applyCommands(rerun, method: "squash"), want: [["gh", "run", "rerun", "11", "--failed"], ["gh", "run", "rerun", "12", "--failed"]], message: "reruns");
+    foreach (action in ["none", "fix", "merge-base"]) {
+        final r = Record{ pr = 1, head = "h", base = "main", state = "red", reason = "", action = action, model = "opus", evidence = Evidence{} };
+        assert\equal(applyCommands(r, method: "squash").len(), want: 0, message: action);
+    }
+}
+
+test "model none goes only with no action or one apply takes" {
+    final ps = [
+        Pull{ number = 1, mergeable = "CONFLICTING" },
+        Pull{ number = 2, labels = [REJECTED] },
+        Pull{ number = 3, checks = [red("x", conclusion: "ACTION_REQUIRED", job: "1")] },
+        Pull{ number = 4, checks = [red("x", conclusion: "STALE", job: "1")] },
+        Pull{ number = 5, mergeState = "BEHIND" },
+        Pull{ number = 6 },
+    ];
+    foreach (p in ps) {
+        final r = classify(p, open: ps, facts: Facts{});
+        if (r.model == "none") {
+            assert\equal(["none", "queue", "rerun"].indexOf(r.action) != null, want: true, message: "#{p.number} {r.action}");
+        } else {
+            assert\equal(r.action != "none" and r.action != "queue" and r.action != "rerun", want: true, message: "#{p.number} {r.action}");
+        }
+    }
+}
+
+test "a status line carries the record and only the evidence it has" {
+    final p = Pull{ number = 9, head = "h", mergeable = "CONFLICTING" };
+    final r = classify(p, open: [p], facts: Facts{ conflicts = [Conflict{ path = "a.go" }] });
+    final want = `{"pr":9,"head":"h","base":"main","state":"conflicting","reason":"conflicts with main in source","action":"merge-base","model":"opus","evidence":{"conflicts":["a.go"]}}`;
+    assert\equal(render(r), want: want, message: "one line");
+}
+
+test "selectors take a repeated --pr, and apply alone takes --method" {
+    final sel = selectorOf("status", argv: ["--pr", "316", "--pr=327", "--author", "eli"]);
+    assert\equal(sel.prs, want: [316, 327], message: "both numbers");
+    assert\equal(sel.author, want: "eli", message: "author");
+    assert\equal(selectorOf("apply", argv: ["--method", "rebase"]).method, want: "rebase", message: "method");
+    assert\equal(selectorOf("status", argv: [<str>]).method, want: "squash", message: "default method");
+    foreach (argv in [["--pr"], ["--pr", "x"], ["--pr", "0"], ["--pr", "3a"], ["--author", ""], ["--method", "squash"], ["316"], ["--extra"]]) {
+        var refused = false;
+        try {
+            selectorOf("status", argv: argv);
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: argv.join(" "));
+    }
+    var refused = false;
+    try {
+        selectorOf("apply", argv: ["--method", "admin"]);
+    } catch (e) {
+        refused = true;
+    }
+    assert\equal(refused, want: true, message: "an unknown method");
+}
+
+test "selection is the requested numbers or the author's pull requests" {
+    final open = [Pull{ number = 1, author = "eli" }, Pull{ number = 2, author = "bot" }, Pull{ number = 3, author = "eli" }];
+    final numbers = fun (ps: [Pull]) > [int] {
+        final acc = mut[<int>];
+        foreach (p in ps) { acc.append(p.number); }
+        return acc;
+    };
+    assert\equal(numbers(selected(open, prs: [<int>], author: "eli")), want: [1, 3], message: "by author");
+    assert\equal(numbers(selected(open, prs: [2, 3], author: "")), want: [2, 3], message: "by number");
+    assert\equal(sensitivePaths(["libs/mergequeue/plan.go", "internal/cache/key.go", ".github/workflows/ci.yaml"]),
+        want: ["libs/mergequeue/plan.go", ".github/workflows/ci.yaml"], message: "sensitive paths");
+}
