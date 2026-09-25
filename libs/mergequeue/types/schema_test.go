@@ -110,14 +110,34 @@ func TestPlanCheckRefusesAChangeAheadOfWhatItIsStackedOnADuplicateAndAPlanningMe
 // An applier clears the queued mark from an unqueued change, so the plan carries each
 // one's mark from the listing and refuses a mark outside the set.
 func TestAnUnqueuedChangeCarriesItsMarkIntoThePlan(t *testing.T) {
-	for _, m := range []Mark{MarkNone, MarkQueued, MarkRejected} {
+	for _, m := range []Mark{MarkNone, MarkQueued, MarkKickedBack, MarkNeedsRegeneration} {
 		u := UnqueuedChange{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: m}
 		require.NoError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{u}}.Check(), m)
 		require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, CommitDate: dated, Unqueued: []UnqueuedChange{u}}.Check(), m)
 	}
-	odd := UnqueuedChange{ID: "4", Head: head("4"), Mark: "merged"}
-	require.EqualError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued[0]: #4: mark "merged", want queued, rejected or none`)
-	require.EqualError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued: #4: mark "merged", want queued, rejected or none`)
+	odd := UnqueuedChange{ID: "4", Head: head("4"), Mark: "rejected"}
+	require.EqualError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued[0]: #4: mark "rejected", want queued, kicked_back, needs_regeneration or none`)
+	require.EqualError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued: #4: mark "rejected", want queued, kicked_back, needs_regeneration or none`)
+}
+
+// A closed change names a directory-safe id and appears once, as every listed change does.
+func TestAClosedChangeIsCheckedLikeEveryListedOne(t *testing.T) {
+	closed := []ClosedChange{{ID: "9", Repo: "acme/acme"}}
+	require.NoError(t, Changes{Base: "main", Closed: closed}.Check())
+	require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, CommitDate: dated, Closed: closed}.Check())
+	require.ErrorContains(t, Changes{Base: "main", Closed: []ClosedChange{{ID: "../9"}}}.Check(), "closed[0]:")
+	require.ErrorContains(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Closed: []ClosedChange{{ID: "../9"}}}.Check(), "closed:")
+	dup := Changes{Base: "main", Unqueued: []UnqueuedChange{{ID: "9", Head: head("9")}}, Closed: closed}
+	require.EqualError(t, dup.Check(), `closed[0]: id "9" appears twice`)
+}
+
+// A kick-back that needs regeneration leaves its own mark, so the change reads as out of
+// the queue for a reason no push alone fixes.
+func TestAKickBackLeavesTheMarkItsCodeNames(t *testing.T) {
+	require.Equal(t, MarkNeedsRegeneration, Kick{Code: CodeKickRegeneration}.Mark())
+	for _, c := range []Code{CodeKickConflict, CodeKickRed, CodeKickRefused} {
+		require.Equal(t, MarkKickedBack, Kick{Code: c}.Mark(), c)
+	}
 }
 
 func TestCapabilitiesCheckRefusesAnUnknownStackMergeAndNoMethod(t *testing.T) {

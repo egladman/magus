@@ -2,11 +2,11 @@ name: Queue
 
 # The merge queue's validation half, run by `magus queue` (libs/mergequeue). A pull
 # request joins the queue when auto-merge is enabled on it, or, for a stack, when a
-# "queue: <method>" label is on its top. The plan job lists the queue, checks approval at
-# each head and partitions it by the affected sets the magus workspace reports through
-# the Go SDK; each validate job then validates one change on main plus the changes ahead
-# of it in its partition, gated with `magus affected ci` against the candidate it was
-# built onto. Every job uploads its verdict the moment it finishes, and
+# "merge-queue: <method>" label is on its top. The plan job lists the queue, checks
+# approval at each head and partitions it by the affected sets the magus workspace
+# reports through the Go SDK; each validate job then validates one change on main plus
+# the changes ahead of it in its partition, gated with `magus affected ci` against the
+# candidate it was built onto. Every job uploads its verdict the moment it finishes, and
 # queue-apply.yaml, already running, merges it.
 #
 # This workflow executes pull-request code, so its token reads and nothing more. Nothing
@@ -23,8 +23,9 @@ name: Queue
 on:
   # No branches filter: a stacked pull request targets the branch below it, not main.
   pull_request:
-    # auto_merge_enabled is the entry, and a "queue: <method>" label on a stack's top;
-    # synchronize and a review can make a queued pull request ready without either again.
+    # auto_merge_enabled is the entry, and a "merge-queue: <method>" label on a stack's
+    # top; synchronize and a review can make a queued pull request ready without either
+    # again.
     types: [auto_merge_enabled, labeled, synchronize]
   pull_request_review:
     types: [submitted]
@@ -57,14 +58,15 @@ jobs:
   # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
   # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
   # forks too and the plan refuses them by name; skipping them here only saves a run
-  # nobody's change can use.
+  # nobody's change can use. Only a method's label is intent: the queue's status labels
+  # share the prefix.
   intent:
     name: queue intent
     if: >-
       github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-       startsWith(github.event.label.name, 'queue: '))
+       contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name))
     runs-on: ubuntu-latest
     timeout-minutes: 1
     permissions: {}

@@ -1,6 +1,6 @@
 // GitHub provider for the merge queue: `mergequeue --provider github`. It carries the
 // provider contract (see the provider package): describe, list_changes, approval_at,
-// list_green, post_status, retarget, merge_change, kick_back, mark, flag and list_artifacts.
+// list_green, post_status, retarget, merge_change, kick_back, mark and list_artifacts.
 // The queue decides what to validate and merge; this file only speaks GitHub's REST and
 // GraphQL APIs.
 //
@@ -8,18 +8,17 @@
 //
 // A pull request is queued when its author (or a maintainer) enables GitHub's native
 // auto-merge, and merges with the method chosen there. GitHub offers no auto-merge on a
-// stacked pull request, so a stack is queued by the label "queue: <method>" (squash,
-// merge or rebase) on its top pull request, applied by someone with write access; that
-// queues every pull request of the stack, bottom first. Kicking a change back disables
+// stacked pull request, so a stack is queued by the label "merge-queue: <method>"
+// (squash, merge or rebase, exactly) on its top pull request, applied by someone with
+// write access; that queues every pull request of the stack, bottom first. Kicking a change back disables
 // its auto-merge or removes the label from its stack's top, so queuing it again is how
 // a fixed change re-enters.
 //
 // # Marks
 //
-// mark shows the queue's two states as the labels "merge-queue: queued" and
-// "merge-queue: rejected". flag shows each flag as a label of its own, beside the mark:
-// "merge-queue: changes a generator". None starts with "queue: ", so the listing never
-// reads a mark or a flag as merge intent.
+// mark shows the queue's state as one label at most: "merge-queue: queued",
+// "merge-queue: kicked back" or "merge-queue: needs regeneration". They share the intent
+// label's prefix, and none names a method, so the listing never reads one as intent.
 //
 // # Credentials
 //
@@ -66,20 +65,22 @@ final DEFAULT_API = "https://api.github.com";
 final API_ENV = "GITHUB_API_URL";
 final READ_REF = "GITHUB_TOKEN";
 final WRITE_REF = "MERGEQUEUE_TOKEN";
-// The label on a stack's top pull request that queues the stack, followed by a method.
-final QUEUE_LABEL = "queue: ";
+// The label on a stack's top pull request that queues the stack, followed by one of
+// METHODS exactly; the marks' labels share the prefix.
+final QUEUE_LABEL = "merge-queue: ";
+final METHODS = ["merge", "squash", "rebase"];
 // The label each mark shows as, and what mark creates it with when the repository lacks
-// it; MARKS fixes the order label operations run in.
-final MARKS = ["queued", "rejected"];
-final MARK_LABELS = {"queued": "merge-queue: queued", "rejected": "merge-queue: rejected"};
-final MARK_DESCRIPTIONS = {"queued": "The merge queue holds this pull request", "rejected": "The merge queue kicked this back; see its newest comment"};
-final MARK_COLORS = {"queued": "1d76db", "rejected": "d93f0b"};
-// The label each flag shows as, and what flag creates it with. GitHub refuses a label
-// description over 100 characters. A label serves every base of the repository, so its
-// description names none.
-final FLAG_LABELS = {"changes_generator": "merge-queue: changes a generator"};
-final FLAG_DESCRIPTIONS = {"changes_generator": "The queue cannot regenerate its generated files; if the base moves them, merge it in and regenerate."};
-final FLAG_COLORS = {"changes_generator": "fbca04"};
+// it; MARKS fixes the order label operations run in. GitHub refuses a label description
+// over 100 characters. A label serves every base of the repository, so its description
+// names none.
+final MARKS = ["queued", "kicked_back", "needs_regeneration"];
+final MARK_LABELS = {"queued": "merge-queue: queued", "kicked_back": "merge-queue: kicked back", "needs_regeneration": "merge-queue: needs regeneration"};
+final MARK_DESCRIPTIONS = {
+    "queued": "The merge queue holds this pull request.",
+    "kicked_back": "The merge queue kicked this back; see its newest comment.",
+    "needs_regeneration": "The merge queue cannot regenerate this; merge it by hand.",
+};
+final MARK_COLORS = {"queued": "1d76db", "kicked_back": "b60205", "needs_regeneration": "fbca04"};
 // Roles whose label queues a stack: the ones that can enable auto-merge.
 final QUEUE_ROLES = ["admin", "maintain", "write"];
 // How many pages of an issue timeline the labeler check reads before it gives up and
@@ -681,11 +682,11 @@ fun id(b: serialize\Boxed) > str {
     return "{n}";
 }
 
-// queueLabel returns the exact name of the "queue: <method>" label on pr, or "".
+// queueLabel returns the "merge-queue: <method>" label on pr, or "".
 fun queueLabel(pr: serialize\Boxed) > str {
     foreach (l in pr.q("labels").listValue()) {
         final name = l.q("name").stringValue();
-        if (name.startsWith(QUEUE_LABEL)) {
+        if (name.startsWith(QUEUE_LABEL) and METHODS.indexOf(methodOf(name)) != null) {
             return name;
         }
     }
@@ -693,7 +694,7 @@ fun queueLabel(pr: serialize\Boxed) > str {
 }
 
 fun methodOf(label: str) > str {
-    return label.sub(QUEUE_LABEL.len()).trim().lower();
+    return label.sub(QUEUE_LABEL.len());
 }
 
 // stackTops lists the stacks whose top pull request carries a queue label, on base:
@@ -798,7 +799,7 @@ fun labelNames(item: serialize\Boxed) > [str] {
     return names;
 }
 
-// markIn is the mark names show: "queued", "rejected" or "".
+// markIn is the mark names show, one of MARKS or "".
 fun markIn(names: [str]) > str {
     foreach (m in MARKS) {
         if (names.indexOf(MARK_LABELS[m] ?? "") != null) {
@@ -809,7 +810,8 @@ fun markIn(names: [str]) > str {
 }
 
 // markOps is what leaves a pull request labeled names showing want's label and no other
-// mark's, in order: [{op: "add" or "remove", label}]. want "" removes both.
+// mark's, in order: [{op: "add" or "remove", label}]. want "" removes every one, and the
+// intent label too: the queue marks none only a pull request that left it.
 fun markOps(names: [str], want: str) > [{str: str}] {
     final ops = mut [<{str: str}>];
     foreach (m in MARKS) {
@@ -821,21 +823,54 @@ fun markOps(names: [str], want: str) > [{str: str}] {
             ops.append({"op": "remove", "label": label});
         }
     }
+    if (want == "") {
+        foreach (m in METHODS) {
+            if (names.indexOf(QUEUE_LABEL + m) != null) {
+                ops.append({"op": "remove", "label": QUEUE_LABEL + m});
+            }
+        }
+    }
     return ops;
 }
 
-// flagOps is what leaves a pull request labeled names showing flag's label when on and
-// not when off, as markOps's records; empty when it already does.
-fun flagOps(names: [str], flag: str, on: bool) > [{str: str}] {
-    final label = FLAG_LABELS[flag] ?? "";
-    final has = names.indexOf(label) != null;
-    if (on and !has) {
-        return [{"op": "add", "label": label}];
+// closedQuery searches repo for closed pull requests showing any queue label, status or
+// intent, in one query: GitHub reads comma-separated label values as any of them.
+fun closedQuery(repo: str) > str {
+    final labels = mut [<str>];
+    foreach (m in MARKS) {
+        labels.append("\"{MARK_LABELS[m] ?? ""}\"");
     }
-    if (!on and has) {
-        return [{"op": "remove", "label": label}];
+    foreach (m in METHODS) {
+        labels.append("\"{QUEUE_LABEL}{m}\"");
     }
-    return [<{str: str}>];
+    return "repo:{repo} is:pr is:closed label:" + labels.join(",");
+}
+
+// closedFrom reads search result pages into the closed pull requests apply unlabels.
+fun closedFrom(pages: [str], repo: str) > [any] !> any {
+    final closed = mut [<any>];
+    foreach (page in pages) {
+        foreach (item in serialize\jsonDecode(page).q("items").listValue()) {
+            closed.append({"id": "{item.q("number").integerValue()}", "repo": repo});
+        }
+    }
+    return closed;
+}
+
+// closedPulls pages the search to its end, which a short page signals.
+fun closedPulls(repo: str, hdrs: {str: str}) > [str] !> any {
+    final url = apiBase() + "/search/issues?q=" + escape(closedQuery(repo));
+    final bodies = mut [<str>];
+    var page = 1;
+    while (true) {
+        final body = expect(get(url + "&per_page=100&page={page}", hdrs: hdrs), status: 200, what: "search closed pull requests with queue labels");
+        bodies.append(body);
+        if (serialize\jsonDecode(body).q("items").listValue().len() < 100) {
+            break;
+        }
+        page = page + 1;
+    }
+    return bodies;
 }
 
 // unqueuedFrom lists every open pull request queued leaves out, drafts and forks
@@ -977,7 +1012,8 @@ fun mergedUnder(repo: str, base: str, queued: [any], hdrs: {str: str}) > [any] !
 }
 
 // list_changes returns the queued pull requests against the base branch, oldest first,
-// the merged ones a queued one carries the head of, and every other open pull request.
+// the merged ones a queued one carries the head of, every other open pull request, and
+// the closed ones still showing a queue label.
 export fun list_changes(io: {str: any}) > any !> any {
     final hdrs = reading("list_changes");
     final repo = repoOf(io);
@@ -990,7 +1026,8 @@ export fun list_changes(io: {str: any}) > any !> any {
         }
     }
     final changes = changesFrom(pulls, repo: repo, base: base, stacks: stacks);
-    return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes)};
+    return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes),
+        "closed": closedFrom(closedPulls(repo, hdrs: hdrs), repo: repo)};
 }
 
 // requiredFrom reads the approvals the base branch's rulesets require.
@@ -1454,6 +1491,12 @@ fun shQuote(s: str) > str {
     return "'" + s.replace("'", with: "'\\''") + "'";
 }
 
+// byHandLine is how a change the queue will never merge lands: an admin's merge past the
+// queue's failed status.
+fun byHandLine(number: str, method: str) > str {
+    return "Merge it by hand once it is reviewed: `gh pr merge {number} --admin --{method}`";
+}
+
 // requeueLine is how the author queues the change again: auto-merge with its merge
 // method, or, when a label queued it, that label on the stack's top pull request. A
 // fork cannot be queued, so it gets none.
@@ -1493,22 +1536,21 @@ fun reproduction(number: str, run: {str: str}, repoArg: str, base: str, gate: st
     return lines;
 }
 
-// kickComment renders the kick-back comment from kick_back's record: what failed, the
-// label of the flag that explains it, what the run reported, the validation run, how to
-// reproduce it, the files at issue, requeue (from requeueLine), and last the facts it was
-// rendered from as one JSON line a workflow can read back. web is the provider's web root
-// ("https://github.com"). The claim, the paths and the commits may come from a job that
-// ran the change's code, so each is shown literally.
+// kickComment renders the kick-back comment from kick_back's record: what failed, why it
+// needs regeneration when that is the code, what the run reported, the validation run,
+// how to reproduce it, the files at issue, requeue (from requeueLine or byHandLine), and
+// last the facts it was rendered from as one JSON line a workflow can read back. web is
+// the provider's web root ("https://github.com"). The claim, the paths and the commits
+// may come from a job that ran the change's code, so each is shown literally.
 fun kickComment(io: {str: any}, web: str, requeue: str) > str !> any {
     final number = "{io["id"] ?? ""}";
     final base = "{io["base"] ?? ""}";
     final report = "{io["report"] ?? ""}";
     final lines = mut ["### Merge queue: kicked back", "", report.trim()];
-    final label = FLAG_LABELS["{io["flag"] ?? ""}"] ?? "";
-    if (label != "") {
+    if (io["code"] == "KICK_REGENERATION") {
         lines.append("");
-        lines.append("This is why it carries the label `{label}`: the queue cannot regenerate its generated files, "
-            + "so whenever `{base}` moves them, merge `{base}` in and regenerate.");
+        lines.append("This is why it carries the label `{MARK_LABELS["needs_regeneration"] ?? ""}`: "
+            + "the queue will not merge a change whose own code regenerates its generated files.");
     }
     final claim = "{io["claim"] ?? ""}";
     if (claim != "") {
@@ -1657,7 +1699,10 @@ export fun kick_back(io: {str: any}) > bool !> any {
         label = own;
         labeled = number;
     }
-    final requeue = requeueLine(number, method: "{io["method"] ?? ""}", fork: io["fork"] == true, label: label, top: labeled);
+    var requeue = requeueLine(number, method: "{io["method"] ?? ""}", fork: io["fork"] == true, label: label, top: labeled);
+    if (io["code"] == "KICK_REGENERATION") {
+        requeue = byHandLine(number, method: "{io["method"] ?? ""}");
+    }
     final posted = expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/comments",
         body: serialize\jsonEncode({"body": kickComment(io, web: "https://" + apiHost(apiBase()), requeue: requeue)}), hdrs: hdrs),
         status: 201, what: "kick_back: comment");
@@ -1743,30 +1788,6 @@ export fun mark(io: {str: any}) > bool !> any {
             createLabel(repo, label: label, description: MARK_DESCRIPTIONS[want] ?? "", color: MARK_COLORS[want] ?? "", hdrs: hdrs);
             expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/labels", body: serialize\jsonEncode({"labels": [label]}), hdrs: hdrs),
                 status: 200, what: "mark: label #{number} '{label}'");
-        }
-    }
-    return true;
-}
-
-// flag shows or clears the label of io's flag on the pull request, leaving its other
-// labels, from one read of them; a pull request already right takes no write.
-export fun flag(io: {str: any}) > bool !> any {
-    final hdrs = writing("flag");
-    final repo = "{io["repo"] ?? ""}";
-    final number = "{io["id"] ?? ""}";
-    final f = "{io["flag"] ?? ""}";
-    if (FLAG_LABELS[f] == null) {
-        throw "github: flag: no label for the flag '{f}'";
-    }
-    final issue = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/issues/" + number, hdrs: hdrs), status: 200, what: "flag: read #{number}"));
-    foreach (step in flagOps(labelNames(issue), flag: f, on: io["on"] == true)) {
-        final label = step["label"] ?? "";
-        if (step["op"] == "remove") {
-            unlabel(repo, number: number, label: label, hdrs: hdrs);
-        } else {
-            createLabel(repo, label: label, description: FLAG_DESCRIPTIONS[f] ?? "", color: FLAG_COLORS[f] ?? "", hdrs: hdrs);
-            expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/labels", body: serialize\jsonEncode({"labels": [label]}), hdrs: hdrs),
-                status: 200, what: "flag: label #{number} '{label}'");
         }
     }
     return true;
@@ -1884,7 +1905,7 @@ final STACK = `[
      "stack": {"id": 5, "position": 1, "size": 2, "base": {"ref": "main", "sha": "b"}},
      "head": {"sha": "a20", "ref": "s1", "repo": {"full_name": "acme/acme"}}},
     {"number": 21, "draft": false, "auto_merge": null, "title": "top", "user": {"login": "ann"},
-     "base": {"ref": "s1"}, "labels": [{"name": "queue:  Squash"}],
+     "base": {"ref": "s1"}, "labels": [{"name": "merge-queue: Squash"}, {"name": "merge-queue: squash"}],
      "stack": {"id": 5, "position": 2, "size": 2, "base": {"ref": "main", "sha": "b"}},
      "head": {"sha": "a21", "ref": "s2", "repo": {"full_name": "acme/acme"}}},
     {"number": 22, "draft": true, "auto_merge": null, "title": "draft", "user": {"login": "bo"},
@@ -1897,7 +1918,7 @@ test "a labeled stack top queues the stack, each member naming the one below" {
     assert\equal(tops.len(), want: 1, message: "one labeled top");
     assert\equal(tops[0]["number"], want: "21", message: "the top");
     assert\equal(tops[0]["method"], want: "squash", message: "the label's method");
-    assert\equal(tops[0]["label"], want: "queue:  Squash", message: "the label exactly as it is spelled, so removing it finds it");
+    assert\equal(tops[0]["label"], want: "merge-queue: squash", message: "only a method's exact name is intent");
     assert\equal(stackTops([STACK], base: "release").len(), want: 0, message: "a stack on another trunk is not this queue's");
     final got = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"});
     assert\equal(got.len(), want: 2, message: "both members");
@@ -1907,7 +1928,7 @@ test "a labeled stack top queues the stack, each member naming the one below" {
     assert\equal(changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {<str: str>}).len(), want: 0, message: "an unlabeled stack is not queued");
     final top = stackTopIn([STACK], sid: "5");
     assert\equal(top["number"], want: "21", message: "a member finds its stack's top");
-    assert\equal(top["label"], want: "queue:  Squash", message: "and the label that queues it");
+    assert\equal(top["label"], want: "merge-queue: squash", message: "and the label that queues it");
 }
 
 test "every open pull request the listing leaves out is unqueued" {
@@ -1927,22 +1948,26 @@ final MARKED = `[
      "stack": {"id": 6, "position": 1, "size": 1, "base": {"ref": "main", "sha": "b"}},
      "head": {"sha": "a30", "ref": "l", "repo": {"full_name": "acme/acme"}}},
     {"number": 31, "draft": false, "auto_merge": null, "title": "kicked", "user": {"login": "ann"},
-     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: rejected"}],
-     "head": {"sha": "a31", "ref": "k", "repo": {"full_name": "acme/acme"}}}
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: kicked back"}],
+     "head": {"sha": "a31", "ref": "k", "repo": {"full_name": "acme/acme"}}},
+    {"number": 32, "draft": false, "auto_merge": null, "title": "generator", "user": {"login": "ann"},
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: needs regeneration"}],
+     "stack": {"id": 7, "position": 1, "size": 1, "base": {"ref": "main", "sha": "b"}},
+     "head": {"sha": "a32", "ref": "g", "repo": {"full_name": "acme/acme"}}}
 ]`;
 
 test "an unqueued pull request carries the mark its labels show" {
     final got = unqueuedFrom([MARKED], repo: "acme/acme", queued: [<any>]);
     assert\equal(serialize\Boxed.init(got[0]).q("mark").stringValue(), want: "queued", message: "a queued mark left behind");
-    assert\equal(serialize\Boxed.init(got[1]).q("mark").stringValue(), want: "rejected", message: "a kick-back's mark");
+    assert\equal(serialize\Boxed.init(got[1]).q("mark").stringValue(), want: "kicked_back", message: "a kick-back's mark");
+    assert\equal(serialize\Boxed.init(got[2]).q("mark").stringValue(), want: "needs_regeneration", message: "a generator change's mark");
 }
 
 test "the provider never reads its own mark labels as merge intent" {
     foreach (m in MARKS) {
-        assert\equal((MARK_LABELS[m] ?? "").startsWith(QUEUE_LABEL), want: false, message: "{m}'s label is no queue label");
-    }
-    foreach (f, label in FLAG_LABELS) {
-        assert\equal(label.startsWith(QUEUE_LABEL), want: false, message: "{f}'s label is no queue label");
+        final label = MARK_LABELS[m] ?? "";
+        assert\equal(label.startsWith(QUEUE_LABEL), want: true, message: "{m}'s label shares the prefix");
+        assert\equal(METHODS.indexOf(methodOf(label)), want: null, message: "{m}'s label names no method");
     }
     assert\equal(stackTops([MARKED], base: "main").len(), want: 0, message: "a stack top showing a mark is not queued by it");
     assert\equal(changesFrom([MARKED], repo: "acme/acme", base: "main", stacks: {<str: str>}).len(), want: 0, message: "nothing is queued");
@@ -1956,37 +1981,40 @@ fun opsText(ops: [{str: str}]) > str {
     return parts.join("; ");
 }
 
-test "a mark adds its own label and removes the other mark's, and nothing already right" {
+test "a mark adds its own label and removes every other mark's, and nothing already right" {
     assert\equal(opsText(markOps([<str>], want: "queued")), want: "add merge-queue: queued", message: "queued from nothing");
     assert\equal(opsText(markOps(["bug", "merge-queue: queued"], want: "queued")), want: "", message: "already queued takes no write");
-    assert\equal(opsText(markOps(["merge-queue: queued"], want: "rejected")), want: "remove merge-queue: queued; add merge-queue: rejected", message: "a kick-back swaps them");
-    assert\equal(opsText(markOps(["merge-queue: rejected"], want: "queued")), want: "add merge-queue: queued; remove merge-queue: rejected", message: "queued again swaps them back");
-    assert\equal(opsText(markOps(["merge-queue: queued", "merge-queue: rejected", "bug"], want: "")), want: "remove merge-queue: queued; remove merge-queue: rejected", message: "none clears both and keeps the rest");
+    assert\equal(opsText(markOps(["merge-queue: queued"], want: "kicked_back")), want: "remove merge-queue: queued; add merge-queue: kicked back", message: "a kick-back swaps them");
+    assert\equal(opsText(markOps(["merge-queue: kicked back"], want: "queued")), want: "add merge-queue: queued; remove merge-queue: kicked back", message: "queued again swaps them back");
+    assert\equal(opsText(markOps(["merge-queue: queued", "merge-queue: kicked back"], want: "needs_regeneration")),
+        want: "remove merge-queue: queued; remove merge-queue: kicked back; add merge-queue: needs regeneration", message: "one status at a time");
+    assert\equal(opsText(markOps(["merge-queue: queued", "merge-queue: kicked back", "merge-queue: needs regeneration", "merge-queue: squash", "bug"], want: "")),
+        want: "remove merge-queue: queued; remove merge-queue: kicked back; remove merge-queue: needs regeneration; remove merge-queue: squash",
+        message: "none clears every status and the intent label, and keeps the rest");
     assert\equal(opsText(markOps(["bug"], want: "")), want: "", message: "none on nothing takes no write");
+    assert\equal(opsText(markOps(["merge-queue: squash"], want: "queued")), want: "add merge-queue: queued", message: "a status leaves the intent label alone");
 }
 
-test "a flag adds and removes its own label beside the mark, and nothing already right" {
-    assert\equal(opsText(flagOps(["merge-queue: queued"], flag: "changes_generator", on: true)), want: "add merge-queue: changes a generator", message: "on beside the mark");
-    assert\equal(opsText(flagOps(["merge-queue: changes a generator"], flag: "changes_generator", on: true)), want: "", message: "already on takes no write");
-    assert\equal(opsText(flagOps(["merge-queue: queued", "merge-queue: changes a generator"], flag: "changes_generator", on: false)),
-        want: "remove merge-queue: changes a generator", message: "off keeps the mark");
-    assert\equal(opsText(flagOps(["bug"], flag: "changes_generator", on: false)), want: "", message: "off on nothing takes no write");
-    assert\equal(opsText(markOps(["merge-queue: changes a generator"], want: "queued")), want: "add merge-queue: queued", message: "a mark leaves the flag alone");
+test "the closed pull requests still showing a queue label are one search, read into records apply unlabels" {
+    assert\equal(closedQuery("o/r"), want: "repo:o/r is:pr is:closed label:\"merge-queue: queued\",\"merge-queue: kicked back\",\"merge-queue: needs regeneration\","
+        + "\"merge-queue: merge\",\"merge-queue: squash\",\"merge-queue: rebase\"", message: "every status and intent label, any of them");
+    final got = closedFrom([`{"total_count": 2, "items": [{"number": 41, "state": "closed"}, {"number": 42, "state": "closed"}]}`, `{"items": []}`], repo: "o/r");
+    assert\equal(got.len(), want: 2, message: "every item on every page");
+    assert\equal(serialize\Boxed.init(got[1]).q("id").stringValue(), want: "42", message: "by number");
+    assert\equal(serialize\Boxed.init(got[1]).q("repo").stringValue(), want: "o/r", message: "in the repository a mark is cleared in");
 }
 
-test "a flag's label is created with a description GitHub accepts" {
-    foreach (f, label in FLAG_LABELS) {
-        final description = FLAG_DESCRIPTIONS[f] ?? "";
-        assert\equal(description != "" and description.len() <= 100, want: true, message: "{label}'s description fits");
-    }
+test "a mark's label is created with a short description GitHub accepts" {
     foreach (m in MARKS) {
-        assert\equal((MARK_DESCRIPTIONS[m] ?? "").len() <= 100, want: true, message: "{m}'s description fits");
+        final description = MARK_DESCRIPTIONS[m] ?? "";
+        assert\equal(description.startsWith("The merge queue ") and description.endsWith(".") and description.len() <= 100, want: true, message: "{m}'s description");
+        assert\equal((MARK_COLORS[m] ?? "").len(), want: 6, message: "{m}'s color");
     }
 }
 
 fun labelRefusal(status: int, body: str) > str {
     try {
-        labelCreated("merge-queue: changes a generator", status: status, body: body);
+        labelCreated("merge-queue: kicked back", status: status, body: body);
     } catch (e) {
         return "{e}";
     }
@@ -1998,21 +2026,21 @@ test "creating a label the repository has succeeds, and any other refusal names 
     assert\equal(labelRefusal(422, body: `{"message": "Validation Failed", "errors": [{"resource": "Label", "code": "already_exists", "field": "name"}]}`),
         want: "", message: "already there");
     assert\equal(labelRefusal(422, body: `{"message": "Validation Failed", "errors": [{"resource": "Label", "code": "invalid", "field": "description"}]}`),
-        want: "github: create the label 'merge-queue: changes a generator': HTTP 422: Validation Failed (description invalid)", message: "a description too long");
+        want: "github: create the label 'merge-queue: kicked back': HTTP 422: Validation Failed (description invalid)", message: "a description too long");
     assert\equal(labelRefusal(422, body: `{"message": "Validation Failed", "errors": [{"code": "already_exists", "field": "name"}, {"code": "custom", "message": "description is too long"}]}`),
-        want: "github: create the label 'merge-queue: changes a generator': HTTP 422: Validation Failed (name already_exists; description is too long)",
+        want: "github: create the label 'merge-queue: kicked back': HTTP 422: Validation Failed (name already_exists; description is too long)",
         message: "existing does not excuse an invalid one");
-    assert\equal(labelRefusal(403, body: "forbidden"), want: "github: create the label 'merge-queue: changes a generator': HTTP 403: forbidden", message: "no permission");
+    assert\equal(labelRefusal(403, body: "forbidden"), want: "github: create the label 'merge-queue: kicked back': HTTP 403: forbidden", message: "no permission");
 }
 
 test "the labeler is the last actor to apply the label" {
     final body = `[
-        {"event": "labeled", "label": {"name": "queue: squash"}, "actor": {"login": "triager"}},
+        {"event": "labeled", "label": {"name": "merge-queue: squash"}, "actor": {"login": "triager"}},
         {"event": "commented", "actor": {"login": "x"}},
-        {"event": "labeled", "label": {"name": "queue: squash"}, "actor": {"login": "maint"}},
+        {"event": "labeled", "label": {"name": "merge-queue: squash"}, "actor": {"login": "maint"}},
         {"event": "labeled", "label": {"name": "bug"}, "actor": {"login": "other"}}
     ]`;
-    assert\equal(labelerFrom(body, label: "queue: squash"), want: "maint", message: "latest application wins");
+    assert\equal(labelerFrom(body, label: "merge-queue: squash"), want: "maint", message: "latest application wins");
 }
 
 test "merged changes are the ones merged into the base at a head the change carries" {
@@ -2136,7 +2164,7 @@ test "describe lists the methods the repository allows" {
     final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`, rules: `[]`, setup: null, committer: bot);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "allowed methods");
     assert\equal(got["stack_merge"], want: "atomic", message: "GitHub merges a stack in one call");
-    assert\equal(got["queue_label"], want: "queue: ", message: "the label a stack is queued by, before its method");
+    assert\equal(got["queue_label"], want: "merge-queue: ", message: "the label a stack is queued by, before its method");
     assert\equal(got["committer"], want: bot, message: "the app's bot commits");
     assert\equal(got["required_approvals"], want: 0, message: "no rule requires a review, and describe says so rather than leaving it out");
 }
@@ -2319,18 +2347,19 @@ test "a conflict planning found links the run and reproduces nothing" {
         want: "### Merge queue: kicked back\n\nr\n\n" + kickFacts("", paths: [<str>], commits: [<str>], candidate: "") + "\n", message: "a directory source links nothing");
 }
 
-test "a refusal a flag explains names the flag's label" {
+test "a change needing regeneration names its label and is merged by hand" {
     final io = {
-        "id": "8", "base": "main", "method": "squash", "code": "KICK_REFUSED", "candidate_commit": "", "flag": "changes_generator",
-        "report": "The merge queue validated this change but cannot merge it: only its author can regenerate them.\n\nMerge `main` in, regenerate, and push.\n",
+        "id": "8", "base": "main", "method": "squash", "code": "KICK_REGENERATION", "candidate_commit": "",
+        "report": "The merge queue cannot merge this change: it changes what regenerates gen/x.go.\n",
         "paths": [<str>], "with": [<str>],
     };
-    final got = kickComment(io, web: "https://github.com", requeue: "");
+    final got = kickComment(io, web: "https://github.com", requeue: byHandLine("8", method: "squash"));
     assert\equal(got, want: "### Merge queue: kicked back\n\n"
-        + "The merge queue validated this change but cannot merge it: only its author can regenerate them.\n\nMerge `main` in, regenerate, and push.\n\n"
-        + "This is why it carries the label `merge-queue: changes a generator`: the queue cannot regenerate its generated files, "
-        + "so whenever `main` moves them, merge `main` in and regenerate.\n\n"
-        + kickFacts("KICK_REFUSED", paths: [<str>], commits: [<str>], candidate: "") + "\n", message: "the label follows the reason");
+        + "The merge queue cannot merge this change: it changes what regenerates gen/x.go.\n\n"
+        + "This is why it carries the label `merge-queue: needs regeneration`: "
+        + "the queue will not merge a change whose own code regenerates its generated files.\n\n"
+        + "Merge it by hand once it is reviewed: `gh pr merge 8 --admin --squash`\n\n"
+        + kickFacts("KICK_REGENERATION", paths: [<str>], commits: [<str>], candidate: "") + "\n", message: "the label follows the reason");
 }
 
 test "what a verdict carries renders inert: file names, commits and the run's claim" {
@@ -2387,8 +2416,8 @@ test "a hook line's single quotes survive sh quoting" {
 }
 
 test "a stack queued by its top's label re-queues through that label, and a fork not at all" {
-    assert\equal(requeueLine("11", method: "squash", fork: false, label: "queue: squash", top: "12"),
-        want: "Queue the stack again once fixed: `gh pr edit 12 --add-label \"queue: squash\"`", message: "the top's label");
+    assert\equal(requeueLine("11", method: "squash", fork: false, label: "merge-queue: squash", top: "12"),
+        want: "Queue the stack again once fixed: `gh pr edit 12 --add-label \"merge-queue: squash\"`", message: "the top's label");
     assert\equal(requeueLine("11", method: "merge", fork: true, label: "", top: ""), want: "", message: "a fork");
 }
 
@@ -2406,7 +2435,7 @@ test "only this credential's earlier kick-backs are minimized, never the new one
 }
 
 test "a label and a branch are escaped for the URL they go in" {
-    assert\equal(escape("queue: squash"), want: "queue%3a%20squash", message: "a label");
+    assert\equal(escape("merge-queue: squash"), want: "merge-queue%3a%20squash", message: "a label");
     assert\equal(escape("ann:feat/x-1"), want: "ann%3afeat%2fx-1", message: "an owner and branch");
 }
 

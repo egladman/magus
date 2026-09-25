@@ -3628,8 +3628,11 @@ func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
 	assert.Equal(t, "inputs.queue-app-client-id != ''", mint.If)
 	assert.Equal(t, "${{ env.MAGUS_QUEUE_APP_PRIVATE_KEY }}", mint.With["private-key"])
 	assert.Equal(t, "${{ github.event.repository.name }}", mint.With["repositories"], "this repository alone")
-	for _, perm := range []string{"contents", "pull-requests", "statuses", "actions", "workflows"} {
-		assert.Equal(t, "write", mint.With["permission-"+perm], perm)
+	// Apply follows the validation run and dispatches nothing; the dispatch job mints its
+	// own actions: write token.
+	want := map[string]string{"contents": "write", "pull-requests": "write", "statuses": "write", "actions": "read", "workflows": "write"}
+	for perm, level := range want {
+		assert.Equal(t, level, mint.With["permission-"+perm], perm)
 	}
 	for _, out := range []string{"queue-token", "queue-committer", "queue-app-slug"} {
 		assert.Contains(t, action.Outputs, out)

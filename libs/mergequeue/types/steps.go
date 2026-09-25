@@ -144,9 +144,8 @@ type RefusedError struct {
 	Reason string
 	Paths  []string
 	Remedy string
-	// Flag, when set, is the flag that explains the refusal: the kick-back shows it on the
-	// change and its report names it.
-	Flag Flag
+	// Code is the kick-back's code; empty means [CodeKickRefused].
+	Code Code
 }
 
 func (e *RefusedError) Error() string { return e.Reason }

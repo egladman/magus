@@ -17,7 +17,7 @@ magus's Go SDK, with the workspace loaded once. Another build tool answers throu
 
 A change joins the queue when its provider reports merge intent on it. With the built-in
 GitHub provider that is auto-merge enabled on a pull request, or, for a stack, a label
-on its top made of the prefix `describe` reports and a merge method (`queue: squash`).
+on its top made of the prefix `describe` reports and a merge method (`merge-queue: squash`).
 From there the queue:
 
 - builds a candidate per change, main plus every change ahead of it in its partition,
@@ -37,8 +37,9 @@ From there the queue:
 
 It kicks an author back only for what their own change did: a real conflict, a red gate
 on a candidate whose every change beneath is validated and whose base is green on the
-same projects, a regeneration their code broke,
-generated files only they can regenerate, or a stack it cannot merge. A gate killed by a
+same projects, a regeneration their code broke, a stack it cannot merge, or generated
+files their own code regenerates, which takes the change out of the queue for a person
+to merge by hand. A gate killed by a
 signal, an OOM kill included, is that change's red. Only what the queue can prove is the
 machine's (a hook that could not start, the queue's own cancellation) stops a partition
 and leaves the change queued.
@@ -58,30 +59,44 @@ the queue's `merge-queue` status is main's required check, auto-merge cannot fir
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
 about to see that pull request merged.
 
-| To                           | Do                                                      |
-| ---------------------------- | ------------------------------------------------------- |
-| queue a pull request         | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
-| queue a stack                | label its top pull request `queue: squash`              |
-| take it out                  | `gh pr merge <n> --disable-auto`, or remove the label   |
-| list what is queued          | `magus queue ls --provider github --base main`          |
-| tell one is queued           | it carries the label `merge-queue: queued`              |
-| tell one was kicked back     | it carries the label `merge-queue: rejected`            |
-| tell one changes a generator | it carries the label `merge-queue: changes a generator` |
-| see why one is waiting       | its `merge-queue` status, which reads `waiting: <why>`  |
-| see why one was kicked back  | the queue's newest comment on it                        |
-| land it past the queue       | `gh pr merge <n> --admin`: an admin's bypass, see below |
+| To                          | Do                                                      |
+| --------------------------- | ------------------------------------------------------- |
+| queue a pull request        | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
+| queue a stack               | label its top pull request `merge-queue: squash`        |
+| take it out                 | `gh pr merge <n> --disable-auto`, or remove the label   |
+| list what is queued         | `magus queue ls --provider github --base main`          |
+| see why one is waiting      | its `merge-queue` status, which reads `waiting: <why>`  |
+| see why one was kicked back | the queue's newest comment on it                        |
+| land it past the queue      | `gh pr merge <n> --admin`: an admin's bypass, see below |
 
-A queued pull request carries `merge-queue: changes a generator` beside
-`merge-queue: queued` when it touches generated files the queue cannot regenerate
-itself: the build tool cannot prove their regeneration runs none of the pull request's
-own code. Nothing is wrong yet, but when main moves those files the queue kicks it back,
-and only you can merge main in and regenerate.
+A pull request carries at most one of the queue's status labels, and the queue sets and
+removes them itself:
+
+| Label                             | Means                                            | Removed when                                                     |
+| --------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| `merge-queue: queued`             | the queue holds it                               | it is kicked back or merged, or the next apply run finds it gone |
+| `merge-queue: kicked back`        | kicked back; the queue's newest comment says why | it is queued again, or the next apply run finds it closed        |
+| `merge-queue: needs regeneration` | its own code regenerates its generated files     | it is queued again, or the next apply run finds it closed        |
+
+Setting one removes the other two. When the queue sees a pull request merge, it removes
+every `merge-queue:` label from it, the stack's intent label included; one merged or
+closed where the queue did not see it (by hand, or closed unmerged) loses them on the
+next apply run, which lists the closed pull requests still carrying any. The intent label
+is the prefix followed by a merge method, exactly: `merge-queue: squash`,
+`merge-queue: rebase` or `merge-queue: merge`, so no status label ever reads as intent.
+
+The queue never merges a pull request that touches generated files it cannot regenerate
+itself, because the build tool cannot prove their regeneration runs none of the pull
+request's own code. It kicks it back with `KICK_REGENERATION` and labels it
+`merge-queue: needs regeneration`; regenerate, push, and merge it by hand once it is
+reviewed.
 
 A pull request the queue kicks back gets a new comment, and its auto-merge or label is
 removed. The comment says what failed on which commits, links the validation run, and
 holds, collapsed, the files at issue and a block that runs the same validation on your
-machine; its last line is the command that queues it again. One that waits (for a
-review, for the change beneath it, for main to settle) stays queued and needs nothing.
+machine; its last line is the command that queues it again, or, for one that needs
+regeneration, the command that merges it by hand. One that waits (for a review, for the
+change beneath it, for main to settle) stays queued and needs nothing.
 
 An admin merge skips validation and ordering both. The queue notices on its next run
 that main moved without it and plans again from the new tip, so nothing breaks, but
@@ -107,9 +122,10 @@ generated file, a candidate tree or a review proof from a verdict.
   read, whatever its extension (a `CMakeLists.txt` is code to CMake). The proof reads
   main's declarations, so it also covers everything a change merged beneath the
   candidate in the same run changed, and a proof failing only there waits for the next
-  run. A change that fails the proof goes back to its author with the paths,
-  who regenerates and pushes, and review covers the result. This is the only way
-  generated bytes reach an author's branch.
+  run. A change that fails the proof leaves the queue with the paths
+  (`KICK_REGENERATION`): its author regenerates and pushes, review covers the result,
+  and a person merges it by hand. This is the only way generated bytes reach an
+  author's branch.
 - **A hook's environment is an allowlist.** Of the queue's own environment, a hook (the
   gate, the regeneration, a `--facts` command) gets only the names magus's sandbox gives
   a sandboxed child (`PATH`, `HOME`, `USER`, `TMPDIR`, the locale, `TERM`, and on Linux
@@ -346,6 +362,9 @@ a run, and `apply` says so before reading anything.
   ],
   "unqueued": [
     {"id": "490", "repo": "acme/acme", "head": "a1b2...", "mark": "queued"}
+  ],
+  "closed": [
+    {"id": "475", "repo": "acme/acme"}
   ]
 }
 ```
@@ -368,7 +387,9 @@ with `WAIT_UNQUEUED_BELOW`, since merging it would merge that change's commits u
 So does one built on it before a merge of main went on top: planning fetches each
 unqueued head, peels those merges off, and holds a change carrying what is left. A change
 built on a fork waits on the fork's kick-back the same way; the fork's head is fetched
-for its ancestry only, and only when the listing holds another change.
+for its ancestry only, and only when the listing holds another change. `closed` lists
+the closed changes still showing one of the provider's queue labels; planning carries
+them into the plan, and apply clears their labels.
 
 ## Stacks
 
@@ -549,6 +570,7 @@ checked, and hands the verdict's `reason` on as a claim, shown only as text.
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated        |
 | `KICK_RED`              | the gate was red on its candidate, green on what it was built onto   |
 | `KICK_REFUSED`          | something the author has to fix that is neither                      |
+| `KICK_REGENERATION`     | its own code regenerates its generated files; a person merges it     |
 
 ## Applying as each candidate goes green
 
@@ -702,19 +724,18 @@ the context elsewhere, or when the app was replaced.
 A provider is a Buzz script run on an embedded gopherbuzz VM. It exports these
 functions, each taking one record:
 
-| Function         | Receives                                                                                    | Returns                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `describe`       | `{base, remote_url, status_context, app, setup_steps}`                                      | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
-| `list_changes`   | `{base, remote_url}`                                                                        | `{changes, merged, unqueued}`                                                                 |
-| `approval_at`    | the change plus `{commit}`                                                                  | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}`              |
-| `list_green`     | `{base, remote_url, context}`                                                               | `{changes: [{id, repo, head}]}`                                                               |
-| `post_status`    | the change plus `{commit, context, state, description}`                                     | `true` when recorded                                                                          |
-| `retarget`       | the change plus `{base}`                                                                    | `true` once the change targets `base`                                                         |
-| `merge_change`   | the change plus `{commit, message, app, through}`                                           | `{merged, by_provider?, reason?}`                                                             |
+| Function         | Receives                                                                                           | Returns                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `describe`       | `{base, remote_url, status_context, app, setup_steps}`                                             | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
+| `list_changes`   | `{base, remote_url}`                                                                               | `{changes, merged, unqueued, closed?}`                                                        |
+| `approval_at`    | the change plus `{commit}`                                                                         | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}`              |
+| `list_green`     | `{base, remote_url, context}`                                                                      | `{changes: [{id, repo, head}]}`                                                               |
+| `post_status`    | the change plus `{commit, context, state, description}`                                            | `true` when recorded                                                                          |
+| `retarget`       | the change plus `{base}`                                                                           | `true` once the change targets `base`                                                         |
+| `merge_change`   | the change plus `{commit, message, app, through}`                                                  | `{merged, by_provider?, reason?}`                                                             |
 | `kick_back`      | the change plus `{commit, code, report, claim, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                                         |
-| `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                                           |
-| `flag`           | the change plus `{flag, on}`: `changes_generator`, and whether to show it                   | `true` once the change shows the flag exactly when `on`                                       |
-| `list_artifacts` | `{source}`                                                                                  | `{run, complete, artifacts: [{name, url}], headers?}`                                         |
+| `mark`           | the change plus `{mark}`: `queued`, `kicked_back`, `needs_regeneration`, or empty for none         | `true` once the change shows that mark and no other                                           |
+| `list_artifacts` | `{source}`                                                                                         | `{run, complete, artifacts: [{name, url}], headers?}`                                         |
 
 All but `list_artifacts` are required, and a script missing one is refused when it
 opens; `list_artifacts` is required of a provider `apply` follows through a run. Every
@@ -757,21 +778,18 @@ writer ran the change's code: a provider shows these as text only, never as mark
 `{gate, regenerate}`, is there only when validation decided the kick and apply was given
 `--reproduce-gate`: the hook lines that validate the change again.
 `list_changes`' `unqueued` records carry `repo?` and `mark?`, the mark the change shows
-now. Apply marks `queued` every change the plan admitted when it starts, clears that mark
-from an unqueued change still showing it, marks `rejected` after a kick-back and clears
-the mark after a merge. A failed `mark` is a notice and applying goes on: the status and
-the comment are the record.
+now, and its `closed` records `{id, repo?}`. Apply marks `queued` every change the plan
+admitted when it starts, clears that mark from an unqueued change still showing it,
+marks `needs_regeneration` after a `KICK_REGENERATION` kick-back and `kicked_back` after
+any other, and marks none after a merge and on every closed change. Marking none clears
+the label that queued the change too, since only a change that left the queue is marked
+none. A failed `mark` is a notice and applying goes on: the status and the comment are
+the record.
 
-A flag is a property the change shows beside its mark, set and cleared on its own; a
-queued change can carry any flag. `changes_generator` says the queue cannot regenerate
-the change's generated files itself. Planning records on each change it admits the
-generated files it touches whose regeneration the build tool cannot prove runs none of
-the change's code (`--facts generation`, the proof apply needs before it regenerates);
-apply flags every admitted change holding any when it starts and unflags the rest, and
-leaves a change planning held as it is. A kick-back for that same reason flags the change
-first, since apply may have needed files regenerated that the change does not touch, and
-passes `kick_back` the flag as `flag` (empty otherwise) for its comment to name. A
-failed `flag` is a notice, as a failed `mark` is.
+Planning kicks back, with `KICK_REGENERATION`, a change touching generated files whose
+regeneration the build tool cannot prove runs none of the change's code
+(`--facts generation`, the proof apply needs before it regenerates). Apply does the same
+when it needs files regenerated that the change does not touch and the proof fails.
 
 Scripts see Buzz's standard library and a `mergequeue` module whose
 `request(method, url: .., body: .., headers: ..)` returns `{status, body}`; a response
@@ -786,31 +804,33 @@ writes, so the read-only job cannot write by accident. Its listings page to comp
 fail: a cut listing would read as fewer pull requests, fewer merged changes, or a stale
 labeler.
 
-Merge intent is GitHub's native auto-merge, and, for a stack, a `queue: <method>` label
-on its top pull request applied by someone who holds write access. The labeler is read
+Merge intent is GitHub's native auto-merge, and, for a stack, a `merge-queue: <method>`
+label on its top pull request applied by someone who holds write access; only a method
+the provider knows, spelled exactly, is intent. The labeler is read
 from the pull request's timeline; a timeline too long to read, or a labeler whose
 permission cannot be looked up, leaves that stack unqueued and nothing else. Kicking a
 change back posts a new comment, never an edit of an old one: the report, the claim in a
 fence, a link to the validation run, collapsed blocks for reproducing it (`gh run
 download` of the plan, then `magus queue validate --only` with apply's reproduce lines)
 and for the files and commits (the first 50 of each, as code spans), the `gh pr merge
-<n> --auto --<method>` that queues it again (for a stack, the label on its top), and last
-a line holding an HTML comment with one JSON object of its code and files, in which
-every `-`, `<`, `>`, `!`, `&` and `@` is a JSON escape so no file name can end the
-comment early. It then removes the intent where it lives: its own auto-merge, its own
-label, and the label on its stack's top. Last it minimizes as outdated its own earlier
-kick-back comments on the pull request, a comment its credential wrote whose last line
-is that marker; a failure there is printed to the apply job's log and does not fail the
-kick-back. It shows state and properties as three labels, each created with a
-description the first time a repository needs it: `mark` swaps between
-`merge-queue: queued` and `merge-queue: rejected`, and `flag` adds or removes
-`merge-queue: changes a generator` for `changes_generator` beside either. A kick-back
-carrying that flag names the label in its comment. A label GitHub refuses to create for
+<n> --auto --<method>` that queues it again (for a stack, the label on its top), or for
+`KICK_REGENERATION` the label it now carries and the `gh pr merge <n> --admin` that
+merges it by hand, and last a line holding an HTML comment with one JSON object of its
+code and files, in which every `-`, `<`, `>`, `!`, `&` and `@` is a JSON escape so no
+file name can end the comment early. It then removes the intent where it lives: its own
+auto-merge, its own label, and the label on its stack's top. Last it minimizes as
+outdated its own earlier kick-back comments on the pull request, a comment its
+credential wrote whose last line is that marker; a failure there is printed to the apply
+job's log and does not fail the kick-back. `mark` shows the state as one label at most,
+created with a description the first time a repository needs it: `merge-queue: queued`,
+`merge-queue: kicked back` or `merge-queue: needs regeneration`, removing the other two;
+none removes every one and the `merge-queue: <method>` label. `list_changes` finds the
+closed pull requests still showing any of these labels in one search (`is:pr is:closed`
+with every label as alternatives), paged to its end. A label GitHub refuses to create for
 any reason but that the repository already has it is an error naming GitHub's reason.
-None of these labels starts with `"queue: "`, so none reads as merge intent. Its
-`describe` reports the label prefix `"queue: "` and, with a setup, the committer
-`<slug>[bot] <<id>+<slug>[bot]@users.noreply.github.com>`, the app's bot, read from
-GitHub; `queue-apply.yaml` passes the same as `--committer`. Its setup refuses to go on
+Its `describe` reports the label prefix `"merge-queue: "` and, with a setup, the
+committer `<slug>[bot] <<id>+<slug>[bot]@users.noreply.github.com>`, the app's bot, read
+from GitHub; `queue-apply.yaml` passes the same as `--committer`. Its setup refuses to go on
 without `--app`, printing the app's registration link instead, and reads the base's
 rulesets and classic branch protection, the app, and for the steps the checks and
 workflow runs on the
@@ -847,7 +867,7 @@ command hooks.
 | `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation)       | magus's `types.VCSDriver`   |
 | `PushVCS`        | `BuildVCS` plus a leased push (applying)                                      | magus's `types.VCSDriver`   |
 | `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs       | `client.Workspace`          |
-| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark, flag | the `provider` Buzz scripts |
+| `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark       | the `provider` Buzz scripts |
 | `ArtifactLister` | the artifacts a validation run uploaded                                       | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so

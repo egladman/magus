@@ -28,6 +28,8 @@ type Changes struct {
 	Merged []MergedChange `json:"merged,omitempty"`
 	// Unqueued are the open changes carrying no merge intent.
 	Unqueued []UnqueuedChange `json:"unqueued,omitempty"`
+	// Closed are the closed changes still showing a queue label.
+	Closed []ClosedChange `json:"closed,omitempty"`
 }
 
 // Check reports whether c is a document the queue can plan: a valid base, every record
@@ -69,6 +71,15 @@ func (c Changes) Check() error {
 			return fmt.Errorf("unqueued[%d]: id %q appears twice", i, u.ID)
 		}
 		seen[u.ID] = true
+	}
+	for i, cl := range c.Closed {
+		if err := CheckID(cl.ID); err != nil {
+			return fmt.Errorf("closed[%d]: %w", i, err)
+		}
+		if seen[cl.ID] {
+			return fmt.Errorf("closed[%d]: id %q appears twice", i, cl.ID)
+		}
+		seen[cl.ID] = true
 	}
 	return nil
 }
@@ -113,6 +124,9 @@ const (
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
 	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate and green on what that was built onto
 	CodeKickRefused  Code = "KICK_REFUSED"  // something the author has to fix that is neither
+	// CodeKickRegeneration: its own code changes what regenerates generated files it
+	// needs regenerated, so the queue cannot prove that regeneration runs none of it.
+	CodeKickRegeneration Code = "KICK_REGENERATION"
 )
 
 // decision is the decision c goes with, or "" for a code outside the set.
@@ -123,7 +137,7 @@ func (c Code) decision() Decision {
 		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter,
 		CodeWaitBaseRed:
 		return DecisionWait
-	case CodeKickConflict, CodeKickRed, CodeKickRefused:
+	case CodeKickConflict, CodeKickRed, CodeKickRefused, CodeKickRegeneration:
 		return DecisionKick
 	}
 	return ""
@@ -153,6 +167,9 @@ type Plan struct {
 	// head's approval has to be carried over.
 	Merged   []MergedChange   `json:"merged,omitempty"`
 	Unqueued []UnqueuedChange `json:"unqueued,omitempty"`
+	// Closed are the listing's closed changes still showing a queue label, for an applier
+	// to clear.
+	Closed []ClosedChange `json:"closed,omitempty"`
 }
 
 // Check reports whether p is a plan the queue can validate and apply: a valid base and
@@ -215,6 +232,11 @@ func (p Plan) Check() error {
 	for _, u := range p.Unqueued {
 		if err := u.check(); err != nil {
 			return fmt.Errorf("unqueued: %w", err)
+		}
+	}
+	for _, cl := range p.Closed {
+		if err := CheckID(cl.ID); err != nil {
+			return fmt.Errorf("closed: %w", err)
 		}
 	}
 	if p.CommitDate.IsZero() {

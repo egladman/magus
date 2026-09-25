@@ -56,11 +56,6 @@ type Change struct {
 	// unmerged, so it merges first.
 	StackBase string `json:"stack_base,omitempty"`
 	Below     string `json:"below,omitempty"`
-	// AuthorRegenerates is planning's too, set on every change it admits: the generated
-	// files the change touches that the build tool cannot prove regenerate without
-	// running the change's code, so only its author can regenerate them. An applier
-	// shows [FlagChangesGenerator] on an admitted change exactly when it holds any.
-	AuthorRegenerates []string `json:"author_regenerates,omitempty"`
 }
 
 // Label is how the change is named in reports.
@@ -158,9 +153,16 @@ func (u UnqueuedChange) check() error {
 		return fmt.Errorf("#%s: head %q is not a full commit id", u.ID, u.Head)
 	}
 	if !u.Mark.Valid() {
-		return fmt.Errorf("#%s: mark %q, want queued, rejected or none", u.ID, u.Mark)
+		return fmt.Errorf("#%s: mark %q, want queued, kicked_back, needs_regeneration or none", u.ID, u.Mark)
 	}
 	return nil
+}
+
+// ClosedChange is a closed change still showing a queue label, merged or closed where
+// the queue did not see it go. An applier marks it [MarkNone].
+type ClosedChange struct {
+	ID   string `json:"id"`
+	Repo string `json:"repo,omitempty"` // provider's name for the repository, handed back to [Provider.Mark]
 }
 
 // CheckID accepts 1 to 128 ASCII letters, digits, '.', '_' and '-', not starting with
