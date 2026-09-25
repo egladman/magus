@@ -46,6 +46,9 @@ apply report what would merge and call nothing on the provider.
 **--app** *slug*
 : \`slug\` of the app apply writes with (github: a GitHub App, required with a --status-context)
 
+**--app-id** *id*
+: \`id\` of the --app integration, for a provider that cannot read the app (github: the App ID under About on a private app's settings page, never its client id); the status is pinned to it
+
 **--base** *branch*
 : \`branch\` the queue merges into
 
@@ -221,6 +224,12 @@ magus queue describe --provider github --base main
 
 ```sh
 magus queue describe --provider github --base main --app acme-magus-queue
+```
+
+*The same for a private app, whose App ID only its settings page shows*
+
+```sh
+magus queue describe --provider github --base main --app acme-magus-queue --app-id 2034567
 ```
 
 *List what carries merge intent*

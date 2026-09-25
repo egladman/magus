@@ -36,6 +36,9 @@ apply report what would merge and call nothing on the provider.
 \fB\-\-app\fR \fIslug\fR
 `slug` of the app apply writes with (github: a GitHub App, required with a \-\-status\-context)
 .TP
+\fB\-\-app\-id\fR \fIid\fR
+`id` of the \-\-app integration, for a provider that cannot read the app (github: the App ID under About on a private app's settings page, never its client id); the status is pinned to it
+.TP
 \fB\-\-base\fR \fIbranch\fR
 `branch` the queue merges into
 .TP
@@ -215,6 +218,12 @@ magus queue describe --provider github --base main
 .PP
 .EX
 magus queue describe --provider github --base main --app acme-magus-queue
+.EE
+.PP
+\fIThe same for a private app, whose App ID only its settings page shows\fR
+.PP
+.EX
+magus queue describe --provider github --base main --app acme-magus-queue --app-id 2034567
 .EE
 .PP
 \fIList what carries merge intent\fR

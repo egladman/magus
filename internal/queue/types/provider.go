@@ -113,11 +113,14 @@ type ListQuery struct {
 	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
 	// the base requires and who the write credential posts as. App names the app whose
 	// credential the queue writes with (github: a GitHub App's slug, which it requires
-	// with a StatusContext); empty names none. SetupSteps also asks for the steps that
-	// finish wiring the queue, which cost the provider more reads, some needing
-	// permissions an apply job does not hold.
+	// with a StatusContext); empty names none. AppID is that app's integration id as the
+	// person read it, for a provider that cannot read the app itself (github: a private
+	// app is hidden from every token but its installation's). SetupSteps also asks for
+	// the steps that finish wiring the queue, which cost the provider more reads, some
+	// needing permissions an apply job does not hold.
 	StatusContext string
 	App           string
+	AppID         string
 	SetupSteps    bool
 }
 
@@ -159,7 +162,8 @@ type Capabilities struct {
 type Setup struct {
 	// StatusContext is the commit status the queue posts, as asked.
 	StatusContext string `json:"status_context"`
-	// Credential is who the write credential posts statuses as.
+	// Credential is who the write credential posts statuses as. Its ID is empty only
+	// when App names an app whose id the provider could not read and nobody gave.
 	Credential Integration `json:"credential"`
 	// RequiredChecks are the checks the base requires before a change merges, the queue's
 	// own status among them once it is wired.
@@ -207,7 +211,9 @@ type Setting struct {
 
 // App is the app a write credential belongs to and where a person manages it.
 type App struct {
-	Slug            string `json:"slug"`
+	Slug string `json:"slug"`
+	// ID is empty when the provider could not read the app and [ListQuery.AppID] was
+	// empty; the steps then ask for it rather than pin to it.
 	ID              string `json:"id"`
 	ClientID        string `json:"client_id,omitempty"`
 	RegistrationURL string `json:"registration_url,omitempty"`
@@ -257,7 +263,7 @@ func (s Setup) Check() error {
 	switch {
 	case s.StatusContext == "":
 		return errors.New("provider describes a setup for no status context")
-	case s.Credential.ID == "":
+	case s.Credential.ID == "" && (s.App == nil || s.App.ID != ""):
 		return errors.New("provider describes a setup without the integration its credential posts as")
 	}
 	for _, rc := range s.RequiredChecks {

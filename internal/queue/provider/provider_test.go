@@ -138,10 +138,10 @@ const setupScript = `
 export fun describe(io: {str: any}) > any {
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
         "status_context": io["status_context"],
-        "credential": {"id": "812", "name": io["app"]},
+        "credential": {"id": io["app_id"], "name": io["app"]},
         "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
         "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
-        "app": {"slug": io["app"], "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
+        "app": {"slug": io["app"], "id": io["app_id"], "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
             "environment": "magus-queue", "variable": "V", "secret": "S"},
         "steps": [{"title": "Install it", "url": "https://github.com/apps/q/installations/new"}, {"title": "Store it", "command": "gh secret set S"}],
     }};
@@ -157,7 +157,7 @@ export fun mark(io: {str: any}) > bool { return true; }
 `
 
 func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
-	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", SetupSteps: true})
+	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", AppID: "812", SetupSteps: true})
 	require.NoError(t, err)
 	assert.Equal(t, &types.Setup{
 		StatusContext: "gate",
@@ -176,15 +176,24 @@ func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
 	}, got.Setup)
 }
 
+// An app the provider could not read, with no App ID given, is a setup whose steps ask
+// for the id: the credential has none yet.
+func TestDescribeAcceptsAnAppWhoseIDIsNotKnown(t *testing.T) {
+	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", SetupSteps: true})
+	require.NoError(t, err)
+	assert.Equal(t, types.Integration{Name: "q"}, got.Setup.Credential)
+	assert.Equal(t, "", got.Setup.App.ID)
+}
+
 // A setup a person could not follow is the provider's error, named where it broke.
 func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
-		{`"credential": {"id": "812", "name": io["app"]},`, ``, `setup: field "credential" is missing`},
-		{`{"id": "812", "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
+		{`"credential": {"id": io["app_id"], "name": io["app"]},`, ``, `setup: field "credential" is missing`},
+		{`{"id": io["app_id"], "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
 		{`"command": "gh secret set S"`, `"command": "gh secret set S", "url": "https://x"`, `exactly one of a command or a URL`},
 		{`"status_context": io["status_context"],`, `"status_context": "",`, `setup for no status context`},
 	} {
-		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate"})
+		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", AppID: "812"})
 		require.ErrorContains(t, err, tc.want, tc.to)
 	}
 }

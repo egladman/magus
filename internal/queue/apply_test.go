@@ -1497,6 +1497,11 @@ func TestCheckCredentialPassesWhatTheProviderCounts(t *testing.T) {
 	}
 }
 
+func TestCheckCredentialRefusesAnAppWhoseIDIsNotKnown(t *testing.T) {
+	s := &types.Setup{StatusContext: "merge-queue", Credential: types.Integration{Name: "magus-queue"}, App: &types.App{Slug: "magus-queue"}}
+	assert.EqualError(t, checkCredential(s, "main"), "the provider could not read which integration the queue's credential posts its status as")
+}
+
 // requireUnverified asserts err is applying stopping on a plan it could not verify.
 func requireUnverified(t *testing.T, err error, want string) {
 	t.Helper()

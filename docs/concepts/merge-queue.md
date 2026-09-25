@@ -769,8 +769,19 @@ GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main
 Without `--app` it stops with an error carrying the app's registration link, since a
 setup without the app is not one the queue can run on. `-o json` prints the same as the
 `setup` of a `mergequeue.capabilities/v1` document: the status the queue posts and who
-its credential posts it as, every check the base requires and the integration each is
-pinned to, the repository settings the queue needs, the app, and the steps.
+its credential posts it as (empty until the App ID below is known), every check the base
+requires and the integration each is pinned to, the repository settings the queue needs,
+the app, and the steps.
+
+The app has two identifiers, both under About on its settings page
+(`https://github.com/settings/apps/<slug>`, or
+`https://github.com/organizations/<org>/settings/apps/<slug>` for an organization's app).
+Neither is secret, and they do not swap: the client id (it starts with `Iv`) is what
+`setup-magus` mints the token with, and the App ID (a number) is the only value a
+ruleset's `integration_id` accepts. `describe` cannot read either for you: GitHub answers
+`GET /apps/<slug>` for a private app with 404 to a token that is not the app's own
+installation's, the owner's `gh auth token` included. So the printed steps ask you for
+the client id, and `describe` takes the App ID as `--app-id`.
 
 1. Commit `.github/workflows/queue.yaml` and `.github/workflows/queue-apply.yaml` (this
    repository's are the reference).
@@ -778,19 +789,27 @@ pinned to, the repository settings the queue needs, the app, and the steps.
    "Create GitHub App". It is pre-filled: private, no webhook, and contents, pull
    requests, commit statuses, actions and workflows write.
 3. Run `describe` again with `--app <slug>`, and run the commands it prints in order:
-   allow auto-merge, install the app on this repository alone, create the `magus-queue`
-   environment with its secrets released to the default branch only, set the
-   `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's client id, generate a private key on
-   the app's page, store it as the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, and
-   delete the download. On a phone, the first is Settings > General > Pull Requests >
-   "Allow auto-merge", and the key goes into Settings > Environments > magus-queue > Add
-   secret.
-4. Apply the ruleset change it prints last, which requires `merge-queue` from the app's
-   id with "Require branches to be up to date before merging" off: a ruleset of its own
-   when nothing requires it yet, a `gh api` rewrite of that ruleset, or a link for any
-   other. Your other rulesets stay as they are. The pin is what makes the status
-   unforgeable: anyone with write access can post a status from GitHub Actions, and only
-   the app posts as the app.
+   allow auto-merge, install the app on this repository alone (the install link, or
+   `<repo>/settings/installations` once it shows there), and create the `magus-queue`
+   environment with its secrets released to the default branch only. The last command
+   generates a private key on the app's settings page (a `.pem` downloads), stores it as
+   the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, asks for the client id and
+   stores it as `MAGUS_QUEUE_APP_CLIENT_ID`, then deletes the download and lists what it
+   stored. On a phone, paste the key into Settings > Environments > magus-queue > Add
+   secret, and the client id into Settings > Secrets and variables > Actions > Variables.
+4. Run the command `describe` printed last: it asks for the App ID and runs `describe`
+   again with `--app-id`. Its own last step is the ruleset change pinning `merge-queue`
+   to that App ID, with "Require branches to be up to date before merging" off: a
+   ruleset of its own when nothing requires it yet, a `gh api` rewrite of that ruleset,
+   or a link for any other. Your other rulesets stay as they are; run it as printed,
+   since `gh api` shows GitHub's own error when it refuses. The app must be installed
+   (step 3) before this pin holds: until it is, GitHub answers with 422 "Invalid
+   parameter required_status_checks: Invalid integration ids". An `--app-id` that is not
+   a number,
+   or that disagrees with an app `describe` can read, is an error. Once the pin holds,
+   `describe` prints no pin step. The pin is what makes the status unforgeable: anyone
+   with write access can post a status from GitHub Actions, and only the app posts as
+   the app.
 
 Require `merge-queue` only once the queue is on the default branch. Before that, nothing
 posts it, and every merge waits on it.
@@ -815,7 +834,7 @@ functions, each taking one record:
 
 | Function         | Receives                                                                                           | Returns                                                                                       |
 | ---------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `describe`       | `{base, remote_url, status_context, app, setup_steps}`                                             | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
+| `describe`       | `{base, remote_url, status_context, app, app_id, setup_steps}`                                     | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
 | `list_changes`   | `{base, remote_url}`                                                                               | `{changes, merged, unqueued, closed?}`                                                        |
 | `approval_at`    | the change plus `{commit}`                                                                         | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}`              |
 | `list_green`     | `{base, remote_url, context}`                                                                      | `{changes: [{id, repo, head}]}`                                                               |

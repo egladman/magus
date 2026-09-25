@@ -249,6 +249,9 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
+	if f.AppID != "" && f.App == "" {
+		return usagef("magus queue describe: --app-id needs --app, the app it is the id of")
+	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err
@@ -271,7 +274,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	defer p.Close()
 	// An empty --status-context asks for no setup, whose reads need permissions a pull
 	// request job's token may lack.
-	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
+	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: f.App, AppID: f.AppID, SetupSteps: f.StatusContext != ""})
 	if err != nil {
 		return err
 	}
@@ -308,7 +311,11 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 		_, err := io.WriteString(w, b.String())
 		return err
 	}
-	fmt.Fprintf(&b, "# the queue posts %q as %s\n", s.StatusContext, s.Credential)
+	if s.Credential.ID == "" {
+		fmt.Fprintf(&b, "# the queue posts %q as app %s, whose id the provider could not read\n", s.StatusContext, s.Credential.Name)
+	} else {
+		fmt.Fprintf(&b, "# the queue posts %q as %s\n", s.StatusContext, s.Credential)
+	}
 	if len(s.RequiredChecks) == 0 {
 		fmt.Fprintf(&b, "# %s requires no check\n", base)
 	}
@@ -326,7 +333,7 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 	for _, st := range s.Settings {
 		fmt.Fprintf(&b, "# %s is %s; the queue needs %s\n", st.Name, st.Value, st.Want)
 	}
-	if a := s.App; a != nil {
+	if a := s.App; a != nil && a.ID != "" {
 		fmt.Fprintf(&b, "# app %s is integration %s", a.Slug, a.ID)
 		if a.ClientID != "" {
 			fmt.Fprintf(&b, ", client id %s", a.ClientID)
