@@ -2,10 +2,7 @@
 
 package run
 
-import (
-	"fmt"
-	"syscall"
-)
+import "fmt"
 
 // wait waits for the child to exit, kills whatever of its group outlives it while the
 // child's unreaped exit still holds the group's id, and only then reaps it. A kill
@@ -16,7 +13,7 @@ func (g *procGroup) wait() error {
 	exitErr := awaitExit(g.c.Process.Pid)
 	g.mu.Lock()
 	if exitErr == nil {
-		_ = syscall.Kill(-g.c.Process.Pid, syscall.SIGKILL)
+		killGroup(g.c.Process.Pid)
 	}
 	g.reaped = true
 	g.mu.Unlock()
