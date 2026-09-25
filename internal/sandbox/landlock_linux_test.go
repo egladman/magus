@@ -48,7 +48,9 @@ func TestApplyLinuxEnforcement(t *testing.T) {
 	}
 
 	ws := t.TempDir()
-	p := BuildPolicy(ws, nil, nil, nil, nil)
+	secret := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(secret, []byte("x"), 0o600))
+	p := BuildPolicy(PolicyOptions{Workspace: ws, Environ: os.Environ()})
 
 	require.NoError(t, Apply(p))
 
@@ -56,11 +58,11 @@ func TestApplyLinuxEnforcement(t *testing.T) {
 	allowed := filepath.Join(ws, "hello.txt")
 	assert.NoError(t, os.WriteFile(allowed, []byte("ok"), 0o644), "WriteFile inside workspace should succeed")
 
-	// Read of /etc/passwd must be denied.
-	_, err := os.ReadFile("/etc/passwd")
-	assert.Error(t, err, "ReadFile /etc/passwd should be denied after Apply")
+	// A read outside every rule must be denied.
+	_, err := os.ReadFile(secret)
+	assert.Error(t, err, "ReadFile outside the policy should be denied after Apply")
 
-	// Child process must also be confined: `cat /etc/passwd` should fail.
-	cmd := exec.Command("cat", "/etc/passwd")
-	assert.Error(t, cmd.Run(), "child `cat /etc/passwd` should fail under landlock")
+	// Child process must also be confined.
+	cmd := exec.Command("cat", secret)
+	assert.Error(t, cmd.Run(), "child `cat` outside the policy should fail under landlock")
 }

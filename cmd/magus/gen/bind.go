@@ -79,5 +79,5 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bi...")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing.")
 	fs.BoolVar(&cfg.DryRun, "u", cfg.DryRun, "Short for --dry-run")
-	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")
+	fs.TextVar(&cfg.Sandbox.Mode, "sandbox", cfg.Sandbox.Mode, "MAGUS_SANDBOX: Mode is off (the default), best-effort (landlock where the host has it, magus's own binding checks where it does not)...")
 }

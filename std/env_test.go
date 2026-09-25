@@ -39,7 +39,7 @@ func TestEnvReadDotenvHonorsSandbox(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("FOO=bar\n"), 0o644))
 
 	// A policy with no matching rule denies the read.
-	p := &sandbox.Policy{Workspace: t.TempDir()}
+	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
 	_, err := EnvReadDotenv(ctx, path)
@@ -51,7 +51,7 @@ func TestEnvLoadDotenvHonorsSandbox(t *testing.T) {
 	path := filepath.Join(dir, ".env")
 	require.NoError(t, os.WriteFile(path, []byte("MAGUS_TEST_LOAD_DOTENV_XYZ=bar\n"), 0o644))
 
-	p := &sandbox.Policy{Workspace: t.TempDir()}
+	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
 	err := EnvLoadDotenv(ctx, path)
@@ -65,7 +65,7 @@ func TestEnvLoadDotenvHonorsSandbox(t *testing.T) {
 // contract the env module is built around.
 func covEnvSandbox(allow ...string) context.Context {
 	return sandbox.WithPolicy(context.Background(), &sandbox.Policy{
-		Env: sandboxenv.Allowlist{Allow: allow},
+		Env: sandboxenv.Allowlist{Names: allow},
 	})
 }
 

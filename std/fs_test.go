@@ -10,6 +10,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,6 +156,26 @@ func TestFsChmod(t *testing.T) {
 	info, err := os.Stat(p)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+// A link is a way to reach its target, so fs\symlink refuses one pointing where the
+// policy cannot read, including through a ".." that climbs out of a symlinked dir.
+func TestFsSymlinkChecksItsTarget(t *testing.T) {
+	ws := filesystem.ResolveRulePath(t.TempDir())
+	outside := filesystem.ResolveRulePath(t.TempDir())
+	require.NoError(t, os.Symlink(outside, filepath.Join(ws, "out")))
+	ctx := sandbox.WithPolicy(context.Background(), &sandbox.Policy{
+		FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: ws, Read: true, Write: true}}},
+	})
+
+	assert.ErrorIs(t, FsSymlink(ctx, filepath.Join(outside, "secret"), filepath.Join(ws, "a")), types.PathReadDenied)
+	assert.ErrorIs(t, FsSymlink(ctx, "../secret", filepath.Join(ws, "out", "b")), types.PathWriteDenied,
+		"the link itself lands outside")
+	require.NoError(t, os.MkdirAll(filepath.Join(outside, "d"), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(outside, "d"), filepath.Join(ws, "d")))
+	assert.ErrorIs(t, FsSymlink(ctx, "d/../secret", filepath.Join(ws, "c")), types.PathReadDenied,
+		"d/.. climbs out of where d leads, not back into ws")
+	assert.NoError(t, FsSymlink(ctx, "inside.txt", filepath.Join(ws, "e")))
 }
 
 // TestFsSymlinkReadlink round-trips FsSymlink and FsReadlink: the link stores the

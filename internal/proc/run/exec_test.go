@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -184,6 +185,18 @@ func captureStderr(t *testing.T) func() []byte {
 		r.Close()
 		return buf.Bytes()
 	}
+}
+
+// A sandboxed child's environment is the policy's, even an empty one: falling back to
+// the host's would hand every secret in it to the child.
+func TestChildEnvUnderAPolicyNeverInheritsTheHost(t *testing.T) {
+	t.Setenv("MAGUS_TEST_HOST_SECRET", "s3cret")
+	env, _ := childEnv(context.Background(), &sandbox.Policy{}, nil)
+	for _, kv := range env {
+		assert.False(t, strings.HasPrefix(kv, "MAGUS_TEST_HOST_SECRET="), "host env leaked: %s", kv)
+	}
+	env, _ = childEnv(context.Background(), nil, nil)
+	assert.Contains(t, env, "MAGUS_TEST_HOST_SECRET=s3cret", "with the sandbox off the child inherits the host")
 }
 
 func TestExecWorkdirRespected(t *testing.T) {

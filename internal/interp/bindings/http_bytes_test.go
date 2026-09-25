@@ -141,7 +141,7 @@ export fun dl(url: str, dest: str) > int {
 	require.True(t, ok, "export dl not found")
 
 	// A policy with no matching rule denies the write.
-	p := &sandbox.Policy{Workspace: t.TempDir()}
+	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
 	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(srv.URL), vm.StrValue(dest)})
@@ -169,7 +169,7 @@ export fun up(url: str, src: str) > any {
 	require.True(t, ok, "export up not found")
 
 	// A policy with no matching rule denies the read.
-	p := &sandbox.Policy{Workspace: t.TempDir()}
+	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
 	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(srv.URL), vm.StrValue(srcFile)})
@@ -188,7 +188,7 @@ export fun sz(p: str) > int { return xhttp.byteSize(p); }`
 	require.True(t, ok, "export sz not found")
 
 	// A policy with no matching rule denies the read.
-	policy := &sandbox.Policy{Workspace: t.TempDir()}
+	policy := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), policy)
 
 	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(p)})

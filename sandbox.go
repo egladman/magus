@@ -14,40 +14,45 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
-	sandboxapply "github.com/egladman/magus/internal/sandbox/apply"
+	"github.com/egladman/magus/internal/sandbox/confinement"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
 // ApplySandbox applies the process-wide landlock sandbox and attaches the Policy to ctx,
-// or returns ctx unchanged when this workspace's config leaves the sandbox off. Callers
+// or returns ctx unchanged when this workspace's sandbox mode is off. Any other mode
+// either attaches a policy or returns an error: it never runs unconfined. Callers
 // outside a target run (a `magus buzz` script) go through here so a script and a target
 // are confined by the same policy; Run calls it too, so there is one condition rather
 // than a copy per entry point. The write grant is narrowed to the acting lease's row,
 // resolved by job.ActingLease in the order the guard hook resolves it.
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
-	if !m.cfg.Sandbox.Enabled {
+	mode := m.cfg.Sandbox.Mode
+	if !mode.Enabled() {
 		return ctx, nil
 	}
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
-	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
+	p, err := confinement.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox)
+	if err != nil {
+		return ctx, err
+	}
 	lease, from, err := job.ActingLease(loc.CacheDir, trail.LeaseFromEnv())
 	if err != nil {
 		return ctx, fmt.Errorf("sandbox: %w", err)
 	}
-	p = sandboxapply.NarrowToLease(ctx, p, loc, lease, from)
-	return sandboxapply.Apply(ctx, p, m.ws.Root)
+	p = confinement.NarrowToLease(ctx, p, loc, lease, from)
+	return confinement.Apply(ctx, p, m.ws.Root, mode)
 }
 
 // ApplyUnionSandbox unions the landlock policies of every workspace root and
 // applies the combined ruleset to the current process exactly once. Roots whose
-// config disables the sandbox still contribute filesystem rules but no
-// binding-layer policy (MGS2011). It is a no-op (returns nil) when no root
-// requests kernel sandboxing.
+// sandbox mode is off still contribute filesystem rules but get no binding-layer
+// policy. It is a no-op (returns nil) when every root's mode is off, and an MGS2012
+// error when a root requires the sandbox and the kernel cannot enforce it.
 //
 // This is the multi-workspace (server) counterpart to the per-workspace sandbox
-// that Run applies. It lives in the library so callers — the CLI server in
-// particular — never import internal/sandbox directly: policy assembly and
+// that Run applies. It lives in the library so callers (the CLI server in
+// particular) never import internal/sandbox directly: policy assembly and
 // application stay behind one seam, so the two paths cannot drift.
 func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 	if len(roots) == 0 {
@@ -56,15 +61,21 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 
 	policies := make([]*sandbox.Policy, 0, len(roots))
 	anyEnabled := false
+	required := ""
 	for _, root := range roots {
 		cfg, err := loadWorkspaceConfig(root)
 		if err != nil {
 			return err
 		}
-		if cfg.Sandbox.Enabled {
-			anyEnabled = true
+		if cfg.Sandbox.Mode.Resolved() == types.SandboxModeRequired {
+			required = root
 		}
-		policies = append(policies, sandboxapply.FromConfig(ctx, root, cfg))
+		anyEnabled = anyEnabled || cfg.Sandbox.Mode.Enabled()
+		p, err := confinement.FromConfig(root, resolveCacheDir(root, cfg), cfg.Sandbox)
+		if err != nil {
+			return err
+		}
+		policies = append(policies, p)
 	}
 
 	if !anyEnabled {
@@ -77,17 +88,20 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 	secs := time.Since(start).Seconds()
 	if err != nil {
 		if errors.Is(err, sandbox.ErrUnsupported) {
+			confinement.RecordApply(ctx, secs, "unsupported", "union", union)
+			if required != "" {
+				return confinement.ErrRequired(required, "the kernel cannot enforce it: "+err.Error())
+			}
 			slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
-				"kernel landlock unavailable; multi-workspace server running with interpreter-level checks only"),
+				"kernel landlock unavailable; multi-workspace server running with binding-level checks only"),
 				"reason", err.Error())
-			sandboxapply.MarkAppliedExternally(union.Fingerprint())
-			sandboxapply.RecordApply(ctx, secs, "unsupported", "union", union)
+			confinement.MarkAppliedExternally(union.Fingerprint(), false)
 			return nil
 		}
 		return fmt.Errorf("magus: apply union sandbox: %w", err)
 	}
-	sandboxapply.MarkAppliedExternally(union.Fingerprint())
-	sandboxapply.RecordApply(ctx, secs, "applied", "union", union)
+	confinement.MarkAppliedExternally(union.Fingerprint(), true)
+	confinement.RecordApply(ctx, secs, "applied", "union", union)
 	slog.InfoContext(ctx, "magus: applied union landlock ruleset",
 		"workspaces", len(roots),
 		"fingerprint", union.Fingerprint())
@@ -95,7 +109,7 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 }
 
 // loadWorkspaceConfig loads root's magus.yaml with env overrides applied, falling
-// back to defaults when the file is absent — the resolution used for sandbox union.
+// back to defaults when the file is absent: the resolution used for sandbox union.
 //
 // Absence is the only silent fallback, matching loadConfig: a MALFORMED magus.yaml read
 // as defaults would join a workspace that asked to be sandboxed to the server with no

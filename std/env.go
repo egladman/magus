@@ -116,7 +116,7 @@ var Env = Module{
 
 // EnvGet returns the value of the named variable, or "" if unset or stripped by the sandbox policy.
 func EnvGet(ctx context.Context, name string) (string, error) {
-	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
+	if p := sandbox.PolicyFromContext(ctx); p != nil && !p.AllowsEnv(name) {
 		// Empty string, not an error: env.get is widely used as a "did the user
 		// set X?" probe, and a hard error would break innocuous magusfiles in
 		// the sandbox.
@@ -131,7 +131,7 @@ func EnvGet(ctx context.Context, name string) (string, error) {
 // stripped secret is indistinguishable from an absent one and cannot be probed
 // for (mirrors EnvGet's information-hiding).
 func EnvLookup(ctx context.Context, name string) (string, bool, error) {
-	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
+	if p := sandbox.PolicyFromContext(ctx); p != nil && !p.AllowsEnv(name) {
 		return "", false, nil
 	}
 	v, ok := os.LookupEnv(name)
@@ -144,7 +144,7 @@ func EnvSet(ctx context.Context, name, value string) error {
 		return nil
 	}
 	slog.DebugContext(ctx, "env.set", "name", name)
-	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
+	if p := sandbox.PolicyFromContext(ctx); p != nil && !p.AllowsEnv(name) {
 		// Refuse to re-introduce a stripped name; otherwise a spell could set
 		// GITHUB_TOKEN back into magus's env so the next proc.exec carries it.
 		slog.WarnContext(ctx, "env.set blocked by the sandbox", "name", name)
@@ -160,7 +160,7 @@ func EnvUnset(ctx context.Context, name string) error {
 	if types.Tracing(ctx) {
 		return nil
 	}
-	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
+	if p := sandbox.PolicyFromContext(ctx); p != nil && !p.AllowsEnv(name) {
 		slog.WarnContext(ctx, "env.unset blocked by the sandbox", "name", name)
 		return nil
 	}
@@ -172,9 +172,9 @@ func EnvUnset(ctx context.Context, name string) error {
 // expands to "", so a spell cannot recover a hidden secret by interpolating it
 // into a string.
 func EnvExpand(ctx context.Context, s string) (string, error) {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	return os.Expand(s, func(name string) string {
-		if p != nil && !p.AllowEnv(name) {
+		if p != nil && !p.AllowsEnv(name) {
 			return ""
 		}
 		return os.Getenv(name)
@@ -222,13 +222,13 @@ func EnvRequire(ctx context.Context, name string) (string, error) {
 // EnvList returns all environment variables as a name-value map, omitting any the sandbox policy strips.
 func EnvList(ctx context.Context) (map[string]string, error) {
 	raw := os.Environ()
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	m := make(map[string]string, len(raw))
 	for _, kv := range raw {
 		for i := 0; i < len(kv); i++ {
 			if kv[i] == '=' {
 				name := kv[:i]
-				if p != nil && !p.AllowEnv(name) {
+				if p != nil && !p.AllowsEnv(name) {
 					break
 				}
 				m[name] = kv[i+1:]
@@ -273,12 +273,12 @@ func EnvLoadDotenv(ctx context.Context, path string) error {
 	if types.Tracing(ctx) {
 		return nil
 	}
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	for k, v := range parseDotenv(string(data)) {
 		if _, exists := os.LookupEnv(k); exists {
 			continue
 		}
-		if p != nil && !p.AllowEnv(k) {
+		if p != nil && !p.AllowsEnv(k) {
 			slog.WarnContext(ctx, "env.load_dotenv skipped a sandbox-stripped name", "name", k)
 			continue
 		}

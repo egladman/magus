@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 
@@ -309,11 +310,11 @@ func FsGlob(ctx context.Context, pattern string) ([]types.Path, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fs.glob %q: %w", pattern, err)
 	}
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	allowed := make([]types.Path, 0, len(matches))
 	for _, m := range matches {
 		// The sandbox sees the absolute match; the caller sees it relative to base.
-		if p != nil && p.CheckReadCtx(ctx, m) != nil {
+		if p != nil && p.CheckRead(ctx, m) != nil {
 			continue
 		}
 		// Rel only succeeds when both sides are absolute; a match that is already
@@ -713,12 +714,12 @@ func copyFile(src, dst string) error {
 // checkRead returns a MGS2001 diag error when ctx carries a sandbox policy
 // that denies path. nil otherwise (sandbox off or path allowed).
 func checkRead(ctx context.Context, path string) error {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	if p == nil {
 		return nil
 	}
-	if err := p.CheckReadCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint(p, "ro", path)
+	if err := p.CheckRead(ctx, path); err != nil {
+		sandbox.EmitDenyHint(p, filesystem.Read, path)
 		return types.DiagnosticErrorf(types.PathReadDenied, "fs read denied: %s", path)
 	}
 	return nil
@@ -727,12 +728,12 @@ func checkRead(ctx context.Context, path string) error {
 // checkWrite returns a MGS2002 diag error when ctx carries a sandbox policy
 // that denies path for writing.
 func checkWrite(ctx context.Context, path string) error {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	if p == nil {
 		return nil
 	}
-	if err := p.CheckWriteCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint(p, "rw", path)
+	if err := p.CheckWrite(ctx, path); err != nil {
+		sandbox.EmitDenyHint(p, filesystem.Write, path)
 		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
 	}
 	return nil
@@ -935,7 +936,8 @@ func FsChmod(ctx context.Context, path string, mode int) error {
 }
 
 // FsSymlink creates a symbolic link at link pointing to target, subject to the
-// sandbox write policy on link.
+// sandbox write policy on link and the read policy on target: a link is a way to
+// reach its target, so one the policy could not read is refused.
 func FsSymlink(ctx context.Context, target, link string) error {
 	if types.Tracing(ctx) {
 		return nil
@@ -944,6 +946,15 @@ func FsSymlink(ctx context.Context, target, link string) error {
 	// target is the link's stored contents, interpreted relative to the link.
 	link = resolvePath(ctx, link)
 	if err := checkWrite(ctx, link); err != nil {
+		return err
+	}
+	// Concatenated, not joined: Join cleans "..", and the check must resolve the
+	// link's directory before it climbs out of it.
+	reached := target
+	if !filepath.IsAbs(reached) {
+		reached = filepath.Dir(link) + string(filepath.Separator) + reached
+	}
+	if err := checkRead(ctx, reached); err != nil {
 		return err
 	}
 	if err := os.Symlink(target, link); err != nil {

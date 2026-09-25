@@ -26,6 +26,8 @@ var retiredEnv = map[string]string{
 	"MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED":   "MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED",
 	"MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH":        "MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH",
 	"MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW":      "MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW",
+	// Set and ignored, it would turn a sandbox somebody asked for off without a word.
+	"MAGUS_SANDBOX_ENABLED": "MAGUS_SANDBOX",
 }
 
 // RetiredEnv returns an error naming each retired MAGUS_* variable getenv reports set,

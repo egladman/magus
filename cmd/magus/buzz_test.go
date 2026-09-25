@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	sandboxapply "github.com/egladman/magus/internal/sandbox/apply"
+	"github.com/egladman/magus/internal/sandbox/confinement"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -66,23 +66,22 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 	assert.NotContains(t, stderr, "BZZ3001", "-s/--silent must suppress the warning line")
 }
 
-// buzzSandboxTarget is what the fixture script removes. It has to sit outside $TMPDIR as
-// well as outside the workspace, because the default policy grants read+write on both, so
-// a t.TempDir() would be allowed and the test would pass with no policy attached at all.
-// Nothing is created there: checkWrite runs before the removal, so the deny fires on a
-// path that does not exist, and a permitted run removes nothing.
+// buzzSandboxTarget is what the fixture script removes. It sits outside the workspace
+// and every other write grant, so a permitted run would reach it. Nothing is created
+// there: checkWrite runs before the removal, so the deny fires on a path that does not
+// exist, and a permitted run removes nothing.
 const buzzSandboxTarget = "/magus-buzz-sandbox-test/victim"
 
 // buzzSandboxWorkspace builds a workspace whose magus.yaml sets the sandbox as asked,
 // opens it, and returns it on the context loadMagus reads so buzzCmd never touches the
 // process singleton.
-func buzzSandboxWorkspace(t *testing.T, sandboxEnabled bool) (context.Context, *magus.Magus, string) {
+func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context, *magus.Magus, string) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
 		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
-		fmt.Appendf(nil, "sandbox:\n  enabled: %t\n", sandboxEnabled), 0o644))
+		fmt.Appendf(nil, "sandbox:\n  mode: %s\n", mode), 0o644))
 
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err, "fixture workspace must open")
@@ -104,8 +103,8 @@ func buzzSandboxWorkspace(t *testing.T, sandboxEnabled bool) (context.Context, *
 // permanent and process-wide, so applying it here would confine every later test in this
 // binary. The policy still reaches ctx, which is what the binding checks read.
 func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
-	sandboxapply.MarkAppliedExternally("magus buzz sandbox test")
-	ctx, m, script := buzzSandboxWorkspace(t, true)
+	confinement.MarkAppliedExternally("magus buzz sandbox test", false)
+	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)
 
 	err := buzzCmd(ctx, "", []string{"-s", script})
 
@@ -122,7 +121,7 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.
 func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
-	ctx, m, script := buzzSandboxWorkspace(t, false)
+	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeOff)
 
 	require.NoError(t, buzzCmd(ctx, "", []string{"-s", script}))
 
@@ -156,7 +155,7 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
 		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  enabled: false\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  mode: off\n"), 0o644))
 	path := filepath.Join(root, "script.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))
 	return root, path

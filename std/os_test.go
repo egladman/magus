@@ -296,7 +296,6 @@ func TestFsCopyDirChecksReadOnDeniedSubtree(t *testing.T) {
 	// time does (ResolveRulePath), or the write grant silently fails to match on a
 	// machine whose TMPDIR sits under a symlink (macOS: /var -> /private/var).
 	p := &sandbox.Policy{
-		Workspace: root,
 		FS: filesystem.Ruleset{Rules: []filesystem.Rule{
 			{Path: filesystem.ResolveRulePath(dst), Write: true},
 		}},

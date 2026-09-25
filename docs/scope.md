@@ -202,10 +202,12 @@ ran falls outside it. Where a container normalizes the world, magus describes it
 precisely and notices when the description stops matching.
 
 That is a harder route with more moving parts, and being specific about the
-remaining gap matters more than the claim does. Undeclared **file reads** are
-caught only by the [sandbox](concepts/sandbox.md), which is off by default and
-has no kernel layer on macOS - so on the machine most of this is written on, an
-undeclared read succeeds silently. **Network egress is not confined at all.**
+remaining gap matters more than the claim does. The [sandbox](concepts/sandbox.md)
+limits which files a step may read at all, but it is off by default, it has no
+kernel layer on macOS (where a subprocess reads anything the user can), and even
+on Linux it refuses reads outside an allowlist rather than reads a target did not
+declare. An undeclared read inside the workspace succeeds silently everywhere.
+**Network egress is not confined at all.**
 Until both close, magus's determinism is "the inputs you declared are hashed and
 the environment is scrubbed", which is weaker than what a container gives you on
 the filesystem axis and stronger on the version axis. Weigh it that way when
@@ -258,7 +260,7 @@ sharded CI pipeline, sets five things:
 
 ```yaml
 default_charms: [rw]
-sandbox: { env: { passthrough: ["GO*"] } }
+sandbox: { env: { passthrough: [GOFLAGS, GOEXPERIMENT, ...] } }
 cache: { remote: { trusted_keys: ["..."] } }
 required_version: ">= 0.4.4"
 knowledge: { notes: { shared: notes }, vcs: { enabled: true } }

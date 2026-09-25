@@ -483,7 +483,7 @@ func buzzUsage() {
 //
 // The workspace's sandbox policy rides along, because a script reaches the same
 // fs/proc/http bindings a target does and the guard cannot read a script body: it
-// allows `magus buzz -` outright. Without the policy on ctx, sandbox.FromContext
+// allows `magus buzz -` outright. Without the policy on ctx, sandbox.PolicyFromContext
 // returns nil at every binding check and an ad-hoc script writes, execs and fetches
 // with no policy at all in a workspace that asked for one. The trail base beside it
 // is what lets a denial land as sandbox_denial, the way a target's does.
@@ -496,7 +496,7 @@ func buzzUsage() {
 // has to be in force before the first line runs. globalCfg is the config the open
 // would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
-	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Enabled {
+	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Mode.Enabled() {
 		return newLazyWorkspaceContext(ctx, root), nil
 	}
 	m, lerr := buzzLoadWorkspace(ctx, root)

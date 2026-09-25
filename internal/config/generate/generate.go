@@ -144,7 +144,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			yamlTag = strings.ToLower(name)
 		}
 
-		cliOptOut, cliShort := cliOptions(field)
+		cliOptOut, cliShort, cliName := cliOptions(field)
 		if cliOptOut {
 			continue
 		}
@@ -163,11 +163,15 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			continue
 		}
 
-		flagName := config.FlagName(thisYAML...)
+		nameParts := thisYAML
+		if cliName != "" {
+			nameParts = []string{cliName}
+		}
+		flagName := config.FlagName(nameParts...)
 		if kind == "stringslice" || kind == "boolptr" { // env-only; no CLI flag
 			flagName = ""
 		}
-		envVar := config.EnvName("MAGUS", thisYAML...)
+		envVar := config.EnvName("MAGUS", nameParts...)
 		// The flag help leads with the env var, then the field's doc comment when
 		// it has one. A field with no doc shows just the env var, not "ENV: ENV".
 		help := envVar
@@ -244,25 +248,30 @@ func yamlTagOf(f *ast.Field) string {
 	return lookupTag(strings.Trim(f.Tag.Value, "`"), "yaml")
 }
 
-// cliOptions parses the `cli:"…"` struct tag ("-" = opt out; "short=c" = short flag).
-func cliOptions(f *ast.Field) (optOut bool, short string) {
+// cliOptions parses the `cli:"…"` struct tag: "-" opts out, "short=c" adds a short
+// flag, and "name=sandbox" names the flag (--sandbox) and env var (MAGUS_SANDBOX) in
+// place of the yaml path, for a key whose leaf would only repeat its section.
+func cliOptions(f *ast.Field) (optOut bool, short, name string) {
 	if f.Tag == nil {
-		return false, ""
+		return false, "", ""
 	}
 	val := lookupTagRaw(strings.Trim(f.Tag.Value, "`"), "cli")
 	if val == "" {
-		return false, ""
+		return false, "", ""
 	}
 	for _, part := range strings.Split(val, ",") {
 		if part == "-" {
 			optOut = true
 			continue
 		}
-		if k, v, ok := strings.Cut(part, "="); ok && k == "short" {
+		switch k, v, _ := strings.Cut(part, "="); k {
+		case "short":
 			short = v
+		case "name":
+			name = v
 		}
 	}
-	return optOut, short
+	return optOut, short, name
 }
 
 // lookupTag returns the tag value up to the first comma (matches reflect.StructTag.Get's yaml convention).

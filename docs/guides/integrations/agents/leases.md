@@ -401,7 +401,7 @@ and, for a worker, denies the tool call that crosses it. The
 same job row rather than a second declaration, because a boundary written twice
 is a boundary that disagrees with itself.
 
-When `sandbox.enabled` is true and the acting lease resolves to a live row with
+When `sandbox.mode` is not `off` and the acting lease resolves to a live row with
 a `parent` and non-empty `write_paths`, every target run and every `magus buzz`
 script in that checkout gets a filesystem WRITE grant of exactly:
 
@@ -411,18 +411,19 @@ script in that checkout gets a filesystem WRITE grant of exactly:
   it was forked to create and the guard already admits that write; only a glob
   keeps the existing-files-only rule, since a typo in a glob is the case that
   rule protects against;
-- the workspace cache directory and `$TMPDIR`, which a target needs to produce
-  output at all.
+- the workspace cache directory and the sandbox's private temp dir (every
+  child's `TMPDIR`), which a target needs to produce output at all.
 
-Reads are untouched: the row declares a write boundary, and a holder has to read
+Write grants outside the checkout, such as `/dev/null` and the tool caches, are
+kept. Reads are untouched: the row declares a write boundary, and a holder has to read
 the tree it is changing. A refusal is recorded on the trail as a
 `sandbox_denial` carrying the job id, so a reader can say whose boundary was hit
 rather than only that something was blocked.
 
 Nothing narrows for a ROOT job (a row with no parent is the orchestrator, and it
 owns the checkout), for a job id that names no live row, for a writable row with
-no write paths, or when the sandbox is off. A `read_only` row narrows to the
-cache directory and `$TMPDIR` alone, which is the sandbox's reading of the guard
+no write paths, or when the sandbox is off. A `read_only` row narrows the checkout to
+the cache directory and the private temp dir alone, which is the sandbox's reading of the guard
 refusing every write under such a job.
 
 Both tiers resolve the acting lease the same way, in this order: an explicit

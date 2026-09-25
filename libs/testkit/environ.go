@@ -64,10 +64,10 @@ var redirects = map[string]string{
 // the Go toolchain's settings, with every per-user location moved under root.
 //
 // Kept: the sandbox's DefaultAllow names (PATH, LANG, TMPDIR, ...), the Go settings
-// above, and each keep entry: an exact name, or a suffix glob such as "LOCKTEST_*" in
+// above, and each keep entry: an exact name, or a prefix pattern such as "LOCKTEST_*" in
 // internal/sandbox/env's syntax. Every other variable is dropped, so MAGUS_*
 // configuration, BAGGAGE, tokens and GIT_DIR from a hook never reach the test. A keep
-// entry cannot undo a redirect or a set value below. A malformed glob is an error.
+// entry cannot undo a redirect or a set value below. A malformed pattern is an error.
 //
 // Redirected: HOME and XDG_CACHE_HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_RUNTIME_DIR
 // and XDG_STATE_HOME, each to a directory under root that Environ creates. A user's
@@ -85,17 +85,11 @@ var redirects = map[string]string{
 //
 // Environ reads the process environment and does not change it.
 func Environ(root string, keep ...string) ([]string, error) {
-	allow := env.Allowlist{Allow: append(env.DefaultAllow(), goSettings...)}
-	for _, k := range keep {
-		if strings.Contains(k, "*") {
-			allow.Globs = append(allow.Globs, k)
-		} else {
-			allow.Allow = append(allow.Allow, k)
-		}
-	}
-	if err := env.ValidateGlobs(allow.Globs); err != nil {
+	allow, err := env.Parse(keep)
+	if err != nil {
 		return nil, fmt.Errorf("testkit: keep: %w", err)
 	}
+	allow.Names = append(append(allow.Names, env.DefaultAllow()...), goSettings...)
 	kept, _ := allow.Scrub(os.Environ())
 	vars := make(map[string]string, len(kept)+len(redirects)+len(goDirs)+5)
 	for _, kv := range kept {

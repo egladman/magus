@@ -1,6 +1,12 @@
-// Package sandbox confines spell code to a workspace-bounded filesystem and environment.
-// Kernel-level (landlock, Linux 5.13+) and interpreter-level (fs/sh/env bindings) enforcement.
-// A nil [Policy] means sandbox is off; all checks pass through.
+// Package sandbox confines spell code and the processes magus starts to a
+// workspace-bounded filesystem and a scrubbed environment.
+//
+// Two layers enforce one Policy. Kernel landlock (Linux 5.13+) governs every file
+// the process and its children touch. Magus's own checks run at the fs, archive,
+// crypto, http and exec bindings on every platform, and see only what goes through
+// a binding: without landlock, a subprocess is confined in its environment and its
+// first exec, and nothing else. A nil Policy means the sandbox is off and every
+// check passes.
 package sandbox
 
 import (
@@ -22,13 +28,19 @@ import (
 var ErrUnsupported = errors.New("sandbox: kernel sandbox unsupported on this host")
 
 // Policy is the runtime sandbox policy attached to a context and consulted by spell bindings.
-// Immutable after construction; safe for concurrent reads. A nil Policy disables all checks.
+// Immutable after construction; safe for concurrent reads. A nil Policy disables all checks,
+// so a caller whose sandbox mode is not off must attach a built one or refuse to run.
 type Policy struct {
-	Workspace  string             // absolute symlink-resolved workspace root
-	FS         filesystem.Ruleset // allowlist for CheckRead/CheckWrite/CheckExec
-	Env        env.Allowlist      // allowlist of inheritable env-var names
-	BaseEnv    []string           // frozen pre-scrubbed env snapshot (prevents cross-run mutation)
-	EnvDropped []string           // names withheld from BaseEnv by the allowlist, recorded for the env-dropped metric
+	FS  filesystem.Ruleset // allowlist for CheckRead/CheckWrite/CheckExec
+	Env env.Allowlist      // allowlist of inheritable env-var names
+	// BaseEnv is every child's environment: the host's, scrubbed to Env, with TMPDIR
+	// pointed at TempDir. Frozen at build time so one run cannot change the next's.
+	// Non-nil on a built policy; a child of a policy never inherits the host's.
+	BaseEnv    []string
+	EnvDropped []string // names withheld from BaseEnv by the allowlist, recorded for the env-dropped metric
+	// TempDir is the private temp directory children get as TMPDIR, in place of the
+	// shared one, which holds other programs' sockets.
+	TempDir string
 	// Lease is the job lease whose declared boundary narrowed FS, empty on a policy
 	// derived from config alone. Read only to name the boundary on a denial: it is not a
 	// [Policy.Fingerprint] input, because the kernel ruleset is built from FS and two
@@ -38,74 +50,49 @@ type Policy struct {
 	LeaseFrom types.LeaseSource
 }
 
-// CheckRead reports whether the policy permits a read of path; nil Policy permits everything.
-func (p *Policy) CheckRead(path string) error {
+// CheckRead reports whether the policy permits a read of path, recording the decision
+// to the metrics recorder on ctx and a denial to the run's trail. A nil Policy permits
+// everything and records nothing.
+func (p *Policy) CheckRead(ctx context.Context, path string) error {
+	return p.check(ctx, filesystem.Read, path)
+}
+
+// CheckWrite is CheckRead for a write to path.
+func (p *Policy) CheckWrite(ctx context.Context, path string) error {
+	return p.check(ctx, filesystem.Write, path)
+}
+
+// CheckExec is CheckRead for executing the binary at path. It does not search $PATH;
+// resolve the name with exec.LookPath first.
+func (p *Policy) CheckExec(ctx context.Context, path string) error {
+	return p.check(ctx, filesystem.Exec, path)
+}
+
+func (p *Policy) check(ctx context.Context, access filesystem.Access, path string) error {
 	if p == nil {
 		return nil
 	}
-	return p.FS.CheckRead(path)
-}
-
-// CheckWrite reports whether the policy permits a write to path. A nil Policy
-// permits everything.
-func (p *Policy) CheckWrite(path string) error {
-	if p == nil {
-		return nil
-	}
-	return p.FS.CheckWrite(path)
-}
-
-// CheckExec reports whether the policy permits execution of the binary at
-// path. A nil Policy permits everything.
-func (p *Policy) CheckExec(path string) error {
-	if p == nil {
-		return nil
-	}
-	return p.FS.CheckExec(path)
-}
-
-// CheckReadCtx is CheckRead plus a binding-layer metric recording the allow/deny
-// decision to the MetricsRecorder on ctx. Use it at the ctx-carrying fs/archive/crypto
-// binding sites so magus's own read checks are counted (see RecordCheck).
-func (p *Policy) CheckReadCtx(ctx context.Context, path string) error {
-	err := p.CheckRead(path)
-	RecordCheck(ctx, "read", err)
-	recordDenial(ctx, p, "read", path, err)
+	err := p.FS.Check(path, access)
+	recordCheck(ctx, access, err)
+	recordDenial(ctx, p, access, path, err)
 	return err
 }
 
-// CheckWriteCtx is CheckWrite plus the binding-layer write-decision metric.
-func (p *Policy) CheckWriteCtx(ctx context.Context, path string) error {
-	err := p.CheckWrite(path)
-	RecordCheck(ctx, "write", err)
-	recordDenial(ctx, p, "write", path, err)
-	return err
-}
-
-// CheckExecCtx is CheckExec plus the binding-layer exec-decision metric.
-func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
-	err := p.CheckExec(path)
-	RecordCheck(ctx, "exec", err)
-	recordDenial(ctx, p, "exec", path, err)
-	return err
-}
-
-// recordDenial records a refused access on the run's trail, the producer trail.KindSandboxDenial
-// was declared for, and which the console's bell-tier notification has had no source for since.
+// recordDenial records a refused access on the run's trail, the producer
+// trail.KindSandboxDenial was declared for.
 //
-// It sits behind these three wrappers rather than at each deny site because this is where the
-// decision is MADE: fs, archive, crypto, the http bindings and the exec pre-check all reach the
-// policy through them, so one producer covers every Go-side denial and a new binding inherits it.
-// The metric beside it makes the same trade for the same reason.
+// It sits in check rather than at each deny site because this is where the decision is
+// MADE: fs, archive, crypto, the http bindings and the exec pre-check all reach the
+// policy through it, so one producer covers every Go-side denial and a new binding
+// inherits it.
 //
-// What it deliberately does not claim to be is a syscall audit. The kernel landlock layer denies
-// without reporting anything back to Go, so an event here means "magus's own check refused",
-// which is the only denial anything in this process can witness.
+// It is not a syscall audit. The kernel landlock layer denies without reporting anything
+// back to Go, so an event here means "magus's own check refused", which is the only
+// denial anything in this process can witness.
 //
-// Allows are dropped. A read check fires once per glob match, and a durable append-only file is
-// the wrong place for a hot loop's happy path: a denial ends the operation, so it is rare by
-// construction.
-func recordDenial(ctx context.Context, p *Policy, access, path string, err error) {
+// Allows are dropped. A read check fires once per glob match, and a durable append-only
+// file is the wrong place for a hot loop's happy path.
+func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path string, err error) {
 	if err == nil {
 		return
 	}
@@ -113,39 +100,23 @@ func recordDenial(ctx context.Context, p *Policy, access, path string, err error
 	if base == "" {
 		return
 	}
-	var lease string
-	var leaseFrom types.LeaseSource
-	if p != nil {
-		lease, leaseFrom = p.Lease, p.LeaseFrom
-	}
 	trail.Append(ctx, base, trail.Event{
 		Ts:   time.Now().UnixMilli(),
 		Kind: trail.KindSandboxDenial,
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
 		// declared for itself from the workspace default every run already has.
-		Lease:     lease,
-		LeaseFrom: leaseFrom,
+		Lease:     p.Lease,
+		LeaseFrom: p.LeaseFrom,
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
-		Action:  access + " of " + path,
+		Action:  access.String() + " of " + path,
 		Outcome: trail.OutcomeError,
 		Error:   err.Error(),
 	})
 }
 
-// ScrubEnv returns environ filtered to the allowlist, plus dropped names. A nil Policy is a no-op.
-//
-// Production builds BaseEnv by calling p.Env.Scrub directly (see defaults.go) rather than
-// through this method; only tests call ScrubEnv itself.
-func (p *Policy) ScrubEnv(environ []string) (kept, dropped []string) {
-	if p == nil {
-		return environ, nil
-	}
-	return p.Env.Scrub(environ)
-}
-
-// AllowEnv reports whether name is allowed by the policy. A nil Policy permits
-// everything.
-func (p *Policy) AllowEnv(name string) bool {
+// AllowsEnv reports whether the policy lets a child inherit the variable name. A nil
+// Policy permits everything.
+func (p *Policy) AllowsEnv(name string) bool {
 	if p == nil {
 		return true
 	}
@@ -163,14 +134,10 @@ func (p *Policy) Fingerprint() string {
 		rules[i] = fmt.Sprintf("%s:r=%v:w=%v:x=%v", r.Path, r.Read, r.Write, r.Exec)
 	}
 	slices.Sort(rules)
-	envAllow := make([]string, len(p.Env.Allow))
-	copy(envAllow, p.Env.Allow)
-	slices.Sort(envAllow)
-	globs := make([]string, len(p.Env.Globs))
-	copy(globs, p.Env.Globs)
-	slices.Sort(globs)
+	names := slices.Sorted(slices.Values(p.Env.Names))
+	prefixes := slices.Sorted(slices.Values(p.Env.Prefixes))
 	h := sha256.New()
-	fmt.Fprintf(h, "rules=%v;envAllow=%v;globs=%v", rules, envAllow, globs)
+	fmt.Fprintf(h, "rules=%v;envAllow=%v;globs=%v", rules, names, prefixes)
 	return hex.EncodeToString(h.Sum(nil)[:8]) // first 8 bytes → 16 hex chars
 }
 
@@ -181,7 +148,7 @@ func UnionPolicies(ps ...*Policy) *Policy {
 	out := &Policy{}
 	seenRule := make(map[string]int) // path -> index into out.FS.Rules
 	seenEnv := make(map[string]struct{})
-	seenGlob := make(map[string]struct{})
+	seenPrefix := make(map[string]struct{})
 	seenBase := make(map[string]struct{})
 	for _, p := range ps {
 		if p == nil {
@@ -197,19 +164,19 @@ func UnionPolicies(ps ...*Policy) *Policy {
 			seenRule[r.Path] = len(out.FS.Rules)
 			out.FS.Rules = append(out.FS.Rules, r)
 		}
-		for _, n := range p.Env.Allow {
+		for _, n := range p.Env.Names {
 			if _, ok := seenEnv[n]; ok {
 				continue
 			}
 			seenEnv[n] = struct{}{}
-			out.Env.Allow = append(out.Env.Allow, n)
+			out.Env.Names = append(out.Env.Names, n)
 		}
-		for _, g := range p.Env.Globs {
-			if _, ok := seenGlob[g]; ok {
+		for _, g := range p.Env.Prefixes {
+			if _, ok := seenPrefix[g]; ok {
 				continue
 			}
-			seenGlob[g] = struct{}{}
-			out.Env.Globs = append(out.Env.Globs, g)
+			seenPrefix[g] = struct{}{}
+			out.Env.Prefixes = append(out.Env.Prefixes, g)
 		}
 		for _, kv := range p.BaseEnv {
 			if _, ok := seenBase[kv]; ok {
@@ -224,13 +191,13 @@ func UnionPolicies(ps ...*Policy) *Policy {
 
 type policyKey struct{}
 
-// WithPolicy attaches p to ctx; pass nil to clear. Read with FromContext.
+// WithPolicy attaches p to ctx; pass nil to clear. Read with PolicyFromContext.
 func WithPolicy(ctx context.Context, p *Policy) context.Context {
 	return context.WithValue(ctx, policyKey{}, p)
 }
 
-// FromContext returns the Policy attached by WithPolicy, or nil when absent (sandbox off).
-func FromContext(ctx context.Context) *Policy {
+// PolicyFromContext returns the Policy attached by WithPolicy, or nil when absent (sandbox off).
+func PolicyFromContext(ctx context.Context) *Policy {
 	if ctx == nil {
 		return nil
 	}

@@ -203,7 +203,7 @@ magus queue validate --plan plan.json --verdicts verdicts \
   --regenerate 'magus run generate:rw' \
   --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build
 magus queue apply --provider github --base main \
-  --regenerate 'magus --sandbox-enabled run generate:rw' \
+  --regenerate 'magus --sandbox=best-effort run generate:rw' \
   --scratch-env MAGUS_CACHE_DIR=magus verdicts
 ```
 

@@ -178,6 +178,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `-o json`. The `magus-rehydrate.sh` template wires it to session start.
 - **`magus session hints` reports uptake per suggestion id.**
 - **`magus session ls` and `--brief` show each provider's published prompt-cache window.**
+- **MCP and the Connect APIs on `server.sock`, no token needed.** A same-user peer holds
+  the `socket-peer` credential, `mcp=write` and `console=write`, each path held to its
+  loopback need. Every MCP tool call, on any transport, checks `mcp=write` again (MGS9015).
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -204,6 +207,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
   step, one writing what the other reads with no `ctx.needs` path between them, fail at
   derivation. `magus doctor` checks every composed target.
+- **Breaking: the merge queue labels `merge-queue: changes a generator` on a queued pull
+  request whose generated files it cannot regenerate itself.** The author learns before
+  any kick-back that main moving them means merging main in and regenerating. A provider
+  script must export `flag`; label creation GitHub refuses as invalid is now an error.
 - **The merge queue labels pull requests** `merge-queue: queued` while it holds them
   and `merge-queue: rejected` when it kicks one back.
 - **`--scratch-env NAME=DIR` on `magus queue validate` and `magus queue apply`** points
@@ -429,6 +436,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
   of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
 - **The MCP tool catalog is generated from the `std.Magus` descriptor.**
+- **Breaking: `server.sock` speaks HTTP.** Forwarded runs, jobs, status, reload and stop
+  are `/proc/v1/` paths on it, and a client meeting a server started by an older magus
+  gets MGS3025 naming the restart. On Linux and macOS it admits only processes running
+  as the server's user (MGS9022 otherwise).
 - **The merge queue needs no bypass actor.** Apply posts `success` right before a merge,
   once main is still at the predicted tip, and GitHub's auto-merge merges; apply merges
   itself after a minute. A success it cannot follow through goes back to `pending`.
@@ -454,6 +465,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
   caller's grant. Every mint is audited, and a revoked token ends its open streams.
 - **The PR advice comment leads with files no project claims.**
+- **Breaking: a merge queue hook is a command and its arguments, not a shell line.**
+  The queue appends the change's affected projects (`/` when unproven) instead of
+  setting `MERGEQUEUE_*` variables, so a gate becomes `magus run ci
+  --no-default-charms`; `--facts` gets the fact asked for. Shell syntax is refused
+  with MGS3026: point the flag at a script.
 - **The merge queue kicks back stale generated files before its gate runs.** A change
   that edits generator code must commit outputs that are current on top of the base. If
   they are stale, the kick-back names the stale files and says how to fix them. If they are
@@ -476,6 +492,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `magus session hints` as `deny-verdict`.
 - **The `run.remote` record says `stored`, not `published`,** which names output bundles
   only.
+- **Breaking: sandbox grants are explicit, and misconfiguration is an error.** Exec
+  needs `mode: rx` or `rwx`; `ro` and `rw` no longer imply it. An unset `$VAR`, a mode
+  typo or a passthrough prefix like `GO*` fails with MGS2004. System, `PATH`, toolchain
+  and tool-cache directories are granted by default; children get a private `TMPDIR`.
+- **Breaking: `sandbox.enabled` is now `sandbox.mode: off | best-effort | required`.**
+  Also `MAGUS_SANDBOX` and `--sandbox=<mode>`, replacing `MAGUS_SANDBOX_ENABLED` and
+  `--sandbox-enabled`. `best-effort` is the old `enabled: true`; `required` refuses to
+  run (MGS2012) unless kernel landlock enforces the policy. The old env var is an
+  error naming its replacement.
 - **`magus describe graph -o markdown <project>` renders only that project.** A scoped
   index drops the workspace-wide kind and project tables, so a change elsewhere cannot
   make it stale; the unscoped index keeps them. A project path that names no project is
@@ -552,6 +577,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `sockets` check reports `broker.sock` and `server.sock` by name; the compact status line
   names each; and the dashboard gains broker and server tiles. `MAGUS_*` settings now
   apply in a workspace with no `magus.yaml`.
+- **A broker reply that arrives just before the connection closes is no longer lost.**
+  `magus broker stop` could report `connection closed during shutdown` after the broker
+  had answered and stopped.
 - **A run killed outright releases its claims and services at once.** Claims and
   service references ride the run's one broker connection, so the kernel closing it
   releases them; this replaces pid polling and the 24-hour cap. When the broker
@@ -647,6 +675,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
   the check now reads argv the same way the read-ack rule does, ignoring where a global
   flag sits.
+- **The merge queue no longer kicks a change back for a red it inherited.** A red
+  candidate whose base is red on the same projects waits with `WAIT_BASE_RED`, keeps
+  its place and gets no comment. The base is gated once a run, however many changes it
+  reddens.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.
@@ -705,6 +737,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   another base or remote, a base commit the base lacks, or a stack base that is not
   the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
   a revert of the base. Apply writes the squash message itself.
+- **Sandbox path checks follow symlinks the way the kernel does.** A `..` after a
+  symlink, a write through a dangling link, and `fs\symlink` to a path outside the
+  policy no longer pass the binding-level check.
 - **Breaking: no job holding a secret or a write token restores an Actions cache.** A
   merge queue hook can read the runner's runtime token and plant cache entries in the
   default branch's scope, so trusted jobs now install cold. `setup-magus` restores run

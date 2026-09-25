@@ -1,16 +1,24 @@
-// Package apply builds per-workspace sandbox policies from config and the acting lease's
-// job row, and owns the process-wide landlock application state. It lives here (not in
-// sandbox or config) to break the import cycle.
-package apply
+// Package confinement builds a workspace's sandbox policy from its config, the host
+// and the acting lease's job row, and holds the process-wide landlock state that
+// policy is applied under.
+//
+// It is not part of internal/sandbox because it reports to the observability
+// provider, and observability imports cache, which imports proc/run, which imports
+// sandbox.
+package confinement
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -36,8 +44,8 @@ var applyErr error
 // warnedUnsupported gates the MGS2005 warning to at most one log line per process.
 var warnedUnsupported sync.Once
 
-// globalsMu guards policyFingerprint and appliedExternally: both are read from Apply
-// on arbitrary goroutines and written from MarkAppliedExternally on arbitrary
+// globalsMu guards policyFingerprint, appliedExternally and kernelEnforced: they are read
+// from Apply on arbitrary goroutines and written from MarkAppliedExternally on arbitrary
 // goroutines, so (unlike applyErr, which only ever changes inside the applyOnce.Do
 // callback) they need their own lock rather than riding on sync.Once's happens-before.
 var globalsMu sync.Mutex
@@ -50,52 +58,181 @@ var policyFingerprint string
 // In this mode per-workspace Apply calls are attach-only (no syscall, no fingerprint check).
 var appliedExternally bool
 
-// MarkAppliedExternally records that the server has already applied the union landlock ruleset.
-// Subsequent per-workspace Apply calls become attach-only; the MGS2010 fingerprint check is skipped.
-func MarkAppliedExternally(fp string) {
+// kernelEnforced is set once a landlock ruleset is in force on this process, so a
+// required sandbox can tell kernel enforcement from the binding-check fallback.
+var kernelEnforced bool
+
+// MarkAppliedExternally records that the server has already applied the union landlock
+// ruleset, enforced saying whether the kernel took it. Subsequent per-workspace Apply calls
+// become attach-only; the MGS2010 fingerprint check is skipped.
+func MarkAppliedExternally(fp string, enforced bool) {
 	applyOnce.Do(func() {})
 	globalsMu.Lock()
 	policyFingerprint = fp
 	appliedExternally = true
+	kernelEnforced = enforced
 	globalsMu.Unlock()
 }
 
-// FromConfig assembles a sandbox Policy for root using the sandbox fields of cfg.
-func FromConfig(ctx context.Context, root string, cfg config.Config) *sandbox.Policy {
-	userExtras := make([]filesystem.Rule, 0, len(cfg.Sandbox.Allow))
-	for _, pp := range cfg.Sandbox.Allow {
-		read := true
-		write := pp.Mode == "rw"
-		rule, err := filesystem.ExpandUserRule(pp.Path, read, write)
-		if err != nil {
-			slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-				"sandbox.allow entry failed to resolve; skipped"),
-				"path", pp.Path, "err", err)
-			continue
-		}
-		userExtras = append(userExtras, rule)
-	}
-	var exact, globs []string
-	for _, name := range cfg.Sandbox.Env.Passthrough {
-		if strings.Contains(name, "*") {
-			if err := env.ValidateGlobs([]string{name}); err != nil {
-				slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-					"sandbox.env.passthrough pattern must end in '*'; ignoring"),
-					"pattern", name, "err", err)
-				continue
-			}
-			globs = append(globs, name)
-		} else {
-			exact = append(exact, name)
-		}
-	}
-	return sandbox.BuildPolicy(root, userExtras, nil, exact, globs)
+// ErrRequired returns the MGS2012 refusal of a required sandbox at root that the kernel
+// is not enforcing, why saying what stands in the way.
+func ErrRequired(root, why string) error {
+	return types.DiagnosticErrorf(types.SandboxRequired,
+		"sandbox mode is required for %s, and %s; run it on Linux 5.13 or newer with landlock enabled (/sys/kernel/security/landlock)", root, why)
 }
 
-// Apply applies the kernel-level landlock sandbox (once per process) and attaches policy to ctx.
-// ErrUnsupported logs MGS2005 and falls through to interpreter-level enforcement.
-// A fingerprint mismatch rejects the run with MGS2010 (landlock is immutable once set).
-func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Context, error) {
+// FromConfig builds the sandbox policy for the workspace at root from cfg and the host:
+// its environment, the running binary, the checkout's git directories and the go
+// toolchain on PATH. It creates the private temp dir children get as TMPDIR (see
+// privateTempDir).
+//
+// A sandbox.allow entry that does not resolve, and a passthrough pattern that does not
+// parse, are errors (MGS2004): a sandbox that quietly grants less than was written
+// breaks builds in ways nobody can trace, and one that grants more is not a sandbox.
+func FromConfig(root, cacheDir string, cfg config.SandboxConfig) (*sandbox.Policy, error) {
+	home, _ := os.UserHomeDir()
+	var errs []error
+	allow := make([]filesystem.Rule, 0, len(cfg.Allow))
+	for _, a := range cfg.Allow {
+		rule, err := filesystem.ExpandUserRule(a.Path, a.Mode, home, os.LookupEnv)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		allow = append(allow, rule)
+	}
+	passthrough, err := env.Parse(cfg.Env.Passthrough)
+	errs = append(errs, err)
+	if err := errors.Join(errs...); err != nil {
+		return nil, types.WrapDiagnostic(types.AllowlistUnresolved, err, "sandbox config for %s", root)
+	}
+
+	tmp, err := privateTempDir(os.TempDir(), root)
+	if err != nil {
+		return nil, err
+	}
+	if filesystem.Under(filesystem.ResolveRulePath(tmp), filesystem.ResolveRulePath(root)) {
+		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s; point TMPDIR outside it", tmp, root)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("sandbox: locate the running binary: %w", err)
+	}
+	gitDir, commonDir := gitDirs(root)
+	var installs []string
+	if goroot := goRootOnPath(home); goroot != "" {
+		installs = append(installs, goroot)
+	}
+	return sandbox.BuildPolicy(sandbox.PolicyOptions{
+		Workspace:    root,
+		CacheDir:     cacheDir,
+		TempDir:      tmp,
+		Executable:   exe,
+		GitDir:       gitDir,
+		GitCommonDir: commonDir,
+		Home:         home,
+		GOOS:         runtime.GOOS,
+		Environ:      os.Environ(),
+		InstallDirs:  installs,
+		Allow:        allow,
+		Env:          passthrough,
+	}), nil
+}
+
+// privateTempDir returns base/magus-sandbox-<uid>-<hash of root>, creating it 0700.
+//
+// It sits outside the workspace because a temp dir inside a checkout changes what
+// tools see: a repository a test creates there is nested in the workspace's own. The
+// name is fixed per workspace rather than per run, so every run of one workspace in a
+// server process builds the same policy and passes the MGS2010 fingerprint check.
+// base is usually world-writable, so a path that already exists must be a directory
+// this user owns and nobody else can enter, or another account could have planted it.
+func privateTempDir(base, root string) (string, error) {
+	sum := sha256.Sum256([]byte(root))
+	dir := filepath.Join(base, fmt.Sprintf("magus-sandbox-%d-%x", os.Getuid(), sum[:6]))
+	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return "", fmt.Errorf("sandbox: create the private temp dir: %w", err)
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", fmt.Errorf("sandbox: %w", err)
+	}
+	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ownedByUser(info) {
+		return "", fmt.Errorf("sandbox: %s is not a private directory of this user; remove it and let magus recreate it", dir)
+	}
+	return dir, nil
+}
+
+// gitDirs returns the git directory of the checkout holding root and the repository's
+// common one; both are empty outside a git checkout. A linked worktree's .git is a file
+// naming its own directory, which names the common one in its commondir file.
+func gitDirs(root string) (gitDir, commonDir string) {
+	for dir := root; ; dir = filepath.Dir(dir) {
+		dotgit := filepath.Join(dir, ".git")
+		info, err := os.Stat(dotgit)
+		if err == nil && info.IsDir() {
+			return dotgit, dotgit
+		}
+		if err == nil {
+			return linkedGitDirs(dotgit)
+		}
+		if filepath.Dir(dir) == dir {
+			return "", ""
+		}
+	}
+}
+
+func linkedGitDirs(dotgit string) (gitDir, commonDir string) {
+	b, err := os.ReadFile(dotgit)
+	if err != nil {
+		return "", ""
+	}
+	gitDir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
+	if !ok {
+		return "", ""
+	}
+	gitDir = strings.TrimSpace(gitDir)
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(filepath.Dir(dotgit), gitDir)
+	}
+	commonDir = gitDir
+	if c, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
+		commonDir = strings.TrimSpace(string(c))
+		if !filepath.IsAbs(commonDir) {
+			commonDir = filepath.Join(gitDir, commonDir)
+		}
+	}
+	return filepath.Clean(gitDir), filepath.Clean(commonDir)
+}
+
+// goRootOnPath returns the GOROOT of the go binary on PATH when it resolves into a Go
+// install (<root>/bin/go beside <root>/pkg/tool), the toolchain directory a build execs
+// the compiler from. A shim resolves elsewhere and yields nothing, and so does a root
+// that would contain home.
+func goRootOnPath(home string) string {
+	bin, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+	if bin, err = filepath.EvalSymlinks(bin); err != nil {
+		return ""
+	}
+	root := filepath.Dir(filepath.Dir(bin))
+	if filepath.Base(filepath.Dir(bin)) != "bin" || (home != "" && filesystem.Under(home, root)) {
+		return ""
+	}
+	if info, err := os.Stat(filepath.Join(root, "pkg", "tool")); err != nil || !info.IsDir() {
+		return ""
+	}
+	return root
+}
+
+// Apply applies the kernel-level landlock sandbox (once per process) and attaches policy
+// to ctx. Without landlock, best-effort logs MGS2005 and falls back to binding checks,
+// and required refuses with MGS2012 and attaches nothing. A fingerprint mismatch rejects
+// the run with MGS2010 (landlock is immutable once set).
+func Apply(ctx context.Context, policy *sandbox.Policy, root string, mode types.SandboxMode) (context.Context, error) {
+	required := mode.Resolved() == types.SandboxModeRequired
 	// Stamp the live provider as the binding-layer sandbox metrics recorder so the
 	// fs/archive/crypto/exec checks (which run below observability in the import graph
 	// and cannot reach it directly) can report allow/deny decisions and dropped env
@@ -105,9 +242,12 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 	}
 
 	globalsMu.Lock()
-	externally := appliedExternally
+	externally, enforced := appliedExternally, kernelEnforced
 	globalsMu.Unlock()
 	if externally { // server applied union policy; attach-only
+		if required && !enforced {
+			return ctx, ErrRequired(root, "the ruleset this process runs under is not kernel-enforced")
+		}
 		return sandbox.WithPolicy(ctx, policy), nil
 	}
 
@@ -122,35 +262,48 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 		secs := time.Since(start).Seconds()
 		switch {
 		case applyErr == nil:
+			globalsMu.Lock()
+			kernelEnforced = true
+			globalsMu.Unlock()
 			RecordApply(ctx, secs, "applied", "workspace", policy)
+		case errors.Is(applyErr, sandbox.ErrUnsupported) && required:
+			// Left as the error: the ruleset was never installed, so no later Apply in
+			// this process may run as though it were.
+			RecordApply(ctx, secs, "unsupported", "workspace", policy)
+			applyErr = ErrRequired(root, "the kernel cannot enforce it: "+applyErr.Error())
 		case errors.Is(applyErr, sandbox.ErrUnsupported):
 			warnedUnsupported.Do(func() {
 				slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
-					"kernel landlock unavailable; sandbox running with interpreter-level checks only"),
+					"kernel landlock unavailable; sandbox running with binding-level checks only"),
 					"reason", applyErr.Error())
 			})
-			// ErrUnsupported is the documented fallback path; not fatal. Binding-level
-			// checks still enforce the same rules, so record them under "unsupported".
+			// Best-effort's documented fallback: binding-level checks still enforce the
+			// same rules on what goes through a binding, recorded as "unsupported".
 			applyErr = nil
 			RecordApply(ctx, secs, "unsupported", "workspace", policy)
 		}
 		// A hard kernel error falls through unrecorded; the run aborts below.
 	})
 	if applyErr != nil {
+		if errors.Is(applyErr, types.SandboxRequired) {
+			return ctx, applyErr
+		}
 		// Fail closed: ruleset was partially built but restrict_self was never called.
 		return ctx, fmt.Errorf("sandbox: kernel sandbox failed: %w", applyErr)
 	}
 
 	globalsMu.Lock()
-	current := policyFingerprint
+	current, enforced := policyFingerprint, kernelEnforced
 	globalsMu.Unlock()
+	if required && !enforced {
+		return ctx, ErrRequired(root, "an earlier apply in this process fell back to binding-level checks")
+	}
 	if fp != current { // mismatch: kernel-level and binding-level policies would disagree
 		RecordApply(ctx, 0, "mismatch", "workspace", nil) // no ruleset installed; count the outcome, not rules
 		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this server process (fingerprint %s vs %s); restart the server to pick up new sandbox configuration",
 			types.DiagnosticErrorf(types.SandboxPolicyMismatch, "sandbox policy mismatch"),
 			root, fp, current)
 	}
-
 	return sandbox.WithPolicy(ctx, policy), nil
 }
 
@@ -184,8 +337,8 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 		Read:     read,
 		Write:    write,
 		Exec:     exec,
-		EnvExact: int64(len(policy.Env.Allow)),
-		EnvGlob:  int64(len(policy.Env.Globs)),
+		EnvExact: int64(len(policy.Env.Names)),
+		EnvGlob:  int64(len(policy.Env.Prefixes)),
 		Scope:    scope,
 	})
 }
@@ -195,7 +348,8 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 // boundary to derive one from: no lease id, no row, a row that is not live, a ROOT lease
 // (a row with no parent is the orchestrator, and it owns the whole checkout), or a row
 // that declared no write paths and is not read-only. A read-only row narrows the grant
-// to nothing but the cache dir and $TMPDIR, the same answer the guard gives its writes.
+// to nothing but the cache dir and the policy's private temp dir, the same answer the
+// guard gives its writes.
 //
 // The grant is DERIVED from the row rather than declared a second time in magus.yaml,
 // because a boundary written twice is a boundary that disagrees with itself. The agent
@@ -206,8 +360,10 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 // Reads are left exactly as the workspace policy granted them: the job store declares a
 // write boundary only, and a worker has to read the tree it is changing.
 //
-// Beyond the write paths it grants writes to the workspace cache directory and $TMPDIR,
-// which every target run needs to produce output at all.
+// Only write grants on the checkout, or on a directory holding it, are dropped. Grants
+// outside it (/dev/null, tool caches, the git directories of a linked worktree) stay,
+// and the workspace cache directory and the private temp dir are granted back, which
+// every target run needs to produce output at all.
 //
 // A deny path INSIDE a write one costs the directory holding it, not the leased tree:
 // this ruleset and landlock are both allowlists with no deny rule, so an enclosing grant
@@ -238,15 +394,18 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location
 	if !row.ReadOnly {
 		granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
 	}
+	rootAbs := filesystem.ResolveRulePath(loc.Root)
 	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(granted)+2)
 	for _, r := range policy.FS.Rules {
-		r.Write = false
+		if filesystem.Under(r.Path, rootAbs) || filesystem.Under(rootAbs, r.Path) {
+			r.Write = false
+		}
 		rules = append(rules, r)
 	}
 	for _, p := range granted {
 		rules = append(rules, filesystem.Rule{Path: p, Read: true, Write: true})
 	}
-	for _, p := range []string{loc.CacheDir, os.TempDir()} {
+	for _, p := range []string{loc.CacheDir, policy.TempDir} {
 		if p == "" {
 			continue
 		}

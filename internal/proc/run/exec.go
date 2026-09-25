@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
 )
@@ -141,14 +142,14 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
 	c.WaitDelay = 5 * time.Second
 
-	policy := sandbox.FromContext(ctx)
+	policy := sandbox.PolicyFromContext(ctx)
 	if policy != nil {
 		resolved, err := exec.LookPath(name)
 		if err != nil {
 			resolved = name // let exec.Cmd surface the real lookup error
 		}
-		if err := policy.CheckExecCtx(ctx, resolved); err != nil {
-			sandbox.EmitDenyHint(policy, "ro", resolved)
+		if err := policy.CheckExec(ctx, resolved); err != nil {
+			sandbox.EmitDenyHint(policy, filesystem.Exec, resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
@@ -157,11 +158,11 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	if js := jobserverFrom(ctx); js != nil {
 		c.ExtraFiles = js.files()
 	}
-	sandbox.RecordEnvDropped(ctx, name, policy)
-	sandbox.EmitShimHint(name, policy)
+	sandbox.RecordEnvDropped(ctx, policy, name)
+	sandbox.EmitShimHint(policy, name)
 	if len(withheld) > 0 {
 		slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
-			"withheld magus socket pointer(s) from op subprocess (done regardless of sandbox.enabled)"),
+			"withheld magus socket pointer(s) from op subprocess (done regardless of sandbox.mode)"),
 			"vars", withheld)
 	}
 	if opts.Stdin != "" {
@@ -276,14 +277,13 @@ func classifyMissingBinary(err error, name string, started bool) error {
 var ProcForwardVars = []string{"MAGUS_PROC_SOCKET", "MAGUS_SERVER_ADDRESS"}
 
 // childEnv layers self-reference variables and caller overrides over the base environment.
+//
+// Under a policy the base is its BaseEnv even when that is empty: a sandboxed child
+// never falls back to the host's environment.
 func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (env, withheld []string) {
-	var base []string
+	root := os.Environ()
 	if policy != nil {
-		base = policy.BaseEnv
-	}
-	root := base
-	if root == nil {
-		root = os.Environ()
+		root = policy.BaseEnv
 	}
 	for _, name := range ProcForwardVars {
 		if hasEnvVar(root, name) && !hasEnvVar(overrides, name) {

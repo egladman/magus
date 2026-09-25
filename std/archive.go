@@ -98,8 +98,8 @@ var Archive = Module{
 // the writing.
 func archiveOpenRead(ctx context.Context, method, src string) (*os.File, []byte, error) {
 	src = resolvePath(ctx, src)
-	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckReadCtx(ctx, src); err != nil {
+	if p := sandbox.PolicyFromContext(ctx); p != nil {
+		if err := p.CheckRead(ctx, src); err != nil {
 			return nil, nil, fmt.Errorf("archive.%s: %w", method, err)
 		}
 	}
@@ -439,11 +439,11 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	strip := archiveOptInt(opts, "strip", 0)
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
 
-	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckReadCtx(ctx, src); err != nil {
+	if p := sandbox.PolicyFromContext(ctx); p != nil {
+		if err := p.CheckRead(ctx, src); err != nil {
 			return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 		}
-		if err := p.CheckWriteCtx(ctx, dest); err != nil {
+		if err := p.CheckWrite(ctx, dest); err != nil {
 			return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 		}
 	}
@@ -496,11 +496,11 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 	level := archiveOptInt(opts, "level", -1)
 	followSymlinks := archiveOptBool(opts, "follow_symlinks", false)
 
-	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckReadCtx(ctx, src); err != nil {
+	if p := sandbox.PolicyFromContext(ctx); p != nil {
+		if err := p.CheckRead(ctx, src); err != nil {
 			return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
 		}
-		if err := p.CheckWriteCtx(ctx, dest); err != nil {
+		if err := p.CheckWrite(ctx, dest); err != nil {
 			return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
 		}
 	}
@@ -609,7 +609,7 @@ func compressCollect(ctx context.Context, src string, followSymlinks bool, polic
 				return fmt.Errorf("follow symlink %s: %w", path, err)
 			}
 			if policy != nil {
-				if err := policy.CheckReadCtx(ctx, resolved); err != nil {
+				if err := policy.CheckRead(ctx, resolved); err != nil {
 					return fmt.Errorf("symlink target denied by sandbox: %s", resolved)
 				}
 			}
@@ -620,7 +620,7 @@ func compressCollect(ctx context.Context, src string, followSymlinks bool, polic
 			path = resolved
 		}
 		if policy != nil && !fi.IsDir() {
-			if err := policy.CheckReadCtx(ctx, path); err != nil {
+			if err := policy.CheckRead(ctx, path); err != nil {
 				return fmt.Errorf("archive.compress: %w", err)
 			}
 		}
@@ -643,7 +643,7 @@ func compressCollect(ctx context.Context, src string, followSymlinks bool, polic
 // threads and level are accepted for parity with the compressTar* family but
 // are unused here: the caller bakes them into the wrap closure.
 func compressTar(ctx context.Context, src, dest string, _, _ int, maxSize int64, followSymlinks bool, wrap func(io.Writer) (io.WriteCloser, error)) (files []string, bytesIn, bytesOut int64, err error) {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	entries, bytesIn, err := compressCollect(ctx, src, followSymlinks, p)
 	if err != nil {
 		return
@@ -751,7 +751,7 @@ func compressTarZst(ctx context.Context, src, dest string, threads, level int, m
 // independent entries are compressed concurrently. The zip central directory
 // is written single-threaded after all entries are done.
 func compressZip(ctx context.Context, src, dest string, threads int, maxSize int64, followSymlinks bool) (files []string, bytesIn, bytesOut int64, err error) {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	entries, bytesIn, err := compressCollect(ctx, src, followSymlinks, p)
 	if err != nil {
 		return

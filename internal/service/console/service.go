@@ -183,7 +183,7 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 				Profile:    s.config.ConcurrencyProfile,
 				Effective:  cache.ResolveConcurrency(s.config.Concurrency, s.config.ConcurrencyProfile),
 			},
-			Sandbox: s.config.Sandbox.Enabled,
+			Sandbox: s.config.Sandbox.Mode.Enabled(),
 		},
 	}
 	addr, err := s.resolveStatusAddr(ctx)

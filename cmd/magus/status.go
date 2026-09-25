@@ -340,7 +340,7 @@ func buildConfigStatus(c config.Config) types.StatusConfig {
 			Profile:    c.ConcurrencyProfile,
 			Effective:  cache.ResolveConcurrency(c.Concurrency, c.ConcurrencyProfile),
 		},
-		Sandbox: c.Sandbox.Enabled,
+		Sandbox: c.Sandbox.Mode.Enabled(),
 	}
 }
 

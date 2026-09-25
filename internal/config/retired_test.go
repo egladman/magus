@@ -31,6 +31,10 @@ func TestRetiredEnvReplacementsAreKnown(t *testing.T) {
 	for _, key := range KnownKeys() {
 		known[EnvName("MAGUS", strings.Split(key, ".")...)] = true
 	}
+	// A key can carry a flat name of its own (sandbox.mode is MAGUS_SANDBOX).
+	for _, d := range EnvVarDocs() {
+		known[d.EnvVar] = true
+	}
 	for old, repl := range retiredEnv {
 		assert.True(t, known[repl], "%s names %s, which magus does not read", old, repl)
 	}

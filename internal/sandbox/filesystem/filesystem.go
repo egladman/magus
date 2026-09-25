@@ -5,31 +5,44 @@ package filesystem
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
-// ErrDenied is returned by Ruleset.CheckRead, CheckWrite, and CheckExec when a
-// requested operation falls outside the configured allowlist.
+// ErrDenied is returned by Ruleset.Check when a requested operation falls outside
+// the configured allowlist.
 var ErrDenied = errors.New("sandbox: operation denied by the sandbox policy")
 
-// accessMode classifies a requested access against the ruleset.
-type accessMode int
+// Access is one kind of filesystem access a check asks about.
+type Access int
 
 const (
-	modeRead  accessMode = iota // read-only
-	modeWrite                   // write or create
-	modeExec                    // execute (binary launch)
+	Read  Access = iota // open for reading, list a directory
+	Write               // write, create, remove, rename
+	Exec                // execve a binary
 )
 
-// Rule is one entry in the policy's filesystem allowlist.
-//
-// Exec is the KERNEL layer's input: landlock grants execve where it is set, and Read
-// alone is enough for dlopen/mmap without permitting execve. checkAccess below does
-// not consult it: CheckExec passes on Read, and TestCheckExecRequiresReadNotExec
-// pins that. So on a host with no landlock (darwin, or a kernel below 5.13) a
-// read-only rule does not stop an exec, and Exec: false on a rule is a request the
-// kernel layer carries out or nobody does.
+// String names a for metrics and messages: read, write or exec.
+func (a Access) String() string {
+	switch a {
+	case Read:
+		return "read"
+	case Write:
+		return "write"
+	case Exec:
+		return "exec"
+	}
+	return fmt.Sprintf("access(%d)", int(a))
+}
+
+// Rule is one entry in the policy's filesystem allowlist. Each flag grants its
+// access alone: Exec without Read permits execve and nothing else, and Read
+// without Exec is enough for dlopen and mmap but not for execve. The kernel layer
+// and Check read the flags the same way, so a host without landlock refuses the
+// same exec a host with it does.
 type Rule struct {
 	Path  string
 	Read  bool
@@ -37,101 +50,122 @@ type Rule struct {
 	Exec  bool
 }
 
-// Ruleset is the filesystem allowlist consulted by CheckRead/CheckWrite/CheckExec.
+// Grants reports whether r grants access.
+func (r Rule) Grants(access Access) bool {
+	switch access {
+	case Read:
+		return r.Read
+	case Write:
+		return r.Write
+	case Exec:
+		return r.Exec
+	}
+	return false
+}
+
+// Ruleset is the filesystem allowlist a Policy consults.
 type Ruleset struct {
 	Rules []Rule
 }
 
-// CheckRead reports whether the ruleset permits a read of path (must be absolute; path-shape only).
-func (rs Ruleset) CheckRead(path string) error {
-	return rs.checkAccess(path, modeRead)
-}
-
-// CheckWrite reports whether the ruleset permits a write to path (must be absolute; path-shape only).
-func (rs Ruleset) CheckWrite(path string) error {
-	return rs.checkAccess(path, modeWrite)
-}
-
-// CheckExec reports whether the ruleset permits execution of path. Does not resolve $PATH; use exec.LookPath first.
-func (rs Ruleset) CheckExec(path string) error {
-	return rs.checkAccess(path, modeExec)
-}
-
-func (rs Ruleset) checkAccess(path string, mode accessMode) error {
+// Check reports whether the ruleset permits access to path. path is resolved
+// through every symlink first, a dangling one included, so the check lands on the
+// file the operation would touch. An error wraps ErrDenied.
+func (rs Ruleset) Check(path string, access Access) error {
 	abs, err := normalizePath(path)
 	if err != nil {
 		return fmt.Errorf("%w: %s: %w", ErrDenied, path, err)
 	}
 	for _, r := range rs.Rules {
-		if !Under(abs, r.Path) {
-			continue
-		}
-		switch mode {
-		case modeRead, modeExec:
-			if r.Read {
-				return nil
-			}
-		case modeWrite:
-			if r.Write {
-				return nil
-			}
+		if Under(abs, r.Path) && r.Grants(access) {
+			return nil
 		}
 	}
-	return fmt.Errorf("%w: %s outside workspace allowlist", ErrDenied, abs)
+	return fmt.Errorf("%w: %s %s is outside the allowlist", ErrDenied, access, abs)
 }
 
-// normalizePath returns an absolute, symlink-resolved, lexically-clean path.
-// For non-existent paths (write targets), resolves the parent and re-attaches the base name.
-// On Linux ≥5.13 the landlock layer closes the residual TOCTOU window; on other platforms it is accepted.
+// maxSymlinks bounds link expansion, matching Linux's MAXSYMLINKS.
+const maxSymlinks = 40
+
+// normalizePath returns path absolute, clean, and resolved through every symlink
+// in it, the way the kernel would walk it.
+//
+// Components are resolved in order and ".." is applied to the RESOLVED prefix, so
+// /ws/l/../x with l -> /home/u/.config is /home/u/x, not /ws/x. A lexical clean
+// before resolution would check a path the kernel never opens.
+//
+// A missing component and everything after it are kept lexically: a write target
+// need not exist yet. A symlink is followed even when its target is missing, so a
+// write through a dangling link is checked against where the file would be created
+// rather than against the link. On Linux 5.13 and newer the landlock layer closes
+// the window between this check and the operation; elsewhere it stays open.
 func normalizePath(path string) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("sandbox: empty path")
+		return "", errors.New("sandbox: empty path")
 	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("sandbox: %w", err)
+	if strings.IndexByte(path, 0) >= 0 {
+		return "", errors.New("sandbox: path contains NUL")
 	}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		return filepath.Clean(resolved), nil
-	}
-	// The path does not exist yet (a write target). Walk up to the nearest ancestor
-	// that DOES exist, resolve that, and re-attach the missing tail.
-	//
-	// COST: this branch is roughly 3x the resolved one: 150 allocs/op and ~23us against
-	// 47 allocs/op and ~8.3us (BenchmarkCheckReadCtx/missing vs /existing in
-	// internal/sandbox, Apple M5 darwin/arm64, 6 runs). Treat the ratio as the durable
-	// figure; the absolute numbers track TMPDIR depth, because the dominant cost in BOTH
-	// branches is EvalSymlinks lstat-ing every path component, and this branch calls it
-	// once per ancestor instead of once.
-	//
-	// It matters because callers hit it in loops: fs.glob consults CheckReadCtx once per
-	// match, so a check over paths not on disk pays the multiplier per path. Filter to
-	// paths that exist before checking, or memoize per run: resolution is pure for a
-	// given tree.
-	//
-	// Resolving only the immediate parent was not enough: when the parent is also missing,
-	// the fallback kept the whole path lexical, so a symlink above it went unresolved.
-	// Rule paths ARE resolved, so the two forms could never match and the write was
-	// denied, every nested create on a workspace under a symlink, which on macOS is any
-	// path under /var or /tmp.
-	missing := []string{}
-	dir := abs
-	for {
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break // reached the root without finding anything that exists
+	if !filepath.IsAbs(path) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("sandbox: %w", err)
 		}
-		missing = append([]string{filepath.Base(dir)}, missing...)
-		if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
-			return filepath.Clean(filepath.Join(append([]string{resolvedParent}, missing...)...)), nil
-		}
-		dir = parent
+		// Joined by hand: filepath.Join cleans, and cleaning before resolution is the bug.
+		path = wd + string(filepath.Separator) + path
 	}
-	return filepath.Clean(abs), nil
+	vol := filepath.VolumeName(path)
+	resolved := vol + string(filepath.Separator)
+	pending := splitPath(path[len(vol):])
+	links := 0
+	for len(pending) > 0 {
+		c := pending[0]
+		pending = pending[1:]
+		switch c {
+		case "", ".":
+			continue
+		case "..":
+			resolved = filepath.Dir(resolved)
+			continue
+		}
+		next := filepath.Join(resolved, c)
+		info, err := os.Lstat(next)
+		switch {
+		case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+			resolved = next
+			continue
+		case err != nil:
+			return "", fmt.Errorf("sandbox: %w", err)
+		case info.Mode()&fs.ModeSymlink == 0:
+			resolved = next
+			continue
+		}
+		links++
+		if links > maxSymlinks {
+			return "", fmt.Errorf("sandbox: %s: too many levels of symbolic links", path)
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			return "", fmt.Errorf("sandbox: %w", err)
+		}
+		if filepath.IsAbs(target) {
+			tvol := filepath.VolumeName(target)
+			resolved = tvol + string(filepath.Separator)
+			target = target[len(tvol):]
+		}
+		pending = append(splitPath(target), pending...)
+	}
+	return filepath.Clean(resolved), nil
 }
 
-// ResolveRulePath normalizes path the same way checkAccess does so containment checks are symmetric.
-// Rule paths must be normalized at policy-build time; divergence from the kernel landlock layer is a security hazard.
+func splitPath(p string) []string {
+	return strings.FieldsFunc(p, func(r rune) bool { return os.IsPathSeparator(uint8(r)) })
+}
+
+// ResolveRulePath normalizes path the way Check does, so rule and checked paths
+// compare as the same string. Rule paths must go through it at policy-build time: an
+// unresolved rule matches nothing. A path normalizePath rejects comes back lexically
+// clean.
 func ResolveRulePath(path string) string {
 	resolved, err := normalizePath(path)
 	if err != nil {

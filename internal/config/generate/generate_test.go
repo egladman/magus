@@ -46,7 +46,8 @@ type Config struct {
 
 type CacheConfig struct {
 	// Directory holding cached artifacts.
-	Dir string @yaml:"dir"@
+	Dir  string @yaml:"dir"@
+	Mode string @yaml:"mode" cli:"name=cache"@
 }
 
 type Embedded struct {
@@ -87,6 +88,7 @@ func TestParseConfigFlagsDerivesEveryScalarKind(t *testing.T) {
 		{Flag: "verbose", EnvVar: "MAGUS_VERBOSE", Kind: "bool", GoPath: "cfg.Verbose", YamlPath: "verbose", Usage: "MAGUS_VERBOSE"},
 		{Flag: "timeout", EnvVar: "MAGUS_TIMEOUT", Kind: "duration", GoPath: "cfg.Timeout", YamlPath: "timeout", Usage: "MAGUS_TIMEOUT"},
 		{Flag: "cache-dir", EnvVar: "MAGUS_CACHE_DIR", Kind: "string", GoPath: "cfg.Cache.Dir", YamlPath: "cache.dir", Usage: "MAGUS_CACHE_DIR: Directory holding cached artifacts."},
+		{Flag: "cache", EnvVar: "MAGUS_CACHE", Kind: "string", GoPath: "cfg.Cache.Mode", YamlPath: "cache.mode", Usage: "MAGUS_CACHE"},
 	} {
 		got, ok := defByYamlPath(defs, want.YamlPath)
 		require.True(t, ok, "no def for yaml path %q", want.YamlPath)
@@ -294,21 +296,26 @@ func TestCliOptions(t *testing.T) {
 		return &ast.Field{Tag: &ast.BasicLit{Value: "`" + tag + "`"}}
 	}
 
-	optOut, short := cliOptions(field(""))
+	optOut, short, name := cliOptions(field(""))
+	assert.False(t, optOut)
+	assert.Equal(t, "", short)
+	assert.Equal(t, "", name)
+
+	optOut, short, _ = cliOptions(field(`yaml:"x"`))
 	assert.False(t, optOut)
 	assert.Equal(t, "", short)
 
-	optOut, short = cliOptions(field(`yaml:"x"`))
-	assert.False(t, optOut)
-	assert.Equal(t, "", short)
-
-	optOut, short = cliOptions(field(`cli:"short=c"`))
+	optOut, short, _ = cliOptions(field(`cli:"short=c"`))
 	assert.False(t, optOut)
 	assert.Equal(t, "c", short)
 
-	optOut, short = cliOptions(field(`cli:"-,short=c"`))
+	optOut, short, _ = cliOptions(field(`cli:"-,short=c"`))
 	assert.True(t, optOut)
 	assert.Equal(t, "c", short, "opting out and naming a short flag are independent")
+
+	_, short, name = cliOptions(field(`cli:"name=sandbox,short=s"`))
+	assert.Equal(t, "sandbox", name)
+	assert.Equal(t, "s", short)
 }
 
 func TestYamlTagOf(t *testing.T) {
