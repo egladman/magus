@@ -23,6 +23,8 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.CI.MaxShards, "ci-max-shards", cfg.CI.MaxShards, "MAGUS_CI_MAX_SHARDS")
 	fs.IntVar(&cfg.CI.RunnerPoolBudget, "ci-runner-pool-budget", cfg.CI.RunnerPoolBudget, "MAGUS_CI_RUNNER_POOL_BUDGET")
 	fs.BoolVar(&cfg.CI.RecordRuns, "ci-record-runs", cfg.CI.RecordRuns, "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a ...")
+	fs.IntVar(&cfg.CI.RiskMinRuns, "ci-risk-min-runs", cfg.CI.RiskMinRuns, "MAGUS_CI_RISK_MIN_RUNS: RiskMinRuns is how many recorded affected runs a (project, target) needs, every one of them passing inside RiskWindow...")
+	fs.DurationVar(&cfg.CI.RiskWindow, "ci-risk-window", cfg.CI.RiskWindow, "MAGUS_CI_RISK_WINDOW: RiskWindow is how far back RiskMinRuns counts recorded runs, as a duration (720h is thirty days).")
 	fs.BoolVar(&cfg.Volatility.Enabled, "volatility-enabled", cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED")
 	fs.IntVar(&cfg.Volatility.BootstrapSamples, "volatility-bootstrap-samples", cfg.Volatility.BootstrapSamples, "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES")
 	fs.IntVar(&cfg.Volatility.MinSamples, "volatility-min-samples", cfg.Volatility.MinSamples, "MAGUS_VOLATILITY_MIN_SAMPLES")

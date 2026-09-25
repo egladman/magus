@@ -243,6 +243,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_PROC_SOCKET**
 : Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
 
+**MAGUS_PROC_TOKEN**
+: Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
+
 **MAGUS_CI_MAX_SHARDS**
 : Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: **ci.max_shards**.
 
@@ -251,6 +254,12 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_CI_RECORD_RUNS**
 : Keep the per-branch run log (which commit a branch passed or failed at) in the history file (default: true). Equivalent magus.yaml key: **ci.record_runs**.
+
+**MAGUS_CI_RISK_MIN_RUNS**
+: Passing recorded runs inside ci.risk_window a (project, target) needs before \`magus affected --risk\` drops it from a scoped or full gate; 0 turns pruning off (default: 50). Equivalent magus.yaml key: **ci.risk_min_runs**.
+
+**MAGUS_CI_RISK_WINDOW**
+: How far back ci.risk_min_runs counts recorded runs; must be positive while pruning is on (default: 720h). Equivalent magus.yaml key: **ci.risk_window**.
 
 **MAGUS_SHARD**
 : CI matrix shard ID (e.g. "0"); equivalent to magus run --shard; set by .github/actions/magus
@@ -408,8 +417,8 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_REPORT_FILTER**
 : Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: **report.filter**.
 
-**MAGUS_SANDBOX_ENABLED**
-: When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: **sandbox.enabled**.
+**MAGUS_SANDBOX**
+: off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and --sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: off). Equivalent magus.yaml key: **sandbox.mode**.
 
 **MAGUS_SANDBOX_ENV_PASSTHROUGH**
 : Comma-separated names or globs (e.g. MISE_\*) added to the sandbox's child-process env allowlist. Equivalent magus.yaml key: **sandbox.env.passthrough**.

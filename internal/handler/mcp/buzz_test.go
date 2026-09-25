@@ -25,15 +25,10 @@ import (
 // buzzStandInEnv marks the test binary re-executed as a stand-in for `magus buzz`.
 const buzzStandInEnv = "MCP_BUZZ_STAND_IN"
 
-// standInReadOnly is the stderr line the stand-in writes when it is run read-only.
-const standInReadOnly = "stand-in: read-only"
-
 // TestBuzzStandInProcess is not a test. Re-executed with buzzStandInEnv set, it plays
-// `magus buzz` for the tool: it takes the same argv (buzz, an optional --read-only, -e
-// <src> or <path>, --, argv) and answers with the same streams and exit status, over
-// upstream Buzz's stdlib rather than magus's host modules, which none of these scripts
-// use. It enforces nothing: under --read-only it says so on stderr, which is how a test
-// sees the flag arrive. The refusals themselves are cmd/magus's to test.
+// `magus buzz` for the tool: it takes the same argv (buzz, -e <src> or <path>, --, argv)
+// and answers with the same streams and exit status, over upstream Buzz's stdlib rather
+// than magus's host modules, which none of these scripts use.
 func TestBuzzStandInProcess(t *testing.T) {
 	if os.Getenv(buzzStandInEnv) != "1" {
 		return
@@ -45,10 +40,6 @@ func TestBuzzStandInProcess(t *testing.T) {
 }
 
 func standInBuzz(args []string) int {
-	if len(args) > 1 && args[0] == "buzz" && args[1] == buzzReadOnlyFlag {
-		fmt.Fprintln(os.Stderr, standInReadOnly)
-		args = append([]string{"buzz"}, args[2:]...)
-	}
 	if len(args) < 3 || args[0] != "buzz" {
 		fmt.Fprintf(os.Stderr, "stand-in: unexpected argv %q\n", args)
 		return 2
@@ -169,6 +160,7 @@ fun main(args: [str]) > void {
 }`,
 			"stdin": `{"projects":["api","web"]}`,
 			"args":  []any{"one", "two words"},
+			"write": true,
 		}},
 	})
 	require.NoError(t, err)
@@ -182,7 +174,6 @@ fun main(args: [str]) > void {
 	assert.Equal(t, 0, got.ExitCode)
 	assert.JSONEq(t, `{"in":{"projects":["api","web"]},"args":"one,two words"}`, string(got.JSON))
 	assert.Equal(t, `{"in":{"projects":["api","web"]},"args":"one,two words"}`+"\n", got.Stdout)
-	assert.Equal(t, standInReadOnly+"\n", got.Stderr, "a call without write runs read-only")
 
 	require.NoError(t, inW.Close())
 	require.NoError(t, <-served)
@@ -201,14 +192,14 @@ fun main(args: [str]) > void { std\print("{args.len()} args"); }
 	tool := &buzzTool{root: root, timeout: time.Minute}
 
 	got := decodeBuzzResult(t, callBuzz(t, tool, map[string]any{"path": "tools/count.buzz", "args": "a b c", "write": true}))
-	assert.Equal(t, buzzResult{Stdout: "3 args\n"}, got, "plain text is stdout alone, with no parsed json; write=true drops --read-only")
+	assert.Equal(t, buzzResult{Stdout: "3 args\n"}, got, "plain text is stdout alone, with no parsed json")
 }
 
 func TestBuzzToolCompileErrorIsAToolError(t *testing.T) {
 	useStandInMagus(t)
 	tool := &buzzTool{root: t.TempDir(), timeout: time.Minute}
 
-	res := callBuzz(t, tool, map[string]any{"script": `fun main(args: [str]) > void { var x: int = "a"; }`})
+	res := callBuzz(t, tool, map[string]any{"script": `fun main(args: [str]) > void { var x: int = "a"; }`, "write": true})
 	assert.True(t, res.IsError)
 	assert.Contains(t, allText(res), "magus buzz exited with code 1")
 	assert.Contains(t, allText(res), "BZZ1005")
@@ -220,7 +211,7 @@ func TestBuzzToolRuntimeErrorIsAToolError(t *testing.T) {
 	tool := &buzzTool{root: t.TempDir(), timeout: time.Minute}
 
 	res := callBuzz(t, tool, map[string]any{"script": `import "std";
-fun main(args: [str]) > void { std\print("partial"); throw "boom"; }`})
+fun main(args: [str]) > void { std\print("partial"); throw "boom"; }`, "write": true})
 	assert.True(t, res.IsError)
 	assert.Contains(t, allText(res), "uncaught error: boom")
 	assert.Contains(t, allText(res), "stdout:\npartial", "output printed before the error is kept")
@@ -241,32 +232,33 @@ func TestBuzzToolTimesOut(t *testing.T) {
 	useStandInMagus(t)
 	tool := &buzzTool{root: t.TempDir(), timeout: 500 * time.Millisecond}
 
-	res := callBuzz(t, tool, map[string]any{"script": `fun main(args: [str]) > void { while (true) {} }`})
+	res := callBuzz(t, tool, map[string]any{"script": `fun main(args: [str]) > void { while (true) {} }`, "write": true})
 	assert.True(t, res.IsError)
 	assert.Equal(t, "mcp: magus_buzz: timed out after 500ms", allText(res))
 }
 
-// A call that does not pass write=true still runs, as `magus buzz --read-only`.
-func TestBuzzToolRunsReadOnlyUnlessWrite(t *testing.T) {
-	useStandInMagus(t)
-	tool := &buzzTool{root: t.TempDir(), timeout: time.Minute}
-	script := `import "std"; fun main(args: [str]) > void { std\print("ran"); }`
-
-	for name, tc := range map[string]struct {
-		write      any
-		wantStderr string
-	}{
-		"omitted": {nil, standInReadOnly + "\n"},
-		"false":   {false, standInReadOnly + "\n"},
-		"true":    {true, ""},
-	} {
-		args := map[string]any{"script": script}
-		if tc.write != nil {
-			args["write"] = tc.write
-		}
-		got := decodeBuzzResult(t, callBuzz(t, tool, args))
-		assert.Equal(t, buzzResult{Stdout: "ran\n", Stderr: tc.wantStderr}, got, name)
+// Nothing is forked without write=true: the script that would have written the file never
+// starts, because `magus buzz` has no mode that could have stopped it.
+func TestBuzzToolRefusesWithoutWrite(t *testing.T) {
+	root := t.TempDir()
+	prev := magusExecutable
+	magusExecutable = func() (string, error) {
+		t.Error("a refused call located the magus binary")
+		return "", os.ErrNotExist
 	}
+	t.Cleanup(func() { magusExecutable = prev })
+	tool := &buzzTool{root: root, timeout: time.Minute}
+	script := `import "fs"; fun main(args: [str]) > void { fs\write("written.txt", data: "x"); }`
+
+	for name, args := range map[string]map[string]any{
+		"omitted": {"script": script},
+		"false":   {"script": script, "write": false},
+	} {
+		res := callBuzz(t, tool, args)
+		assert.True(t, res.IsError, name)
+		assert.Contains(t, allText(res), "has no read-only mode", name)
+	}
+	assert.NoFileExists(t, filepath.Join(root, "written.txt"))
 }
 
 func TestBuzzToolArgv(t *testing.T) {
@@ -282,14 +274,11 @@ func TestBuzzToolArgv(t *testing.T) {
 		want    []string
 		wantErr string
 	}{
-		"inline":            {map[string]any{"script": "x"}, []string{"buzz", "--read-only", "-e", "x", "--"}, ""},
-		"inline, writing":   {map[string]any{"script": "x", "write": true}, []string{"buzz", "-e", "x", "--"}, ""},
-		"write=false":       {map[string]any{"script": "x", "write": false}, []string{"buzz", "--read-only", "-e", "x", "--"}, ""},
-		"file":              {map[string]any{"path": "ok.buzz"}, []string{"buzz", "--read-only", "ok.buzz", "--"}, ""},
-		"file, writing":     {map[string]any{"path": "ok.buzz", "write": true}, []string{"buzz", "ok.buzz", "--"}, ""},
-		"absolute file":     {map[string]any{"path": filepath.Join(root, "ok.buzz")}, []string{"buzz", "--read-only", "ok.buzz", "--"}, ""},
-		"args as a string":  {map[string]any{"script": "x", "args": " a  -b "}, []string{"buzz", "--read-only", "-e", "x", "--", "a", "-b"}, ""},
-		"args as an array":  {map[string]any{"script": "x", "args": []any{"a b", "--c"}}, []string{"buzz", "--read-only", "-e", "x", "--", "a b", "--c"}, ""},
+		"inline":            {map[string]any{"script": "x"}, []string{"buzz", "-e", "x", "--"}, ""},
+		"file":              {map[string]any{"path": "ok.buzz"}, []string{"buzz", "ok.buzz", "--"}, ""},
+		"absolute file":     {map[string]any{"path": filepath.Join(root, "ok.buzz")}, []string{"buzz", "ok.buzz", "--"}, ""},
+		"args as a string":  {map[string]any{"script": "x", "args": " a  -b "}, []string{"buzz", "-e", "x", "--", "a", "-b"}, ""},
+		"args as an array":  {map[string]any{"script": "x", "args": []any{"a b", "--c"}}, []string{"buzz", "-e", "x", "--", "a b", "--c"}, ""},
 		"both":              {map[string]any{"script": "x", "path": "ok.buzz"}, nil, "takes script or path, not both"},
 		"neither":           {map[string]any{}, nil, "needs script (inline source) or path"},
 		"not buzz":          {map[string]any{"path": "notes.txt"}, nil, `path "notes.txt" is not a .buzz file`},

@@ -6,9 +6,8 @@
 // binding. The kernel layer confines each child magus starts: Command re-executes
 // magus as a launcher that applies a landlock ruleset to itself and then execs the
 // child, so the child and everything it starts are held to the policy. Magus itself
-// is confined only by `magus buzz --read-only` (see ApplyReadOnly), so in-process Buzz
-// otherwise rests on the binding checks alone. A nil Policy means the sandbox is off
-// and every check passes.
+// is never confined, so in-process Buzz rests on the binding checks alone. A nil
+// Policy means the sandbox is off and every check passes.
 package sandbox
 
 import (
@@ -55,12 +54,6 @@ type Policy struct {
 	Lease string
 	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
 	LeaseFrom types.LeaseSource
-	// ReadOnly refuses every write and every exec whatever FS grants. Set only by
-	// [ReadOnly], the policy `magus buzz --read-only` runs under.
-	ReadOnly bool
-	// unconfined marks a read-only policy derived from no policy at all: reads and the
-	// environment pass as they would with the sandbox off.
-	unconfined bool
 }
 
 // CheckRead reports whether the policy permits a read of path, recording the decision
@@ -71,28 +64,22 @@ func (p *Policy) CheckRead(ctx context.Context, path string) error {
 }
 
 // CheckWrite is CheckRead for a write to path. A write to a control file (see
-// controlFile) is refused even inside a write grant, and a ReadOnly policy refuses
-// every write.
+// controlFile) is refused even inside a write grant.
 func (p *Policy) CheckWrite(ctx context.Context, path string) error {
 	return p.check(ctx, filesystem.Write, path)
 }
 
 // CheckExec is CheckRead for executing the binary at path. It does not search $PATH;
-// resolve the name with exec.LookPath first. A ReadOnly policy refuses every exec.
+// resolve the name with exec.LookPath first.
 func (p *Policy) CheckExec(ctx context.Context, path string) error {
 	return p.check(ctx, filesystem.Exec, path)
 }
 
 func (p *Policy) check(ctx context.Context, access filesystem.Access, path string) error {
-	if p == nil || (p.unconfined && access == filesystem.Read) {
+	if p == nil {
 		return nil
 	}
-	var err error
-	if p.ReadOnly && access != filesystem.Read {
-		err = readOnlyDenied(path)
-	} else {
-		err = p.FS.Check(path, access)
-	}
+	err := p.FS.Check(path, access)
 	if err == nil && access == filesystem.Write {
 		if abs := filesystem.ResolveRulePath(path); p.controlFile(abs) {
 			err = fmt.Errorf("%w: write of %s: another tool runs code from it later, outside the sandbox", filesystem.ErrDenied, abs)
@@ -226,7 +213,7 @@ func (p *Policy) TempBase() string {
 // AllowsEnv reports whether the policy lets a child inherit the variable name. A nil
 // Policy permits everything.
 func (p *Policy) AllowsEnv(name string) bool {
-	if p == nil || p.unconfined {
+	if p == nil {
 		return true
 	}
 	return p.Env.Allows(name)

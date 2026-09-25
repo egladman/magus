@@ -39,12 +39,6 @@ It cannot resolve magus/spell/*, which the workspace loader binds, so a
 magusfile or a target definition reports an unresolved import. Those are
 the files magus already checks by loading them; \-\-check is for the ones
 nothing loads.
-.PP
-\-\-read\-only runs a script that may read, compute and print but change
-nothing: every host member that writes a file, a magus store or the
-network raises MGS2002, and every one that starts a process (proc, the
-VCS, a nested magus, zdef) raises MGS2007. Where landlock is available
-the kernel also confines the process and its children to reads.
 .SH OPTIONS
 .RS
 .TP
@@ -65,9 +59,6 @@ Relax upstream strictness (top\-level statements, optional argument labels) to m
 .TP
 \fB\-\-no\-autoload\fR
 Start the REPL without executing the magusfile
-.TP
-\fB\-\-read\-only\fR
-Refuse every write and process start the script attempts (MGS2002, MGS2007); reads, stdin, stdout and stderr work
 .TP
 \fB\-t\fR
 Run the file's test "..." {} blocks and report pass/fail
@@ -116,12 +107,6 @@ magus buzz --check scripts/report.buzz scripts/build.buzz
 .PP
 .EX
 magus buzz --embedded scripts/target.buzz
-.EE
-.PP
-\fITransform JSON on stdin, refusing any write\fR
-.PP
-.EX
-magus describe spells -o json | magus buzz --read-only scripts/ids.buzz
 .EE
 .PP
 \fIWrite an LCOV coverprofile while testing\fR

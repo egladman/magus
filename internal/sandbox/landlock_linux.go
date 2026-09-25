@@ -177,21 +177,6 @@ func restrictSelf(rulesetFD int) error {
 	return nil
 }
 
-// restrictProcess confines the calling thread, and every process it starts afterwards,
-// to rules. Only ApplyReadOnly calls it.
-func restrictProcess(rules []filesystem.Rule) error {
-	abi, err := ABI()
-	if err != nil {
-		return err
-	}
-	rulesetFD, err := buildRuleset(rules, abi, 0)
-	if err != nil {
-		return err
-	}
-	defer unix.Close(rulesetFD)
-	return restrictSelf(rulesetFD)
-}
-
 // addPathRule attaches one Rule to the ruleset. handledFS is the ABI's handled set;
 // rule rights are masked against it so the kernel is never asked for one it lacks.
 func addPathRule(rulesetFD int, r filesystem.Rule, handledFS uint64) error {

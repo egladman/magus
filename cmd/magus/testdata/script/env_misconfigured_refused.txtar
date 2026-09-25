@@ -25,7 +25,7 @@ stdout 'MAGUS_NO_WAIT was removed in v0.5.0'
 # can reach `magus shell`, and the host receives a deny, not the empty reply of a broken
 # guard.
 stdin pass-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript
 stdout '"permissionDecision":"deny"'
 stdout 'MGS1046'
 ! stdout 'magus guard is NOT running'
@@ -41,7 +41,7 @@ exec magus version
 ! stderr MGS1046
 
 stdin pass-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript
 ! stdout 'permissionDecision'
 
 -- pass-command.json --

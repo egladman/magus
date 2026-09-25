@@ -47,11 +47,12 @@ const (
 	FlagAffectedOpen = "open"
 	// affected: --plan
 	FlagAffectedPlan = "plan"
-	FlagAffectedRisk = "risk"
 	// affected: --preflight
 	FlagAffectedPreflight = "preflight"
 	// affected: --race
 	FlagAffectedRace = "race"
+	// affected: --risk
+	FlagAffectedRisk = "risk"
 	// affected: --stdin
 	FlagAffectedStdin = "stdin"
 	// affected: --step
@@ -102,8 +103,6 @@ const (
 	FlagBuzzEmbedded = "embedded"
 	// buzz: --no-autoload
 	FlagBuzzNoAutoload = "no-autoload"
-	// buzz: --read-only
-	FlagBuzzReadOnly = "read-only"
 	// buzz: --t
 	FlagBuzzT = "t"
 	// buzz: --test
@@ -861,6 +860,25 @@ func BindAffectedImpact(fs *flag.FlagSet) *AffectedImpactFlags {
 	return &f
 }
 
+// AffectedRiskFlags are the flags declared for `magus affected risk`.
+type AffectedRiskFlags struct {
+	Risk  bool   // --risk
+	Base  string // --base, -b
+	Stdin bool   // --stdin
+	Null  bool   // --null
+}
+
+// BindAffectedRisk registers `magus affected risk`'s flags on fs and returns the destination.
+func BindAffectedRisk(fs *flag.FlagSet) *AffectedRiskFlags {
+	var f AffectedRiskFlags
+	fs.BoolVar(&f.Risk, FlagAffectedRisk, false, "Classify the changeset by risk (trivial, mechanical, scoped, full) and print the reduced gate that suffices for it (read-only; runs nothing)")
+	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
+	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
+	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
+	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
+	return &f
+}
+
 // AffectedPlanFlags are the flags declared for `magus affected plan`.
 type AffectedPlanFlags struct {
 	Base              string // --base, -b
@@ -1238,8 +1256,8 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
-	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only)")
-	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session")
+	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
+	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
@@ -1897,7 +1915,6 @@ type BuzzFlags struct {
 	Check        bool   // --check
 	Coverprofile string // --coverprofile
 	Embedded     bool   // --embedded
-	ReadOnly     bool   // --read-only
 	NoAutoload   bool   // --no-autoload
 	C            string // -C
 }
@@ -1911,7 +1928,6 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
-	fs.BoolVar(&f.ReadOnly, FlagBuzzReadOnly, false, "Refuse every write and process start the script attempts (MGS2002, MGS2007); reads, stdin, stdout and stderr work")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")
 	return &f
@@ -2148,24 +2164,5 @@ type VersionFlags struct {
 func BindVersion(fs *flag.FlagSet) *VersionFlags {
 	var f VersionFlags
 	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the server probe entirely")
-	return &f
-}
-
-// AffectedRiskFlags are the flags declared for `magus affected risk`.
-type AffectedRiskFlags struct {
-	Risk  bool   // --risk
-	Base  string // --base, -b
-	Stdin bool   // --stdin
-	Null  bool   // --null
-}
-
-// BindAffectedRisk registers `magus affected risk`'s flags on fs and returns the destination.
-func BindAffectedRisk(fs *flag.FlagSet) *AffectedRiskFlags {
-	var f AffectedRiskFlags
-	fs.BoolVar(&f.Risk, FlagAffectedRisk, false, "Classify the changeset by risk (trivial, mechanical, scoped, full) and print the reduced gate that suffices for it (read-only; runs nothing)")
-	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
-	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
-	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
-	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	return &f
 }

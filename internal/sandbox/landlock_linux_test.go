@@ -1,11 +1,7 @@
 package sandbox
 
 import (
-	"errors"
-	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,59 +42,6 @@ func TestAccessForPathTypeDropsDirRightsOnFiles(t *testing.T) {
 // asking ONLY for directory rights leaves nothing to request on a file.
 func TestAccessForPathTypeCanEmptyTheMask(t *testing.T) {
 	assert.Equal(t, uint64(0), accessForPathType(unix.LANDLOCK_ACCESS_FS_READ_DIR, false))
-}
-
-// readOnlyProbeEnv re-executes the test binary as the confined process, since landlock
-// is permanent and would confine every later test here.
-const readOnlyProbeEnv = "MAGUS_READONLY_PROBE_DIR"
-
-// TestApplyReadOnlyProbe is not a test on its own: re-executed with readOnlyProbeEnv set,
-// it applies the read-only layer and exits 3 on the first access that went the wrong way.
-func TestApplyReadOnlyProbe(t *testing.T) {
-	dir := os.Getenv(readOnlyProbeEnv)
-	if dir == "" {
-		return
-	}
-	fail := func(format string, args ...any) {
-		fmt.Fprintf(os.Stderr, format+"\n", args...)
-		os.Exit(3)
-	}
-	if err := ApplyReadOnly(); err != nil {
-		fail("apply: %v", err)
-	}
-	if _, err := os.ReadFile(filepath.Join(dir, "in.txt")); err != nil {
-		fail("a read was refused: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "out.txt"), []byte("x"), 0o644); err == nil {
-		fail("a write succeeded")
-	}
-	if err := os.WriteFile(os.DevNull, []byte("x"), 0o644); err != nil {
-		fail("a write to the null device was refused: %v", err)
-	}
-	// A child inherits the layer: it may start, and may not write.
-	if err := exec.Command("sh", "-c", "echo x > "+filepath.Join(dir, "child.txt")).Run(); err == nil {
-		fail("a child wrote")
-	}
-	os.Exit(0)
-}
-
-func TestApplyReadOnlyConfinesTheProcessAndItsChildren(t *testing.T) {
-	requireLandlock(t)
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "in.txt"), []byte("in"), 0o644))
-	self, err := os.Executable()
-	require.NoError(t, err)
-
-	cmd := exec.Command(self, "-test.run=^TestApplyReadOnlyProbe$", "-test.count=1")
-	cmd.Env = append(os.Environ(), readOnlyProbeEnv+"="+dir)
-	out, err := cmd.CombinedOutput()
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 3 {
-		t.Fatalf("the read-only layer let the wrong access through:\n%s", out)
-	}
-	require.NoError(t, err, "%s", out)
-	assert.NoFileExists(t, filepath.Join(dir, "out.txt"))
-	assert.NoFileExists(t, filepath.Join(dir, "child.txt"))
 }
 
 // TestHandledRightsFollowTheABI pins which right each ABI adds, since asking a

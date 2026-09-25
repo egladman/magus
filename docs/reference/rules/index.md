@@ -24,6 +24,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                              |
 | [capture-filter](capture-filter.md)               | a filter over a run capture or log, which cuts the failure block apart                            |
 | [cd](cd.md)                                       | a `cd` before a magus command, when the project is an argument                                    |
+| [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)           |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
 | [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
 | [filter-without-input](filter-without-input.md)   | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                        |

@@ -120,10 +120,6 @@ func renderMCPCall(name string, input map[string]any) string {
 			cli = mcpCLIEquivalent{command: hint.MemoryPut, operands: []string{"name"}}
 		}
 	}
-	if name == hint.ToolBuzz.String() && mcpValueString(input["write"]) != "true" {
-		// The tool runs read-only unless the call opts out, so the rules judge that run.
-		cli.flags = []string{"--read-only"}
-	}
 	if !ok {
 		return name
 	}

@@ -319,6 +319,31 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## go-test-packages
+
+go-test with no default package list: the packages forwarded after `--` are the whole scope, which is how `magus affected --risk` narrows a gate from the command line. Forwarding to go-test cannot do it, because forwarded args land after `./...`. With nothing forwarded, `go test` tests the package in the project directory alone.
+
+**Command:** `go test`
+
+### debug
+
+Appends `-v`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/-",
+    "value": "-v"
+  }
+]
+```
+
+</details>
+
 ## go-vet
 
 **Command:** `go vet ./...`

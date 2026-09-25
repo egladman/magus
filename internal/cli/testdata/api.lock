@@ -10,6 +10,8 @@ config cache.size_mb
 config cache.write.enabled
 config ci.max_shards
 config ci.record_runs
+config ci.risk_min_runs
+config ci.risk_window
 config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
@@ -53,8 +55,8 @@ config required_version
 config sandbox.allow.<name>.mode
 config sandbox.allow.<name>.name
 config sandbox.allow.<name>.path
-config sandbox.enabled
 config sandbox.env.passthrough
+config sandbox.mode
 config secret.interactive_timeout
 config secret.unattended_timeout
 config server.address
@@ -105,6 +107,7 @@ flag affected/open
 flag affected/plan
 flag affected/preflight
 flag affected/race
+flag affected/risk
 flag affected/stdin
 flag affected/step
 flag affected/target
@@ -124,7 +127,6 @@ flag buzz/coverprofile
 flag buzz/e
 flag buzz/embedded
 flag buzz/no-autoload
-flag buzz/read-only
 flag buzz/t
 flag buzz/test
 flag clean/cache

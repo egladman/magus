@@ -138,44 +138,6 @@ func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.
-// skipReadOnlyKernel keeps --read-only from applying landlock to the test binary, which
-// would confine every later test in it. The kernel half has its own test in
-// internal/sandbox.
-func skipReadOnlyKernel(t *testing.T) {
-	t.Helper()
-	prev := buzzApplyReadOnlyKernel
-	buzzApplyReadOnlyKernel = func(context.Context) error { return nil }
-	t.Cleanup(func() { buzzApplyReadOnlyKernel = prev })
-}
-
-// --read-only narrows the workspace sandbox rather than replacing it: a write the
-// workspace grants (its own tree) is refused, and the refusal writes no trail event,
-// since recording it would be a write too.
-func TestBuzzCmd_ReadOnlyNarrowsTheWorkspaceSandbox(t *testing.T) {
-	skipReadOnlyKernel(t)
-	ctx, m, _ := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)
-	target := filepath.Join(m.Root(), "inside.txt")
-	script := filepath.Join(m.Root(), "write.buzz")
-	require.NoError(t, os.WriteFile(script,
-		fmt.Appendf(nil, "import \"fs\";\n\nfun main(args: [str]) > void !> any {\n    fs\\writeFile(%q, content: \"x\");\n}\n", target), 0o644))
-
-	require.NoError(t, buzzCmd(ctx, "", []string{"-s", script}), "the workspace grants a write to its own tree")
-	require.NoError(t, os.Remove(target))
-
-	err := buzzCmd(ctx, "", []string{"-s", "--read-only", script})
-
-	require.ErrorIs(t, err, types.PathWriteDenied)
-	assert.NoFileExists(t, target)
-	events, rerr := trail.ReadRecent(m.CacheDir(), 10)
-	require.NoError(t, rerr)
-	assert.Empty(t, events, "a read-only run leaves no trail of its own")
-}
-
-func TestBuzzCmd_ReadOnlyRefusesTheREPL(t *testing.T) {
-	err := buzzCmd(context.Background(), "", []string{"--read-only", "-C", t.TempDir()})
-	assert.ErrorContains(t, err, "--read-only applies to a script")
-}
-
 func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeOff)
 

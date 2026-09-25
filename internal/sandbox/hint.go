@@ -59,11 +59,6 @@ func denyHint(lease string, access filesystem.Access, target string) string {
 // typed and in scope: it doesn't survive being raised across a script VM, so a
 // central handler could not reconstruct it.
 func EmitDenyHint(p *Policy, access filesystem.Access, target string) {
-	if p != nil && p.ReadOnly && access != filesystem.Read {
-		// No allow entry lifts it: read-only is how the run was asked for.
-		interactive.Emit(os.Stderr, ReadOnlyHint)
-		return
-	}
 	lease := ""
 	if p != nil {
 		lease = p.Lease

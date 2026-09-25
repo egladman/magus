@@ -792,14 +792,14 @@ var magusMCPTools = []MCPTool{
 			"Use it to transform another tool's output instead of a shell one-liner: pass that output as stdin and read it with io\\stdin.readAll(). " +
 			"Parsing is upstream-strict, and a top-level fun main(args: [str]) runs automatically with args. " +
 			"A compile or runtime error is a tool error carrying the diagnostic (BZZ code, line:col). " +
-			"A call runs `" + hint.Buzz.String() + " --read-only` unless it passes write=true: the script may read, compute and print, and any write (file, network, magus store) raises MGS2002 and any process start (proc, the VCS, a nested magus) raises MGS2007. " +
+			"`" + hint.Buzz.String() + "` has no read-only mode, so a script reaches whatever its fs, proc and http modules can: every call must pass write=true to accept that, and a call without it is refused before anything runs. " +
 			"Bounded by the workspace target_timeout, or five minutes when that is unset.",
 		Params: []MCPParam{
 			{Name: "script", Type: TypeString, Doc: "Inline Buzz source, run as `magus buzz -e`. Exactly one of script or path."},
 			{Name: "path", Type: TypeString, Doc: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
 			{Name: "args", Type: TypeString, Doc: "The script's argv, the [str] main receives: space-separated, or a JSON array of strings when an argument holds whitespace."},
 			{Name: "stdin", Type: TypeString, Doc: "Text fed to the script's standard input, e.g. a prior tool's JSON result. Omit for an empty stdin."},
-			{Name: "write", Type: TypeBool, Doc: "true runs the script without --read-only, so it may write files and start processes. Omit it for a transform that must change nothing."},
+			{Name: "write", Type: TypeBool, Doc: "Required true: accepts that the script may write, since `magus buzz` cannot confine it to reads. The call is refused without it."},
 		},
 	},
 	{
