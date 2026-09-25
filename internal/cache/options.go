@@ -95,10 +95,14 @@ func WithCollapse(collapse bool) Option {
 	return func(c *Cache) { c.collapse = collapse }
 }
 
-// WithMachineAdmission routes every step through machine-wide admission: it takes its
-// concurrency slots and declared memory_mb from a budget shared by every magus on the
-// host. A step that does not fit fails fast (MGS3009, exit 75); magus never queues
-// behind a peer already holding the budget.
+// WithMachineAdmission routes every step that will execute through machine-wide
+// admission: it takes its concurrency slots and declared memory_mb from a budget shared
+// by every magus on the host. A step that does not fit fails fast (MGS3009, exit 75);
+// magus never queues behind a peer already holding the budget.
+//
+// A step whose entry is in the local cache replays without asking the admitter at all,
+// so a full budget, or under WithMachineAdmissionRequired a missing one, never refuses
+// it. A remote hit is still admitted, as is any step that ends up executing.
 //
 // admitter must reach the ONE arbiter for this machine, which is the user's broker.
 // Omitting the option leaves admission per-process, which is what a library caller
