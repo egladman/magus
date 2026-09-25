@@ -31,18 +31,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// TestMain clears every MAGUS_* configuration variable before any test runs. This suite
-// is run by magus, so it inherits whatever the invoking job exported, and the merge
-// queue's gate exports MAGUS_CACHE_DIR to give each candidate a cache of its own. Every
-// workspace a test opened then shared that one cache, so a test counting real
-// executions was served another test's entry. A test that wants one says so with
-// t.Setenv. testenv then keeps the run off the user's runtime dir and broker.
-func TestMain(m *testing.M) {
-	for _, v := range config.EnvVarDocs() {
-		_ = os.Unsetenv(v.EnvVar)
-	}
-	os.Exit(testenv.Wrap(m).Run())
-}
+func TestMain(m *testing.M) { testenv.Main(m) }
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
 // affected --stdin streaming flow.

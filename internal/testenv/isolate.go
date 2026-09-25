@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/egladman/magus/internal/config"
 )
 
 // isolatedEnv is what a test process must not inherit from the person running it.
@@ -20,9 +22,15 @@ var isolatedEnv = map[string]string{
 	"MAGUS_SERVER_ADDRESS": "",
 }
 
-// Isolate points this process at a fresh private runtime directory, pins the broker
-// off, and drops the sockets a parent magus exported. It returns the directory's
-// removal, which the caller runs once the tests have finished.
+// Isolate points this process at a fresh private runtime directory, clears every
+// MAGUS_* configuration variable, pins the broker off, and drops the sockets a parent
+// magus exported. It returns the directory's removal, which the caller runs once the
+// tests have finished.
+//
+// A suite run by magus inherits what the invoking job exported, and the merge queue's
+// gate exports an absolute MAGUS_CACHE_DIR: every fixture workspace then shares one
+// cache, so a test reads another's trail or is served another's cache entry. A test
+// that wants a variable sets it with t.Setenv.
 //
 // The directory is made under os.TempDir with a short name: a unix socket path is
 // capped near 104 bytes on macOS, and a t.TempDir path can already exceed it.
@@ -34,6 +42,12 @@ func Isolate() (cleanup func(), err error) {
 	if err := os.Setenv("XDG_RUNTIME_DIR", dir); err != nil {
 		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("testenv: %w", err)
+	}
+	for _, v := range config.EnvVarDocs() {
+		if err := os.Unsetenv(v.EnvVar); err != nil {
+			_ = os.RemoveAll(dir)
+			return nil, fmt.Errorf("testenv: %w", err)
+		}
 	}
 	for k, v := range isolatedEnv {
 		if v == "" {
