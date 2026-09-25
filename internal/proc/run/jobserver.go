@@ -32,12 +32,9 @@ const jobserverToken = '+'
 // holds at least PIPE_BUF bytes, and 512 is the smallest PIPE_BUF POSIX allows.
 const maxJobserverTokens = 512
 
-// The descriptor numbers the pipe's ends take in the child, fixed by their order in
-// exec.Cmd.ExtraFiles, where entry i becomes descriptor 3+i.
-const (
-	jobserverReadFD  = 3
-	jobserverWriteFD = 4
-)
+// firstExtraFD is the descriptor exec.Cmd.ExtraFiles[0] becomes in the child; entry i
+// becomes firstExtraFD+i.
+const firstExtraFD = 3
 
 // Jobserver is the token pool one step's processes share.
 type Jobserver struct {
@@ -76,33 +73,34 @@ func (j *Jobserver) Close() error {
 	return errors.Join(j.r.Close(), j.w.Close())
 }
 
-// files is the ExtraFiles slice that puts the pipe at the descriptors environ names.
+// files is the pipe's two ends, read then write, for the child's ExtraFiles.
 func (j *Jobserver) files() []*os.File { return []*os.File{j.r, j.w} }
 
 // environ is the jobserver's half of a child's environment, given the environment the
-// child would otherwise get.
+// child would otherwise get and readFD, the descriptor files()[0] lands on in the child.
 //
 // CARGO_MAKEFLAGS is set as well because the jobserver crate reads it before MAKEFLAGS,
 // so a stale one inherited from a cargo build script would otherwise win.
-func (j *Jobserver) environ(env []string) []string {
+func (j *Jobserver) environ(env []string, readFD int) []string {
 	return []string{
-		"MAKEFLAGS=" + j.makeflags(lookupEnv(env, "MAKEFLAGS")),
-		"CARGO_MAKEFLAGS=" + strings.Join(j.flags(), " "),
+		"MAKEFLAGS=" + j.makeflags(lookupEnv(env, "MAKEFLAGS"), readFD),
+		"CARGO_MAKEFLAGS=" + strings.Join(j.flags(readFD), " "),
 	}
 }
 
-// flags names the pool in every spelling a GNU make release reads. A bare -j because
-// 3.81 takes -jN in MAKEFLAGS as a count forced on a submake and ignores the pipe; 4.x
-// reads the last of --jobserver-fds and --jobserver-auth, and both name the same pipe.
-func (j *Jobserver) flags() []string {
-	fds := strconv.Itoa(jobserverReadFD) + "," + strconv.Itoa(jobserverWriteFD)
+// flags names the pool at readFD and readFD+1 in every spelling a GNU make release
+// reads. A bare -j because 3.81 takes -jN in MAKEFLAGS as a count forced on a submake
+// and ignores the pipe; 4.x reads the last of --jobserver-fds and --jobserver-auth, and
+// both name the same pipe.
+func (j *Jobserver) flags(readFD int) []string {
+	fds := strconv.Itoa(readFD) + "," + strconv.Itoa(readFD+1)
 	return []string{"-j", "--jobserver-fds=" + fds, "--jobserver-auth=" + fds}
 }
 
 // makeflags replaces the job count and any jobserver in an inherited MAKEFLAGS with this
-// pool, keeping every other flag. Words after a lone "--" are variable assignments
-// ("-- CC=clang"), so the pool goes before them.
-func (j *Jobserver) makeflags(inherited string) string {
+// pool at readFD, keeping every other flag. Words after a lone "--" are variable
+// assignments ("-- CC=clang"), so the pool goes before them.
+func (j *Jobserver) makeflags(inherited string, readFD int) string {
 	words := strings.Fields(inherited)
 	vars := len(words)
 	for i, w := range words {
@@ -117,7 +115,7 @@ func (j *Jobserver) makeflags(inherited string) string {
 			kept = append(kept, w)
 		}
 	}
-	kept = append(kept, j.flags()...)
+	kept = append(kept, j.flags(readFD)...)
 	kept = append(kept, words[vars:]...)
 	return strings.Join(kept, " ")
 }

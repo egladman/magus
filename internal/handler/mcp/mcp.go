@@ -8,6 +8,7 @@ package mcp
 // per-call origin marker, request-scoped logger, stderr banner, and audit record.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -193,6 +194,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&insightTool{ws: opts.Magus},
 		&runTargetTool{opts: opts},
 		&runAffectedTool{opts: opts},
+		&buzzTool{root: opts.Magus.Root(), timeout: cmp.Or(opts.Config.TargetTimeout, buzzDefaultTimeout)},
 		&doctorTool{opts: opts},
 		&statusTool{opts: opts},
 		&affectedPlanTool{opts: opts, next: next},

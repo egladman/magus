@@ -7,9 +7,9 @@
 // one exception visible.
 //
 // The /api/v1 routes are drawn as two clusters rather than ten boxes, and the split is the
-// one internal/serverhttp itself makes: the read views a share link may also serve, and the
+// one internal/server itself makes: the read views a share link may also serve, and the
 // review-and-plan routes that stay loopback-only. Their contents are the mounting order in
-// internal/serverhttp/server.go's Serve; docs/reference/console.md is the prose twin.
+// internal/server/server.go's Serve; docs/reference/console.md is the prose twin.
 namespace serverHttp;
 
 import "../libs/diagram/diagram" as _;
@@ -49,7 +49,7 @@ export fun serverHttpDiagram() > Diagram {
             Node{ id = "connect", anchor = "internal/handler/metrics", label = "Connect RPC",
                   sub = "eleven typed services",
                   x = 600, y = 352, w = 280, h = 64 },
-            Node{ id = "health", anchor = "internal/serverhttp", label = "/livez /readyz", sub = "no authentication",
+            Node{ id = "health", anchor = "internal/server", label = "/livez /readyz", sub = "no authentication",
                   role = "external", x = 600, y = 440, w = 280, h = 64 },
         ],
         // Bends are declared rather than defaulted so no two crossing segments share an x:

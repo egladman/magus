@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -141,10 +145,17 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	// hold references this list does not show, whether or not it showed any. A stale index
 	// caveats a list that has rows and explains one that does not, so the age rides the
 	// answer as StaleIndexes either way and only downgrades the empty case.
-	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, symbolCoverage(ctx, root, pos[0], true))
+	coverage := symbolCoverage(ctx, root, pos[0], true)
+	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, coverage)
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
+	}
+	if rf.Definition || rf.Source {
+		defs, _ := g.Definitions(out.Symbol)
+		defs.Answer = knowledge.Answer(pos[0], len(defs.Definitions) > 0, coverage)
+		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), rf.Source)
+		return emitDefinitions(os.Stdout, opts, defs)
 	}
 
 	switch opts.Format {
@@ -425,6 +436,217 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 	}
 	printVerdict(os.Stdout, out.Answer, "")
 	return nil
+}
+
+// indexedAtFunc reports when the SCIP index covering a workspace-relative file was
+// written, and false when no index for it can be found.
+type indexedAtFunc func(file string) (time.Time, bool)
+
+// symbolIndexTimes returns an indexedAtFunc over the cached index of each project, or
+// nil when the workspace cannot be read. Files under a knowledge.symbols override check as
+// unverified; see magus.SymbolIndexedAt.
+func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return nil
+	}
+	cacheDir, err := magus.ResolveCacheDir(ws.Root(), magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nil
+	}
+	projects, err := ws.ListProjects(ctx)
+	if err != nil {
+		return nil
+	}
+	return func(file string) (time.Time, bool) {
+		owner, found := "", false
+		for _, p := range projects.Projects {
+			if (p.Path == "." || file == p.Path || strings.HasPrefix(file, p.Path+"/")) && (!found || len(p.Path) > len(owner)) {
+				owner, found = p.Path, true
+			}
+		}
+		if !found {
+			return time.Time{}, false
+		}
+		return magus.SymbolIndexedAt(cacheDir, filepath.Join(ws.Root(), filepath.FromSlash(owner)))
+	}
+}
+
+// checkDefinitions sets each site's Status against the file on disk under root, and
+// fills Source when withSource is set. The graph is re-assembled from the working tree on
+// every query while the index keeps the positions of the tree it was built over, so a
+// digest of today's lines proves nothing; what does is the symbol's name still sitting on
+// its start line (else changed) and the file predating its index (else unverified, since
+// an edit inside the body moves the end). A site with no end line is checked and printed
+// over its declaration line alone.
+func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, indexedAt indexedAtFunc, withSource bool) {
+	type sourceFile struct {
+		lines   [][]byte
+		modTime time.Time
+	}
+	files := map[string]*sourceFile{}
+	for i := range sites {
+		site := &sites[i]
+		if site.StartLine == 0 {
+			continue
+		}
+		file, seen := files[site.File]
+		if !seen {
+			path := filepath.Join(root, filepath.FromSlash(site.File))
+			if data, err := os.ReadFile(path); err == nil {
+				file = &sourceFile{lines: types.SplitSourceLines(data)}
+				if info, err := os.Stat(path); err == nil {
+					file.modTime = info.ModTime()
+				}
+			}
+			files[site.File] = file
+		}
+		end := max(site.StartLine, site.EndLine)
+		if file == nil || end > len(file.lines) {
+			site.Status = types.DefinitionUnreadable
+			continue
+		}
+		site.Status = types.DefinitionUnverified
+		switch {
+		case name != "" && !containsWord(file.lines[site.StartLine-1], name):
+			site.Status = types.DefinitionChanged
+		case indexedAt != nil:
+			if at, ok := indexedAt(site.File); ok && !file.modTime.After(at) {
+				site.Status = types.DefinitionVerified
+			}
+		}
+		if withSource {
+			site.Source = string(bytes.Join(file.lines[site.StartLine-1:end], []byte("\n")))
+		}
+	}
+}
+
+// containsWord reports whether line holds name delimited by non-identifier bytes, so a
+// declaration of F is not confirmed by a line declaring FF.
+func containsWord(line []byte, name string) bool {
+	isIdent := func(b byte) bool {
+		return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
+	}
+	for off := 0; ; {
+		i := bytes.Index(line[off:], []byte(name))
+		if i < 0 {
+			return false
+		}
+		start, stop := off+i, off+i+len(name)
+		if (start == 0 || !isIdent(line[start-1])) && (stop == len(line) || !isIdent(line[stop])) {
+			return true
+		}
+		off = start + 1
+	}
+}
+
+// definitionRange renders a site as path:start-end, path:start when the end is unknown, or
+// the bare path when no line was recorded.
+func definitionRange(s types.KnowledgeDefinitionSite) string {
+	switch {
+	case s.StartLine == 0:
+		return s.File
+	case s.EndLine == 0:
+		return fmt.Sprintf("%s:%d", s.File, s.StartLine)
+	}
+	return fmt.Sprintf("%s:%d-%d", s.File, s.StartLine, s.EndLine)
+}
+
+// emitDefinitions renders `magus refs <symbol> --definition`. It exits 1 when a range no
+// longer holds what was indexed or cannot be read: the lines printed for it are not the
+// symbol's, and a caller editing by them would edit the wrong text.
+func emitDefinitions(w io.Writer, opts OutputOptions, out types.KnowledgeDefinitionsOutput) error {
+	var stale, verified int
+	for _, s := range out.Definitions {
+		switch s.Status {
+		case types.DefinitionChanged, types.DefinitionUnreadable:
+			stale++
+		case types.DefinitionVerified:
+			verified++
+		}
+	}
+	staleErr := func() error {
+		if stale > 0 {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	}
+	// An index older than its project's latest edit may miss a definition added since,
+	// which is what reportIndexStaleness fails an answer for. A verified digest proves the
+	// site it names, so an answer made only of those carries the notice and exits 0: in a
+	// checkout being edited some index is always behind, and an exit that is always 1
+	// teaches callers to ignore it.
+	settle := func(nw io.Writer) error {
+		if verified > 0 && verified == len(out.Definitions) {
+			fmt.Fprint(nw, staleIndexNotice(out.Answer.StaleIndexes))
+			return nil
+		}
+		if err := reportIndexStaleness(nw, out.Answer); err != nil {
+			return err
+		}
+		return staleErr()
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		if err := emitFormatted(opts, out); err != nil {
+			return err
+		}
+		if stale > 0 {
+			fmt.Fprintf(os.Stderr, "magus refs: %d definition(s) changed since indexing; refresh with `%s`\n", stale, hint.GraphBuild)
+		}
+		return settle(os.Stderr)
+	case outputName:
+		var names []string
+		for _, s := range out.Definitions {
+			if s.StartLine > 0 && s.Status != types.DefinitionChanged && s.Status != types.DefinitionUnreadable {
+				names = append(names, definitionRange(s))
+			}
+		}
+		if err := emitNames(names); err != nil {
+			return err
+		}
+		if stale > 0 {
+			fmt.Fprintf(os.Stderr, "magus refs: %d definition(s) changed since indexing and were not listed; refresh with `%s`\n", stale, hint.GraphBuild)
+		}
+		return staleErr()
+	}
+
+	fmt.Fprintf(w, "symbol: %s", out.Symbol)
+	if out.Label != "" {
+		fmt.Fprintf(w, "  (%s)", out.Label)
+	}
+	fmt.Fprintln(w)
+	if len(out.Definitions) == 0 {
+		fmt.Fprintln(w, "no definition in this workspace")
+		printVerdict(w, out.Answer, "")
+		if out.Answer.Verdict == types.VerdictUnknown {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	}
+	for i, s := range out.Definitions {
+		if i > 0 && s.Source != "" {
+			fmt.Fprintln(w)
+		}
+		fmt.Fprint(w, definitionRange(s))
+		if s.StartLine == 0 {
+			fmt.Fprint(w, "  (the index recorded no line in this file)")
+		} else {
+			fmt.Fprintf(w, "  %s", s.Status)
+			if s.EndLine == 0 {
+				fmt.Fprint(w, "  (the index recorded no end line; the declaration line alone)")
+			}
+			if s.Status == types.DefinitionChanged {
+				fmt.Fprintf(w, "  (edited since indexing; refresh with `%s`)", hint.GraphBuild)
+			}
+		}
+		fmt.Fprintln(w)
+		if s.Source != "" {
+			fmt.Fprintln(w, s.Source)
+		}
+	}
+	return settle(w)
 }
 
 // linesSuffix renders a capped line list as " lines 5,8,12", or "" when absent.

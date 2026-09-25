@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -26,7 +26,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -36,7 +36,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -46,7 +46,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -56,7 +56,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -66,7 +66,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads",
             "timeout": 10,
             "type": "command"
           }
@@ -90,7 +90,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }
@@ -101,7 +101,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }

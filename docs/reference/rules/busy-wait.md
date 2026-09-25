@@ -14,7 +14,7 @@ A loop polling for work you started, which announces its own completion.
 
 ## Why
 
-A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for.
+A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the cd, output-pipe, output-redirect, capture-filter and unknown-env rules.
 
 ## Seeing it
 

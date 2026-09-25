@@ -1,6 +1,10 @@
 package types
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 // Schema names. Each document carries its own under "schema"; a reader refuses any
 // other, so a format change is a new name rather than a silent misread.
@@ -24,6 +28,8 @@ type Changes struct {
 	Merged []MergedChange `json:"merged,omitempty"`
 	// Unqueued are the open changes carrying no merge intent.
 	Unqueued []UnqueuedChange `json:"unqueued,omitempty"`
+	// Closed are the closed changes still showing a queue label.
+	Closed []ClosedChange `json:"closed,omitempty"`
 }
 
 // Check reports whether c is a document the queue can plan: a valid base, every record
@@ -65,6 +71,15 @@ func (c Changes) Check() error {
 			return fmt.Errorf("unqueued[%d]: id %q appears twice", i, u.ID)
 		}
 		seen[u.ID] = true
+	}
+	for i, cl := range c.Closed {
+		if err := CheckID(cl.ID); err != nil {
+			return fmt.Errorf("closed[%d]: %w", i, err)
+		}
+		if seen[cl.ID] {
+			return fmt.Errorf("closed[%d]: id %q appears twice", i, cl.ID)
+		}
+		seen[cl.ID] = true
 	}
 	return nil
 }
@@ -109,6 +124,9 @@ const (
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
 	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate and green on what that was built onto
 	CodeKickRefused  Code = "KICK_REFUSED"  // something the author has to fix that is neither
+	// CodeKickRegeneration: its own code changes what regenerates generated files it
+	// needs regenerated, so the queue cannot prove that regeneration runs none of it.
+	CodeKickRegeneration Code = "KICK_REGENERATION"
 )
 
 // decision is the decision c goes with, or "" for a code outside the set.
@@ -119,7 +137,7 @@ func (c Code) decision() Decision {
 		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter,
 		CodeWaitBaseRed:
 		return DecisionWait
-	case CodeKickConflict, CodeKickRed, CodeKickRefused:
+	case CodeKickConflict, CodeKickRed, CodeKickRefused, CodeKickRegeneration:
 		return DecisionKick
 	}
 	return ""
@@ -131,6 +149,11 @@ type Plan struct {
 	Base       string `json:"base"`
 	RemoteURL  string `json:"remote_url,omitempty"` // URL of the remote the provider names its repository by
 	BaseCommit string `json:"base_commit"`          // tip of Base every candidate is built on
+	// CommitDate dates every commit the queue writes: the newest commit date of the base
+	// commit and each admitted head. It is read from the commits rather than a clock, so
+	// the same queue plans the same candidates and nothing a cache keys on moves, and no
+	// admitted commit is newer, so a build reading HEAD's date as "now" finds none ahead.
+	CommitDate time.Time `json:"commit_date"`
 	// Depth is how many candidates of one partition validate at once.
 	Depth int `json:"depth"`
 	// Partitions hold the admitted changes in queue order, every change after the one
@@ -144,11 +167,14 @@ type Plan struct {
 	// head's approval has to be carried over.
 	Merged   []MergedChange   `json:"merged,omitempty"`
 	Unqueued []UnqueuedChange `json:"unqueued,omitempty"`
+	// Closed are the listing's closed changes still showing a queue label, for an applier
+	// to clear.
+	Closed []ClosedChange `json:"closed,omitempty"`
 }
 
 // Check reports whether p is a plan the queue can validate and apply: a valid base and
 // base commit, every change once, each after the change it is stacked on, and planning's
-// verdicts deciding anything but merge, with no gate.
+// verdicts deciding anything but merge, with no gate, and a commit date.
 func (p Plan) Check() error {
 	if err := checkBranch(p.Base); err != nil {
 		return fmt.Errorf("base: %w", err)
@@ -207,6 +233,14 @@ func (p Plan) Check() error {
 		if err := u.check(); err != nil {
 			return fmt.Errorf("unqueued: %w", err)
 		}
+	}
+	for _, cl := range p.Closed {
+		if err := CheckID(cl.ID); err != nil {
+			return fmt.Errorf("closed: %w", err)
+		}
+	}
+	if p.CommitDate.IsZero() {
+		return errors.New("the plan records no commit date")
 	}
 	return nil
 }

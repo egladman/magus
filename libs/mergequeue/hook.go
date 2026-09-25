@@ -28,16 +28,10 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/json"
+	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/libs/mergequeue/types"
 	magustypes "github.com/egladman/magus/types"
 )
-
-// scrubbed are credentials no hook sees: a gate runs the changes' code, and a token in
-// its environment is a token handed to every author in the queue.
-var scrubbed = []string{
-	"MERGEQUEUE_TOKEN", "GITHUB_TOKEN", "GH_TOKEN",
-	"ACTIONS_RUNTIME_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL",
-}
 
 // ExitTempFail is EX_TEMPFAIL from sysexits.h: the hook could not run right now (a build
 // tool's lock was held, say). It is run again, and a failure that outlasts the retries
@@ -162,13 +156,14 @@ func pattern(lit string, leads bool) string {
 
 // hookCommand is one hook invocation: Command run with Args appended.
 type hookCommand struct {
-	Command Command
-	Args    []string
-	Dir     string
-	Env     []string // added to the queue's environment, less the scrubbed credentials
-	Stdin   io.Reader
-	Stdout  io.Writer
-	Stderr  io.Writer
+	Command     Command
+	Args        []string
+	Dir         string
+	Passthrough []string // see [HookEnv]
+	Env         []string // set over what passes from the queue's environment
+	Stdin       io.Reader
+	Stdout      io.Writer
+	Stderr      io.Writer
 }
 
 // Run runs c in a process group of its own. A cancelled context interrupts the whole
@@ -176,14 +171,25 @@ type hookCommand struct {
 // is killed interruptGrace later. Whatever of the group outlives the hook is killed
 // before Run returns, so no process a hook started runs on into the next hook or past
 // the verdict it led to. A process that left the group itself (setsid) escapes this,
-// and only the machine's own boundary, a CI job's, ends it.
+// and only the machine's own boundary, a CI job's, ends it. An argument
+// [types.CheckUnit] refuses is an error, since Args follow Command's own.
 func (c hookCommand) Run(ctx context.Context) error {
 	if len(c.Command) == 0 {
 		return errors.New("empty command hook")
 	}
+	for _, a := range c.Args {
+		if err := types.CheckUnit(a); err != nil {
+			return fmt.Errorf("%s hook: %w", c.Command[0], err)
+		}
+	}
+	inherited, err := hookEnviron(c.Passthrough)
+	if err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args)...)
 	cmd.Dir = c.Dir
-	cmd.Env = append(hookEnviron(), c.Env...)
+	// exec keeps the last value a name is given.
+	cmd.Env = slices.Concat(inherited, c.Env)
 	cmd.Stdin = c.Stdin
 	// Output goes through pipes of the queue's own: exec's would hold Wait until every
 	// process holding them exits, which is the group outliving the hook, so it could
@@ -193,10 +199,11 @@ func (c hookCommand) Run(ctx context.Context) error {
 		return err
 	}
 	isolate(cmd)
+	g := &group{cmd: cmd}
 	var killer *time.Timer
 	cmd.Cancel = func() error {
-		killer = time.AfterFunc(interruptGrace, func() { kill(cmd) })
-		return interrupt(cmd)
+		killer = time.AfterFunc(interruptGrace, func() { _ = g.signal(true) })
+		return g.signal(false)
 	}
 	cmd.WaitDelay = interruptGrace + time.Second
 	if err := cmd.Start(); err != nil {
@@ -204,14 +211,32 @@ func (c hookCommand) Run(ctx context.Context) error {
 		return err
 	}
 	out.started()
-	err = cmd.Wait()
+	err = g.wait()
 	if killer != nil {
 		killer.Stop()
 	}
-	// The hook is reaped, but its group id stays taken while any member lives.
-	kill(cmd)
 	out.drain()
 	return err
+}
+
+// group is a started hook's process group, whose id is its leader's process id. Once
+// the leader is reaped that id is free for another process, and a new group, a
+// parallel hook's say, can take it; so no signal is sent to it from then on. wait,
+// per platform, reaps the leader.
+type group struct {
+	cmd    *exec.Cmd
+	mu     sync.Mutex
+	reaped bool
+}
+
+// signal interrupts the group, or kills it, unless its leader is reaped.
+func (g *group) signal(kill bool) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.reaped {
+		return os.ErrProcessDone
+	}
+	return signalGroup(g.cmd, kill)
 }
 
 // hookOutput copies a hook's stdout and stderr to their writers through pipes.
@@ -287,11 +312,34 @@ func (o *hookOutput) drain() {
 	o.close()
 }
 
-func hookEnviron() []string {
-	return slices.DeleteFunc(os.Environ(), func(kv string) bool {
-		name, _, _ := strings.Cut(kv, "=")
-		return slices.Contains(scrubbed, name)
-	})
+// pathLines is paths one per line, as a hook reads them on stdin. Git allows a line
+// break in a path, which that protocol would read as two paths, so such paths are
+// returned as refused and left out rather than carried.
+func pathLines(paths []string) (lines string, refused []string) {
+	kept := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if strings.ContainsAny(p, "\n\r") {
+			refused = append(refused, p)
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if len(kept) == 0 {
+		return "", refused
+	}
+	return strings.Join(kept, "\n") + "\n", refused
+}
+
+// hookEnviron is what of the queue's own environment reaches a hook: the names magus's
+// sandbox gives a sandboxed child (PATH, HOME, TMPDIR, the locale, ...) and passthrough.
+func hookEnviron(passthrough []string) ([]string, error) {
+	allow, err := sandboxenv.Parse(passthrough)
+	if err != nil {
+		return nil, fmt.Errorf("sandbox.env.passthrough: %w", err)
+	}
+	allow.Names = append(allow.Names, sandboxenv.DefaultAllow()...)
+	kept, _ := allow.Scrub(os.Environ())
+	return kept, nil
 }
 
 // changeFailure is a hook failing on the change: what it says is about the change.
@@ -339,16 +387,13 @@ type ScratchVar struct {
 	Dir  string // relative, inside the scratch directory
 }
 
-// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name other than a
-// credential the queue removes, and DIR a relative path that stays inside the scratch
-// directory.
+// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name, and DIR a relative
+// path that stays inside the scratch directory.
 func ParseScratchVar(spec string) (ScratchVar, error) {
 	name, dir, ok := strings.Cut(spec, "=")
 	switch {
 	case !ok || !isEnvName(name) || dir == "":
 		return ScratchVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
-	case slices.Contains(scrubbed, name):
-		return ScratchVar{}, fmt.Errorf("%q: the queue removes %s from every hook", spec, name)
 	case !filepath.IsLocal(dir):
 		return ScratchVar{}, fmt.Errorf("%q: %s leaves the scratch directory", spec, dir)
 	}
@@ -367,36 +412,51 @@ func isEnvName(s string) bool {
 	return s != ""
 }
 
-// scratchEnv creates each of vars under scratch and returns their assignments.
-func scratchEnv(scratch string, vars []ScratchVar) ([]string, error) {
-	env := make([]string, 0, len(vars))
-	for _, v := range vars {
+// HookEnv is a gate's or a regeneration's environment. Of the queue's own environment
+// a hook gets only what magus's sandbox gives a sandboxed child and Passthrough; the
+// rest, a credential or a GitHub Actions file command included, never reaches it.
+type HookEnv struct {
+	// Passthrough are the names, or suffix globs such as "GO*", that also pass: the
+	// workspace's sandbox.env.passthrough. A credential named here reaches every hook,
+	// which is the workspace's choice.
+	Passthrough []string
+	// Scratch are pointed into each candidate's scratch directory.
+	Scratch []ScratchVar
+	// Fixed are NAME=VALUE assignments every hook takes as given, such as a
+	// [CacheReadProxy]'s stand-ins.
+	Fixed []string
+}
+
+// of creates each scratch variable under scratch and returns every assignment.
+func (e HookEnv) of(scratch string) ([]string, error) {
+	env := make([]string, 0, len(e.Scratch)+len(e.Fixed))
+	for _, v := range e.Scratch {
 		dir := filepath.Join(scratch, v.Dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
 		env = append(env, v.Name+"="+dir)
 	}
-	return env, nil
+	return append(env, e.Fixed...), nil
 }
 
 // CommandGate is a [types.Gate] running cmd in a checkout with the units appended as
-// arguments, and vars pointed into the checkout's scratch directory. Exit status 0 is
-// green; anything else the hook's processes do is red. Its output goes to log, each
-// line tagged with the commit gated and its change, or "base" for a commit gated as it
-// stands; a nil log discards it.
-func CommandGate(cmd Command, vars []ScratchVar, log *HookLog) types.Gate {
-	return commandGate{cmd: cmd, vars: vars, log: log}
+// arguments and env added to its environment. Exit status 0 is green; anything else the
+// hook's processes do is red. Its output goes to log, each line tagged with the commit
+// gated and its change, or "base" for a commit gated as it stands; a nil log discards
+// it.
+func CommandGate(cmd Command, env HookEnv, log *HookLog) types.Gate {
+	return commandGate{cmd: cmd, env: env, log: log}
 }
 
 type commandGate struct {
-	cmd  Command
-	vars []ScratchVar
-	log  *HookLog
+	cmd Command
+	env HookEnv
+	log *HookLog
 }
 
 func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
-	env, err := scratchEnv(cand.Scratch, g.vars)
+	env, err := g.env.of(cand.Scratch)
 	if err != nil {
 		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
@@ -406,7 +466,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	}
 	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Env: env, Stdout: out, Stderr: out})
+	err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Passthrough: g.env.Passthrough, Env: env, Stdout: out, Stderr: out})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
@@ -418,25 +478,31 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 }
 
 // CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the
-// units appended as arguments, the generated paths on stdin, one per line, and vars
-// pointed into the checkout's scratch directory. A failure of the hook's processes is a
-// *[types.RefusedError] naming the paths: the change did not regenerate.
-func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
+// units appended as arguments, the generated paths on stdin, one per line, and hookEnv
+// added to its environment. A failure of the hook's processes is a
+// *[types.RefusedError] naming the paths: the change did not regenerate. So is a path
+// holding a line break, which the hook is never run for.
+func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
-		env, err := scratchEnv(r.Scratch, vars)
+		env, err := hookEnv.of(r.Scratch)
 		if err != nil {
 			return fmt.Errorf("regenerate %s: %w", r.Change.Label(), err)
+		}
+		stdin, refused := pathLines(r.Paths)
+		if len(refused) > 0 {
+			return &types.RefusedError{Reason: "the regeneration reads one path per line, and " + joinPaths(refused) + " holds a line break", Paths: refused}
 		}
 		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
 		defer out.Close()
 		err = runHook(ctx, hookCommand{
-			Command: cmd,
-			Args:    r.Units,
-			Dir:     r.Dir,
-			Env:     env,
-			Stdin:   strings.NewReader(strings.Join(r.Paths, "\n") + "\n"),
-			Stdout:  out,
-			Stderr:  out,
+			Command:     cmd,
+			Args:        r.Units,
+			Dir:         r.Dir,
+			Passthrough: hookEnv.Passthrough,
+			Env:         env,
+			Stdin:       strings.NewReader(stdin),
+			Stdout:      out,
+			Stderr:      out,
 		})
 		var failed changeFailure
 		if errors.As(err, &failed) {
@@ -462,16 +528,26 @@ func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.Regen
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
 //	all         stdin: empty
 //	            prints {"units": [unit]}: how the build tool names every unit
+//	auto_resolve  stdin: {"path": path, "base": text, "merged": text}, a conflicted
+//	            source file's merge base content and the merge the queue settled
+//	            prints {"auto_resolve": bool, "verdict": line}: whether the merge may
+//	            go without a person, and the build tool's line on the path either way;
+//	            a command that fails this query settles nothing
 //
-// A failing command is an error, since the hook reads only the base, never the change's
-// code.
-func CommandFacts(cmd Command, dir string, log *HookLog) types.BuildFacts {
-	return commandFacts{cmd: cmd, dir: dir, log: log}
+// A path holding a line break is never written: affected answers unbounded for it, and
+// outputs leaves it unclassified, which is source.
+//
+// A failing command is an error, auto_resolve aside, since the hook reads only the base,
+// never the change's code. Its environment is a gate's under env, less env.Scratch: facts
+// run in dir, which has no scratch directory.
+func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) types.BuildFacts {
+	return commandFacts{cmd: cmd, dir: dir, env: env, log: log}
 }
 
 type commandFacts struct {
 	cmd Command
 	dir string
+	env HookEnv
 	log *HookLog
 }
 
@@ -480,12 +556,14 @@ func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answe
 	defer stderr.Close()
 	var stdout bytes.Buffer
 	err := runHook(ctx, hookCommand{
-		Command: f.cmd,
-		Args:    []string{query},
-		Dir:     f.dir,
-		Stdin:   strings.NewReader(stdin),
-		Stdout:  &stdout,
-		Stderr:  stderr,
+		Command:     f.cmd,
+		Args:        []string{query},
+		Dir:         f.dir,
+		Passthrough: f.env.Passthrough,
+		Env:         f.env.Fixed,
+		Stdin:       strings.NewReader(stdin),
+		Stdout:      &stdout,
+		Stderr:      stderr,
 	})
 	if err != nil {
 		return fmt.Errorf("%s hook: %w", query, err)
@@ -500,11 +578,15 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 	if len(paths) == 0 {
 		return []string{}, "", nil
 	}
+	stdin, refused := pathLines(paths)
+	if len(refused) > 0 {
+		return nil, "the affected hook reads one path per line, and " + joinPaths(refused) + " holds a line break", nil
+	}
 	var ans struct {
 		Affected    []string `json:"affected"`
 		UnboundedBy string   `json:"unbounded_by"`
 	}
-	if err := f.ask(ctx, "affected", "affected #"+c.ID, strings.Join(paths, "\n")+"\n", &ans); err != nil {
+	if err := f.ask(ctx, "affected", "affected #"+c.ID, stdin, &ans); err != nil {
 		return nil, "", err
 	}
 	if ans.Affected == nil && ans.UnboundedBy == "" {
@@ -515,7 +597,10 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 
 func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]types.Writes, error) {
 	out := map[string]types.Writes{}
-	if len(paths) == 0 {
+	// A path the hook cannot be asked about stays unclassified, which is source: its
+	// conflicts are the author's, and a review sees it.
+	stdin, _ := pathLines(paths)
+	if stdin == "" {
 		return out, nil
 	}
 	var ans struct {
@@ -523,7 +608,7 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 		Updated    []string `json:"updated"`
 		Maintained []string `json:"maintained"`
 	}
-	if err := f.ask(ctx, "outputs", "outputs", strings.Join(paths, "\n")+"\n", &ans); err != nil {
+	if err := f.ask(ctx, "outputs", "outputs", stdin, &ans); err != nil {
 		return nil, err
 	}
 	mark := func(answered []string, set func(*types.Writes)) {
@@ -539,6 +624,26 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 	mark(ans.Updated, func(w *types.Writes) { w.Updated = true })
 	mark(ans.Maintained, func(w *types.Writes) { w.Maintained = true })
 	return out, nil
+}
+
+func (f commandFacts) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
+	in, err := json.Marshal(map[string]string{"path": path, "base": string(base), "merged": string(merged)})
+	if err != nil {
+		return "", false, err
+	}
+	var ans struct {
+		AutoResolve bool   `json:"auto_resolve"`
+		Verdict     string `json:"verdict"`
+	}
+	// A build tool that answers no auto_resolve settles nothing: the file stays the
+	// author's conflict, as it was before the query existed.
+	if err := f.ask(ctx, "auto_resolve", "auto_resolve", string(in), &ans); err != nil {
+		return path + ": the facts command answered no auto_resolve (" + err.Error() + ")", false, nil //nolint:nilerr // settles nothing, the safe side
+	}
+	if ans.Verdict == "" {
+		ans.Verdict = path + ": the auto_resolve hook gave no verdict"
+	}
+	return ans.Verdict, ans.AutoResolve, nil
 }
 
 func (f commandFacts) Generation(ctx context.Context, outputs, changed []string) (types.Generation, error) {

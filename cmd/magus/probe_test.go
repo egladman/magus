@@ -438,8 +438,7 @@ func TestResolveDeclaredWorkspacesEmpty(t *testing.T) {
 }
 
 // TestAcquireRejectsNonDeclared confirms that once setDeclared has been
-// called with an allowlist, acquire of a root outside the list fails with
-// MGS2010 (SandboxPolicyMismatch).
+// called with an allowlist, acquire of a root outside the list fails.
 func TestAcquireRejectsNonDeclared(t *testing.T) {
 	allowed := t.TempDir()
 	forbidden := t.TempDir()
@@ -454,10 +453,7 @@ func TestAcquireRejectsNonDeclared(t *testing.T) {
 	reg.setDeclared([]string{allowed})
 
 	_, err := reg.acquire(forbidden)
-	require.Error(t, err, "acquire of non-declared root should error")
-	var de *types.DiagnosticError
-	require.ErrorAs(t, err, &de)
-	assert.Equal(t, types.SandboxPolicyMismatch, de.Code, "expected MGS2010 SandboxPolicyMismatch")
+	require.ErrorIs(t, err, errWorkspaceUndeclared)
 }
 
 // TestAcquireAdmitsDeclaredEvenWithoutMagusYaml verifies that a declared
@@ -478,15 +474,10 @@ func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
 	reg.setDeclared([]string{allowed})
 
 	// acquire may fail at magus.Open (no real workspace), but it must NOT
-	// fail with the MGS2010 declared-list gate.
+	// fail with the declared-list gate.
 	_, err := reg.acquire(allowed)
-	if err != nil {
-		var de *types.DiagnosticError
-		if errors.As(err, &de) {
-			assert.NotEqual(t, types.SandboxPolicyMismatch, de.Code,
-				"acquire of declared root was wrongly rejected by the allowlist gate: %v", err)
-		}
-	}
+	assert.NotErrorIs(t, err, errWorkspaceUndeclared,
+		"acquire of declared root was wrongly rejected by the allowlist gate")
 }
 
 // TestWarmRespectsContextCancellation verifies that warm exits promptly when

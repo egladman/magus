@@ -7,14 +7,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
 // fakeRecorder captures the binding-layer sandbox metric calls. It satisfies
 // MetricsRecorder, which the live observability.Provider also satisfies structurally.
 type fakeRecorder struct {
-	checks  []checkCall
-	dropped []droppedCall
+	checks   []checkCall
+	dropped  []droppedCall
+	launches []string
 }
 
 type checkCall struct{ access, decision, project string }
@@ -31,119 +34,75 @@ func (r *fakeRecorder) RecordSandboxEnvDropped(_ context.Context, project string
 	r.dropped = append(r.dropped, droppedCall{project, n})
 }
 
-func TestCheckCtxRecordsAllowAndDeny(t *testing.T) {
-	dir := filesystem.ResolveRulePath(t.TempDir())
-	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{
-		{Path: dir, Read: true},
-	}}}
+func (r *fakeRecorder) RecordSandboxApply(_ context.Context, _ float64, outcome, scope string) {
+	r.launches = append(r.launches, scope+"/"+outcome)
+}
 
+func TestRecordLaunch(t *testing.T) {
+	rec := &fakeRecorder{}
+	ctx := WithMetrics(context.Background(), rec)
+	RecordLaunch(ctx, 0.01, "applied")
+	RecordLaunch(ctx, 0, "unsupported")
+	RecordLaunch(context.Background(), 0, "applied")
+	assert.Equal(t, []string{"child/applied", "child/unsupported"}, rec.launches)
+}
+
+func TestChecksRecordAllowAndDeny(t *testing.T) {
+	dir := filesystem.ResolveRulePath(t.TempDir())
+	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: dir, Read: true}}}}
 	rec := &fakeRecorder{}
 	ctx := WithMetrics(context.Background(), rec)
 
-	// Allow: a path under the granted rule.
-	if err := policy.CheckReadCtx(ctx, filepath.Join(dir, "f")); err != nil {
-		t.Fatalf("CheckReadCtx allow: unexpected error: %v", err)
-	}
-	// Deny: a path outside the allowlist.
-	if err := policy.CheckReadCtx(ctx, "/definitely/not/allowed/f"); err == nil {
-		t.Fatal("CheckReadCtx deny: expected an error, got nil")
-	}
+	assert.NoError(t, policy.CheckRead(ctx, filepath.Join(dir, "f")))
+	assert.Error(t, policy.CheckRead(ctx, "/definitely/not/allowed/f"))
+	assert.Error(t, policy.CheckExec(ctx, filepath.Join(dir, "f")))
 
-	want := []checkCall{
-		{access: "read", decision: "allow", project: ""},
-		{access: "read", decision: "deny", project: ""},
-	}
-	if len(rec.checks) != len(want) {
-		t.Fatalf("recorded %d checks, want %d: %+v", len(rec.checks), len(want), rec.checks)
-	}
-	for i, w := range want {
-		if rec.checks[i] != w {
-			t.Errorf("check[%d] = %+v, want %+v", i, rec.checks[i], w)
-		}
-	}
+	assert.Equal(t, []checkCall{
+		{access: "read", decision: "allow"},
+		{access: "read", decision: "deny"},
+		{access: "exec", decision: "deny"},
+	}, rec.checks)
 }
 
-func TestCheckCtxNoRecorderIsNoop(t *testing.T) {
+func TestChecksWithoutARecorderStillCheck(t *testing.T) {
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: "/", Read: true}}}}
-	// No MetricsRecorder on ctx: must not panic and must return the raw check result.
-	if err := policy.CheckReadCtx(context.Background(), "/etc"); err != nil {
-		t.Fatalf("CheckReadCtx without recorder: unexpected error: %v", err)
-	}
+	assert.NoError(t, policy.CheckRead(context.Background(), "/etc"))
 }
 
 func TestRecordEnvDropped(t *testing.T) {
 	rec := &fakeRecorder{}
 	ctx := WithMetrics(context.Background(), rec)
 
-	policy := &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"}}
-	RecordEnvDropped(ctx, "go", policy)
+	RecordEnvDropped(ctx, &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"}}, "go")
+	assert.Equal(t, []droppedCall{{n: 2}}, rec.dropped)
 
-	if len(rec.dropped) != 1 {
-		t.Fatalf("recorded %d env-dropped calls, want 1: %+v", len(rec.dropped), rec.dropped)
-	}
-	if got := rec.dropped[0]; got.n != 2 || got.project != "" {
-		t.Errorf("env-dropped = %+v, want {project:\"\" n:2}", got)
-	}
-
-	// Nothing dropped: no call.
 	rec.dropped = nil
-	RecordEnvDropped(ctx, "go", &Policy{})
-	if len(rec.dropped) != 0 {
-		t.Errorf("expected no env-dropped call for an empty policy, got %+v", rec.dropped)
-	}
+	RecordEnvDropped(ctx, &Policy{}, "go")
+	assert.Empty(t, rec.dropped, "nothing dropped, nothing recorded")
 }
 
-// TestRecordEnvDropped_LogsMGS2003Notice pins the raise site: sandbox enabled (a
-// non-nil policy) plus at least one dropped var must log MGS2003 with the command
-// and the drop count, matching docs/reference/codes/sandbox/MGS2003.md's shape.
-func TestRecordEnvDropped_LogsMGS2003Notice(t *testing.T) {
+// logged runs fn with the default logger captured at info level.
+func logged(t *testing.T, fn func()) string {
+	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	policy := &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "VAULT_TOKEN"}}
-	RecordEnvDropped(context.Background(), "go", policy)
-
-	got := buf.String()
-	if !bytes.Contains(buf.Bytes(), []byte("MGS2003")) {
-		t.Fatalf("expected MGS2003 in log output, got: %s", got)
-	}
-	if !bytes.Contains(buf.Bytes(), []byte("cmd=go")) {
-		t.Errorf("expected cmd=go in log output, got: %s", got)
-	}
-	if !bytes.Contains(buf.Bytes(), []byte("stripped_count=3")) {
-		t.Errorf("expected stripped_count=3 in log output, got: %s", got)
-	}
+	fn()
+	return buf.String()
 }
 
-// TestRecordEnvDropped_SilentWhenSandboxOff is the negative control: a nil policy
-// (sandbox disabled) must log nothing, matching MGS2003's "sandbox must be
-// enabled" gate.
-func TestRecordEnvDropped_SilentWhenSandboxOff(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+// RecordEnvDropped logs MGS2003 with the command and the drop count, the shape
+// docs/reference/codes/sandbox/MGS2003.md prints, and only when something was dropped
+// under a sandbox that is on.
+func TestRecordEnvDroppedLogsMGS2003(t *testing.T) {
+	got := logged(t, func() {
+		RecordEnvDropped(context.Background(), &Policy{EnvDropped: []string{"A_KEY", "B_TOKEN", "C_TOKEN"}}, "go")
+	})
+	assert.Contains(t, got, "MGS2003")
+	assert.Contains(t, got, "cmd=go")
+	assert.Contains(t, got, "stripped_count=3")
 
-	RecordEnvDropped(context.Background(), "go", nil)
-
-	if buf.Len() != 0 {
-		t.Errorf("expected no log output with sandbox off, got: %s", buf.String())
-	}
-}
-
-// TestRecordEnvDropped_SilentWhenNothingDropped covers a policy that is present
-// (sandbox on) but stripped nothing, the count-must-be-positive half of the gate.
-func TestRecordEnvDropped_SilentWhenNothingDropped(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	RecordEnvDropped(context.Background(), "go", &Policy{})
-
-	if buf.Len() != 0 {
-		t.Errorf("expected no log output when nothing was dropped, got: %s", buf.String())
-	}
+	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), nil, "go") }), "sandbox off")
+	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), &Policy{}, "go") }), "nothing dropped")
 }

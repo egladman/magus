@@ -8,20 +8,60 @@ default_charms:
 
 sandbox:
   env:
-    # Every GO* variable reaches a sandboxed child. The Go toolchain is configured
-    # almost entirely through them (GOEXPERIMENT, GOFLAGS, GOOS/GOARCH, GOCACHE,
-    # GOMODCACHE, GOPRIVATE, ...), and a variable that shapes compilation but does
-    # not reach the compiler does not merely get ignored - it splits the build cache.
+    # The Go toolchain's variables reach a sandboxed child. Go is configured almost
+    # entirely through them, and a variable that shapes compilation but does not
+    # reach the compiler does not merely get ignored: it splits the build cache.
     #
     # That is not hypothetical. mise sets GOEXPERIMENT=jsonv2 for this repo, so a
     # `go test` run inheriting it and a sandboxed one that did not produced two
     # differently-fingerprinted builds of the same package in one cache, surfacing
     # as an unrelated-looking linker error: "fingerprint mismatch:
-    # github.com/egladman/magus has X, import from .../cmd/magus expecting Y". The
-    # prefix is deliberately broad rather than an enumeration - the next GO* knob
-    # someone sets should not have to be discovered this way.
+    # github.com/egladman/magus has X, import from .../cmd/magus expecting Y".
+    #
+    # Named one by one rather than as GO*, which also matches
+    # GOOGLE_APPLICATION_CREDENTIALS. The list is `go help environment`'s.
     passthrough:
-      - "GO*"
+      - GOROOT
+      - GOPATH
+      - GOBIN
+      - GOCACHE
+      - GOMODCACHE
+      - GOENV
+      - GOFLAGS
+      - GOEXPERIMENT
+      - GOOS
+      - GOARCH
+      - GOAMD64
+      - GOARM
+      - GOARM64
+      - GO386
+      - GOPPC64
+      - GORISCV64
+      - GOWASM
+      - GOTOOLCHAIN
+      - GOPROXY
+      - GOPRIVATE
+      - GONOPROXY
+      - GONOSUMDB
+      - GOSUMDB
+      - GOINSECURE
+      - GOVCS
+      - GOWORK
+      - GOTMPDIR
+      - GODEBUG
+      - GOFIPS140
+      - GOCOVERDIR
+      - GOTELEMETRY
+      - GOTELEMETRYDIR
+      - GOMAXPROCS
+      - GOGC
+      - GOMEMLIMIT
+      - GOTRACEBACK
+      - CGO_ENABLED
+      - CGO_CFLAGS
+      - CGO_CPPFLAGS
+      - CGO_CXXFLAGS
+      - CGO_LDFLAGS
 
 cache:
   remote:

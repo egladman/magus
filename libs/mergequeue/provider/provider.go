@@ -3,16 +3,15 @@
 //
 // A provider script exports these functions, each taking one record and returning one:
 //
-//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, queue_label?, committer?, setup?}
-//	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}]}
+//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}
+//	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}], closed?: [{id, repo?}]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
-//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
-//	kick_back(change + {commit, code, report, paths, with, candidate_commit, flag}) > bool
+//	merge_change(change + {commit, message, app, through: [{id, commit}]}) > {merged, by_provider?, reason?}
+//	kick_back(change + {commit, code, report, claim, paths, with, candidate_commit, source, reproduce?}) > bool
 //	mark(change + {mark})                          > bool
-//	flag(change + {flag, on})                      > bool
 //	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
 //
 // Every op but list_artifacts is required; list_artifacts is required of a provider
@@ -71,14 +70,13 @@ const (
 	opMergeChange   = "merge_change"
 	opKickBack      = "kick_back"
 	opMark          = "mark"
-	opFlag          = "flag"
 	opListArtifacts = "list_artifacts"
 )
 
 // Every op but list_artifacts is required: branch protection requires the queue's status
 // once it is wired, so a provider that can list changes but not merge them would hold
 // every change forever.
-var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark, opFlag}
+var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark}
 
 // Script is a [types.Provider] backed by a Buzz script, and a
 // [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
@@ -220,7 +218,7 @@ func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabil
 	var committer map[string]string
 	var setup *record
 	if err := r.decode(required("stack_merge", &sm), required("linear_stacks", &c.LinearStacks), required("methods", &methods),
-		optional("queue_label", &c.QueueLabel), optional("committer", &committer), optional("setup", &setup)); err != nil {
+		required("required_approvals", &c.RequiredApprovals), optional("queue_label", &c.QueueLabel), optional("committer", &committer), optional("setup", &setup)); err != nil {
 		return types.Capabilities{}, err
 	}
 	if setup != nil {
@@ -298,8 +296,8 @@ func (p *Script) ListChanges(ctx context.Context, q types.ListQuery) (types.Chan
 		return types.Changes{}, err
 	}
 	out := types.Changes{Schema: types.SchemaChanges, Base: q.Base, RemoteURL: q.RemoteURL}
-	var changes, merged, unqueued []record
-	if err := r.decode(required("changes", &changes), required("merged", &merged), required("unqueued", &unqueued)); err != nil {
+	var changes, merged, unqueued, closed []record
+	if err := r.decode(required("changes", &changes), required("merged", &merged), required("unqueued", &unqueued), optional("closed", &closed)); err != nil {
 		return types.Changes{}, err
 	}
 	for _, row := range changes {
@@ -326,6 +324,13 @@ func (p *Script) ListChanges(ctx context.Context, q types.ListQuery) (types.Chan
 		}
 		u.Mark = types.Mark(mark)
 		out.Unqueued = append(out.Unqueued, u)
+	}
+	for _, row := range closed {
+		var cl types.ClosedChange
+		if err := row.decode(required("id", &cl.ID), optional("repo", &cl.Repo)); err != nil {
+			return types.Changes{}, err
+		}
+		out.Closed = append(out.Closed, cl)
 	}
 	// The same checks the document gets when it is read back, here where the script
 	// that broke them can be named.
@@ -432,6 +437,7 @@ func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.Mer
 	params := changeParams(c)
 	params["commit"] = opts.Commit
 	params["message"] = opts.Message
+	params["app"] = opts.App
 	through := make([]map[string]string, len(opts.Through))
 	for i, pin := range opts.Through {
 		through[i] = map[string]string{"id": pin.ID, "commit": pin.Commit}
@@ -462,36 +468,25 @@ func (p *Script) KickBack(ctx context.Context, c types.Change, commit string, k 
 	params["commit"] = commit
 	params["code"] = string(k.Code)
 	params["report"] = k.Report
+	params["claim"] = k.Claim
 	params["paths"] = k.Paths
 	params["with"] = k.With
 	params["candidate_commit"] = k.CandidateCommit
 	params["source"] = k.Source
-	params["flag"] = string(k.Flag)
 	if k.Reproduce != nil {
 		params["reproduce"] = map[string]string{"gate": k.Reproduce.Gate, "regenerate": k.Reproduce.Regenerate}
 	}
 	return p.acknowledged(ctx, opKickBack, params)
 }
 
-// Mark calls mark. A mark outside the three is refused before the script sees it.
+// Mark calls mark. A mark outside the set is refused before the script sees it.
 func (p *Script) Mark(ctx context.Context, c types.Change, m types.Mark) error {
 	if !m.Valid() {
-		return fmt.Errorf("%s: mark %q, want queued, rejected or none", p.where(opMark), m)
+		return fmt.Errorf("%s: mark %q, want queued, kicked_back, needs_regeneration or none", p.where(opMark), m)
 	}
 	params := changeParams(c)
 	params["mark"] = string(m)
 	return p.acknowledged(ctx, opMark, params)
-}
-
-// Flag calls flag. A flag the queue does not know is refused before the script sees it.
-func (p *Script) Flag(ctx context.Context, c types.Change, f types.Flag, on bool) error {
-	if !f.Valid() {
-		return fmt.Errorf("%s: flag %q, want %s", p.where(opFlag), f, types.FlagChangesGenerator)
-	}
-	params := changeParams(c)
-	params["flag"] = string(f)
-	params["on"] = on
-	return p.acknowledged(ctx, opFlag, params)
 }
 
 // ListArtifacts calls list_artifacts.
@@ -547,7 +542,7 @@ type record struct {
 // field is one key of a record and where its value goes.
 type field struct {
 	key      string
-	dst      any // *string, *bool, *[]string, *[]record, **record or *map[string]string
+	dst      any // *string, *bool, *int, *[]string, *[]record, **record or *map[string]string
 	required bool
 }
 
@@ -586,6 +581,12 @@ func (r record) set(f field, v any) error {
 			return wrong("bool")
 		}
 		*dst = b
+	case *int:
+		n, ok := v.(int64)
+		if !ok {
+			return wrong("int")
+		}
+		*dst = int(n)
 	case *[]string:
 		items, ok := v.([]any)
 		if !ok {

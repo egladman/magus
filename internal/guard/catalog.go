@@ -61,8 +61,16 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "a loop polling for work you started, which announces its own completion",
 		Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 			"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
-			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for."},
+			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. " +
+			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the cd, output-pipe, output-redirect, capture-filter and unknown-env rules."},
 	{Name: string(denyRuleCacheDirWrite), Decision: "deny", Catches: "a write into this checkout's magus cache dir, which magus alone owns"},
+	{Name: string(denyRuleClaimedDeclaration), Decision: "deny",
+		Catches: "a leased edit landing in a declaration another live job claims (`run.go#executeStages`)",
+		Why: "A write path may claim one declaration of a file, so two jobs can start on one file and integrate in order. " +
+			"The claim holds only if an edit into the other job's declaration is caught before it lands, because afterwards both diffs touch it and neither applies over the other. " +
+			"The edit is applied to the file in memory and its changed lines are placed by the same diff-driver matching the job footprint uses, so the declaration this names is the one `magus job wait` would report. " +
+			"It fires only for a job-bound writer whose own claims in the file do not name the declaration, and only when another live job claims a declaration of that file; an edit that lands in the writer's claims, in no one's, or above the first declaration passes. " +
+			"A payload carrying no edit, such as a whole-file write, and a file whose lines cannot be placed stay graded by path alone."},
 	{Name: string(denyRuleCaptureFilter), Decision: "deny",
 		Catches: "a filter over a run capture or log, which cuts the failure block apart",
 		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
@@ -77,11 +85,12 @@ var denyRuleDocs = []RuleDoc{
 			"A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. " +
 			"A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line."},
 	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
-		Catches: "a trailing `echo $?`, which repeats an exit status the harness already reports",
+		Catches: "a line ending by printing an exit status, which the harness already reports",
 		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +
 			"It also misreports: the echo exits 0, so the line as a whole passes whatever `cmd` did. " +
-			"It fires only on the LAST statement, joined by `;` or a newline, printing nothing but `$?` and literal text. " +
-			"`rc=$?`, `exit $?`, `[ $? -ne 0 ]`, an echo mid-script, one after `&&` or `||`, and one redirected to a file all keep the status for later logic and are untouched. " +
+			"Every spelling of that ending fires: `echo`/`printf` of `$?` with literal text, to the console or stderr; the same through a capture (`rc=$?; echo $rc`); `cmd || echo \"failed $?\"`, where the echo runs exactly when cmd failed; and `${PIPESTATUS[...]}`, whose answer is `set -o pipefail` or no pipe. " +
+			"Measured 2026-09-24: 508 lines ended this way against 2 denies, when only a bare trailing `echo $?` fired. " +
+			"`exit $?`, `[ $? -ne 0 ]`, an echo mid-script, one after `&&`, and one redirected to a file keep the status for later logic and are untouched. " +
 			"Chain with `&&`, or make separate calls, when a failure must not be masked."},
 	{Name: string(denyRuleFilterWithoutInput), Decision: "deny",
 		Catches: "a filter with no file, pipe or redirect, which reads a stdin nothing feeds",
@@ -165,7 +174,8 @@ var denyRuleDocs = []RuleDoc{
 			"A `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. " +
 			"The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. " +
 			"Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for \"no matches\" is how a rename misses half its sites. " +
-			"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool."},
+			"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. " +
+			"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched."},
 	{Name: string(denyRuleSedInPlace), Decision: "deny",
 		Catches: "`sed -i`, whose two spellings destroy each other's work across platforms",
 		Why: "`sed -i` is not portable and the two spellings destroy each other's work. " +
@@ -188,14 +198,33 @@ var denyRuleDocs = []RuleDoc{
 			"Measured: one such call put 69 files, a whole regenerated docs site plus five untouched source files, into a commit about four collection methods. " +
 			"`magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it."},
 	{Name: string(denyRuleSymbolSearch), Decision: "deny",
-		Catches: "a recursive text search for a symbol the index defines and can enumerate",
-		Why: "It fires only when the index can VOUCH for the name: the symbol is defined here and no project's index is older than its sources. " +
-			"On those terms `magus refs <symbol> --occurrences` knows every definition and reference, including the generated and cross-language ones a pattern misses. " +
+		Catches: "a recursive text search for names the graph answers exactly: symbols or diagnostic codes",
+		Why: "It fires only when the graph can VOUCH for every name the pattern looks for: each symbol is defined here and no project's index is older than its sources, and each diagnostic code is one the graph carries a node for. " +
+			"On those terms `magus refs <symbol> --occurrences` knows every definition and reference, including the generated and cross-language ones a pattern misses, and `magus explain diagnostic:<code>` knows the code's page and what documents and emits it. " +
+			"An alternation (`A\\|B`, `-e A -e B`, `A|B` under -E) is answered with one command per name, and a definition lookup (`func X`, `func (r *T) X`, `type X`) with refs on X. A single name the index cannot vouch for, a BZZ code, a case-insensitive search, or a search of a tree outside the workspace stays advice or nothing. " +
 			"Searching raw TEXT is untouched and has its own answer: `magus refs --text <pattern> [<path>...]` is a literal substring search with grep's exit codes, scoped by the same trailing paths."},
+	{Name: string(denyRuleSearchTranslation), Decision: "deny",
+		Catches: "a text search whose pattern a graph query provably answers with the same entities",
+		Why: "The pattern is compiled in the tool's own dialect (BRE, ERE or fixed) and run against the graph's ids when the command is judged, so the deny names a query that was checked rather than one that looks equivalent. " +
+			"Three shapes qualify. A pattern that can only match MGS codes (`MGS30[23]`, `MGS30..`, `MGS302[0-9]\\|MGS303[0-9]`), over any path in the workspace, becomes `magus query kind=diagnostic 'id=~^diagnostic:...$'`, and a single literal code keeps symbol-search's `magus explain diagnostic:<code>`. " +
+			"A pattern selecting every Markdown heading of the files searched (`^#`, `^#\\+`), when those lines match the section nodes the graph holds file for file and none sits in a code fence, becomes `magus query kind=docsection 'id=~^docsection:<file>#'`. " +
+			"A search of a magusfile whose every hit declares a target the graph holds becomes `magus explain target:<project>:<name>`. " +
+			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. " +
+			"Measured 2026-09-24: 14,773 searches, 45% of them alternations, and graph verbs used about 50 times less than grep."},
 	{Name: string(denyRuleThrowawayCopy), Decision: "deny",
 		Catches: "a run inside a temp or scratchpad copy, which leaves the real tree unverified",
 		Why: "A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits. " +
 			"No magus run needs a clean tree; run from the workspace and name the project. If you genuinely need a pristine tree, use a throwaway `git worktree add`, not a copy."},
+	{Name: string(denyRuleUnknownEnv), Decision: "deny",
+		Catches: "a retired or misspelled MAGUS_* variable handed to a command",
+		Why: "A retired or misspelled name is ignored without a word, so the setting the caller meant never takes effect and nothing says so. " +
+			"Measured 2026-09-24: the day MAGUS_NO_WAIT was removed, agents prefixed 462 commands with it, copied from 33 briefs. " +
+			"It fires on the names a command's environment receives: a `NAME=value` prefix, `env NAME=value`, `env -u NAME`, and `export`. It asks config.EnvVarProblem, the check magus's own startup refuses on (MGS1046), so a name the guard denies is one the binary would refuse, and one it cannot prove wrong passes both."},
+	{Name: string(denyRuleBriefCommand), Decision: "deny",
+		Catches: "a spawn or continuation brief that teaches a command the guard denies",
+		Why: "A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. " +
+			"Measured 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable. " +
+			"Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect."},
 	{Name: string(denyRuleWholeTree), Decision: "deny",
 		Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",
 		Why: "These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. " +
@@ -218,12 +247,6 @@ var advisoryDocs = []RuleDoc{
 		Why: "Targets compose through ctx.needs, so the last one usually pulls the rest in order and each extra invocation reloads the workspace. " +
 			"It ADVISES rather than refuses because two genuinely independent targets on one line are real work, and only the graph knows which case this is. " +
 			"The exception worth knowing: `affected ci` does not regenerate. Where the gate strips the workspace's default charms, its composed `generate` is a drift gate, so `affected generate:rw` comes first as its own invocation."},
-	{Name: string(advisoryCodeSearch), Decision: "advise",
-		Catches: "a repo-wide text search that the symbol graph may answer better",
-		Why: "A text match misses the generated, indirect and cross-language references the graph knows about, so the two agree only when the pattern is a real symbol. " +
-			"It ADVISES rather than refuses because that is exactly the case it cannot check in advance: an empty semantic result means the pattern was text, and grep was the right tool after all. " +
-			"Pick by the question: `magus refs <symbol>` for a code symbol, `magus query \"<terms>\"` for a domain entity, `magus refs --text <pattern>` for raw text."},
-	{Name: string(advisoryDocSearch), Decision: "advise", Catches: "a search through markdown, where headings are indexed as doc sections"},
 	{Name: string(advisoryFocus), Decision: "advise", Catches: "a read or write outside the paths the running job declared"},
 	{Name: string(advisoryGateRepeat), Decision: "advise", Catches: "the gate run again soon after it passed, repeating work already done"},
 	{Name: string(advisoryGeneratedWrite), Decision: "advise", Catches: "a hand edit to a declared output, which the next run overwrites"},
@@ -232,6 +255,10 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryInstalledSkill), Decision: "advise", Catches: "a write to an installed skill copy, which re-installing discards"},
 	{Name: string(advisoryLeaseInvalid), Decision: "advise", Catches: "a call naming a lease this workspace's job store does not declare"},
 	{Name: string(advisoryLeaseTerminal), Decision: "advise", Catches: "a call naming a lease whose row has already finished"},
+	{Name: string(advisoryLeasedPath), Decision: "advise",
+		Catches: "a write into paths a running lease owns, by a caller that names no lease",
+		Why: "The writer is either that lease, not saying so, or a second agent about to collide with it; magus cannot tell which, so it advises rather than refuses. " +
+			"It speaks once per session per lease. Every write used to repeat it: 8,419 servings in one audit, 52% of every advisory the guard served, for a fact the writer had after the first."},
 	{Name: string(advisoryMemoryWrite), Decision: "advise", Catches: "a write to a memory file, where the memory surface is the way in"},
 	{Name: string(advisoryNewFile), Decision: "advise", Catches: "a new file in a directory whose naming has settled"},
 	{Name: string(advisoryNewSourceDir), Decision: "advise", Catches: "a new file that opens a directory, which is a boundary rather than a file"},
@@ -294,10 +321,9 @@ func Rule(name string) (RuleDoc, bool) {
 // constants. Declared here rather than derived, for the same reason the docs are: a kind
 // that nothing lists is a kind nothing can miss.
 var advisoryKinds = []hint.MarkerKind{
-	advisoryCodeSearch, advisoryDocSearch, advisorySourceRead,
-	advisoryPrecedent, advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource,
+	advisorySourceRead, advisoryPrecedent, advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource,
 	advisoryRegenSource, advisoryGraphStale, advisoryGateRepeat, advisoryFocus,
-	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid,
+	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
 	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun,
 }

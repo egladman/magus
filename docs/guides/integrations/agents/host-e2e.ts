@@ -69,9 +69,10 @@ const repository = path.resolve(here, "../../../..");
 const templates = path.join(repository, "docs/guides/integrations/agents");
 
 // The probe is disposable-harness-only. It proves that the configured command
-// was invoked, then passes the exact hook response back to the host.
+// was invoked, then passes the exact hook response back to the host. The template
+// is told its host on its argv, the only place it reads one: $1 is the provider id.
 export const probeScript = `#!/usr/bin/env sh
-sh "$2" > "$MAGUS_HOST_E2E_RESPONSE"
+sh "$2" --agent-name "$1" > "$MAGUS_HOST_E2E_RESPONSE"
 status=$?
 printf '{"provider":"%s","scenario":"%s","transport":"shell","exitCode":%s,"responseFile":"hook-response.json"}\\n' \\\
   "$1" "$MAGUS_HOST_E2E_SCENARIO" "$status" >> "$MAGUS_HOST_E2E_TRACE"
@@ -197,7 +198,6 @@ function guardedCommand(
     `MAGUS_HOST_E2E_TRACE=${shellWord(workspace.trace)}`,
     `MAGUS_HOST_E2E_RESPONSE=${shellWord(workspace.response)}`,
     `MAGUS_HOST_E2E_SCENARIO=${shellWord(scenario)}`,
-    `__MAGUS_AGENT_NAME=${shellWord(descriptor.id)}`,
     `__MAGUS_BIN=${shellWord(path.join(workspace.root, "magus"))}`,
     "sh",
     shellWord(path.join(workspace.root, "host-e2e-probe.sh")),

@@ -114,9 +114,10 @@ func TestRegions(t *testing.T) {
 				replaceIn(t, dir, "a.go", "\treturn 1\n}\n\nfunc B() int {\n\treturn 2",
 					"\treturn 11\n} // A\n// between\nfunc B2() int {\n\treturn 22")
 			},
+			// The comment directly above B2 is B2's; the blank line it replaced was A's.
 			want: []types.RegionChange{
 				golang(was, 6, 8, declA), golang(was, 9, 10, declB),
-				golang(now, 6, 8, declA), golang(now, 9, 10, "func B2() int {"),
+				golang(now, 6, 7, declA), golang(now, 8, 10, "func B2() int {"),
 			},
 		},
 		{
@@ -297,6 +298,104 @@ func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
 	}, got)
 }
 
+// RegionsBetween places the lines two in-memory versions of a file differ in exactly as
+// Regions places a checkout's, from the attributes of the repository it is handed; the
+// checkout's own copy of the file is never read.
+func TestRegionsBetween(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.buzz diff=buzz\n", "a.go": "package gone\n"})
+	edited := strings.Replace(regionsGo, "return 2", "return 20", 1)
+	added := regionsGo + "\nfunc D() {\n}\n"
+	was, now := types.RegionOld, types.RegionNew
+	for _, tc := range []struct {
+		name          string
+		path          string
+		before, after string
+		want          []types.RegionChange
+	}{
+		{
+			name: "an edited body", path: "a.go", before: regionsGo, after: edited,
+			want: []types.RegionChange{region("a.go", was, 10, 10, "func B() int {", "golang"), region("a.go", now, 10, 10, "func B() int {", "golang")},
+		},
+		{
+			name: "an added function is itself", path: "a.go", before: regionsGo, after: added,
+			want: []types.RegionChange{region("a.go", now, 16, 16, "func C() {", "golang"), region("a.go", now, 17, 18, "func D() {", "golang")},
+		},
+		{
+			name: "no before places every line", path: "a.go", after: "package a\n\nfunc X() {\n}\n",
+			want: []types.RegionChange{region("a.go", now, 1, 2, "", "golang"), region("a.go", now, 3, 4, "func X() {", "golang")},
+		},
+		{
+			name: "a path with no driver still has lines", path: "notes.txt", before: "a\nb\n", after: "a\nc\n",
+			want: []types.RegionChange{region("notes.txt", was, 2, 2, "", ""), region("notes.txt", now, 2, 2, "", "")},
+		},
+		{name: "identical versions change nothing", path: "a.go", before: regionsGo, after: regionsGo},
+		{
+			// Lines 1-11 of the after version: the comment directly above B and the table's
+			// own comment go down to them; the comment a blank line away stays with A.
+			name: "doc comments belong below, and a var block is named", path: "a.go",
+			after: "package a\n\nfunc A() {\n}\n\n// stays with A\n\n// B says hi.\nfunc B() {\n}\n// table\nvar (\n\tx = 1\n)\n\nconst one = 1\n",
+			want: []types.RegionChange{
+				region("a.go", now, 1, 2, "", "golang"),
+				region("a.go", now, 3, 7, "func A() {", "golang"),
+				region("a.go", now, 8, 10, "func B() {", "golang"),
+				region("a.go", now, 11, 15, "var (", "golang"),
+				region("a.go", now, 16, 16, "const one = 1", "golang"),
+			},
+		},
+		{
+			name: "a comment above the first declaration is that declaration's", path: "a.go",
+			after: "package a\n\n// A does it.\n// Twice.\nfunc A() {\n}\n",
+			want: []types.RegionChange{
+				region("a.go", now, 1, 2, "", "golang"),
+				region("a.go", now, 3, 6, "func A() {", "golang"),
+			},
+		},
+		{
+			name: "a buzz doc comment", path: "x.buzz",
+			after: "fun a() > void {\n}\n\n// b does it.\nfun b() > void {\n}\n",
+			want: []types.RegionChange{
+				region("x.buzz", now, 1, 3, "fun a() > void {", "buzz"),
+				region("x.buzz", now, 4, 6, "fun b() > void {", "buzz"),
+			},
+		},
+		{
+			name: "a markdown comment above a heading", path: "d.md",
+			after: "# T\n\ntext\n<!-- note -->\n## S\nbody\n",
+			want: []types.RegionChange{
+				region("d.md", now, 1, 3, "# T", "markdown"),
+				region("d.md", now, 4, 6, "## S", "markdown"),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var before []byte
+			if tc.before != "" {
+				before = []byte(tc.before)
+			}
+			got, err := gitVCS{}.RegionsBetween(t.Context(), dir, tc.path, before, []byte(tc.after))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestDrivers(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{".gitattributes": "*.go diff=golang\n*.txt -diff\n*.md diff\n"})
+
+	got, err := gitVCS{}.Drivers(t.Context(), dir, []string{"a.go", "sub/b.go", "c.txt", "d.md", "e.rs"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"a.go": "golang", "sub/b.go": "golang"}, got,
+		"only a NAMED driver counts: unset, set without a name and unspecified place nothing")
+
+	got, err = gitVCS{}.Drivers(t.Context(), dir, nil)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
 func TestParseZeroContextPatch(t *testing.T) {
 	patch := "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n--- not a header\n+++ nor this\n+x\n" +
 		"diff --git \"a/sp ace\\\"q\" \"b/sp ace\\\"q\"\n--- \"a/sp ace\\\"q\"\t\n+++ /dev/null\n@@ -3,2 +2,0 @@ ctx\n-a\n-b\n\\ No newline at end of file\n"
@@ -315,4 +414,32 @@ func replaceIn(t *testing.T, dir, name, from, to string) {
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(string(body), from), "%q in %s", from, name)
 	writeRepoFile(t, dir, name, strings.Replace(string(body), from, to, 1))
+}
+
+// The pure placement (types.DiffDriver.Declarations) names every line as git's funcname
+// matching does, for every driver magus routes files to, so a region a merge reports is
+// the region git's hunk headers, a footprint and a job claim name.
+func TestPurePlacementMatchesGit(t *testing.T) {
+	isolateGitConfig(t)
+	fixtures := map[string]string{
+		"golang":     "package a\n\nimport \"fmt\"\n\ntype T struct {\n\tA int\n}\n\nfunc (t T) M() {\n\tfmt.Println(1)\n}\n\nfunc F(x int) int {\n\treturn x\n}\n",
+		"python":     "import os\n\nclass A:\n    def m(self):\n        return 1\n\nasync def f():\n    pass\n",
+		"rust":       "use std::fmt;\n\npub struct S {\n    a: i32,\n}\n\nimpl S {\n    pub fn new() -> Self {\n        S { a: 1 }\n    }\n}\n",
+		"markdown":   "Intro line\n\n# Title\n\ntext\n\n## Section two\n\n   ### Indented heading\n\n    #### code block, not a heading\n",
+		"typescript": "import x from 'y'\n\nexport function f(a: number): number {\n  if (a) {\n    return a\n  }\n  return 0\n}\n\nclass C {\n  m(a: string): void {\n  }\n}\n",
+		"buzz":       "import \"std\";\n\nexport fun main(args: [str]) > void {\n    std\\print(\"x\");\n}\n\nobject O {\n    fun m() > void {}\n}\n\ntest \"it works\" {\n}\n",
+	}
+	var funcnames []string
+	for _, f := range gitFuncnames {
+		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+	}
+	for _, d := range types.DiffDrivers {
+		t.Run(d.Name, func(t *testing.T) {
+			body := fixtures[d.Name]
+			require.NotEmpty(t, body, "every driver needs a fixture")
+			want, err := gitPlaceLines(t.Context(), t.TempDir(), d.Name, funcnames, []byte(body))
+			require.NoError(t, err)
+			assert.Equal(t, want, d.Declarations(types.SplitLines([]byte(body))))
+		})
+	}
 }

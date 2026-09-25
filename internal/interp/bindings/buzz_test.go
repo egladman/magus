@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/internal/sandbox"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
@@ -19,7 +20,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+func TestMain(m *testing.M) {
+	// os.execute under a policy starts its child as this binary re-run as the launcher.
+	sandbox.MaybeLaunch()
+	testkit.Main(m)
+}
 
 func TestBuzzEngine_Registered(t *testing.T) {
 	e := engine.Lookup("buzz")

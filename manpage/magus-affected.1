@@ -7,8 +7,7 @@ magus\-affected \- Run a target for VCS\-diff affected projects
 .SH DESCRIPTION
 Run a named target for every project that is affected by changes in
 version control. The active VCS adapter is picked by autodetect from .git, .hg,
-or .jj at the workspace root, or pinned with MAGUS_VCS_COMMAND_NAME /
-vcs.command_name. MAGUS_VCS_COMMAND overrides the command entirely. When
+or .jj at the workspace root, or pinned with MAGUS_VCS_NAME / vcs.name. When
 MAGUS_VCS_ENABLED=false (or vcs.enabled: false) affected detection
 short\-circuits and falls back to the full project set with the source label
 "vcs disabled".

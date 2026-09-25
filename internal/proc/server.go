@@ -3,6 +3,7 @@ package proc
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
@@ -96,6 +98,24 @@ func LeaseFromContext(ctx context.Context) string {
 	return ""
 }
 
+type sandboxFloorKey struct{}
+
+// WithSandboxFloor marks ctx as belonging to a run that must stay sandboxed at mode or
+// stronger. On a client it makes [Forward] say so; on the server it is what the client
+// said, and the handler declines the run (ErrNotAdoptable) rather than execute it with
+// less than the client had.
+func WithSandboxFloor(ctx context.Context, mode types.SandboxMode) context.Context {
+	return context.WithValue(ctx, sandboxFloorKey{}, mode.Resolved())
+}
+
+// SandboxFloorFromContext returns the mode [WithSandboxFloor] set, or off when unset.
+func SandboxFloorFromContext(ctx context.Context) types.SandboxMode {
+	if v, ok := ctx.Value(sandboxFloorKey{}).(types.SandboxMode); ok {
+		return v
+	}
+	return types.SandboxModeOff
+}
+
 // withJob marks ctx as a background job invocation (submitJob), distinct from an adopted run.
 // The server's handler reads it via IsJob to route jobs through the full command set while a
 // plain adopted run stays limited to run/affected.
@@ -146,6 +166,8 @@ type Server struct {
 	ep   endpoint.Endpoint
 	svc  *service
 	http *http.Server
+	// token is the secret every /proc/ request must carry; see [TokenEnv].
+	token string
 	// peerChecked is whether requests pass the peer-uid guard; see Server.
 	peerChecked bool
 	// extra is what Mount installed for the paths outside /proc/, nil for none.
@@ -162,6 +184,10 @@ type Server struct {
 
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
 func (s *Server) Addr() string { return s.ep.String() }
+
+// Token returns the secret a client presents on every /proc/ request. A process hands it
+// to the nested magus it spawns through [TokenEnv], and to nothing else.
+func (s *Server) Token() string { return s.token }
 
 // Done returns a channel closed when the server has been Closed, whether by an RPC
 // shutdown request or a signal. A blocking server loop selects on it so an RPC-driven
@@ -201,6 +227,7 @@ func (s *Server) Close() {
 		// Shutdown waits for handlers, and each one runs on the context cancelled above.
 		_ = s.http.Shutdown(context.Background())
 		_ = os.Remove(s.ep.Addr)
+		_ = os.Remove(tokenPath(s.ep.Addr))
 		close(s.closed)
 	})
 	<-s.closed
@@ -233,6 +260,11 @@ func New(opts Options) (*Server, error) {
 		ep = endpoint.Endpoint{Scheme: "unix", Addr: filepath.Join(SockDir(), sockName)}
 	}
 
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, fmt.Errorf("proc: random bytes: %w", err)
+	}
+
 	lim := opts.Limiter
 	if lim == nil {
 		par := opts.Concurrency
@@ -262,6 +294,7 @@ func New(opts Options) (*Server, error) {
 	srv := &Server{
 		ep:          ep,
 		svc:         svc,
+		token:       hex.EncodeToString(secret),
 		peerChecked: httpx.PeerCredentialsSupported(),
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -310,15 +343,33 @@ func (s *Server) routes() (http.Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("proc: %w", err)
 		}
-		mux.Handle("/proc/", guarded)
+		mux.Handle("/proc/", s.requireToken(guarded))
 	} else {
-		mux.Handle("/proc/", proc)
+		mux.Handle("/proc/", s.requireToken(proc))
 	}
 	mux.HandleFunc("/", s.serveExtra)
 	if !s.peerChecked {
 		return mux, nil
 	}
 	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, mux), nil
+}
+
+// requireToken refuses a /proc/ request that does not carry this server's token.
+//
+// The peer check admits every process of this user, and landlock does not govern
+// connect(2) on a pathname socket, so a confined child that finds the socket could post a
+// run its parent then executes outside the child's sandbox. The token is what that child
+// lacks: it rides only to a nested magus (see [TokenEnv]) and in a 0600 file in the
+// private socket directory, which the sandbox does not grant.
+func (s *Server) requireToken(next http.Handler) http.Handler {
+	want := []byte(s.token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get(tokenHeader)), want) != 1 {
+			writeJSON(w, http.StatusUnauthorized, errorReply{Message: ErrTokenRefused.Error()})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) serveExtra(w http.ResponseWriter, r *http.Request) {
@@ -341,6 +392,7 @@ func (s *Server) Start() error {
 			strings.Contains(opErr.Err.Error(), "bind: address already in use")) {
 			if !isSocketLive(s.svc.parentCtx, s.ep.Addr) {
 				_ = os.Remove(s.ep.Addr)
+				_ = os.Remove(tokenPath(s.ep.Addr))
 				ln, err = s.ep.Listen()
 			}
 		}
@@ -351,12 +403,44 @@ func (s *Server) Start() error {
 	}
 	// Socket security comes from the parent directory (0700 per sockdir_unix.go);
 	// a post-Listen chmod would create a brief world-accessible window.
+	if err := writeToken(s.ep.Addr, s.token); err != nil {
+		_ = ln.Close()
+		s.cancel()
+		return fmt.Errorf("proc: %w", err)
+	}
 	s.mu.Lock()
 	s.listener = ln
 	s.mu.Unlock()
 
 	go func() { _ = s.http.Serve(ln) }()
 	watchSignals(s, s.cancel)
+	return nil
+}
+
+// tokenPath is where the token for the socket at sock is kept: beside it, in the same
+// private directory, so a client that found the socket by discovery can present it.
+func tokenPath(sock string) string { return sock + ".token" }
+
+// writeToken publishes token for the socket at sock, readable by this user alone. A file
+// left by a server that crashed is replaced; O_EXCL after the remove refuses to follow
+// anything planted at the path in between.
+func writeToken(sock, token string) error {
+	path := tokenPath(sock)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("replace token %s: %w", path, err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("write token: %w", err)
+	}
+	_, werr := f.WriteString(token)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("write token %s: %w", path, werr)
+	}
 	return nil
 }
 
@@ -490,6 +574,11 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCwd(ctx, req.Cwd)
 	ctx = WithLease(ctx, req.Lease)
+	// A run of its own, so its env\set reaches no other run this server holds.
+	ctx = environ.With(ctx)
+	if req.Sandbox.Enabled() {
+		ctx = WithSandboxFloor(ctx, req.Sandbox)
+	}
 	// Adopt the client's ancestry (BeginInvocation appends the id minted below), so a run
 	// this server executes for a nested client recognizes the lock it holds for that
 	// client's parent as its own ancestor's rather than waiting on itself forever.
@@ -600,6 +689,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		ctx = WithCwd(ctx, req.Cwd)
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
+		ctx = environ.With(ctx)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
 		// A job descends from nobody. parentCtx carries whatever ancestry the SERVER's
 		// process environment had (which is a real value when the server was started from

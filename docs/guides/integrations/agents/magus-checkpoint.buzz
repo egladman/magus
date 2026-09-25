@@ -25,8 +25,11 @@
 // the rest; nothing in the payload becomes the note, because a note is a sentence
 // a person writes. It prints NOTHING and always exits 0. Override:
 //
-//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
 //   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
+// checkpoint, which the configuration `magus agent harness apply` writes on the
+// command. Without it nothing is recorded and MGS3024 goes to stderr.
 //
 // A host whose envelope spells those fields differently passes them as flags
 // instead, since `--session` and `--transcript` outrank the envelope, and a host that
@@ -41,7 +44,7 @@
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 17
+// magus-guard-template: 18
 
 // EVERY call that can fail is caught, matching the templates beside it and the
 // missing `set -e` in the sh copy. A hook that can fail is a hook that can break
@@ -112,20 +115,32 @@ fun warn(message: str) > void {
     io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
 }
 
-// This surface declares no flags, and parses its argv anyway: an argument arriving here
-// means the wiring meant something by it, and reading none at all accepted that silently.
-fun reportArgv(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
-    if (parsed == null) { return; }
+// The host this entry is wired into, the one argument this surface takes; see
+// AGENT_NAME_FLAG in magus-command.buzz.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// reports every other argument: an argument arriving here means the wiring meant
+// something by it, and reading none at all accepted that silently.
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares none. "
+        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    reportArgv(args);
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+    // No host, no record, and a coded line on stderr rather than a guess.
+    final agentName = agentNameOf(args);
+    if (agentName == "") {
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
+            + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
+            + "the commands it writes name the host.");
+        return;
+    }
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
     // unenforced, because there is no rule, so announcing it would interrupt the end of

@@ -13,11 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/mergequeue"
 	"github.com/egladman/magus/libs/mergequeue/types"
@@ -27,13 +29,16 @@ import (
 
 var queueBase = strings.Repeat("b", 40)
 
+// queueDate dates every commit the queue tests name.
+var queueDate = time.Unix(1_788_000_000, 0).UTC()
+
 func queueHead(id string) string { return strings.Repeat("0", 39) + id }
 
 // queueProvider approves every change at the commit asked about, lists CHANGES, merges
 // nothing, and lists RUN as every validation run's artifacts.
 const queueProvider = `
 export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"], "queue_label": "merge: ",
+    return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"], "required_approvals": 0, "queue_label": "merge: ",
         "committer": {"name": "bot", "email": "bot@example.invalid"}};
 }
 export fun list_changes(io: {str: any}) > any {
@@ -47,7 +52,6 @@ export fun post_status(io: {str: any}) > bool { return true; }
 export fun retarget(io: {str: any}) > bool { return true; }
 export fun kick_back(io: {str: any}) > bool { return true; }
 export fun mark(io: {str: any}) > bool { return true; }
-export fun flag(io: {str: any}) > bool { return true; }
 export fun merge_change(io: {str: any}) > any { return {"merged": false, "reason": "the test merges nothing"}; }
 export fun list_artifacts(io: {str: any}) > any {
     final run = {"repo": "acme/widgets", "head_repo": "acme/widgets", "head_branch": "main", "event": "push", "branch_event": true,
@@ -150,6 +154,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"--interval with --once":   {"apply", "--provider", "github", "--once", "--interval", "1s", "s"},
 		"a zero --interval":        {"apply", "--provider", "github", "--interval", "0s", "s"},
 		"a committer without one":  {"apply", "--provider", "github", "--committer", "nobody", "s"},
+		"reproduce without gate":   {"apply", "--provider", "github", "--base", "main", "--reproduce-regenerate", "make gen", "s"},
 		"plan without --out":       {"plan", "--provider", "github"},
 		"plan without a provider":  {"plan", "--out", "p"},
 		"plan with an operand":     {"plan", "--provider", "github", "--out", "p", "extra"},
@@ -164,6 +169,62 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	// validate runs the changes' code, so it takes no provider at all.
 	_, err := f.run(t, "", "validate", "--provider", "github", "--plan", "p", "--gate", "true", "--verdicts", "v")
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
+	// A reproduce line is only shown, but never one validate would refuse to run.
+	_, err = f.run(t, "", "apply", "--provider", "github", "--base", "main", "--reproduce-gate", "curl x | sh", "s")
+	require.ErrorContains(t, err, "--reproduce-gate")
+	require.ErrorContains(t, err, "joins two commands")
+}
+
+// Without the runner's credentials or a trust set, --remote-cache-read would gate every
+// candidate cold, or replay what nobody signed; both are refused before anything runs.
+func TestQueueValidateRemoteCacheReadRefusesWhatItCannotServe(t *testing.T) {
+	was := globalCfg.Cache.Remote
+	t.Cleanup(func() { globalCfg.Cache.Remote = was })
+	keys := config.CacheRemote{TrustedKeys: []string{"4VhfiMjDLmoVolYdjgPHwpHjw9+aGnoHe87P6V3inAk="}}
+	f := newQueueFixture(t, "", "")
+	for name, tc := range map[string]struct {
+		url, token string
+		remote     config.CacheRemote
+		want       string
+	}{
+		"no credentials": {remote: keys, want: "ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set"},
+		"no token":       {url: "https://results.example/", remote: keys, want: "ACTIONS_RUNTIME_TOKEN is not set"},
+		"no url":         {token: "t", remote: keys, want: "ACTIONS_RESULTS_URL or"},
+		"no trusted key": {url: "https://results.example/", token: "t", want: "cache.remote.trusted_keys names none"},
+		"unverified": {url: "https://results.example/", token: "t", want: "cache.remote.insecure turns that check off",
+			remote: config.CacheRemote{TrustedKeys: keys.TrustedKeys, Insecure: true, InsecureReason: "r"}},
+	} {
+		t.Setenv("ACTIONS_RESULTS_URL", tc.url)
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", tc.token)
+		globalCfg.Cache.Remote = tc.remote
+		verdicts := filepath.Join(f.root, "verdicts-"+strings.ReplaceAll(name, " ", "-"))
+		_, err := f.run(t, "", "validate", "--plan", "p", "--gate", "true", "--verdicts", verdicts, "--remote-cache-read")
+		var misuse errUsage
+		require.ErrorAs(t, err, &misuse, name)
+		assert.ErrorContains(t, err, tc.want, name)
+		assert.NoDirExists(t, verdicts, "%s: refused before anything is written", name)
+	}
+}
+
+// Hooks take the proxy's URL and stand-in, the base's trust set, verification on and
+// remote writes off; the runner's token appears nowhere in what they are handed.
+func TestQueueCacheReadHandsHooksTheProxyAndPinsTheTrustSet(t *testing.T) {
+	upstream := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(upstream.Close)
+	t.Setenv("ACTIONS_RESULTS_URL", upstream.URL+"/")
+	t.Setenv("ACTIONS_RUNTIME_TOKEN", "real-runtime-token")
+	proxy, env, err := queueCacheRead(config.CacheRemote{TrustedKeys: []string{"k1", "k2"}}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = proxy.Close() })
+	assert.Equal(t, []string{
+		"ACTIONS_RESULTS_URL=" + proxy.URL,
+		"ACTIONS_RUNTIME_TOKEN=" + proxy.Token,
+		"MAGUS_CACHE_REMOTE_TRUSTED_KEYS=k1,k2",
+		"MAGUS_CACHE_REMOTE_INSECURE=false",
+		"MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
+	}, env)
+	assert.NotContains(t, strings.Join(env, "\n"), "real-runtime-token")
+	assert.NotContains(t, strings.Join(env, "\n"), upstream.URL)
 }
 
 func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
@@ -211,10 +272,24 @@ func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
 	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
 	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"sequential","linear_stacks":false,`+
-		`"methods":["squash"],"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
+		`"methods":["squash"],"required_approvals":0,"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
 
 	_, err = f.run(t, "", "describe", "--provider", "local.buzz")
 	require.ErrorContains(t, err, "--base")
+}
+
+// A base requiring no approval is said out loud: the queue then merges what nobody
+// reviewed, and adds no review rule of its own.
+func TestQueueDescribeSaysWhenTheBaseRequiresNoApproval(t *testing.T) {
+	withOutput(t, "")
+	f := newQueueFixture(t, "", "")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
+	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--status-context", "")
+	require.NoError(t, err)
+	assert.Equal(t, `# local.buzz on main: merge methods squash; stacks merge sequential; a stack queues by the label "merge: <method>"
+# main requires no approval, so the queue merges a change nobody approved; it adds no review rule of its own
+# no setup: --status-context is empty, or provider local.buzz reports none
+`, string(out))
 }
 
 // setupProvider describes a setup naming the status context and app describe was asked
@@ -222,9 +297,9 @@ func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
 const setupProvider = `
 export fun describe(io: {str: any}) > any {
     if (io["status_context"] == "") {
-        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"]};
+        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2};
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "queue_label": "queue: ",
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "required_approvals": 2, "queue_label": "queue: ",
         "setup": {
             "status_context": io["status_context"],
             "credential": {"id": "812", "name": "{io["app"]}"},
@@ -257,6 +332,7 @@ func TestQueueDescribePrintsTheSetupStepsAPersonRuns(t *testing.T) {
 	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q")
 	require.NoError(t, err)
 	assert.Equal(t, `# local.buzz on main: merge methods squash, merge; stacks merge atomic; a stack queues by the label "queue: <method>"
+# main requires 2 approving reviews at the commit a review of a change's head covers
 # the queue posts "merge-queue" as 812 (q)
 # main requires "merge-queue" from integration 15368 (not seen reported)
 # main requires "ci gate" from any source (seen on pull_request)
@@ -304,7 +380,7 @@ func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
 	f := newSetupFixture(t)
 	out, err := f.run(t, "", "describe", "-o", "json", "--status-context", "", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
-	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"]}`+"\n", string(out))
+	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
 }
 
 func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
@@ -321,6 +397,7 @@ func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
 func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	f.vcs.EXPECT().FetchRef(mock.Anything, f.root, "origin", "refs/heads/main").Return(queueBase, nil)
+	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
 	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil)
 	var changes bytes.Buffer
 	require.NoError(t, mergequeue.WriteChanges(&changes, types.Changes{Base: "main"}))
@@ -348,7 +425,7 @@ func validated(t *testing.T, dir string) {
 	t.Helper()
 	c := types.Change{ID: "1", Head: queueHead("1"), Base: "main", Method: types.MethodSquash, Affected: []string{"app"}}
 	vd := &mergequeue.VerdictDir{Path: dir}
-	require.NoError(t, vd.WritePlan(types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: queueBase, Depth: 1, Partitions: [][]types.Change{{c}}}))
+	require.NoError(t, vd.WritePlan(types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: queueBase, CommitDate: queueDate, Depth: 1, Partitions: [][]types.Change{{c}}}))
 	require.NoError(t, vd.Record(types.Verdict{BaseCommit: queueBase, Change: c, Decision: types.DecisionMerge, Onto: queueBase,
 		CandidateCommit: strings.Repeat("c", 40), Method: types.MethodSquash, Depth: 1}))
 	require.NoError(t, vd.MarkDone())
@@ -506,10 +583,11 @@ func TestQueuePlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 	paths := map[string]string{queueHead("1"): "app/a.txt", queueHead("2"): "lib/b.txt"}
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/r.git", nil)
 	f.vcs.EXPECT().FetchRef(mock.Anything, f.root, "origin", "refs/heads/main").Return(queueBase, nil)
+	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
 	for head, path := range paths {
 		f.vcs.EXPECT().FetchCommit(mock.Anything, f.root, "origin", head).Return(nil)
 		f.vcs.EXPECT().RangeCommits(mock.Anything, f.root, queueBase, head, []string(nil)).Return([]magustypes.Commit{{ID: head, Parents: []string{queueBase}}}, nil)
-		f.vcs.EXPECT().FindCommit(mock.Anything, f.root, head).Return(magustypes.Commit{ID: head, Parents: []string{queueBase}}, nil)
+		f.vcs.EXPECT().FindCommit(mock.Anything, f.root, head).Return(magustypes.Commit{ID: head, Parents: []string{queueBase}, Date: queueDate}, nil)
 		f.vcs.EXPECT().IsAncestor(mock.Anything, f.root, head, queueBase).Return(false, nil)
 		f.vcs.EXPECT().RangeFiles(mock.Anything, f.root, queueBase, head, []string(nil)).Return([]string{path}, nil)
 		f.vcs.EXPECT().MergeTrees(mock.Anything, f.root, magustypes.TreeMerge{Ours: queueBase, Theirs: head}).Return(magustypes.TreeMergeResult{Tree: "t"}, nil)

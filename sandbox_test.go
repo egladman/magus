@@ -1,59 +1,81 @@
 package magus
 
 import (
+	"bytes"
 	"context"
-	"os"
-	"path/filepath"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
-// A workspace with no magus.yaml is a workspace that never asked for anything, so
-// defaults are the right answer and no error.
-func TestLoadWorkspaceConfigFallsBackWhenTheFileIsAbsent(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := loadWorkspaceConfig(t.TempDir())
+// openSandboxed opens a workspace whose magus.yaml sets the sandbox mode.
+func openSandboxed(t *testing.T, mode types.SandboxMode) *Magus {
+	t.Helper()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": "",
+		"magus.yaml":     "sandbox:\n  mode: " + string(mode) + "\n",
+	})
+	m, err := Open(t.Context(), root)
 	require.NoError(t, err)
-	assert.False(t, cfg.Sandbox.Enabled, "defaults do not enable the sandbox")
+	t.Cleanup(func() { _ = m.Close() })
+	return m
 }
 
-// The failure this exists to prevent: a magus.yaml that asked for sandboxing but does not
-// parse used to collapse into Defaults(), which disables it, so the workspace joined the
-// server's union unsandboxed and nothing said so.
-func TestLoadWorkspaceConfigRefusesAMalformedFile(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  enabled: [true\n"), 0o644))
-
-	_, err := loadWorkspaceConfig(root)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "magus.yaml")
+func TestApplySandboxLeavesAnOffWorkspaceAlone(t *testing.T) {
+	m := openSandboxed(t, types.SandboxModeOff)
+	ctx, err := m.ApplySandbox(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, sandbox.PolicyFromContext(ctx))
 }
 
-func TestApplyUnionSandboxReportsAMalformedWorkspaceConfig(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  enabled: [true\n"), 0o644))
-
-	assert.Error(t, ApplyUnionSandbox(context.Background(), []string{root}))
+// Best-effort attaches the policy whatever the host: the binding checks and the env
+// allowlist hold everywhere, and the kernel layer joins them where it can.
+func TestApplySandboxAttachesTheWorkspacePolicy(t *testing.T) {
+	m := openSandboxed(t, types.SandboxModeBestEffort)
+	ctx, err := m.ApplySandbox(t.Context())
+	require.NoError(t, err)
+	p := sandbox.PolicyFromContext(ctx)
+	require.NotNil(t, p)
+	assert.Equal(t, types.SandboxModeBestEffort, p.Mode)
+	assert.Equal(t, types.SandboxModeBestEffort, m.SandboxMode())
 }
 
-// TestApplyUnionSandboxIsInertWithoutAnOptIn: the server applies a kernel policy
-// only when some workspace asked for one. No roots, or roots that never enable
-// sandboxing, must leave the process unconfined: applying a policy nobody
-// requested would break every other workspace the server serves.
-func TestApplyUnionSandboxIsInertWithoutAnOptIn(t *testing.T) {
+// Required is refused where the kernel cannot confine the children, before any run
+// starts, rather than at the first child.
+func TestApplySandboxRefusesARequiredWorkspaceTheKernelCannotConfine(t *testing.T) {
+	if abi, err := sandbox.ABI(); err == nil && abi >= sandbox.RequiredABI {
+		t.Skipf("landlock ABI %d confines children here", abi)
+	}
+	m := openSandboxed(t, types.SandboxModeRequired)
+	_, err := m.ApplySandbox(t.Context())
+	require.ErrorIs(t, err, types.SandboxRequired)
+	assert.ErrorContains(t, err, "sandbox mode is required for /")
+}
+
+// MGS2005 is said once, by the invocation a person started, and never by a nested magus.
+func TestWarnKernelUnavailableOncePerTopLevelInvocation(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	warnedKernelUnavailable = sync.Once{}
+	t.Cleanup(func() { warnedKernelUnavailable = sync.Once{} })
 	ctx := context.Background()
 
-	assert.NoError(t, ApplyUnionSandbox(ctx, nil))
-	assert.NoError(t, ApplyUnionSandbox(ctx, []string{}))
+	t.Setenv("MAGUS_LEVEL", "1")
+	warnKernelUnavailable(ctx)
+	assert.Empty(t, buf.String(), "a nested magus stays quiet")
 
-	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	assert.NoError(t, ApplyUnionSandbox(ctx, []string{root}),
-		"a workspace with no sandbox block requests nothing")
+	t.Setenv("MAGUS_LEVEL", "0")
+	warnKernelUnavailable(ctx)
+	warnKernelUnavailable(ctx)
+	assert.Contains(t, buf.String(), string(types.SandboxUnsupported))
+	assert.Equal(t, 1, strings.Count(buf.String(), "kernel landlock unavailable"), "once per process")
 }

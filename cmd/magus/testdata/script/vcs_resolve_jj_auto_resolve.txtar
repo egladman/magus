@@ -1,0 +1,72 @@
+# jj records a conflict in the commit and runs a merge tool only through `jj resolve`, so
+# on jj auto-resolution happens in `magus vcs resolve`, which runs `jj resolve --tool
+# magus` over each conflicted source file and lets the driver decide. CHANGELOG.md, prose
+# where both sides only added lines at one place, settles with both; NOTES.md, where both
+# edited one line differently, keeps jj's conflict. Loading the workspace registers the
+# tool in the repository's own config for a person's `jj resolve --tool magus`.
+
+[!exec:jj] skip 'jj not available'
+env HOME=$WORK/home
+env XDG_CONFIG_HOME=$WORK/home/.config
+env JJ_USER=Test
+env JJ_EMAIL=test@example.com
+mkdir $WORK/home/.config
+
+exec jj git init --quiet .
+exec magus ls
+exec jj config list --repo merge-tools.magus
+stdout '^merge-tools.magus.merge-args = \["vcs", "merge-driver", "\$base", "\$left", "\$right", "\$marker_length", "\$path", "\$output"\]$'
+stdout '^merge-tools.magus.merge-conflict-exit-codes = \[1\]$'
+! stdout 'ui.merge-editor'
+
+exec jj commit --quiet -m base
+exec jj bookmark create --quiet base -r @-
+cp CHANGELOG.main.md CHANGELOG.md
+cp NOTES.main.md NOTES.md
+exec jj commit --quiet -m main-side
+exec jj bookmark create --quiet mainside -r @-
+exec jj new --quiet base
+cp CHANGELOG.other.md CHANGELOG.md
+cp NOTES.other.md NOTES.md
+exec jj commit --quiet -m other-side
+exec jj bookmark create --quiet otherside -r @-
+exec jj new --quiet mainside otherside
+exec jj resolve --list
+stdout '^CHANGELOG.md +2-sided conflict'
+stdout '^NOTES.md +2-sided conflict'
+
+! exec magus vcs resolve
+stdout 'vcs resolve: auto-resolved CHANGELOG.md'
+! stdout 'auto-resolved NOTES.md'
+cmp CHANGELOG.md CHANGELOG.want.md
+exec jj resolve --list
+! stdout CHANGELOG.md
+stdout '^NOTES.md +2-sided conflict'
+
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "acme-root", "merge_low_risk": ["fixtures/**"]});
+-- CHANGELOG.md --
+# Changes
+- the first entry
+-- CHANGELOG.main.md --
+# Changes
+- the first entry
+- main's entry
+-- CHANGELOG.other.md --
+# Changes
+- the first entry
+- other's entry
+-- CHANGELOG.want.md --
+# Changes
+- the first entry
+- main's entry
+- other's entry
+-- NOTES.md --
+status: draft
+-- NOTES.main.md --
+status: ready
+-- NOTES.other.md --
+status: blocked

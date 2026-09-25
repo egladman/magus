@@ -69,10 +69,10 @@ inputs:
       Its private key is never an input: the calling step puts it in its env as
       MAGUS_QUEUE_APP_PRIVATE_KEY (secrets.MAGUS_QUEUE_APP_PRIVATE_KEY). With both,
       this action mints an installation token for this repository alone and reports
-      it as queue-token; with neither, the queue runs on the job's own token. One
-      without the other fails the job: a queue that silently fell back to the job's
-      token would stop starting main's workflows and posting a status its ruleset
-      counts.
+      it as queue-token; with neither it mints nothing, as every job but the merge
+      queue's wants. The queue writes only as its app: a run or a merge the job's own
+      token makes starts no workflow. One without the other fails the job, since half
+      an app is a misconfiguration, never a job without one.
     required: false
     default: ''
 
@@ -104,8 +104,9 @@ outputs:
   queue-token:
     description: >
       An installation token of the queue's GitHub App, scoped to this repository with
-      contents, pull-requests, statuses, actions and workflows write; revoked when the
-      job ends. Empty when no app is configured.
+      contents, pull-requests, statuses and workflows write and actions read; revoked
+      when the job ends. Empty when no app is configured, and the merge queue then refuses to
+      run.
     value: ${{ steps.queue-app-token.outputs.token }}
   queue-committer:
     description: >
@@ -429,7 +430,9 @@ runs:
         permission-contents: write
         permission-pull-requests: write
         permission-statuses: write
-        permission-actions: write
+        permission-actions: read
+        # Apply merges as the app when auto-merge does not fire, and GitHub requires this
+        # to merge or push a change touching .github/workflows/.
         permission-workflows: write
 
     - name: Resolve the queue app's bot

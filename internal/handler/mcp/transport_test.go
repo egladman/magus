@@ -39,6 +39,7 @@ Run:
   magus_run_affected      - run a target on only VCS-changed projects
   magus_affected_plan     - emit a CI shard plan for the affected set
   magus_affected_explain  - explain why a project is affected by VCS changes
+  magus_buzz              - run a Buzz script over another tool's output (stdin) instead of a shell one-liner
 
 Inspect:
   magus_doctor            - validate the workspace health

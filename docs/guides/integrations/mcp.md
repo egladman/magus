@@ -123,7 +123,7 @@ and it speaks HTTP. `/mcp` is one path on it, beside the Connect APIs and the co
 operations the CLI uses (see [the server's socket](server.md#two-transports)):
 
 ```text
-$XDG_RUNTIME_DIR/magus/server.sock      # or $TMPDIR/magus-<uid>/server.sock without XDG_RUNTIME_DIR
+$XDG_RUNTIME_DIR/magus/server.sock      # else <user cache dir>/magus/run/, else /tmp/magus-<uid>/
 ```
 
 It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP,
@@ -174,6 +174,34 @@ Run:
 | `magus_run_affected`     | Run a target on only the VCS-affected projects                             |
 | `magus_affected_plan`    | Emit a provider-neutral CI shard plan for the affected set                 |
 | `magus_affected_explain` | Explain why a project is in the affected set                               |
+| `magus_buzz`             | Run a Buzz program (`magus buzz`) over `stdin` and return its output       |
+
+`magus_buzz` is the tool for transforming another tool's output, in place of a shell
+one-liner. Pass the earlier result as `stdin` and the script reads it with
+`io\stdin.readAll()`; its `main` receives `args`. This call keeps the spell ids from a
+`magus_query` result:
+
+```json
+{
+  "script": "import \"std\"; import \"io\"; import \"encoding/json\";\nfun main(args: [str]) > void !> any {\n    final q = json\\parse(io\\stdin.readAll() ?? \"null\") as {str: any};\n    final ids = mut [<str>];\n    foreach (m in q[\"matches\"] as [any]) {\n        final hit = m as {str: any};\n        if (hit[\"kind\"] == args[0]) { ids.append(hit[\"id\"] as str); }\n    }\n    std\\print(json\\stringify({\"kind\": args[0], \"ids\": ids}));\n}",
+  "args": "spell",
+  "stdin": "<the magus_query result text>",
+  "write": true
+}
+```
+
+The reply carries the script's stdout and, because that stdout is JSON, the same value
+parsed under `json`:
+
+```json
+{"exit_code":0,"stdout":"{\"ids\":[\"spell:go\",\"spell:golangci\"],\"kind\":\"spell\"}\n","json":{"ids":["spell:go","spell:golangci"],"kind":"spell"}}
+```
+
+A compile or runtime error comes back as a tool error carrying the diagnostic, such as
+`[BZZ1005] buzz: line 1:32: ...`. `magus buzz` has no read-only mode, so a script
+reaches whatever its `fs`, `proc` and `http` modules can; every call must pass
+`write: true` to accept that, and one without it is refused before anything runs. A
+run is bounded by `target_timeout`, or five minutes when that is unset.
 
 Inspect:
 

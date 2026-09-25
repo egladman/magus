@@ -86,6 +86,13 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	if !opts.hasArgs {
 		args = append(args, tgt.DefaultArgs...)
 	}
+	// TrailingArgs is DefaultArgs' opposite: ANY forwarded arg drops it, not just
+	// an explicit one, because it exists for an operand a tool refuses to combine
+	// with a flag at all (`go clean -cache ./...` errors "cannot be used with
+	// package arguments", not just with the wrong order). See spells.Command.TrailingArgs.
+	if !opts.hasArgs && len(opts.args) == 0 {
+		args = append(args, tgt.TrailingArgs...)
+	}
 	args = append(args, opts.args...)
 	// A static op is resolved to {bin, args} ONCE, with no Target (see recordOp in
 	// internal/spell/resolve.go), so it cannot compute a value only the

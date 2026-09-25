@@ -26,13 +26,15 @@ func TestSeedsLazyLayer(t *testing.T) {
 	for _, in := range []string{
 		"kind:symbol Foo", "symbol:example.com/a Foo#", "relation:defines", "relation:references", "id:symbol:x",
 		"kind:sym*", "kind:symbol*", "kind:*", "id:sym*",
-		"relation:calls", // symbol->symbol calls live only in the lazy shards
+		"relation:calls",                         // symbol->symbol calls live only in the lazy shards
+		"file:internal/a/a.go", "dir:internal/a", // a Go file node exists only in the lazy shards
 	} {
 		assert.Truef(t, SeedsLazyLayer(in), "%q should seed symbols", in)
 	}
 	for _, in := range []string{
 		"kind:target build", "build", "project:pkg/a", "relation:uses",
 		"kind:tar*", "id:target:*", // wildcards that cannot reach symbols
+		"profile:x",
 	} {
 		assert.Falsef(t, SeedsLazyLayer(in), "%q should NOT seed symbols", in)
 	}

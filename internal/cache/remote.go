@@ -551,17 +551,8 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 		if sigBytes == nil {
 			return nil, errors.New("importArtifact: artifact is unsigned; refusing (trust set configured)")
 		}
-		legacy, err := c.verifier.verify(domainArtifact, sigBytes, manifestBytes, extraDigest)
-		if err != nil {
+		if err := c.verifier.verify(domainArtifact, sigBytes, manifestBytes, extraDigest); err != nil {
 			return nil, fmt.Errorf("importArtifact: %w", err)
-		}
-		if legacy {
-			// compat: see sigAlg in signing.go. A pre-domain producer signed only the
-			// manifest, so its log is unauthenticated: keep the entry (it still
-			// replays) and drop the extras rather than reject an artifact every
-			// released magus produces. Delete this branch with sigAlg.
-			dropStagedExtras(extras)
-			extras = nil
 		}
 	} else {
 		// No trust set (an explicitly insecure remote): nothing authenticates the

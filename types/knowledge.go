@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
@@ -87,7 +88,10 @@ import (
 // indexer rendered and a fingerprint of the definition's lines, which is what lets a review
 // compare a symbol against its base and tell an added, removed, or re-signed API from a body
 // edit. Additive; the bump is for a v13 store whose symbol shards predate them.
-const KnowledgeSchemaVersion = 14
+// v15 adds `lines` and `bytes` attrs to file nodes an extractor read (buzz sources, and the
+// defining files of a SCIP index), so a reader can size a file before paging through it.
+// Additive; the bump is for a v14 store whose buzz and symbol shards predate them.
+const KnowledgeSchemaVersion = 15
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -507,14 +511,44 @@ type KnowledgeSymbol struct {
 	// was built over. Two sides with equal digests defined the symbol identically. Empty when
 	// the lines could not be read.
 	BodyDigest string
-	Defs       []string
-	Refs       []KnowledgeSymbolRef
+	// SourceLines and SourceBytes size the file Source names, counted from the same read
+	// that computes BodyDigest. Zero when that read did not happen.
+	SourceLines int
+	SourceBytes int
+	Defs        []string
+	Refs        []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
 	// (caller, callee), the same scale decision Refs makes per (file, symbol), so a hot
 	// callee yields one entry per caller, never one per call site. Empty when the indexer
 	// emits no enclosing ranges, which is the honest answer rather than a guess.
 	Calls []KnowledgeSymbolCall
+}
+
+// CountLines reports how many lines b holds, the number an editor or `sed -n 'N,Mp'`
+// addresses: a final line without a trailing newline still counts, and an empty file has
+// none.
+func CountLines(b []byte) int {
+	n := bytes.Count(b, []byte{'\n'})
+	if len(b) > 0 && b[len(b)-1] != '\n' {
+		n++
+	}
+	return n
+}
+
+// SplitSourceLines splits file content into its lines, the indexing BodyDigest uses:
+// element i is line i+1.
+func SplitSourceLines(b []byte) [][]byte { return bytes.Split(b, []byte("\n")) }
+
+// BodyDigest fingerprints lines start through end (1-based, inclusive) of a file split by
+// SplitSourceLines, the value KnowledgeSymbol.BodyDigest records. ok is false when the
+// range does not fit the file.
+func BodyDigest(lines [][]byte, start, end int) (digest string, ok bool) {
+	if start < 1 || end < start || end > len(lines) {
+		return "", false
+	}
+	sum := sha256.Sum256(bytes.Join(lines[start-1:end], []byte("\n")))
+	return hex.EncodeToString(sum[:8]), true
 }
 
 // KnowledgePackage is one third-party dependency read out of a project's manifest:
@@ -838,6 +872,61 @@ type KnowledgeRefSite struct {
 	Count int    `json:"count,omitempty" yaml:"count,omitempty"`
 	Lines []int  `json:"lines,omitempty" yaml:"lines,omitempty"`
 }
+
+// KnowledgeDefinitionsDefinition is the human-readable description of
+// `magus refs <symbol> --definition`.
+const KnowledgeDefinitionsDefinition = "refs --definition prints where an ingested code " +
+	"symbol is defined as path:start-end, the exact lines its body occupies, from the SCIP " +
+	"index's enclosing range. Each range is checked against the file on disk: verified when " +
+	"the file predates its index, changed when the symbol's name has left the start line, " +
+	"unverified when the name is there but the file was edited since. " +
+	"With --source it prints those lines."
+
+// KnowledgeDefinitionsOutput is the result of `magus refs <symbol> --definition`.
+type KnowledgeDefinitionsOutput struct {
+	Definition    string                    `json:"definition"     yaml:"definition"`
+	SchemaVersion int                       `json:"schema_version" yaml:"schema_version"`
+	Symbol        string                    `json:"symbol"         yaml:"symbol"`
+	Label         string                    `json:"label"          yaml:"label"`
+	Definitions   []KnowledgeDefinitionSite `json:"definitions"    yaml:"definitions"`
+	Answer        KnowledgeAnswer           `json:"answer"         yaml:"answer"`
+}
+
+// KnowledgeDefinitionSite is one file that defines a symbol and, when the index recorded
+// them, the 1-based inclusive lines the definition spans.
+type KnowledgeDefinitionSite struct {
+	File string `json:"file" yaml:"file"`
+	// StartLine is 0 when the index recorded no line in this file (a symbol defined in
+	// several files carries one position).
+	StartLine int `json:"start_line,omitempty" yaml:"start_line,omitempty"`
+	// EndLine is 0 when the indexer emitted no enclosing range. The extent is then
+	// unknown: magus prints the declaration line alone rather than guess where the
+	// body ends.
+	EndLine int                       `json:"end_line,omitempty" yaml:"end_line,omitempty"`
+	Status  KnowledgeDefinitionStatus `json:"status"             yaml:"status"`
+	// Source is the text of the lines, filled only on request (--source).
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+}
+
+// KnowledgeDefinitionStatus says whether a definition's recorded range still bounds the
+// symbol in the file on disk.
+type KnowledgeDefinitionStatus string
+
+const (
+	// DefinitionVerified means the file has not changed since its index was written, so
+	// the range is exactly the one indexed.
+	DefinitionVerified KnowledgeDefinitionStatus = "verified"
+	// DefinitionChanged means the symbol's name is no longer on the start line: the file
+	// was edited after it was indexed and the range points at other code. `magus graph
+	// build` refreshes it.
+	DefinitionChanged KnowledgeDefinitionStatus = "changed"
+	// DefinitionUnverified means the name is still on the start line but magus cannot
+	// vouch for the end: the file changed after its index was written, or no index time
+	// was found.
+	DefinitionUnverified KnowledgeDefinitionStatus = "unverified"
+	// DefinitionUnreadable means the file could not be read or is shorter than the range.
+	DefinitionUnreadable KnowledgeDefinitionStatus = "unreadable"
+)
 
 // SymbolOccurrenceStatus says whether one occurrence's recorded range still describes
 // the file on disk. It exists because a SCIP range is only meaningful against the exact

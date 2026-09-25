@@ -316,6 +316,11 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 		projectForPath: func(abs string) (string, bool) { return matchProject(abs, capable) },
 		runIndex: func(ctx context.Context, project string) error {
 			err := m.Run(ctx, []types.Target{{Path: project, Name: spells.SymbolIndexOp}})
+			if err == nil {
+				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
+					slog.Default().DebugContext(ctx, "magus: guard index not written", slog.String("error", gerr.Error()))
+				}
+			}
 			if err == nil || ctx.Err() != nil {
 				return err // a clean run, or a yield-cancel that carries no useful hint
 			}

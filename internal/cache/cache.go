@@ -73,6 +73,7 @@ type Cache struct {
 	outputs        *OutputStore // per-execution captured-output store (target output refs)
 	exportMu       sync.RWMutex // guards Export/Import against concurrent Run writes
 	evictMu        sync.Mutex   // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
+	failureHinted  sync.Map     // cache key -> struct{}: keys emitUnchangedFailureHint already spoke for
 	// annotator folds failure output and raises notices for whichever CI
 	// provider is running the job; Nop off CI, so call sites never branch.
 	// annotateMu serializes a whole failure block (group open, dump, group
@@ -143,6 +144,11 @@ type Step struct {
 	// not own. Ordinary outputs stay lenient: a glob that legitimately matches nothing
 	// is common, and only a total miss is suspicious.
 	RequiredOutputs []string
+	// NestedDirs are the workspace-relative dirs of the projects nested under this one.
+	// A file inside one belongs to that project, so an output glob stops at its boundary
+	// unless the glob itself is rooted inside it (a declared cross-project output).
+	// Unhashed: it narrows what a snapshot records and a replay writes, never the key.
+	NestedDirs []string
 
 	// OutputsDeclared reports that Outputs came from the TARGET (ctx.writesFiles) rather than
 	// being inherited from the project or a bound spell. Only then does producing nothing mean
@@ -257,6 +263,8 @@ type runCtx struct {
 	onHit   func(*Result)
 	onMiss  func(*Result)
 	onError func(error)
+	// auditReplay judges the paths a hit just wrote; see AuditReplay.
+	auditReplay func(ctx context.Context, s Step, written []string) error
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -551,6 +559,11 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			if r, ok := c.replayHit(ctx, rc, s, hash, e, start, netRec); ok {
 				e.done()
 				c.backfill(ctx, s, hash, i)
+				if rc.auditReplay != nil {
+					if err := rc.auditReplay(ctx, s, r.Outputs); err != nil {
+						return r, err
+					}
+				}
 				return r, nil
 			}
 			e.done()
@@ -571,7 +584,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
 	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
 	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
-	paths, err := c.replayFrom(replayCtx, e.manifest, s.WorkspaceRoot, e.root)
+	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s), s.WorkspaceRoot, e.root)
 	endReplay(err)
 	result.Duration = time.Since(start)
 	if err != nil {
@@ -835,29 +848,36 @@ const maxHintErrChars = 120
 // emitUnchangedFailureHint names the recorded failure this step's cache key already
 // holds, and returns [HintUnchangedFailure] when it said so. Nothing is replayed: a
 // failure is deliberately not a cacheable result (docs/concepts/cache/output-refs.md),
-// so the step runs either way and the line is context, never a verdict. Empty when the
-// key has no stored execution, when the newest one passed, or when hints are off.
+// so the step runs either way and the line is context, never a verdict. It prints
+// BEFORE the run, so it says the step runs again: under -s a passing re-run prints
+// nothing else, and a bare "which failed" before exit 0 reads as a failure replayed as a
+// pass. Empty when the key has no stored execution, when the newest one passed, when
+// hints are off, or when this key was already hinted.
+//
+// The line names the failed ATTEMPT, not the step ref: the step ref resolves to the
+// key's newest attempt, so once the re-run passes it shows that pass instead.
 //
 // Once per key rather than per target, because the fact reported is about the KEY: a
-// re-run whose inputs moved hashes differently and deserves silence. The dedupe rides
-// interactive.Emit, which keys on the whole message; the ref inside it is derived from
-// the cache key, so one line per key per process falls out with no state of its own,
-// and one `magus run` invocation is one process.
+// re-run whose inputs moved hashes differently and deserves silence. The attempt id
+// differs per failure, so interactive.Emit's whole-message dedupe cannot do this.
 func (c *Cache) emitUnchangedFailureHint(hash string) string {
 	// A record-only run carries the same pointer as run.target.result's next breadcrumbs.
 	if c.outputs == nil || !interactive.HintsEnabled() || c.recordsOnly {
 		return ""
 	}
 	d, err := c.outputs.newestDescriptor(hash)
-	if err != nil || !d.Failed || d.Ref == "" {
+	if err != nil || !d.Failed || d.Attempt == "" {
+		return ""
+	}
+	if _, dup := c.failureHinted.LoadOrStore(hash, struct{}{}); dup {
 		return ""
 	}
 	msg, _, _ := strings.Cut(d.ErrMsg, "\n")
 	if len(msg) > maxHintErrChars {
 		msg = msg[:maxHintErrChars] + "..."
 	}
-	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; read it with %s",
-		d.Ref, msg, hint.QueryOutput.With(d.Ref)))
+	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
+		d.Attempt, msg, hint.QueryOutput.With(d.Attempt)))
 	return HintUnchangedFailure
 }
 

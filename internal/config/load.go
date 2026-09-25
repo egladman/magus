@@ -406,9 +406,10 @@ func mergeConfig(dst, src Config) Config {
 // `false`. Absent and false both decode to false, so without the document's own
 // key set every bool defaulting true (server.enabled, ci.record_runs,
 // volatility.enabled, volatility.annotate_gha) is impossible to turn off from
-// magus.yaml, however plainly it is written there. Only bools consult the key
-// set; every other kind keeps non-zero-wins, which is what lets a partial
-// overlay inherit the tier beneath it.
+// magus.yaml, however plainly it is written there. Only bools, and a field
+// tagged `merge:"written"` whose zero means something (jobs.stale_after: 0 is
+// never), consult the key set; every other kind keeps non-zero-wins, which is
+// what lets a partial overlay inherit the tier beneath it.
 func mergeOverlay(dst, src Config, data []byte) Config {
 	var written map[string]any
 	if err := yaml.Unmarshal(data, &written); err != nil {
@@ -436,7 +437,7 @@ func mergeStruct(dst, src reflect.Value, written map[string]any) {
 			mergeStruct(df, sf, sub)
 			continue
 		}
-		if _, ok := written[key]; ok && sf.Kind() == reflect.Bool {
+		if _, ok := written[key]; ok && (sf.Kind() == reflect.Bool || t.Field(i).Tag.Get("merge") == "written") {
 			df.Set(sf)
 			continue
 		}

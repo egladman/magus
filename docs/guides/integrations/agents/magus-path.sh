@@ -27,9 +27,10 @@
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
-# __MAGUS_AGENT_NAME, HOST_SESSION_PATH and HOST_AGENT_PATH work exactly as they do
-# in magus-command.sh: attribution recorded on the activity event; the subagent id
-# also selects the job that subagent was spawned for.
+# `--agent-name <host>`, HOST_SESSION_PATH and HOST_AGENT_PATH work exactly as they do
+# in magus-command.sh: the host name is REQUIRED on this script's argv, all three are
+# attribution recorded on the activity event, and the subagent id also selects the job
+# that subagent was spawned for.
 #
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-command.sh. It records what HOST_RESPONSE RENDERS, not
@@ -39,7 +40,7 @@
 # before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 # Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 # renders as a deny.
-# magus-guard-template: 17
+# magus-guard-template: 18
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
@@ -49,7 +50,15 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_AGENT_PATH" ] || HOST_AGENT_PATH='agent_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The host this entry is wired into, from the entry's own argv only; see magus-command.sh.
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
 # The one arm on this surface that does not fail open; see the truncated-envelope check
 # below. Plain assignment for the same reason as the rest: a `}` would end a ${...}.
 [ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this write from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
@@ -126,10 +135,10 @@ if [ "$(printf '%s' "$event" | jq -r '(.tool_name // "") | startswith("mcp__")' 
   whole_event=
 fi
 
-# Codex by name or by its event's turn_id, exactly as magus-command.sh decides it. No
-# Codex rule prompts for a write, so there an ask renders as a deny.
+# Codex is the host the entry names, exactly as magus-command.sh decides it. No Codex rule
+# prompts for a write, so there an ask renders as a deny.
 if [ -z "$HOST_ASK_BRANCH" ]; then
-  if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
+  if [ "$agent_name" = codex ]; then
     HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason "\n\nThis write needs the approval of the person you work for, and Codex has no prompt for it. Ask them to make it themselves.")}}}}'
   else
     HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}'
@@ -163,7 +172,7 @@ guard() {
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$agent_name" --transport sh --session "$session" --agent "$agent" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

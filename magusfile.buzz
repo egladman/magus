@@ -64,7 +64,8 @@ import "project/libs/coldread";
 import "project/libs/testlayout";
 import "project/libs/mergequeue";
 
-// Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
+// Cross-shard remote cache via GitHub Actions Cache. The spell reads the service
+// endpoint and token ci.yaml exports, and misses every read in a job that exports neither.
 //
 // The trust set is the switch: declaring the keys that verify the cache is what turns
 // the cache on. The insecure arm is an escape hatch for validating a backend BEFORE
@@ -106,11 +107,13 @@ if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
     magus\secret.provider(system_keychain);
 }
 
-// Unconditional, unlike the cache above: the spell's enabled() gates every op
-// on GITHUB_ACTIONS, so this costs nothing on a laptop. Under Actions it
-// supplies the job-log structure AND answers last_green_run, which is what
-// lets `affected ci --plan` inherit a green run's verdict on a low-risk push.
-magus\ci.provider(github);
+// Wired when the workflow asks for it with CI_PROVIDER, never by the spell noticing it
+// runs under Actions (docs/doctrine.md, "Told, never guessed"). Asked, it supplies the
+// job-log structure AND answers last_green_run, which is what lets `affected ci --plan`
+// inherit a green run's verdict on a low-risk push.
+if (os\env("CI_PROVIDER") == "github-actions") {
+    magus\ci.provider(github);
+}
 magus\harness.provider(cursor);
 magus\harness.provider(codex);
 magus\harness.provider(claude);
@@ -434,10 +437,13 @@ fun build_date() > str !> any {
     }
 }
 
-// built_by is the CI workflow that produced the binary, empty for a local build so
-// nothing claims a pedigree it does not have. It should match the job_workflow_ref a
-// keyless signature carries, which is what lets the claim be checked against proof.
-fun built_by() > str !> any { return os\env("GITHUB_WORKFLOW_REF") ?? ""; }
+// built_by is the CI workflow that produced the binary, empty unless the build is told
+// one, so nothing claims a pedigree it does not have. release.yaml passes its own
+// workflow ref in BUILT_BY rather than this reading the runner's variable, so a build
+// stamps what its caller said and not where it happened to run. It should match the
+// job_workflow_ref a keyless signature carries, which is what lets the claim be checked
+// against proof.
+fun built_by() > str !> any { return os\env("BUILT_BY") ?? ""; }
 
 fun ld_flags() > str !> any {
     return "-w -s"
@@ -632,12 +638,16 @@ fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registr
 // output back out of a file magus wrote. That is the shell-parsing shape this
 // magusfile avoids everywhere else, and it drifts the moment the tag scheme changes.
 //
-// Self-gating on $GITHUB_STEP_SUMMARY rather than a charm, matching the second half
-// of ci_shard below: outside Actions the variable is unset and this is a no-op, so a
-// local `magus run image-build:cd` needs no extra flag to stay quiet.
-fun write_image_summary(refs: [str]) > void !> any {
+// Behind the gha charm, like ci_shard below, rather than on whether $GITHUB_STEP_SUMMARY
+// happens to be set: the workflow asks with `image-build:cd,gha`, and a local
+// `magus run image-build:cd` stays quiet because nobody asked, not because it noticed
+// where it runs (docs/doctrine.md, "Told, never guessed").
+fun write_image_summary(ctx: magus\Context, refs: [str]) > void !> any {
+    if (!ctx.hasCharm("gha")) { return; }
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
-    if (summaryPath == null or ("{summaryPath}") == "") { return; }
+    if (summaryPath == null or ("{summaryPath}") == "") {
+        throw "image-build: the gha charm is set but $GITHUB_STEP_SUMMARY is unset; run this inside a GitHub Actions step";
+    }
     if (refs.len() == 0) { return; }
 
     var md = "## Container images\n\n| Reference | Pull |\n| --- | --- |\n";
@@ -713,6 +723,7 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void !> any {
 //     magus run image-build:cd             # GHCR, tagged with the short commit, static only
 //     magus run image-build:cd,unstable    # both registries, version only, no floating tag
 //     magus run image-build:cd,stable      # both registries, version + latest, both variants
+//     magus run image-build:cd,gha         # any delivering mode, plus the Actions job summary
 //
 // The commit channel is the default among delivering modes for the same reason a bare run
 // pushes nothing: it adds an immutable tag to one registry and moves nothing, while a
@@ -745,7 +756,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
             foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
                 registries, dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
         }
-        write_image_summary(pushed);
+        write_image_summary(ctx, refs: pushed);
     } else if (ctx.hasCharm("dynamic")) {
         load_variant(ctx, "Dockerfile");
     } else {

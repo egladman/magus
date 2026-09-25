@@ -102,6 +102,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "SemverNext", Zero: types.SemverNext{}, Encode: func(v any) vm.Value { return ObjectSemverNext(v.(types.SemverNext)) }},
 	{Name: "SemverVersion", Zero: types.SemverVersion{}, Encode: func(v any) vm.Value { return ObjectSemverVersion(v.(types.SemverVersion)) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
+	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any) vm.Value { return ObjectSkill(v.(types.Skill)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest)) }},
 	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},

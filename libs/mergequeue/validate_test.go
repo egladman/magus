@@ -1,6 +1,7 @@
 package mergequeue
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -21,7 +22,7 @@ import (
 )
 
 func planOf(groups ...[]types.Change) types.Plan {
-	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 3, Partitions: groups}
+	return types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, CommitDate: when, Depth: 3, Partitions: groups}
 }
 
 // validating wires a Validator to d, answering each change's fetch.
@@ -155,6 +156,46 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 	assert.Equal(t, []string{"a"}, g.unitsOf("3@"+c3), "a gate runs its change's affected set")
 }
 
+// A candidate auto-resolution settled is gated like any other, and its verdict names
+// what was settled: the reason of a merge, and a line of a kick-back's report.
+func TestAVerdictNamesWhatAutoResolutionSettled(t *testing.T) {
+	for name, red := range map[string]bool{"green": false, "red": true} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			one := change("1", "a")
+			d.builds(building{touched: []string{"CHANGELOG.md"}, files: map[string]string{"CHANGELOG.md": "<<<<<<< markers\n"},
+				conflicts: map[string][]magustypes.Conflict{one.Head: {{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}}})
+			d.facts.EXPECT().Classify(mock.Anything, []string{"CHANGELOG.md"}).Return(genOutput, nil)
+			d.sides(base, one.Head, "CHANGELOG.md", "a\nz\n", "a\np\nz\n", "a\nq\nz\n")
+			d.allows("CHANGELOG.md", "a\nz\n", "a\np\nq\nz\n", chVerdict, true)
+			d.vcs.EXPECT().MarkResolved(mock.Anything, mock.Anything, []string{"CHANGELOG.md"}).Return(nil)
+			result := allGreen
+			if red {
+				result = redFor("1")
+			}
+			g := d.gates(result)
+			plan := planOf([]types.Change{one})
+			v, dir := validating(t, d, plan)
+			var events bytes.Buffer
+			v.Events = NewEvents(&events)
+			require.NoError(t, v.Run(t.Context(), plan))
+
+			cand := candidateOf(base, one.Head)
+			assert.Equal(t, 1, g.count("1"), "a resolution never skips the gate")
+			assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+cand+`"`)
+			got := recorded(t, dir)["1"]
+			if !red {
+				assert.Equal(t, types.DecisionMerge, got.Decision)
+				assert.Equal(t, chNote, got.Reason)
+				return
+			}
+			assert.Equal(t, types.CodeKickRed, got.Code)
+			assert.Equal(t, "The merge queue built this change at `"+short(one.Head)+"` onto `main` at `"+short(base)+"`, and the gate exited 1.\n"+
+				"\nBuilding the candidate "+chNote+"; the gate ran on that merge.\n", got.Report)
+		})
+	}
+}
+
 // A red candidate on a green base is its change's own (everything beneath it validated),
 // and what was built onto it is built again onto what did validate.
 func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
@@ -266,6 +307,7 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 	d.builds(building{touched: []string{"a/x.go"}, conflicts: map[string][]magustypes.Conflict{two.Head: {{Path: "a/x.go", Kind: magustypes.ConflictKindContent}}}})
 	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(map[string]types.Writes{}, nil)
 	c1 := candidateOf(base, one.Head)
+	d.sides(c1, two.Head, "a/x.go", "package a\n", "package a1\n", "package a2\n")
 	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, two.Head, c1, []string{"a/x.go"}).Return(nil, nil)
 	d.gates(allGreen)
 	plan := planOf([]types.Change{one, two, three})
@@ -274,7 +316,8 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 
 	got := recorded(t, dir)
 	assert.Equal(t, types.CodeWaitConflictAhead, got["2"].Code)
-	assert.Equal(t, "conflicts with #1 ahead of it in a/x.go; retried once it merges", got["2"].Reason)
+	assert.Equal(t, "conflicts with #1 ahead of it in `a/x.go`; retried once it merges; not auto-resolved: a/x.go#(preamble): not settled",
+		got["2"].Reason, "the reason names the location auto-resolution could not settle")
 	assert.Equal(t, []string{"a/x.go"}, got["2"].Paths)
 	assert.Equal(t, "1", got["3"].After, "stacked past the change that waits")
 	assert.Equal(t, types.DecisionMerge, got["3"].Decision)
@@ -354,7 +397,7 @@ func TestValidationRegeneratesOnlyWhatApplyingCanReproduce(t *testing.T) {
 		"a generator change whose outputs are fresh": {want: types.DecisionMerge},
 		"a generator change whose outputs are stale": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
 			want:       types.DecisionKick,
-			wantReason: "building its candidate failed: gen/x.go are stale on top of " + base[:12] + ", and it changes code their regeneration runs (gen/gen.go), so the queue cannot regenerate them for it"},
+			wantReason: "building its candidate failed: `gen/x.go` are stale on top of " + base[:12] + ", and it changes code their regeneration runs (`gen/gen.go`), so the queue cannot regenerate them for it"},
 		"a change the regeneration runs none of": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}}, want: types.DecisionMerge},
 	} {
 		t.Run(name, func(t *testing.T) {

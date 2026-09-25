@@ -57,8 +57,22 @@ type Command struct {
 	// "./internal/compress/"]})`) without the default package list riding along
 	// and recompiling the module. Charms patch Args only, never DefaultArgs;
 	// defaults are appended after the patched base.
-	DefaultArgs []string         `json:"default_args,omitempty"`
-	Charms      map[string]Charm `json:"charms,omitempty"`
+	DefaultArgs []string `json:"default_args,omitempty"`
+	// TrailingArgs are argv tokens the RUNNER appends only on a fully bare
+	// invocation: no explicit call-site args AND no `magus run <t> -- <extra>`
+	// forwarding either. This is DefaultArgs' opposite, not just its mirror
+	// position: DefaultArgs rides along even when extras are forwarded (a bare
+	// `-run X` still scopes to the default package list), but TrailingArgs drops
+	// out the moment ANY arg shows up, forwarded or explicit.
+	//
+	// It exists for an operand a tool refuses to combine with certain flags at
+	// all, not merely in the wrong order: `go clean -cache ./...` fails with
+	// "cannot be used with package arguments" regardless of where `./...` sits,
+	// so the trailing package pattern can only be safe on the no-args invocation.
+	// DefaultArgs cannot express this (it always applies over forwarding), and a
+	// fixed Args entry cannot either (forwarded args land after Args too).
+	TrailingArgs []string         `json:"trailing_args,omitempty"`
+	Charms       map[string]Charm `json:"charms,omitempty"`
 	// Sources, when non-empty, are doublestar globs (relative to the project
 	// directory this command runs in) that the RUNNER expands into a file list
 	// at EXECUTION time, via the same walk that builds the cache key

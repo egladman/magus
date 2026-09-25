@@ -2,7 +2,11 @@
 // job log by. Wire it in a magusfile:
 //
 //   import "spells/gitlab/ci" as gitlab
-//   magus\ci.provider(gitlab)
+//   if (os\env("CI_PROVIDER") == "gitlab-ci") { magus\ci.provider(gitlab); }
+//
+// The condition is the caller asking, set in .gitlab-ci.yml's variables. The spell
+// declares no enabled() op and never checks for GitLab itself: wired, it writes its
+// markers wherever it runs. See "Told, never guessed" in docs/doctrine.md.
 //
 // magus knows nothing about GitLab: it speaks only the generic CI provider
 // contract (see internal/ci/annotate), calling group_start / group_end /
@@ -51,17 +55,6 @@ final ESC = std\char(27);
 // HIDE is the "erase to end of line" pair GitLab uses to keep the marker itself
 // out of the rendered log.
 final HIDE = ESC + "[0K";
-
-// getenv reads one environment variable, returning "" when unset (os.env returns
-// null for an unset var; callers test against "").
-fun getenv(name: str) > str { return os\env(name) ?? ""; }
-
-// enabled gates the whole provider on running under GitLab CI, which sets
-// GITLAB_CI=true for every job. magus probes this once, so wiring the spell
-// unconditionally costs nothing anywhere else.
-export fun enabled(target: Target, cb: fun(any)) > bool {
-    return getenv("GITLAB_CI") == "true";
-}
 
 // nowSeconds is the wall-clock second every section marker carries. os.time()
 // is epoch millis.

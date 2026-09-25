@@ -175,6 +175,15 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return nil
 	}
 
+	if !globalCfg.DryRun {
+		if conflicts, err = autoResolveConflicts(ctx, m, res.VCS, conflicts); err != nil {
+			return err
+		}
+		if len(conflicts) == 0 {
+			return nil
+		}
+	}
+
 	plan, err := planResolution(ctx, m, res.VCS, conflicts)
 	if err != nil {
 		return err
@@ -184,6 +193,38 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return unresolvedError(plan)
 	}
 	return applyResolution(ctx, root, rc, m, res.VCS, plan, stale)
+}
+
+// autoResolveConflicts runs the merge driver over the content conflicts in source files,
+// where the VCS did not already run it during the operation (jj), and returns the
+// conflicts still standing. The driver decides each file (Magus.AutoResolve), so a
+// comment-only edit settles here even though no glob routes it.
+func autoResolveConflicts(ctx context.Context, m *magus.Magus, drv types.VCSDriver, conflicts []types.Conflict) ([]types.Conflict, error) {
+	var eligible []string
+	for _, c := range conflicts {
+		if c.Kind == types.ConflictKindContent && m.FindOutputProducer(filepath.Join(m.Root(), filepath.FromSlash(c.Path))) == nil {
+			eligible = append(eligible, c.Path)
+		}
+	}
+	if len(eligible) == 0 {
+		return conflicts, nil
+	}
+	if err := drv.RunMergeDriver(ctx, m.Root(), eligible); err != nil {
+		return nil, fmt.Errorf("vcs resolve: %w", err)
+	}
+	left, err := drv.Conflicts(ctx, m.Root())
+	if err != nil {
+		return nil, fmt.Errorf("vcs resolve: %w", err)
+	}
+	for _, p := range eligible {
+		if !slices.ContainsFunc(left, func(c types.Conflict) bool { return c.Path == p }) {
+			fmt.Printf("vcs resolve: auto-resolved %s\n", p)
+		}
+	}
+	if len(left) == 0 {
+		fmt.Println("vcs resolve: every conflict is resolved")
+	}
+	return left, nil
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that

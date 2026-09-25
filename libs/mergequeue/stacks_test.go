@@ -357,7 +357,7 @@ func stacksHold(t *testing.T, data []byte) {
 	}
 	settled, partitions := arrange(changes, verdicts)
 
-	plan := types.Plan{Base: "main", BaseCommit: base, Depth: 1, Partitions: partitions, Verdicts: settled, Merged: w.in.merged, Unqueued: w.in.unqueued}
+	plan := types.Plan{Base: "main", BaseCommit: base, CommitDate: when, Depth: 1, Partitions: partitions, Verdicts: settled, Merged: w.in.merged, Unqueued: w.in.unqueued}
 	require.NoError(t, plan.Check(), "stack order, no duplicates, and every code of its decision's class")
 
 	where := map[string][2]int{}

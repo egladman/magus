@@ -163,17 +163,32 @@ When true, the host architecture keys every cache entry; off by default because 
 \fBMAGUS_CACHE_SIZE_MB\fR
 Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBcache.size_mb\fR.
 .TP
+\fBMAGUS_CACHE_REMOTE_TRUSTED_KEYS\fR
+Comma\-separated base64 Ed25519 public keys a remote artifact must be signed by; required when a remote backend is wired. Equivalent magus.yaml key: \fBcache.remote.trusted_keys\fR.
+.TP
 \fBMAGUS_CACHE_REMOTE_INSECURE\fR
 Disable remote\-cache signature verification (accept/produce unsigned artifacts); for trusted single\-repo CI only. Requires cache.remote.insecure_reason (default: false). Equivalent magus.yaml key: \fBcache.remote.insecure\fR.
 .TP
 \fBMAGUS_CACHE_REMOTE_INSECURE_REASON\fR
 Why this cache runs unverified; required whenever cache.remote.insecure is true. Equivalent magus.yaml key: \fBcache.remote.insecure_reason\fR.
 .TP
+\fBMAGUS_CACHE_SIGNING_KEY\fR
+Env\-only, no magus.yaml equivalent: the Ed25519 seed that signs remote\-cache writes (see `magus config cache\-key`); env\-only because a signing secret in a committed file is not a secret
+.TP
+\fBMAGUS_CACHE_TOOL_VERSION\fR
+Env\-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off (default: project)
+.TP
 \fBMAGUS_LOG_FORMAT\fR
 Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: \fBlog.format\fR.
 .TP
 \fBMAGUS_LOG_LEVEL\fR
 Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: \fBlog.level\fR.
+.TP
+\fBMAGUS_LOG_SILENT\fR
+When true, the env equivalent of \-s/\-\-silent: suppress progress, bound the failing\-project dump, and surface only lines a target marks as a notice (default: false). Equivalent magus.yaml key: \fBlog.silent\fR.
+.TP
+\fBMAGUS_LOG_STREAM\fR
+When true, the env equivalent of \-vv: stream every target's output live instead of withholding a passing target's output (default: false). Equivalent magus.yaml key: \fBlog.stream\fR.
 .TP
 \fBMAGUS_CONCURRENCY\fR
 Maximum number of concurrently running per\-project build steps; overrides concurrency_profile when positive (default: concurrency_profile decides). Equivalent magus.yaml key: \fBconcurrency\fR.
@@ -189,6 +204,15 @@ Path to the runtime\-history JSON shared by volatility detection, the CI forecas
 .TP
 \fBMAGUS_DRY_RUN\fR
 When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: \fBdry_run\fR.
+.TP
+\fBMAGUS_MAX_FAILURES\fR
+How many projects may fail before a run stops starting more; 1 is fail\-fast, 0 is unlimited (default: 0). Equivalent magus.yaml key: \fBmax_failures\fR.
+.TP
+\fBMAGUS_TARGET_TIMEOUT\fR
+Duration after which magus cancels any single target, subprocesses included; 0 means no limit (default: 0). Equivalent magus.yaml key: \fBtarget_timeout\fR.
+.TP
+\fBMAGUS_STALL_TIMEOUT\fR
+Abort an invocation that starts, finishes and prints nothing for this long; negative turns the watchdog off (default: 15m). Equivalent magus.yaml key: \fBstall_timeout\fR.
 .TP
 \fBMAGUS_DEFAULT_CHARMS\fR
 Comma\-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and \-\-no\-default\-charms ignores them for one run. Equivalent magus.yaml key: \fBdefault_charms\fR.
@@ -208,11 +232,17 @@ Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read 
 \fBMAGUS_PROC_SOCKET\fR
 Env\-only, no magus.yaml equivalent: the proc\-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
 .TP
+\fBMAGUS_PROC_TOKEN\fR
+Env\-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
+.TP
 \fBMAGUS_CI_MAX_SHARDS\fR
 Maximum number of parallel CI shards; \-1 means unlimited (default: 8). Equivalent magus.yaml key: \fBci.max_shards\fR.
 .TP
 \fBMAGUS_CI_RUNNER_POOL_BUDGET\fR
 Cross\-shard concurrency cap at the GHA matrix level; 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBci.runner_pool_budget\fR.
+.TP
+\fBMAGUS_CI_RECORD_RUNS\fR
+Keep the per\-branch run log (which commit a branch passed or failed at) in the history file (default: true). Equivalent magus.yaml key: \fBci.record_runs\fR.
 .TP
 \fBMAGUS_SHARD\fR
 CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github/actions/magus
@@ -250,6 +280,21 @@ Idle workspace eviction TTL for the multi\-workspace server; e.g. "6h", "30m" (d
 \fBMAGUS_SERVER_WORKSPACES\fR
 Colon\-separated list of workspace roots the server will serve; non\-empty list triggers eager union of sandbox policies and rejection of out\-of\-list workspaces (MGS2010). Equivalent magus.yaml key: \fBserver.workspaces\fR.
 .TP
+\fBMAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES\fR
+How often the server checks whether the activity trail is due for a trim (default: 1h). Equivalent magus.yaml key: \fBserver.maintenance.rotate_activities\fR.
+.TP
+\fBMAGUS_SERVER_MAINTENANCE_ROTATE_LOGS\fR
+How often the server checks the run\-log journals, and the age past which it trims them (default: 168h). Equivalent magus.yaml key: \fBserver.maintenance.rotate_logs\fR.
+.TP
+\fBMAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED\fR
+How often the server checks for expired `vcs checkpoint \-\-preserve` captures (default: 24h). Equivalent magus.yaml key: \fBserver.maintenance.prune_preserved\fR.
+.TP
+\fBMAGUS_SERVER_MAINTENANCE_SYNC_GRAPH\fR
+How often the server reconciles the knowledge graph, a safety net behind the VCS refresh hook (default: 6h). Equivalent magus.yaml key: \fBserver.maintenance.sync_graph\fR.
+.TP
+\fBMAGUS_SERVER_MAINTENANCE_CHECK_REVIEW\fR
+How often the server checks for a merge or a new remark on a review this tree took part in (default: 15m). Equivalent magus.yaml key: \fBserver.maintenance.check_review\fR.
+.TP
 \fBMAGUS_MCP_ENABLED\fR
 When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: \fBmcp.enabled\fR.
 .TP
@@ -259,8 +304,83 @@ host:port for the MCP Streamable HTTP server `magus server` starts (default: 127
 \fBMAGUS_MCP_INSECURE_BIND\fR
 Permit a non\-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: \fBmcp.insecure_bind\fR.
 .TP
+\fBMAGUS_CONSOLE_ENABLED\fR
+When false, the MCP HTTP server does not mount the console's read\-only API and job service (default: true when MCP is up). Equivalent magus.yaml key: \fBconsole.enabled\fR.
+.TP
 \fBMAGUS_HINTS_ENABLED\fR
 When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: \fBhints.enabled\fR.
+.TP
+\fBMAGUS_DIFF_TUI\fR
+When false, `magus diff` prints its report instead of opening the interactive viewer (default: true). Equivalent magus.yaml key: \fBdiff.tui\fR.
+.TP
+\fBMAGUS_JOBS_MAX_DEPTH\fR
+How many levels below its root job a `magus job fork` may land; 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBjobs.max_depth\fR.
+.TP
+\fBMAGUS_JOBS_MAX_LIVE\fR
+How many live jobs one root's tree may hold at once, the new one included; 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBjobs.max_live\fR.
+.TP
+\fBMAGUS_JOBS_DEFAULT_TIMEOUT\fR
+Timeout for a fork that names no \-\-timeout; 0 means no bound (default: 0). Equivalent magus.yaml key: \fBjobs.default_timeout\fR.
+.TP
+\fBMAGUS_JOBS_STALE_AFTER\fR
+Flag a live job nobody updated for this long in `magus ls jobs` and `magus doctor`; 0 never flags (default: 0). Equivalent magus.yaml key: \fBjobs.stale_after\fR.
+.TP
+\fBMAGUS_SECRET_INTERACTIVE_TIMEOUT\fR
+Bound on a secret\-provider read when stdin is a terminal (default: 60s). Equivalent magus.yaml key: \fBsecret.interactive_timeout\fR.
+.TP
+\fBMAGUS_SECRET_UNATTENDED_TIMEOUT\fR
+Bound on a secret\-provider read with no terminal to prompt on (default: 10s). Equivalent magus.yaml key: \fBsecret.unattended_timeout\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_WORKSPACES\fR
+Comma\-separated extra workspace roots a \-\-global knowledge\-graph query unions in. Equivalent magus.yaml key: \fBknowledge.workspaces\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_PUBLISHED_REF\fR
+OCI artifact a published knowledge graph is read from, as <registry>/<repository>:<tag>. Equivalent magus.yaml key: \fBknowledge.published_ref\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_MAX_SIZE_MB\fR
+Soft cap on the knowledge shard store in MB; least\-recently\-used shards are evicted past it. 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBknowledge.max_size_mb\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_VCS_ENABLED\fR
+Fold VCS history (last commit, commit count) onto file nodes as the @vcs shard (default: false). Equivalent magus.yaml key: \fBknowledge.vcs.enabled\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_VCS_MAX_COMMITS\fR
+Bound the history walk to the most recent N commits; 0 uses a built\-in default (default: 0). Equivalent magus.yaml key: \fBknowledge.vcs.max_commits\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_VCS_AUTHORSHIP\fR
+Include author nodes and authored edges in the @vcs shard; false keeps only the per\-file attributes (default: true). Equivalent magus.yaml key: \fBknowledge.vcs.authorship\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED\fR
+When true, the server never re\-runs a project's scip op on its own (default: false). Equivalent magus.yaml key: \fBknowledge.symbol_indexing.disabled\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS\fR
+Seconds a project's sources must be quiet before the server re\-indexes it; 0 uses a built\-in default (default: 0). Equivalent magus.yaml key: \fBknowledge.symbol_indexing.quiet_seconds\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS\fR
+Minimum seconds between re\-index runs for one project; 0 uses a built\-in default (default: 0). Equivalent magus.yaml key: \fBknowledge.symbol_indexing.min_interval_seconds\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_SESSIONS_DISABLED\fR
+When true, `graph build` runs no agent\-session adapter (default: false). Equivalent magus.yaml key: \fBknowledge.sessions.disabled\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_NOTES_SHARED\fR
+Workspace\-relative directory of the team's committed notes. Equivalent magus.yaml key: \fBknowledge.notes.shared\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_NOTES_PRIVATE\fR
+A second notes directory, yours rather than the team's, anywhere on disk. Equivalent magus.yaml key: \fBknowledge.notes.private\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES\fR
+Fewest callees a function needs before the duplication lens compares it (default: 3). Equivalent magus.yaml key: \fBknowledge.duplication.min_callees\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED\fR
+Fewest shared callees a pair needs to be reported as duplicates (default: 4). Equivalent magus.yaml key: \fBknowledge.duplication.min_shared\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE\fR
+Lowest similarity score in [0,1] the duplication lens reports (default: 0.7). Equivalent magus.yaml key: \fBknowledge.duplication.min_score\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO\fR
+Lowest ratio in [0,1] of the shorter function's span to the longer one's (default: 0.5). Equivalent magus.yaml key: \fBknowledge.duplication.min_span_ratio\fR.
+.TP
+\fBMAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS\fR
+When true, the duplication lens also compares test functions (default: false). Equivalent magus.yaml key: \fBknowledge.duplication.include_tests\fR.
 .TP
 \fBMAGUS_VOLATILITY_ENABLED\fR
 Master switch for volatility detection and auto\-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: \fBvolatility.enabled\fR.
@@ -280,14 +400,62 @@ When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUM
 \fBMAGUS_REPORT_FILTER\fR
 Comma\-separated +type/\-type terms restricting JSONL event emission (e.g. \-graph.build,\-graph.query). Equivalent magus.yaml key: \fBreport.filter\fR.
 .TP
-\fBMAGUS_SANDBOX_ENABLED\fR
-When 1 or true, confine every subprocess and in\-process spell to the workspace + a curated allowlist, scrub the child\-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: \fBsandbox.enabled\fR.
+\fBMAGUS_SANDBOX\fR
+off, best\-effort, or required. On, magus scrubs child\-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best\-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and \-\-sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: off). Equivalent magus.yaml key: \fBsandbox.mode\fR.
+.TP
+\fBMAGUS_SANDBOX_ENV_PASSTHROUGH\fR
+Comma\-separated names or globs (e.g. MISE_*) added to the sandbox's child\-process env allowlist. Equivalent magus.yaml key: \fBsandbox.env.passthrough\fR.
 .TP
 \fBMAGUS_UPDATE_URL\fR
 Env\-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self\-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
 .TP
 \fBMAGUS_NO_BOOTSTRAP_EXEC\fR
 Env\-only, no magus.yaml equivalent: when 1, true or yes, disable the pre\-workspace\-load check that replaces this process with a workspace\-local ./magus found by walking up from the working directory (or \-\-root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
+.TP
+\fBMAGUS_REGISTRY_URL\fR
+Env\-only, no magus.yaml equivalent: override the built\-in registry source's URL with a mirror of its signed index (default: https://eli.gladman.cc/magus/public/registry/index.json)
+.TP
+\fBMAGUS_OFFLINE\fR
+Env\-only, no magus.yaml equivalent: when set to anything but 0 or false, a registry or remote\-spell fetch fails with a named error instead of sending a request (default: false)
+.TP
+\fBMAGUS_DIFFTOOL\fR
+Env\-only, no magus.yaml equivalent: the command, taking two paths, that `\-\-then file <path> diff` compares a cached artifact with (default: $DIFFTOOL, then git diff \-\-no\-index)
+.TP
+\fBMAGUS_LOG_VIEWER_URL\fR
+Env\-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self\-hosted mirror (default: the hosted log viewer)
+.TP
+\fBMAGUS_CONSOLE_DIR\fR
+Env\-only, no magus.yaml equivalent: directory of the built console the LAN share serves (default: <root>/console/gen)
+.TP
+\fBMAGUS_PPROF\fR
+Env\-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated
+.TP
+\fBMAGUS_MCP_TOKEN\fR
+Env\-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
+.TP
+\fBMAGUS_S3_BUCKET\fR
+Env\-only: the bucket the aws/s3\-cache spell stores remote\-cache artifacts in
+.TP
+\fBMAGUS_S3_ENDPOINT\fR
+Env\-only: the S3\-compatible endpoint the aws/s3\-cache spell talks to (default: https://s3.<region>.amazonaws.com)
+.TP
+\fBMAGUS_LEVEL\fR
+Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand
+.TP
+\fBMAGUS_INVOCATION_ANCESTORS\fR
+Set by magus for the processes it spawns: the comma\-separated invocations a nested magus runs underneath; never set it by hand
+.TP
+\fBMAGUS_BOOTSTRAP_EXEC_DONE\fR
+Set by magus when it replaces itself with a workspace\-local ./magus, so the replacement never hops again; never set it by hand
+.TP
+\fBMAGUS_SYMBOL_INDEX\fR
+Set by magus for a spell's scip op: the path the indexer writes its SCIP index to; never set it by hand
+.TP
+\fBMAGUS_INTERNAL_ADVICE_MODE\fR
+Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice
+.TP
+\fBMAGUS_INTERNAL_ADVICE_BASE_BRANCH\fR
+Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting
 .RE
 .SH FILES
 .TP

@@ -140,10 +140,6 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	serverRegistry = reg // publish so startBridge can adopt the bridge workspace into it
 
 	if len(declared) > 0 {
-		if err := reg.preloadAndApplySandbox(ctx, declared); err != nil {
-			slog.Error("server: workspace union setup failed", slog.String("error", err.Error()))
-			return
-		}
 		reg.warmInBackground(ctx, declared)
 	}
 
@@ -180,8 +176,10 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	}
 	addr = srv.Addr()
 	_ = os.Setenv(proc.SocketEnv, addr)
+	_ = os.Setenv(proc.TokenEnv, srv.Token())
 	if err := srv.Start(); err != nil {
 		_ = os.Unsetenv(proc.SocketEnv)
+		_ = os.Unsetenv(proc.TokenEnv)
 		slog.Error("server: start failed", slog.String("error", err.Error()))
 		return
 	}

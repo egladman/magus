@@ -399,16 +399,20 @@ func hgMetaDir(root string) string { return filepath.Join(root, ".hg") }
 func hgrcPath(root string) string { return filepath.Join(root, ".hg", "hgrc") }
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .hg/hgrc.
-func (v hgVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
-	_, err := v.writeMergeDriver(ctx, root, outputGlobs)
+func (v hgVCS) InstallMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) error {
+	_, err := v.writeMergeDriver(ctx, root, globs)
 	return err
 }
 
-func (v hgVCS) writeMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
+func (v hgVCS) writeMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
 	return lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyMergeDriverSection(hgrcPath(root), outputGlobs)
+		return writeHgFamilyMergeDriverSection(hgrcPath(root), globs)
 	})
 }
+
+// RunMergeDriver implements types.MergeDriverInstaller: hg ran the merge tool during the
+// merge, so a conflict still standing is one it did not settle.
+func (hgVCS) RunMergeDriver(context.Context, string, []string) error { return nil }
 
 // MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
 func (v hgVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
@@ -424,11 +428,11 @@ func (v hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
 // EnsureMergeDriver implements types.MergeDriverInstaller. hgrc holds the glob list
 // inline, so a byte comparison of the rendered section answers both questions the git
 // side needs two checks for: registered at all, and registered for the current globs.
-func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
-	if len(outputGlobs) == 0 {
+func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
+	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
 		return false, nil
 	}
-	return v.writeMergeDriver(ctx, root, outputGlobs)
+	return v.writeMergeDriver(ctx, root, globs)
 }
 
 // InstallRefreshHook implements types.RefreshHookInstaller with an hg `update` hook,

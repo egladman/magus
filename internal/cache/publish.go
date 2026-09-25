@@ -211,15 +211,8 @@ func (c *Cache) readSignedPair(r io.Reader, domain, metaName, payloadName string
 		return nil, nil, errors.New("unsigned; refusing an unauthenticated object - ask the publisher to set MAGUS_CACHE_SIGNING_KEY and republish")
 	}
 	sum := sha256.Sum256(payload)
-	legacy, err := c.verifier.verify(domain, sigBytes, meta, map[string]string{payloadName: hex.EncodeToString(sum[:])})
-	if err != nil {
+	if err := c.verifier.verify(domain, sigBytes, meta, map[string]string{payloadName: hex.EncodeToString(sum[:])}); err != nil {
 		return nil, nil, err
-	}
-	if legacy {
-		// A pre-domain envelope covers only the metadata, leaving the payload
-		// unauthenticated, and the payload is the point. No such objects exist (the
-		// formats postdate domain separation), so refuse rather than degrade.
-		return nil, nil, errors.New("signature predates domain separation; refusing - ask the publisher to republish with a current magus")
 	}
 	return meta, payload, nil
 }

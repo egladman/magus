@@ -1,0 +1,57 @@
+# A failure is never a cache entry, so a target whose inputs have not moved since it
+# failed runs again, and its verdict is that run's own.
+#
+# Reported twice as "a failure replayed as a pass": golangci-lint lost its lock to a
+# parallel run, the next `run lint -s` printed "inputs unchanged since <ref>, which
+# failed" and exited 0. The re-run had passed. Under -s a pass prints nothing else, so
+# the hint was the only line, and it read as the verdict.
+#
+# The marker sits outside the workspace, so removing it leaves the cache key alone:
+# the same key failing once for an environmental reason, then passing.
+
+env MAGUS_HINTS_ENABLED=true
+cd ws
+
+# Environmental failure: the "lock" is held.
+! exec magus run flaky:rw . -s -- $WORK/lock
+stderr 'lock-held'
+stderr 'exit 3'
+! stderr 'hint: inputs unchanged'
+
+# Lock released, inputs unchanged. The hint says the target runs again, the target
+# runs, and the exit status is the re-run's pass.
+rm $WORK/lock
+exec magus run flaky:rw . -s -- $WORK/lock
+stderr 'hint: inputs unchanged since out[0-9a-f]+, which failed: .*exit 3; running it again'
+! stderr 'lock-held'
+
+# The pass is what the key now replays.
+exec magus run flaky:rw . -- $WORK/lock
+stderr '\[pass\] reruns \(cached'
+
+# Deterministic failure: every run executes and fails with the same cause and status.
+! exec magus run hard:rw . -s
+stderr 'exit 7'
+! exec magus run hard:rw . -s
+stderr 'hint: inputs unchanged since out[0-9a-f]+, which failed: .*exit 7; running it again'
+stderr 'deterministic'
+stderr 'exit 7'
+
+-- lock --
+held
+-- ws/magus.yaml --
+{}
+-- ws/.gitignore --
+.magus/
+-- ws/magusfile.buzz --
+import "magus";
+import "proc";
+magus\project({"name": "reruns"});
+
+export fun flaky(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "if [ -e \"$1\" ]; then echo lock-held; exit 3; fi", "sh", args[0]]);
+}
+
+export fun hard(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "echo deterministic; exit 7"]);
+}

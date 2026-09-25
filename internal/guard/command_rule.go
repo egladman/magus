@@ -60,8 +60,8 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	if deps.CheckoutState != nil {
-		if dir, ok := gitPushDir(req.Commands, cmp.Or(at.dir, at.workspace)); ok {
-			req.Checkout = deps.CheckoutState(ctx, dir)
+		if push, ok := locatePush(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
+			req.Checkout = deps.CheckoutState(ctx, push.dir)
 		}
 	}
 	bind := func(rule workspace.CommandRule) ruleCall {
@@ -110,30 +110,6 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Dir:         at.dir,
 		Workspace:   at.workspace,
 	}
-}
-
-// gitPushDir is the directory the first `git push` on a line runs in, the one command whose
-// rule needs the checkout's state: dir, moved by each `-C` git is given, as git
-// applies them. False when the line pushes nothing.
-func gitPushDir(cmds []types.CommandInvocation, dir string) (string, bool) {
-	for _, c := range cmds {
-		if c.Program != "git" {
-			continue
-		}
-		if ops := operands(c.Args, "C"); len(ops) == 0 || ops[0] != "push" {
-			continue
-		}
-		for i := 0; i+1 < len(c.Args) && c.Args[i] != "push"; i++ {
-			if c.Args[i] == "-C" {
-				dir = filepath.Join(dir, c.Args[i+1])
-				if filepath.IsAbs(c.Args[i+1]) {
-					dir = c.Args[i+1]
-				}
-			}
-		}
-		return dir, true
-	}
-	return "", false
 }
 
 // actingRole is where a caller acting under lease stands, and the lease's job row. A bound
@@ -210,7 +186,7 @@ func programPath(parts []*syntax.Word, words []string, inv hint.Invocation, dir 
 		return ""
 	}
 	word := words[i]
-	if !strings.Contains(word, "/") || strings.HasPrefix(word, "~") || !literalOnly(parts[i].Parts) {
+	if !strings.Contains(word, "/") || strings.HasPrefix(word, "~") || !fixedPath(parts[i].Parts) {
 		return ""
 	}
 	if filepath.IsAbs(word) {
@@ -222,9 +198,9 @@ func programPath(parts []*syntax.Word, words []string, inv hint.Invocation, dir 
 	return filepath.Join(dir, word)
 }
 
-// literalOnly reports whether a word's value is fixed before the line runs: no variable,
-// substitution or glob inside it.
-func literalOnly(parts []syntax.WordPart) bool {
+// fixedPath reports whether a word's value is fixed before the line runs: no variable,
+// substitution or glob inside it. Stricter than literalOnly, which lets a glob through.
+func fixedPath(parts []syntax.WordPart) bool {
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *syntax.Lit:
@@ -233,7 +209,7 @@ func literalOnly(parts []syntax.WordPart) bool {
 			}
 		case *syntax.SglQuoted:
 		case *syntax.DblQuoted:
-			if !literalOnly(p.Parts) {
+			if !fixedPath(p.Parts) {
 				return false
 			}
 		default:
