@@ -83,6 +83,20 @@ func TestFromConfigGivesChildrenAPrivateTempDir(t *testing.T) {
 	assert.NotEqual(t, p.TempDir, fromConfig(t, t.TempDir(), cacheDir, config.SandboxConfig{}).TempDir)
 }
 
+// A caller's own temp dir replaces the one FromConfig would make, under the same rule
+// that it stays out of the workspace.
+func TestFromConfigWithTempDirUsesTheCallersTempDir(t *testing.T) {
+	root, tmp := t.TempDir(), t.TempDir()
+	p, err := FromConfigWithTempDir(root, "", tmp, config.SandboxConfig{})
+	require.NoError(t, err)
+	assert.Equal(t, tmp, p.TempDir)
+	assert.Contains(t, p.BaseEnv, "TMPDIR="+tmp)
+	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(tmp, "x")))
+
+	_, err = FromConfigWithTempDir(root, "", filepath.Join(root, "tmp"), config.SandboxConfig{})
+	assert.ErrorContains(t, err, "inside the workspace")
+}
+
 // A temp dir inside the checkout changes what tools see: a repository a test creates
 // there nests in the workspace's own, and a VCS command run in it rewrites the
 // workspace's history. So a TMPDIR inside the workspace is refused, not used.

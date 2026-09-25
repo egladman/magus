@@ -3,7 +3,9 @@
 package run
 
 import (
+	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 )
 
@@ -36,11 +38,30 @@ func KillGroup(c *exec.Cmd) {
 	_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 }
 
+// procGroup is a started child's process group, whose id is the child's pid. Once the
+// child is reaped another process can take that id, so nothing signals the group after.
+type procGroup struct {
+	c      *exec.Cmd
+	mu     sync.Mutex
+	reaped bool
+}
+
 // setCancel starts c in its own process group and, on context cancellation of a
-// CommandContext, SIGTERMs the whole group.
-func setCancel(c *exec.Cmd) {
+// CommandContext, SIGTERMs the whole group. When c's WaitDelay runs out exec kills c,
+// and wait then kills the rest of the group.
+func setCancel(c *exec.Cmd) *procGroup {
 	SetupProcessGroup(c)
-	c.Cancel = func() error {
-		return TerminateGroup(c)
+	g := &procGroup{c: c}
+	c.Cancel = func() error { return g.signal(syscall.SIGTERM) }
+	return g
+}
+
+// signal sends sig to the group unless its leader is reaped.
+func (g *procGroup) signal(sig syscall.Signal) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.reaped {
+		return os.ErrProcessDone
 	}
+	return syscall.Kill(-g.c.Process.Pid, sig)
 }

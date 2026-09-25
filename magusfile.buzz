@@ -62,7 +62,6 @@ import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
 import "project/libs/coldread";
 import "project/libs/testlayout";
-import "project/libs/mergequeue";
 
 // Cross-shard remote cache via GitHub Actions Cache. The spell reads the service
 // endpoint and token ci.yaml exports, and misses every read in a job that exports neither.
@@ -455,9 +454,7 @@ fun ld_flags() > str !> any {
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    // The merge queue is compiled in as `magus queue`, and its sources are a project of
-    // their own, which this target's globs stop at.
-    ctx.needs(gopherbuzz\build, mergequeue\build);
+    ctx.needs(gopherbuzz\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
     // spells/**/*.buzz is a project source, so editing a spell does invalidate this
@@ -2752,7 +2749,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "internal/agent/skills/**", "internal/agent/agents-section.md",
                    "docs/reference/codes/**/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
-                   "internal/registry/testdata/*",
+                   "internal/registry/testdata/*", "internal/queue/testdata/**",
                    "benchmarks/agent/internal/bench/testdata/*",
                    "internal/registry/registry-keys.json",
                    "internal/selfupdate/release-keys.json");
@@ -2762,10 +2759,6 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
-    // libs/mergequeue likewise: a project, and packages of this module that magus
-    // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
-    // test inputs.
-    ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
     // The setup action, the installer and the workflows: the release trust anchor, the
     // queue app's credential rules and the no-cache rule for trusted jobs are asserted
     // against them. The installer is committed under docs/gen but is a script, not a page.
@@ -3184,8 +3177,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/coldread/**/*.go",
                    // A project, so the tree globs below stop at its directory, but also a
                    // package of this module that golangci-lint and go vet both compile.
-                   "libs/pricing/**/*.go", "libs/pricing/pricing.json",
-                   "libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz");
+                   "libs/pricing/**/*.go", "libs/pricing/pricing.json");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this
