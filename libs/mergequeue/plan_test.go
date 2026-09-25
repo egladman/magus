@@ -119,12 +119,13 @@ func TestPlanCarriesTheMarkEachUnqueuedChangeShows(t *testing.T) {
 	in := changes()
 	in.Unqueued = []types.UnqueuedChange{
 		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
-		{ID: "5", Repo: "acme/acme", Head: head("5"), Mark: types.MarkRejected},
+		{ID: "5", Repo: "acme/acme", Head: head("5"), Mark: types.MarkKickedBack},
 		{ID: "6", Repo: "acme/acme", Head: head("6")},
 	}
+	in.Closed = []types.ClosedChange{{ID: "8", Repo: "acme/acme"}}
 	plan, err := planner(t, d).Run(t.Context(), in)
 	require.NoError(t, err)
-	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1, Unqueued: in.Unqueued}, plan)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1, Unqueued: in.Unqueued, Closed: in.Closed}, plan)
 	require.NoError(t, plan.Check())
 }
 
@@ -201,8 +202,6 @@ func TestPlanAdmission(t *testing.T) {
 		want     types.Decision
 		wantCode types.Code
 		wantSet  []string
-		// wantRegen is what the admitted change records only its author can regenerate.
-		wantRegen []string
 	}{
 		// Alone in the listing, nothing can be built on a fork, so its head is never fetched.
 		"a fork is kicked back unfetched": {c: types.Change{ID: "1", Head: head("1"), Base: "main", Method: types.MethodSquash, Fork: true},
@@ -216,18 +215,18 @@ func TestPlanAdmission(t *testing.T) {
 			wantSet: []string{"a"}},
 		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
 		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},
-		"generated files regenerated from the change's own code are its author's": {c: change("1", "a"), admit: &admitting{
+		"generated files regenerated from the change's own code keep it out of the queue": {c: change("1", "a"), admit: &admitting{
 			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
-		}, wantSet: []string{"a"}, wantRegen: []string{"gen/x.go"}},
+		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
 		"generated files the base's regeneration provably makes are not": {c: change("1", "a"), admit: &admitting{
 			changed: []string{"a/x.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}},
 		}, wantSet: []string{"a"}},
-		"generated files no regeneration can be bounded for are the author's": {c: change("1", "a"), admit: &admitting{
+		"generated files no regeneration can be bounded for keep it out of the queue": {c: change("1", "a"), admit: &admitting{
 			changed: []string{"gen/x.go", "magusfile.buzz"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
 			generation: types.Generation{Units: []string{"gen"}, Unbounded: "magusfile.buzz edits the declarations"},
-		}, wantSet: []string{"a"}, wantRegen: []string{"gen/x.go"}},
+		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -246,7 +245,6 @@ func TestPlanAdmission(t *testing.T) {
 				require.Empty(t, plan.Verdicts)
 				require.Len(t, plan.Partitions, 1)
 				assert.Equal(t, tc.wantSet, plan.Partitions[0][0].Affected)
-				assert.Equal(t, tc.wantRegen, plan.Partitions[0][0].AuthorRegenerates)
 				return
 			}
 			require.Len(t, plan.Verdicts, 1)
@@ -260,6 +258,11 @@ func TestPlanAdmission(t *testing.T) {
 					"Merge `main` into this branch and resolve the conflict by hand.\n", v.Report, "the files travel in paths and with, not in the prose")
 				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.", v.Reason)
 				assert.Empty(t, v.Gate, "planning runs no hook")
+			}
+			if v.Code == types.CodeKickRegeneration {
+				assert.Equal(t, []string{"gen/x.go"}, v.Paths)
+				assert.Equal(t, "The merge queue cannot merge this change: it changes what regenerates gen/x.go, so the queue cannot prove regenerating them runs none of its code.\n\n"+
+					"Regenerate them yourself, push, and merge it by hand once it is reviewed.\n", v.Report)
 			}
 		})
 	}

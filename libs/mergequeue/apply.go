@@ -722,7 +722,7 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 	}
 	why, paths := unprovenWhy(g, outputs)
 	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
-		"), so only its author can regenerate them", Remedy: r.mergeBaseIn(), Flag: types.FlagChangesGenerator}
+		"), so only its author can regenerate them", Remedy: r.mergeBaseIn() + " Then merge it by hand once it is reviewed.", Code: types.CodeKickRegeneration}
 }
 
 // proveOwed proves each merge of the base into c that a review covers only through
@@ -1337,7 +1337,11 @@ func refusal(r *types.RefusedError) types.Kick {
 	if r.Remedy != "" {
 		report += "\n" + r.Remedy + "\n"
 	}
-	return types.Kick{Code: types.CodeKickRefused, Report: report, Paths: r.Paths, Flag: r.Flag}
+	code := r.Code
+	if code == "" {
+		code = types.CodeKickRefused
+	}
+	return types.Kick{Code: code, Report: report, Paths: r.Paths}
 }
 
 // mergeBaseIn is the remedy for what only the author can regenerate.
@@ -1367,15 +1371,10 @@ func (r *applyRun) kick(ctx context.Context, c types.Change, k types.Kick) error
 	if err := r.post(ctx, c, c.Head, types.StateFailure, "kicked back; see the comment"); err != nil {
 		return err
 	}
-	// Before the comment that names it: planning proved only the generated files the
-	// change touches, and applying may have needed others regenerated.
-	if k.Flag != "" {
-		r.flag(ctx, c, k.Flag, true)
-	}
 	if err := r.provider.KickBack(ctx, c, c.Head, k); err != nil {
 		return fmt.Errorf("kick back %s: %w", c.Label(), err)
 	}
-	r.mark(ctx, c, types.MarkRejected)
+	r.mark(ctx, c, k.Mark())
 	return nil
 }
 
@@ -1405,14 +1404,12 @@ func (r *applyRun) revokeStale(ctx context.Context) error {
 
 // markStart marks queued every change the plan admitted, and clears the queued mark from
 // each unqueued change still showing one: its intent was withdrawn, or a run stopped
-// before marking what it did to it. It flags each admitted change that changes a
-// generator and unflags the rest; a change planning held keeps its flag, since planning
-// proved nothing about it.
+// before marking what it did to it. It clears the marks of every closed change still
+// showing one, merged or closed where the queue did not see it go.
 func (r *applyRun) markStart(ctx context.Context) {
 	for _, g := range r.plan.Partitions {
 		for _, c := range g {
 			r.mark(ctx, c, types.MarkQueued)
-			r.flag(ctx, c, types.FlagChangesGenerator, len(c.AuthorRegenerates) > 0)
 		}
 	}
 	for _, v := range r.plan.Verdicts {
@@ -1425,9 +1422,12 @@ func (r *applyRun) markStart(ctx context.Context) {
 			r.mark(ctx, types.Change{ID: u.ID, Repo: u.Repo, Head: u.Head}, types.MarkNone)
 		}
 	}
+	for _, cl := range r.plan.Closed {
+		r.mark(ctx, types.Change{ID: cl.ID, Repo: cl.Repo}, types.MarkNone)
+	}
 }
 
-// mergedEvent reports c merged and clears its mark.
+// mergedEvent reports c merged and clears its mark and the label that queued it.
 func (r *applyRun) mergedEvent(ctx context.Context, c types.Change, e Event) {
 	r.Events.Emit(e)
 	r.mark(ctx, c, types.MarkNone)
@@ -1443,21 +1443,6 @@ func (r *applyRun) mark(ctx context.Context, c types.Change, m types.Mark) {
 		what := "mark #" + c.ID + " " + string(m)
 		if m == types.MarkNone {
 			what = "clear the mark on #" + c.ID
-		}
-		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
-	}
-}
-
-// flag shows f on c when on and clears it otherwise. A failure is a notice, as a mark's
-// is.
-func (r *applyRun) flag(ctx context.Context, c types.Change, f types.Flag, on bool) {
-	if r.DryRun {
-		return
-	}
-	if err := r.provider.Flag(ctx, c, f, on); err != nil {
-		what := "flag #" + c.ID + " " + string(f)
-		if !on {
-			what = "clear " + string(f) + " from #" + c.ID
 		}
 		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
 	}

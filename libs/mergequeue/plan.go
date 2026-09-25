@@ -74,7 +74,7 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 		return types.Plan{}, err
 	}
 	plan := types.Plan{Schema: types.SchemaPlan, Base: in.Base, RemoteURL: in.RemoteURL, BaseCommit: tip, Depth: max(1, p.Depth),
-		Merged: in.Merged, Unqueued: in.Unqueued}
+		Merged: in.Merged, Unqueued: in.Unqueued, Closed: in.Closed}
 	if len(in.Changes) == 0 {
 		p.Events.Emit(Event{Kind: EventNotice, Reason: "no change carries merge intent against " + in.Base})
 		return plan, nil
@@ -326,8 +326,14 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 		}
 		c.Affected, c.UnboundedBy = affected, unboundedBy
 	}
-	if c.AuthorRegenerates, err = authorRegenerates(ctx, r.facts, paths); err != nil {
+	regen, err := authorRegenerates(ctx, r.facts, paths)
+	if err != nil {
 		return nil, fmt.Errorf("regeneration of %s: %w", c.Label(), err)
+	}
+	if len(regen) > 0 {
+		v := decided(*c, types.DecisionKick, types.CodeKickRegeneration, "", regenerationReport(joinPaths(regen)))
+		v.Reason, v.Paths = firstLine(v.Report), regen
+		return v, nil
 	}
 	return nil, nil //nolint:nilnil // no verdict is planning's answer that c is admitted
 }
@@ -372,6 +378,14 @@ const forkReport = "The merge queue does not merge changes from forks: it cannot
 func conflictReport(base, commit string) string {
 	return fmt.Sprintf("The merge queue could not merge this change at `%s`: it conflicts with `%s` outside the generated files.\n\n"+
 		"Merge `%s` into this branch and resolve the conflict by hand.\n", short(commit), base, base)
+}
+
+// regenerationReport says why the queue will not merge a change whose own code changes
+// what regenerates paths: it cannot prove that regeneration runs none of the change.
+func regenerationReport(paths string) string {
+	return "The merge queue cannot merge this change: it changes what regenerates " + paths +
+		", so the queue cannot prove regenerating them runs none of its code.\n\n" +
+		"Regenerate them yourself, push, and merge it by hand once it is reviewed.\n"
 }
 
 func reasonSuffix(reason string) string {

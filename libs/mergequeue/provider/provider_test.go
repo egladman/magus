@@ -63,6 +63,7 @@ export fun list_changes(io: {str: any}) > any {
         }],
         "merged": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
         "unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "mark": "queued"}],
+        "closed": [{"id": "12", "repo": "acme/acme"}],
     };
 }
 
@@ -97,16 +98,11 @@ export fun kick_back(io: {str: any}) > bool {
     final paths = io["paths"] ?? [<str>];
     final repro = serialize\Boxed.init(io["reproduce"]);
     return io["report"] == "report" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c"
-        and io["source"] == "o/r/runs/7" and repro.q("gate").stringValue() == "make test" and repro.q("regenerate").stringValue() == ""
-        and io["flag"] == "";
+        and io["source"] == "o/r/runs/7" and repro.q("gate").stringValue() == "make test" and repro.q("regenerate").stringValue() == "";
 }
 
 export fun mark(io: {str: any}) > bool {
-    return io["id"] == "7" and io["repo"] == "acme/acme" and io["mark"] != "rejected";
-}
-
-export fun flag(io: {str: any}) > bool {
-    return io["id"] == "7" and io["repo"] == "acme/acme" and io["flag"] == "changes_generator" and io["on"] == true;
+    return io["id"] == "7" and io["repo"] == "acme/acme" and io["mark"] != "kicked_back";
 }
 
 export fun list_artifacts(io: {str: any}) > any {
@@ -158,7 +154,6 @@ export fun retarget(io: {str: any}) > bool { return true; }
 export fun merge_change(io: {str: any}) > any { return {}; }
 export fun kick_back(io: {str: any}) > bool { return true; }
 export fun mark(io: {str: any}) > bool { return true; }
-export fun flag(io: {str: any}) > bool { return true; }
 `
 
 func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
@@ -206,9 +201,12 @@ func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T
 		}},
 		Merged:   []types.MergedChange{{ID: "6", Head: headD, Commit: headE, Method: types.MethodSquash}},
 		Unqueued: []types.UnqueuedChange{{ID: "9", Repo: "acme/acme", Head: headF, Mark: types.MarkQueued}},
+		Closed:   []types.ClosedChange{{ID: "12", Repo: "acme/acme"}},
 	}, got)
+	_, err = open(t, strings.Replace(script, `"closed": [{"id": "12"`, `"closed": [{"id": "../12"`, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, "closed[0]:")
 	_, err = open(t, strings.Replace(script, `"mark": "queued"`, `"mark": "merged"`, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
-	require.ErrorContains(t, err, `unqueued[0]: #9: mark "merged", want queued, rejected or none`)
+	require.ErrorContains(t, err, `unqueued[0]: #9: mark "merged", want queued, kicked_back, needs_regeneration or none`)
 }
 
 func TestListChangesRefusesWhatGitCouldReadAsAnOption(t *testing.T) {
@@ -309,18 +307,16 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	noRepro := kick
 	noRepro.Reproduce = nil
 	require.ErrorContains(t, p.KickBack(ctx, change, headA, noRepro), "provider refused", "no reproduce record reaches the script as null")
-	flagged := kick
-	flagged.Flag = types.FlagChangesGenerator
-	require.ErrorContains(t, p.KickBack(ctx, change, headA, flagged), "provider refused", "the flag reaches the script")
+	regeneration := kick
+	regeneration.Code = types.CodeKickRegeneration
+	require.ErrorContains(t, p.KickBack(ctx, change, headA, regeneration), "provider refused", "the code reaches the script")
 	kick.Paths = nil
 	require.ErrorContains(t, p.KickBack(ctx, change, headA, kick), "provider refused")
 	require.NoError(t, p.Mark(ctx, change, types.MarkQueued))
 	require.NoError(t, p.Mark(ctx, change, types.MarkNone))
-	require.ErrorContains(t, p.Mark(ctx, change, types.MarkRejected), "provider refused")
-	require.EqualError(t, p.Mark(ctx, change, "merged"), `provider "echo": mark: mark "merged", want queued, rejected or none`)
-	require.NoError(t, p.Flag(ctx, change, types.FlagChangesGenerator, true))
-	require.ErrorContains(t, p.Flag(ctx, change, types.FlagChangesGenerator, false), "provider refused")
-	require.EqualError(t, p.Flag(ctx, change, "urgent", true), `provider "echo": flag: flag "urgent", want changes_generator`)
+	require.NoError(t, p.Mark(ctx, change, types.MarkNeedsRegeneration))
+	require.ErrorContains(t, p.Mark(ctx, change, types.MarkKickedBack), "provider refused")
+	require.EqualError(t, p.Mark(ctx, change, "rejected"), `provider "echo": mark: mark "rejected", want queued, kicked_back, needs_regeneration or none`)
 }
 
 func TestListArtifactsDecodesTheListing(t *testing.T) {
@@ -338,7 +334,7 @@ func TestAListingThatDoesNotSayWhatRanIsRefused(t *testing.T) {
 
 func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
 	_, err := newScript(context.Background(), "half", `export fun list_changes(io: {str: any}) > any { return {}; }`)
-	require.EqualError(t, err, `provider "half" does not export describe, approval_at, list_green, post_status, retarget, merge_change, kick_back, mark, flag`)
+	require.EqualError(t, err, `provider "half" does not export describe, approval_at, list_green, post_status, retarget, merge_change, kick_back, mark`)
 
 	noRuns := open(t, strings.Split(script, "export fun list_artifacts")[0])
 	assert.False(t, noRuns.ListsArtifacts())

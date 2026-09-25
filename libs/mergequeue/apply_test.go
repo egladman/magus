@@ -30,7 +30,6 @@ func applierFor(t *testing.T, d doubles, plan types.Plan, verdicts ...types.Verd
 	d.noCheckouts()
 	d.noneGreen()
 	d.marks(nil)
-	d.flags()
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Verdicts: verdicts, Done: true}, nil).Maybe()
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 	require.NoError(t, err)
@@ -480,21 +479,22 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/gen.go", "gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
 	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).Return(types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}}, nil)
-	flags := d.flags()
+	marks := d.marks(nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
 	d.status(c, c.Head, types.StateFailure, "kicked back")
 	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.MatchedBy(func(k types.Kick) bool {
-		return k.Code == types.CodeKickRefused && k.Flag == types.FlagChangesGenerator &&
-			strings.Contains(k.Report, "it changes code their regeneration runs (gen/gen.go), so only its author can regenerate them")
-	})).Run(func(context.Context, types.Change, string, types.Kick) { flags.add("kicked") }).Return(nil).Once()
+		return k.Code == types.CodeKickRegeneration &&
+			strings.Contains(k.Report, "it changes code their regeneration runs (gen/gen.go), so only its author can regenerate them") &&
+			strings.Contains(k.Report, "merge it by hand")
+	})).Run(func(context.Context, types.Change, string, types.Kick) { marks.add("kicked") }).Return(nil).Once()
 	a := applierFor(t, d, planOf([]types.Change{c}), v)
 	a.Regenerate = func(context.Context, types.Regeneration) error {
 		t.Error("regenerated from code the change touched")
 		return nil
 	}
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
-	assert.Equal(t, []string{"1 changes_generator off", "1 changes_generator on", "kicked"}, flags.entries(),
-		"the kick-back shows the flag its report names, even where planning proved the files the change touches")
+	assert.Equal(t, []string{"1 queued", "kicked", "1 needs_regeneration"}, marks.entries(),
+		"the kick-back leaves the change needing regeneration, not merely kicked back")
 }
 
 // Where the build tool proves the change touches none of the generator's code, applying
@@ -663,7 +663,6 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	d.noCheckouts()
 	d.noneGreen()
 	d.marks(nil)
-	d.flags()
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Rejected: []types.RejectedVerdict{{Change: "1", Reason: "not a zip"}, {Change: "8", Reason: "x"}}, Done: true}, nil)
 	d.waits(one, one.Head, "its verdict could not be read: not a zip")
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
@@ -710,24 +709,23 @@ func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
 }
 
 // A dry run reports and calls nothing on the provider: no expectation is set on it, and
-// it shows no mark and no flag.
+// it shows no mark.
 func TestApplyDryRunCallsNothingOnTheProvider(t *testing.T) {
 	d := newDoubles(t)
 	one := change("1", "a")
-	marks, flags := d.marks(nil), d.flags()
+	marks := d.marks(nil)
 	var out bytes.Buffer
 	a := applierFor(t, d, planOf([]types.Change{one}), validated(one, base, ""))
 	a.DryRun, a.Events = true, NewEvents(&out)
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
 	assert.Contains(t, out.String(), "dry run: would merge candidate "+candidateOf(base, one.Head)[:12])
 	assert.Empty(t, marks.entries())
-	assert.Empty(t, flags.entries())
 }
 
 // A run starts by marking queued what the plan admitted, the changes planning left
 // waiting included, and by clearing the queued mark an unqueued change still shows. A
-// change planning found merged loses its mark; a rejected mark on an unqueued change
-// stays for its author to read.
+// change planning found merged loses its mark, and so does a closed one; a kick-back's
+// mark on an unqueued change stays for its author to read.
 func TestARunMarksWhatThePlanAdmittedAndClearsAQueuedMarkLeftBehind(t *testing.T) {
 	d := newDoubles(t)
 	one, two, held, gone := change("1", "a"), change("2", "b"), change("3"), change("5")
@@ -740,36 +738,19 @@ func TestARunMarksWhatThePlanAdmittedAndClearsAQueuedMarkLeftBehind(t *testing.T
 	plan.Verdicts = []types.Verdict{waiting("3"), {Change: gone, Decision: types.DecisionMerged, Reason: "its head is already on main"}}
 	plan.Unqueued = []types.UnqueuedChange{
 		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
-		{ID: "6", Repo: "acme/acme", Head: head("6"), Mark: types.MarkRejected},
+		{ID: "6", Repo: "acme/acme", Head: head("6"), Mark: types.MarkKickedBack},
+		{ID: "8", Repo: "acme/acme", Head: head("8"), Mark: types.MarkNeedsRegeneration},
 		{ID: "7", Repo: "acme/acme", Head: head("7")},
 	}
+	plan.Closed = []types.ClosedChange{{ID: "9", Repo: "acme/acme"}}
 	a := applierFor(t, d, plan)
 	require.NoError(t, a.Run(t.Context(), plan))
-	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued", "4 none in acme/acme", "5 none"}, marks.entries())
+	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued", "4 none in acme/acme", "9 none in acme/acme", "5 none"}, marks.entries(),
+		"a closed change still showing a queue label is cleared, whoever merged or closed it")
 }
 
-// A run flags each admitted change whose generated files only its author can regenerate
-// and unflags the rest, beside the queued mark; a change planning held keeps whatever
-// flag it shows, since planning proved nothing about it.
-func TestARunFlagsTheAdmittedChangesThatChangeAGenerator(t *testing.T) {
-	d := newDoubles(t)
-	generator, plain, held := change("1", "a"), change("2", "b"), change("3")
-	generator.AuthorRegenerates = []string{"gen/x.go"}
-	d.caps()
-	marks, flags := d.marks(nil), d.flags()
-	d.waits(held, held.Head, "r")
-	d.waits(generator, generator.Head, "not validated in this run")
-	d.waits(plain, plain.Head, "not validated in this run")
-	plan := planOf([]types.Change{generator}, []types.Change{plain})
-	plan.Verdicts = []types.Verdict{waiting("3")}
-	a := applierFor(t, d, plan)
-	require.NoError(t, a.Run(t.Context(), plan))
-	assert.Equal(t, []string{"1 changes_generator on", "2 changes_generator off"}, flags.entries())
-	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued"}, marks.entries(), "a flagged change stays queued")
-}
-
-// A kick-back shows the rejected mark once the provider carried it out.
-func TestAKickBackMarksTheChangeRejected(t *testing.T) {
+// A kick-back shows the kicked-back mark once the provider carried it out.
+func TestAKickBackMarksTheChangeKickedBack(t *testing.T) {
 	d := newDoubles(t)
 	c := change("1", "a")
 	d.caps()
@@ -782,7 +763,7 @@ func TestAKickBackMarksTheChangeRejected(t *testing.T) {
 	red := types.Verdict{BaseCommit: base, Change: c, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
 	a := applierFor(t, d, planOf([]types.Change{c}), red)
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
-	assert.Equal(t, []string{"1 queued", "kicked", "1 rejected"}, marks.entries())
+	assert.Equal(t, []string{"1 queued", "kicked", "1 kicked_back"}, marks.entries())
 }
 
 // A merge clears the mark, whoever merged it.
@@ -1328,7 +1309,7 @@ func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 		pinned     string
 	}{
 		"pinned to GitHub Actions, holding the queue app's": {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "15368"},
-		"pinned to another app, holding the queue app's":   {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "977"},
+		"pinned to another app, holding the queue app's":    {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "977"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)

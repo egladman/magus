@@ -31,9 +31,12 @@ final FIELDS = "number,title,state,author,headRefName,baseRefName,headRefOid,isD
 final LIMIT = 100;
 
 // The queue's own surface: a stack's top carries QUEUE_LABEL plus a method, a kick-back
-// sets REJECTED and ends its comment with KICK_MARKER, and QUEUE_STATUS is its status.
-final QUEUE_LABEL = "queue: ";
-final REJECTED = "merge-queue: rejected";
+// sets KICKED or, for KICK_REGENERATION, NEEDS_REGENERATION, and ends its comment with
+// KICK_MARKER, and QUEUE_STATUS is its status. The status labels share QUEUE_LABEL, so
+// only a method after it is intent.
+final QUEUE_LABEL = "merge-queue: ";
+final KICKED = "merge-queue: kicked back";
+final NEEDS_REGENERATION = "merge-queue: needs regeneration";
 final KICK_MARKER = "<!-- mergequeue: ";
 final QUEUE_STATUS = "merge-queue";
 
@@ -326,8 +329,8 @@ export fun stackTops(p: Pull, open: [Pull], depth: int) > [int] {
 }
 
 export fun hasQueueLabel(labels: [str]) > bool {
-    foreach (l in labels) {
-        if (l.startsWith(QUEUE_LABEL)) {
+    foreach (m in METHODS) {
+        if (labels.indexOf(QUEUE_LABEL + m) != null) {
             return true;
         }
     }
@@ -388,7 +391,8 @@ export fun stateOf(p: Pull, open: [Pull]) > str {
         return "conflicting";
     }
     // A kick-back takes the intent away; intent back on means someone queued it again.
-    if (p.labels.indexOf(REJECTED) != null and !intent(p, open: open)) {
+    final kicked = p.labels.indexOf(KICKED) != null or p.labels.indexOf(NEEDS_REGENERATION) != null;
+    if (kicked and !intent(p, open: open)) {
         return "kicked-back";
     }
     if (failing(p.checks).len() > 0) {
@@ -646,9 +650,14 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
 
 fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
     final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive);
+    // The queue never merges it, whatever is fixed: a person regenerates and merges it.
+    if (p.labels.indexOf(NEEDS_REGENERATION) != null or (p.kick != null and p.kick!.code == "KICK_REGENERATION")) {
+        return recordOf(p, state: "kicked-back", action: "none", model: "none",
+            reason: "KICK_REGENERATION: its own code regenerates its generated files; regenerate them and merge it by hand", evidence: plain);
+    }
     if (p.kick == null) {
         return recordOf(p, state: "kicked-back", action: "fix", model: "opus",
-            reason: "labeled {REJECTED}, and no kick-back comment carries its facts", evidence: plain);
+            reason: "labeled {KICKED}, and no kick-back comment carries its facts", evidence: plain);
     }
     final kick = p.kick!;
     if (kick.code == "KICK_CONFLICT") {
@@ -1065,7 +1074,7 @@ final SAMPLE = `{
   "headRefName": "delete-ci-shard", "headRefOid": "6d401ee42f1190d5dc092c450b7ff62764e793c0",
   "isCrossRepository": false, "isDraft": false, "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING",
   "number": 317, "state": "OPEN", "title": "refactor(ci)!: delete ci-shard; run a shard of a saved plan with magus run --stdin",
-  "labels": [{"id": "LA_1", "name": "merge-queue: rejected", "color": "d93f0b"}],
+  "labels": [{"id": "LA_1", "name": "merge-queue: kicked back", "color": "b60205"}],
   "files": [{"path": ".github/workflows/ci.yaml", "additions": 10, "deletions": 3}, {"path": "types/diagnostic.go", "additions": 1, "deletions": 1}],
   "statusCheckRollup": [
     {"__typename": "CheckRun", "conclusion": "CANCELLED", "detailsUrl": "https://github.com/egladman/magus/actions/runs/36064348656/job/107850475236", "name": "queue advice", "status": "COMPLETED", "workflowName": "Queue advice"},
@@ -1086,7 +1095,7 @@ test "a gh pr view record reads into a pull request, each check at its newest ru
     assert\equal(p.head, want: "delete-ci-shard", message: "head");
     assert\equal(p.author, want: "egladman", message: "author");
     assert\equal(p.autoMerge, want: false, message: "a null autoMergeRequest is no intent");
-    assert\equal(p.labels, want: ["merge-queue: rejected"], message: "labels");
+    assert\equal(p.labels, want: ["merge-queue: kicked back"], message: "labels");
     assert\equal(p.files, want: [".github/workflows/ci.yaml", "types/diagnostic.go"], message: "files");
     assert\equal(p.checks.len(), want: 3, message: "queue advice once, and the queue's own status left out");
     assert\equal(p.checks[0].conclusion, want: "SUCCESS", message: "the cancelled run was superseded");
@@ -1107,7 +1116,7 @@ test "an unreadable kick marker is a kick with no code" {
 
 test "state is the first thing between a pull request and its merge" {
     final bottom = Pull{ number = 1, head = "a" };
-    final top = Pull{ number = 2, head = "b", base = "a", labels = ["queue: squash"] };
+    final top = Pull{ number = 2, head = "b", base = "a", labels = ["merge-queue: squash"] };
     final open = [bottom, top];
     final expect = fun(p: Pull, want: str) > void {
         assert\equal(stateOf(p, open: open), want: want, message: "#{p.number} {want}");
@@ -1119,12 +1128,14 @@ test "state is the first thing between a pull request and its merge" {
     expect(top, want: "waiting-below");
     expect(Pull{ number = 3, mergeable = "CONFLICTING", checks = failed }, want: "conflicting");
     expect(Pull{ number = 3, mergeState = "DIRTY" }, want: "conflicting");
-    expect(Pull{ number = 3, labels = [REJECTED], checks = failed }, want: "kicked-back");
-    expect(Pull{ number = 3, labels = [REJECTED], autoMerge = true }, want: "queued");
+    expect(Pull{ number = 3, labels = [KICKED], checks = failed }, want: "kicked-back");
+    expect(Pull{ number = 3, labels = [NEEDS_REGENERATION] }, want: "kicked-back");
+    expect(Pull{ number = 3, labels = [KICKED], autoMerge = true }, want: "queued");
     expect(Pull{ number = 3, autoMerge = true, checks = failed }, want: "red");
     expect(Pull{ number = 3, mergeState = "BEHIND" }, want: "behind");
     expect(Pull{ number = 3, autoMerge = true }, want: "queued");
-    expect(Pull{ number = 3, labels = ["queue: rebase"] }, want: "queued");
+    expect(Pull{ number = 3, labels = ["merge-queue: rebase"] }, want: "queued");
+    expect(Pull{ number = 3, labels = ["merge-queue: queued", "merge-queue: Squash"] }, want: "needs-queue");
     expect(bottom, want: "queued");
     expect(Pull{ number = 3, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, want: "needs-queue");
 }
@@ -1205,7 +1216,7 @@ test "a failed hygiene check names the title or the changelog fragment" {
 }
 
 test "a kick-back is fixed by the model its code and paths call for" {
-    final kicked = fun (code: str, paths: [str]) > Pull => Pull{ number = 6, labels = [REJECTED], kick = Kick{ code = code, paths = paths, url = "u" } };
+    final kicked = fun (code: str, paths: [str]) > Pull => Pull{ number = 6, labels = [KICKED], kick = Kick{ code = code, paths = paths, url = "u" } };
     final expect = fun(p: Pull, facts: Facts, action: str, model: str) > void {
         final r = classify(p, open: [p], facts: facts);
         assert\equal([r.state, r.action, r.model], want: ["kicked-back", action, model], message: r.reason);
@@ -1215,7 +1226,9 @@ test "a kick-back is fixed by the model its code and paths call for" {
     expect(kicked("KICK_REFUSED", paths: ["MAGUS.md"]), facts: Facts{ generated = ["MAGUS.md"] }, action: "fix", model: "sonnet");
     expect(kicked("KICK_REFUSED", paths: [<str>]), facts: Facts{}, action: "fix", model: "opus");
     expect(kicked("KICK_NEW", paths: [<str>]), facts: Facts{}, action: "fix", model: "opus");
-    expect(Pull{ number = 6, labels = [REJECTED] }, facts: Facts{}, action: "fix", model: "opus");
+    expect(Pull{ number = 6, labels = [KICKED] }, facts: Facts{}, action: "fix", model: "opus");
+    expect(kicked("KICK_REGENERATION", paths: ["MAGUS.md"]), facts: Facts{ generated = ["MAGUS.md"] }, action: "none", model: "none");
+    expect(Pull{ number = 6, labels = [NEEDS_REGENERATION] }, facts: Facts{}, action: "none", model: "none");
     final r = classify(kicked("KICK_RED", paths: ["a.go"]), open: [<Pull>], facts: Facts{});
     assert\equal([r.evidence.kick, r.evidence.kickUrl], want: ["KICK_RED", "u"], message: "the kick in evidence");
 }
@@ -1230,7 +1243,7 @@ test "a green pull request is queued, a stack by the label on its top" {
     final top = Pull{ number = 3, head = "c", base = "b" };
     final stacked = classify(lone, open: [lone, mid, top], facts: Facts{});
     assert\equal(stacked.evidence.top, want: 3, message: "the top of the stack");
-    assert\equal(applyCommands(stacked, method: "rebase"), want: [["gh", "pr", "edit", "3", "--add-label", "queue: rebase"]], message: "the label on the top");
+    assert\equal(applyCommands(stacked, method: "rebase"), want: [["gh", "pr", "edit", "3", "--add-label", "merge-queue: rebase"]], message: "the label on the top");
     assert\equal(classify(mid, open: [lone, mid, top], facts: Facts{}).evidence.parent, want: 1, message: "the middle waits on the bottom");
 
     final fork = Pull{ number = 4, head = "d", base = "a" };
@@ -1256,7 +1269,7 @@ test "apply only queues and reruns" {
 test "model none goes only with no action or one apply takes" {
     final ps = [
         Pull{ number = 1, mergeable = "CONFLICTING" },
-        Pull{ number = 2, labels = [REJECTED] },
+        Pull{ number = 2, labels = [KICKED] },
         Pull{ number = 3, checks = [red("x", conclusion: "ACTION_REQUIRED", job: "1")] },
         Pull{ number = 4, checks = [red("x", conclusion: "STALE", job: "1")] },
         Pull{ number = 5, mergeState = "BEHIND" },

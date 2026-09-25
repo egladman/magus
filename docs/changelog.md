@@ -189,7 +189,7 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
   change's head is stacked on it: it merges after it, its own delta measured from that
   head, and waits without blame when the one beneath is kicked back. On GitHub a
-  `queue: <method>` label on a stack's top queues the stack.
+  `merge-queue: <method>` label on a stack's top queues the stack.
 - **`MergeStarter.StartMerge` takes the identity to act as.** A merge started for a
   machine no longer depends on the box's configured git identity.
 - **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
@@ -207,12 +207,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
   step, one writing what the other reads with no `ctx.needs` path between them, fail at
   derivation. `magus doctor` checks every composed target.
-- **Breaking: the merge queue labels `merge-queue: changes a generator` on a queued pull
-  request whose generated files it cannot regenerate itself.** The author learns before
-  any kick-back that main moving them means merging main in and regenerating. A provider
-  script must export `flag`; label creation GitHub refuses as invalid is now an error.
-- **The merge queue labels pull requests** `merge-queue: queued` while it holds them
-  and `merge-queue: rejected` when it kicks one back.
+- **The merge queue leaves a change whose own code regenerates its generated files to a
+  person.** It kicks it back with `KICK_REGENERATION`, labels it
+  `merge-queue: needs regeneration`, and says to regenerate and merge it by hand.
+- **The merge queue labels pull requests with at most one status:**
+  `merge-queue: queued`, `merge-queue: kicked back` or `merge-queue: needs regeneration`.
+  A merge the queue sees removes every `merge-queue:` label, and the next apply run
+  clears a closed pull request still carrying one. Label creation GitHub refuses as
+  invalid is an error.
 - **`--scratch-env NAME=DIR` on `magus queue validate` and `magus queue apply`** points
   a variable at a directory inside each candidate's scratch space, so cache isolation
   lives on the queue's flags rather than on the hook's command line. It may repeat.

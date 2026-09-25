@@ -242,22 +242,6 @@ func (d doubles) marks(fail map[string]error) *trail {
 	return tr
 }
 
-// flags records every flag the provider is asked to show as "<id> <flag> on" or "<id>
-// <flag> off". Set before [applierFor], it answers every flag ahead of that catch-all.
-func (d doubles) flags() *trail {
-	tr := &trail{}
-	d.provider.EXPECT().Flag(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, c types.Change, f types.Flag, on bool) error {
-			state := "off"
-			if on {
-				state = "on"
-			}
-			tr.add(c.ID + " " + string(f) + " " + state)
-			return nil
-		}).Maybe()
-	return tr
-}
-
 // checkouts are the checkouts building candidates made.
 type checkouts struct {
 	mu      sync.Mutex
