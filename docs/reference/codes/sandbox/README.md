@@ -126,6 +126,7 @@ Two layers run together:
 - [MGS3023](MGS3023.md): a pipe whose writers loop back into the run reading it.
 - [MGS3027](MGS3027.md): the merge queue refused a validation run the base's own queue workflow did not start.
 - [MGS3028](MGS3028.md): the merge queue's plan disagrees with what apply reads itself.
+- [MGS3030](MGS3030.md): a magus stage upstream of this run in a pipe exited non-zero.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not
