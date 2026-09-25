@@ -109,13 +109,15 @@ const (
 	denyRuleFilterWithoutInput   denyRuleName = "filter-without-input"
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
+	denyRuleUnknownEnv         denyRuleName = "unknown-env"
 
 	// Not shell rules: one fires on a SPAWN and one on a FILE WRITE, and neither reaches a
 	// shell parser. They live in this block because denyRuleName is the one namespace every
 	// verdict's Rule field is drawn from, and the catalog test reads this block to find what
 	// must be documented. See internal/guard/spawn.go and internal/guard/buzz.go.
-	denySpawnUnbriefed denyRuleName = "spawn-unbriefed"
-	denyBuzzUnbriefed  denyRuleName = "buzz-unbriefed"
+	denySpawnUnbriefed   denyRuleName = "spawn-unbriefed"
+	denyBuzzUnbriefed    denyRuleName = "buzz-unbriefed"
+	denyRuleBriefCommand denyRuleName = "brief-command"
 	// Upgraded from the push-gate ADVISORY when the run log proves no green gate covers
 	// this commit; see internal/guard/push.go.
 	denyRulePushUngated denyRuleName = "push-ungated"
@@ -361,86 +363,6 @@ func captureFilterFires(cmds []hint.Invocation, command string, d Dialect) bool 
 // its value-taking flags differently and no flag value looks like this path.
 func namesCapture(c hint.Invocation) bool {
 	return slices.ContainsFunc(c.Args, capturePathRe.MatchString)
-}
-
-// exitStatusEchoFires reports a line whose last statement prints the previous exit status
-// and nothing else. The host reports a nonzero exit on its own, and the echo exits 0, so
-// the line reads as passing whatever ran before it.
-//
-// Only the last top-level statement, after `;` or a newline, and only printed to the
-// console: anywhere earlier, after `&&`/`||`, redirected, or captured by `printf -v`, the
-// status can feed later logic, and the guard cannot prove it does not.
-func exitStatusEchoFires(command string, d Dialect) bool {
-	f, err := parseFile(command, d)
-	if err != nil || len(f.Stmts) < 2 {
-		return false
-	}
-	prev, last := f.Stmts[len(f.Stmts)-2], f.Stmts[len(f.Stmts)-1]
-	// After `&`, $? is the status of starting a job, not of the job.
-	if prev.Background || prev.Coprocess || prev.Disown {
-		return false
-	}
-	if last.Background || last.Coprocess || last.Disown || last.Negated || len(last.Redirs) > 0 {
-		return false
-	}
-	call, ok := last.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Assigns) > 0 || len(call.Args) < 2 {
-		return false
-	}
-	switch filepath.Base(literalWord(call.Args[0].Parts)) {
-	case "echo":
-	case "printf":
-		if slices.ContainsFunc(call.Args[1:], func(w *syntax.Word) bool { return strings.HasPrefix(w.Lit(), "-v") }) {
-			return false
-		}
-	default:
-		return false
-	}
-	printsStatus := false
-	for _, w := range call.Args[1:] {
-		status, only := onlyExitStatus(w.Parts, false)
-		if !only {
-			return false
-		}
-		printsStatus = printsStatus || status
-	}
-	return printsStatus
-}
-
-// onlyExitStatus reports whether parts expand to literal text and bare `$?` alone, and
-// whether a `$?` was among them. An unquoted glob or tilde is refused because it expands
-// to something other than the label it looks like.
-func onlyExitStatus(parts []syntax.WordPart, quoted bool) (status, only bool) {
-	for _, p := range parts {
-		switch p := p.(type) {
-		case *syntax.Lit:
-			if !quoted && strings.ContainsAny(p.Value, "*?[~") {
-				return false, false
-			}
-		case *syntax.SglQuoted:
-		case *syntax.DblQuoted:
-			s, ok := onlyExitStatus(p.Parts, true)
-			if !ok {
-				return false, false
-			}
-			status = status || s
-		case *syntax.ParamExp:
-			if !isBareExitStatus(p) {
-				return false, false
-			}
-			status = true
-		default:
-			return false, false
-		}
-	}
-	return status, true
-}
-
-func isBareExitStatus(p *syntax.ParamExp) bool {
-	return p.Param != nil && p.Param.Value == "?" && p.Flags == nil &&
-		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
-		p.NestedParam == nil && p.Index == nil && len(p.Modifiers) == 0 &&
-		p.Slice == nil && p.Repl == nil && p.Names == 0 && p.Exp == nil
 }
 
 // backtickSubstFires reports a backtick command substitution anywhere on the line. Only the
@@ -976,31 +898,6 @@ var (
 	// while the false negative silently rewrote a dependency's identifier.
 	scriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
 
-	// A repo-wide CONTENT search. This does NOT claim the agent asked the wrong
-	// question (a hook cannot know that), only that a whole-tree text search has
-	// a better tool here, because the graph answers from DECLARED sources while a
-	// grep hit is a guess. Deliberately narrow: a recursive grep (egrep and fgrep
-	// included, which internal/hint models as the same family), or a bare ripgrep
-	// or ag, both effectively always repo-wide. A plain `grep pattern file` is
-	// reading one file and is left alone.
-	codeSearchRe = regexp.MustCompile(`\b[ef]?grep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s`)
-
-	// The same advisory reached by a repo-wide search for a file by NAME. Split
-	// from the content arm because the narrowness rule differs: a content search
-	// is admitted on being RECURSIVE, a file-find on asking a NAME question:
-	// `find . -type d` and `fd -t d` list a tree rather than look a name up, and
-	// stay silent. fd is recursive by default, so its admitting shapes are the
-	// name query itself: an extension flag, a glob flag, or a pattern in the
-	// first operand. A pattern behind a value-consuming flag (`fd -t f parse`)
-	// is missed, because telling that operand from the flag's own argument
-	// needs an argv parse this line-shaped rule does not do; erring toward
-	// silence keeps the gate honest. The leading class rejects `git clean -fd`.
-	fileFindRe = regexp.MustCompile(`\bfind\s+[^|&;]*-name\b|(^|[^-\w])fd\s+([^|&;]*(-[eg]|--(extension|glob))\b|[^-|&;\s])`)
-	// docSearchRe fires when a read or search command names a markdown file: an agent
-	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
-	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
-	// any repo, not just one that keeps docs under a magus convention.
-	docSearchRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more|grep|egrep|fgrep|rg|ag)\b[^|&;]*\.md\b`)
 	// sourceReadRe is the fallback when the argv parse fails: an unbounded dump of a
 	// source file. Keep the extension list in sync with sourceExt in parse.go.
 	sourceReadRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more)\b[^|&;]*\.(go|buzz|ts|tsx|js|jsx|rs|py|c|h|cc|cpp|java|kt|swift|rb|cs|zig)\b`)
@@ -1047,15 +944,6 @@ var (
 	// into the output.
 	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
 		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
-	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
-	// search to fall back on, so "where does this string appear" has no magus
-	// answer and the deny removed a capability. The advisory still applies the
-	// pressure without making the agent unable to work.
-	//
-	// The reason must ROUTE, not scold: `magus query` indexes DOMAIN entities and
-	// returns 0 for a code symbol, while `magus refs` indexes CODE symbols. An
-	// agent that tries `magus query someFunc`, gets 0, and concludes the graph is
-	// useless is the failure this text exists to prevent.
 	// DENY, not advise. Advise was tuned out: agents kept prefixing `cd <dir> &&`
 	// on every shell call, which relocates later commands on the line and re-fires
 	// shell chpwd hooks (mise among them) that can fail with an empty command.
@@ -1064,15 +952,6 @@ var (
 	// the command line. A DIFFERENT workspace is `--root <path>`, not a cd.
 	denyCd = "Do not `cd`. The project is an argument, written bare: `" + hint.Run.With("<target>", "libs/foo") + "`. A different workspace is `--root <path>`; `" + hint.Where.With("<name>") + "` resolves a fuzzy name.\n" +
 		"Your shell tool has a working_directory (or cwd) field: set that. A `cd` prefix relocates every later command on the line."
-
-	searchGuardReason = "this workspace has a knowledge graph, and a text match misses the generated, indirect, and cross-language references it knows about. Pick by what you are asking:\n" +
-		"  CODE SYMBOL (defined / used where):  " + hint.Refs.With("<symbol>") + "\n" +
-		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  " + hint.Query.With("\"<terms>\"") + "  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
-		"  ONE node's edges, provenance, blast radius:  " + hint.Explain.With("<node>") + "\n" +
-		"  HOW two things connect:  " + hint.Path.With("<a>", "<b>") + "\n" +
-		"  RAW TEXT (a string literal, a comment, a config value):  " + hint.Refs.With("--text", "<pattern>", "[<path>...]") + "  a literal substring search with grep's exit codes, scoped by the same trailing paths\n" +
-		"  MARKDOWN PROSE:  " + hint.Query.With("kind=docsection", "\"<terms>\"") + "  returns the section that covers it\n" +
-		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. " + searchColdIndexRouting + " Load the magus-query skill for the full grammar."
 
 	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
 	// answer a reader can misread as "absent" and fall back to grep on, so whichever
@@ -1089,9 +968,6 @@ var (
 		"  DOES IT EXIST, and what kind of thing is it:  " + hint.Query.With("%s") + "\n" +
 		"A text match finds the name. refs finds the USES, generated and cross-language ones included, which is what a precedent hunt is actually asking for. An empty result means it was text rather than a symbol, and grep is right after all. " + searchColdIndexRouting
 
-	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `" + hint.Explain.With("<section>") + "` to see what it links to.\n" +
-		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
-
 	// Shared with Cursor's Read synthesis: an unbounded source dump before refs/query.
 	sourceReadAdvice = "this workspace has SCIP symbol indexes; an unbounded source read wastes the context they already answered. Before dumping a whole file to find a definition or call site:\n" +
 		"  CODE SYMBOL (defined / used where):  `" + hint.Refs.With("<symbol>") + "`  (add `--occurrences` for edit-precise ranges)\n" +
@@ -1099,10 +975,6 @@ var (
 		"Then read ONLY the path+line range refs returned. If you already have that range from refs, a bounded read is fine. " + searchColdIndexRouting
 
 	sourceReadBrief = "magus workspace: `" + hint.Refs.With("<sym>") + "` before reading whole source files."
-
-	// The placeholder repeat, kept for the read with no pattern to query with. A search
-	// gets its own terms spliced in instead: see proseSuggestion.
-	docSearchBrief = "magus workspace: prose is queryable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "`"
 
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
@@ -1176,11 +1048,7 @@ var (
 	// correction is the flag that returns that thing, not the prohibition.
 	// The exit-status fact is the half a reader cannot discover by trying again: the pipe
 	// SUCCEEDS, so a failing gate reads as exit 0 and nothing ever says so.
-	pipeExitNote = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
-	// The exit-0 fact leads the second line: it is what turns the echo from noise into a
-	// wrong answer, and nothing on screen says so.
-	denyExitStatusEcho = "Drop the trailing `echo $?`: the harness already reports a nonzero exit, and success needs no confirmation.\n" +
-		"The echo exits 0, so the line reads as passing whatever ran before it. If a failure must not be masked, join with `&&` or make separate calls."
+	pipeExitNote      = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
 	throwawayCopyDeny = "Run from the workspace and name the project: `" + hint.Run.With("<target>", "<project>") + "`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
 		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
 )
@@ -1409,12 +1277,6 @@ func agentSignOffFires(cmds []hint.Invocation, parsed bool, command string) bool
 	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
 }
 
-// searchHints is the unscoped default translator, used when no project list is
-// available (and by the pure guard tests). Judge builds a manifest-scoped
-// translator per invocation and hands it to evaluateWith, so live
-// suggestions can carry project= scoping.
-var searchHints = hint.NewTranslator()
-
 // precedentIdentRe is the identifier shape the transcript mining classified as a
 // precedent hunt: CamelCase, or snake_case with a real separator. A run of lowercase
 // letters is as likely to be prose, and routing that to refs spends the session's one
@@ -1453,96 +1315,6 @@ func precedentIdent(cmds []hint.Invocation) string {
 	return ""
 }
 
-// searchAdvisoryLead renders hint's suggestions for one command on the line,
-// preferring a search-family command's over a file-find's, as the paragraph
-// prepended to searchGuardReason. The lead hands back something to TRY rather
-// than a principle to weigh: a generic "use the graph" loses to muscle
-// memory; `magus refs HandleFoo` does not. Empty when hint abstains for every
-// command, in which case the generic reason still ships. Routing and hedging
-// rationale live in internal/hint.
-//
-// A content search outranks a file-find: on a line carrying both (`find | xargs
-// grep`), the search answers the content question, the find only the name one.
-func searchAdvisoryLead(cmds []hint.Invocation, hints *hint.Translator) string {
-	hasFileFind := slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		return c.Name == "find" || c.Name == "fd"
-	})
-	var fallback []hint.Suggestion
-	for _, c := range cmds {
-		var suggestions []hint.Suggestion
-		if hasFileFind && hint.IsSearchTool(c.Name) {
-			// A find on the same line is feeding the grep its files, so the grep is
-			// repo-wide even though its own argv is not: ask as recursive FIRST rather
-			// than losing the content question to the find.
-			//
-			// Asked first, not as a fallback when the plain ask abstains. The plain ask
-			// stopped abstaining when refs --text landed, and a non-recursive grep
-			// translates to a literal search over the files it was handed, which is a
-			// narrower answer than the repo-wide symbol question the pipeline is really
-			// asking. Kept as a fallback it would have won every time.
-			suggestions = hints.Suggest(hint.Invocation{Name: c.Name, Args: append([]string{"-r"}, c.Args...)})
-		}
-		if len(suggestions) == 0 {
-			suggestions = hints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
-		}
-		if len(suggestions) == 0 {
-			continue
-		}
-		if hint.IsSearchTool(c.Name) {
-			return renderAdvisoryLead(suggestions)
-		}
-		if fallback == nil {
-			fallback = suggestions
-		}
-	}
-	if fallback == nil {
-		return ""
-	}
-	return renderAdvisoryLead(fallback)
-}
-
-// proseSuggestion is the doc-section query hint composes for the prose search on the
-// line, with the reader's own terms already in it, or nil when there is none.
-//
-// The doc rule is matched before the code-search rule, so this is the only path by
-// which a prose search meets a runnable command. searchAdvisoryLead records the
-// reasoning for the code case, and it holds harder here: a `<terms>` placeholder is a
-// command the reader still has to finish writing.
-//
-// It abstains for a plain read (`cat docs/x.md` carries no pattern) and for a line whose
-// only searchable command asks a code question, so a prose notice never leads with a
-// symbol lookup. The placeholder wording stands in both cases.
-func proseSuggestion(cmds []hint.Invocation, hints *hint.Translator) []hint.Suggestion {
-	for _, c := range cmds {
-		inv := hint.Invocation{Name: c.Name, Args: c.Args}
-		if hint.Classify(inv) != hint.ClassSearchProse {
-			continue
-		}
-		if s := hints.Suggest(inv); len(s) > 0 {
-			return s
-		}
-	}
-	return nil
-}
-
-func renderAdvisoryLead(suggestions []hint.Suggestion) string {
-	var b strings.Builder
-	switch suggestions[0].Confidence {
-	case hint.ConfidenceHigh:
-		b.WriteString("Run")
-	case hint.ConfidenceMedium:
-		b.WriteString("Try")
-	default:
-		b.WriteString("Maybe try")
-	}
-	b.WriteString(" `" + suggestions[0].Run + "` - " + suggestions[0].Why + ".")
-	for _, s := range suggestions[1:] {
-		b.WriteString(" Or `" + s.Run + "` - " + s.Why + ".")
-	}
-	b.WriteString(" " + suggestions[0].Hedge + "\n\n")
-	return b.String()
-}
-
 // Evaluate applies the guard rules in severity order, against the facts deps supplies
 // (the spell catalog the raw-tool rule matches against, among them).
 //
@@ -1562,15 +1334,15 @@ func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
 func Evaluate(deps Dependencies, command string) ShellVerdict {
-	return evaluateWith(deps, command, searchHints)
-}
-
-// evaluateWith is Evaluate with the caller's hint translator, so Judge can pass one
-// scoped from the knowledge manifest while the verdict stays a pure function of what
-// was handed in.
-func evaluateWith(deps Dependencies, command string, hints *hint.Translator) ShellVerdict {
 	d := effectiveDialect(deps.ShellDialect)
-	v := strengthenWithWorkspace(evaluateRules(deps, command, hints, d), matchWorkspaceShell(deps.ShellRules, command, d))
+	builtin := evaluateRules(deps, command, d)
+	// A built-in advisory is about this workspace, so a line that only touches paths
+	// outside it has nothing to be advised about. Denies are exempt: each one decides for
+	// itself whether a path outside the tree changes its answer.
+	if builtin.Deny == "" && builtin.Context != "" && deps.scope.lineOutside(command, d) {
+		builtin = ShellVerdict{}
+	}
+	v := strengthenWithWorkspace(builtin, matchWorkspaceShell(deps.ShellRules, command, d))
 	// A deny refuses the WHOLE line, and the reason only ever discusses the one construct
 	// that earned it. On a line holding several commands that reads as a partial refusal:
 	// the writer fixes the named command and assumes the others ran. They did not.
@@ -1595,7 +1367,7 @@ func nothingRanNote(command string, d Dialect) string {
 	return ""
 }
 
-func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d Dialect) ShellVerdict {
+func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE (a pipe, a redirect, a cd before a magus
 	// call) rather than which program runs.
@@ -1646,7 +1418,7 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	if parsed && captureFilterFires(cmds, command, d) {
 		return ShellVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
 	}
-	if scriptedRewriteFires(command, d) {
+	if scriptedRewriteFires(command, d, deps.scope) {
 		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
 	var advisory ShellVerdict
@@ -1719,70 +1491,27 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: pipeDeny(pipedVerb, pipedFilter), Rule: denyRule{Name: denyRuleOutputPipe}}
 	case redirected:
 		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
+	}
+	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
+		return ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}
+	}
 	// Below the rules that name the command itself: on `go test ./...; echo $?` the raw
 	// tool is the correction worth reading first.
-	case exitStatusEchoFires(command, d):
-		return ShellVerdict{Deny: denyExitStatusEcho, Rule: denyRule{Name: denyRuleExitStatusEcho}}
+	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
+		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+	}
+	switch {
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return ShellVerdict{Context: updateGuardContext}
 	case parsed && slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
 		return ShellVerdict{Context: installGuardContext}
-	case ruleFires(cmds, parsed, command, docSearchFires, docSearchRe):
-		v := ShellVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
-		if s := proseSuggestion(cmds, hints); s != nil {
-			v.Context = renderAdvisoryLead(s) + docSearchAdvice
-			v.Brief = "magus workspace: prose is queryable. `" + s[0].Run + "`"
-		}
-		return v
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
-	case precedentIdent(cmds) != "":
-		ident := precedentIdent(cmds)
-		// An indexed symbol is the one search shape with an EXACT replacement, which is
-		// what makes denying it free: refs returns the same sites, column-precise and
-		// checked against the tree, plus the generated and cross-language ones a pattern
-		// cannot reach. Anything the index cannot vouch for stays an advisory, because a
-		// deny that routes nowhere takes a capability away. Raw text is the standing case
-		// there: a string literal or a comment body is not a symbol, so no index holds it.
-		defined, definitive := deps.symbolDefined(ident)
-		// The index could not vouch for ident, which is the ONLY reason this is advice
-		// rather than the refusal below. The long form already says so (searchColdIndexRouting),
-		// but the brief is what a reader sees on every call, and "refs finds every use" reads
-		// as a preference they may decline. Naming the staleness and the one command that
-		// clears it turns a silent degradation into something actionable.
-		//
-		// It matters most on a branch that is ADDING symbols: the index lags exactly there,
-		// so the rule is quietest on the code most likely to need it.
-		if !definitive {
-			return ShellVerdict{
-				Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
-				Kind:    advisoryPrecedent,
-				Brief: "magus workspace: the symbol index cannot vouch for " + ident + " yet, so this is advice and not a refusal. `" +
-					hint.GraphBuild.String() + "` refreshes it, then `" + hint.Refs.With(ident, "--occurrences") + "` answers exactly.",
-			}
-		}
-		if defined {
-			return ShellVerdict{
-				Deny: "`" + hint.Refs.With(ident, "--occurrences") + "` answers this exactly, and is checked against the tree rather than matched against it.\n" +
-					ident + " is an indexed symbol here, so the graph knows every definition and reference including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
-				Rule: denyRule{Name: denyRuleSymbolSearch, Arg: ident},
-			}
-		}
-		return ShellVerdict{
-			Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
-			Kind:    advisoryPrecedent,
-			Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
-		}
-	case ruleFires(cmds, parsed, command, codeSearchFires, codeSearchRe),
-		ruleFires(cmds, parsed, command, fileFindFires, fileFindRe):
-		return ShellVerdict{
-			Context: searchAdvisoryLead(cmds, hints) + searchGuardReason,
-			Kind:    advisoryCodeSearch,
-			// Carries the ROUTING, not just the verbs. A worker meets this having never
-			// seen the full text, and picking query for a code symbol returns 0, which is
-			// how a reader concludes the graph is useless.
-			Brief: "magus workspace: `" + hint.Refs.With("<sym>") + "` for code, `" + hint.Query.String() + "` for entities.",
-		}
+	}
+	if v, ok := searchVerdict(deps, cmds); ok {
+		return v
+	}
+	switch {
 	case echoOnSuccessRe.MatchString(command):
 		return ShellVerdict{Context: echoOnSuccessAdvice}
 	case timedMagusRe.MatchString(command):

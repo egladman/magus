@@ -20,7 +20,6 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -112,6 +111,10 @@ type Dependencies struct {
 	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
 	// base an attributed spawn records for its job, the value `magus job exec` records.
 	CheckoutBase func(ctx context.Context, root string) string
+
+	// scope is where the judged call runs. Judge fills it from the location it resolved,
+	// so Evaluate can tell a path outside the workspace without reading anything itself.
+	scope workspaceScope
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -311,6 +314,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// session on that host would share the anonymous bucket. The acting lease is resolved
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	location := hookLocation(ctx, deps)
+	deps.scope = scopeAt(location)
 	policyDigest := recordPolicy(ctx, deps, location, false)
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
@@ -413,7 +417,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
 			case "advise":
-				advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
+				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), g.Kind, true
 			}
 		}
 		if verdict.Decision != "deny" {
@@ -433,6 +437,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if reason := denyBuzzWriteWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				verdict.Decision, verdict.Reason = "deny", reason
 				verdict.Rule = string(denyBuzzUnbriefed)
+			}
+		}
+		// A script is judged by what running it would be judged by, and the write is the
+		// last moment that costs nothing to change.
+		if verdict.Decision != "deny" {
+			if v := denyScriptWrite(deps, input, write); v.Deny != "" {
+				verdict.Decision, verdict.Reason, verdict.Rule = "deny", v.Deny, v.RuleName()
 			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
@@ -455,6 +466,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if text := adviseInstalledSkillWrite(input); text != "" {
 				advice, adviceKind, spoken = text, advisoryInstalledSkill, true
 			}
+		}
+		// Every rung below advises about THIS workspace, so a write outside it (a scratch
+		// file, a user-level config) is none of their business. The two rungs above still
+		// speak: host wiring and an installed skill live outside a workspace by design.
+		if deps.scope.outside(input) {
+			spoken = true
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseMemoryWrite(input); text != "" {
@@ -519,7 +536,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if callDir == "" {
 			callDir = location.dir
 		}
-		v := rankOwnBuild(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), ownBuildVerdict(deps, callDir, input, shellD))
+		v := rankOwnBuild(Evaluate(deps, input), ownBuildVerdict(deps, callDir, input, shellD))
+		v = rankScriptContent(v, denyScriptContent(deps, callDir, input, shellD))
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
@@ -823,9 +841,10 @@ const (
 // file_path), so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
-// A payload carrying a PROMPT rather than either is a spawn: it is RECORDED and EXEMPT from
-// judgment. There is no command and no path to judge, only a context transfer to note, and a
-// prompt that merely MENTIONS a denied command would otherwise block the spawn describing it.
+// A payload carrying a PROMPT rather than either is a spawn: it is RECORDED, and never judged
+// as a shell line. A prompt that merely MENTIONS a denied command would otherwise block the
+// spawn describing it; the commands it presents as ones to run are graded on their own
+// (internal/guard/brief.go).
 //
 // Anything that is not an object with a usable tool_input is left alone and judged as the
 // literal text it is: the bare-command form keeps working exactly as before.
@@ -1215,21 +1234,6 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Context:       req.Value,
 		DeclaredModel: req.DeclaredModel,
 	})
-}
-
-// hookSearchHints builds the search translator scoped to the projects the
-// knowledge manifest records, so a caught search can be answered with a
-// project=-scoped query. An absent or unreadable manifest yields the unscoped
-// default, identical to a workspace that never built a graph.
-func hookSearchHints(cacheDir string) *hint.Translator {
-	if cacheDir == "" {
-		return searchHints
-	}
-	paths := knowledge.ProjectPaths(cacheDir)
-	if len(paths) == 0 {
-		return searchHints
-	}
-	return hint.NewTranslator(hint.WithProjects(paths))
 }
 
 // hookLocation resolves the local workspace cache because a hook runs as a short-lived

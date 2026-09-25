@@ -18,13 +18,14 @@ name is the entry below. `magus describe rules` prints the same list.
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | [agent-sign-off](agent-sign-off.md)               | an agent stamping a read receipt or closing an attention request, which only a person may do      |
 | [backtick-substitution](backtick-substitution.md) | a backtick command substitution, which inside double quotes runs a command                        |
+| [brief-command](brief-command.md)                 | a spawn or continuation brief that teaches a command the guard denies                             |
 | [busy-wait](busy-wait.md)                         | a loop polling for work you started, which announces its own completion                           |
 | [buzz-unbriefed](buzz-unbriefed.md)               | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                              |
 | [capture-filter](capture-filter.md)               | a filter over a run capture or log, which cuts the failure block apart                            |
 | [cd](cd.md)                                       | a `cd` before a magus command, when the project is an argument                                    |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
-| [exit-status-echo](exit-status-echo.md)           | a trailing `echo $?`, which repeats an exit status the harness already reports                    |
+| [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
 | [filter-without-input](filter-without-input.md)   | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                        |
 | [interpreter-rewrite](interpreter-rewrite.md)     | an inline interpreter rewriting a file this tree already carries                                  |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                     |
@@ -40,9 +41,10 @@ name is the entry below. `magus describe rules` prints the same list.
 | [sibling-checkout](sibling-checkout.md)           | a magus command relocated into another checkout, judging a tree nobody ships                      |
 | [spawn-unbriefed](spawn-unbriefed.md)             | a subagent spawned before the multi-agent skill loaded                                            |
 | [stage-all](stage-all.md)                         | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output           |
-| [symbol-search](symbol-search.md)                 | a recursive text search for a symbol the index defines and can enumerate                          |
+| [symbol-search](symbol-search.md)                 | a recursive text search for names the graph answers exactly: symbols or diagnostic codes          |
 | [throwaway-copy](throwaway-copy.md)               | a run inside a temp or scratchpad copy, which leaves the real tree unverified                     |
 | [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store         |
+| [unknown-env](unknown-env.md)                     | a retired or misspelled MAGUS_* variable handed to a command                                      |
 | [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                        |
 | [worktree-remove](worktree-remove.md)             | removing a worktree, which may hold another session's uncommitted work                            |
 
@@ -52,8 +54,6 @@ name is the entry below. `magus describe rules` prints the same list.
 | --------------------------------------- | --------------------------------------------------------------------------------------- |
 | [chained-run](chained-run.md)           | several magus runs chained on one line, where the dependency graph would have run them  |
 | [checkpoint-state](checkpoint-state.md) | a command reaching for a tree's identity, which a revision alone cannot give            |
-| [code-search](code-search.md)           | a repo-wide text search that the symbol graph may answer better                         |
-| [doc-search](doc-search.md)             | a search through markdown, where headings are indexed as doc sections                   |
 | [focus](focus.md)                       | a read or write outside the paths the running job declared                              |
 | [gate-repeat](gate-repeat.md)           | the gate run again soon after it passed, repeating work already done                    |
 | [generated-write](generated-write.md)   | a hand edit to a declared output, which the next run overwrites                         |
@@ -62,6 +62,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [installed-skill](installed-skill.md)   | a write to an installed skill copy, which re-installing discards                        |
 | [lease-invalid](lease-invalid.md)       | a call naming a lease this workspace's job store does not declare                       |
 | [lease-terminal](lease-terminal.md)     | a call naming a lease whose row has already finished                                    |
+| [leased-path](leased-path.md)           | a write into paths a running lease owns, by a caller that names no lease                |
 | [memory-write](memory-write.md)         | a write to a memory file, where the memory surface is the way in                        |
 | [new-file](new-file.md)                 | a new file in a directory whose naming has settled                                      |
 | [new-source-dir](new-source-dir.md)     | a new file that opens a directory, which is a boundary rather than a file               |

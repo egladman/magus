@@ -76,7 +76,6 @@ import (
 // 48: magus-query teaches the doc-section layer: every markdown heading is a
 // `docsection` node, so prose is retrieved with `magus query kind=docsection`
 // (a `path#anchor` pointer to one passage) instead of reading the whole file.
-// Pairs with the guard's doc-search advisory on a cat/grep of a `.md`.
 // 49: the query grammar teaches operators: kind=spell (match), kind!=op
 // (exclude), id=~regex (regex), with the `:`/`-kind:op` spelling kept as a
 // compat alias. `=` reads as a match over a structured graph, and `!=` removes

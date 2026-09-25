@@ -307,3 +307,21 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.True(t, covered[rule[1]], "%s is in the policy's header with no real-input case here", rule[1])
 	}
 }
+
+// TestWriteOutsideTheWorkspaceIsAdvisedNothing: a scratch file or a user-level config is
+// not this workspace's to advise on, and the audit caught advisories on exactly those.
+// The same write inside the root still is.
+func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvBaggage, "")
+	root, elsewhere := t.TempDir(), t.TempDir()
+	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
+	write := func(path string) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: path, IsPath: true, Session: "s1", Host: "test-host"})
+	}
+
+	assert.Equal(t, "pass", write(elsewhere+"/CLAUDE.md").Decision)
+	inside := write(root + "/CLAUDE.md")
+	assert.Equal(t, "advise", inside.Decision)
+	assert.Equal(t, string(advisoryMemoryWrite), inside.Rule)
+}

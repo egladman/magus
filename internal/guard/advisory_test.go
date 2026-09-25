@@ -75,7 +75,7 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	base := t.TempDir()
 	gate := hint.NewGate(base, "shared")
 	for _, kind := range []hint.MarkerKind{
-		advisoryStaleBinary, advisoryCodeSearch, advisoryDocSearch, advisorySourceRead, advisoryPrecedent,
+		advisoryStaleBinary, advisorySourceRead, advisoryPrecedent,
 		advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource, advisoryRegenSource,
 		advisoryGraphStale, advisoryFocus, advisoryNewFile,
 	} {
