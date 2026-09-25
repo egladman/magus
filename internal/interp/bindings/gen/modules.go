@@ -31,6 +31,7 @@ var Modules = Set{
 	"net":      {Register: RegisterNet},
 	"os":       {Register: RegisterOs},
 	"path":     {Register: RegisterPath, Capabilities: Capabilities(WASM)},
+	"pipe":     {Register: RegisterPipe},
 	"platform": {Register: RegisterPlatform, Capabilities: Capabilities(WASM)},
 	"proc":     {Register: RegisterProc},
 	"semver":   {Register: RegisterSemver, Capabilities: Capabilities(WASM)},

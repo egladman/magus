@@ -69,7 +69,7 @@ changes_json() {
 }
 
 AFFECTED="'$MAGUS' affected ci --plan --stdin"
-GATE="'$MAGUS' affected tests --base \"\$MERGEQUEUE_ONTO\""
+GATE="'$MAGUS' run tests"
 
 APPS=(crew flight-simulator navigation ticket-booking warp-drive-manager)
 

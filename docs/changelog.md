@@ -137,6 +137,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   carries a `stdio` credential holding `mcp=write`, and every MCP tool call, over either
   transport, is refused below that with MGS9015.
 - **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
+- **A `pipe` Buzz module makes `magus buzz <script>` a stage of a magus pipe.** A
+  script reads the records of the run before it with `pipe\more`, `pipe\next` and
+  `pipe\all`, and `pipe\emit` writes records for the stage after it, so `magus run test .
+  | magus buzz failures.buzz` replaces `| grep FAIL`. Its exit status counts like any
+  stage's.
+- **Magus stages in a pipe trade typed records, and projects flow forward.** A run
+  whose stdout another magus reads writes its `-o jsonl` records there and its prose
+  on stderr, so `magus run format libs/x | magus run lint | magus run test` runs all
+  three on libs/x. Named projects still win; an explicit `-o` keeps its format.
 - **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
   `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
   turns into a token. magus runs none of it. `apply` refuses a status pinned to another
@@ -419,6 +428,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
   key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
   the hook form; the shipped sh and Buzz command and path hooks pass `sh` and `buzz`.
+- **A pipe of magus runs fails at its first failed stage, without `set -o pipefail`.**
+  A run starts nothing once a magus stage upstream of it has failed, and the last
+  stage exits with that stage's status (MGS3030), so `magus run generate:rw . | magus
+  run test .` is a chain whose exit status can be trusted.
 - **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
   a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
   the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
@@ -497,6 +510,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
   are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
   forking its spell's import path instead.
+- **Breaking: `magus run --then` and `magus affected --then`, with no alias.** Pipe the
+  run into a `magus buzz` script instead: `pipe\outputs`, `pipe\exportTo`,
+  `pipe\history`, `pipe\diff` and `pipe\value` act on the records it reads, and
+  `fs\readFile` and `crypto\sha256File` cover `contents` and `hash`.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
 - **The `preflight` target convention.** The starter magusfile and the docs no longer

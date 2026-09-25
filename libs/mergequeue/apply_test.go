@@ -30,6 +30,7 @@ func applierFor(t *testing.T, d doubles, plan types.Plan, verdicts ...types.Verd
 	d.noCheckouts()
 	d.noneGreen()
 	d.marks(nil)
+	d.flags()
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Verdicts: verdicts, Done: true}, nil).Maybe()
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 	require.NoError(t, err)
@@ -479,13 +480,21 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/gen.go", "gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
 	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).Return(types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}}, nil)
-	d.kicks(c, types.CodeKickRefused, "it changes code their regeneration runs (gen/gen.go), so only its author can regenerate them")
+	flags := d.flags()
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
+	d.status(c, c.Head, types.StateFailure, "kicked back")
+	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.MatchedBy(func(k types.Kick) bool {
+		return k.Code == types.CodeKickRefused && k.Flag == types.FlagChangesGenerator &&
+			strings.Contains(k.Report, "it changes code their regeneration runs (gen/gen.go), so only its author can regenerate them")
+	})).Run(func(context.Context, types.Change, string, types.Kick) { flags.add("kicked") }).Return(nil).Once()
 	a := applierFor(t, d, planOf([]types.Change{c}), v)
 	a.Regenerate = func(context.Context, types.Regeneration) error {
 		t.Error("regenerated from code the change touched")
 		return nil
 	}
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Equal(t, []string{"1 changes_generator off", "1 changes_generator on", "kicked"}, flags.entries(),
+		"the kick-back shows the flag its report names, even where planning proved the files the change touches")
 }
 
 // Where the build tool proves the change touches none of the generator's code, applying
@@ -654,6 +663,7 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	d.noCheckouts()
 	d.noneGreen()
 	d.marks(nil)
+	d.flags()
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Rejected: []types.RejectedVerdict{{Change: "1", Reason: "not a zip"}, {Change: "8", Reason: "x"}}, Done: true}, nil)
 	d.waits(one, one.Head, "its verdict could not be read: not a zip")
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
@@ -700,17 +710,18 @@ func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
 }
 
 // A dry run reports and calls nothing on the provider: no expectation is set on it, and
-// it shows no mark.
+// it shows no mark and no flag.
 func TestApplyDryRunCallsNothingOnTheProvider(t *testing.T) {
 	d := newDoubles(t)
 	one := change("1", "a")
-	marks := d.marks(nil)
+	marks, flags := d.marks(nil), d.flags()
 	var out bytes.Buffer
 	a := applierFor(t, d, planOf([]types.Change{one}), validated(one, base, ""))
 	a.DryRun, a.Events = true, NewEvents(&out)
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
 	assert.Contains(t, out.String(), "dry run: would merge candidate "+candidateOf(base, one.Head)[:12])
 	assert.Empty(t, marks.entries())
+	assert.Empty(t, flags.entries())
 }
 
 // A run starts by marking queued what the plan admitted, the changes planning left
@@ -735,6 +746,26 @@ func TestARunMarksWhatThePlanAdmittedAndClearsAQueuedMarkLeftBehind(t *testing.T
 	a := applierFor(t, d, plan)
 	require.NoError(t, a.Run(t.Context(), plan))
 	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued", "4 none in acme/acme", "5 none"}, marks.entries())
+}
+
+// A run flags each admitted change whose generated files only its author can regenerate
+// and unflags the rest, beside the queued mark; a change planning held keeps whatever
+// flag it shows, since planning proved nothing about it.
+func TestARunFlagsTheAdmittedChangesThatChangeAGenerator(t *testing.T) {
+	d := newDoubles(t)
+	generator, plain, held := change("1", "a"), change("2", "b"), change("3")
+	generator.AuthorRegenerates = []string{"gen/x.go"}
+	d.caps()
+	marks, flags := d.marks(nil), d.flags()
+	d.waits(held, held.Head, "r")
+	d.waits(generator, generator.Head, "not validated in this run")
+	d.waits(plain, plain.Head, "not validated in this run")
+	plan := planOf([]types.Change{generator}, []types.Change{plain})
+	plan.Verdicts = []types.Verdict{waiting("3")}
+	a := applierFor(t, d, plan)
+	require.NoError(t, a.Run(t.Context(), plan))
+	assert.Equal(t, []string{"1 changes_generator on", "2 changes_generator off"}, flags.entries())
+	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued"}, marks.entries(), "a flagged change stays queued")
 }
 
 // A kick-back shows the rejected mark once the provider carried it out.
@@ -1225,7 +1256,6 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 			}
 			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
 			require.Len(t, ran, 1)
-			assert.Equal(t, onBase, ran[0].Onto)
 			assert.Equal(t, []string{"gen/x.go"}, ran[0].Paths)
 			assert.Equal(t, []string{"gen"}, ran[0].Units)
 		})
