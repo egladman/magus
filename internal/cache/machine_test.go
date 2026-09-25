@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -450,6 +451,92 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	require.Len(t, observed, 1, "the result observers feed -o jsonl's run.target.result and run.diagnostic")
 	assert.ErrorIs(t, observed[0], types.MachineBudgetExhausted)
 	assert.Equal(t, Stats{Error: 1}, c.Stats(), "a refusal counts toward the run's failed total")
+}
+
+// cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the
+// same cache under an admitter whose budget another checkout's claim has filled.
+func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *fakeAdmitter) {
+	t.Helper()
+	t.Setenv("MAGUS_LEVEL", "")
+	cdir := t.TempDir()
+	warm, err := Open(t.Context(), cdir, WithLocalWrite(true))
+	require.NoError(t, err)
+	_, err = warm.RunAll(t.Context(), []Step{step}, func(context.Context, Step) error { return nil })
+	require.NoError(t, err, "warming the entry")
+
+	b, _ := testBudget(t, 10_000, 8)
+	held := b.Request(types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	})
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+	adm := &fakeAdmitter{budget: b}
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm))
+	require.NoError(t, err)
+	return c, adm
+}
+
+// TestRunAllReplaysALocalHitWithoutAMachineClaim is two fully cached `magus run test .`
+// in different checkouts: the second must replay, not exit 75 for memory it never uses.
+func TestRunAllReplaysALocalHitWithoutAMachineClaim(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v1"), 0o644))
+	step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: []string{"a.txt"}, MemoryMB: 9000}
+	c, adm := cachedUnderFullBudget(t, step)
+	noRun := func(context.Context) error {
+		t.Error("a cached step must replay, not run")
+		return nil
+	}
+
+	results, err := c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error { return noRun(ctx) })
+	require.NoError(t, err)
+	assert.True(t, results[0].Hit)
+
+	r, err := c.RunAside(t.Context(), step, noRun)
+	require.NoError(t, err)
+	assert.True(t, r.Hit)
+
+	assert.Zero(t, adm.requests, "a local hit asks the machine budget for nothing")
+}
+
+func TestRunAllClaimsForAStepThatWillExecute(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(root string, s *Step)
+	}{
+		{"source changed", func(root string, _ *Step) {
+			require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v2-different-length"), 0o644))
+		}},
+		{"no cache", func(_ string, s *Step) { s.NoCache = true }},
+		{"skip replay", func(_ string, s *Step) { s.SkipReplay = true }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v1"), 0o644))
+			step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: []string{"a.txt"}, MemoryMB: 9000}
+			c, adm := cachedUnderFullBudget(t, step)
+			tc.edit(root, &step)
+
+			_, err := c.RunAll(t.Context(), []Step{step}, func(context.Context, Step) error {
+				t.Error("a refused step must not run")
+				return nil
+			})
+			require.ErrorIs(t, err, types.MachineBudgetExhausted)
+			assert.Equal(t, 1, adm.requests)
+		})
+	}
+}
+
+// TestRunRefusesToExecuteAGoneLocalHit pins what keeps an evicted entry from running
+// unclaimed: under replayLocal, Run neither falls through to fn nor to another tier.
+func TestRunRefusesToExecuteAGoneLocalHit(t *testing.T) {
+	c, err := Open(t.Context(), t.TempDir(), WithLocalWrite(true))
+	require.NoError(t, err)
+	_, err = c.Run(t.Context(), Step{ProjectPath: ".", Target: "test"}, func(context.Context) error {
+		t.Error("a step admitted as a local hit must not execute")
+		return nil
+	}, replayLocal(strings.Repeat("0", 64)))
+	require.ErrorIs(t, err, errLocalEntryGone)
 }
 
 func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
