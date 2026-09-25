@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,7 +56,12 @@ var remediationSections = map[string]bool{
 // codeURL is a parameter rather than a direct types.CodeURL call so a test can hand it a
 // domain that routes a code nowhere; that branch is unreachable through the real one,
 // which is the point of guarding it.
-func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string) types.Check {
+//
+// helpTitles names the codes whose Help link carries a description (rpcerr's server
+// reasons). Each such page must be titled "<CODE>: <description>", so the link reads the
+// same as the page it opens; a mismatch fails, since it is mechanical to fix.
+func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string,
+	helpTitles map[types.DiagnosticCode]string) types.Check {
 	const name = "diagnostic-docs"
 
 	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
@@ -67,7 +73,7 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 		}
 	}
 
-	var unroutable, missing, silent []string
+	var unroutable, missing, mistitled, silent []string
 	pages := 0
 	for _, code := range codes {
 		url := codeURL(code)
@@ -86,6 +92,11 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 			continue
 		}
 		pages++
+		if want, ok := helpTitles[code]; ok && !strings.Contains(string(md), fmt.Sprintf("title: %q\n", string(code)+": "+want)) {
+			mistitled = append(mistitled, fmt.Sprintf(
+				"%s: %s is not titled %q, the description its Help link carries; make the two agree",
+				code, relToRoot(root, page), string(code)+": "+want))
+		}
 		if !hasRemediation(string(md)) {
 			silent = append(silent, fmt.Sprintf(
 				"%s: %s explains the failure but declares no remediation section; add a `## Resolution` naming the next step",
@@ -93,10 +104,17 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 		}
 	}
 
-	if broken := append(unroutable, missing...); len(broken) > 0 {
-		msg := fmt.Sprintf(
-			"%d of %d diagnostic code(s) print a see: target that leads nowhere, so the reader is left with the code and no way to look it up",
-			len(broken), len(codes))
+	if broken := append(append(unroutable, missing...), mistitled...); len(broken) > 0 {
+		var parts []string
+		if n := len(unroutable) + len(missing); n > 0 {
+			parts = append(parts, fmt.Sprintf(
+				"%d of %d diagnostic code(s) print a see: target that leads nowhere, so the reader is left with the code and no way to look it up",
+				n, len(codes)))
+		}
+		if len(mistitled) > 0 {
+			parts = append(parts, fmt.Sprintf("%d code page(s) are titled otherwise than the Help link that opens them", len(mistitled)))
+		}
+		msg := strings.Join(parts, "; ")
 		if len(silent) > 0 {
 			msg += fmt.Sprintf("; a further %d have a page that never names a next step", len(silent))
 		}
@@ -127,7 +145,7 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 // checkDiagnosticDocs reports diagnostic codes whose docs page is missing or names no
 // next step.
 func (r *runner) checkDiagnosticDocs() types.Check {
-	return checkDiagnosticDocs(r.root, types.AllDiagnosticCodes(), types.CodeURL)
+	return checkDiagnosticDocs(r.root, types.AllDiagnosticCodes(), types.CodeURL, rpcerr.Titles())
 }
 
 // codeDocsRoot is the directory every code page lives under, and the one whose absence

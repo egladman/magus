@@ -2,11 +2,8 @@ package rpcerr
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -28,20 +25,6 @@ func TestHTTPStatusMatchesConnect(t *testing.T) {
 		rr := httptest.NewRecorder()
 		_ = connect.NewErrorWriter().Write(rr, httptest.NewRequest(http.MethodPost, "/", nil), connect.NewError(c, errors.New("probe")))
 		assert.Equal(t, rr.Code, httpStatus(c), c.String())
-	}
-}
-
-// A Help link's description is the reason's own page heading, so the link reads the same as
-// the page it opens.
-func TestTitlesMatchTheCodePages(t *testing.T) {
-	t.Parallel()
-	for code, title := range titles {
-		pages, err := filepath.Glob(filepath.Join("..", "..", "docs", "reference", "codes", "*", string(code)+".md"))
-		require.NoError(t, err)
-		require.Len(t, pages, 1, "%s has one code page", code)
-		body, err := os.ReadFile(pages[0])
-		require.NoError(t, err)
-		assert.Contains(t, string(body), fmt.Sprintf("title: %q\n", string(code)+": "+title), pages[0])
 	}
 }
 

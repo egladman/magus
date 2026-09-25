@@ -2685,47 +2685,6 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// DOCS_TESTS are the Go tests that read docs/**/*.md, CHANGELOG.md or changes/**/*.md:
-// the markdown roots a docs edit moves. Found by reading each test, not by path: every
-// one opens a real file under those roots rather than a fixture. Names are unique in the
-// module, which is what lets one -run and one -skip carry them across packages.
-//
-//   conventions_test.go   docs for leaked tokens; the agents guide's parity tables,
-//                         embedded templates and examples; every .md for env sniffing
-//   types                 each diagnostic code's page exists
-//   internal/selfupdate   docs/setup/verify.md publishes the active release key
-//   internal/rpcerr       each code page's title
-//   cmd/magus-docs, -examples, -configdocs   their generated pages, byte for byte
-//   cmd/magus-utils       CHANGELOG.md and the unreleased fragments parse
-final DOCS_TESTS = [
-    "TestDocsCarryNoBearerToken", "TestNoEnvironmentSniffing",
-    "TestSessionParityTableMatchesTheAdapterDeclarations", "TestParityTableMatchesTheGlueDeclarations",
-    "TestRehydrateTemplateIsWiredAfterCompaction", "TestGuideExamplesDoNotResolveMagusFromTheProcessDirectory",
-    "TestHookTemplatesAreEmbeddedInTheGuide",
-    "TestEveryDiagnosticCodeHasDocPage", "TestReleaseTrustAnchorMatchesInstallerAndCI", "TestTitlesMatchTheCodePages",
-    "TestModuleDocsUpToDate", "TestDocsHaveExampleMarkers", "TestConfigDocsUpToDate",
-    "TestMigrateRoundtrip", "TestUnreleasedFragmentsFollowTheFormat",
-];
-final DOCS_TEST_PACKAGES = [".", "./types", "./internal/selfupdate", "./internal/rpcerr",
-    "./cmd/magus-docs", "./cmd/magus-examples", "./cmd/magus-configdocs", "./cmd/magus-utils"];
-
-fun docs_tests_pattern() > str {
-    return "^(" + DOCS_TESTS.join("|") + ")$";
-}
-
-// The Go tests that read the repository's markdown, split out of `test` so a docs edit
-// runs them alone. Keyed on the Go tree as well, since a code change can fail them too.
-export fun docs_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", "**/*.buzz", "mise.toml", "magus.yaml",
-                   "docs/**/*.md", "CHANGELOG.md", "changes/**/*.md",
-                   "docs/guides/integrations/agents/*", ".github/actions/setup-magus/action.yml",
-                   "internal/selfupdate/release-keys.json");
-    // As test does: the page goldens compare against what generate just wrote.
-    ctx.needs(format);
-    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-run", docs_tests_pattern()] + DOCS_TEST_PACKAGES});
-}
-
 // Tests with race detection and a coverage floor. The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
@@ -2764,11 +2723,14 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //   internal/agent/skills/**          go:embed pulls in the DIRECTORY, so a non-.md file
     //                                     added there is a compile-time input too
     //   internal/agent/agents-section.md  go:embed
+    //   docs/reference/codes/**/*.md      internal/doctor grades every MGS code's page
+    //                                     (exists, names a next step, titled as its Help
+    //                                     link) with the Go check `magus doctor` runs
     //
-    // The tests that read docs/**/*.md, CHANGELOG.md and changes/**/*.md run in
-    // docs_test instead, which declares those roots; this suite skips them. A docs edit
-    // then re-runs that handful of tests rather than the whole race-enabled suite. A new
-    // test that reads one of those roots belongs in DOCS_TESTS, or it replays stale here.
+    // Nothing else here reads docs/, CHANGELOG.md or changes/. A check of what a page says
+    // runs in the docs project's conventions target, and a page generated from Go is gated
+    // by the generate target that writes it, so a docs edit outside the code pages re-runs
+    // no part of this suite. A test that opens one of those roots breaks that.
     //
     // The non-.md fixtures below are the same enumeration for the same reason. They sit
     // in the project's sources too, which is what keys go_build, but a readsFiles call
@@ -2788,6 +2750,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.buzz", "mise.toml", "magus.yaml",
                    "**/*.lock",
                    "internal/agent/skills/**", "internal/agent/agents-section.md",
+                   "docs/reference/codes/**/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
                    "internal/registry/testdata/*",
                    "benchmarks/agent/internal/bench/testdata/*",
@@ -2803,9 +2766,14 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
     // test inputs.
     ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
-    // The setup action and the workflows: the release trust anchor, the queue app's
-    // credential rules and the no-cache rule for trusted jobs are asserted against them.
-    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/*.yaml");
+    // The setup action, the installer and the workflows: the release trust anchor, the
+    // queue app's credential rules and the no-cache rule for trusted jobs are asserted
+    // against them. The installer is committed under docs/gen but is a script, not a page.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
+    // The hook templates a reader installs and the site stylesheet: conventions_test reads
+    // them as code (coverage lines, wiring, the landing palette), never as prose.
+    ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.json",
+                   "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2828,9 +2796,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // goroutines. The engine's real concurrency keeps -race below, in the packages that
     // own it: internal/cache, internal/proc/run and the root package.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + COVERAGE_PROFILE, "-skip", docs_tests_pattern()] + raced_packages()});
+        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + COVERAGE_PROFILE] + raced_packages()});
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, "-skip", docs_tests_pattern(), CMD_MAGUS_PKG]});
+        {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, CMD_MAGUS_PKG]});
     // One profile again, or the badge and the floor below would measure the raced half
     // of the tree and call it the tree.
     fs\writeFile(COVERAGE_PROFILE,
@@ -3306,7 +3274,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, docs_test, security);
+    ctx.needs(lint, build, test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its

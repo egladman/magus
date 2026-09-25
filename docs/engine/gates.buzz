@@ -22,6 +22,8 @@ import "lib/html" as _;
 // The conventions lint's pure half: lintMarkdown/pathReferences decide WHAT is wrong,
 // conventionsCheck below is the part allowed to read the tree and say so.
 import "lib/conventions" as _;
+// The checks whose other half lives outside the page; crosscheckFindings reads both.
+import "lib/crosscheck" as _;
 
 // loadMeta populates the commit-metadata fields once, shelling out to git. The
 // GitHub source-navigation links (edit/blame/history/blob) use the git symbolic ref
@@ -509,13 +511,112 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
         }
     }
 
-    if (violations.len() > 0) {
-        var body = "";
-        foreach (v in violations) { body = body + "\n  " + v; }
-        throw "conventions: {violations.len()} violation(s) of docs/conventions.md across {checked} file(s):"
-            + body + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
+    final cross = crosscheckFindings(root, docs: docs, pages: sorted);
+
+    if (violations.len() > 0 or cross.len() > 0) {
+        var message = "";
+        if (violations.len() > 0) {
+            var body = "";
+            foreach (v in violations) { body = body + "\n  " + v; }
+            message = "conventions: {violations.len()} violation(s) of docs/conventions.md across {checked} file(s):"
+                + body + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
+        }
+        if (cross.len() > 0) {
+            var body = "";
+            foreach (v in cross) { body = body + "\n  " + v; }
+            if (message != "") { message = message + "\n\n"; }
+            message = message + "crosscheck: {cross.len()} disagreement(s) between a page and what it documents:"
+                + body + "\n\nEach line names both halves; fix whichever is wrong.";
+        }
+        throw message;
     }
     std\print("conventions: {checked} files checked, no violations");
+}
+
+// ENVIRONMENT_SKIP_SEGMENTS are the doc trees the environment-detection rule does not
+// govern, the same set conventions_test.go skips for code: captured output and history.
+final ENVIRONMENT_SKIP_SEGMENTS = ["manpage", "testdata", "schema", "blog", "releases"];
+
+fun environmentRuleApplies(rel: str) > bool {
+    if (rel == "changelog.md") { return false; }
+    foreach (seg in rel.split("/")) {
+        foreach (skip in ENVIRONMENT_SKIP_SEGMENTS) {
+            if (seg == skip) { return false; }
+        }
+    }
+    return true;
+}
+
+fun formatFindings(found: [ConventionFinding], into: mut [str]) > void {
+    foreach (f in found) {
+        into.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
+    }
+}
+
+// crosscheckFindings runs lib/crosscheck over the tree: every page for what it must never
+// carry, and the agent guide, the verify guide and the unreleased changelog fragments
+// against the files they document.
+fun crosscheckFindings(root: str, docs: str, pages: [str]) > [str] !> any {
+    final found: mut [str] = mut [<str>];
+    foreach (rel in pages) {
+        final file = docs + "/" + rel;
+        final md = fs\readFile(root + "/" + file);
+        formatFindings(bearerFindings(file, md: md), into: found);
+        if (environmentRuleApplies(rel)) {
+            formatFindings(environmentFindings(file, md: md), into: found);
+        }
+    }
+    // The fragments are the next release's changelog, written by hand, so they are held
+    // to the rule the pages are. The rendered changelog page is exempt as generated.
+    foreach (frag in fs\glob(root + "/changes/unreleased/*.md")) {
+        final file = "changes/unreleased/" + fs\basename(frag.value);
+        formatFindings(environmentFindings(file, md: fs\readFile(frag.value)), into: found);
+    }
+
+    final agentsRel = docs + "/guides/integrations/agents";
+    final agentsDir = root + "/" + agentsRel;
+    final templates = mut {<str: str>};
+    final adapters = mut {<str: str>};
+    foreach (name, page in TEMPLATE_PAGES) {
+        final body = fs\readFile(agentsDir + "/" + name);
+        templates[name] = body;
+        if (name.startsWith("magus-session-load-")) { adapters[name] = body; }
+        foreach (f in embedFindings(name, body: body, page: agentsRel + "/" + page,
+                doc: fs\readFile(agentsDir + "/" + page))) {
+            found.append(f);
+        }
+    }
+    final guide = docs + "/guides/integrations/agents.md";
+    foreach (f in guardParityFindings(templates, guide: fs\readFile(root + "/" + guide), guideFile: guide)) {
+        found.append(f);
+    }
+    final sessionGuide = agentsRel + "/session-load.md";
+    foreach (f in sessionParityFindings(adapters, guide: fs\readFile(root + "/" + sessionGuide), guideFile: sessionGuide)) {
+        found.append(f);
+    }
+    final hostPage = agentsRel + "/claude-code.md";
+    foreach (f in rehydrateWiringFindings(hostPage, doc: fs\readFile(root + "/" + hostPage))) {
+        found.append(f);
+    }
+    // The shipped hook configs: the one this repository dogfoods and the one a reader copies.
+    foreach (configFile, page in {".claude/settings.json": "claude-code.md",
+            agentsRel + "/codex-hooks.json": "codex.md"}) {
+        foreach (f in hostWiringFindings(fs\readFile(root + "/" + configFile), configFile: configFile,
+                page: agentsRel + "/" + page, doc: fs\readFile(agentsDir + "/" + page))) {
+            found.append(f);
+        }
+    }
+    foreach (page in fs\glob(agentsDir + "/*.md")) {
+        final file = agentsRel + "/" + fs\basename(page.value);
+        formatFindings(magusLookupFindings(file, md: fs\readFile(page.value)), into: found);
+    }
+
+    final verify = docs + "/setup/verify.md";
+    foreach (f in releaseKeyFindings(fs\readFile(root + "/internal/selfupdate/release-keys.json"),
+            guideFile: verify, guide: fs\readFile(root + "/" + verify))) {
+        found.append(f);
+    }
+    return found;
 }
 
 // collectFindings runs both halves over one file into the single tier that throws.

@@ -113,7 +113,7 @@ func TestCheckDiagnosticDocs(t *testing.T) {
 			root := t.TempDir()
 			writeCodePage(t, root, code, c.body)
 
-			got := checkDiagnosticDocs(root, []types.DiagnosticCode{code}, types.CodeURL)
+			got := checkDiagnosticDocs(root, []types.DiagnosticCode{code}, types.CodeURL, nil)
 			require.Equal(t, c.wantStatus, got.Status, got.Message)
 			if c.wantDetail == "" {
 				assert.Empty(t, got.Details)
@@ -133,7 +133,7 @@ func TestCheckDiagnosticDocsMissingPage(t *testing.T) {
 	root := t.TempDir()
 	writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
 
-	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, types.SpellShadowed}, types.CodeURL)
+	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, types.SpellShadowed}, types.CodeURL, nil)
 	require.Equal(t, types.CheckFail, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "MGS1002")
@@ -156,7 +156,7 @@ func TestCheckDiagnosticDocsUnroutableCode(t *testing.T) {
 		return types.CodeURL(c)
 	}
 
-	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, stray}, url)
+	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, stray}, url, nil)
 	require.Equal(t, types.CheckFail, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "no see: target")
@@ -182,7 +182,7 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 		root := t.TempDir()
 		writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
 
-		got := checkDiagnosticDocs(root, codes, func(types.DiagnosticCode) string { return "" })
+		got := checkDiagnosticDocs(root, codes, func(types.DiagnosticCode) string { return "" }, nil)
 		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "no see: target")
@@ -192,17 +192,39 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 		root := t.TempDir()
 		writeCodesTree(t, root)
 
-		got := checkDiagnosticDocs(root, codes, types.CodeURL)
+		got := checkDiagnosticDocs(root, codes, types.CodeURL, nil)
 		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1001.md")
 	})
 }
 
+// TestCheckDiagnosticDocsHelpTitle: a Help link's description is its page's heading, so
+// the link reads the same as the page it opens.
+func TestCheckDiagnosticDocsHelpTitle(t *testing.T) {
+	root := t.TempDir()
+	writeCodePage(t, root, types.NoCITarget, "---\ntitle: \"MGS1001: no ci target\"\n---\n\n## Resolution\n\nDeclare it.\n")
+	codes := []types.DiagnosticCode{types.NoCITarget}
+
+	got := checkDiagnosticDocs(root, codes, types.CodeURL, map[types.DiagnosticCode]string{types.NoCITarget: "no ci target"})
+	require.Equal(t, types.CheckOK, got.Status, got.Message)
+
+	got = checkDiagnosticDocs(root, codes, types.CodeURL, map[types.DiagnosticCode]string{types.NoCITarget: "ci target missing"})
+	require.Equal(t, types.CheckFail, got.Status)
+	assert.Equal(t, "1 code page(s) are titled otherwise than the Help link that opens them", got.Message)
+	require.Len(t, got.Details, 1)
+	assert.Contains(t, got.Details[0], `"MGS1001: ci target missing"`)
+	assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1001.md")
+}
+
 // TestDiagnosticCatalogPassesItsOwnCheck runs the check against the real catalog and the
 // real pages, which is the only run that grades the doctrine claim it exists to enforce.
-// A code shipped without a page, or with a page naming no next step, fails here; there is
-// no allowlist, because the remedy for a listed code is to write the section.
+// A code shipped without a page, with a page naming no next step, or with a page titled
+// otherwise than its Help link, fails here; there is no allowlist, because the remedy
+// for a listed code is to write the section.
+//
+// The one test in this module that reads docs/: every page is keyed to a Go constant and
+// graded by Go code, so the root test target declares docs/reference/codes for it.
 //
 // The message is asserted too: CheckOK is also what the out-of-scope skip returns, so a
 // status assertion alone passes on a check that resolved no page at all.

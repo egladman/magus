@@ -570,8 +570,9 @@ magus trusts a KEYRING, not a key: `internal/selfupdate/release-keys.json` lists
 every Ed25519 public key a signature may come from, each with a state. Signing
 uses exactly one; verification accepts any that is not revoked. The ring has
 reviewable copies in `docs/gen/install`, the setup action, and the download
-guide, and `TestReleaseTrustAnchorMatchesInstallerAndCI` fails CI when they
-disagree. Never put a private Ed25519 seed in the repository or a release
+guide. `TestReleaseTrustAnchorMatchesInstallerAndCI` fails CI when the installer
+or the action disagrees with the ring, and the docs project's `conventions`
+target when the guide does not publish the active key. Never put a private Ed25519 seed in the repository or a release
 artifact.
 
 | state     | signs | verifies |
