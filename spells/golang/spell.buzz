@@ -142,7 +142,15 @@ final GO_MOD_HINTS = [
          advise = "go.mod does not cover the imports in the tree; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 ];
 
-fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS}; }
+// GO_PLATFORM_ENV names the environment variables that select what Go builds, vets,
+// tests or lints FOR. None of it rides argv: the toolchain reads it straight from the
+// environment, so an op whose result depends on the target platform has to key on
+// these names itself: a magusfile target composing the op has no reason to know it
+// needs its own ctx.envInputs("GOOS") beside the call, and a GOOS the shell set for one
+// run and not the next would otherwise replay a different platform's result.
+final GO_PLATFORM_ENV = ["GOOS", "GOARCH", "GOARM", "GOAMD64"];
+
+fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV}; }
 // go rejects -cache/-testcache/-modcache/-fuzzcache combined with ANY package
 // pattern ("cannot be used with package arguments"), in any order, so
 // "./..." can only be safe on a fully bare invocation. defaultArgs cannot
@@ -168,7 +176,7 @@ fun goFmt(target: Target) > Command {
 // (mise, asdf, a system package), and the spell's version probe records which.
 fun golangCILint(target: Target) > Command {
     final args = ["run", "./..."];
-    return Command{bin = "golangci-lint", args = args, charms = {
+    return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV, charms = {
         "debug": append(["-v"]),
         "rw": after(args, "run", ["--fix"]),
     }};
@@ -177,7 +185,7 @@ fun golangCILint(target: Target) > Command {
 // so one package's tests need not compile every test binary in the module. A bare
 // go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree.
 fun goTest(target: Target) > Command {
-    return Command{bin = "go", args = ["test"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, charms = {
+    return Command{bin = "go", args = ["test"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
@@ -206,7 +214,7 @@ fun goModEdit(target: Target) > Command {
 fun goModJSON(target: Target) > Command {
     return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true};
 }
-fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
+fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."], envKeys = GO_PLATFORM_ENV}; }
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is

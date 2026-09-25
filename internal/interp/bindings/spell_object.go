@@ -242,6 +242,9 @@ func commandToMap(t spells.Command) vm.Value {
 		}
 		op.MapSet("secrets", secrets)
 	}
+	if len(t.EnvKeys) > 0 {
+		op.MapSet("envKeys", strSliceToBuzzList(t.EnvKeys))
+	}
 	return op
 }
 

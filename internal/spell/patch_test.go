@@ -188,6 +188,10 @@ var (
 		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 	}
+	// goldenGoPlatformEnv mirrors GO_PLATFORM_ENV in spells/golang/spell.buzz: the ops
+	// whose result depends on the target platform (build, vet, test, golangci-lint's
+	// go compile) key on it.
+	goldenGoPlatformEnv = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"}
 	goldenPackageManagerHints = []spells.Hint{
 		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
 		{Contains: "ERR_PNPM_NO_SCRIPT", Advise: "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
@@ -347,7 +351,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Manifests:  goldenGoManifests,
 		Ops: map[string]spells.Op{
 			"go-mod-download": installOp("go", goldenGoInstallManifests, goldenGoInstall),
-			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints}},
+			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv}},
 			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean"}, TrailingArgs: []string{"./..."}}},
 			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
@@ -361,11 +365,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]spells.Charm{
+			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
-			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, Charms: map[string]spells.Charm{
+			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
@@ -378,7 +382,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
+			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}, EnvKeys: goldenGoPlatformEnv}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}, External: spells.ExternalReads}},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
