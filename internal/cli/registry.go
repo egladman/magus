@@ -1541,8 +1541,10 @@ arguments the cwd project (or the whole workspace, from the root) is selected.
 These are the same files the cache snapshots and replays on a hit. Whether
 each one is regenerable is the declaration's claim, not something clean
 verifies - so a file magus only modifies rather than produces belongs in
-ctx.modifiesExistingFiles, which clean never removes. Preview with the global
---dry-run flag before trusting a declaration you have not read.
+ctx.modifiesExistingFiles, which clean never removes. Nor does it remove an
+output the VCS tracks: that file is committed, and deleting it would dirty
+the tree. Preview with the global --dry-run flag before trusting a
+declaration you have not read.
 
 --cache additionally invalidates the magus cache entries for those projects,
 which is what forces a genuinely full rebuild: removing the files alone
