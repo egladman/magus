@@ -619,8 +619,6 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
-	QueueRunUntrusted, QueuePlanUnverified,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated,
 	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
