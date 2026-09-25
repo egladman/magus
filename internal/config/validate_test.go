@@ -2,7 +2,6 @@ package config
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,32 +27,6 @@ func TestValidate_LogFormatRefusesJSONL(t *testing.T) {
 	require.ErrorContains(t, Validate(cfg), "log.format")
 	cfg.Log.Format = "json"
 	assert.NoError(t, Validate(cfg))
-}
-
-// Statistical pruning is off at risk_min_runs 0; otherwise it needs a window to
-// count in, and a negative value for either is an error, never a clamp.
-func TestValidate_RiskPruning(t *testing.T) {
-	tests := []struct {
-		name    string
-		ci      CI
-		failure string
-	}{
-		{"defaults", Defaults().CI, ""},
-		{"pruning off", CI{MaxShards: -1}, ""},
-		{"no window while pruning", CI{MaxShards: -1, RiskMinRuns: 50}, "ci.risk_window"},
-		{"negative window", CI{MaxShards: -1, RiskMinRuns: 50, RiskWindow: -time.Hour}, "ci.risk_window"},
-		{"negative runs", CI{MaxShards: -1, RiskMinRuns: -1, RiskWindow: time.Hour}, "ci.risk_min_runs"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{CI: tt.ci, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
-			if tt.failure == "" {
-				assert.NoError(t, Validate(cfg))
-				return
-			}
-			assert.ErrorContains(t, Validate(cfg), tt.failure)
-		})
-	}
 }
 
 func TestValidationError_Error(t *testing.T) {

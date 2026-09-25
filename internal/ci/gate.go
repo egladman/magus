@@ -242,9 +242,9 @@ func ProseScopes(projects []*types.Project) []ProseScope {
 	return scopes
 }
 
-// MatchProse returns the first scope glob matching the workspace-relative
+// matchProse returns the first scope glob matching the workspace-relative
 // path, with its origin, or ok=false when no prose glob claims it.
-func MatchProse(scopes []ProseScope, p string) (glob, origin string, ok bool) {
+func matchProse(scopes []ProseScope, p string) (glob, origin string, ok bool) {
 	for _, s := range scopes {
 		rel := p
 		if s.Dir != "" && s.Dir != "." {
@@ -310,7 +310,7 @@ func (c ChangeClassifier) classify(ctx context.Context, p, role, green string) (
 	if role == "maintained" {
 		return ClassGenerated, "magus maintains it outside any target"
 	}
-	if glob, origin, ok := MatchProse(c.Prose, p); ok {
+	if glob, origin, ok := matchProse(c.Prose, p); ok {
 		return ClassProse, "matches " + quoteGlob(glob) + " (" + origin + ")"
 	}
 	// Comment-only detection needs the language's comment and string syntax,

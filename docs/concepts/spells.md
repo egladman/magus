@@ -24,7 +24,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`buzz`](spells/buzz.md)             | Buzz           | 0   | Buzz language identity: the .buzz extension and the comment and string syntax magus reads source with. |
 | [`cosign`](spells/cosign.md)         | -              | 3   | Cosign spell: keyless sign, attest, and verify for container artifacts.                                |
 | [`docker`](spells/docker.md)         | Docker         | 6   | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.                       |
-| [`go`](spells/go.md)                 | Go             | 15  | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.      |
+| [`go`](spells/go.md)                 | Go             | 14  | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.      |
 | [`markdown`](spells/markdown.md)     | Markdown       | 4   | Markdown docs spell: markdownlint and prettier for linting and formatting prose.                       |
 | [`podman`](spells/podman.md)         | OCI containers | 4   | Podman spell: image build, push, manifest assembly, and run for the podman runtime.                    |
 | [`python`](spells/python.md)         | Python         | 7   | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.                    |

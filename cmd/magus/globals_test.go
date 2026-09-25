@@ -301,7 +301,7 @@ func flagProbes(cmd cli.Command) []flagProbe {
 // are documented correctly, and they can never appear in a recorded flag set, so they
 // are excluded rather than "fixed" out of the man page.
 var modeSelectors = map[string]map[string]bool{
-	"affected": {"explain": true, "plan": true, "impact": true, "risk": true},
+	"affected": {"explain": true, "plan": true, "impact": true},
 }
 
 // documentedFlagNames lists the non-global flag names a BuildFlags closure declares.
