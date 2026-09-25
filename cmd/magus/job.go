@@ -298,6 +298,11 @@ func printJobTree(out io.Writer, report types.JobList) {
 		fmt.Fprintf(out, "  %s and %s claim common ground\n", o.JobA, o.JobB)
 		fmt.Fprintf(out, "    %s: %s\n", o.JobA, strings.Join(o.PathsA, ", "))
 		fmt.Fprintf(out, "    %s: %s\n", o.JobB, strings.Join(o.PathsB, ", "))
+		if o.Claims == types.ClaimsDisjoint {
+			fmt.Fprintln(out, "    claims: disjoint (different declarations of one file: an integration order, not a wait)")
+		} else if o.Claims != "" {
+			fmt.Fprintf(out, "    claims: %s\n", o.Claims)
+		}
 		if line := overlapFootprintLine(o.Footprint); line != "" {
 			fmt.Fprintf(out, "    %s\n", line)
 		}
@@ -573,7 +578,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.timeout, "timeout", "", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 		fs.StringVar(&declared.parent, "parent", "", "The job this one is forked from")
 		fs.StringVar(&declared.checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
-		fs.Var(&declared.writePaths, "write-paths", "A path this job may write; repeatable or comma-separated")
+		fs.Var(&declared.writePaths, "write-paths", "A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\\#b.md`); repeatable or comma-separated")
 		fs.Var(&declared.denyPaths, "deny-paths", "A path this job may not write, carved out of its write paths; repeatable or comma-separated")
 		fs.Var(&declared.readPaths, "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 		fs.Var(&declared.dependsOn, "depends-on", "A job this one waits on; repeatable or comma-separated")
@@ -648,6 +653,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths}
 	if err := job.RefuseDirectoryWritePaths(store, row.ID, candidate); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	if err := job.RefuseUngradableClaims(ctx, store, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
@@ -1290,8 +1298,9 @@ func printJobStatus(out io.Writer, s job.Status) {
 
 // printJobFootprint writes the declarations the job's diff landed in, one line each. An
 // unknown footprint says why in one line: silence would read as a job that touched nothing.
+// A landing outside the job's declaration claims is among the violations above it.
 func printJobFootprint(out io.Writer, s job.Status) {
-	const heading = "footprint, reported and never graded"
+	const heading = "footprint"
 	if !s.FootprintKnown {
 		reason := s.FootprintReason
 		if reason == "" {

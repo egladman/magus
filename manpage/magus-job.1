@@ -129,8 +129,8 @@ Read one job as JSON on stdin instead of taking it from flags
 \fB\-\-timeout\fR \fIduration\fR
 Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
 .TP
-\fB\-\-write\-paths\fR \fIstring\fR
-A path this job may write; repeatable or comma\-separated
+\fB\-\-write\-paths\fR \fI<file>#<declaration>\fR
+A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\(rs#b.md`); repeatable or comma\-separated
 .RE
 .SS job exec options
 .RS

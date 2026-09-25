@@ -720,6 +720,7 @@ export object JobOverlap {
     jobB: str = "",
     pathsA: [str] = [],
     pathsB: [str] = [],
+    claims: str = "",
     footprint: JobOverlapFootprint? = null,
 }
 
@@ -770,6 +771,7 @@ export object JobStatus {
     footprint: [RegionChange] = [],
     footprintKnown: bool = false,
     footprintReason: str = "",
+    footprintUnclaimed: [str] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;

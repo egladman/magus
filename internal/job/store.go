@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -297,7 +298,7 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 			}
 		}
 		next = append(next, types.JobUnattributedWrite{
-			Path: path, Digest: s.digest(ctx, path), At: now,
+			Path: path, Digest: s.fileDigest(ctx, path), At: now,
 		})
 		if len(next) > MaxUnattributedWrites {
 			next = next[len(next)-MaxUnattributedWrites:]
@@ -521,7 +522,21 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) [
 //
 // Runs under the store's mutex, which is deliberate (reading the previous owned set and
 // recording what it gave up has to be one step), and is why every branch below is bounded.
+//
+// A released declaration (`run.go#executeStages`) digests the lines the declaration spans
+// in the file now, as the footprint places them, so the next holder inherits that body
+// rather than a file other claims on it keep changing. A declaration no line is placed in
+// any more is absent.
 func (s *Store) digest(ctx context.Context, declared string) string {
+	p, decl := types.SplitClaim(declared)
+	if decl != "" {
+		return s.declarationDigest(ctx, p, decl)
+	}
+	return s.fileDigest(ctx, p)
+}
+
+// fileDigest is digest for a path SplitClaim already cut.
+func (s *Store) fileDigest(ctx context.Context, declared string) string {
 	if s.root == "" {
 		return types.DigestAbsent
 	}
@@ -570,6 +585,47 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 		return types.DigestUnreadable
 	}
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
+}
+
+// declarationDigest is digest for one declaration of the file at p. The file passes every
+// check digest makes of a whole file before a line of it is placed.
+func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
+	if whole := s.fileDigest(ctx, p); !strings.HasPrefix(whole, "sha256:") {
+		return whole
+	}
+	root, err := filepath.EvalSymlinks(s.root)
+	if err != nil {
+		return types.DigestUnreadable
+	}
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+	if err != nil {
+		return types.DigestUnreadable
+	}
+	res, err := vcs.Resolve(ctx, s.root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return types.DigestUnreadable
+	}
+	regions, err := res.VCS.RegionsBetween(ctx, s.root, path.Clean(p), nil, body)
+	if err != nil {
+		return types.DigestUnreadable
+	}
+	lines := strings.SplitAfter(string(body), "\n")
+	var spanned strings.Builder
+	found := false
+	for _, r := range regions {
+		if !types.NamesDeclaration(decl, r.Declaration) {
+			continue
+		}
+		found = true
+		for n := r.Lines[0]; n <= r.Lines[1] && n-1 < len(lines); n++ {
+			spanned.WriteString(lines[n-1])
+		}
+	}
+	if !found {
+		return types.DigestAbsent
+	}
+	sum := sha256.Sum256([]byte(spanned.String()))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // maxDigestBytes bounds one release digest, because the hash is computed while the store

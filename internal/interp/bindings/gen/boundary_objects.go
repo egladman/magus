@@ -1680,6 +1680,7 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 		itemsPathsB[indexPathsB] = vm.StrValue(v.PathsB[indexPathsB])
 	}
 	out.MapSet("pathsB", vm.ListValue(itemsPathsB))
+	out.MapSet("claims", vm.StrValue(v.Claims))
 	optFootprint := vm.Null
 	if v.Footprint != nil {
 		optFootprint = ObjectJobOverlapFootprint((*v.Footprint))
@@ -1776,6 +1777,11 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("footprint", vm.ListValue(itemsFootprint))
 	out.MapSet("footprintKnown", vm.BoolValue(v.FootprintKnown))
 	out.MapSet("footprintReason", vm.StrValue(v.FootprintReason))
+	itemsFootprintUnclaimed := make([]vm.Value, len(v.FootprintUnclaimed))
+	for indexFootprintUnclaimed := range v.FootprintUnclaimed {
+		itemsFootprintUnclaimed[indexFootprintUnclaimed] = vm.StrValue(v.FootprintUnclaimed[indexFootprintUnclaimed])
+	}
+	out.MapSet("footprintUnclaimed", vm.ListValue(itemsFootprintUnclaimed))
 	return out
 }
 

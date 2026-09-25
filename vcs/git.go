@@ -1436,6 +1436,7 @@ type gitFuncname struct{ driver, pattern string }
 func (f gitFuncname) key() string { return "diff." + f.driver + ".xfuncname" }
 
 var gitFuncnames = []gitFuncname{
+	{"golang", golangFuncname},
 	{"typescript", typescriptFuncname},
 	{"buzz", buzzFuncname},
 }
@@ -1444,6 +1445,16 @@ var gitFuncnames = []gitFuncname{
 // a line starting with ! rejects what it matches. Group 1, when a pattern has one, is the
 // header git prints. [[:blank:]] stands in for [ \t], which a bracket expression reads as
 // a backslash and a t.
+
+// golangFuncname is git's built-in golang pattern (a func, and a type ... struct or
+// interface, at any indentation) plus a top-level var, const or type declaration, single or
+// a `(` block. The built-in leaves those to the declaration above them, so a change to a
+// table such as `var allDiagnosticCodes` read as a change to the function before it. A
+// registration for a built-in driver replaces the built-in, which is why the first two
+// lines repeat it.
+const golangFuncname = `^[[:blank:]]*(func[[:blank:]]*.*(\{[[:blank:]]*)?)` + "\n" +
+	`^[[:blank:]]*(type[[:blank:]].*(struct|interface)[[:blank:]]*(\{[[:blank:]]*)?)` + "\n" +
+	`^((var|const|type)[[:blank:]].*)`
 
 // buzzFuncname names Buzz's top-level declarations: fun (export, extern or both), object,
 // protocol, enum (enum<str> too) and test blocks. A method is indented, so a change inside

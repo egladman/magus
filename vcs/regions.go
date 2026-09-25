@@ -44,15 +44,8 @@ func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.Fi
 		return nil, fmt.Errorf("git merge-base %s HEAD: %w", base, err)
 	}
 	base = mergeBase
-	// Each flag pins something the box's config would otherwise change about the parse:
-	// diff.algorithm and diff.indentHeuristic move hunk boundaries, diff.interHunkContext
-	// merges neighbouring hunks, diff.relative and diff.srcPrefix rewrite the paths, and
-	// diff.renames, diff.ignoreSubmodules, diff.external and textconv change which files
-	// appear and what their lines are.
-	args := []string{"diff", "-U0", "--inter-hunk-context=0", "--diff-algorithm=histogram",
-		"--indent-heuristic", "--no-renames", "--ignore-submodules=all", "--no-relative",
-		"--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", base, "--"}
-	out, err := gitOutput(ctx, root, gitOpts{Literal: true, KeepLeadingSpace: true}, append(args, paths...)...)
+	args := slices.Concat([]string{"diff"}, regionDiffFlags, []string{base, "--"}, paths)
+	out, err := gitOutput(ctx, root, gitOpts{Literal: true, KeepLeadingSpace: true}, args...)
 	if err != nil {
 		return nil, fmt.Errorf("git diff %s: %w", base, err)
 	}
@@ -80,7 +73,11 @@ func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.Fi
 		return nil, nil
 	}
 
-	drivers, err := gitPathDrivers(ctx, root, patched)
+	patchedPaths := make([]string, len(patched))
+	for i, f := range patched {
+		patchedPaths[i] = f.path
+	}
+	drivers, err := v.Drivers(ctx, root, patchedPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +135,80 @@ func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.Fi
 		return cmp.Or(strings.Compare(a.File.Path, b.File.Path),
 			cmp.Compare(sideOrder(a.Side), sideOrder(b.Side)),
 			cmp.Compare(a.Lines[0], b.Lines[0]))
+	})
+	return regions, nil
+}
+
+// regionDiffFlags pin what the box's config would otherwise change about a region diff:
+// diff.algorithm and diff.indentHeuristic move hunk boundaries, diff.interHunkContext
+// merges neighbouring hunks, diff.relative and diff.srcPrefix rewrite the paths, and
+// diff.renames, diff.ignoreSubmodules, diff.external and textconv change which files
+// appear and what their lines are.
+var regionDiffFlags = []string{"-U0", "--inter-hunk-context=0", "--diff-algorithm=histogram",
+	"--indent-heuristic", "--no-renames", "--ignore-submodules=all", "--no-relative",
+	"--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"}
+
+// RegionsBetween implements types.RegionReporter: the line ranges come from a `git diff
+// --no-index` of the two versions under Regions' pinned flags, and each line is placed by
+// gitPlaceLines on the version that holds it, exactly as Regions places a checkout's.
+func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]types.RegionChange, error) {
+	if isBinaryContent(before) || isBinaryContent(after) {
+		return nil, nil
+	}
+	tmp, err := os.MkdirTemp("", "magus-regions-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	for name, body := range map[string][]byte{"before": before, "after": after} {
+		if err := os.WriteFile(filepath.Join(tmp, name), body, 0o600); err != nil {
+			return nil, err
+		}
+	}
+	env := []string{"GIT_CEILING_DIRECTORIES=" + filepath.Dir(tmp), "GIT_ATTR_NOSYSTEM=1"}
+	args := slices.Concat([]string{"diff", "--no-index"}, regionDiffFlags, []string{"--", "before", "after"})
+	out, err := gitExec(ctx, tmp, gitOpts{Env: env}, args...).Output()
+	// --no-index exits 1 when the files differ, and 0 with no patch when they do not.
+	if err != nil && exitCode(err) != 1 {
+		return nil, fmt.Errorf("git diff --no-index: %w", gitStderr(err))
+	}
+	patched, err := parseZeroContextPatch(string(out))
+	if err != nil || len(patched) == 0 {
+		return nil, err
+	}
+	f := patched[0]
+	drivers, err := v.Drivers(ctx, root, []string{path})
+	if err != nil {
+		return nil, err
+	}
+	driver := drivers[path]
+	var funcnames, oldDecls, newDecls []string
+	if driver != "" {
+		if funcnames, err = gitFuncnameConfig(ctx, root); err != nil {
+			return nil, err
+		}
+		place := filepath.Join(tmp, "place")
+		if err := os.Mkdir(place, 0o700); err != nil {
+			return nil, err
+		}
+		if f.hasSide(types.RegionOld) {
+			if oldDecls, err = gitPlaceLines(ctx, place, driver, funcnames, before); err != nil {
+				return nil, err
+			}
+		}
+		if f.hasSide(types.RegionNew) {
+			if newDecls, err = gitPlaceLines(ctx, place, driver, funcnames, after); err != nil {
+				return nil, err
+			}
+		}
+	}
+	var regions []types.RegionChange
+	for _, h := range f.hunks {
+		regions = appendRegions(regions, path, types.RegionOld, h.oldStart, h.oldCount, driver, oldDecls)
+		regions = appendRegions(regions, path, types.RegionNew, h.newStart, h.newCount, driver, newDecls)
+	}
+	slices.SortStableFunc(regions, func(a, b types.RegionChange) int {
+		return cmp.Or(cmp.Compare(sideOrder(a.Side), sideOrder(b.Side)), cmp.Compare(a.Lines[0], b.Lines[0]))
 	})
 	return regions, nil
 }
@@ -278,13 +349,15 @@ func parseHunkRange(s string) (start, count int, err error) {
 	return start, count, err
 }
 
-// gitPathDrivers maps each file with a named diff driver to that driver, from the same
-// attributes `git diff` reads. A path whose attribute is unspecified, set without a name,
-// or unset has none.
-func gitPathDrivers(ctx context.Context, root string, files []patchFile) (map[string]string, error) {
+// Drivers implements types.RegionReporter from the same attributes `git diff` reads. A
+// path whose attribute is unspecified, set without a name, or unset has none.
+func (gitVCS) Drivers(ctx context.Context, root string, paths []string) (map[string]string, error) {
+	if len(paths) == 0 {
+		return map[string]string{}, nil
+	}
 	var stdin bytes.Buffer
-	for _, f := range files {
-		stdin.WriteString(f.path)
+	for _, p := range paths {
+		stdin.WriteString(p)
 		stdin.WriteByte(0)
 	}
 	out, err := gitOutput(ctx, root, gitOpts{Stdin: stdin.Bytes(), KeepLeadingSpace: true},
@@ -305,19 +378,24 @@ func gitPathDrivers(ctx context.Context, root string, files []patchFile) (map[st
 	return drivers, nil
 }
 
-// gitFuncnameConfig returns every diff.<driver>.funcname and xfuncname the repository
-// sees as -c arguments, since gitPlaceLines runs outside the repository and would
-// otherwise lose a driver defined in its config.
+// gitFuncnameConfig returns the funcname patterns placement runs with, as -c arguments:
+// magus's own gitFuncnames first, so a checkout whose config was never written still
+// places lines the way one that was does, then every diff.<driver>.funcname and xfuncname
+// the repository sees, which win where they set the same key. gitPlaceLines runs outside
+// the repository and would otherwise lose both.
 func gitFuncnameConfig(ctx context.Context, root string) ([]string, error) {
+	var args []string
+	for _, f := range gitFuncnames {
+		args = append(args, "-c", f.key()+"="+f.pattern)
+	}
 	out, err := gitOutput(ctx, root, gitOpts{KeepLeadingSpace: true},
 		"config", "-z", "--get-regexp", `^diff\..+\.x?funcname$`)
 	if exitCode(err) == 1 {
-		return nil, nil
+		return args, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("git config diff funcnames: %w", err)
 	}
-	var args []string
 	// Records are <key> LF <value> NUL.
 	for _, rec := range splitNUL(out) {
 		key, value, _ := strings.Cut(rec, "\n")
@@ -386,7 +464,43 @@ func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, 
 			decls[h.oldStart-1] = strings.TrimSpace(after)
 		}
 	}
+	handLeadersDown(decls, lines, declarationLeaders[driver])
 	return decls, nil
+}
+
+// declarationLeaders are the line prefixes, per diff driver, of what is written directly
+// above a declaration and belongs to it: a doc comment, a decorator, an attribute.
+var declarationLeaders = map[string][]string{
+	"golang":     {"//", "/*", "*"},
+	"buzz":       {"//"},
+	"typescript": {"//", "/*", "*", "@"},
+	"python":     {"#", "@"},
+	"rust":       {"//", "/*", "*", "#["},
+	"markdown":   {"<!--"},
+}
+
+// handLeadersDown gives the run of leader lines directly above each declaration to that
+// declaration. git names a line by searching up from it, so without this a doc comment
+// belongs to the declaration above, and a claim on a function does not cover an edit to
+// its own documentation. The run stops at a blank line or any other line, so a comment
+// separated from the declaration by a blank line stays where git put it.
+func handLeadersDown(decls, lines, leaders []string) {
+	if len(leaders) == 0 {
+		return
+	}
+	leads := func(line string) bool {
+		line = strings.TrimLeft(line, " \t")
+		return slices.ContainsFunc(leaders, func(p string) bool { return strings.HasPrefix(line, p) })
+	}
+	for i := 1; i < len(decls); i++ {
+		above := decls[i-1]
+		if decls[i] == above {
+			continue
+		}
+		for j := i - 1; j >= 0 && decls[j] == above && leads(lines[j]); j-- {
+			decls[j] = decls[i]
+		}
+	}
 }
 
 // readWorkingFile reads a regular file at repository-relative path p under root. Anything

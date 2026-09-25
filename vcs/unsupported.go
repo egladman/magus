@@ -140,6 +140,14 @@ func (declines[N]) Regions(context.Context, string, string, []types.FileChange) 
 	return nil, decline[N](types.CapRegionReporter)
 }
 
+func (declines[N]) RegionsBetween(context.Context, string, string, []byte, []byte) ([]types.RegionChange, error) {
+	return nil, decline[N](types.CapRegionReporter)
+}
+
+func (declines[N]) Drivers(context.Context, string, []string) (map[string]string, error) {
+	return nil, decline[N](types.CapRegionReporter)
+}
+
 func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {
 	return false, decline[N](types.CapAncestryReporter)
 }

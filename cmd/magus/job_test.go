@@ -163,7 +163,7 @@ func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
 				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{8, 8}},
 			}},
 			want: "verified plan, recorded pass\n" +
-				"footprint, reported and never graded: where its diff since the checkpoint landed\n" +
+				"footprint: where its diff since the checkpoint landed\n" +
 				"  a.go#func X() {\n" +
 				"  a.go#func Y() {\n" +
 				"  notes.txt:1-2\n" +
@@ -173,19 +173,19 @@ func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
 			name:   "known and empty",
 			status: job.Status{Job: "plan", Verified: true, FootprintKnown: true},
 			want: "verified plan, recorded pass\n" +
-				"footprint, reported and never graded: no line changed since the checkpoint\n",
+				"footprint: no line changed since the checkpoint\n",
 		},
 		{
 			name:   "declined",
 			status: job.Status{Job: "plan", Verified: true, FootprintReason: "git does not report changed regions (RegionReporter)"},
 			want: "verified plan, recorded pass\n" +
-				"footprint, reported and never graded: not known, git does not report changed regions (RegionReporter)\n",
+				"footprint: not known, git does not report changed regions (RegionReporter)\n",
 		},
 		{
 			name:   "nobody looked",
 			status: job.Status{Job: "plan", Verified: true},
 			want: "verified plan, recorded pass\n" +
-				"footprint, reported and never graded: not known, nothing observed the tree\n",
+				"footprint: not known, nothing observed the tree\n",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -195,6 +195,23 @@ func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
 			assert.Equal(t, tc.want, out.String())
 		})
 	}
+}
+
+func TestPrintJobTreeRendersTheClaimsVerdict(t *testing.T) {
+	t.Parallel()
+
+	rows := []types.Job{
+		{ID: "a", State: types.StateRunning, WritePaths: []string{"run.go#executeStages"}},
+		{ID: "b", State: types.StateRunning, WritePaths: []string{"run.go#RunCI"}},
+	}
+	var out strings.Builder
+	printJobTree(&out, types.NewJobList(rows))
+	_, after, ok := strings.Cut(out.String(), "\noverlaps\n")
+	require.True(t, ok, "two claims on one file are listed: %s", out.String())
+	assert.Equal(t, "  a and b claim common ground\n"+
+		"    a: run.go#executeStages\n"+
+		"    b: run.go#RunCI\n"+
+		"    claims: disjoint (different declarations of one file: an integration order, not a wait)\n", after)
 }
 
 func TestPrintJobTreeRendersEachFootprintVerdict(t *testing.T) {

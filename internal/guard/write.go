@@ -213,6 +213,8 @@ type writeGrade struct {
 	// empty for the job-store advisories that report a live collision: those describe THIS
 	// write against a boundary that moves, so the second one is a second fact.
 	Kind hint.MarkerKind
+	// Rule names the catalogued rule a deny came from, "" for the path-lease denies.
+	Rule string
 }
 
 // gradeLeasedWrite judges a file write against the job store's declared write
@@ -236,6 +238,13 @@ type writeGrade struct {
 // that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
 // not block a tool call.
 func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
+	return gradeLeasedEdit(ctx, deps, actingLease, writePath, writeFields{})
+}
+
+// gradeLeasedEdit is gradeLeasedWrite for a write whose payload says what it changes. A
+// write inside the acting lease's own paths is graded once more, by declaration, when
+// another live lease claims a declaration of that file; see gradeClaimedDeclarations.
+func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
 		return writeGrade{}
@@ -277,7 +286,15 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
 			return writeGrade{Decision: "deny", Reason: reason}
 		}
-		return gradeAgainstOwnLease(me, owningLeases(leases, live), rel)
+		owners := owningLeases(leases, live)
+		g := gradeAgainstOwnLease(me, owners, rel)
+		if g.Decision == "deny" {
+			return g
+		}
+		if claimed := gradeClaimedDeclarations(ctx, location.workspace, me, owners, rel, fields); claimed.Decision != "" {
+			return claimed
+		}
+		return g
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
@@ -516,7 +533,10 @@ func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 func declarationCovering(decls []string, rel string) (string, bool, error) {
 	var firstErr error
 	for _, raw := range decls {
-		decl := path.Clean(strings.TrimSpace(raw))
+		// A claim on one declaration (`run.go#executeStages`) covers its file at this, the
+		// path, level; gradeClaimedDeclarations is where the declaration is read.
+		file, _ := types.SplitClaim(raw)
+		decl := path.Clean(file)
 		if decl == "." || decl == "/" {
 			// A blank entry, or one that names the whole tree by naming nothing, would put
 			// its lease on every path in the plan. types.pathsIntersect refuses the same
