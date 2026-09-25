@@ -25,11 +25,10 @@ const (
 
 // Helper exit codes. Anything else is a helper bug.
 const (
-	exitDenied      = 3
-	exitReadFailed  = 4
-	exitFDLeaked    = 5
-	exitUnsupported = 6
-	exitApplyWrong  = 7
+	exitDenied     = 3
+	exitReadFailed = 4
+	exitFDLeaked   = 5
+	exitFDMissing  = 6
 )
 
 func TestMain(m *testing.M) {
@@ -42,9 +41,12 @@ func TestMain(m *testing.M) {
 		if _, err := unix.FcntlInt(3, unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
 			os.Exit(exitFDLeaked)
 		}
+		if os.Getenv(helperPathEnv) == "appended" {
+			if _, err := unix.FcntlInt(3+LauncherFiles, unix.F_GETFD, 0); err != nil {
+				os.Exit(exitFDMissing)
+			}
+		}
 		os.Exit(0)
-	case "apply":
-		os.Exit(helperApply(os.Getenv(helperPathEnv)))
 	}
 	os.Exit(m.Run())
 }
@@ -130,6 +132,38 @@ func TestCommandLeavesNoRulesetInTheChild(t *testing.T) {
 	p := &Policy{FS: filesystem.Ruleset{Rules: testRules(t)}}
 	code, out := confinedHelper(t, p, "fd", "")
 	assert.Equal(t, 0, code, "descriptor 3 is closed before the exec: %s", out)
+}
+
+// A /proc/self grant is the child's own entry, not the entry of the magus that built
+// the policy.
+func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
+	requireLandlock(t)
+
+	own := filesystem.Rule{Path: filesystem.ResolveRulePath("/proc/self/status"), Read: true}
+	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), own)}}
+
+	code, out := confinedHelper(t, p, "read", "/proc/self/status")
+	assert.Equal(t, 0, code, "the child reads its own status: %s", out)
+	code, out = confinedHelper(t, p, "read", own.Path)
+	assert.Equal(t, exitDenied, code, "and not the status of the magus that built the policy: %s", out)
+}
+
+// A caller's own ExtraFiles, a jobserver pipe say, reach the command after the
+// ruleset's slot, where LauncherFiles says they will.
+func TestCommandPassesAppendedFilesAfterTheRuleset(t *testing.T) {
+	requireLandlock(t)
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	cmd, err := Command(context.Background(), &Policy{FS: filesystem.Ruleset{Rules: testRules(t)}}, exe)
+	require.NoError(t, err)
+	cmd.ExtraFiles = append(cmd.ExtraFiles, r)
+
+	code, out := runHelper(t, cmd, "fd", "appended")
+	assert.Equal(t, 0, code, "descriptor 3 closed, the appended file at 3+LauncherFiles: %s", out)
 }
 
 func TestCommandRefusesWithoutItsRuleset(t *testing.T) {

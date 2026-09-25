@@ -499,7 +499,7 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Breaking: `sandbox.enabled` is now `sandbox.mode: off | best-effort | required`.**
   Also `MAGUS_SANDBOX` and `--sandbox=<mode>`, replacing `MAGUS_SANDBOX_ENABLED` and
   `--sandbox-enabled`. `best-effort` is the old `enabled: true`; `required` refuses to
-  run (MGS2012) unless kernel landlock enforces the policy. The old env var is an
+  run (MGS2012) unless kernel landlock can confine its children. The old env var is an
   error naming its replacement.
 - **`magus describe graph -o markdown <project>` renders only that project.** A scoped
   index drops the workspace-wide kind and project tables, so a change elsewhere cannot
@@ -737,6 +737,18 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   another base or remote, a base commit the base lacks, or a stack base that is not
   the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
   a revert of the base. Apply writes the squash message itself.
+- **Files that run code after the run are write-protected.** Under any mode but `off`,
+  magus's checks refuse writes to `.git/hooks`, `.git/config`, `.git/info`, `magus.yaml`,
+  mise and asdf pins, `.envrc`, `.claude/`, `.cursor/`, `.mcp.json`,
+  `.vscode/tasks.json` and git hook managers' config. Landlock cannot deny inside a
+  grant, so a child can still write them.
+- **Buzz's own `os` and `io` go through the sandbox,** each run's `env\set` stays in
+  that run, the proc socket demands a token (`MAGUS_PROC_TOKEN`), and the lease marker
+  moved out of the cache dir a confined run can write.
+- **The sandbox confines each child, not magus.** A launcher applies the landlock
+  ruleset to every process a run starts, so a server serves each workspace under its
+  own policy. `required` needs landlock ABI 3 (Linux 6.2), else MGS2012. MGS2010 now
+  means a nested or forwarded run asked for a weaker mode.
 - **Sandbox path checks follow symlinks the way the kernel does.** A `..` after a
   symlink, a write through a dangling link, and `fs\symlink` to a path outside the
   policy no longer pass the binding-level check.

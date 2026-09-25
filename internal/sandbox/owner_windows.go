@@ -1,4 +1,4 @@
-package confinement
+package sandbox
 
 import "io/fs"
 

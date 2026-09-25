@@ -174,16 +174,16 @@ func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
 	assert.Empty(t, none.Lease)
 }
 
-// TestSandboxFloorCrossesTheWire: a client running sandboxed says so, and the adopted
-// handler sees it, so it can decline rather than run the work unsandboxed. Each run also
-// gets an env overlay of its own.
+// TestSandboxFloorCrossesTheWire: a client running sandboxed says under which mode, and
+// the adopted handler sees it, so it can decline rather than run the work under less.
+// Each run also gets an env overlay of its own.
 func TestSandboxFloorCrossesTheWire(t *testing.T) {
 	srv, err := New(Options{Handler: func(ctx context.Context, args []string) error {
 		if environ.From(ctx) == nil {
 			return errors.New("no env overlay on the adopted run")
 		}
-		if want := args[len(args)-1] == "floor"; SandboxFloorFromContext(ctx) != want {
-			return fmt.Errorf("floor = %v, want %v", !want, want)
+		if got, want := SandboxFloorFromContext(ctx), types.SandboxMode(args[len(args)-1]); got != want {
+			return fmt.Errorf("floor = %v, want %v", got, want)
 		}
 		return nil
 	}})
@@ -192,10 +192,10 @@ func TestSandboxFloorCrossesTheWire(t *testing.T) {
 	require.NoError(t, srv.Start())
 	t.Setenv(SocketEnv, srv.Addr())
 
-	code, err := Forward(WithSandboxFloor(t.Context()), []string{"run", "build", "floor"}, "", "")
+	code, err := Forward(WithSandboxFloor(t.Context(), types.SandboxModeRequired), []string{"run", "build", "required"}, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
-	code, err = Forward(t.Context(), []string{"run", "build", "none"}, "", "")
+	code, err = Forward(t.Context(), []string{"run", "build", "off"}, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 }

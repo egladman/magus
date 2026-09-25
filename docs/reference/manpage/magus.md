@@ -292,7 +292,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: **report.filter**.
 
 **MAGUS_SANDBOX**
-: off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: off). Equivalent magus.yaml key: **sandbox.mode**.
+: off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and --sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: off). Equivalent magus.yaml key: **sandbox.mode**.
 
 **MAGUS_UPDATE_URL**
 : Env-only, no magus.yaml equivalent: override the release index URL for \`magus self update\`; set to a self-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)

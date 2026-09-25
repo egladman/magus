@@ -35,10 +35,15 @@ func newGuardFixture(t *testing.T, rules ...filesystem.Rule) guardFixture {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModuleSurface(t.Context(), sess)
+	base := []filesystem.Rule{{Path: ws, Read: true, Write: true}}
+	// A child the kernel confines needs its ELF interpreter and libc too.
+	for _, dir := range []string{"/lib", "/lib64", "/usr/lib", "/usr/lib64"} {
+		base = append(base, filesystem.Rule{Path: filesystem.ResolveRulePath(dir), Read: true, Exec: true})
+	}
 	p := &sandbox.Policy{
 		Workspace: ws,
-		FS:        filesystem.Ruleset{Rules: append([]filesystem.Rule{{Path: ws, Read: true, Write: true}}, rules...)},
-		Env:       sandboxenv.Allowlist{Allow: []string{"PATH"}},
+		FS:        filesystem.Ruleset{Rules: append(base, rules...)},
+		Env:       sandboxenv.Allowlist{Names: []string{"PATH"}},
 		BaseEnv:   []string{"PATH=" + os.Getenv("PATH")},
 	}
 	return guardFixture{

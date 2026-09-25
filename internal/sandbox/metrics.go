@@ -14,11 +14,21 @@ import (
 // observability import) because internal/sandbox sits below internal/observability
 // in the import graph (observability -> cache -> proc/run -> sandbox), so sandbox
 // cannot import observability without a cycle. The full observability.Provider
-// satisfies this interface structurally; a higher package that can see both
-// (internal/sandbox/confinement) stamps the live provider onto ctx via WithMetrics.
+// satisfies this interface structurally; the root package, which can see both, stamps
+// the live provider onto ctx via WithMetrics.
 type MetricsRecorder interface {
 	RecordSandboxCheck(ctx context.Context, access, decision, project string)
 	RecordSandboxEnvDropped(ctx context.Context, project string, n int64)
+	RecordSandboxApply(ctx context.Context, secs float64, outcome, scope string)
+}
+
+// RecordLaunch reports how one child of a policy started: "applied" when the launcher
+// confined it, secs being the time to compile its ruleset, or "unsupported" when a
+// best-effort policy ran it without the kernel layer. A no-op without a recorder.
+func RecordLaunch(ctx context.Context, secs float64, outcome string) {
+	if rec := metricsFromContext(ctx); rec != nil {
+		rec.RecordSandboxApply(ctx, secs, outcome, "child")
+	}
 }
 
 type metricsKey struct{}

@@ -7,10 +7,12 @@ import (
 	"os/exec"
 )
 
-// Command returns a plain exec.CommandContext: this platform has no kernel sandbox,
-// so the command runs UNCONFINED whatever p says. Callers that must not run
-// unconfined check Supported first.
-func Command(ctx context.Context, _ *Policy, name string, args ...string) (*exec.Cmd, error) {
+// Command returns a plain exec.CommandContext for a nil p and ErrUnsupported for any
+// other: this platform has no kernel sandbox to confine the command with.
+func Command(ctx context.Context, p *Policy, name string, args ...string) (*exec.Cmd, error) {
+	if p != nil {
+		return nil, ErrUnsupported
+	}
 	return exec.CommandContext(ctx, name, args...), nil
 }
 

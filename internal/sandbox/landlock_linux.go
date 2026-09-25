@@ -103,16 +103,6 @@ func handledScopes(abi int) uint64 {
 	return 0
 }
 
-// threadSignalsFixed reports whether the kernel carries landlock erratum 2, which
-// lets threads of one process signal each other across domains. Without it a signal
-// scope applied thread by thread deadlocks the Go runtime, whose AllThreadsSyscall
-// signals each thread in turn
-// (https://docs.kernel.org/userspace-api/landlock.html#erratum-2-scoped-signal-handling).
-func threadSignalsFixed() bool {
-	errata, _, errno := syscall.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, unix.LANDLOCK_CREATE_RULESET_ERRATA)
-	return errno == 0 && errata&(1<<(2-1)) != 0
-}
-
 // ABI reports the highest landlock ABI version the running kernel supports. It
 // changes no process state. The error wraps ErrUnsupported when landlock is absent
 // (ENOSYS), disabled at boot (EOPNOTSUPP) or its syscalls are filtered (EPERM from a
@@ -133,48 +123,9 @@ func ABI() (int, error) {
 	return int(ret), nil
 }
 
-// Supported reports whether landlock can be applied on this host. It changes no
-// process state. A false return guarantees Apply and Command report ErrUnsupported.
-func Supported() bool {
-	abi, err := ABI()
-	return err == nil && abi >= 1
-}
-
-// Apply confines every thread of the current process, and every process it later
-// starts, to p's filesystem rules and, from ABI v6, to its own abstract unix socket
-// scope and, where erratum 2 is fixed, its own signal scope. It returns
-// ErrUnsupported, having changed nothing, when landlock is unavailable or when the
-// binary links cgo, which rules out confining every thread
-// (syscall.AllThreadsSyscall). The restriction is permanent.
-func Apply(p *Policy) error {
-	if p == nil {
-		return nil
-	}
-	abi, err := ABI()
-	if err != nil {
-		return err
-	}
-	scopes := handledScopes(abi)
-	if !threadSignalsFixed() {
-		scopes &^= unix.LANDLOCK_SCOPE_SIGNAL
-	}
-	rulesetFD, err := buildRuleset(p, abi, scopes)
-	if err != nil {
-		return err
-	}
-	defer unix.Close(rulesetFD)
-
-	if err := restrictSelf(rulesetFD, true); err != nil {
-		return err
-	}
-	_ = unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0) // best-effort
-	return nil
-}
-
-// buildRuleset compiles p's filesystem rules and the given scopes into a landlock
-// ruleset for abi and returns its descriptor, close-on-exec. It changes no process
-// state.
-func buildRuleset(p *Policy, abi int, scopes uint64) (int, error) {
+// buildRuleset compiles rules and the given scopes into a landlock ruleset for abi and
+// returns its descriptor, close-on-exec. It changes no process state.
+func buildRuleset(rules []filesystem.Rule, abi int, scopes uint64) (int, error) {
 	handledFS := handledAccessFS(abi)
 	attr := unix.LandlockRulesetAttr{
 		Access_fs: handledFS,
@@ -193,44 +144,34 @@ func buildRuleset(p *Policy, abi int, scopes uint64) (int, error) {
 		return -1, fmt.Errorf("sandbox: landlock_create_ruleset: %w", errno)
 	}
 	rulesetFD := int(fd)
-
-	for _, r := range p.FS.Rules {
-		if err := addPathRule(rulesetFD, r, handledFS); err != nil {
-			// A missing path is not an error: a Rust toolchain allowlist may
-			// name $CARGO_HOME on a host that only builds Go, and an unlisted
-			// path is denied either way.
-			if errors.Is(err, syscall.ENOENT) {
-				continue
-			}
-			unix.Close(rulesetFD)
-			return -1, fmt.Errorf("sandbox: landlock_add_rule %s: %w", r.Path, err)
-		}
+	if err := addPathRules(rulesetFD, rules, handledFS); err != nil {
+		unix.Close(rulesetFD)
+		return -1, err
 	}
 	return rulesetFD, nil
 }
 
+// addPathRules attaches each of rules to the ruleset. A missing path is not an error:
+// a Rust toolchain allowlist may name $CARGO_HOME on a host that only builds Go, and an
+// unlisted path is denied either way.
+func addPathRules(rulesetFD int, rules []filesystem.Rule, handledFS uint64) error {
+	for _, r := range rules {
+		if err := addPathRule(rulesetFD, r, handledFS); err != nil && !errors.Is(err, syscall.ENOENT) {
+			return fmt.Errorf("sandbox: landlock_add_rule %s: %w", r.Path, err)
+		}
+	}
+	return nil
+}
+
 // restrictSelf sets no_new_privs, which unprivileged landlock_restrict_self
-// requires, and enforces the ruleset. With allThreads it does both on every thread
-// and fails with ErrUnsupported under cgo; without it, only on the calling thread,
-// which the caller must have locked and must exec from, since sibling threads stay
+// requires, and enforces the ruleset on the calling thread alone. The caller must
+// have locked the thread and must exec from it, since sibling threads stay
 // unconfined (https://docs.kernel.org/userspace-api/landlock.html#inheritance).
-func restrictSelf(rulesetFD int, allThreads bool) error {
-	if !allThreads {
-		if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
-			return fmt.Errorf("sandbox: prctl(PR_SET_NO_NEW_PRIVS): %w", err)
-		}
-		if _, _, errno := syscall.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(rulesetFD), 0, 0); errno != 0 {
-			return fmt.Errorf("sandbox: landlock_restrict_self: %w", errno)
-		}
-		return nil
+func restrictSelf(rulesetFD int) error {
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return fmt.Errorf("sandbox: prctl(PR_SET_NO_NEW_PRIVS): %w", err)
 	}
-	if _, _, errno := syscall.AllThreadsSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0); errno != 0 {
-		if errors.Is(errno, syscall.ENOTSUP) {
-			return fmt.Errorf("%w: sandbox: a cgo binary cannot confine every thread: %w", ErrUnsupported, errno)
-		}
-		return fmt.Errorf("sandbox: prctl(PR_SET_NO_NEW_PRIVS): %w", errno)
-	}
-	if _, _, errno := syscall.AllThreadsSyscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(rulesetFD), 0, 0); errno != 0 {
+	if _, _, errno := syscall.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(rulesetFD), 0, 0); errno != 0 {
 		return fmt.Errorf("sandbox: landlock_restrict_self: %w", errno)
 	}
 	return nil

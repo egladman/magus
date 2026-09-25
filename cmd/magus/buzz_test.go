@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/sandbox/confinement"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -97,13 +96,9 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 // TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox pins the reason `magus buzz` is not a
 // hole in the sandbox. The agent guard allows `magus buzz -` outright and cannot read a
 // script body, so a script that magus never sandboxed was an unrestricted fs/proc/network
-// surface in a workspace that had asked for one.
-//
-// MarkAppliedExternally puts the apply layer in its attach-only mode: landlock is
-// permanent and process-wide, so applying it here would confine every later test in this
-// binary. The policy still reaches ctx, which is what the binding checks read.
+// surface in a workspace that had asked for one. The script runs in this process, which
+// the sandbox never confines, so the binding check is the whole defense here.
 func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
-	confinement.MarkAppliedExternally("magus buzz sandbox test", false)
 	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)
 
 	err := buzzCmd(ctx, "", []string{"-s", script})
@@ -127,14 +122,14 @@ func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
 		return nil, errors.New("magusfile.buzz:1: broken on purpose")
 	})
 
-	globalCfg.Sandbox.Enabled = true
+	globalCfg.Sandbox.Mode = types.SandboxModeBestEffort
 	_, err := buzzScriptContext(t.Context(), t.TempDir())
 	require.ErrorIs(t, err, types.WorkspaceLoadFailed)
 	assert.ErrorContains(t, err, "broken on purpose")
 	assert.Equal(t, 1, *opens)
 
 	// Adopted, so the open is attempted with the sandbox off too.
-	globalCfg.Sandbox.Enabled = false
+	globalCfg.Sandbox.Mode = types.SandboxModeOff
 	_, err = buzzScriptContext(withMagus(t.Context(), nil), t.TempDir())
 	require.NoError(t, err, "with the sandbox off a failed load still only warns")
 	assert.Equal(t, 2, *opens)

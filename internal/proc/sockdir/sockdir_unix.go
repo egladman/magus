@@ -14,9 +14,9 @@ import (
 // but is not private to this user, since a socket there is one another account could
 // tamper with.
 //
-// $TMPDIR is last because the sandbox grants every run write access to it: a confined
-// child could unlink a socket there and bind its own in its place, or read the token
-// file beside it (see proc.TokenEnv). Neither of the first two is granted.
+// $TMPDIR is last because it is shared: a process that can write it could unlink a
+// socket there and bind its own in its place, or read the token file beside it (see
+// proc.TokenEnv). Neither of the first two is granted to a sandboxed run.
 func Dir() string {
 	var bases []string
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {

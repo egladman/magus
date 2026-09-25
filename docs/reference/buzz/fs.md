@@ -23,7 +23,7 @@ Filesystem and path primitives.
 
 Return paths matching pattern (doublestar-style).
 
-**Signature:** `fs\glob(pattern) -> [Path]` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L291)
+**Signature:** `fs\glob(pattern) -> [Path]` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L292)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -44,7 +44,7 @@ foreach (path in fs\glob("cmd/**/*.go") catch []) { std\print(path.value); }
 
 Directory portion of path.
 
-**Signature:** `fs\dirname(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L333)
+**Signature:** `fs\dirname(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L334)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -66,7 +66,7 @@ std\print(fs\dirname("cmd/magus/main.go"));
 
 Final element of path.
 
-**Signature:** `fs\basename(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L338)
+**Signature:** `fs\basename(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L339)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -88,7 +88,7 @@ std\print(fs\basename("cmd/magus/main.go"));
 
 True iff path exists.
 
-**Signature:** `fs\exists(path) -> bool`[^buzz-stdlib-fs-exists] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L344)
+**Signature:** `fs\exists(path) -> bool`[^buzz-stdlib-fs-exists] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L345)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -111,7 +111,7 @@ if (fs\exists("go.mod") catch false) { std\print("Go module"); }
 
 Return the contents of path as a string.
 
-**Signature:** `fs\readFile(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L364)
+**Signature:** `fs\readFile(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L365)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -133,7 +133,7 @@ std\print(version);
 
 Write content to path (mode 0644).
 
-**Signature:** `fs\writeFile(path, content)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L377)
+**Signature:** `fs\writeFile(path, content)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L378)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -157,7 +157,7 @@ try {
 
 Create path and parents (default mode 0755).
 
-**Signature:** `fs\mkdirAll(path, [perm])`[^buzz-stdlib-fs-mkdir_all] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L395)
+**Signature:** `fs\mkdirAll(path, [perm])`[^buzz-stdlib-fs-mkdir_all] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L396)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -168,7 +168,7 @@ Create path and parents (default mode 0755).
 
 Join path elements with the OS separator.
 
-**Signature:** `fs\join(parts...) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L410)
+**Signature:** `fs\join(parts...) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L411)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -190,7 +190,7 @@ std\print(fs\join(["cmd", "magus", "main.go"]));
 
 Recursively remove path (no error if missing).
 
-**Signature:** `fs\removeAll(path)`[^buzz-stdlib-fs-remove_all] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L415)
+**Signature:** `fs\removeAll(path)`[^buzz-stdlib-fs-remove_all] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L416)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -213,7 +213,7 @@ try {
 
 Remove a single file or empty directory (no error if missing). Unlike remove_all it refuses a non-empty directory, so a wrong path costs one error rather than a recursive delete.
 
-**Signature:** `fs\remove(path)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L431)
+**Signature:** `fs\remove(path)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L432)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -223,7 +223,7 @@ Remove a single file or empty directory (no error if missing). Unlike remove_all
 
 Move or rename src to dst, creating dst's parent directory if needed. Within one filesystem this is atomic, which is what makes it the last step of a write-to-temp-then-swap. Across filesystems the underlying rename fails rather than silently copying; copy_file plus remove is the explicit form for that.
 
-**Signature:** `fs\rename(src, dst)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L448)
+**Signature:** `fs\rename(src, dst)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L449)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -234,7 +234,7 @@ Move or rename src to dst, creating dst's parent directory if needed. Within one
 
 Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.
 
-**Signature:** `fs\size(path) -> int` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L473)
+**Signature:** `fs\size(path) -> int` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L474)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -244,9 +244,9 @@ Return path's size in bytes. Raises when path does not exist; stat returns the w
 
 ### tempFile
 
-Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.
+Create a new empty temporary file with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.
 
-**Signature:** `fs\tempFile([prefix]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L486)
+**Signature:** `fs\tempFile([prefix]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L488)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -258,7 +258,7 @@ Create a new empty temporary file (in os.TempDir()) with an optional name prefix
 
 Write content to path so a reader sees either the old bytes or the new ones, never a partial file: the content goes to a temporary file in the same directory, is flushed to disk, then renamed over path. Use it for anything another process may read while a target runs - a generated file, a lockfile, a cache index. write_file is the cheaper form when nothing else is looking.
 
-**Signature:** `fs\writeFileAtomic(path, content)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L505)
+**Signature:** `fs\writeFileAtomic(path, content)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L508)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -269,7 +269,7 @@ Write content to path so a reader sees either the old bytes or the new ones, nev
 
 Return directory entries; empty if path does not exist.
 
-**Signature:** `fs\listDir(path) -> []string`[^buzz-stdlib-fs-list_dir] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L561)
+**Signature:** `fs\listDir(path) -> []string`[^buzz-stdlib-fs-list_dir] - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L564)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -290,7 +290,7 @@ foreach (name in fs\listDir("cmd") catch []) { std\print(name); }
 
 File-name extension of path, including the leading dot ("" if none).
 
-**Signature:** `fs\ext(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L581)
+**Signature:** `fs\ext(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L584)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -312,7 +312,7 @@ std\print(fs\ext("archive.tar.gz"));
 
 True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.
 
-**Signature:** `fs\isDir(path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L587)
+**Signature:** `fs\isDir(path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L590)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -333,7 +333,7 @@ if (fs\isDir("internal") catch false) { std\print("internal is a directory"); }
 
 True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.
 
-**Signature:** `fs\isFile(path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L598)
+**Signature:** `fs\isFile(path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L601)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -354,7 +354,7 @@ if (fs\isFile("go.mod") catch false) { std\print("go.mod is a file"); }
 
 Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.
 
-**Signature:** `fs\stat(path) -> FileInfo` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L610)
+**Signature:** `fs\stat(path) -> FileInfo` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L613)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -385,7 +385,7 @@ try {
 
 Copy the file at src to dst (overwriting), preserving its permission bits.
 
-**Signature:** `fs\copyFile(src, dst)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L629)
+**Signature:** `fs\copyFile(src, dst)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L632)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -409,7 +409,7 @@ try {
 
 Recursively copy the directory tree at src to dst, preserving permission bits.
 
-**Signature:** `fs\copyDir(src, dst)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L649)
+**Signature:** `fs\copyDir(src, dst)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L652)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -434,7 +434,7 @@ try {
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.
 
-**Signature:** `fs\watch(paths, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L799)
+**Signature:** `fs\watch(paths, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L802)
 
 | Parameter  | Type                                                                        | Optional | Description |
 | ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
@@ -462,7 +462,7 @@ try {
 
 Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.
 
-**Signature:** `fs\walk(root, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L864)
+**Signature:** `fs\walk(root, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L867)
 
 | Parameter  | Type                                                                        | Optional | Description |
 | ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
@@ -492,7 +492,7 @@ try {
 
 Append content to path (creating if absent, mode 0644).
 
-**Signature:** `fs\appendFile(path, content)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L901)
+**Signature:** `fs\appendFile(path, content)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L904)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -516,7 +516,7 @@ try {
 
 Change the permission bits of path to mode (octal integer, e.g. 0755).
 
-**Signature:** `fs\chmod(path, mode)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L924)
+**Signature:** `fs\chmod(path, mode)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L927)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -542,7 +542,7 @@ try {
 
 Create a symbolic link at link pointing to target.
 
-**Signature:** `fs\symlink(target, link)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L941)
+**Signature:** `fs\symlink(target, link)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L944)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -566,7 +566,7 @@ try {
 
 Return the target of the symbolic link at path.
 
-**Signature:** `fs\readlink(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L968)
+**Signature:** `fs\readlink(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L971)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -586,9 +586,9 @@ std\print(fs\readlink("/usr/local/bin/magus") catch "");
 
 ### tempDir
 
-Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.
+Create a new temporary directory with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise.
 
-**Signature:** `fs\tempDir([prefix]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L1011)
+**Signature:** `fs\tempDir([prefix]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L1016)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -616,7 +616,7 @@ try {
 
 Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.
 
-**Signature:** `fs\readLines(path) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L984)
+**Signature:** `fs\readLines(path) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L987)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -637,7 +637,7 @@ foreach (line in fs\readLines("targets.txt") catch []) { std\print(line); }
 
 Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 
-**Signature:** `fs\writeLines(path, lines)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L998)
+**Signature:** `fs\writeLines(path, lines)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go#L1001)
 
 | Parameter | Type       | Optional | Description |
 | --------- | ---------- | -------- | ----------- |

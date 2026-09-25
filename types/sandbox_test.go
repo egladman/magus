@@ -29,3 +29,13 @@ func TestSandboxModeZeroValueIsOff(t *testing.T) {
 	assert.True(t, SandboxModeRequired.Enabled())
 	assert.Equal(t, []string{"off", "best-effort", "required"}, m.Values())
 }
+
+func TestSandboxModeWeakerThan(t *testing.T) {
+	var unset SandboxMode
+	assert.True(t, SandboxModeOff.WeakerThan(SandboxModeBestEffort))
+	assert.True(t, SandboxModeBestEffort.WeakerThan(SandboxModeRequired))
+	assert.True(t, unset.WeakerThan(SandboxModeBestEffort), "unset behaves as off")
+	assert.False(t, SandboxModeRequired.WeakerThan(SandboxModeBestEffort))
+	assert.False(t, SandboxModeBestEffort.WeakerThan(SandboxModeBestEffort))
+	assert.False(t, unset.WeakerThan(SandboxModeOff))
+}

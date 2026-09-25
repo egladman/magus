@@ -97,8 +97,8 @@ const maxSymlinks = 40
 // A missing component and everything after it are kept lexically: a write target
 // need not exist yet. A symlink is followed even when its target is missing, so a
 // write through a dangling link is checked against where the file would be created
-// rather than against the link. On Linux 5.13 and newer the landlock layer closes
-// the window between this check and the operation; elsewhere it stays open.
+// rather than against the link. The window between this check and the operation stays
+// open: the landlock layer confines magus's children, never magus itself.
 func normalizePath(path string) (string, error) {
 	if path == "" {
 		return "", errors.New("sandbox: empty path")

@@ -33,7 +33,11 @@ import (
 
 // TestMain keeps the variables helper processes are instructed with: LOCKTEST_* for
 // helperHold's holder and PIPETEST_* for pipeStage's stages.
-func TestMain(m *testing.M) { testkit.Main(m, "LOCKTEST_*", "PIPETEST_*") }
+func TestMain(m *testing.M) {
+	// A sandboxed run's children start as this binary re-run as their launcher.
+	MaybeLaunchSandbox()
+	testkit.Main(m, "LOCKTEST_*", "PIPETEST_*")
+}
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
 // affected --stdin streaming flow.
@@ -1472,6 +1476,24 @@ func TestApplyEnvSandboxMode(t *testing.T) {
 		return map[string]string{"MAGUS_SANDBOX_ENABLED": "1"}[k]
 	})
 	assert.ErrorContains(t, err, "MAGUS_SANDBOX_ENABLED was renamed to MAGUS_SANDBOX")
+}
+
+// MAGUS_SANDBOX is the mode a sandboxed parent hands its children, and a floor: a
+// nested workspace that declares a stronger mode runs under its own, and one that
+// declares a weaker mode runs under its parent's.
+func TestApplyEnvSandboxModeIsAFloor(t *testing.T) {
+	parent := func(k string) string { return map[string]string{"MAGUS_SANDBOX": "best-effort"}[k] }
+	for declared, want := range map[types.SandboxMode]types.SandboxMode{
+		types.SandboxModeRequired:   types.SandboxModeRequired,
+		types.SandboxModeOff:        types.SandboxModeBestEffort,
+		"":                          types.SandboxModeBestEffort,
+		types.SandboxModeBestEffort: types.SandboxModeBestEffort,
+	} {
+		cfg := config.Defaults()
+		cfg.Sandbox.Mode = declared
+		require.NoError(t, configgen.ApplyEnv(&cfg, parent))
+		assert.Equal(t, want, cfg.Sandbox.Mode, "workspace declares %q", declared)
+	}
 }
 
 // The environment overwrites fields after the yaml is validated, so an SDK load has to

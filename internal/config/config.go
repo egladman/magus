@@ -216,8 +216,11 @@ type ShadowAck struct {
 
 // SandboxConfig is the per-workspace sandbox policy.
 type SandboxConfig struct {
-	// Mode is off (the default), best-effort (landlock where the host has it, magus's own binding checks where it does not), or required (refuse to run, MGS2012, unless the kernel enforces it).
-	Mode  types.SandboxMode  `json:"mode" yaml:"mode" cli:"name=sandbox"`
+	// Mode is off (the default), best-effort (landlock confines each child where the host has it, magus's own binding checks where it does not), or required (refuse to run, MGS2012, unless the kernel can confine every child: landlock ABI 3).
+	//
+	// MAGUS_SANDBOX is a floor, not an override: a sandboxed run hands its children its
+	// mode there, and a nested workspace's own mode may raise it and never lower it.
+	Mode  types.SandboxMode  `json:"mode" yaml:"mode" cli:"name=sandbox,floor"`
 	Allow []SandboxAllowPath `json:"allow" yaml:"allow"` // extra {path, mode} entries extending the filesystem allowlist
 	Env   SandboxEnv         `json:"env" yaml:"env"`     // env-var passthrough rules
 }
@@ -820,7 +823,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VOLATILITY_THRESHOLD", "volatility.threshold", "0.05", "Wilson lower-bound volatility rate above which a project+target is considered volatile"},
 		{"MAGUS_VOLATILITY_ANNOTATE_GHA", "volatility.annotate_gha", "true", "When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY"},
 		{"MAGUS_REPORT_FILTER", "report.filter", "", "Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query)"},
-		{"MAGUS_SANDBOX", "sandbox.mode", "off", "off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
+		{"MAGUS_SANDBOX", "sandbox.mode", "off", "off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and --sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
 		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
 	}

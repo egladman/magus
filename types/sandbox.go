@@ -1,6 +1,9 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // SandboxMode is how hard magus confines a run: not at all, as far as the host
 // allows, or with the kernel's enforcement or not at all.
@@ -14,11 +17,12 @@ const (
 	// SandboxModeOff attaches no policy: every check passes and children inherit the
 	// whole environment. The default.
 	SandboxModeOff SandboxMode = "off"
-	// SandboxModeBestEffort confines with kernel landlock where the host has it and
-	// falls back to magus's own binding checks, saying so once (MGS2005), where it
-	// does not.
+	// SandboxModeBestEffort confines each child with kernel landlock where the host
+	// has it, and with magus's own binding checks alone, saying so once (MGS2005),
+	// where it does not.
 	SandboxModeBestEffort SandboxMode = "best-effort"
-	// SandboxModeRequired refuses to run (MGS2012) unless the kernel enforces the policy.
+	// SandboxModeRequired refuses to run (MGS2012) unless the kernel can confine
+	// every child: landlock ABI 3 or newer.
 	SandboxModeRequired SandboxMode = "required"
 )
 
@@ -32,6 +36,12 @@ func (m SandboxMode) Resolved() SandboxMode {
 
 // Enabled reports whether m attaches a policy at all.
 func (m SandboxMode) Enabled() bool { return m.Resolved() != SandboxModeOff }
+
+// WeakerThan reports whether m confines less than o. The modes are ordered off,
+// best-effort, required; a nested or forwarded run may only move up that order.
+func (m SandboxMode) WeakerThan(o SandboxMode) bool {
+	return slices.Index(sandboxModes, m.Resolved()) < slices.Index(sandboxModes, o.Resolved())
+}
 
 // String renders m, naming the zero value by the mode it behaves as.
 func (m SandboxMode) String() string { return string(m.Resolved()) }

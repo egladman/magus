@@ -189,11 +189,3 @@ func TestBuildPolicyMergesDuplicatePaths(t *testing.T) {
 	}
 	assert.Equal(t, 1, n)
 }
-
-func TestFingerprintStable(t *testing.T) {
-	o, root := hostOptions(t)
-	fp := BuildPolicy(o).Fingerprint()
-	assert.Equal(t, fp, BuildPolicy(o).Fingerprint())
-	o.Allow = []filesystem.Rule{ro(filepath.Join(root, "extra"))}
-	assert.NotEqual(t, fp, BuildPolicy(o).Fingerprint())
-}

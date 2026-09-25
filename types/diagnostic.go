@@ -296,11 +296,13 @@ const (
 	PathShimSuspected     DiagnosticCode = "MGS2006"
 	ExecDenied            DiagnosticCode = "MGS2007"
 	ProcSocketWithheld    DiagnosticCode = "MGS2008"
-	SandboxPolicyMismatch DiagnosticCode = "MGS2010"
-	SecretTooShortToMask  DiagnosticCode = "MGS2011"
-	// SandboxRequired is sandbox mode required where the kernel does not enforce the
-	// policy: MGS2005's fallback to binding checks, refused. Code the caller does not
-	// trust must not run behind checks it can step around.
+	// SandboxWeakened is a nested or forwarded run asking for a weaker sandbox mode than
+	// the run that started it. A mode only strengthens on the way down.
+	SandboxWeakened      DiagnosticCode = "MGS2010"
+	SecretTooShortToMask DiagnosticCode = "MGS2011"
+	// SandboxRequired is sandbox mode required where the kernel cannot confine a child:
+	// MGS2005's fallback to binding checks, refused. Code the caller does not trust must
+	// not run behind checks it can step around.
 	SandboxRequired           DiagnosticCode = "MGS2012"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	VCSUnavailable            DiagnosticCode = "MGS3002"
@@ -617,7 +619,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SpellOverrideInvalid, GuardRuleMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
-	SandboxPolicyMismatch, SecretTooShortToMask, SandboxRequired,
+	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,

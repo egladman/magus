@@ -1,21 +1,21 @@
 // Package sandbox confines spell code and the processes magus starts to a
 // workspace-bounded filesystem and a scrubbed environment.
 //
-// Two layers enforce one Policy. Kernel landlock (Linux 5.13+) governs every file
-// the process and its children touch. Magus's own checks run at the fs, archive,
-// crypto, http and exec bindings on every platform, and see only what goes through
-// a binding: without landlock, a subprocess is confined in its environment and its
-// first exec, and nothing else. A nil Policy means the sandbox is off and every
-// check passes.
+// Two layers enforce one Policy. Magus's own checks run at the fs, archive, crypto,
+// http and exec bindings on every platform, and see only what goes through a
+// binding. The kernel layer confines each child magus starts: Command re-executes
+// magus as a launcher that applies a landlock ruleset to itself and then execs the
+// child, so the child and everything it starts are held to the policy. Magus itself
+// is never confined, so in-process Buzz rests on the binding checks alone. A nil
+// Policy means the sandbox is off and every check passes.
 package sandbox
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"slices"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/sandbox/env"
@@ -24,7 +24,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrUnsupported is returned by Apply when landlock is unavailable (non-Linux, kernel <5.13, LSM disabled).
+// ErrUnsupported is returned by ABI and Command when landlock is unavailable
+// (non-Linux, kernel <5.13, LSM disabled).
 var ErrUnsupported = errors.New("sandbox: kernel sandbox unsupported on this host")
 
 // Policy is the runtime sandbox policy attached to a context and consulted by spell bindings.
@@ -41,10 +42,15 @@ type Policy struct {
 	// TempDir is the private temp directory children get as TMPDIR, in place of the
 	// shared one, which holds other programs' sockets.
 	TempDir string
+	// Mode decides a child the kernel cannot confine: best-effort runs it under the
+	// binding checks and the env allowlist, required refuses it (MGS2012).
+	Mode types.SandboxMode
+	// Workspace and GitDirs locate the control files CheckWrite refuses (see
+	// controlFile). Resolved like rule paths; empty locates none.
+	Workspace string
+	GitDirs   []string
 	// Lease is the job lease whose declared boundary narrowed FS, empty on a policy
-	// derived from config alone. Read only to name the boundary on a denial: it is not a
-	// [Policy.Fingerprint] input, because the kernel ruleset is built from FS and two
-	// policies with equal rules must still share one landlock application.
+	// derived from config alone. Read only to name the boundary on a denial.
 	Lease string
 	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
 	LeaseFrom types.LeaseSource
@@ -57,7 +63,8 @@ func (p *Policy) CheckRead(ctx context.Context, path string) error {
 	return p.check(ctx, filesystem.Read, path)
 }
 
-// CheckWrite is CheckRead for a write to path.
+// CheckWrite is CheckRead for a write to path. A write to a control file (see
+// controlFile) is refused even inside a write grant.
 func (p *Policy) CheckWrite(ctx context.Context, path string) error {
 	return p.check(ctx, filesystem.Write, path)
 }
@@ -73,9 +80,88 @@ func (p *Policy) check(ctx context.Context, access filesystem.Access, path strin
 		return nil
 	}
 	err := p.FS.Check(path, access)
+	if err == nil && access == filesystem.Write {
+		if abs := filesystem.ResolveRulePath(path); p.controlFile(abs) {
+			err = fmt.Errorf("%w: write of %s: another tool runs code from it later, outside the sandbox", filesystem.ErrDenied, abs)
+		}
+	}
 	recordCheck(ctx, access, err)
 	recordDenial(ctx, p, access, path, err)
 	return err
+}
+
+// controlNames are the files and directories, at any depth of the workspace, that
+// another tool reads and runs code from after the run ends: version-manager pins and
+// hooks, direnv, git hook managers, and agent and editor settings. A write to one is
+// a way to run code outside the sandbox later, so the binding checks refuse it under
+// every mode but off. The kernel layer cannot: landlock has no deny rule inside a
+// grant, so a child can still write them.
+//
+// ./magus is deliberately absent: go-build writes it, and a person runs it next.
+var controlNames = map[string]bool{
+	"magus.yaml":              true,
+	"mise.toml":               true,
+	".mise.toml":              true,
+	"mise.local.toml":         true,
+	".mise.local.toml":        true,
+	".mise":                   true,
+	".tool-versions":          true,
+	".envrc":                  true,
+	".claude":                 true,
+	".cursor":                 true,
+	".mcp.json":               true,
+	".pre-commit-config.yaml": true,
+	".husky":                  true,
+	"lefthook.yml":            true,
+	"lefthook.yaml":           true,
+	".lefthook.yml":           true,
+	".lefthook.yaml":          true,
+}
+
+// gitControlNames are the entries of a git directory git runs or obeys: hooks, config
+// (core.hooksPath, core.fsmonitor, aliases) and info (attributes, exclude).
+var gitControlNames = map[string]bool{"hooks": true, "config": true, "config.worktree": true, "info": true}
+
+// controlFile reports whether abs, a resolved path, is or lies inside a control file
+// of the workspace or of one of its git directories. A linked worktree's .git is a
+// file naming its git directory, so it is a control file too.
+func (p *Policy) controlFile(abs string) bool {
+	for _, dir := range p.GitDirs {
+		if rel, ok := relUnder(abs, dir); ok {
+			first, _, _ := strings.Cut(rel, string(filepath.Separator))
+			if rel == "" || gitControlNames[first] {
+				return true
+			}
+		}
+	}
+	rel, ok := relUnder(abs, p.Workspace)
+	if !ok || rel == "" {
+		return false
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	for i, c := range parts {
+		next := ""
+		if i+1 < len(parts) {
+			next = parts[i+1]
+		}
+		switch {
+		case controlNames[c]:
+			return true
+		case c == ".vscode" && next == "tasks.json":
+			return true
+		case c == ".git" && (next == "" || gitControlNames[next]):
+			return true
+		}
+	}
+	return false
+}
+
+// relUnder is abs relative to root when abs is at or under it; root "" holds nothing.
+func relUnder(abs, root string) (string, bool) {
+	if !filesystem.Under(abs, root) {
+		return "", false
+	}
+	return strings.TrimPrefix(abs[len(root):], string(filepath.Separator)), true
 }
 
 // recordDenial records a refused access on the run's trail, the producer
@@ -114,6 +200,16 @@ func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path
 	})
 }
 
+// TempBase is the directory a run under p makes its temp files in: p's private temp
+// dir, or "" (os.TempDir) for a nil p. The shared temp dir is granted to nothing under
+// a policy, so a file made there is one the run's own children cannot touch.
+func (p *Policy) TempBase() string {
+	if p == nil {
+		return ""
+	}
+	return p.TempDir
+}
+
 // AllowsEnv reports whether the policy lets a child inherit the variable name. A nil
 // Policy permits everything.
 func (p *Policy) AllowsEnv(name string) bool {
@@ -121,72 +217,6 @@ func (p *Policy) AllowsEnv(name string) bool {
 		return true
 	}
 	return p.Env.Allows(name)
-}
-
-// Fingerprint returns a stable hash of the policy's FS rules and env config.
-// Policies with equal fingerprints can share a landlock ruleset.
-func (p *Policy) Fingerprint() string {
-	if p == nil {
-		return ""
-	}
-	rules := make([]string, len(p.FS.Rules))
-	for i, r := range p.FS.Rules {
-		rules[i] = fmt.Sprintf("%s:r=%v:w=%v:x=%v", r.Path, r.Read, r.Write, r.Exec)
-	}
-	slices.Sort(rules)
-	names := slices.Sorted(slices.Values(p.Env.Names))
-	prefixes := slices.Sorted(slices.Values(p.Env.Prefixes))
-	h := sha256.New()
-	fmt.Fprintf(h, "rules=%v;envAllow=%v;globs=%v", rules, names, prefixes)
-	return hex.EncodeToString(h.Sum(nil)[:8]) // first 8 bytes → 16 hex chars
-}
-
-// UnionPolicies returns the set-union of all input policies (for multi-workspace servers).
-// FS rules with the same path are merged by OR-ing Read/Write/Exec. nil inputs are ignored.
-// Per-workspace binding-layer checks remain strict; only the kernel landlock layer sees the union.
-func UnionPolicies(ps ...*Policy) *Policy {
-	out := &Policy{}
-	seenRule := make(map[string]int) // path -> index into out.FS.Rules
-	seenEnv := make(map[string]struct{})
-	seenPrefix := make(map[string]struct{})
-	seenBase := make(map[string]struct{})
-	for _, p := range ps {
-		if p == nil {
-			continue
-		}
-		for _, r := range p.FS.Rules {
-			if idx, ok := seenRule[r.Path]; ok {
-				out.FS.Rules[idx].Read = out.FS.Rules[idx].Read || r.Read
-				out.FS.Rules[idx].Write = out.FS.Rules[idx].Write || r.Write
-				out.FS.Rules[idx].Exec = out.FS.Rules[idx].Exec || r.Exec
-				continue
-			}
-			seenRule[r.Path] = len(out.FS.Rules)
-			out.FS.Rules = append(out.FS.Rules, r)
-		}
-		for _, n := range p.Env.Names {
-			if _, ok := seenEnv[n]; ok {
-				continue
-			}
-			seenEnv[n] = struct{}{}
-			out.Env.Names = append(out.Env.Names, n)
-		}
-		for _, g := range p.Env.Prefixes {
-			if _, ok := seenPrefix[g]; ok {
-				continue
-			}
-			seenPrefix[g] = struct{}{}
-			out.Env.Prefixes = append(out.Env.Prefixes, g)
-		}
-		for _, kv := range p.BaseEnv {
-			if _, ok := seenBase[kv]; ok {
-				continue
-			}
-			seenBase[kv] = struct{}{}
-			out.BaseEnv = append(out.BaseEnv, kv)
-		}
-	}
-	return out
 }
 
 type policyKey struct{}

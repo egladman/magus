@@ -87,6 +87,11 @@ type FlagDef struct {
 	GoPath    string // Go field selector, e.g. "cfg.Cache.Dir"
 	YamlPath  string // dotted yaml path, e.g. "cache.dir"
 	Usage     string // sanitized one-line description for flag.Usage
+	// Floor makes the env var a floor rather than an override: ApplyEnv keeps the
+	// stronger of the configured value and the env's, by the type's WeakerThan. A text
+	// kind only. For a setting a parent process hands its children, which a child's own
+	// config may raise and never lower.
+	Floor bool
 }
 
 func parseConfigFlags(configPath string) ([]FlagDef, error) {
@@ -144,8 +149,8 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			yamlTag = strings.ToLower(name)
 		}
 
-		cliOptOut, cliShort, cliName := cliOptions(field)
-		if cliOptOut {
+		cli := cliOptions(field)
+		if cli.optOut {
 			continue
 		}
 
@@ -164,8 +169,8 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		}
 
 		nameParts := thisYAML
-		if cliName != "" {
-			nameParts = []string{cliName}
+		if cli.name != "" {
+			nameParts = []string{cli.name}
 		}
 		flagName := config.FlagName(nameParts...)
 		if kind == "stringslice" || kind == "boolptr" { // env-only; no CLI flag
@@ -181,12 +186,13 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 
 		*out = append(*out, FlagDef{
 			Flag:      flagName,
-			FlagShort: cliShort,
+			FlagShort: cli.short,
 			EnvVar:    envVar,
 			Kind:      kind,
 			GoPath:    goSel,
 			YamlPath:  strings.Join(thisYAML, "."),
 			Usage:     help,
+			Floor:     cli.floor && kind == "text",
 		})
 	}
 }
@@ -248,30 +254,39 @@ func yamlTagOf(f *ast.Field) string {
 	return lookupTag(strings.Trim(f.Tag.Value, "`"), "yaml")
 }
 
-// cliOptions parses the `cli:"…"` struct tag: "-" opts out, "short=c" adds a short
-// flag, and "name=sandbox" names the flag (--sandbox) and env var (MAGUS_SANDBOX) in
-// place of the yaml path, for a key whose leaf would only repeat its section.
-func cliOptions(f *ast.Field) (optOut bool, short, name string) {
+// cliOpts is what a `cli:"…"` struct tag says about a field.
+type cliOpts struct {
+	optOut bool   // "-": no flag and no env var
+	short  string // "short=c": a short flag
+	name   string // "name=sandbox": the flag and env name in place of the yaml path
+	floor  bool   // "floor": the env var may only strengthen the value (see FlagDef.Floor)
+}
+
+// cliOptions parses the `cli:"…"` struct tag. "name=sandbox" names the flag
+// (--sandbox) and env var (MAGUS_SANDBOX) for a key whose leaf would only repeat its
+// section.
+func cliOptions(f *ast.Field) cliOpts {
+	var o cliOpts
 	if f.Tag == nil {
-		return false, "", ""
+		return o
 	}
 	val := lookupTagRaw(strings.Trim(f.Tag.Value, "`"), "cli")
 	if val == "" {
-		return false, "", ""
+		return o
 	}
 	for _, part := range strings.Split(val, ",") {
-		if part == "-" {
-			optOut = true
-			continue
-		}
 		switch k, v, _ := strings.Cut(part, "="); k {
+		case "-":
+			o.optOut = true
+		case "floor":
+			o.floor = true
 		case "short":
-			short = v
+			o.short = v
 		case "name":
-			name = v
+			o.name = v
 		}
 	}
-	return optOut, short, name
+	return o
 }
 
 // lookupTag returns the tag value up to the first comma (matches reflect.StructTag.Get's yaml convention).

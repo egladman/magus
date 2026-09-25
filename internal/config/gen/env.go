@@ -517,8 +517,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 		cfg.DefaultCharms = out
 	}
 	if v := getenv("MAGUS_SANDBOX"); v != "" {
-		if err := cfg.Sandbox.Mode.UnmarshalText([]byte(v)); err != nil {
+		floor := cfg.Sandbox.Mode
+		if err := floor.UnmarshalText([]byte(v)); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_SANDBOX: %w", err))
+		} else if cfg.Sandbox.Mode.WeakerThan(floor) {
+			cfg.Sandbox.Mode = floor
 		}
 	}
 	if v := getenv("MAGUS_SANDBOX_ENV_PASSTHROUGH"); v != "" {

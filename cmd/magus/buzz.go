@@ -505,7 +505,7 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 	}
 	m, lerr := buzzLoadWorkspace(ctx, root)
 	if lerr != nil {
-		if globalCfg.Sandbox.Enabled {
+		if globalCfg.Sandbox.Mode.Enabled() {
 			return nil, types.WrapDiagnostic(types.WorkspaceLoadFailed, lerr,
 				"the sandbox is on and the workspace failed to load, so there is no policy to run this script under: %v", lerr)
 		}

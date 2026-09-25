@@ -3,6 +3,7 @@
 package std
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -129,7 +130,7 @@ var Fs = Module{
 		},
 		{
 			Name: "temp_file",
-			Doc:  "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
+			Doc:  "Create a new empty temporary file with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
 			Args: []Arg{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
@@ -259,7 +260,7 @@ var Fs = Module{
 		},
 		{
 			Name: "temp_dir",
-			Doc:  "Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.",
+			Doc:  "Create a new temporary directory with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise.",
 			Args: []Arg{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
@@ -482,14 +483,16 @@ func FsSize(ctx context.Context, path string) (int, error) {
 	return int(info.Size()), nil
 }
 
-// FsTempFile creates an empty temporary file and returns its path.
+// FsTempFile creates an empty temporary file and returns its path, in the sandbox's
+// private temp dir when a policy is attached.
 func FsTempFile(ctx context.Context, prefix string) (string, error) {
+	base := sandbox.PolicyFromContext(ctx).TempBase()
 	if types.Tracing(ctx) {
 		// Dry run: name a plausible path without creating it, matching temp_dir.
 		// Writes to it are themselves recorded as skipped, so it never needs to exist.
-		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+		return filepath.Join(cmp.Or(base, os.TempDir()), prefix+"magus-dry-run"), nil
 	}
-	f, err := os.CreateTemp("", prefix)
+	f, err := os.CreateTemp(base, prefix)
 	if err != nil {
 		return "", fmt.Errorf("fs.temp_file: %w", err)
 	}
@@ -1006,15 +1009,18 @@ func FsWriteLines(ctx context.Context, path string, lines []string) error {
 	return FsWriteFile(ctx, path, content)
 }
 
-// FsTempDir creates a new temporary directory in os.TempDir() with an optional
-// name prefix and returns its path.
+// FsTempDir creates a new temporary directory with an optional name prefix and returns
+// its path. Under a policy it is made in the policy's private temp dir: the shared one
+// is granted to none of the run's children, so a directory there is one they could
+// neither read nor write.
 func FsTempDir(ctx context.Context, prefix string) (string, error) {
+	base := sandbox.PolicyFromContext(ctx).TempBase()
 	if types.Tracing(ctx) {
 		// Dry run: return a plausible path without creating it. Writes into it are
 		// themselves recorded (skipped), so the directory never needs to exist.
-		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+		return filepath.Join(cmp.Or(base, os.TempDir()), prefix+"magus-dry-run"), nil
 	}
-	dir, err := os.MkdirTemp("", prefix)
+	dir, err := os.MkdirTemp(base, prefix)
 	if err != nil {
 		return "", fmt.Errorf("fs.temp_dir: %w", err)
 	}

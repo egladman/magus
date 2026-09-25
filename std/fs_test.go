@@ -340,6 +340,20 @@ func TestFsTempFile(t *testing.T) {
 	assert.NotEqual(t, p, q)
 }
 
+// Under a policy the temp file and dir land in its private temp dir: the shared one is
+// granted to none of the run's children, which could not touch what was made there.
+func TestFsTempUnderAPolicyUsesItsPrivateTempDir(t *testing.T) {
+	private := t.TempDir()
+	ctx := sandbox.WithPolicy(context.Background(), &sandbox.Policy{TempDir: private})
+
+	f, err := FsTempFile(ctx, "magus-test-")
+	require.NoError(t, err)
+	assert.Equal(t, private, filepath.Dir(f))
+	d, err := FsTempDir(ctx, "magus-test-")
+	require.NoError(t, err)
+	assert.Equal(t, private, filepath.Dir(d))
+}
+
 func TestFsWriteFileAtomic(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

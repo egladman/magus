@@ -15,8 +15,9 @@ import (
 // fakeRecorder captures the binding-layer sandbox metric calls. It satisfies
 // MetricsRecorder, which the live observability.Provider also satisfies structurally.
 type fakeRecorder struct {
-	checks  []checkCall
-	dropped []droppedCall
+	checks   []checkCall
+	dropped  []droppedCall
+	launches []string
 }
 
 type checkCall struct{ access, decision, project string }
@@ -31,6 +32,19 @@ func (r *fakeRecorder) RecordSandboxCheck(_ context.Context, access, decision, p
 
 func (r *fakeRecorder) RecordSandboxEnvDropped(_ context.Context, project string, n int64) {
 	r.dropped = append(r.dropped, droppedCall{project, n})
+}
+
+func (r *fakeRecorder) RecordSandboxApply(_ context.Context, _ float64, outcome, scope string) {
+	r.launches = append(r.launches, scope+"/"+outcome)
+}
+
+func TestRecordLaunch(t *testing.T) {
+	rec := &fakeRecorder{}
+	ctx := WithMetrics(context.Background(), rec)
+	RecordLaunch(ctx, 0.01, "applied")
+	RecordLaunch(ctx, 0, "unsupported")
+	RecordLaunch(context.Background(), 0, "applied")
+	assert.Equal(t, []string{"child/applied", "child/unsupported"}, rec.launches)
 }
 
 func TestChecksRecordAllowAndDeny(t *testing.T) {

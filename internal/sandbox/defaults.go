@@ -7,15 +7,17 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/types"
 )
 
 // PolicyOptions is everything BuildPolicy reads about the host. The caller gathers it
-// (see confinement.FromConfig), so a test states every input.
+// (see FromConfig), so a test states every input.
 type PolicyOptions struct {
-	Workspace  string // workspace root: read, write, exec
-	CacheDir   string // magus's cache: read, write
-	TempDir    string // private temp dir the caller created: read, write, exec, and children's TMPDIR
-	Executable string // the running magus binary: read, exec
+	Mode       types.SandboxMode // becomes Policy.Mode
+	Workspace  string            // workspace root: read, write, exec
+	CacheDir   string            // magus's cache: read, write
+	TempDir    string            // private temp dir the caller created: read, write, exec, and children's TMPDIR
+	Executable string            // the running magus binary: read, exec
 	// GitDir is the checkout's own git directory and GitCommonDir the repository's
 	// shared one. A linked worktree keeps both outside the workspace, so they get
 	// grants of their own: GitDir and the object store read-write, which is what
@@ -79,12 +81,25 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		kept = append(kept, "TMPDIR="+o.TempDir)
 	}
 	slices.Sort(kept)
+	var gitDirs []string
+	for _, d := range []string{o.GitDir, o.GitCommonDir} {
+		if d != "" {
+			gitDirs = append(gitDirs, filesystem.ResolveRulePath(d))
+		}
+	}
+	var workspace string
+	if o.Workspace != "" {
+		workspace = filesystem.ResolveRulePath(o.Workspace)
+	}
 	return &Policy{
 		FS:         filesystem.Ruleset{Rules: rules},
 		Env:        allow,
 		BaseEnv:    kept,
 		EnvDropped: dropped,
 		TempDir:    o.TempDir,
+		Mode:       o.Mode.Resolved(),
+		Workspace:  workspace,
+		GitDirs:    slices.Compact(gitDirs),
 	}
 }
 
@@ -113,9 +128,10 @@ func join(base string, elem ...string) string {
 // The /etc files beside /etc are there for their symlink targets: resolv.conf and
 // localtime point outside /etc, and a rule path is resolved when it is added.
 //
-// The /proc/self entries are the magus process's own when landlock applies them, as
-// landlock binds a rule to the inode it opened. /proc/self/environ is deliberately
-// absent: in-process Buzz would read magus's unscrubbed environment through it.
+// The /proc/self entries resolve to magus's own when the policy is built, and landlock
+// binds a rule to the inode it opened, so the launcher grants them again on the child's
+// own entries (see procSelfRules). /proc/self/environ is deliberately absent: it holds
+// the environment as it was before the scrub.
 var systemRules = []filesystem.Rule{
 	rx("/usr"), rx("/bin"), rx("/sbin"),
 	rx("/lib"), rx("/lib32"), rx("/lib64"), rx("/libx32"),

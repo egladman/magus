@@ -88,9 +88,9 @@ type runRequest struct {
 	// exempt from the trail's redaction, so an unchecked one is a way to carry a
 	// credential onto an event line.
 	Lease string `json:"lease,omitempty"`
-	// Sandbox is true when the client runs sandboxed, so the server may take the run only
-	// if it will sandbox it too. See [WithSandboxFloor].
-	Sandbox bool `json:"sandbox,omitempty"`
+	// Sandbox is the mode the client runs under, so the server may take the run only if
+	// it will sandbox it at that mode or stronger. See [WithSandboxFloor].
+	Sandbox types.SandboxMode `json:"sandbox,omitempty"`
 }
 
 // runReply is the response from the parent to the child.

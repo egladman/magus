@@ -634,7 +634,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_SANDBOX",
 		Flag:     fieldtype.FlagNames{Long: "sandbox"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_SANDBOX: Mode is off (the default), best-effort (landlock where the host has it, magus's own binding checks where it does not)...",
+		Usage:    "MAGUS_SANDBOX: Mode is off (the default), best-effort (landlock confines each child where the host has it, magus's own binding check...",
 	},
 	{
 		GoPath:   "Sandbox.Env.Passthrough",

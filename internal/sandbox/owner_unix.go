@@ -1,6 +1,6 @@
 //go:build !windows
 
-package confinement
+package sandbox
 
 import (
 	"io/fs"

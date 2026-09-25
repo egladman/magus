@@ -201,6 +201,49 @@ func TestChildEnvUnderAPolicyNeverInheritsTheHost(t *testing.T) {
 	assert.Contains(t, env, "MAGUS_TEST_HOST_SECRET=s3cret", "with the sandbox off the child inherits the host")
 }
 
+// TestMain lets the test binary serve as the sandbox launcher: a confined Exec
+// re-executes the running binary, which under go test is this one.
+func TestMain(m *testing.M) {
+	sandbox.MaybeLaunch()
+	os.Exit(m.Run())
+}
+
+// Where the host has landlock, a policy's child is confined by the kernel: cat cannot
+// read a file outside the grant, though no binding ever sees that read. Without it
+// best-effort still runs the child, and required refuses before anything starts.
+func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
+	if _, err := exec.LookPath("cat"); err != nil {
+		t.Skip("'cat' not available")
+	}
+	ws := t.TempDir()
+	secretFile := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(secretFile, []byte("s3cret"), 0o600))
+	policy := func(mode types.SandboxMode) context.Context {
+		p := sandbox.BuildPolicy(sandbox.PolicyOptions{Mode: mode, Workspace: ws, Environ: os.Environ(), GOOS: runtime.GOOS})
+		return sandbox.WithPolicy(t.Context(), p)
+	}
+	opts := ExecOptions{Dir: ws, Capture: true, Quiet: true}
+	abi, abiErr := sandbox.ABI()
+
+	res, err := Exec(policy(types.SandboxModeBestEffort), "cat", []string{secretFile}, opts)
+	if abiErr == nil && abi >= 1 {
+		assert.NotEqual(t, 0, res.Code, "the kernel refuses a read outside the grant")
+		assert.NotContains(t, res.Stdout, "s3cret")
+	} else {
+		require.NoError(t, err)
+		assert.Equal(t, "s3cret", res.Stdout, "best-effort without the kernel layer still runs the child")
+	}
+
+	res, err = Exec(policy(types.SandboxModeRequired), "cat", []string{secretFile}, opts)
+	if abiErr != nil || abi < sandbox.RequiredABI {
+		require.ErrorIs(t, err, types.SandboxRequired)
+		assert.False(t, res.Started, "nothing starts unconfined")
+	} else {
+		assert.NotEqual(t, 0, res.Code)
+		assert.NotContains(t, res.Stdout, "s3cret")
+	}
+}
+
 func TestExecWorkdirRespected(t *testing.T) {
 	if _, err := exec.LookPath("pwd"); err != nil {
 		t.Skip("'pwd' not available")
@@ -301,16 +344,16 @@ func TestExecResolvesAgainstTheRunsPATH(t *testing.T) {
 	require.ErrorIs(t, err, types.ToolNotOnPath, "another run's PATH does not carry the tool")
 }
 
-// TestChildEnvHoldsTheSandboxFloor: every child of a sandboxed run is told a nested magus
-// must run sandboxed, and an override from the target cannot say otherwise. The cache and
-// state dirs the scrub drops reach it too, so a nested magus reads the same lease marker
-// and job store.
+// TestChildEnvHoldsTheSandboxFloor: every child of a sandboxed run is told the mode a
+// nested magus must run under, and an override from the target cannot say otherwise. The
+// cache and state dirs the scrub drops reach it too, so a nested magus reads the same
+// lease marker and job store.
 func TestChildEnvHoldsTheSandboxFloor(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", "/parent/cache")
 	t.Setenv("XDG_STATE_HOME", "/parent/state")
-	p := &sandbox.Policy{BaseEnv: []string{"PATH=/usr/bin"}}
+	p := &sandbox.Policy{BaseEnv: []string{"PATH=/usr/bin"}, Mode: types.SandboxModeRequired}
 	env, _ := childEnv(sandbox.WithPolicy(t.Context(), p), p,
-		[]string{SandboxEnvVar + "=0", "XDG_STATE_HOME=/target/state"})
+		[]string{SandboxEnvVar + "=off", "XDG_STATE_HOME=/target/state"})
 
 	var got []string
 	for _, kv := range env {
@@ -318,7 +361,7 @@ func TestChildEnvHoldsTheSandboxFloor(t *testing.T) {
 			got = append(got, value)
 		}
 	}
-	assert.Equal(t, []string{"1"}, got)
+	assert.Equal(t, []string{"required"}, got)
 	assert.Equal(t, "/parent/cache", envValue(env, "MAGUS_CACHE_DIR"))
 	assert.Equal(t, "/target/state", envValue(env, "XDG_STATE_HOME"), "a location the target set wins")
 

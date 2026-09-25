@@ -2,37 +2,49 @@ package magus
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"time"
+	"sync"
 
-	"github.com/egladman/magus/internal/config"
-	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/observability"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/confinement"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
-// ApplySandbox applies the process-wide landlock sandbox and attaches the Policy to ctx,
-// or returns ctx unchanged when this workspace's sandbox mode is off. Any other mode
-// either attaches a policy or returns an error: it never runs unconfined. Callers
-// outside a target run (a `magus buzz` script) go through here so a script and a target
-// are confined by the same policy; Run calls it too, so there is one condition rather
-// than a copy per entry point. The write grant is narrowed to the acting lease's row,
-// resolved by job.ActingLease in the order the guard hook resolves it.
+// MaybeLaunchSandbox returns at once unless this process was started as the launcher
+// of a sandboxed child; then it confines itself and execs that child, never returning.
+//
+// On Linux, magus confines each process a sandboxed run starts by re-executing the
+// running binary as that launcher. A program that runs magus targets with the sandbox
+// on must therefore call this first in main, before any configuration, logging or
+// connection is set up, or its children start it again in their place.
+func MaybeLaunchSandbox() { sandbox.MaybeLaunch() }
+
+// SandboxMode is the sandbox mode this workspace's runs are confined under.
+func (m *Magus) SandboxMode() types.SandboxMode { return m.cfg.Sandbox.Mode.Resolved() }
+
+// ApplySandbox attaches this workspace's sandbox policy to ctx, or returns ctx unchanged
+// when its sandbox mode is off. Any other mode either attaches a policy or returns an
+// error: it never runs unconfined. Callers outside a target run (a `magus buzz` script)
+// go through here so a script and a target are confined by the same policy; Run calls it
+// too, so there is one condition rather than a copy per entry point. The write grant is
+// narrowed to the acting lease's row, resolved by job.ActingLease in the order the guard
+// hook resolves it.
+//
+// Nothing here confines this process: the policy's children are confined as each
+// starts (see sandbox.Command). Required mode is refused (MGS2012) here rather than at
+// the first child when the kernel cannot confine them, and best-effort without the
+// kernel layer says so once (MGS2005).
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	mode := m.cfg.Sandbox.Mode
 	if !mode.Enabled() {
 		return ctx, nil
 	}
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
-	p, err := confinement.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox)
+	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox)
 	if err != nil {
 		return ctx, err
 	}
@@ -40,90 +52,64 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, fmt.Errorf("sandbox: %w", err)
 	}
-	p = confinement.NarrowToLease(ctx, p, loc, lease, from)
-	return confinement.Apply(ctx, p, m.ws.Root, mode)
+	p = sandbox.NarrowToLease(ctx, p, loc, lease, from)
+	confines, err := p.KernelConfines()
+	if err != nil {
+		return ctx, err
+	}
+	if !confines {
+		warnKernelUnavailable(ctx)
+	}
+	// The binding checks sit below observability in the import graph, so the live
+	// provider reaches them as a recorder on the same ctx that carries the policy.
+	if prov := observability.FromContext(ctx); prov != nil {
+		ctx = sandbox.WithMetrics(ctx, prov)
+		recordRules(ctx, prov, p)
+	}
+	return sandbox.WithPolicy(ctx, p), nil
 }
 
-// ApplyUnionSandbox unions the landlock policies of every workspace root and
-// applies the combined ruleset to the current process exactly once. Roots whose
-// sandbox mode is off still contribute filesystem rules but get no binding-layer
-// policy. It is a no-op (returns nil) when every root's mode is off, and an MGS2012
-// error when a root requires the sandbox and the kernel cannot enforce it.
-//
-// This is the multi-workspace (server) counterpart to the per-workspace sandbox
-// that Run applies. It lives in the library so callers (the CLI server in
-// particular) never import internal/sandbox directly: policy assembly and
-// application stay behind one seam, so the two paths cannot drift.
-func ApplyUnionSandbox(ctx context.Context, roots []string) error {
-	if len(roots) == 0 {
-		return nil
-	}
+// warnedKernelUnavailable keeps MGS2005 to one line per process.
+var warnedKernelUnavailable sync.Once
 
-	policies := make([]*sandbox.Policy, 0, len(roots))
-	anyEnabled := false
-	required := ""
-	for _, root := range roots {
-		cfg, err := loadWorkspaceConfig(root)
-		if err != nil {
-			return err
-		}
-		if cfg.Sandbox.Mode.Resolved() == types.SandboxModeRequired {
-			required = root
-		}
-		anyEnabled = anyEnabled || cfg.Sandbox.Mode.Enabled()
-		p, err := confinement.FromConfig(root, resolveCacheDir(root, cfg), cfg.Sandbox)
-		if err != nil {
-			return err
-		}
-		policies = append(policies, p)
+// warnKernelUnavailable logs MGS2005 for a best-effort sandbox on a host without
+// landlock. A nested magus says nothing: the invocation that started it already did,
+// and a line per nested run would teach a reader to skip it.
+func warnKernelUnavailable(ctx context.Context) {
+	if procrun.CurrentLevel() > 0 {
+		return
 	}
-
-	if !anyEnabled {
-		return nil // no workspace requested kernel sandboxing
-	}
-
-	union := sandbox.UnionPolicies(policies...)
-	start := time.Now()
-	err := sandbox.Apply(union)
-	secs := time.Since(start).Seconds()
-	if err != nil {
-		if errors.Is(err, sandbox.ErrUnsupported) {
-			confinement.RecordApply(ctx, secs, "unsupported", "union", union)
-			if required != "" {
-				return confinement.ErrRequired(required, "the kernel cannot enforce it: "+err.Error())
-			}
-			slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
-				"kernel landlock unavailable; multi-workspace server running with binding-level checks only"),
-				"reason", err.Error())
-			confinement.MarkAppliedExternally(union.Fingerprint(), false)
-			return nil
+	warnedKernelUnavailable.Do(func() {
+		reason := "landlock reports ABI 0"
+		if _, err := sandbox.ABI(); err != nil {
+			reason = err.Error()
 		}
-		return fmt.Errorf("magus: apply union sandbox: %w", err)
-	}
-	confinement.MarkAppliedExternally(union.Fingerprint(), true)
-	confinement.RecordApply(ctx, secs, "applied", "union", union)
-	slog.InfoContext(ctx, "magus: applied union landlock ruleset",
-		"workspaces", len(roots),
-		"fingerprint", union.Fingerprint())
-	return nil
+		slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
+			"kernel landlock unavailable; children run under magus's binding checks and env allowlist only"),
+			"reason", reason)
+	})
 }
 
-// loadWorkspaceConfig loads root's magus.yaml with env overrides applied, falling
-// back to defaults when the file is absent: the resolution used for sandbox union.
-//
-// Absence is the only silent fallback, matching loadConfig: a MALFORMED magus.yaml read
-// as defaults would join a workspace that asked to be sandboxed to the server with no
-// sandbox at all, and say nothing about it.
-func loadWorkspaceConfig(root string) (config.Config, error) {
-	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return config.Config{}, fmt.Errorf("magus: load %s: %w", filepath.Join(root, "magus.yaml"), err)
+// recordRules reports the allow-rules p was built from under the workspace scope.
+func recordRules(ctx context.Context, prov observability.Provider, p *sandbox.Policy) {
+	var read, write, exec int64
+	for _, r := range p.FS.Rules {
+		if r.Read {
+			read++
 		}
-		cfg = config.Defaults()
+		if r.Write {
+			write++
+		}
+		if r.Exec {
+			exec++
+		}
 	}
-	if err := configgen.ApplyEnv(&cfg, os.Getenv); err != nil {
-		return config.Config{}, fmt.Errorf("magus: invalid configuration from the environment: %w", err)
-	}
-	return cfg, nil
+	prov.RecordSandboxRules(ctx, observability.SandboxRules{
+		Read:     read,
+		Write:    write,
+		Exec:     exec,
+		EnvExact: int64(len(p.Env.Names)),
+		EnvGlob:  int64(len(p.Env.Prefixes)),
+		Scope:    "workspace",
+	})
 }

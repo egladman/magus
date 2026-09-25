@@ -138,7 +138,7 @@ func (c *upstreamCaller) wrap(mod vm.Value, label, name string, guard upstreamGu
 	}
 	mod.MapSet(name, vm.DirectValue(label, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		orig := func() (vm.Value, error) { return c.call(ctx, fn, args) }
-		if sandbox.FromContext(ctx) == nil {
+		if sandbox.PolicyFromContext(ctx) == nil {
 			return orig()
 		}
 		return guard(ctx, args, orig)

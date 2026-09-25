@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,58 +65,45 @@ func TestAllowsEnv(t *testing.T) {
 	}
 }
 
-// TestApplyWithoutLandlockReportsUnsupported: Supported() false must mean Apply
-// reports ErrUnsupported, never a success and never a different error.
-func TestApplyWithoutLandlockReportsUnsupported(t *testing.T) {
-	if runtime.GOOS == "linux" && Supported() {
-		t.Skip("Apply would restrict this test process")
-	}
-	assert.ErrorIs(t, Apply(BuildPolicy(PolicyOptions{Workspace: t.TempDir()})), ErrUnsupported)
-	assert.NoError(t, Apply(nil), "Apply(nil) is a no-op")
-}
+// A file another tool runs code from after the run is refused inside the workspace's
+// own write grant, at any depth, and so are the git directories' hooks and config.
+func TestCheckWriteRefusesControlFiles(t *testing.T) {
+	ws := t.TempDir()
+	common := t.TempDir() // a linked worktree keeps its git dirs outside the checkout
+	gitDir := filepath.Join(common, "worktrees", "wt")
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, ".git", "hooks"), 0o755))
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(ws, ".git", "hooks"), filepath.Join(ws, "hooks-link")))
+	p := BuildPolicy(PolicyOptions{Workspace: ws, GitDir: gitDir, GitCommonDir: common})
+	ctx := t.Context()
 
-func TestUnionPoliciesMergesRules(t *testing.T) {
-	a := &Policy{
-		FS: filesystem.Ruleset{Rules: []filesystem.Rule{
-			{Path: "/shared", Read: true},
-			{Path: "/only-in-a", Read: true, Write: true},
-		}},
-		Env: env.Allowlist{Names: []string{"PATH", "HOME"}},
+	for _, rel := range []string{
+		".git", ".git/hooks/pre-commit", ".git/config", ".git/info/exclude", "hooks-link/pre-push",
+		"magus.yaml", "mise.toml", ".mise.toml", ".mise/tasks/build", ".tool-versions", ".envrc",
+		".claude/settings.json", ".cursor/rules/x.mdc", ".mcp.json", ".vscode/tasks.json",
+		".pre-commit-config.yaml", ".husky/pre-push", "lefthook.yml",
+		"pkg/sub/.envrc", "pkg/sub/mise.toml", "pkg/.claude/settings.json",
+	} {
+		assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), filesystem.ErrDenied, rel)
+		assert.NoError(t, p.CheckRead(ctx, filepath.Join(ws, rel)), "reads are not refused: %s", rel)
 	}
-	b := &Policy{
-		FS: filesystem.Ruleset{Rules: []filesystem.Rule{
-			{Path: "/shared", Write: true, Exec: true},
-			{Path: "/only-in-b", Read: true},
-		}},
-		Env: env.Allowlist{Names: []string{"PATH", "GOPATH"}, Prefixes: []string{"MISE_*"}},
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(gitDir, "config.worktree")), filesystem.ErrDenied,
+		"the worktree's own git dir is write-granted and its config is still refused")
+
+	for _, rel := range []string{"magus", "src/main.go", ".vscode/settings.json", ".gitignore", "docs/magus.yaml.md"} {
+		assert.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), rel)
 	}
-	u := UnionPolicies(nil, a, b)
-	assert.Equal(t, []filesystem.Rule{
-		{Path: "/shared", Read: true, Write: true, Exec: true},
-		{Path: "/only-in-a", Read: true, Write: true},
-		{Path: "/only-in-b", Read: true},
-	}, u.FS.Rules)
-	assert.Equal(t, env.Allowlist{Names: []string{"PATH", "HOME", "GOPATH"}, Prefixes: []string{"MISE_*"}}, u.Env)
-	assert.NotNil(t, UnionPolicies(), "the union of nothing is an empty policy")
-}
-
-func TestUnionDeduplicatesBaseEnv(t *testing.T) {
-	a := &Policy{BaseEnv: []string{"PATH=/usr/bin", "HOME=/home/u"}}
-	b := &Policy{BaseEnv: []string{"PATH=/usr/bin", "GOPATH=/home/u/go"}}
-	assert.Equal(t, []string{"PATH=/usr/bin", "HOME=/home/u", "GOPATH=/home/u/go"}, UnionPolicies(a, b).BaseEnv)
-}
-
-func TestUnionOfOnePolicyIsThatPolicy(t *testing.T) {
-	p := BuildPolicy(PolicyOptions{Workspace: t.TempDir()})
-	assert.Equal(t, p.Fingerprint(), UnionPolicies(p).Fingerprint())
+	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")), "git's own writes stay granted")
+	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")))
 }
 
 // noopMetrics satisfies MetricsRecorder without doing work. The benchmark stamps one
 // because recordCheck returns early without a recorder, and a real run always has one.
 type noopMetrics struct{}
 
-func (noopMetrics) RecordSandboxCheck(context.Context, string, string, string) {}
-func (noopMetrics) RecordSandboxEnvDropped(context.Context, string, int64)     {}
+func (noopMetrics) RecordSandboxCheck(context.Context, string, string, string)  {}
+func (noopMetrics) RecordSandboxEnvDropped(context.Context, string, int64)      {}
+func (noopMetrics) RecordSandboxApply(context.Context, float64, string, string) {}
 
 // benchPolicy returns a policy shaped like a real run's, plus the workspace root its last
 // rule guards. Rule paths go through ResolveRulePath: an unresolved rule matches nothing,

@@ -100,17 +100,20 @@ func LeaseFromContext(ctx context.Context) string {
 
 type sandboxFloorKey struct{}
 
-// WithSandboxFloor marks ctx as belonging to a run that must stay sandboxed. On a client
-// it makes [Forward] say so; on the server it is what the client said, and the handler
-// declines the run (ErrNotAdoptable) rather than execute it with less than the client had.
-func WithSandboxFloor(ctx context.Context) context.Context {
-	return context.WithValue(ctx, sandboxFloorKey{}, true)
+// WithSandboxFloor marks ctx as belonging to a run that must stay sandboxed at mode or
+// stronger. On a client it makes [Forward] say so; on the server it is what the client
+// said, and the handler declines the run (ErrNotAdoptable) rather than execute it with
+// less than the client had.
+func WithSandboxFloor(ctx context.Context, mode types.SandboxMode) context.Context {
+	return context.WithValue(ctx, sandboxFloorKey{}, mode.Resolved())
 }
 
-// SandboxFloorFromContext reports whether ctx was marked by [WithSandboxFloor].
-func SandboxFloorFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(sandboxFloorKey{}).(bool)
-	return v
+// SandboxFloorFromContext returns the mode [WithSandboxFloor] set, or off when unset.
+func SandboxFloorFromContext(ctx context.Context) types.SandboxMode {
+	if v, ok := ctx.Value(sandboxFloorKey{}).(types.SandboxMode); ok {
+		return v
+	}
+	return types.SandboxModeOff
 }
 
 // withJob marks ctx as a background job invocation (submitJob), distinct from an adopted run.
@@ -573,8 +576,8 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	ctx = WithLease(ctx, req.Lease)
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
-	if req.Sandbox {
-		ctx = WithSandboxFloor(ctx)
+	if req.Sandbox.Enabled() {
+		ctx = WithSandboxFloor(ctx, req.Sandbox)
 	}
 	// Adopt the client's ancestry (BeginInvocation appends the id minted below), so a run
 	// this server executes for a nested client recognizes the lock it holds for that

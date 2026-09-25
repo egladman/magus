@@ -278,7 +278,8 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 }
 
 // TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
-// hook through: a marker in the checkout's cache dir, read by the same job.ActingLease the
+// hook through: a marker keyed by the checkout's cache dir (job.MarkerPath, under the user
+// state dir), read by the same job.ActingLease the
 // sandbox resolves through. A marker that holds anything but a lease id is an error, and
 // the guard refuses the call: grading it as nobody's while the checkout says it is
 // somebody's is how every lease rule falls silent at once.

