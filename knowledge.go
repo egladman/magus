@@ -592,6 +592,17 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	}), true
 }
 
+// SymbolIndexedAt reports when the cached SCIP index of the project at projectAbsDir was
+// written under cacheDir, and false when there is none. A knowledge.symbols override that
+// points at an index in the tree is not consulted.
+func SymbolIndexedAt(cacheDir, projectAbsDir string) (time.Time, bool) {
+	info, err := os.Stat(symbols.IndexPath(cacheDir, projectAbsDir))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
 // SymbolOccurrences returns every exact source range where the symbol keyed by key
 // appears, with each range verified against the file on disk. It reads the SAME declared
 // indexes the graph is built from, so it can never disagree with `magus refs` about which

@@ -44,6 +44,17 @@ func isSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsSh
 func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []types.TargetGraphProject) Shard {
 	s := Shard{Name: symbolsShardName(project)}
 	seenFiles := map[string]bool{}
+	// A file several symbols define is sized by each of them from one read, so the first
+	// record that carries a size is as good as any.
+	sizes := map[string][2]int{}
+	for _, sym := range syms {
+		if sym.SourceLines == 0 && sym.SourceBytes == 0 {
+			continue
+		}
+		if path, _, ok := strings.Cut(sym.Source, ":"); ok {
+			sizes[path] = [2]int{sym.SourceLines, sym.SourceBytes}
+		}
+	}
 	noteFile := func(path, language string) {
 		if path == "" || seenFiles[path] {
 			return
@@ -52,6 +63,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		var attrs map[string]string
 		if language != "" {
 			attrs = map[string]string{attrLanguage: language}
+		}
+		if size, ok := sizes[path]; ok {
+			attrs = fileSizeAttrs(attrs, size[0], size[1])
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {

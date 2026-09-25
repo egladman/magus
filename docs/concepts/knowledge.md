@@ -202,13 +202,21 @@ current by the drift gate; do not hand-edit the output.)
 
 ```sh
 magus refs <name>                          # the definition + every reference, each as path:line
+magus refs <name> --definition             # the definition's exact lines, as path:start-end
+magus refs <name> --source                 # the definition's body itself
 magus explain "symbol:<id>"                # the node's `source` is the definition's path:line
+magus explain "file:<path>"                # a file's `lines` and `bytes`
 magus query "kind=symbol <name>" -o json   # each match's `.source` is "path:line"
 ```
 
-Symbol nodes carry their definition as `source: "path:line"`, and `refs` returns
-every reference the same way. An agent (or an MCP tool) can read the exact line
-straight from the graph and edit surgically instead of loading the whole file.
+Symbol nodes carry their definition as `source: "path:line"` and, where the indexer
+recorded an enclosing range, `def_end_line`; `refs` returns every reference the same
+way. `--definition` checks each range against the file on disk: `verified` when the
+file predates its index, `changed` (exit 1) when the symbol's name has left the start
+line, and `unverified` when the name is still there but the file was edited since, so
+the end may have moved. A symbol with no recorded end line says so. An
+agent (or an MCP tool) can read the exact lines straight from the graph and edit
+surgically instead of loading the whole file.
 
 **Where does risk concentrate?**
 

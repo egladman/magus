@@ -1492,6 +1492,14 @@ and says so rather than falling back to a text search - a grep result
 and an index result answer different questions, and quietly substituting
 one for the other is how a wrong answer looks right.
 
+--definition answers "where is the body" with the exact lines: each
+definition as path:start-end, from the index's enclosing range, checked
+against the file on disk: verified when the file predates its index,
+changed (exit 1) when the symbol's name has left the start line, and
+unverified when the name is there but the file was edited since. An index
+that recorded no end line says so instead of guessing one. --source adds
+the lines themselves.
+
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
 every other grep-shaped tool. It is the replacement a guard deny routes a
@@ -1502,6 +1510,8 @@ questions and are not meant to share a contract.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
+		{Name: "definition", Kind: FlagBool, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
+		{Name: "source", Kind: FlagBool, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n"},
 		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace"},
 		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
@@ -1513,6 +1523,8 @@ questions and are not meant to share a contract.`,
 		{"Every reference to a symbol", "magus refs Open"},
 		{"By fully-qualified node ID", "magus refs symbol:github.com/egladman/magus/Open"},
 		{"As JSON", "magus refs Open -o json"},
+		{"Where a symbol's body starts and ends", "magus refs Open --definition"},
+		{"A symbol's body, by name", "magus refs Open --source"},
 		{"Raw text search, no index needed", "magus refs TODO --text"},
 	},
 }
