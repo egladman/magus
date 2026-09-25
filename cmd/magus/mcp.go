@@ -147,7 +147,8 @@ func publishServerTrailBase() {
 }
 
 // startBridge opens the server's own workspace, keeps its graph and symbol indexes
-// current, and serves MCP and the console over HTTP when mcp.enabled allows. Called from
+// current, and serves MCP, the console and the APIs over loopback HTTP, and MCP and the APIs
+// on the server's own socket, when mcp.enabled allows. Called from
 // the server surface. cancel is the CancelFunc for the server's context; it is called if
 // the HTTP server exits for any reason other than ctx cancellation, so the server shuts
 // down rather than running on with MCP unavailable.
@@ -320,6 +321,10 @@ func bridgeServerOptions() []serverhttp.Option {
 	// Same registry the WorkspaceLister reports from.
 	if serverRegistry != nil {
 		opts = append(opts, serverhttp.WithActivityWorkspaces(serverRegistry.activityWorkspaces))
+	}
+	// The server's own socket carries MCP and the APIs beside its control routes.
+	if procServer != nil {
+		opts = append(opts, serverhttp.WithSocket(procServer))
 	}
 	return opts
 }
