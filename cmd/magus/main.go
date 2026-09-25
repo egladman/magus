@@ -114,6 +114,7 @@ func runCLI() int {
 	if exitCode >= 0 {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
+		pipeStageOf(rootCtx).linger()
 		recordPipeExit(args, code, interrupted)
 		return code
 	}
@@ -151,6 +152,7 @@ func runCLI() int {
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
+	pipeStageOf(rootCtx).linger()
 	recordPipeExit(args, code, interrupted)
 	return code
 }

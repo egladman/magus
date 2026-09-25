@@ -93,7 +93,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	}
 	_ = interactive.SaveLastTarget(chosen.Dir, targetName)
 
-	sink.EmitScope(ctx, chosen.Path, "")
+	sink.EmitScope(ctx, chosen.Path, "", []string{chosen.Path})
 
 	if *step {
 		ctx = withStepGate(ctx)
@@ -340,7 +340,7 @@ func openXRun(ctx context.Context, root string) (*magus.Magus, *magus.Sink, func
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	sink, cleanup, err := openRunSink(m, opts)
+	sink, cleanup, err := openRunSink(ctx, m, opts)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -404,7 +404,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 		}
 	}
 
-	sink.EmitScope(ctx, d.Project, "ref "+ref)
+	sink.EmitScope(ctx, d.Project, "ref "+ref, []string{d.Project})
 	if step {
 		ctx = withStepGate(ctx)
 	}

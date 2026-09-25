@@ -32,25 +32,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return targetUsage()
 	}
 	// Kept before anything reshapes them: --detach re-submits this invocation verbatim,
-	// so it needs the args as the user wrote them, chain and all.
+	// so it needs the args as the user wrote them.
 	origArgs := args
-
-	// The chain is split off the RAW args, before anything else touches them.
-	// splitTargetFromArgs partitions flags from positionals and reorders them
-	// (flags first), which would hoist a verb's own --path across the separator and
-	// leave the chain holding a bare flag.
-	args, chainArgs, chained := splitOnThen(args)
-
-	// Parsed before the run, not after it: a typo'd verb used to build the whole
-	// project and only then exit 2 on something checkable up front.
-	var chain chainPlan
-	if chained {
-		var proceed bool
-		var chainErr error
-		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
-			return chainErr
-		}
-	}
 
 	// Find the target even if global flags precede it (`magus run --dry-run build`);
 	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
@@ -224,7 +207,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(m, opts)
+	sink, closeSink, err := openRunSink(ctx, m, opts)
 	if err != nil {
 		return err
 	}
@@ -234,9 +217,31 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// ctx, not the server's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCwd(ctx)
-	targets, source, err := resolveTargets(ctx, m, parsedTarget, runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd})
+	sel := runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd}
+	inherited := false
+	// Projects flow forward: named projects win, and a run naming none takes what the
+	// record stage upstream of it ran on, the way xargs takes its arguments.
+	if len(projectArgs) == 0 && parsedTarget.Path == "" {
+		projects, upstream, ok, err := inheritedProjects(ctx)
+		if err != nil {
+			return err
+		}
+		if ok && len(projects) == 0 {
+			sink.EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf(
+				"pid %d, upstream of this run in a pipe, reported no projects, so this run ran nothing", upstream))
+			return nil
+		}
+		if ok {
+			// Workspace paths, so anchored at the root rather than the caller's cwd.
+			sel.projects, sel.cwd, inherited = projects, m.Root(), true
+		}
+	}
+	targets, source, err := resolveTargets(ctx, m, parsedTarget, sel)
 	if err != nil {
 		return err
+	}
+	if inherited {
+		source = "pipe"
 	}
 	// Fault tolerance by design: a target only some projects serve should skip (not
 	// error) the projects that lack it when the scope is the workspace or several
@@ -254,7 +259,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	sink.EmitScope(ctx, scopeLabel, source)
+	sink.EmitScope(ctx, scopeLabel, source, scopePaths(targets))
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
@@ -369,9 +374,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 
-	if chained {
-		return runChain(ctx, m, opts, targetName, targets, chain, readReturns(targetName))
-	}
+	sink.RecordValues(targetName, readReturns(targetName))
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		// No undeclared seeds: `magus run` names its own selection, so no changed file seeded it.
@@ -815,8 +818,7 @@ type runOutput struct {
 // glob is left over from a previous run and reporting it would claim this invocation
 // produced it. It DOES report the return value, because a dry run evaluates the
 // target body under a tracing context: the value is real, and omitting it made
-// `-o json` claim "no return value" for a target that had just produced one, while
-// `--then value` printed it.
+// `-o json` claim "no return value" for a target that had just produced one.
 func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
@@ -940,7 +942,7 @@ func detachToServer(ctx context.Context, root string, argv []string, wait bool) 
 	if err != nil {
 		return err
 	}
-	sink, closeSink, err := openSink(opts)
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return err
 	}

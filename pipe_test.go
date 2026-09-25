@@ -184,6 +184,131 @@ func TestAcquireDefersToAPredecessorThatHolds(t *testing.T) {
 	}
 }
 
+// A run reading its stdin as records drains it itself, so waiting on the upstream
+// neither spools stdin nor replaces it with a relay.
+func TestRecordReaderWaitsWithoutSpooling(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	ready := readyFile(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "400", "WRITE_AFTER": "records"})
+	upstreamOf(t, up, w)
+	waitForFile(t, ready, 5*time.Second)
+
+	proved := &pipeline{ready: make(chan struct{}), records: report.NewReader(strings.NewReader(""), nil)}
+	close(proved.ready)
+	stdio := &ProcessStdio{Stdin: r, pipeline: proved}
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(stdio), writingTo(io.Discard))
+	start := time.Now()
+	release, sp, err := l.takeRunLocks(context.Background(), []string{"p"})
+	if err != nil {
+		t.Fatalf("takeRunLocks: %v", err)
+	}
+	defer release()
+	if sp != nil {
+		t.Fatalf("spooled stdin that the record reader owns")
+	}
+	if waited := time.Since(start); waited < 200*time.Millisecond {
+		t.Fatalf("took p after %s, before the upstream released it", waited)
+	}
+	got, _ := io.ReadAll(r)
+	if string(got) != "records" {
+		t.Fatalf("stdin = %q, want the upstream's bytes untouched", got)
+	}
+}
+
+// ReadRecords takes the records off stdin and leaves every other byte where a target
+// reads it, in order, with the end of the stream intact.
+func TestReadRecordsRelaysWhatIsNotARecord(t *testing.T) {
+	r, w := shellPipe(t)
+	go func() {
+		_, _ = w.WriteString(`{"schema":5,"type":"run.scope","label":"a","projects":["a"]}` + "\npayload-1\n\n" +
+			`{"schema":5,"type":"run.target.result","project":"a","target":"emit","status":"ok","cache_hit":false}` + "\npayload-2")
+		_ = w.Close()
+	}()
+	in, err := ReadRecords(r)
+	if err != nil {
+		t.Fatalf("ReadRecords: %v", err)
+	}
+	lines, err := in.All(context.Background())
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	var got []string
+	for _, l := range lines {
+		got = append(got, l.Type)
+	}
+	if want := []string{report.TypeRunScope, report.TypeTargetResult}; !slices.Equal(got, want) {
+		t.Fatalf("records = %q, want %q", got, want)
+	}
+	rest, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read the relayed stdin: %v", err)
+	}
+	if string(rest) != "payload-1\n\npayload-2" {
+		t.Fatalf("relayed stdin = %q, want the upstream's other bytes", rest)
+	}
+}
+
+// TestReadByMagus proves the reading end of stdout: a process running this executable
+// reads it, anything else does not, and a stream that is no pipe proves nothing.
+func TestReadByMagus(t *testing.T) {
+	ctx := context.Background()
+
+	r, w := shellPipe(t)
+	reader := pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"})
+	reader.Stdin = r
+	startStage(t, reader)
+	_ = r.Close()
+	if !ReadByMagus(ctx, w) {
+		t.Errorf("a stage running this executable reads the pipe, but ReadByMagus = false")
+	}
+
+	r2, w2 := shellPipe(t)
+	other := exec.Command("sleep", "3")
+	other.Stdin = r2
+	startStage(t, other)
+	_ = r2.Close()
+	if ReadByMagus(ctx, w2) {
+		t.Errorf("sleep reads the pipe, but ReadByMagus = true")
+	}
+
+	file, err := os.Create(filepath.Join(t.TempDir(), "out"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if ReadByMagus(ctx, file) || ReadByMagus(ctx, nil) {
+		t.Errorf("ReadByMagus proved a reader of a file")
+	}
+}
+
+// TestRecordUpstream proves the writing end of stdin: a stage of this executable whose
+// argv writes records, and never one whose argv does not or a stage of another tool.
+func TestRecordUpstream(t *testing.T) {
+	ctx := context.Background()
+	writes := func(argv []string) bool { return slices.Contains(argv, "records") }
+
+	r, w := shellPipe(t)
+	up := pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}, "records")
+	upstreamOf(t, up, w)
+	pid, ok := RecordUpstream(ctx, r, writes)
+	if !ok || pid != up.Process.Pid {
+		t.Errorf("RecordUpstream = %d, %v; want the record stage %d", pid, ok, up.Process.Pid)
+	}
+
+	r2, w2 := shellPipe(t)
+	upstreamOf(t, pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}), w2)
+	if _, ok := RecordUpstream(ctx, r2, writes); ok {
+		t.Errorf("proved a stage whose argv writes no records")
+	}
+
+	r3, w3 := shellPipe(t)
+	upstreamOf(t, exec.Command("sleep", "3"), w3)
+	if _, ok := RecordUpstream(ctx, r3, func([]string) bool { return true }); ok {
+		t.Errorf("proved sleep as a record stage")
+	}
+}
+
 // TestAcquireDefersBeforeThePredecessorLocks is the order a plain fail-fast lost
 // silently: the downstream got to the lock first, blocked reading stdin while holding
 // it, and the upstream was refused.

@@ -1,0 +1,16 @@
+import "std";
+import "pipe";
+
+// magus run build . | magus buzz export.buzz
+// Copies every file the build declared and produced under dist-copy/, keeping the tree.
+try {
+    foreach (rec in pipe\all()) {
+        if (rec.@"type" == "run.target.result") {
+            foreach (a in pipe\outputs(rec)) {
+                std\print(pipe\exportTo(a, dest: "dist-copy/{a.path}"));
+            }
+        }
+    }
+} catch (e) {
+    std\print("no magus run is piped into this script");
+}
