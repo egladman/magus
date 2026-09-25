@@ -19,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/libs/mergequeue/types"
 	"github.com/egladman/magus/libs/mergequeue/types/gen/mocks"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // run is the storage behind one CI run's listing: zips served over https to a request
@@ -33,7 +34,13 @@ type run struct {
 	fetched []string
 }
 
-const runID = "acme/widgets/runs/7"
+const (
+	runID    = "acme/widgets/runs/7"
+	workflow = ".github/workflows/queue.yaml"
+)
+
+// trusted is the origin of a run main's own queue workflow made.
+var trusted = types.RunOrigin{Repo: "acme/widgets", HeadRepo: "acme/widgets", HeadBranch: "main", Event: "push", BranchEvent: true, Definition: workflow}
 
 func newRun(t *testing.T) *run {
 	r := &run{t: t, lister: mocks.NewMockArtifactLister(t), zips: map[string][]byte{}, failZip: map[string]bool{}}
@@ -68,13 +75,13 @@ func (r *run) artifact(name string, files map[string][]byte) types.Artifact {
 
 // lists expects one more listing of the run, holding artifacts.
 func (r *run) lists(complete bool, artifacts ...types.Artifact) {
-	r.lister.EXPECT().ListArtifacts(mock.Anything, runID).Return(types.ArtifactListing{Complete: complete,
+	r.lister.EXPECT().ListArtifacts(mock.Anything, runID).Return(types.ArtifactListing{Run: trusted, Complete: complete,
 		Headers: map[string]string{"Authorization": "Bearer tok"}, Artifacts: artifacts}, nil).Once()
 }
 
 func (r *run) follower() *ArtifactFollower {
-	return &ArtifactFollower{Lister: r.lister, Source: runID, Path: filepath.Join(r.t.TempDir(), "verdicts"), Follow: true, Interval: 1,
-		Client: r.srv.Client()}
+	return &ArtifactFollower{Lister: r.lister, Source: runID, Path: filepath.Join(r.t.TempDir(), "verdicts"), Branch: "main", Definition: workflow,
+		Follow: true, Interval: 1, Client: r.srv.Client()}
 }
 
 func zipOf(t *testing.T, files map[string][]byte) []byte {
@@ -206,13 +213,56 @@ func TestArtifactFollowerStopsWhenTheListingFails(t *testing.T) {
 func TestArtifactFollowerRefusesAMissingRequiredField(t *testing.T) {
 	lister := mocks.NewMockArtifactLister(t)
 	for name, f := range map[string]*ArtifactFollower{
-		"lister": {Source: "1", Path: t.TempDir()},
-		"source": {Lister: lister, Path: t.TempDir()},
-		"path":   {Lister: lister, Source: "1"},
+		"lister":     {Source: "1", Path: t.TempDir(), Branch: "main", Definition: workflow},
+		"source":     {Lister: lister, Path: t.TempDir(), Branch: "main", Definition: workflow},
+		"path":       {Lister: lister, Source: "1", Branch: "main", Definition: workflow},
+		"branch":     {Lister: lister, Source: "1", Path: t.TempDir(), Definition: workflow},
+		"definition": {Lister: lister, Source: "1", Path: t.TempDir(), Branch: "main"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := f.Poll(context.Background())
-			require.EqualError(t, err, "artifact follower needs a lister, a source and a path")
+			require.EqualError(t, err, "artifact follower needs a lister, a source, a path, a branch and a definition")
+		})
+	}
+}
+
+// A run a pull request started ran the pull request's own workflow file, which can
+// upload any plan and any verdict; so can a fork's run, another branch's, and another
+// workflow's. Each is refused on its first listing, before anything is downloaded.
+func TestArtifactFollowerRefusesARunTheBaseBranchsQueueWorkflowDidNotMake(t *testing.T) {
+	for name, tc := range map[string]struct {
+		edit func(o *types.RunOrigin)
+		want string
+	}{
+		"a pull request's event": {func(o *types.RunOrigin) { o.Event, o.BranchEvent = "pull_request", false },
+			`"pull_request" started it, and that event runs a definition a change supplied`},
+		"a review's event": {func(o *types.RunOrigin) { o.Event, o.BranchEvent = "pull_request_review", false },
+			`"pull_request_review" started it, and that event runs a definition a change supplied`},
+		"a fork": {func(o *types.RunOrigin) { o.HeadRepo = "mallory/widgets" },
+			`it ran a commit of "mallory/widgets", not of "acme/widgets"`},
+		"another branch": {func(o *types.RunOrigin) { o.HeadBranch = "feature" },
+			`it ran on "feature", not "main"`},
+		"another workflow": {func(o *types.RunOrigin) { o.Definition = ".github/workflows/evil.yaml" },
+			`it ran ".github/workflows/evil.yaml", not ".github/workflows/queue.yaml"`},
+		"no repository": {func(o *types.RunOrigin) { o.Repo, o.HeadRepo = "", "" },
+			"the provider named no repository for it"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRun(t)
+			origin := trusted
+			tc.edit(&origin)
+			forged := r.artifact(PlanArtifact, map[string][]byte{PlanFile: planBytes(t, "1")})
+			verdict := r.artifact(VerdictArtifactPrefix+"1", verdictFiles(t, "1"))
+			r.lister.EXPECT().ListArtifacts(mock.Anything, runID).Return(types.ArtifactListing{Run: origin, Complete: true,
+				Headers: map[string]string{"Authorization": "Bearer tok"}, Artifacts: []types.Artifact{forged, verdict}}, nil).Once()
+			f := r.follower()
+			_, _, err := f.Plan(context.Background())
+			var diag *magustypes.DiagnosticError
+			require.ErrorAs(t, err, &diag)
+			assert.Equal(t, magustypes.QueueRunUntrusted, diag.Code)
+			assert.ErrorContains(t, err, tc.want+"; apply reads nothing it uploaded")
+			assert.Empty(t, r.fetched, "nothing of the run is downloaded")
+			assert.NoFileExists(t, filepath.Join(f.Path, PlanFile))
 		})
 	}
 }
@@ -285,11 +335,11 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 	}))
 	t.Cleanup(api.Close)
 	lister := mocks.NewMockArtifactLister(t)
-	lister.EXPECT().ListArtifacts(mock.Anything, "r").Return(types.ArtifactListing{Complete: true,
+	lister.EXPECT().ListArtifacts(mock.Anything, "r").Return(types.ArtifactListing{Run: trusted, Complete: true,
 		Headers: map[string]string{"Authorization": "Bearer tok", "Private-Token": "tok"},
 		Artifacts: []types.Artifact{{Name: VerdictArtifactPrefix + "1", URL: api.URL + "/zip"},
 			{Name: VerdictArtifactPrefix + "2", URL: api.URL + "/downgrade"}}}, nil)
-	f := &ArtifactFollower{Lister: lister, Source: "r", Path: filepath.Join(t.TempDir(), "v"), Follow: true, Client: api.Client()}
+	f := &ArtifactFollower{Lister: lister, Source: "r", Path: filepath.Join(t.TempDir(), "v"), Branch: "main", Definition: workflow, Follow: true, Client: api.Client()}
 	f.Client.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true // the storage server's own certificate
 	batch, err := f.Poll(context.Background())
 	require.NoError(t, err)

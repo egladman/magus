@@ -585,6 +585,9 @@ func serverStop(ctx context.Context, args []string) error {
 	// server.address, or a stale socket), so a failed status query means nothing to stop.
 	addr := resolveServerAddr(tf.Socket)
 	st, qerr := proc.QueryStatus(ctx, addr)
+	if proc.ServerOutdated(qerr) {
+		return qerr
+	}
 	if qerr != nil {
 		fmt.Fprintf(os.Stderr, "magus: no server is running at %s\n", addr)
 		return errSilent{exitCode: 1}
@@ -948,8 +951,11 @@ func serverReload(ctx context.Context, args []string) error {
 	// sure nothing is holding an old config", and nothing is.
 	addr := resolveServerAddr(socket)
 	if _, qerr := proc.QueryStatus(ctx, addr); qerr != nil {
+		if proc.ServerOutdated(qerr) {
+			return qerr
+		}
 		fmt.Fprintln(os.Stderr, "magus: no server is running; every command already reads the current config")
-		return nil //nolint:nilerr // no server is the success case here: nothing is holding an old config
+		return nil
 	}
 
 	dropped, busy, err := proc.ReloadConfig(ctx, addr)

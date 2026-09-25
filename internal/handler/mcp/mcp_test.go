@@ -439,3 +439,38 @@ func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn ha
 		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
 		nil, fn)
 }
+
+func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
+	ok := func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		return mcplib.NewToolResultText("ran"), nil
+	}
+	req := mcplib.CallToolRequest{}
+	req.Params.Name = "magus_status"
+
+	cases := map[string]struct {
+		cred    types.Credential
+		allowed bool
+	}{
+		"socket peer":   {types.CredentialSocketPeer, true},
+		"connector":     {types.Credential{Class: types.ClassStored, Grant: types.GrantConnector}, true},
+		"operator":      {types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}, true},
+		"console token": {types.Credential{Class: types.ClassStored, Grant: types.GrantConsole}, false},
+		"no credential": {types.Credential{}, false},
+		"viewer grant":  {types.Credential{Class: types.ClassSocketPeer, Grant: types.GrantViewer}, false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			res, err := authorize(ok)(trail.ContextWithCredential(t.Context(), c.cred), req)
+			require.NoError(t, err)
+			text := allText(res)
+			if c.allowed {
+				assert.False(t, res.IsError, text)
+				assert.Equal(t, "ran", text)
+				return
+			}
+			assert.True(t, res.IsError)
+			assert.Contains(t, text, string(types.GrantInsufficient))
+			assert.Contains(t, text, "magus_status needs mcp=write")
+		})
+	}
+}

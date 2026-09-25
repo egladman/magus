@@ -1,24 +1,27 @@
 package proc
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -284,19 +287,11 @@ func TestDialRespectsContextCancellation(t *testing.T) {
 	assert.LessOrEqual(t, elapsed, time.Second, "Dial should return near-instantly with cancelled ctx")
 }
 
-// newWedgedServer starts a raw unix-socket listener that accepts one connection,
-// drains the request frame, and then never replies, simulating the wedged-server
-// symptom documented elsewhere in this repo as "server-adopted runs ignore
-// SIGTERM ... the goroutine parked in proc.readFrame". It returns a unix:// address.
-//
-// The accept goroutine blocks in io.Copy(io.Discard, conn) rather than forever: once
-// the client gives up (its deferred conn.Close fires after readFrameCtx returns) the
-// server side sees EOF and this goroutine exits, so the test leaks nothing.
-//
-// Uses a short-named temp dir (like New's real sockName, not t.TempDir()): the
-// unix socket path max is ~104 bytes on darwin, and t.TempDir() embeds the full
-// test name, which overflows that limit for these test names.
-func newWedgedServer(t *testing.T) string {
+// rawServer starts a raw unix-socket listener that hands its one connection to serve, and
+// returns its unix:// address. Uses a short-named temp dir (like New's real sockName, not
+// t.TempDir()): the unix socket path max is ~104 bytes on darwin, and t.TempDir() embeds the
+// full test name, which overflows that limit for these test names.
+func rawServer(t *testing.T, serve func(net.Conn)) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "magus-w")
 	require.NoError(t, err)
@@ -312,18 +307,82 @@ func newWedgedServer(t *testing.T) string {
 			return
 		}
 		defer conn.Close()
-		_, _, _ = readFrame(conn) // drain the request so the client's write never blocks
-		_, _ = io.Copy(io.Discard, conn)
+		serve(conn)
 	}()
 	return "unix://" + addr
 }
 
-// TestShutdownRespectsContextCancellation is the B-1 regression test: before the
-// fix, Shutdown's readFrame(conn) call used a plain io.Reader with no deadline and
-// completely ignored ctx once past Dial, so a server that accepted the connection
-// and never replied blocked Shutdown forever; ctx cancellation could not unblock
-// it. Pre-fix this test hangs past the hard bound below; post-fix it returns
-// promptly with a context error.
+// newWedgedServer accepts one connection, reads whatever the client sends, and never
+// replies: a wedged server. The read ends once the client gives up and closes, so the test
+// leaks nothing.
+func newWedgedServer(t *testing.T) string {
+	return rawServer(t, func(conn net.Conn) { _, _ = io.Copy(io.Discard, conn) })
+}
+
+// oldLineServer answers the way a server from before the socket carried HTTP does: it reads
+// the request's first line as a JSONL frame, fails to decode it, and writes one error frame.
+func oldLineServer(t *testing.T) string {
+	return rawServer(t, func(conn net.Conn) {
+		_, _ = bufio.NewReader(conn).ReadBytes('\n')
+		_, _ = conn.Write([]byte(`{"type":"error","message":"proc: decode frame type: invalid character 'P' looking for beginning of value"}` + "\n"))
+	})
+}
+
+// A client that meets a server still on the old line protocol gets MGS3025, which says to
+// restart it, on every operation rather than a transport error nobody can act on.
+func TestAClientMeetingAnOldServerIsToldToRestartIt(t *testing.T) {
+	for name, call := range map[string]func(addr string) error{
+		"status":   func(addr string) error { _, err := QueryStatus(t.Context(), addr); return err },
+		"shutdown": func(addr string) error { return Shutdown(t.Context(), addr) },
+		"reload":   func(addr string) error { _, _, err := ReloadConfig(t.Context(), addr); return err },
+		"job": func(addr string) error {
+			_, err := SubmitJob(t.Context(), addr, []string{"graph", "build"}, "")
+			return err
+		},
+		"forward": func(addr string) error {
+			t.Setenv("MAGUS_PROC_SOCKET", addr)
+			_, err := Forward(t.Context(), []string{"run", "build"}, "", "")
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := call(oldLineServer(t))
+			var de *types.DiagnosticError
+			require.ErrorAs(t, err, &de)
+			assert.Equal(t, types.ServerProtocolOutdated, de.Code)
+			assert.Contains(t, err.Error(), "restart it")
+			assert.True(t, ServerOutdated(err))
+			assert.False(t, NotAdopted(err), "an outdated server is a failure to say out loud, not a quiet local fallback")
+		})
+	}
+}
+
+// A client still on the old line protocol reaches a new server's HTTP parser, which refuses
+// its frame as a malformed request. Nothing runs.
+func TestAnOldLineClientRunsNothing(t *testing.T) {
+	var called atomic.Bool
+	srv, err := New(Options{
+		Handler: func(context.Context, []string) error { called.Store(true); return nil },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	ep, err := endpoint.Parse(srv.Addr())
+	require.NoError(t, err)
+	conn, err := ep.Dial(t.Context())
+	require.NoError(t, err)
+	defer conn.Close()
+	_, err = conn.Write([]byte(`{"type":"run","args":["run","build"],"cwd":"/tmp","protocol":"v2"}` + "\n"))
+	require.NoError(t, err)
+	reply, err := io.ReadAll(conn)
+	require.NoError(t, err)
+	assert.True(t, bytes.HasPrefix(reply, []byte("HTTP/1.1 400")), "%q", reply)
+	assert.False(t, called.Load())
+}
+
+// TestShutdownRespectsContextCancellation is the B-1 regression test: a server that
+// accepts the connection and never replies must not block Shutdown past ctx.
 func TestShutdownRespectsContextCancellation(t *testing.T) {
 	addr := newWedgedServer(t)
 
@@ -413,88 +472,90 @@ func TestShutdownRPC(t *testing.T) {
 	t.Error("server still responding after Shutdown; expected it to stop")
 }
 
-// TestShutdownIgnoresWrongMagic verifies that a Shutdown request with the wrong
-// magic string is silently ignored (server keeps running).
-func TestShutdownIgnoresWrongMagic(t *testing.T) {
+// TestSubmitJobRoundTrip submits a background job over the socket: the reply names its
+// invocation at once, and the handler then runs it as a job.
+func TestSubmitJobRoundTrip(t *testing.T) {
+	got := make(chan []string, 1)
 	srv, err := New(Options{
-		Handler: func(_ context.Context, args []string) error { return nil },
+		Handler: func(ctx context.Context, args []string) error {
+			if IsJob(ctx) {
+				got <- args
+			}
+			return nil
+		},
 	})
 	require.NoError(t, err)
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	// A QueryStatus with an empty magic is silently ignored by the server.
-	// Re-use QueryStatus as a liveness probe — server should still answer.
-	_, err = QueryStatus(context.Background(), srv.Addr())
-	require.NoError(t, err, "QueryStatus before shutdown attempt")
-}
-
-// TestWireIsJSONL verifies that a raw connection receives exactly one
-// newline-terminated JSON object per reply with no embedded newlines.
-func TestWireIsJSONL(t *testing.T) {
-	srv, err := New(Options{
-		Handler: func(_ context.Context, _ []string) error { return nil },
-	})
+	inv, err := SubmitJob(t.Context(), srv.Addr(), []string{"graph", "build"}, "")
 	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	ep, err := endpoint.Parse(srv.Addr())
-	require.NoError(t, err)
-	conn, err := ep.Dial(context.Background())
-	require.NoError(t, err)
-	defer conn.Close()
-
-	// Write a minimal run request using raw JSON so we control the wire bytes.
-	frame := `{"type":"run","args":["run","build","wire-test"],"cwd":"/tmp","protocol":"v2"}` + "\n"
-	_, err = conn.Write([]byte(frame))
-	require.NoError(t, err)
-
-	// Read the reply — should be exactly one line ending with \n.
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	require.NoError(t, err)
-	reply := buf[:n]
-
-	assert.True(t, bytes.HasSuffix(reply, []byte("\n")), "reply does not end with \\n: %q", reply)
-	inner := reply[:len(reply)-1]
-	assert.False(t, bytes.Contains(inner, []byte("\n")), "reply contains embedded newline: %q", reply)
-	assert.True(t, json.Valid(inner), "reply is not valid JSON: %q", inner)
-}
-
-// TestProtocolMismatchRejectsV1 verifies that sending "protocol":"v1" causes
-// the server to return an error frame and Forward surfaces it as a Go error.
-func TestProtocolMismatchRejectsV1(t *testing.T) {
-	srv, err := New(Options{
-		Handler: func(_ context.Context, _ []string) error { return nil },
-	})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	ep, err := endpoint.Parse(srv.Addr())
-	require.NoError(t, err)
-	conn, err := ep.Dial(context.Background())
-	require.NoError(t, err)
-	defer conn.Close()
-
-	// Deliberately send the old protocol version.
-	frame := `{"type":"run","args":["run","build","x"],"cwd":"/tmp","protocol":"v1"}` + "\n"
-	_, err = conn.Write([]byte(frame))
-	require.NoError(t, err)
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	require.NoError(t, err)
-	reply := buf[:n]
-
-	var envelope struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
+	assert.NotEmpty(t, inv)
+	select {
+	case args := <-got:
+		assert.Equal(t, []string{"graph", "build"}, args)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the job never ran")
 	}
-	require.NoError(t, json.Unmarshal(bytes.TrimRight(reply, "\n"), &envelope), "unmarshal reply")
-	assert.Equal(t, "error", envelope.Type)
-	assert.NotEmpty(t, envelope.Message, "error reply has empty message")
+}
+
+func TestReloadConfigRoundTrip(t *testing.T) {
+	srv, err := New(Options{
+		Handler:        func(context.Context, []string) error { return nil },
+		ConfigReloader: func() (int, int) { return 3, 1 },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	dropped, busy, err := ReloadConfig(t.Context(), srv.Addr())
+	require.NoError(t, err)
+	assert.Equal(t, [2]int{3, 1}, [2]int{dropped, busy})
+}
+
+// TestSocketRoutes pins the socket's route table from outside: each operation answers on its
+// own method and path, a wrong method or an unknown /proc/ path is a 404 that runs nothing,
+// and the paths outside /proc/ belong to whatever is mounted, 404 until something is.
+func TestSocketRoutes(t *testing.T) {
+	var called atomic.Bool
+	srv, err := New(Options{
+		Handler: func(context.Context, []string) error { called.Store(true); return nil },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	ep, err := endpoint.Parse(srv.Addr())
+	require.NoError(t, err)
+	client := socketClient(ep)
+
+	do := func(method, path string) int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), method, socketURL(path), strings.NewReader(`{"args":["run","build"]}`))
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	assert.Equal(t, http.StatusOK, do(http.MethodGet, pathStatus))
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, pathReload))
+	assert.Equal(t, http.StatusNotFound, do(http.MethodGet, pathRun), "a run is a POST")
+	assert.Equal(t, http.StatusNotFound, do(http.MethodPost, "/proc/v0/run"))
+	assert.False(t, called.Load(), "no refused request reached the handler")
+	assert.Equal(t, http.StatusNotFound, do(http.MethodPost, "/mcp"), "nothing is mounted yet")
+
+	if !srv.peerChecked {
+		return
+	}
+	unmount, err := srv.Mount(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if trail.CredentialFromContext(r.Context()) != types.CredentialSocketPeer {
+			w.WriteHeader(http.StatusTeapot)
+		}
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, do(http.MethodPost, "/mcp"), "the mount serves the socket peer's credential")
+	unmount()
+	assert.Equal(t, http.StatusNotFound, do(http.MethodPost, "/mcp"), "unmounted")
 }
 
 // TestForwardArgsWithNewline confirms that an embedded newline in an arg is

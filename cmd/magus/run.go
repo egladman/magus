@@ -933,6 +933,9 @@ func withoutDetachFlag(args []string) []string {
 func detachToServer(ctx context.Context, root string, argv []string, wait bool) error {
 	addr := resolveServerAddr("")
 	if _, serr := proc.QueryStatus(ctx, addr); serr != nil {
+		if proc.ServerOutdated(serr) {
+			return serr
+		}
 		return types.WrapDiagnostic(types.ServerRequired, nil,
 			"--detach hands the work to the server, and none is running at %s; start one with `%s`", addr, hint.ServerStart)
 	}

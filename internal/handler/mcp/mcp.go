@@ -120,8 +120,9 @@ var ToolNeed = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
 
 // authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
 // The credential is the one on ctx: the server's bearer guard stamps the bearer it verified,
-// and ServeStdio stamps types.CredentialStdio. A ctx carrying neither holds the zero
-// credential, which grants nothing.
+// ServeStdio stamps types.CredentialStdio, and the socket peer guard stamps
+// types.CredentialSocketPeer. A ctx carrying none of them holds the zero credential, which
+// grants nothing.
 func authorize(fn handlerFn) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		cred := trail.CredentialFromContext(ctx)

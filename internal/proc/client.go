@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -17,31 +15,19 @@ import (
 // statusQueryTimeout caps the QueryStatus round-trip; prevents hung servers from blocking forever.
 const statusQueryTimeout = 5 * time.Second
 
-// Forward dials [SocketEnv], delegates args, and returns the exit code.
+// Forward delegates args to the server [SocketEnv] names and returns the exit code.
 // On any transport error callers should fall back to running locally.
 // Pass "" for root when unknown; the server resolves it from Cwd.
 func Forward(ctx context.Context, args []string, version, root string) (int, error) {
-	raw := os.Getenv(SocketEnv)
-	if raw == "" {
+	addr := os.Getenv(SocketEnv)
+	if addr == "" {
 		return 0, fmt.Errorf("proc: forward: %s not set", SocketEnv)
 	}
-
-	ep, err := endpoint.Parse(raw)
-	if err != nil {
-		return 0, fmt.Errorf("proc: forward: invalid %s: %w", SocketEnv, err)
-	}
-
-	conn, err := ep.Dial(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("proc: forward: dial %s: %w", ep, err)
-	}
-	defer func() { _ = conn.Close() }()
 
 	cwd, _ := os.Getwd()
 	// Send the adoption identity, not the raw display version: a dev build is fingerprinted
 	// from its VCS stamp so it never matches a differently-built dev server (see
-	// adoptionIdentity). A stale pre-fix server compares this against its stored "unknown"
-	// and mismatches, so the fix fails closed against old servers too.
+	// adoptionIdentity).
 	// The ancestry travels with the request because the server, not this process, is what
 	// takes the project locks for an adopted run: without it the server cannot tell a
 	// lock held for THIS client's parent from one held for an unrelated client.
@@ -51,86 +37,61 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	// Read through trail.LeaseFromEnv rather than the raw variable so a malformed
 	// value is dropped here, once, by the same rule every other channel applies.
 	req := runRequest{
-		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: protocolV2,
+		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root,
 		Ancestors: types.InvocationAncestorsFromContext(ctx),
 		Lease:     trail.LeaseFromEnv(),
 	}
-	if err := writeFrame(conn, typeRun, req); err != nil {
-		return 0, fmt.Errorf("proc: forward: write: %w", err)
-	}
-
-	typ, line, err := readFrameCtx(ctx, conn)
+	reply, err := roundTrip[runReply](ctx, addr, runExchange, req)
 	if err != nil {
-		return 0, fmt.Errorf("proc: forward: read: %w", err)
+		return 0, err
 	}
-	if typ == typeError {
-		var er errorReply
-		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
-			return 0, decodeWireError(er.Message)
-		}
-		return 0, fmt.Errorf("proc: forward: server error (undecodable)")
-	}
-	if typ != typeRunReply {
-		return 0, fmt.Errorf("proc: forward: unexpected reply type %q", typ)
-	}
-
-	var reply runReply
-	if err := json.Unmarshal(line, &reply); err != nil {
-		return 0, fmt.Errorf("proc: forward: decode reply: %w", err)
-	}
-	// An adopted run's failure reason has to be SAID. The server hands it back in
-	// reply.Err and this used to drop it, on the reasoning that the exit code is what
-	// callers act on, which is true, and left the user with a bare status and no reason,
-	// because the adopted handler returns its error to the server instead of printing it
-	// the way a local dispatch does. Emitted through slog so it renders exactly as the
-	// local path's error does; the exit code is still what the caller returns on.
+	// An adopted run's failure reason has to be SAID. The adopted handler returns its error
+	// to the server instead of printing it the way a local dispatch does, so this is the one
+	// place it reaches the user. Emitted through slog so it renders exactly as the local
+	// path's error does; the exit code is still what the caller returns on.
 	if reply.ExitCode != 0 && reply.Err != "" {
 		slog.ErrorContext(ctx, reply.Err)
 	}
 	return reply.ExitCode, nil
 }
 
-// QueryStatus dials the proc server at addr and returns a live pool snapshot.
+// QueryStatus asks the proc server at addr for a live pool snapshot.
 // addr accepts a unix:// URL or a bare path.
 func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
-	req := statusRequest{Magic: statusMagic, Protocol: protocolV2}
-	reply, err := roundTrip[StatusReply](ctx, addr, statusExchange, req)
+	reply, err := roundTrip[StatusReply](ctx, addr, statusExchange, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &reply, nil
 }
 
-// SubmitJob dials the proc server at addr and submits a fire-and-forget background job:
-// the server runs `magus <args>` asynchronously and this returns as soon as it is
-// accepted, with the job's invocation id (a Dashboard deep-link). It scopes the job to
-// the caller's working directory (computed here, like Forward, so there is no
-// transposition-prone dir argument); the server walks up from it to the workspace root.
-// Used by the VCS refresh hook, which must not block a checkout. addr accepts a unix://
-// URL or a path. version is the caller's build version; it is sent as an adoption identity
-// (see adoptionIdentity) so a background job is version-gated exactly like a forwarded run
-// - a stale dev server will not silently run a fresh client's job with the wrong code.
+// SubmitJob submits a fire-and-forget background job to the proc server at addr: the
+// server runs `magus <args>` asynchronously and this returns as soon as it is accepted, with
+// the job's invocation id (a Dashboard deep-link), or "" when an identical job already in
+// flight absorbed it. It scopes the job to the caller's working directory (computed here,
+// like Forward, so there is no transposition-prone dir argument); the server walks up from it
+// to the workspace root. Used by the VCS refresh hook, which must not block a checkout. addr
+// accepts a unix:// URL or a path. version is the caller's build version; it is sent as an
+// adoption identity (see adoptionIdentity) so a background job is version-gated exactly like
+// a forwarded run.
 func SubmitJob(ctx context.Context, addr string, args []string, version string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("proc: job: getwd: %w", err)
 	}
-	req := jobRequest{Magic: jobMagic, Args: args, Version: adoptionIdentity(version), Protocol: protocolV2, Cwd: cwd}
+	req := jobRequest{Args: args, Version: adoptionIdentity(version), Cwd: cwd}
 	reply, err := roundTrip[jobReply](ctx, addr, jobExchange, req)
 	if err != nil {
 		return "", err
 	}
-	if reply.Err != "" {
-		return "", fmt.Errorf("proc: job: %s", reply.Err)
-	}
 	return reply.Inv, nil
 }
 
-// Shutdown dials the proc server at addr and requests a graceful shutdown.
+// Shutdown asks the proc server at addr to shut down gracefully. It returns once the server
+// has accepted the request, not once it has exited.
 // addr accepts a unix:// URL or a bare path.
 func Shutdown(ctx context.Context, addr string) error {
-	req := shutdownRequest{Magic: shutdownMagic, Protocol: protocolV2}
-	_, err := roundTrip[shutdownReply](ctx, addr, shutdownExchange, req)
+	_, err := roundTrip[struct{}](ctx, addr, shutdownExchange, nil)
 	return err
 }
 
@@ -151,7 +112,7 @@ func RunChildSync(ctx context.Context, lim *cache.Limiter, fn func() error) erro
 // A partial reset that leaves the server running, for the case where editing
 // magus.yaml would otherwise mean restarting it.
 func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err error) {
-	reply, err := roundTrip[configReloadReply](ctx, addr, configReloadExchange, configReloadRequest{Protocol: protocolV2})
+	reply, err := roundTrip[configReloadReply](ctx, addr, configReloadExchange, nil)
 	if err != nil {
 		return 0, 0, err
 	}

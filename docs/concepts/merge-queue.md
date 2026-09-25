@@ -131,6 +131,24 @@ generated file, a candidate tree or a review proof from a verdict.
   main into the change is a version control question apply answers itself, and a merge
   differing only in generated files is covered only when main's regeneration, run on the
   plain merge, gives exactly that merge's tree.
+- **Apply follows only the base's own validation.** A pull request's event runs the pull
+  request's own copy of the workflow, a fork's included, so that run could upload any
+  plan and any verdict. With a run as its source, `apply` reads what started the run
+  before it downloads anything, and refuses
+  ([MGS3027](../reference/codes/sandbox/MGS3027.md)) any run but the `--workflow`
+  definition started by a push or a dispatch on `--base` of the repository itself.
+- **Apply pins what it can read itself.** The plan comes from validation's run, so apply
+  checks it against its own facts and stops
+  ([MGS3028](../reference/codes/sandbox/MGS3028.md)) before merging anything that rests
+  on a disagreement: the plan must name apply's own `--base` and remote, its base commit
+  must be on the base apply reads, and a stacked change's stack base must be beneath its
+  head, off the base, and the head the provider confirmed for the change beneath it (or
+  the newest commit it carries of a change the provider lists as merged). A stack base
+  is where the delta reviewers approved starts, so a forged one would merge a delta
+  nobody reviewed, such as one reverting the base. A stack the provider now declares
+  differently only makes the change wait, since it may have changed after planning.
+- **Apply writes its own words.** The squash message is apply's, from the change's own
+  commits; a verdict carries none.
 - **Candidates share nothing.** Each candidate gets a checkout and a scratch directory
   of its own (`MERGEQUEUE_SCRATCH`), so no change's hook can plant a cache entry another
   candidate's gate replays; `tools/gha-queue.buzz` points magus's and Go's caches there
@@ -176,7 +194,7 @@ magus queue validate --plan plan.json --verdicts verdicts \
   --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
   --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' \
   --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build
-magus queue apply --provider github \
+magus queue apply --provider github --base main \
   --regenerate 'MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS' \
   --scratch-env MAGUS_CACHE_DIR=magus verdicts
 ```
@@ -227,6 +245,13 @@ with neither, a change that needs an update commit waits with `WAIT_NO_COMMITTER
 apply stops with an error. `--app <slug>` names the app whose token the provider writes
 with, when it is not the job's own; apply then checks that the base requires the queue's
 status from that app.
+
+A run source (`run:<owner>/<name>/runs/<id>` on GitHub) needs `--workflow`, the
+definition the run must have run. Every listing says what started the run: apply
+refuses the run ([MGS3027](../reference/codes/sandbox/MGS3027.md)), downloading nothing,
+unless it ran `--workflow` on `--base` of its own repository, started by an event that
+runs the base's own copy of it (a push or a dispatch on GitHub). A source directory is
+the caller's own, and takes no `--workflow`.
 
 A run source asks the provider's `list_artifacts` for the run's `mergequeue-plan`
 artifact, then for each `mergequeue-verdict-<id>` artifact as the run uploads it, and
@@ -399,7 +424,6 @@ directory that already holds one is an error.
   "onto": "5e1a...",
   "candidate_commit": "77aa...",
   "method": "squash",
-  "message": "* add lexer",
   "depth": 2,
   "duration_ms": 41230
 }
@@ -445,16 +469,21 @@ Validation runs the changes' code with a read-only token; apply holds the write 
 and runs none of it. In this repository they are two GitHub Actions workflows, and
 verdicts pass between them one change at a time:
 
-1. `queue.yaml` (read-only) plans, then fans the plan out as a job matrix, one
-   `validate --only <id>` job per change up to the depth of each partition. Each job
-   uploads its verdict as an artifact the moment it finishes.
+1. `queue.yaml` (read-only), run on main by a push or a dispatch, plans, then fans the
+   plan out as a job matrix, one `validate --only <id>` job per change up to the depth of
+   each partition. Each job uploads its verdict as an artifact the moment it finishes.
 2. `queue-apply.yaml` starts when validation is requested (`workflow_run: requested`), from
    main's definition with a write-scoped Actions token, and downloads each verdict
    artifact as it appears, while validation is still running: `apply` with the run as its
    source merges each change whose predecessors have merged, and stops once the
    validation run completes. A first job waits only to see whether validation's plan job
-   runs at all; on a pull request event with no merge intent it is skipped, and so is
-   apply.
+   runs at all; on a run cancelled before it started it is skipped, and so is apply.
+3. A pull request event (merge intent enabled, a queue label, a push, a review) runs the
+   pull request's own copy of `queue.yaml`, so apply never follows it. That run's one job
+   says whether the event carries merge intent, and `queue-apply.yaml`'s dispatch job,
+   holding only `actions: write`, answers it by dispatching `queue.yaml` on main, which
+   validates the whole queue. A forged intent job starts one more run on main and
+   nothing else.
 
 The apply job runs in the `magus-queue` environment, which holds the app's key when
 there is one, so every apply run is listed under the repository's Deployments as a
@@ -613,7 +642,7 @@ functions, each taking one record:
 | `merge_change`   | the change plus `{commit, message, through}`                                                | `{merged, by_provider?, reason?}`                                                |
 | `kick_back`      | the change plus `{commit, code, report, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                            |
 | `mark`           | the change plus `{mark}`: `queued`, `rejected`, or empty for none                           | `true` once the change shows that mark and no other                              |
-| `list_artifacts` | `{source}`                                                                                  | `{complete, artifacts: [{name, url}], headers?}`                                 |
+| `list_artifacts` | `{source}`                                                                                  | `{run, complete, artifacts: [{name, url}], headers?}`                            |
 
 All but `list_artifacts` are required, and a script missing one is refused when it
 opens; `list_artifacts` is required of a provider `apply` follows through a run. Every
@@ -631,7 +660,12 @@ app?, steps: [{title, command? or url?}]}`. `credential` is the integration the 
 credential posts statuses as (the `app` named, else the provider's default),
 `required_checks` what the base requires and the integration each is pinned to, and
 `steps` only when `setup_steps` is true, since they cost reads a job's token may not be
-allowed. A provider that returns no `setup` skips apply's credential check. `approval_at` must
+allowed. A provider that returns no `setup` skips apply's credential check.
+`list_artifacts`' `run` is `{repo, head_repo, head_branch, event, branch_event,
+definition}`: the repository the run belongs to and the one whose commit it ran, the
+branch it ran on, what started it, whether that event runs the branch's own copy of the
+definition (`branch_event`; on GitHub only `push` and `workflow_dispatch` do), and the
+definition it ran. `approval_at` must
 name the change's current head, base and merge method, whether it still carries merge
 intent (`queued`), and the other open changes whose head branch is its branch
 (`shared_with`); `approved_commit` names an older commit its approvals stand at, which

@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,19 +18,19 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
 // maxArgs caps runRequest.Args to prevent OOM from untrusted callers.
 const maxArgs = 256
 
-// handshakeTimeout bounds how long an accepted connection may take to deliver its
-// request frame. Without it a client that connects and never writes parks the
-// handleConn goroutine forever inside readFrame — leaking a goroutine/fd, blocking
-// Server.Close (connWg.Wait), and letting any local caller DoS the socket.
+// handshakeTimeout bounds how long an accepted connection may take to deliver its request
+// headers. Without it a client that connects and never writes holds a connection open
+// forever, blocking Server.Close, and letting any local caller DoS the socket.
 const handshakeTimeout = 30 * time.Second
 
 type contextKey int
@@ -134,69 +134,30 @@ type Options struct {
 	Server func() *types.StatusServer
 }
 
-// Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
+// Server serves HTTP on a Unix-domain socket: the proc routes under /proc/v1/ that child
+// processes forward work through, and whatever [Server.Mount] adds beside them.
+//
+// Where the platform reports a connection's peer uid, every request must come from a process
+// running as this one's user, and is admitted as [types.CredentialSocketPeer] and held to its
+// route's Need. Elsewhere the socket's private directory is the only boundary, as it always
+// was for these routes, and Mount refuses: nothing that needs a credential rides a socket that
+// cannot name its caller.
 type Server struct {
-	ep  endpoint.Endpoint
-	svc *service
-	// mu guards listener. Start assigns it and Close reads it, and those run on
-	// different goroutines: an RPC shutdown dispatches Close from a connection
-	// handler (service.shutdown) while the accept loop Start spawned is still
-	// live. Without the lock that pair is a data race the detector catches only
-	// intermittently, because it needs a stop to land while accept is mid-flight.
+	ep   endpoint.Endpoint
+	svc  *service
+	http *http.Server
+	// peerChecked is whether requests pass the peer-uid guard; see Server.
+	peerChecked bool
+	// extra is what Mount installed for the paths outside /proc/, nil for none.
+	extra atomic.Pointer[http.Handler]
+	// mu guards listener. Start assigns it and Close reads it, and those run on different
+	// goroutines: an RPC shutdown dispatches Close from a handler while Serve is live.
 	mu       sync.Mutex
 	listener net.Listener
-	closing  bool // set under mu once Close begins; gates connWg.Add (see trackConn)
 	cancel   context.CancelFunc
 	once     sync.Once
-	connWg   sync.WaitGroup // tracks in-flight handleConn goroutines
-	done     chan struct{}  // closed by Close to stop the signal watcher goroutine
-}
-
-// setListener publishes the bound listener under mu.
-func (s *Server) setListener(ln net.Listener) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.listener = ln
-}
-
-// currentListener reads the listener under mu.
-func (s *Server) currentListener() net.Listener {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.listener
-}
-
-// beginShutdown marks the server closing and returns the listener, clearing it so
-// only the first caller closes it. Both happen under one acquisition of mu because
-// they are one transition: publishing closing is what stops trackConn registering
-// another connection, and that is what makes Close's connWg.Wait safe.
-func (s *Server) beginShutdown() net.Listener {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closing = true
-	ln := s.listener
-	s.listener = nil
-	return ln
-}
-
-// trackConn registers an accepted connection with connWg, reporting whether the
-// caller may hand it to a handler. A false means shutdown has begun and the
-// connection must be closed instead.
-//
-// sync.WaitGroup forbids a positive Add that starts once Wait is under way, and
-// that pair is reachable here rather than theoretical: Accept can return a
-// connection accepted moments before Close shut the listener, so Add(1) lands
-// while Close is already inside connWg.Wait. The detector caught it about one run
-// in eight of TestShutdownRPC. Gating Add on the same mu that publishes closing
-// makes the two mutually exclusive.
-func (s *Server) trackConn() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closing {
-		return false
-	}
-	s.connWg.Add(1)
-	return true
+	done     chan struct{} // closed when Close begins, to stop the signal watcher goroutine
+	closed   chan struct{} // closed when Close has drained every in-flight request
 }
 
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
@@ -209,20 +170,40 @@ func (s *Server) Addr() string { return s.ep.String() }
 // listener's context is a sibling of the process context, not its parent.
 func (s *Server) Done() <-chan struct{} { return s.done }
 
-// Close shuts down the listener, removes the socket file, and waits for all in-flight handlers.
-// Safe to call multiple times.
+// Mount serves h for every path on the socket outside /proc/, each request carrying the
+// socket peer's credential, until the returned unmount runs. A later Mount replaces an
+// earlier one; an unmount whose handler was already replaced does nothing. Where the
+// platform cannot name a connection's peer it installs nothing and returns
+// [httpx.ErrPeerCredentialsUnsupported].
+func (s *Server) Mount(h http.Handler) (unmount func(), err error) {
+	if !s.peerChecked {
+		return nil, httpx.ErrPeerCredentialsUnsupported
+	}
+	box := &h
+	s.extra.Store(box)
+	return func() { s.extra.CompareAndSwap(box, nil) }, nil
+}
+
+// Close stops accepting, cancels the server's work, waits for every in-flight request, and
+// removes the socket file. Safe to call multiple times and concurrently; every caller
+// returns once the drain is done.
 func (s *Server) Close() {
 	s.once.Do(func() {
 		close(s.done) // unblocks watchSignals before we cancel/close
-		if s.cancel != nil {
-			s.cancel()
-		}
-		if ln := s.beginShutdown(); ln != nil {
+		s.cancel()
+		s.mu.Lock()
+		ln := s.listener
+		s.listener = nil
+		s.mu.Unlock()
+		if ln != nil {
 			_ = ln.Close()
 		}
+		// Shutdown waits for handlers, and each one runs on the context cancelled above.
+		_ = s.http.Shutdown(context.Background())
 		_ = os.Remove(s.ep.Addr)
+		close(s.closed)
 	})
-	s.connWg.Wait() // wait outside the once so concurrent callers all block
+	<-s.closed
 }
 
 // New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_PROC_SOCKET is set.
@@ -279,13 +260,73 @@ func New(opts Options) (*Server, error) {
 		onJobDone:       opts.OnJobDone,
 	}
 	srv := &Server{
-		ep:     ep,
-		svc:    svc,
-		cancel: cancel,
-		done:   make(chan struct{}),
+		ep:          ep,
+		svc:         svc,
+		peerChecked: httpx.PeerCredentialsSupported(),
+		cancel:      cancel,
+		done:        make(chan struct{}),
+		closed:      make(chan struct{}),
+	}
+	handler, err := srv.routes()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	// No ReadTimeout: its deadline outlives the body and would cancel a request mid-stream,
+	// and a forwarded run holds its request, an MCP or Connect stream its response, for as
+	// long as the work takes.
+	//
+	// Every request's context derives from the server's, so Close, which cancels it before it
+	// drains, ends an open stream instead of waiting on a client that will never hang up.
+	srv.http = &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: handshakeTimeout,
+		BaseContext:       func(net.Listener) context.Context { return serverCtx },
+	}
+	if srv.peerChecked {
+		srv.http.ConnContext = httpx.PeerConnContext
 	}
 	svc.shutdownFn = srv.Close
 	return srv, nil
+}
+
+// routes is the socket's whole handler: the proc routes, held to routeNeeds, a 404 for any
+// other /proc/ path, and the mounted handler for the rest, all behind the peer guard where
+// the platform has one.
+func (s *Server) routes() (http.Handler, error) {
+	proc := http.NewServeMux()
+	proc.HandleFunc("POST "+pathRun, s.svc.handleRun)
+	proc.HandleFunc("POST "+pathJobs, s.svc.handleJob)
+	proc.HandleFunc("GET "+pathStatus, s.svc.handleStatus)
+	proc.HandleFunc("POST "+pathShutdown, s.svc.handleShutdown)
+	proc.HandleFunc("POST "+pathReload, s.svc.handleReload)
+	proc.HandleFunc("/proc/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusNotFound, errorReply{Message: fmt.Sprintf("proc: no route %s %s", r.Method, r.URL.Path)})
+	})
+
+	mux := http.NewServeMux()
+	if s.peerChecked {
+		guarded, err := httpx.GrantGuard(rpcerr.FormatJSON, routeNeeds, proc)
+		if err != nil {
+			return nil, fmt.Errorf("proc: %w", err)
+		}
+		mux.Handle("/proc/", guarded)
+	} else {
+		mux.Handle("/proc/", proc)
+	}
+	mux.HandleFunc("/", s.serveExtra)
+	if !s.peerChecked {
+		return mux, nil
+	}
+	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, mux), nil
+}
+
+func (s *Server) serveExtra(w http.ResponseWriter, r *http.Request) {
+	if h := s.extra.Load(); h != nil {
+		(*h).ServeHTTP(w, r)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, errorReply{Message: fmt.Sprintf("proc: nothing is served at %s on this socket", r.URL.Path)})
 }
 
 // Start binds the socket and begins serving. Must be called once; on error the Server is unusable.
@@ -310,9 +351,11 @@ func (s *Server) Start() error {
 	}
 	// Socket security comes from the parent directory (0700 per sockdir_unix.go);
 	// a post-Listen chmod would create a brief world-accessible window.
-	s.setListener(ln)
+	s.mu.Lock()
+	s.listener = ln
+	s.mu.Unlock()
 
-	go serve(s, s.svc)
+	go func() { _ = s.http.Serve(ln) }()
 	watchSignals(s, s.cancel)
 	return nil
 }
@@ -329,126 +372,54 @@ func isSocketLive(ctx context.Context, addr string) bool {
 	return true
 }
 
-func serve(srv *Server, svc *service) {
-	// Read the listener ONCE, under the lock, and accept on the local copy. Reading
-	// srv.listener each iteration races Close, which clears the field, and Close is
-	// dispatched from a connection handler (an RPC `server stop`), so the two run
-	// concurrently by design rather than by accident. Accept on a closed listener
-	// returns an error, which is exactly the loop's existing exit condition, so
-	// holding the value across the close needs no extra signaling.
-	ln := srv.currentListener()
-	if ln == nil {
-		return // closed before the accept loop got going
-	}
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return // listener was closed
-		}
-		if !srv.trackConn() {
-			// Close is already waiting on connWg; registering now would be the
-			// Add-during-Wait the WaitGroup contract forbids. Drop the connection
-			// instead: the client sees the same closed socket it would have seen
-			// had Accept lost the race by a microsecond.
-			_ = conn.Close()
-			return
-		}
-		go handleConn(svc, conn, &srv.connWg)
-	}
-}
-
-// writeErr sends an error reply; ignores send errors (best-effort on a broken connection).
-func writeErr(conn net.Conn, msg string) {
-	_ = writeFrame(conn, typeError, errorReply{Message: msg})
-}
-
-// handleConn reads one JSONL request frame, dispatches to the service, and writes the reply.
-func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
-	defer wg.Done()
-	defer func() { _ = conn.Close() }()
-
-	_ = conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
-	typ, line, err := readFrame(conn)
-	if errors.Is(err, io.EOF) {
-		return // bare liveness probe (isSocketLive dialed and closed), silent no-op
-	}
-	if err != nil {
-		writeErr(conn, err.Error())
+func (s *service) handleRun(w http.ResponseWriter, r *http.Request) {
+	var req runRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		refuse(w, http.StatusBadRequest, err)
 		return
 	}
-
-	switch typ {
-	case typeRun:
-		var req runRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode run request: "+err.Error())
-			return
-		}
-		var reply runReply
-		if err := svc.run(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeRunReply, reply)
-
-	case typeJob:
-		var req jobRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode job request: "+err.Error())
-			return
-		}
-		var reply jobReply
-		if err := svc.submitJob(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeJobReply, reply)
-
-	case typeStatus:
-		var req statusRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode status request: "+err.Error())
-			return
-		}
-		var reply StatusReply
-		if err := svc.status(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeStatusReply, reply)
-
-	case typeShutdown:
-		var req shutdownRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode shutdown request: "+err.Error())
-			return
-		}
-		var reply shutdownReply
-		if err := svc.shutdown(req, &reply); err != nil {
-			writeErr(conn, err.Error())
-			return
-		}
-		_ = writeFrame(conn, typeShutdownReply, reply)
-
-	case typeConfigReload:
-		var req configReloadRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode config.reload request: "+err.Error())
-			return
-		}
-		if req.Protocol != "" && req.Protocol != protocolV2 {
-			writeErr(conn, ErrProtocolMismatch.Error())
-			return
-		}
-		var dropped, busy int
-		if svc.configReloader != nil {
-			dropped, busy = svc.configReloader()
-		}
-		_ = writeFrame(conn, typeConfigReloadReply, configReloadReply{Dropped: dropped, Busy: busy})
-
-	default:
-		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
+	var reply runReply
+	if err := s.run(req, &reply); err != nil {
+		refuse(w, http.StatusInternalServerError, err)
+		return
 	}
+	writeJSON(w, http.StatusOK, reply)
+}
+
+func (s *service) handleJob(w http.ResponseWriter, r *http.Request) {
+	var req jobRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		refuse(w, http.StatusBadRequest, err)
+		return
+	}
+	var reply jobReply
+	if err := s.submitJob(req, &reply); err != nil {
+		refuse(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, reply)
+}
+
+func (s *service) handleStatus(w http.ResponseWriter, _ *http.Request) {
+	var reply StatusReply
+	s.status(&reply)
+	writeJSON(w, http.StatusOK, reply)
+}
+
+func (s *service) handleShutdown(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusAccepted, struct{}{})
+	if s.shutdownFn != nil {
+		// Close drains in-flight requests, this one included, so it cannot run inline.
+		go s.shutdownFn()
+	}
+}
+
+func (s *service) handleReload(w http.ResponseWriter, _ *http.Request) {
+	var reply configReloadReply
+	if s.configReloader != nil {
+		reply.Dropped, reply.Busy = s.configReloader()
+	}
+	writeJSON(w, http.StatusOK, reply)
 }
 
 // activeCall is the per-request state tracked for the Status RPC.
@@ -470,7 +441,7 @@ type service struct {
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting
 	nextID          atomic.Uint64
-	shutdownFn      func() // called by shutdown handler; set by New to srv.Close
+	shutdownFn      func() // called by the shutdown route; set by New to srv.Close
 }
 
 // versionAdmits reports whether a request carrying reqVersion may be adopted by this
@@ -483,13 +454,10 @@ func (s *service) versionAdmits(reqVersion string) bool {
 }
 
 // admitWork refuses a request to run magus that this server must not execute: one over the
-// argument limit, one speaking another protocol, or one from a different build.
-func (s *service) admitWork(request string, args []string, protocol, version string) error {
+// argument limit, or one from a different build.
+func (s *service) admitWork(request string, args []string, version string) error {
 	if len(args) > maxArgs {
 		return fmt.Errorf("proc: %s.Args exceeds limit (%d > %d)", request, len(args), maxArgs)
-	}
-	if protocol != "" && protocol != protocolV2 {
-		return ErrProtocolMismatch
 	}
 	if !s.versionAdmits(version) {
 		return ErrVersionMismatch
@@ -510,10 +478,12 @@ func (s *service) trackCall(args []string, workspace, inv string) (call *activeC
 }
 
 func (s *service) run(req runRequest, reply *runReply) error {
-	if err := s.admitWork("runRequest", req.Args, req.Protocol, req.Version); err != nil {
+	if err := s.admitWork("runRequest", req.Args, req.Version); err != nil {
 		return err
 	}
 
+	// The server's context, not the request's: a client that disconnects mid-run does not
+	// cancel the work it started.
 	ctx, cancel := context.WithCancel(s.parentCtx)
 	defer cancel()
 
@@ -559,8 +529,6 @@ func (s *service) run(req runRequest, reply *runReply) error {
 		if errors.Is(err, ErrNotAdoptable) { // propagate so client falls back to local execution
 			return err
 		}
-		// os.exit(code) from a magusfile: honor the requested code in the reply
-		// rather than collapsing every failure to 1. Code 0 is a clean early exit.
 		var exitErr types.ExitError
 		if errors.As(err, &exitErr) {
 			// os.exit(code) from a magusfile: honor the code and say nothing. The message
@@ -597,10 +565,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 // starts, so a rapid series of checkouts collapses to one refresh. The job's own
 // success/failure is observed via the Dashboard/logs, not the reply.
 func (s *service) submitJob(req jobRequest, reply *jobReply) error {
-	if req.Magic != jobMagic {
-		return nil // ignore unauthenticated submissions, matching status/shutdown
-	}
-	if err := s.admitWork("jobRequest", req.Args, req.Protocol, req.Version); err != nil {
+	if err := s.admitWork("jobRequest", req.Args, req.Version); err != nil {
 		return err
 	}
 
@@ -623,8 +588,8 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	call, untrack := s.trackCall(req.Args, workspace, inv)
 	reply.Inv = inv
 
-	// Run on the server's context, not the connection's: the job must outlive the
-	// socket round-trip that submitted it.
+	// Run on the server's context, not the request's: the job must outlive the round-trip
+	// that submitted it.
 	go func() {
 		defer s.inflight.Delete(key)
 		defer untrack()
@@ -660,13 +625,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	return nil
 }
 
-func (s *service) status(req statusRequest, reply *StatusReply) error {
-	if req.Magic != statusMagic {
-		return nil
-	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
-		return ErrProtocolMismatch
-	}
+func (s *service) status(reply *StatusReply) {
 	reply.ParentPID = os.Getpid()
 	reply.Version = s.version
 	snap := s.lim.Snapshot()
@@ -690,20 +649,6 @@ func (s *service) status(req statusRequest, reply *StatusReply) error {
 	if s.workspaceLister != nil {
 		reply.Workspaces = s.workspaceLister()
 	}
-	return nil
-}
-
-func (s *service) shutdown(req shutdownRequest, _ *shutdownReply) error {
-	if req.Magic != shutdownMagic {
-		return nil
-	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
-		return ErrProtocolMismatch
-	}
-	if s.shutdownFn != nil {
-		go s.shutdownFn()
-	}
-	return nil
 }
 
 func cycleKey(root, cwd string, args []string) string {
