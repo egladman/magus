@@ -504,10 +504,11 @@ verdicts pass between them one change at a time:
    runs at all; on a run cancelled before it started it is skipped, and so is apply.
 3. A pull request event (merge intent enabled, a queue label, a push, a review) runs the
    pull request's own copy of `queue.yaml`, so apply never follows it. That run's one job
-   says whether the event carries merge intent, and `queue-apply.yaml`'s dispatch job,
-   holding only `actions: write`, answers it by dispatching `queue.yaml` on main, which
-   validates the whole queue. A forged intent job starts one more run on main and
-   nothing else.
+   says whether the event carries merge intent, and `queue-apply.yaml`'s dispatch job
+   answers it by dispatching `queue.yaml` on main, which validates the whole queue. It
+   dispatches with the queue app's token, since a run the Actions
+   token starts fires no `workflow_run` and apply would never follow it; it runs only
+   main's code. A forged intent job starts one more run on main and nothing else.
 
 The apply job runs in the `magus-queue` environment, which holds the app's key when
 there is one, so every apply run is listed under the repository's Deployments as a

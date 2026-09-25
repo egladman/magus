@@ -20,7 +20,8 @@ name: Queue apply
 # of this repository, and `magus queue apply` checks the same of the run it reads
 # (--base, --workflow) before it downloads anything. For a same-repository pull
 # request's run, dispatch waits for its intent job and starts queue.yaml on main instead,
-# with a token that can do nothing else.
+# with the queue app's token: a run the Actions token starts fires no workflow_run, so no
+# apply would follow it. Dispatch runs only main's code.
 #
 # It never executes pull-request code: it builds magus, which runs the queue, from main,
 # reads only verdicts from the artifacts, and rebuilds each candidate itself from the
@@ -84,10 +85,11 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_review')
     runs-on: ubuntu-latest
+    # The app's key is released to main's runs alone.
+    environment: magus-queue
     timeout-minutes: 20
     permissions:
       contents: read # check out main's gha-queue.buzz
-      actions: write # read the run's jobs, dispatch queue.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,9 +101,18 @@ jobs:
           installation-strategy: source
           source-path: .
 
+      # The app's token, never the Actions token: a run the Actions token dispatches
+      # fires no workflow_run, so apply would never follow the validation it asked for.
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
+          permission-actions: write
+
       - name: Start a validation run on main once the pull request's run saw merge intent
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
         run: magus buzz tools/gha-queue.buzz -- dispatch --run "$RUN" --base "$MAIN"
