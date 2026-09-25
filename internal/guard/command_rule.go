@@ -158,8 +158,8 @@ func actingRole(ctx context.Context, at location, lease string) (types.AgentRole
 }
 
 // commandInvocations resolves a shell line into the programs it runs, the way
-// ParseCommandsDialect does, and marks each one a while or until loop repeats. Nil when
-// the line does not parse.
+// ParseCommandsDialect does, and marks each one a polling loop repeats (pollingLoop). Nil
+// when the line does not parse.
 //
 // A loop inside a wrapper's script (`sh -c 'while ...'`) is not marked: the wrapper's
 // payload is parsed on its own, outside the loop walk.
@@ -174,9 +174,8 @@ func commandInvocations(command string, d Dialect, dir string) []types.CommandIn
 	visit = func(root syntax.Node, repeats bool) {
 		syntax.Walk(root, func(n syntax.Node) bool {
 			switch n := n.(type) {
-			case *syntax.WhileClause:
-				// WhileClause is also the until loop.
-				if !repeats && syntax.Node(n) != root {
+			case *syntax.WhileClause, *syntax.ForClause:
+				if _, polls := pollingLoop(n, d); polls && !repeats && n != root {
 					visit(n, true)
 					return false
 				}

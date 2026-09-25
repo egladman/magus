@@ -2,8 +2,8 @@ name: Audit
 
 # The out-of-band checks: expensive, non-blocking, and answering a question that only
 # moves when something OUTSIDE this branch does - a new magus release, a model provider's
-# behaviour, a generator that stopped being deterministic. Nothing here gates a merge or
-# publishes. That is why they are off the PR path rather than continue-on-error, which is
+# behaviour, a generator that stopped being deterministic - or one too costly to ask of
+# every change, the extended test suite. Nothing here gates a merge or publishes. That is why they are off the PR path rather than continue-on-error, which is
 # where `compat` used to live: a check that never blocks and never changes with the diff
 # is noise on a pull request and a real signal on a schedule.
 
@@ -97,6 +97,46 @@ jobs:
 
       - name: Run ci with the released magus
         run: magus affected ci --no-default-charms --concurrency-profile aggressive
+
+  extended:
+    # The extended suite (the `extended` charm): the tests the default gate leaves out
+    # because they need a C toolchain or a docker daemon. Weekly, or by hand from the
+    # Actions tab, over the whole tree.
+    name: extended suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      - name: Install codec build dependencies
+        # Install first, update only on failure; see the note in ci.yaml for why update is the
+        # expensive half and why the image's cached index already satisfies both packages.
+        run: |
+          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
+            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
+                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      - name: Run the extended suite
+        run: magus run ci:extended --no-default-charms --concurrency-profile aggressive
 
   determinism:
     # Byte-stability is an invariant drift gating, cache replay, and regenerate-to-resolve

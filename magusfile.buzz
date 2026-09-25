@@ -2680,6 +2680,11 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
 // Tests with race detection and a coverage floor. The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
+    // The extended suite adds the tests that need a C toolchain and a docker daemon, which a
+    // gate every change pays for should not require: `magus run test:extended`, `ci:extended`.
+    if (ctx.hasCharm("extended")) {
+        ctx.needs(compress_cgo_test, completion_test);
+    }
     // Declared so coverage_render can read them after a cache HIT: without this the
     // profiles are undeclared residue, restored by nothing, and the render target
     // finds no file to measure whenever the suite replays.
@@ -3255,14 +3260,14 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, compress_cgo_test, completion_test, security);
+    ctx.needs(lint, build, test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its
-// shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one:
-// a gate that silently skips when a tool is missing is how the zsh recipe stayed broken
-// - it told users to append a script to ~/.zshrc that registers nothing, and nothing
-// ever ran it to find out. Its declared footprint keeps the cost off every run: affected
+// shell. Part of the extended suite (test:extended), and it REQUIRES a docker daemon rather than
+// skipping without one: a gate that silently skips when a tool is missing is how the zsh
+// recipe stayed broken - it told users to append a script to ~/.zshrc that registers
+// nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected
 // only reaches it when the completion scripts or their checks change.
 //
 // One image per shell, pinned to a major-version tag, and nothing is installed into any
@@ -3452,8 +3457,9 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
 //
 // REQUIRED, not skipped when pkg-config comes up empty - the call completion_test makes
 // about docker, for the same reason: quietly skipping on a missing tool is how the
-// untested half got here. CI already installs both -dev packages, and a host that cannot
-// build this cannot build a release.
+// untested half got here. It runs in the extended suite (test:extended), not the default gate, so
+// only a run that asked for it needs the -dev packages; the release workflow runs it
+// before the dynamic binary, the one artifact that ships these codecs.
 // The name diverges from the workspace's `test` convention on purpose, and magus's own
 // conformance advice flags it. It is not the same work: this compiles with cgo and the
 // liblzma/libzstd build tags, covers one package, and has a hard pkg-config precondition.

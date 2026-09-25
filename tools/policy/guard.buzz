@@ -13,6 +13,8 @@
 //   ci-batch-poll (advise once per session): one pull request's CI read piecemeal.
 //   queue-poll (advise once per session): the merge queue's state read through GitHub.
 //   admin-merge (deny): `gh pr merge --admin`, which lands a pull request past the queue.
+//   pr-watch (deny): a pull request's own state (merged, auto-merge, mergeability) read
+//     again and again, which the host's PR monitor reports as it changes.
 //   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
@@ -53,6 +55,11 @@ final adminMergeDenial = "`--admin` merges past the merge queue: nothing validat
     + "  gh pr merge <number> --auto --squash\n"
     + "(or --rebase). The queue validates it on main's tip and merges it; `magus queue ls` shows "
     + "where it stands. Bypassing the queue is the human's call, made from their own terminal.";
+
+final prWatchDenial = "Watching a pull request's state costs a call per pass and learns nothing the host "
+    + "will not tell you. Let the host report it: in Claude Code's desktop app, turn on the pull "
+    + "request's CI monitor, which wakes the session on a failure, a conflict or a new comment. A "
+    + "queued pull request's place is one `magus queue ls` away, asked once.";
 
 final gateDenial ="The gate runs once per branch, by the orchestrator or by a worker spawned as "
     + "`<parent>/integrate <job>`, never by a worker mid-change. Finish with the narrow validation "
@@ -508,6 +515,9 @@ export fun decide(programs: [Program], caller: Caller, checkout: Checkout?, once
         if (runs(call, first: "pr", second: "merge") and hasFlag(call.args, long: "--admin")) {
             return magus\guard.deny(adminMergeDenial);
         }
+        if (call.repeats and readsPRState(call)) {
+            return magus\guard.deny(prWatchDenial);
+        }
     }
     foreach (call in calls) {
         if (pollsQueue(call)) {
@@ -652,7 +662,7 @@ fun unqualifiedPush(programs: [Program], checkout: Checkout) > str {
 }
 
 // GhCall is one gh invocation: its arguments, and whether something runs it again and
-// again (a while or until loop, or the watch program).
+// again (a polling loop, or the watch program).
 object GhCall {
     args: [str],
     repeats: bool,
@@ -725,6 +735,31 @@ fun pollsQueue(call: GhCall) > bool {
     return false;
 }
 
+// The --json fields that describe a pull request's own lifecycle rather than its content.
+final prStateFields = ["state", "merged", "mergedAt", "closed", "autoMergeRequest", "mergeStateStatus",
+    "mergeable", "reviewDecision"];
+
+// readsPRState: a read of a pull request's own lifecycle, through `gh pr view --json` naming
+// one of prStateFields, `gh pr status`, or `gh api` on the pull request itself
+// (`repos/<owner>/<name>/pulls/<n>`, not its files, commits or reviews).
+fun readsPRState(call: GhCall) > bool {
+    if (runs(call, first: "pr", second: "status")) {
+        return true;
+    }
+    if (runs(call, first: "pr", second: "view")) {
+        foreach (field in jsonFields(call.args)) {
+            if (prStateFields.indexOf(field) != null) { return true; }
+        }
+        return false;
+    }
+    final ops = operandsOf(call.args, valueFlags: ghValueFlags);
+    if (ops.len() > 1 and ops[0] == "api") {
+        final parts = ops[1].split("/");
+        return parts.len() == 5 and parts[0] == "repos" and parts[3] == "pulls" and (std\parseInt(parts[4]) ?? 0) > 0;
+    }
+    return false;
+}
+
 fun isQueueWorkflow(name: str) > bool {
     return name.startsWith("queue") and (name.endsWith(".yaml") or name.endsWith(".yml"));
 }
@@ -788,7 +823,7 @@ fun jsonFields(args: [str]) > [str] {
 }
 
 // request is the programs a command runs, each spelled as its argv. A leading "loop:" marks
-// the program as repeated by a while loop, and a program word holding a slash is its path.
+// the program as repeated by a polling loop, and a program word holding a slash is its path.
 fun request(argvs: [[str]]) > [Program] {
     final programs = mut [<Program>];
     foreach (argv in argvs) {
@@ -917,6 +952,31 @@ test "an admin merge is denied, naming the queue's entry" {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("--auto --squash") != null, message: "names the entry");
+    }
+}
+
+test "a pull request's state read again and again is denied, naming the monitor" {
+    foreach (argvs in [
+        [["loop:", "gh", "pr", "view", "300", "--json", "state,autoMergeRequest"], ["loop:", "sleep", "60"]],
+        [["watch", "-n", "60", "gh", "pr", "view", "300", "--json", "mergeStateStatus"]],
+        [["loop:", "gh", "api", "repos/egladman/magus/pulls/300", "--jq", ".merged"]],
+        [["loop:", "gh", "pr", "status"]],
+    ]) {
+        final v = decide(request(argvs), caller: person(), checkout: null, once: counter());
+        std\assert(v.decision == "deny", message: argvs[0].join(" "));
+        std\assert(v.reason.indexOf("CI monitor") != null, message: "names the host's monitor");
+    }
+}
+
+test "one read of a pull request's state, and a loop over its content, stay silent" {
+    foreach (argvs in [
+        [["gh", "pr", "view", "300", "--json", "state,autoMergeRequest"]],
+        [["gh", "api", "repos/egladman/magus/pulls/300"]],
+        [["loop:", "gh", "pr", "view", "300", "--json", "title,body"]],
+        [["loop:", "gh", "api", "repos/egladman/magus/pulls/300/files"]],
+    ]) {
+        final v = decide(request(argvs), caller: person(), checkout: null, once: counter());
+        std\assert(v.decision == "allow", message: argvs[0].join(" "));
     }
 }
 

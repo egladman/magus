@@ -1091,9 +1091,10 @@ var gitDriftHooks = []string{"post-commit", "pre-push"}
 // path fires post-commit, never post-merge).
 var gitRegenHooks = []string{"post-commit", "post-merge", "post-rewrite"}
 
-// InstallMergeDriver writes .gitattributes entries and registers the magus merge driver,
-// both under one repository lock so a concurrent install cannot pair one's attributes
-// with the other's registration. A root outside any git repository is an error.
+// InstallMergeDriver writes .gitattributes entries and registers the magus merge driver
+// and the diff drivers git does not ship, all under one repository lock so a concurrent
+// install cannot pair one's attributes with the other's registration. A root outside any
+// git repository is an error.
 func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
 	paths, ok, err := gitRepoPathsOf(ctx, root)
 	if err != nil {
@@ -1126,10 +1127,13 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	if err != nil {
 		return false, err
 	}
-	// One read answers all three questions. Ensure runs on every workspace load and its
-	// contract is to be cheap in the steady state, so it cannot spawn a subprocess each.
-	registered, haveDriver := v.registeredDriver(ctx, root)
-	if attrsCurrent == attrsWanted && haveDriver &&
+	// One read answers every registration question. Ensure runs on every workspace load and
+	// its contract is to be cheap in the steady state, so it cannot spawn a subprocess each.
+	// An unreadable config reads as nothing registered, and the install reports the error.
+	cfg, _ := gitManagedConfig(ctx, root)
+	registered := cfg[gitMergeDriverKey]
+	haveDriver := registered != ""
+	if attrsCurrent == attrsWanted && haveDriver && len(staleFuncnames(cfg)) == 0 &&
 		driverExeExists(registered) && driverIsReachableHere(ctx, root, registered) &&
 		driverIsPreferredHere(root, registered) && driverUsable(ctx, registered) {
 		return false, nil
@@ -1152,14 +1156,46 @@ func (v gitVCS) registeredDriver(ctx context.Context, root string) (cmd string, 
 // merge.magus.driver, so a per-worktree registration wins over the shared one as it does
 // for git itself. `config` exits 1 for an unset key.
 func (v gitVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
-	cmd, err := gitOutput(ctx, root, gitOpts{}, "config", "merge.magus.driver")
+	cmd, err := gitOutput(ctx, root, gitOpts{}, "config", gitMergeDriverKey)
 	if exitCode(err) == 1 {
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("git config merge.magus.driver: %w", err)
+		return "", fmt.Errorf("git config %s: %w", gitMergeDriverKey, err)
 	}
 	return cmd, nil
+}
+
+// gitMergeDriverKey is the config key holding the magus merge driver's command line.
+const gitMergeDriverKey = "merge.magus.driver"
+
+// gitManagedConfig returns the effective value of every config key magus registers: the
+// merge driver and each gitFuncnames pattern, keyed as git spells them. An unset key is
+// absent from the map.
+//
+// -z because a pattern may hold newlines. git lists every scope from system to worktree,
+// so the last value printed for a key is the one `git config <key>` would return.
+func gitManagedConfig(ctx context.Context, root string) (map[string]string, error) {
+	keys := make([]string, 0, 1+len(gitFuncnames))
+	keys = append(keys, gitMergeDriverKey)
+	for _, f := range gitFuncnames {
+		keys = append(keys, f.key())
+	}
+	pattern := "^(" + strings.ReplaceAll(strings.Join(keys, "|"), ".", `\.`) + ")$"
+	out, err := gitOutput(ctx, root, gitOpts{}, "config", "-z", "--get-regexp", pattern)
+	if exitCode(err) == 1 {
+		return map[string]string{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("git config --get-regexp %s: %w", pattern, err)
+	}
+	cfg := make(map[string]string, len(keys))
+	for _, entry := range strings.Split(out, "\x00") {
+		if key, value, _ := strings.Cut(entry, "\n"); key != "" {
+			cfg[key] = value
+		}
+	}
+	return cfg, nil
 }
 
 // driverArgsCurrent reports whether a registered command still names the subcommand this
@@ -1282,13 +1318,61 @@ func splitDriver(registered string) (exe, args string) {
 	return rest, ""
 }
 
-// CheckMergeDriver reports whether both .gitattributes and git config driver registration
-// are present. A torn managed section in .gitattributes is an error.
+// CheckMergeDriver reports whether the managed .gitattributes section and the merge driver
+// registration are present, and the diff drivers with them: a missing diff driver line or
+// xfuncname registration reads false, like a missing merge driver. A torn managed section in
+// .gitattributes is an error.
 func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
 	if _, ok := v.registeredDriver(ctx, root); !ok {
 		return false, nil // not configured; not an error
 	}
-	return managedSectionPresent(filepath.Join(root, ".gitattributes"), generatedMarkers)
+	present, err := managedSectionPresent(filepath.Join(root, ".gitattributes"), generatedMarkers)
+	if err != nil || !present {
+		return false, err
+	}
+	missing, err := MissingDiffDrivers(ctx, root)
+	return len(missing) == 0, err
+}
+
+// MissingDiffDrivers names each piece of the diff driver wiring root lacks: a line of the
+// managed .gitattributes section, as `.gitattributes: <line>`, or an xfuncname registration,
+// as `git config <key>`. A registration holding a pattern other than magus's counts as
+// missing, since Ensure overwrites it. Nil means complete, or root is not in a git
+// repository. A torn managed section is an error.
+func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
+	if _, ok, err := gitRepoPathsOf(ctx, root); err != nil || !ok {
+		return nil, err
+	}
+	path := filepath.Join(root, ".gitattributes")
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	spans, err := managedSpans(text, generatedMarkers)
+	if err != nil {
+		return nil, fmt.Errorf("vcs: %s: %w", path, err)
+	}
+	have := map[string]bool{}
+	for _, s := range spans {
+		for line := range strings.SplitSeq(text[s.start:s.end], "\n") {
+			have[strings.TrimSpace(line)] = true
+		}
+	}
+	var missing []string
+	for _, d := range gitDiffDrivers {
+		if !have[d.line()] {
+			missing = append(missing, ".gitattributes: "+d.line())
+		}
+	}
+	cfg, err := gitManagedConfig(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range staleFuncnames(cfg) {
+		missing = append(missing, "git config "+f.key())
+	}
+	return missing, nil
 }
 
 // gitAttrsState returns .gitattributes as it is now and as the declared globs say it
@@ -1307,13 +1391,86 @@ func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wante
 	return string(existing), wanted, nil
 }
 
-// gitAttrsBody is the managed .gitattributes section's content for outputGlobs.
+// gitAttrsBody is the managed .gitattributes section's content for outputGlobs, after the
+// diff driver lines.
+//
+// The two kinds share the section because they set different attributes: git resolves
+// each attribute by the last line that sets it, so a generated `.go` file keeps
+// merge=magus from its glob line and takes diff=golang from `*.go`, whichever line comes
+// first.
 func gitAttrsBody(outputGlobs []string) string {
 	var body strings.Builder
+	for _, d := range gitDiffDrivers {
+		body.WriteString(d.line() + "\n")
+	}
 	for _, glob := range outputGlobs {
 		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", glob)
 	}
 	return body.String()
+}
+
+// gitDiffDriver routes paths matching glob to a git diff driver. The driver's hunk-header
+// ("funcname") pattern names the declaration each hunk lands in, which is how the
+// footprint names what a change touched and what `git diff` prints after each @@.
+type gitDiffDriver struct{ glob, driver string }
+
+func (d gitDiffDriver) line() string { return d.glob + " diff=" + d.driver }
+
+// gitDiffDrivers are the managed section's diff driver lines. golang, python, rust and
+// markdown are git built-ins; the rest need a gitFuncnames registration.
+var gitDiffDrivers = []gitDiffDriver{
+	{"*.go", "golang"},
+	{"*.py", "python"},
+	{"*.rs", "rust"},
+	{"*.md", "markdown"},
+	{"*.ts", "typescript"},
+	{"*.tsx", "typescript"},
+	{"*.buzz", "buzz"},
+}
+
+// gitFuncname is the xfuncname pattern magus registers for a diff driver git does not ship.
+// It lives in git config rather than .gitattributes, so, like the merge driver, every clone
+// needs its own registration.
+type gitFuncname struct{ driver, pattern string }
+
+func (f gitFuncname) key() string { return "diff." + f.driver + ".xfuncname" }
+
+var gitFuncnames = []gitFuncname{
+	{"typescript", typescriptFuncname},
+	{"buzz", buzzFuncname},
+}
+
+// The patterns are POSIX extended regexes, one per line, tried in order until one matches;
+// a line starting with ! rejects what it matches. Group 1, when a pattern has one, is the
+// header git prints. [[:blank:]] stands in for [ \t], which a bracket expression reads as
+// a backslash and a t.
+
+// buzzFuncname names Buzz's top-level declarations: fun (export, extern or both), object,
+// protocol, enum (enum<str> too) and test blocks. A method is indented, so a change inside
+// one is named by its object.
+const buzzFuncname = `^((export[[:blank:]]+)?(extern[[:blank:]]+)?(fun|object|protocol|enum(<[^>]*>)?)[[:blank:]]+[A-Za-z_].*|test[[:blank:]]+".*)$`
+
+// typescriptFuncname names TypeScript declarations. The control-flow rejection comes first
+// because `  if (x) {` otherwise reads as a method. Top-level forms anchor at column 0 so a
+// local arrow function does not rename the function around it. A method must be indented
+// and close its parameter list on the line, which keeps a wrapped call from reading as one.
+var typescriptFuncname = strings.Join([]string{
+	`!^[[:blank:]]*(if|else|for|while|do|switch|case|catch|return|throw|with|new|await|yield|typeof|delete)([[:blank:](]|$)`,
+	`^((export[[:blank:]]+)?(default[[:blank:]]+)?(declare[[:blank:]]+)?(abstract[[:blank:]]+)?(async[[:blank:]]+)?(function[[:blank:]*]|class[[:blank:]]|interface[[:blank:]]|type[[:blank:]]+[A-Za-z_$][A-Za-z0-9_$]*[[:blank:]]*(<.*>)?[[:blank:]]*=|enum[[:blank:]]|namespace[[:blank:]]).*)$`,
+	`^((export[[:blank:]]+)?(const|let|var)[[:blank:]]+[A-Za-z_$][A-Za-z0-9_$]*[[:blank:]]*(:[^=]*)?=[[:blank:]]*(async[[:blank:]]+)?(<[^>]*>[[:blank:]]*)?(\(|function[[:blank:]*(]|[A-Za-z_$][A-Za-z0-9_$]*[[:blank:]]*=>).*)$`,
+	`^[[:blank:]]+(((public|private|protected|static|readonly|override|async|get|set)[[:blank:]]+)*\*?[A-Za-z_$#][A-Za-z0-9_$]*[[:blank:]]*(<[^>]*>)?[[:blank:]]*\([^;]*\)[[:blank:]]*(:.*)?\{[[:blank:]]*)$`,
+}, "\n")
+
+// staleFuncnames returns the gitFuncnames whose registration in cfg is missing or holds
+// another pattern.
+func staleFuncnames(cfg map[string]string) []gitFuncname {
+	var stale []gitFuncname
+	for _, f := range gitFuncnames {
+		if cfg[f.key()] != f.pattern {
+			stale = append(stale, f)
+		}
+	}
+	return stale
 }
 
 // gitMergeDriverCommand is the command line git runs to resolve a conflict in a
@@ -1410,15 +1567,26 @@ func driverExeExists(registered string) bool {
 // usually THIS worktree's binary (gitMergeDriverCommand falls back to os.Executable()
 // when PATH holds no magus that answers), so a shared write points every other worktree at
 // this build, and a merge there silently resolves with the wrong tool. Reading stays
-// unscoped; `git config <key>` already prefers worktree config.
+// unscoped; `git config <key>` already prefers worktree config. The xfuncname patterns
+// take the same scope so every registration magus owns lives in one place.
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	args := []string{"config"}
+	scope := []string{"config"}
 	if v.worktreeConfigEnabled(ctx, root) {
-		args = append(args, "--worktree")
+		scope = append(scope, "--worktree")
 	}
-	args = append(args, "merge.magus.driver", gitMergeDriverCommand(ctx, root))
-	if _, err := gitOutput(ctx, root, gitOpts{}, args...); err != nil {
-		return fmt.Errorf("git config merge.magus.driver: %w", err)
+	set := func(key, value string) error {
+		if _, err := gitOutput(ctx, root, gitOpts{}, slices.Concat(scope, []string{key, value})...); err != nil {
+			return fmt.Errorf("git config %s: %w", key, err)
+		}
+		return nil
+	}
+	if err := set(gitMergeDriverKey, gitMergeDriverCommand(ctx, root)); err != nil {
+		return err
+	}
+	for _, f := range gitFuncnames {
+		if err := set(f.key(), f.pattern); err != nil {
+			return err
+		}
 	}
 	return nil
 }

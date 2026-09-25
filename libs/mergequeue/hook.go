@@ -1,7 +1,7 @@
 package mergequeue
 
-// This file runs the queue's hooks as shell command lines: the gate and the regeneration
-// on each candidate, and the build tool's facts during planning.
+// This file runs the queue's hooks, each a command and its arguments with no shell
+// between: the gate and the regeneration on each candidate, and the build tool's facts.
 //
 // Whatever a hook's process tree does is the change's: a normal non-zero exit, a death by
 // signal (an OOM kill included) and a temporary failure that outlasts its retries are
@@ -24,28 +24,12 @@ import (
 	"sync"
 	"time"
 
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/mergequeue/types"
-)
-
-// Environment the queue sets for its hooks.
-const (
-	EnvChange     = "MERGEQUEUE_CHANGE"      // the change's id
-	EnvHead       = "MERGEQUEUE_HEAD"        // the change's head commit
-	EnvBase       = "MERGEQUEUE_BASE"        // the branch the queue merges into
-	EnvBaseCommit = "MERGEQUEUE_BASE_COMMIT" // the commit every partition starts on
-	EnvOnto       = "MERGEQUEUE_ONTO"        // the commit this candidate was built onto
-	EnvCandidate  = "MERGEQUEUE_CANDIDATE"   // the candidate being gated
-	// EnvScratch is a directory private to the checkout a hook runs in, for its caches:
-	// a cache shared between candidates would let one change's hook plant a result
-	// another candidate's gate replays.
-	EnvScratch = "MERGEQUEUE_SCRATCH"
-	// EnvUnits lists, space separated, what the build tool regenerates by, when the
-	// caller proved that regeneration runs none of the change's code.
-	EnvUnits = "MERGEQUEUE_UNITS"
-	// EnvQuery names the fact a [CommandFacts] hook is asked for: "affected", "outputs"
-	// or "generation".
-	EnvQuery = "MERGEQUEUE_QUERY"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // scrubbed are credentials no hook sees: a gate runs the changes' code, and a token in
@@ -69,33 +53,141 @@ var retryDelay = 5 * time.Second
 // interruptGrace is how long an interrupted hook gets to stop before it is killed.
 const interruptGrace = 30 * time.Second
 
-// hookCommand is one hook invocation: a shell command line run with `sh -c`.
+// Command is a hook: a program and the arguments it always takes. The queue appends its
+// inputs and runs it with no shell between, so nothing in it or them is expanded.
+type Command []string
+
+// ParseCommand reads flag's value as a command and its arguments, in sh's word syntax:
+// quotes and backslashes group and escape, and nothing expands. Anything a shell would
+// act on (a variable, a substitution, an operator, a redirection, a glob, a leading
+// assignment, a comment) is refused with MGS3026, naming flag, since no shell runs it.
+func ParseCommand(flag, line string) (Command, error) {
+	refuse := func(what string) (Command, error) {
+		return nil, magustypes.DiagnosticErrorf(magustypes.QueueHookNotACommand,
+			"%s %q: %s, and a hook is a command and its arguments with no shell to act on it; put the line in a script and point %s at it",
+			flag, line, what, flag)
+	}
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX), syntax.KeepComments(true)).Parse(strings.NewReader(line), "")
+	switch {
+	case err != nil:
+		return refuse("it does not parse as sh words (" + err.Error() + ")")
+	case len(f.Stmts) == 0:
+		return refuse("it names no command")
+	case len(f.Stmts) != 1:
+		return refuse("it holds more than one command")
+	}
+	st := f.Stmts[0]
+	call, isCall := st.Cmd.(*syntax.CallExpr)
+	switch {
+	case len(st.Comments) > 0 || len(f.Last) > 0:
+		return refuse("# starts a comment")
+	case st.Background:
+		return refuse("& runs it in the background")
+	case st.Negated:
+		return refuse("! negates it")
+	case len(st.Redirs) > 0:
+		return refuse(st.Redirs[0].Op.String() + " redirects it")
+	case !isCall:
+		if bc, ok := st.Cmd.(*syntax.BinaryCmd); ok {
+			return refuse(bc.Op.String() + " joins two commands")
+		}
+		return refuse("it is a compound command")
+	case len(call.Assigns) > 0:
+		return refuse(call.Assigns[0].Name.Value + "= sets a variable")
+	}
+	for _, w := range call.Args {
+		if what := shellSyntax(w.Parts, false); what != "" {
+			return refuse(what)
+		}
+	}
+	// Literal words only, so this is quote and escape removal: no ReadDir, no glob.
+	cmd, err := expand.Fields(&expand.Config{}, call.Args...)
+	if err != nil || len(cmd) != len(call.Args) {
+		return refuse(fmt.Sprintf("its words do not read as literal text (%v)", err))
+	}
+	return cmd, nil
+}
+
+// shellSyntax names the first thing in parts a shell would expand, or "" when they are
+// literal text.
+func shellSyntax(parts []syntax.WordPart, quoted bool) string {
+	for i, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			if !quoted {
+				if what := pattern(p.Value, i == 0); what != "" {
+					return what
+				}
+			}
+		case *syntax.SglQuoted:
+			if p.Dollar {
+				return "$'...' is a shell quote"
+			}
+		case *syntax.DblQuoted:
+			if p.Dollar {
+				return `$"..." is a shell quote`
+			}
+			if what := shellSyntax(p.Parts, true); what != "" {
+				return what
+			}
+		case *syntax.ParamExp:
+			return "$" + p.Param.Value + " is a variable"
+		case *syntax.CmdSubst:
+			return "$(...) is a command substitution"
+		case *syntax.ArithmExp:
+			return "$((...)) is arithmetic"
+		default:
+			return "it holds shell syntax"
+		}
+	}
+	return ""
+}
+
+// pattern names an unescaped glob or brace character in an unquoted literal, or a
+// tilde leading its word.
+func pattern(lit string, leads bool) string {
+	if leads && strings.HasPrefix(lit, "~") {
+		return "~ is a home directory"
+	}
+	for i := 0; i < len(lit); i++ {
+		switch c := lit[i]; {
+		case c == '\\':
+			i++
+		case strings.IndexByte("*?[{", c) >= 0:
+			return string(c) + " is a pattern"
+		}
+	}
+	return ""
+}
+
+// hookCommand is one hook invocation: Command run with Args appended.
 type hookCommand struct {
-	Line   string
-	Dir    string
-	Env    []string // added to the queue's environment, less the scrubbed credentials
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Command Command
+	Args    []string
+	Dir     string
+	Env     []string // added to the queue's environment, less the scrubbed credentials
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Stderr  io.Writer
 }
 
 // Run runs c in a process group of its own. A cancelled context interrupts the whole
 // group rather than killing it, so a build tool it started can stop cleanly; the group
-// is killed interruptGrace later. Whatever of the group outlives the shell is killed
+// is killed interruptGrace later. Whatever of the group outlives the hook is killed
 // before Run returns, so no process a hook started runs on into the next hook or past
 // the verdict it led to. A process that left the group itself (setsid) escapes this,
 // and only the machine's own boundary, a CI job's, ends it.
 func (c hookCommand) Run(ctx context.Context) error {
-	if strings.TrimSpace(c.Line) == "" {
+	if len(c.Command) == 0 {
 		return errors.New("empty command hook")
 	}
-	cmd := exec.CommandContext(ctx, "sh", "-c", c.Line)
+	cmd := exec.CommandContext(ctx, c.Command[0], slices.Concat(c.Command[1:], c.Args)...)
 	cmd.Dir = c.Dir
 	cmd.Env = append(hookEnviron(), c.Env...)
 	cmd.Stdin = c.Stdin
 	// Output goes through pipes of the queue's own: exec's would hold Wait until every
-	// process holding them exits, which is the group outliving the shell, so it could
-	// not be killed at the shell's exit.
+	// process holding them exits, which is the group outliving the hook, so it could
+	// not be killed at the hook's exit.
 	out, err := pipeOutput(cmd, c.Stdout, c.Stderr)
 	if err != nil {
 		return err
@@ -116,7 +208,7 @@ func (c hookCommand) Run(ctx context.Context) error {
 	if killer != nil {
 		killer.Stop()
 	}
-	// The shell is reaped, but its group id stays taken while any member lives.
+	// The hook is reaped, but its group id stays taken while any member lives.
 	kill(cmd)
 	out.drain()
 	return err
@@ -238,23 +330,25 @@ func runHook(ctx context.Context, c hookCommand) error {
 }
 
 // ScratchVar is an environment variable the queue points into each hook's scratch
-// directory: Name is set to $MERGEQUEUE_SCRATCH/Dir. It keeps a cache private to one
-// candidate without the hook's command line saying so, which leaves that line one a
-// person can run outside the queue as it stands.
+// directory, a directory private to the checkout the hook runs in: Name is set to Dir
+// inside it. It keeps the caches of the tools a hook runs private to one candidate
+// without the hook's command line saying so, which leaves that line one a person can
+// run outside the queue as it stands.
 type ScratchVar struct {
 	Name string
 	Dir  string // relative, inside the scratch directory
 }
 
-// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name the queue does not
-// set itself, and DIR a relative path that stays inside the scratch directory.
+// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name other than a
+// credential the queue removes, and DIR a relative path that stays inside the scratch
+// directory.
 func ParseScratchVar(spec string) (ScratchVar, error) {
 	name, dir, ok := strings.Cut(spec, "=")
 	switch {
 	case !ok || !isEnvName(name) || dir == "":
 		return ScratchVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
-	case strings.HasPrefix(name, "MERGEQUEUE_") || slices.Contains(scrubbed, name):
-		return ScratchVar{}, fmt.Errorf("%q: the queue sets or removes %s itself", spec, name)
+	case slices.Contains(scrubbed, name):
+		return ScratchVar{}, fmt.Errorf("%q: the queue removes %s from every hook", spec, name)
 	case !filepath.IsLocal(dir):
 		return ScratchVar{}, fmt.Errorf("%q: %s leaves the scratch directory", spec, dir)
 	}
@@ -286,50 +380,48 @@ func scratchEnv(scratch string, vars []ScratchVar) ([]string, error) {
 	return env, nil
 }
 
-// CommandGate is a [types.Gate] running line in each candidate's checkout, with vars
-// pointed into the candidate's scratch directory. Exit status 0 is green; anything else
-// the hook's processes do is red. line's output goes to log, each line tagged with its
-// candidate; a nil log discards it.
-func CommandGate(line string, plan types.Plan, vars []ScratchVar, log *HookLog) types.Gate {
-	return commandGate{line: line, base: plan.Base, baseCommit: plan.BaseCommit, vars: vars, log: log}
+// CommandGate is a [types.Gate] running cmd in a checkout with the units appended as
+// arguments, and vars pointed into the checkout's scratch directory. Exit status 0 is
+// green; anything else the hook's processes do is red. Its output goes to log, each
+// line tagged with the commit gated and its change, or "base" for a commit gated as it
+// stands; a nil log discards it.
+func CommandGate(cmd Command, vars []ScratchVar, log *HookLog) types.Gate {
+	return commandGate{cmd: cmd, vars: vars, log: log}
 }
 
 type commandGate struct {
-	line, base, baseCommit string
-	vars                   []ScratchVar
-	log                    *HookLog
+	cmd  Command
+	vars []ScratchVar
+	log  *HookLog
 }
 
-func (g commandGate) Validate(ctx context.Context, cand types.Candidate, onto string, c types.Change) (types.GateResult, error) {
+func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
 	env, err := scratchEnv(cand.Scratch, g.vars)
 	if err != nil {
-		return types.GateResult{}, fmt.Errorf("gate on the candidate `%s`: %w", short(cand.Commit), err)
+		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
-	out := g.log.Prefixed("[" + short(cand.Commit) + " #" + c.ID + "] ")
+	of := "base"
+	if cand.Change != "" {
+		of = "#" + cand.Change
+	}
+	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	err = runHook(ctx, hookCommand{
-		Line: g.line,
-		Dir:  cand.Dir,
-		Env: append(env, EnvChange+"="+c.ID, EnvHead+"="+c.Head, EnvBase+"="+g.base,
-			EnvBaseCommit+"="+g.baseCommit, EnvOnto+"="+onto, EnvCandidate+"="+cand.Commit, EnvScratch+"="+cand.Scratch),
-		Stdout: out,
-		Stderr: out,
-	})
+	err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Env: env, Stdout: out, Stderr: out})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
 		return types.GateResult{Summary: "the gate " + failed.why}, nil
 	case err != nil:
-		return types.GateResult{}, fmt.Errorf("gate on the candidate `%s`: %w", short(cand.Commit), err)
+		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
 	return types.GateResult{Green: true}, nil
 }
 
-// CommandRegenerate is a [types.RegenerateFunc] running line in a checkout with the generated
-// paths on stdin, one per line, and vars pointed into the checkout's scratch directory. A
-// failure of the hook's processes is a *[types.RefusedError] naming the paths: the change
-// did not regenerate.
-func CommandRegenerate(line string, plan types.Plan, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
+// CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the
+// units appended as arguments, the generated paths on stdin, one per line, and vars
+// pointed into the checkout's scratch directory. A failure of the hook's processes is a
+// *[types.RefusedError] naming the paths: the change did not regenerate.
+func CommandRegenerate(cmd Command, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
 		env, err := scratchEnv(r.Scratch, vars)
 		if err != nil {
@@ -338,14 +430,13 @@ func CommandRegenerate(line string, plan types.Plan, vars []ScratchVar, log *Hoo
 		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
 		defer out.Close()
 		err = runHook(ctx, hookCommand{
-			Line: line,
-			Dir:  r.Dir,
-			Env: append(env, EnvChange+"="+r.Change.ID, EnvHead+"="+r.Change.Head, EnvBase+"="+plan.Base,
-				EnvBaseCommit+"="+plan.BaseCommit, EnvOnto+"="+r.Onto, EnvScratch+"="+r.Scratch,
-				EnvUnits+"="+strings.Join(r.Units, " ")),
-			Stdin:  strings.NewReader(strings.Join(r.Paths, "\n") + "\n"),
-			Stdout: out,
-			Stderr: out,
+			Command: cmd,
+			Args:    r.Units,
+			Dir:     r.Dir,
+			Env:     env,
+			Stdin:   strings.NewReader(strings.Join(r.Paths, "\n") + "\n"),
+			Stdout:  out,
+			Stderr:  out,
 		})
 		var failed changeFailure
 		if errors.As(err, &failed) {
@@ -355,10 +446,10 @@ func CommandRegenerate(line string, plan types.Plan, vars []ScratchVar, log *Hoo
 	}
 }
 
-// CommandFacts is [types.BuildFacts] from line, run in dir, for a build tool that has no Go
-// implementation. $MERGEQUEUE_QUERY names the fact asked for, and line prints one JSON
-// object answering it; other keys are ignored, so a build tool's richer structured
-// output can be the answer as it stands.
+// CommandFacts is [types.BuildFacts] from cmd, run in dir, for a build tool that has no
+// Go implementation. The fact asked for is appended to cmd as one argument, and cmd
+// prints one JSON object answering it; other keys are ignored, so a build tool's richer
+// structured output can be the answer as it stands.
 //
 //	affected    stdin: the change's paths, one per line
 //	            prints {"affected": [unit], "unbounded_by": why}; a missing "affected" is unbounded
@@ -369,29 +460,32 @@ func CommandRegenerate(line string, plan types.Plan, vars []ScratchVar, log *Hoo
 //	            names none
 //	generation  stdin: {"outputs": [path], "changed": [path]}
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
+//	all         stdin: empty
+//	            prints {"units": [unit]}: how the build tool names every unit
 //
 // A failing command is an error, since the hook reads only the base, never the change's
 // code.
-func CommandFacts(line, dir string, log *HookLog) types.BuildFacts {
-	return commandFacts{line: line, dir: dir, log: log}
+func CommandFacts(cmd Command, dir string, log *HookLog) types.BuildFacts {
+	return commandFacts{cmd: cmd, dir: dir, log: log}
 }
 
 type commandFacts struct {
-	line, dir string
-	log       *HookLog
+	cmd Command
+	dir string
+	log *HookLog
 }
 
-func (f commandFacts) ask(ctx context.Context, query, label string, env []string, stdin string, answer any) error {
+func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answer any) error {
 	stderr := f.log.Prefixed("[" + label + "] ")
 	defer stderr.Close()
 	var stdout bytes.Buffer
 	err := runHook(ctx, hookCommand{
-		Line:   f.line,
-		Dir:    f.dir,
-		Env:    append(env, EnvQuery+"="+query),
-		Stdin:  strings.NewReader(stdin),
-		Stdout: &stdout,
-		Stderr: stderr,
+		Command: f.cmd,
+		Args:    []string{query},
+		Dir:     f.dir,
+		Stdin:   strings.NewReader(stdin),
+		Stdout:  &stdout,
+		Stderr:  stderr,
 	})
 	if err != nil {
 		return fmt.Errorf("%s hook: %w", query, err)
@@ -410,8 +504,7 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 		Affected    []string `json:"affected"`
 		UnboundedBy string   `json:"unbounded_by"`
 	}
-	if err := f.ask(ctx, "affected", "affected #"+c.ID, []string{EnvChange + "=" + c.ID, EnvHead + "=" + c.Head},
-		strings.Join(paths, "\n")+"\n", &ans); err != nil {
+	if err := f.ask(ctx, "affected", "affected #"+c.ID, strings.Join(paths, "\n")+"\n", &ans); err != nil {
 		return nil, "", err
 	}
 	if ans.Affected == nil && ans.UnboundedBy == "" {
@@ -430,7 +523,7 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 		Updated    []string `json:"updated"`
 		Maintained []string `json:"maintained"`
 	}
-	if err := f.ask(ctx, "outputs", "outputs", nil, strings.Join(paths, "\n")+"\n", &ans); err != nil {
+	if err := f.ask(ctx, "outputs", "outputs", strings.Join(paths, "\n")+"\n", &ans); err != nil {
 		return nil, err
 	}
 	mark := func(answered []string, set func(*types.Writes)) {
@@ -458,10 +551,23 @@ func (f commandFacts) Generation(ctx context.Context, outputs, changed []string)
 		Code      []string `json:"code"`
 		Unbounded string   `json:"unbounded"`
 	}
-	if err := f.ask(ctx, "generation", "generation", nil, string(in), &ans); err != nil {
+	if err := f.ask(ctx, "generation", "generation", string(in), &ans); err != nil {
 		return types.Generation{}, err
 	}
 	return types.Generation{Units: ans.Units, Code: ans.Code, Unbounded: ans.Unbounded}, nil
+}
+
+func (f commandFacts) AllUnits(ctx context.Context) ([]string, error) {
+	var ans struct {
+		Units []string `json:"units"`
+	}
+	if err := f.ask(ctx, "all", "all", "", &ans); err != nil {
+		return nil, err
+	}
+	if len(ans.Units) == 0 {
+		return nil, errors.New("all hook named no unit")
+	}
+	return ans.Units, nil
 }
 
 // HookLog interleaves the output of concurrent hooks a whole line at a time, each line

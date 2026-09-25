@@ -4,9 +4,12 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestWithLoadedConfig(t *testing.T) {
 	opt := WithLoadedConfig(config.Config{})

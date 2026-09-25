@@ -180,7 +180,7 @@ func attentionDispose(root string, args []string) error {
 	// Disposing closes a request that exists to reach a PERSON (docs/doctrine.md,
 	// "Manual on purpose"): an agent answering its own block, or another agent's,
 	// removes the person the queue exists to reach. The guard denies this outright
-	// (rule person-only), but it fails OPEN where it is not wired, the same gap
+	// (rule agent-sign-off), but it fails OPEN where it is not wired, the same gap
 	// --ack closed this way first (diff.go).
 	if !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: session dispose records that a person closed this request, so it needs an interactive terminal")

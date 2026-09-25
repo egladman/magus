@@ -125,6 +125,11 @@ func TestCommandInvocations(t *testing.T) {
 			}},
 		{"a for loop walks a list and repeats nothing", `for i in 1 2; do gh pr view $i; done`,
 			[]types.CommandInvocation{{Program: "gh", Args: []string{"pr", "view", ""}}}},
+		{"a for loop that sleeps between passes polls", `for i in 1 2 3; do gh pr view 7 --json state; sleep 60; done`,
+			[]types.CommandInvocation{
+				{Program: "gh", Args: []string{"pr", "view", "7", "--json", "state"}, Repeats: true},
+				{Program: "sleep", Args: []string{"60"}, Repeats: true},
+			}},
 		{"a line that does not parse runs nothing", `gh pr view "`, nil},
 	}
 	for _, tc := range cases {

@@ -8,10 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // A ceiling-bearing body carries an accumulator, which is what lets its error report a
 // split at all.

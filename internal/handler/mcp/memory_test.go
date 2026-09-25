@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/memory"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestParseMemoryRefs(t *testing.T) {
 // sends a few params and sees nothing of what the name already holds, so the fields it
 // omits have to survive.
 func TestMemoryPutMatchesTheCLIContract(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	tool := &memoryTool{opts: Options{Magus: fixtureMagus(t)}}
 	ctx := context.Background()
 

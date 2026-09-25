@@ -12,9 +12,12 @@ import (
 	"text/template/parse"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestLocalSkillNameIsReserved keeps magus out of the one name a workspace is
 // told it owns.
