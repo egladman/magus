@@ -1286,7 +1286,7 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
 	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
-	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App, required with a --status-context)")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
@@ -1401,7 +1401,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
-	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it")
 	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
