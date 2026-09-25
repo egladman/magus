@@ -44,7 +44,7 @@ func TestAccessForPathTypeDropsDirRightsOnFiles(t *testing.T) {
 // grant carries REFER, which a device cannot hold.
 func TestAccessForPathTypeDropsReferFromAWriteGrant(t *testing.T) {
 	assert.Equal(t,
-		unix.LANDLOCK_ACCESS_FS_WRITE_FILE|unix.LANDLOCK_ACCESS_FS_TRUNCATE|unix.LANDLOCK_ACCESS_FS_IOCTL_DEV,
+		uint64(unix.LANDLOCK_ACCESS_FS_WRITE_FILE|unix.LANDLOCK_ACCESS_FS_TRUNCATE|unix.LANDLOCK_ACCESS_FS_IOCTL_DEV),
 		accessForPathType(fsAccessWrite, false))
 }
 
