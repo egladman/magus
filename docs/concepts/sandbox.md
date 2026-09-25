@@ -90,7 +90,7 @@ A checkout that acts as a delegated worker gets a write grant NARROWER than the 
 
 ### Environment scrubbing
 
-The child environment is not inherited; it is **rebuilt from an allowlist**. The default keeps only a small, non-secret baseline: `HOME`, `USER`, `PATH`, locale and terminal vars (`LANG`, `LC_*`, `TZ`, `TERM`, and per-platform additions like `SHELL`, `PWD`, `XDG_*`), plus the one runtime coordination var `MAGUS_RUN_ID`. Every other variable is dropped, which is what keeps `AWS_*`, `GITHUB_TOKEN`, `VAULT_*`, `NPM_TOKEN`, `ANTHROPIC_API_KEY`, and their kind out of subprocesses. When variables are dropped, [MGS2003](../reference/codes/sandbox/MGS2003.md) records the count as an informational notice - the build may well have succeeded; the message exists so a behavior change from a missing variable is traceable.
+The child environment is not inherited; it is **rebuilt from an allowlist**. The default keeps only a small, non-secret baseline: `HOME`, `USER`, `PATH`, locale and terminal vars (`LANG`, `LC_*`, `TZ`, `TERM`, and per-platform additions like `SHELL`, `PWD`, `XDG_*`). Every other variable is dropped, which is what keeps `AWS_*`, `GITHUB_TOKEN`, `VAULT_*`, `NPM_TOKEN`, `ANTHROPIC_API_KEY`, and their kind out of subprocesses. When variables are dropped, [MGS2003](../reference/codes/sandbox/MGS2003.md) records the count as an informational notice - the build may well have succeeded; the message exists so a behavior change from a missing variable is traceable.
 
 A workspace opts specific variables back in through `sandbox.env.passthrough`:
 

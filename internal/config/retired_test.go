@@ -18,8 +18,8 @@ func TestRetiredEnvNamesEachReplacement(t *testing.T) {
 	}
 	err := RetiredEnv(func(k string) string { return env[k] })
 	require.EqualError(t, err,
-		"MAGUS_DAEMON_ADDRESS was renamed to MAGUS_SERVER_ADDRESS; magus no longer reads it\n"+
-			"MAGUS_DAEMON_WORKSPACES was renamed to MAGUS_SERVER_WORKSPACES; magus no longer reads it")
+		"MAGUS_DAEMON_ADDRESS was renamed to MAGUS_SERVER_ADDRESS in v0.5.0; magus no longer reads it\n"+
+			"MAGUS_DAEMON_WORKSPACES was renamed to MAGUS_SERVER_WORKSPACES in v0.5.0; magus no longer reads it")
 
 	assert.NoError(t, RetiredEnv(func(string) string { return "" }))
 }
@@ -31,8 +31,12 @@ func TestRetiredEnvReplacementsAreKnown(t *testing.T) {
 	for _, key := range KnownKeys() {
 		known[EnvName("MAGUS", strings.Split(key, ".")...)] = true
 	}
-	for old, repl := range retiredEnv {
-		assert.True(t, known[repl], "%s names %s, which magus does not read", old, repl)
+	for old, r := range retiredEnv {
+		if r.replacement == "" {
+			assert.NotEmpty(t, r.instead, "%s names neither a replacement nor what to do", old)
+			continue
+		}
+		assert.True(t, known[r.replacement], "%s names %s, which magus does not read", old, r.replacement)
 	}
 	for old, repl := range retiredKeys {
 		assert.NotContains(t, knownKeysIn(configTypeName), old, "%s is retired but still a key", old)

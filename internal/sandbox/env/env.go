@@ -26,18 +26,14 @@ var commonEnvAllow = []string{
 	"TERM",
 }
 
-// magusRuntimeEnv lists MAGUS_* vars passed to sandbox children.
-// MAGUS_PROC_SOCKET and MAGUS_SERVER_ADDRESS are absent: they're unauthenticated and would let spells escape the sandbox.
-var magusRuntimeEnv = []string{
-	"MAGUS_RUN_ID",
-}
-
-// DefaultAllow returns the base env-var allowlist (cross-platform + platform-specific + magus runtime vars).
+// DefaultAllow returns the base env-var allowlist (cross-platform + platform-specific).
+// No MAGUS_* variable is on it: the ones a child magus needs are injected per spawn, and
+// MAGUS_PROC_SOCKET and MAGUS_SERVER_ADDRESS stay off because they're unauthenticated and
+// would let spells escape the sandbox.
 func DefaultAllow() []string {
-	out := make([]string, 0, len(commonEnvAllow)+len(platformEnvAllow)+len(magusRuntimeEnv))
+	out := make([]string, 0, len(commonEnvAllow)+len(platformEnvAllow))
 	out = append(out, commonEnvAllow...)
 	out = append(out, platformEnvAllow...)
-	out = append(out, magusRuntimeEnv...)
 	return out
 }
 

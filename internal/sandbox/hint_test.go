@@ -319,10 +319,8 @@ func TestAllowEnv(t *testing.T) {
 	assert.False(t, p.AllowEnv("NPM_TOKEN"), "exact name; not matched by NPM_CONFIG_*")
 }
 
-func TestMagusRuntimeEnvPassesThrough(t *testing.T) {
+func TestMagusSocketsAreNotAllowlisted(t *testing.T) {
 	p := BuildPolicy("/ws", nil, nil, nil, nil)
-	// MAGUS_RUN_ID is a plain identifier; it passes through to all children.
-	assert.True(t, p.AllowEnv("MAGUS_RUN_ID"), "MAGUS_RUN_ID must pass through")
 	// MAGUS_PROC_SOCKET and MAGUS_SERVER_ADDRESS are intentionally withheld
 	// from the general allowlist: the pool socket is unauthenticated. They
 	// are injected per-spawn only by MagusCmd (recursive magus invocations).

@@ -556,67 +556,43 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	return types.Check{Name: "vcs-base-ref", Status: types.CheckOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
 
-// runtimeEnvVars are the MAGUS_* variables magus reads without them being config
-// fields; see checkEnvVars for why each one cannot be migrated onto the config
-// struct the way that function's doc otherwise requires.
-var runtimeEnvVars = map[string]struct{}{
-	"MAGUS_LEVEL":                {},
-	"MAGUS_INVOCATION_ANCESTORS": {},
-	"MAGUS_SHARD":                {},
-	"MAGUS_N_SHARDS":             {},
-	"MAGUS_CACHE_SIGNING_KEY":    {},
-	"MAGUS_PROC_SOCKET":          {},
-}
-
+// checkEnvVars fails on a MAGUS_* variable that is provably wrong (config.EnvVarProblem:
+// retired, or a near miss), the same set every command refuses at startup, and advises on
+// one magus simply does not read. The second kind may belong to a newer magus or to the
+// repository's own tooling, which only a person can tell apart, so it is reported and
+// never gates.
 func (*runner) checkEnvVars() types.Check {
-	var unknown []string
+	var problems, unknown []string
 	for _, kv := range os.Environ() {
-		eq := strings.IndexByte(kv, '=')
-		if eq < 0 {
+		key, value, ok := strings.Cut(kv, "=")
+		if !ok || value == "" || !strings.HasPrefix(key, "MAGUS_") {
 			continue
 		}
-		key := kv[:eq]
-		if !strings.HasPrefix(key, "MAGUS_") {
-			continue
+		if msg, bad := config.EnvVarProblem(key); bad {
+			problems = append(problems, msg)
+		} else if !config.KnownEnvVar(key) {
+			unknown = append(unknown, key)
 		}
-		if _, ok := KnownEnvVars[key]; ok {
-			continue
-		}
-		// Vars magus reads that are deliberately NOT config fields, so they never
-		// appear in KnownEnvVars. Flagging them told users their own documented
-		// setup was a typo:
-		//   MAGUS_LEVEL              subprocess recursion depth, like GNU Make's
-		//                            MAKELEVEL (internal/proc/run SelfVars); a nested
-		//                            magus legitimately sees it.
-		//   MAGUS_SHARD              CI matrix inputs, read as the --shard/--n-shards
-		//   MAGUS_N_SHARDS           flag defaults (cmd/magus/run.go) and exported by
-		//                            magus's own GitHub action.
-		//   MAGUS_CACHE_SIGNING_KEY  the remote-cache signing seed. It must stay
-		//                            env-only: a signing secret that could be set in a
-		//                            committed magus.yaml is not a secret.
-		//   MAGUS_PROC_SOCKET        the proc-server socket magus exports for its own
-		//                            forwarded children (proc.SocketEnv); a child
-		//                            magus legitimately sees it, and no person sets it.
-		if _, ok := runtimeEnvVars[key]; ok {
-			continue
-		}
-		// MAGUS_VCS_<NAME>_BASE_REF is a dynamic per-VCS pattern, not a
-		// static config field. Allow any key of this shape.
-		if strings.HasPrefix(key, "MAGUS_VCS_") && strings.HasSuffix(key, "_BASE_REF") {
-			continue
-		}
-		unknown = append(unknown, key)
 	}
-	if len(unknown) == 0 {
-		return types.Check{Name: "environment-variables", Status: types.CheckOK, Message: "no unknown MAGUS_* variables"}
-	}
+	slices.Sort(problems)
 	slices.Sort(unknown)
-	return types.Check{
-		Name:    "environment-variables",
-		Status:  types.CheckFail,
-		Message: fmt.Sprintf("%d unknown MAGUS_* variable(s); typos?", len(unknown)),
-		Details: unknown,
+	switch {
+	case len(problems) > 0:
+		return types.Check{
+			Name:    "environment-variables",
+			Status:  types.CheckFail,
+			Message: fmt.Sprintf("%d misconfigured MAGUS_* variable(s) (MGS1046)", len(problems)),
+			Details: append(problems, unknown...),
+		}
+	case len(unknown) > 0:
+		return types.Check{
+			Name:    "environment-variables",
+			Status:  types.CheckAdvice,
+			Message: fmt.Sprintf("%d MAGUS_* variable(s) this magus does not read; a newer magus's, or your own tooling's?", len(unknown)),
+			Details: unknown,
+		}
 	}
+	return types.Check{Name: "environment-variables", Status: types.CheckOK, Message: "no unknown MAGUS_* variables"}
 }
 
 // checkTargetNameConventions fails when a workspace declares target functions

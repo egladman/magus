@@ -71,6 +71,28 @@ func runCLI() int {
 	// bootstrap_exec.go.
 	maybeBootstrapExec(os.Args)
 
+	args := expandVerbosityArgs(os.Args[1:])
+
+	// After the bootstrap exec, so the workspace's own binary judges the environment: a
+	// variable a newer ./magus reads is unknown to the older PATH binary that found it.
+	// Before everything else, help and version included, because a retired or misspelled
+	// MAGUS_* value is misconfiguration whatever the command.
+	//
+	// Two commands answer it differently, because an agent host runs them as its guard
+	// hook and reads a failed hook as no verdict, which it treats as allow. `shell` denies
+	// with the refusal as its reason. `buzz` runs the hook glue, which calls `shell` in
+	// this same environment, so it carries on and lets that verdict land.
+	if err := config.MisconfiguredEnv(os.Environ()); err != nil {
+		switch sub, subArgs := peekSub(args); sub {
+		case "shell":
+			return exitCodeOf(shellCmd(withEnvRefusal(context.Background(), err), subArgs))
+		case "buzz":
+		default:
+			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+			return 1
+		}
+	}
+
 	log.SetFlags(0)
 	log.SetPrefix("magus: ")
 
@@ -79,8 +101,6 @@ func runCLI() int {
 	// empty exactly when a run failed slowly. main() calls os.Exit on runCLI's RESULT,
 	// so this defer still runs. No-op unless MAGUS_PPROF is set.
 	defer startProfiling()()
-
-	args := expandVerbosityArgs(os.Args[1:])
 
 	rootCtx, stopSignals, interrupted := watchInterrupts(context.Background())
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
@@ -619,7 +639,16 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// Without a second pass the whole MAGUS_* surface goes unchecked while the
 	// equivalent yaml is rejected. Printed and exiting 1 like the load failure
 	// above, for the same reason: it is the same multi-line validator text.
-	if err := errors.Join(configgen.ApplyEnv(&cfg, os.Getenv), config.Validate(cfg)); err != nil {
+	//
+	// Retired names are hidden from it: runCLI already reported them (MGS1046), and the
+	// `buzz` it lets through must not exit here instead, or the hook glue never runs.
+	knownEnv := func(name string) string {
+		if !config.KnownEnvVar(name) {
+			return ""
+		}
+		return os.Getenv(name)
+	}
+	if err := errors.Join(configgen.ApplyEnv(&cfg, knownEnv), config.Validate(cfg)); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: invalid configuration from the environment: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}

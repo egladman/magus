@@ -3873,3 +3873,142 @@ func testMainIsolates(t *testing.T, dir string) bool {
 	}
 	return false
 }
+
+// envNameLiteralRe matches a string literal that is exactly a MAGUS_* name, or a
+// NAME=value pair handed to a child: the shapes a read (os.Getenv("NAME"), a const) and
+// an export take. Prose naming a variable inside a longer message does not match.
+var envNameLiteralRe = regexp.MustCompile(`^(MAGUS_[A-Z0-9_]*[A-Z0-9])(=.*)?$`)
+
+// buzzEnvLiteralRe is envNameLiteralRe for a quoted Buzz string.
+var buzzEnvLiteralRe = regexp.MustCompile("[\"`](MAGUS_[A-Z0-9_]*[A-Z0-9])(?:=[^\"`\\n]*)?[\"`]")
+
+// envRegistrySkipDirs are trees whose MAGUS_* names are not reads: VCS and cache state,
+// installed agent copies, dependencies, and fixtures. gen/ is walked on purpose, since the
+// generated ApplyEnv is where every config-derived variable is read.
+var envRegistrySkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "testdata": true,
+}
+
+// envNamesNeverInEnvironment are MAGUS_* literals in shipped code that name something other
+// than a variable magus reads, each with what it is. Registering one would admit a
+// variable nothing reads.
+var envNamesNeverInEnvironment = map[string]string{
+	"MAGUS_QUEUE_APP_CLIENT_ID":   "a GitHub Actions variable the merge queue's GitHub provider sets up; workflows read it as vars.MAGUS_QUEUE_APP_CLIENT_ID",
+	"MAGUS_QUEUE_APP_PRIVATE_KEY": "the GitHub Actions secret the merge queue's GitHub provider stores the queue app's key under; the setup-magus action reads it, magus never does",
+}
+
+// repoToolingPrefixes are the paths this repository builds and releases itself with,
+// which ship to nobody. A MAGUS_* name only they read is theirs, not magus's.
+var repoToolingPrefixes = []string{
+	"cmd/magus-utils/", "tools/", ".github/", "benchmarks/", "hack/", "magusfile.buzz",
+}
+
+// shipsWithMagus reports whether slash (a slash-separated repo path) is code that ships:
+// not the repository's own tooling, and not the docs site except the agent glue a reader
+// installs.
+func shipsWithMagus(slash string) bool {
+	for _, p := range repoToolingPrefixes {
+		if strings.HasPrefix(slash, p) {
+			return false
+		}
+	}
+	return !strings.HasPrefix(slash, "docs/") || strings.HasPrefix(slash, "docs/guides/integrations/agents/")
+}
+
+// TestEveryReadMagusEnvVarIsRegistered holds config.EnvVarDocs complete for what ships, and
+// keeps this repository's own tooling clear of MGS1046. A name shipped code reads and
+// nobody registered is one doctor calls unknown and a near miss of it is not caught; a
+// tooling name a typo away from a registered one would stop every magus command in the
+// job that sets it.
+func TestEveryReadMagusEnvVarIsRegistered(t *testing.T) {
+	t.Parallel()
+
+	found := map[string]string{}
+	tooling := map[string]string{}
+	note := func(name, where string) {
+		into := found
+		if !shipsWithMagus(where) {
+			into = tooling
+		}
+		if _, ok := into[name]; !ok {
+			into[name] = where
+		}
+	}
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if envRegistrySkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		slash := filepath.ToSlash(path)
+		switch {
+		case strings.HasSuffix(slash, ".buzz"):
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, m := range buzzEnvLiteralRe.FindAllStringSubmatch(string(body), -1) {
+				note(m[1], slash)
+			}
+		// retired.go names exactly what magus stopped reading; MGS1046 reports those by
+		// name, so they are the one set that must NOT be registered.
+		case strings.HasSuffix(slash, ".go") && !strings.HasSuffix(slash, "_test.go") && slash != "internal/config/retired.go":
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				return nil //nolint:nilerr // a file that does not parse is the build's finding, not this gate's
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				s, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					return true
+				}
+				if m := envNameLiteralRe.FindStringSubmatch(s); m != nil {
+					note(m[1], fmt.Sprintf("%s:%d", slash, fset.Position(lit.Pos()).Line))
+				}
+				return true
+			})
+		}
+		return nil
+	})
+	require.NoError(t, err, "walk")
+	require.Contains(t, found, "MAGUS_CACHE_DIR", "the scan found nothing it should have; it is broken, not green")
+
+	var missing []string
+	for name, where := range found {
+		_, notEnv := envNamesNeverInEnvironment[name]
+		assert.False(t, notEnv && config.KnownEnvVar(name), "%s is registered, so drop it from envNamesNeverInEnvironment", name)
+		if !notEnv && !config.KnownEnvVar(name) {
+			missing = append(missing, fmt.Sprintf("%s (%s)", name, where))
+		}
+	}
+	for name := range envNamesNeverInEnvironment {
+		assert.Contains(t, found, name, "%s is named nowhere any more; drop it from envNamesNeverInEnvironment", name)
+	}
+	slices.Sort(missing)
+	assert.Empty(t, missing,
+		"these MAGUS_* names are read or exported by shipped code but missing from config.EnvVarDocs;\n"+
+			"register each with its doc, or rename it off the prefix:\n%s",
+		strings.Join(missing, "\n"))
+
+	var refused []string
+	for name, where := range tooling {
+		if msg, bad := config.EnvVarProblem(name); bad {
+			refused = append(refused, fmt.Sprintf("%s (%s)", msg, where))
+		}
+	}
+	slices.Sort(refused)
+	assert.Empty(t, refused,
+		"this repository's own tooling uses MAGUS_* names every magus command refuses (MGS1046);\n"+
+			"rename them off the prefix:\n%s",
+		strings.Join(refused, "\n"))
+}

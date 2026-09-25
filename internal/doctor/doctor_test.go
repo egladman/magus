@@ -547,62 +547,70 @@ func TestCheckHasCharmTypos(t *testing.T) {
 	})
 }
 
+// clearMagusEnv unsets every ambient MAGUS_* variable for the test. t.Setenv has no
+// unset form, and this check read the ambient environment for real until CI exported
+// three MAGUS_* vars and failed it.
+func clearMagusEnv(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "MAGUS_") {
+			continue
+		}
+		k, v, _ := strings.Cut(kv, "=")
+		require.NoError(t, os.Unsetenv(k))
+		t.Cleanup(func() { _ = os.Setenv(k, v) })
+	}
+}
+
+// A provable mistake (retired, or a near miss) fails with the MGS1046 line; a name magus
+// does not read but cannot call wrong is advice; the names magus sets for its own
+// children, which no config field carries, pass.
 func TestCheckEnvVars(t *testing.T) {
-	t.Run("no unknown vars", func(t *testing.T) {
-		// UNSET, not set-to-empty: checkEnvVars scans os.Environ() by KEY, so
-		// t.Setenv(k, "") leaves the variable present and the isolation does
-		// nothing. This test read the ambient environment for real until CI
-		// exported three MAGUS_* vars and failed it. t.Setenv has no unset form,
-		// so restore by hand.
-		for _, kv := range os.Environ() {
-			if !strings.HasPrefix(kv, "MAGUS_") {
-				continue
+	cases := []struct {
+		name   string
+		env    map[string]string
+		status types.CheckStatus
+		detail []string
+	}{
+		{name: "none", status: types.CheckOK},
+		{
+			name:   "near miss",
+			env:    map[string]string{"MAGUS_CACHE_DIRR": "/tmp/c"},
+			status: types.CheckFail,
+			detail: []string{"MAGUS_CACHE_DIRR is set, but magus does not read it; did you mean MAGUS_CACHE_DIR?"},
+		},
+		{
+			name:   "retired, beside an unknown one",
+			env:    map[string]string{"MAGUS_DAEMON_ADDRESS": "unix:///tmp/s", "MAGUS_OWN_TOOL": "1"},
+			status: types.CheckFail,
+			detail: []string{"MAGUS_DAEMON_ADDRESS was renamed to MAGUS_SERVER_ADDRESS in v0.5.0; magus no longer reads it", "MAGUS_OWN_TOOL"},
+		},
+		{
+			name:   "unknown",
+			env:    map[string]string{"MAGUS_CACHE_MOD": "auto"},
+			status: types.CheckAdvice,
+			detail: []string{"MAGUS_CACHE_MOD"},
+		},
+		{
+			name: "set by magus for its children",
+			env: map[string]string{
+				"MAGUS_LEVEL": "1", "MAGUS_INVOCATION_ANCESTORS": "1:inv", "MAGUS_SHARD": "0",
+				"MAGUS_N_SHARDS": "2", "MAGUS_CACHE_SIGNING_KEY": "seed", "MAGUS_VCS_GIT_BASE_REF": "origin/main",
+			},
+			status: types.CheckOK,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearMagusEnv(t)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
 			}
-			k, v, _ := strings.Cut(kv, "=")
-			require.NoError(t, os.Unsetenv(k))
-			t.Cleanup(func() { _ = os.Setenv(k, v) })
-		}
-		r := &runner{}
-		got := r.checkEnvVars()
-		assert.Equal(t, types.CheckOK, got.Status, got.Details)
-	})
-
-	t.Run("typo'd var", func(t *testing.T) {
-		t.Setenv("MAGUS_CACHE_MOD", "auto")
-		r := &runner{}
-		got := r.checkEnvVars()
-		assert.Equal(t, types.CheckFail, got.Status)
-		assert.Contains(t, got.Details, "MAGUS_CACHE_MOD")
-	})
-
-	// magus reads these itself (subprocess recursion depth and invocation ancestry, CI
-	// shard inputs, the cache-signing seed) without them being config fields, so they can
-	// never appear in KnownEnvVars; runtimeEnvVars is the allowlist that keeps this
-	// check from calling magus's own documented setup a typo.
-	t.Run("runtime env vars recognized", func(t *testing.T) {
-		for _, name := range []string{
-			"MAGUS_LEVEL",
-			"MAGUS_INVOCATION_ANCESTORS",
-			"MAGUS_SHARD",
-			"MAGUS_N_SHARDS",
-			"MAGUS_CACHE_SIGNING_KEY",
-		} {
-			t.Run(name, func(t *testing.T) {
-				for _, kv := range os.Environ() {
-					if !strings.HasPrefix(kv, "MAGUS_") {
-						continue
-					}
-					k, v, _ := strings.Cut(kv, "=")
-					require.NoError(t, os.Unsetenv(k))
-					t.Cleanup(func() { _ = os.Setenv(k, v) })
-				}
-				t.Setenv(name, "1")
-				r := &runner{}
-				got := r.checkEnvVars()
-				assert.Equal(t, types.CheckOK, got.Status, got.Details)
-			})
-		}
-	})
+			got := (&runner{}).checkEnvVars()
+			assert.Equal(t, tc.status, got.Status, got.Details)
+			assert.Equal(t, tc.detail, got.Details)
+		})
+	}
 }
 
 // TestDisplayPath covers the server path displayPath's own doc cites as the
