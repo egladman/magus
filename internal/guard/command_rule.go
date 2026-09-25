@@ -3,7 +3,6 @@ package guard
 import (
 	"cmp"
 	"context"
-	"path/filepath"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -57,8 +56,8 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	if deps.CheckoutState != nil {
-		if dir, ok := gitPushDir(req.Commands, cmp.Or(at.dir, at.workspace)); ok {
-			req.Checkout = deps.CheckoutState(ctx, dir)
+		if push, ok := locatePush(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
+			req.Checkout = deps.CheckoutState(ctx, push.dir)
 		}
 	}
 	bind := func(rule workspace.CommandRule) ruleCall {
@@ -105,30 +104,6 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Role:        role,
 		Lease:       lease,
 	}
-}
-
-// gitPushDir is the directory the first `git push` on a line runs in, the one command whose
-// rule needs the checkout's state: dir, moved by each `-C` git is given, as git
-// applies them. False when the line pushes nothing.
-func gitPushDir(cmds []types.CommandInvocation, dir string) (string, bool) {
-	for _, c := range cmds {
-		if c.Program != "git" {
-			continue
-		}
-		if ops := operands(c.Args, "C"); len(ops) == 0 || ops[0] != "push" {
-			continue
-		}
-		for i := 0; i+1 < len(c.Args) && c.Args[i] != "push"; i++ {
-			if c.Args[i] == "-C" {
-				dir = filepath.Join(dir, c.Args[i+1])
-				if filepath.IsAbs(c.Args[i+1]) {
-					dir = c.Args[i+1]
-				}
-			}
-		}
-		return dir, true
-	}
-	return "", false
 }
 
 // actingRole is where a caller acting under lease stands, and the lease's job row. A bound
