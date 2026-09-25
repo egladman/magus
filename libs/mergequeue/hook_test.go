@@ -34,13 +34,13 @@ func lines(log *bytes.Buffer) []string { return strings.Split(strings.TrimSpace(
 
 func TestParseCommandReadsLiteralWords(t *testing.T) {
 	for line, want := range map[string]Command{
-		"magus run ci --no-default-charms":        {"magus", "run", "ci", "--no-default-charms"},
-		"magus --sandbox-enabled run generate:rw": {"magus", "--sandbox-enabled", "run", "generate:rw"},
-		`'/opt/my magus' run "ci"`:                {"/opt/my magus", "run", "ci"},
-		`./gate.sh a\ b 'x; y' "\$HOME *"`:        {"./gate.sh", "a b", "x; y", "$HOME *"},
-		`sh -c 'test -f ok || exit 3'`:            {"sh", "-c", "test -f ok || exit 3"},
-		"  make   test  ":                         {"make", "test"},
-		`tool a~b 'a*b' --pattern=\*.go`:          {"tool", "a~b", "a*b", "--pattern=*.go"},
+		"magus run ci --no-default-charms":         {"magus", "run", "ci", "--no-default-charms"},
+		"magus --sandbox=required run generate:rw": {"magus", "--sandbox=required", "run", "generate:rw"},
+		`'/opt/my magus' run "ci"`:                 {"/opt/my magus", "run", "ci"},
+		`./gate.sh a\ b 'x; y' "\$HOME *"`:         {"./gate.sh", "a b", "x; y", "$HOME *"},
+		`sh -c 'test -f ok || exit 3'`:             {"sh", "-c", "test -f ok || exit 3"},
+		"  make   test  ":                          {"make", "test"},
+		`tool a~b 'a*b' --pattern=\*.go`:           {"tool", "a~b", "a*b", "--pattern=*.go"},
 	} {
 		got, err := ParseCommand("--gate", line)
 		require.NoError(t, err, line)

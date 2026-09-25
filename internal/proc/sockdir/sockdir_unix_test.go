@@ -3,6 +3,7 @@
 package sockdir
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // TestVerifySockDirRejectsWorldWritable guards S-2: os.MkdirAll(dir, 0o700) is
 // a silent no-op when dir already exists, so it neither chmods nor checks
 // ownership of a directory another local user pre-created. The fallback
-// $TMPDIR/magus-$UID sits under a world-writable parent with a fully
+// /tmp/magus-$UID sits under a world-writable parent with a fully
 // predictable name (UIDs are enumerable), so a loosely permissioned
 // pre-created directory is exactly what an attacker would leave behind.
 func TestVerifySockDirRejectsWorldWritable(t *testing.T) {
@@ -62,6 +63,41 @@ func TestVerifySockDirRejectsSymlink(t *testing.T) {
 func TestVerifySockDirMissingIsNotAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "does-not-exist")
 	assert.NoError(t, verifySockDir(dir))
+}
+
+// TestDirStaysOutOfTMPDIR: with no runtime dir the sockets go to the user cache dir, not
+// $TMPDIR, because every sandboxed run may write $TMPDIR and so could unlink a socket
+// there and bind its own.
+func TestDirStaysOutOfTMPDIR(t *testing.T) {
+	root := t.TempDir()
+	tmp := filepath.Join(root, "tmp")
+	require.NoError(t, os.Mkdir(tmp, 0o700))
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	cache, err := os.UserCacheDir()
+	require.NoError(t, err)
+
+	dir := Dir()
+	assert.Equal(t, filepath.Join(cache, "magus", "run"), dir)
+	assert.NotContains(t, dir, tmp)
+	require.NoError(t, verifySockDir(dir))
+}
+
+// TestDirFallbackIgnoresTMPDIR: testscript points TMPDIR at $WORK/.tmp, and a token file
+// there is an untracked file in the workspace, so the last resort is /tmp itself.
+func TestDirFallbackIgnoresTMPDIR(t *testing.T) {
+	root := t.TempDir()
+	// A file as HOME fails the cache dir's MkdirAll even for root.
+	home := filepath.Join(root, "home")
+	require.NoError(t, os.WriteFile(home, nil, 0o600))
+	t.Setenv("TMPDIR", filepath.Join(root, "tmp"))
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("HOME", home)
+
+	assert.Equal(t, fmt.Sprintf("/tmp/magus-%d", os.Getuid()), Dir())
 }
 
 // The wrong-owner case (a directory owned by a different uid) is not covered

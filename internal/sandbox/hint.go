@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,15 +27,18 @@ func allowLabel(target string) string {
 	return b.String()
 }
 
-// denyHint renders the remedy for a sandbox-denied operation on target (a path, or
-// a resolved binary for exec). mode is "ro" (read/exec) or "rw" (write); rw needs
-// the extra mode command.
+// allowMode is the sandbox.allow mode that grants access; read is the default mode,
+// so it needs no mode command.
+var allowMode = map[filesystem.Access]string{filesystem.Write: "rw", filesystem.Exec: "rx"}
+
+// denyHint renders the remedy for a sandbox-denied access to target (a path, or a
+// resolved binary for exec).
 //
 // Under a lease the remedy is not a config edit: the boundary is the lease's own
 // write paths, declared by the orchestrator, and telling a worker to widen the
 // workspace allow list would be telling it to route around its contract. The lease
 // hint names the lease and hands the decision back to whoever declared the row.
-func denyHint(lease, mode, target string) string {
+func denyHint(lease string, access filesystem.Access, target string) string {
 	if lease != "" {
 		return fmt.Sprintf("sandbox blocked access to %s: it is outside the paths lease %s was given. "+
 			"Report it to the orchestrator, which can widen the row's write_paths with the magus_job tool; do not edit sandbox.allow yourself.",
@@ -43,19 +47,19 @@ func denyHint(lease, mode, target string) string {
 	label := allowLabel(target)
 	cmd := fmt.Sprintf("sandbox blocked access to %s; allow it with:\n"+
 		"        magus config set key=sandbox.allow.%s.path,value=%s", target, label, target)
-	if mode == "rw" {
-		cmd += fmt.Sprintf("\n        magus config set key=sandbox.allow.%s.mode,value=rw", label)
+	if mode, ok := allowMode[access]; ok {
+		cmd += fmt.Sprintf("\n        magus config set key=sandbox.allow.%s.mode,value=%s", label, mode)
 	}
 	return cmd
 }
 
-// EmitDenyHint prints the "allow it with" remedy via the interactive hint channel
-// (a no-op when hints are disabled). Call it at a sandbox denial site, before
-// returning the diagnostic error, while the path/command is still typed and in
-// scope — it doesn't survive being raised across a script VM, so a central
-// handler could not reconstruct the target.
-func EmitDenyHint(p *Policy, mode, target string) {
-	if p != nil && p.ReadOnly {
+// EmitDenyHint prints the "allow it with" remedy for p's denial of access to target
+// via the interactive hint channel (a no-op when hints are disabled). Call it at a
+// sandbox denial site, before returning the diagnostic error, while target is still
+// typed and in scope: it doesn't survive being raised across a script VM, so a
+// central handler could not reconstruct it.
+func EmitDenyHint(p *Policy, access filesystem.Access, target string) {
+	if p != nil && p.ReadOnly && access != filesystem.Read {
 		// No allow entry lifts it: read-only is how the run was asked for.
 		interactive.Emit(os.Stderr, ReadOnlyHint)
 		return
@@ -64,7 +68,7 @@ func EmitDenyHint(p *Policy, mode, target string) {
 	if p != nil {
 		lease = p.Lease
 	}
-	interactive.Emit(os.Stderr, denyHint(lease, mode, target))
+	interactive.Emit(os.Stderr, denyHint(lease, access, target))
 }
 
 // shimMarker pairs a PATH-shim runtime manager with the env var it reads at
@@ -114,12 +118,12 @@ func shimHint(cmd, manager, envVar string) string {
 		cmd, envVar)
 }
 
-// EmitShimHint prints the MGS2006 hint when policy suggests a PATH-shim manager
-// (mise, asdf) lost the var it needs while its shim directory is still on PATH (a
-// no-op when nothing matches, or hints are disabled). Call it at the same site
+// EmitShimHint prints the MGS2006 hint when p suggests a PATH-shim manager (mise,
+// asdf) lost the var it needs while its shim directory is still on PATH (a no-op
+// when nothing matches, or hints are disabled). Call it at the same site
 // RecordEnvDropped runs, while cmd is still in scope.
-func EmitShimHint(cmd string, policy *Policy) {
-	manager, envVar, ok := detectShimSuspect(policy)
+func EmitShimHint(p *Policy, cmd string) {
+	manager, envVar, ok := detectShimSuspect(p)
 	if !ok {
 		return
 	}

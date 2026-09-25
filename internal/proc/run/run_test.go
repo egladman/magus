@@ -134,13 +134,14 @@ func TestExecWithholdsProcSocket(t *testing.T) {
 // env; not parallel.
 func TestChildEnvReportsWithheldProcVars(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "unix:///tmp/p.sock")
+	t.Setenv("MAGUS_PROC_TOKEN", "secret")
 	t.Setenv("MAGUS_SERVER_ADDRESS", "unix:///tmp/p.sock")
-	// Both present in the process env, no overrides: both are withheld from the child.
+	// All present in the process env, no overrides: all are withheld from the child.
 	_, withheld := childEnv(context.Background(), nil, nil)
-	assert.ElementsMatch(t, ProcForwardVars, withheld, "both magus socket pointers withheld")
+	assert.ElementsMatch(t, ProcForwardVars, withheld, "every magus socket pointer withheld")
 	// An override that re-adds one (a nested magus forwarding) means it is NOT withheld.
 	_, withheld = childEnv(context.Background(), nil, []string{"MAGUS_PROC_SOCKET=unix:///tmp/child.sock"})
-	assert.Equal(t, []string{"MAGUS_SERVER_ADDRESS"}, withheld, "re-injected var is not reported withheld")
+	assert.Equal(t, []string{"MAGUS_PROC_TOKEN", "MAGUS_SERVER_ADDRESS"}, withheld, "re-injected var is not reported withheld")
 }
 
 // TestChildEnvCarriesInvocationAncestry pins the ONLY carrier the ordinary nested case

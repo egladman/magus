@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -95,7 +96,7 @@ func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 // a reader over that file (deleted on Close), false is [cache.ErrRemoteMiss], and a
 // throw is an error.
 func (b *spellRemoteBackend) GetArtifact(ctx context.Context, namespace, key string) (io.ReadCloser, error) {
-	dest, err := tempArtifactPath("magus-remote-get-")
+	dest, err := tempArtifactPath(ctx, "magus-remote-get-")
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +151,7 @@ func (b *spellRemoteBackend) HasArtifact(ctx context.Context, namespace, key str
 // PutArtifact streams r into a temp file and invokes the spell's put_artifact op. false
 // is [cache.ErrRemoteExists].
 func (b *spellRemoteBackend) PutArtifact(ctx context.Context, namespace, key string, r io.Reader) error {
-	src, err := tempArtifactPath("magus-remote-put-")
+	src, err := tempArtifactPath(ctx, "magus-remote-put-")
 	if err != nil {
 		return err
 	}
@@ -243,9 +244,10 @@ func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, e
 }
 
 // tempArtifactPath returns a unique path in the temp dir without leaving a file
-// behind, so the spell (or PutArtifact) creates it.
-func tempArtifactPath(prefix string) (string, error) {
-	f, err := os.CreateTemp("", prefix+"*.tar.gz")
+// behind, so the spell (or PutArtifact) creates it. Under a policy that is the policy's
+// temp dir, the one the spell's own children can write.
+func tempArtifactPath(ctx context.Context, prefix string) (string, error) {
+	f, err := os.CreateTemp(sandbox.PolicyFromContext(ctx).TempBase(), prefix+"*.tar.gz")
 	if err != nil {
 		return "", err
 	}

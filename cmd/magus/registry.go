@@ -203,6 +203,9 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	return out
 }
 
+// errWorkspaceUndeclared refuses a root outside a server's declared workspace list.
+var errWorkspaceUndeclared = errors.New("workspace not declared")
+
 // setDeclared records the explicit workspace allowlist; empty keeps legacy lazy mode.
 func (r *wsRegistry) setDeclared(roots []string) {
 	r.mu.Lock()
@@ -217,13 +220,6 @@ func (r *wsRegistry) setDeclared(roots []string) {
 	}
 }
 
-// preloadAndApplySandbox unions policies for all declared workspaces and applies landlock once.
-// The policy assembly/application lives behind the public library seam so the CLI
-// does not reach into internal/sandbox directly (CRIT-6).
-func (*wsRegistry) preloadAndApplySandbox(ctx context.Context, roots []string) error {
-	return magus.ApplyUnionSandbox(ctx, roots)
-}
-
 // acquire loads the workspace for root and takes an in-flight lease so evictIdle/close
 // won't Close it underneath the caller. Caller must release(e) when done. Rejects
 // undeclared roots in declared mode. Takes no context: load's own r.open seam has no ctx
@@ -234,8 +230,7 @@ func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 		if _, ok := r.declared[root]; !ok {
 			r.mu.Unlock()
 			return nil, fmt.Errorf("%w: workspace %q is not in this server's declared list; add it to server.workspaces (magus.yaml) or MAGUS_SERVER_WORKSPACES and restart the server",
-				types.DiagnosticErrorf(types.SandboxPolicyMismatch, "workspace not declared"),
-				root)
+				errWorkspaceUndeclared, root)
 		}
 	}
 	e, ok := r.entries[root]

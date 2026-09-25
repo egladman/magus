@@ -292,17 +292,23 @@ const (
 	// It fires only on total omission. A footprint naming one *.go path is a narrowing its
 	// author meant; a footprint naming no Go file at all under a target that calls go-fmt is
 	// the mistake, and the two are distinguishable without knowing what the op reads.
-	FootprintDropsOpGlobs     DiagnosticCode = "MGS1036"
-	PathReadDenied            DiagnosticCode = "MGS2001"
-	PathWriteDenied           DiagnosticCode = "MGS2002"
-	EnvStripped               DiagnosticCode = "MGS2003"
-	AllowlistUnresolved       DiagnosticCode = "MGS2004"
-	SandboxUnsupported        DiagnosticCode = "MGS2005"
-	PathShimSuspected         DiagnosticCode = "MGS2006"
-	ExecDenied                DiagnosticCode = "MGS2007"
-	ProcSocketWithheld        DiagnosticCode = "MGS2008"
-	SandboxPolicyMismatch     DiagnosticCode = "MGS2010"
-	SecretTooShortToMask      DiagnosticCode = "MGS2011"
+	FootprintDropsOpGlobs DiagnosticCode = "MGS1036"
+	PathReadDenied        DiagnosticCode = "MGS2001"
+	PathWriteDenied       DiagnosticCode = "MGS2002"
+	EnvStripped           DiagnosticCode = "MGS2003"
+	AllowlistUnresolved   DiagnosticCode = "MGS2004"
+	SandboxUnsupported    DiagnosticCode = "MGS2005"
+	PathShimSuspected     DiagnosticCode = "MGS2006"
+	ExecDenied            DiagnosticCode = "MGS2007"
+	ProcSocketWithheld    DiagnosticCode = "MGS2008"
+	// SandboxWeakened is a nested or forwarded run asking for a weaker sandbox mode than
+	// the run that started it. A mode only strengthens on the way down.
+	SandboxWeakened      DiagnosticCode = "MGS2010"
+	SecretTooShortToMask DiagnosticCode = "MGS2011"
+	// SandboxRequired is sandbox mode required where the kernel cannot confine a child:
+	// MGS2005's fallback to binding checks, refused. Code the caller does not trust must
+	// not run behind checks it can step around.
+	SandboxRequired           DiagnosticCode = "MGS2012"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	VCSUnavailable            DiagnosticCode = "MGS3002"
 	ToolNotOnPath             DiagnosticCode = "MGS3003"
@@ -624,7 +630,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SpellOverrideInvalid, GuardRuleMisdeclared, MisconfiguredEnvVar,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
-	SandboxPolicyMismatch, SecretTooShortToMask,
+	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,

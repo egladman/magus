@@ -436,7 +436,8 @@ func TestJobExecVacateAllowsAJobThatAlreadyExited(t *testing.T) {
 func TestJobExecVacateClearsAMarkerThatDoesNotRead(t *testing.T) {
 	root, cacheDir := execFixture(t)
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
+	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("not a lease id!\n"), 0o644))
 
 	out := captureStdout(t, func() {
 		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))

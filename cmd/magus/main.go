@@ -58,6 +58,9 @@ import (
 )
 
 func main() {
+	// First of all: a sandboxed child starts as this binary re-executed as its
+	// launcher, which must confine itself and exec the child before anything else runs.
+	magus.MaybeLaunchSandbox()
 	os.Exit(runCLI())
 }
 
@@ -116,6 +119,9 @@ func runCLI() int {
 	// lock. Stamped here rather than in BeginInvocation because every subcommand that
 	// locks needs it, including the ones with no invocation record of their own (clean).
 	rootCtx = types.WithInvocationAncestors(rootCtx, run.AncestorsFromEnv())
+	// env\set lands here rather than in the process environment. An adopted run gets its
+	// own from the proc server, so under `magus server` one run's PATH is not another's.
+	rootCtx = run.WithEnvOverlay(rootCtx)
 	rootCtx = proveStdio(rootCtx, args)
 
 	res, exitCode := startup(rootCtx, args)
@@ -706,6 +712,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 				serverSock = true
 				// Propagate to child processes spawned by this invocation.
 				_ = os.Setenv(proc.SocketEnv, sock)
+				_ = os.Setenv(proc.TokenEnv, proc.ReadToken(sock))
 			}
 		} else if !topLevel {
 			serverSock = strings.HasSuffix(sock, "/"+proc.ServerSocketName())
@@ -720,7 +727,14 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 					fwdRoot = r
 				}
 			}
-			code, fwdErr := proc.Forward(rootCtx, args, version, fwdRoot)
+			// The flags are not parsed yet, so this is magus.yaml and the environment,
+			// the inherited floor included; a --sandbox flag rides in args and the server
+			// reads it there (see adoptedSandbox).
+			fwdCtx := rootCtx
+			if globalCfg.Sandbox.Mode.Enabled() {
+				fwdCtx = proc.WithSandboxFloor(rootCtx, globalCfg.Sandbox.Mode)
+			}
+			code, fwdErr := proc.Forward(fwdCtx, args, version, fwdRoot)
 			stopFwd()
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
@@ -750,6 +764,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
 				_ = os.Unsetenv(proc.SocketEnv)
+				_ = os.Unsetenv(proc.TokenEnv)
 			}
 		}
 	}
@@ -787,7 +802,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// `magus run build --concurrency 4` silently ran at the default width, and every
 	// other generated config flag was dead in that position too.
 	bindGlobalsAfterSubcommand(rest)
-	if err := finalizeConfig(); err != nil {
+	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
 		fmt.Fprintf(os.Stderr, "magus: invalid configuration from flags: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
@@ -897,12 +912,14 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			})
 			if err == nil {
 				_ = os.Setenv(proc.SocketEnv, srv.Addr())
+				_ = os.Setenv(proc.TokenEnv, srv.Token())
 				err = srv.Start()
 			}
 			if err == nil {
 				adoptCloser = func() { srv.Close() }
 			} else {
 				_ = os.Unsetenv(proc.SocketEnv)
+				_ = os.Unsetenv(proc.TokenEnv)
 			}
 		}
 	}
@@ -1093,14 +1110,117 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 		return fmt.Errorf("no subcommand after global flags in forwarded args")
 	}
 	sub, subArgs := rest[0], rest[1:]
-	switch sub {
-	case "run":
-		return runTarget(ctx, root, rc, subArgs)
-	case "affected":
-		return affected(ctx, root, rc, subArgs)
-	default:
+	if sub != "run" && sub != "affected" {
 		return fmt.Errorf("%w: %q (only run, affected)", proc.ErrNotAdoptable, sub)
 	}
+	if err := adoptedSandbox(ctx, root, subArgs); err != nil {
+		return err
+	}
+	if sub == "run" {
+		return runTarget(ctx, root, rc, subArgs)
+	}
+	return affected(ctx, root, rc, subArgs)
+}
+
+// adoptedSandbox holds an adopted run to the sandbox mode its client runs under, or a
+// stronger one.
+//
+// The forwarded flags bind into this process's globalCfg, but the run is sandboxed by
+// the workspace this process already opened, so a client's --sandbox reached nothing in
+// either direction. A client asking for less than its floor or than this workspace's
+// mode is refused (MGS2010). A client whose floor this workspace does not meet is
+// declined (ErrNotAdoptable), so it runs the work itself under its own mode; executing
+// it here would run a confined client's work under less.
+func adoptedSandbox(ctx context.Context, root string, subArgs []string) error {
+	floor := proc.SandboxFloorFromContext(ctx)
+	flag, set := sandboxFlag(subArgs)
+	if set && flag.WeakerThan(floor) {
+		return errSandboxWeakened("a forwarded run", flag, floor)
+	}
+	want := floor
+	if set && want.WeakerThan(flag) {
+		want = flag
+	}
+	if !want.Enabled() && !set {
+		return nil
+	}
+	have, err := workspaceSandboxMode(ctx, root)
+	if err != nil {
+		return err
+	}
+	if set && flag.WeakerThan(have) {
+		return errSandboxWeakened("a forwarded run", flag, have)
+	}
+	if have.WeakerThan(want) {
+		return fmt.Errorf("%w: the client runs under sandbox mode %s and this workspace's server runs it under %s",
+			proc.ErrNotAdoptable, want, have)
+	}
+	return nil
+}
+
+// workspaceSandboxMode is the mode a run of the workspace at root in this process runs
+// under. The sandbox is applied as the run itself is about to, so a mode this host
+// cannot honor (required without landlock) is the error the run would have met.
+func workspaceSandboxMode(ctx context.Context, root string) (types.SandboxMode, error) {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	if _, err := m.ApplySandbox(ctx); err != nil {
+		return "", err
+	}
+	return m.SandboxMode(), nil
+}
+
+// sandboxFlag reads --sandbox=<mode> (or --sandbox <mode>) from a subcommand's args, the
+// way the flag package would, the last one winning. It stops at "--", past which args
+// belong to a tool. A value that names no mode is not a setting: the subcommand's own
+// parse rejects it.
+func sandboxFlag(args []string) (mode types.SandboxMode, set bool) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			break
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") || name != "sandbox" {
+			continue
+		}
+		if !hasValue {
+			if i+1 >= len(args) {
+				continue
+			}
+			i++
+			value = args[i]
+		}
+		var m types.SandboxMode
+		if err := m.UnmarshalText([]byte(value)); err == nil && value != "" {
+			mode, set = m, true
+		}
+	}
+	return mode, set
+}
+
+// refuseInheritedSandboxWeakened refuses a nested magus that would run under a weaker
+// sandbox mode than the run that started it. The parent hands every child its mode
+// (run.SandboxEnvVar, the setting's own variable), and only a flag can lower it, so this
+// is the flag's check.
+func refuseInheritedSandboxWeakened(mode types.SandboxMode) error {
+	if run.CurrentLevel() == 0 {
+		return nil
+	}
+	// An unknown value never reaches here: loading the config already refused it.
+	inherited := types.SandboxMode(os.Getenv(run.SandboxEnvVar))
+	if !inherited.Valid() || !mode.WeakerThan(inherited) {
+		return nil
+	}
+	return errSandboxWeakened("this magus, started inside a sandboxed run,", mode, inherited)
+}
+
+// errSandboxWeakened is the MGS2010 refusal of who asking for mode under floor.
+func errSandboxWeakened(who string, mode, floor types.SandboxMode) error {
+	return types.DiagnosticErrorf(types.SandboxWeakened,
+		"%s asked for sandbox mode %s, weaker than the %s it runs under; a nested or forwarded run may only strengthen the sandbox", who, mode, floor)
 }
 
 // dispatchJob routes a background job submitted through proc.SubmitJob. Unlike an adopted run

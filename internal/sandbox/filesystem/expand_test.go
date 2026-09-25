@@ -9,51 +9,64 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExpandUserRule_AbsPath(t *testing.T) {
-	r, err := ExpandUserRule("/tmp/mydir", true, false)
-	require.NoError(t, err)
-	// user-allow paths default to Exec=true.
-	assert.Equal(t, Rule{Path: "/tmp/mydir", Read: true, Write: false, Exec: true}, r)
-}
-
-func TestExpandUserRule_EnvVar(t *testing.T) {
-	t.Setenv("TEST_EXPAND_PATH", "/var/test")
-	r, err := ExpandUserRule("$TEST_EXPAND_PATH", true, false)
-	require.NoError(t, err)
-	assert.Equal(t, "/var/test", r.Path)
-}
-
-// TestExpandUserRuleAlwaysGrantsExec pins the documented default: a magus.yaml
-// sandbox.allow entry is executable whatever read/write the caller asked for,
-// so a toolchain directory ($GOPATH/bin, $CARGO_HOME/bin) stays runnable. It is
-// a deliberate widening, which is exactly why it should fail loudly if changed.
-func TestExpandUserRuleAlwaysGrantsExec(t *testing.T) {
-	for _, tc := range []struct{ read, write bool }{
-		{false, false}, {true, false}, {false, true}, {true, true},
-	} {
-		r, err := ExpandUserRule("/tmp/some-tooldir", tc.read, tc.write)
-		require.NoError(t, err)
-		assert.Truef(t, r.Exec, "read=%v write=%v must still grant Exec", tc.read, tc.write)
-		assert.Equal(t, tc.read, r.Read)
-		assert.Equal(t, tc.write, r.Write)
+func env(vars map[string]string) func(string) (string, bool) {
+	return func(k string) (string, bool) {
+		v, ok := vars[k]
+		return v, ok
 	}
 }
 
-// TestExpandUserRuleExpandsTilde covers the ~ branch. Joined against the real home
-// so the rule compares equal to paths the checker later normalizes.
-func TestExpandUserRuleExpandsTilde(t *testing.T) {
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-
-	r, err := ExpandUserRule("~/tools", true, false)
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(home, "tools"), r.Path)
-	assert.NotContains(t, r.Path, "~", "the tilde must not survive into the rule")
+func TestModeRuleSpellsEachGrant(t *testing.T) {
+	for mode, want := range map[string]Rule{
+		"":    {Read: true},
+		"ro":  {Read: true},
+		"rw":  {Read: true, Write: true},
+		"rx":  {Read: true, Exec: true},
+		"rwx": {Read: true, Write: true, Exec: true},
+	} {
+		got, err := ModeRule(mode)
+		require.NoError(t, err, mode)
+		assert.Equal(t, want, got, mode)
+	}
+	for _, typo := range []string{"RW", "wr", "x", "r", "rox"} {
+		_, err := ModeRule(typo)
+		assert.ErrorContains(t, err, "unknown mode", typo)
+	}
 }
 
-// TestExpandUserRuleResolvesSymlinksWhenThePathExists is what keeps a user rule
-// comparable with a checked path: checkAccess resolves symlinks, so a rule that
-// did not would match nothing. The unresolved form must NOT come back.
+func TestExpandUserRuleResolvesVariablesAndHome(t *testing.T) {
+	dir := ResolveRulePath(t.TempDir())
+	r, err := ExpandUserRule("$TOOLS/bin", "rx", "", env(map[string]string{"TOOLS": dir}))
+	require.NoError(t, err)
+	assert.Equal(t, Rule{Path: filepath.Join(dir, "bin"), Read: true, Exec: true}, r)
+
+	r, err = ExpandUserRule("${TOOLS}/x", "rw", "", env(map[string]string{"TOOLS": dir}))
+	require.NoError(t, err)
+	assert.Equal(t, Rule{Path: filepath.Join(dir, "x"), Read: true, Write: true}, r)
+
+	r, err = ExpandUserRule("~/tools", "ro", dir, env(nil))
+	require.NoError(t, err)
+	assert.Equal(t, Rule{Path: filepath.Join(dir, "tools"), Read: true}, r)
+}
+
+// "$UNSET/" would expand to "/" and grant the whole filesystem.
+func TestExpandUserRuleRefusesAnUnsetOrEmptyVariable(t *testing.T) {
+	for _, raw := range []string{"$UNSET/", "${UNSET}/cache", "$EMPTY/x"} {
+		_, err := ExpandUserRule(raw, "rw", "/home/u", env(map[string]string{"EMPTY": ""}))
+		assert.ErrorIs(t, err, ErrUnsetVariable, raw)
+	}
+}
+
+func TestExpandUserRuleRefusesRelativeAndHomelessPaths(t *testing.T) {
+	_, err := ExpandUserRule("relative/dir", "ro", "/home/u", env(nil))
+	assert.ErrorContains(t, err, "must be absolute")
+	_, err = ExpandUserRule("~/x", "ro", "", env(nil))
+	assert.ErrorContains(t, err, "home directory")
+	_, err = ExpandUserRule("/abs", "RW", "", env(nil))
+	assert.ErrorContains(t, err, "unknown mode")
+}
+
+// A rule path is resolved like a checked path, or the two never compare equal.
 func TestExpandUserRuleResolvesSymlinksWhenThePathExists(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real")
@@ -61,23 +74,16 @@ func TestExpandUserRuleResolvesSymlinksWhenThePathExists(t *testing.T) {
 	require.NoError(t, os.MkdirAll(target, 0o755))
 	require.NoError(t, os.Symlink(target, link))
 
-	r, err := ExpandUserRule(link, true, false)
+	r, err := ExpandUserRule(link, "ro", "", env(nil))
 	require.NoError(t, err)
-
-	resolvedTarget, err := filepath.EvalSymlinks(target)
-	require.NoError(t, err)
-	assert.Equal(t, resolvedTarget, r.Path, "an existing symlinked rule path resolves to its target")
-
-	// And the resulting rule actually grants the file it should.
-	rs := Ruleset{Rules: []Rule{r}}
-	assert.NoError(t, rs.CheckRead(filepath.Join(link, "f.txt")))
+	assert.Equal(t, ResolveRulePath(target), r.Path)
+	assert.NoError(t, Ruleset{Rules: []Rule{r}}.Check(filepath.Join(link, "f.txt"), Read))
 }
 
-// TestExpandUserRuleKeepsLexicalFormWhenMissing: a rule may name a directory a
-// later step creates, so a non-existent path is kept rather than rejected.
-func TestExpandUserRuleKeepsLexicalFormWhenMissing(t *testing.T) {
+// A rule may name a directory a later step creates.
+func TestExpandUserRuleKeepsAMissingPath(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "not-created-yet")
-	r, err := ExpandUserRule(missing, true, true)
+	r, err := ExpandUserRule(missing, "rw", "", env(nil))
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Clean(missing), r.Path)
+	assert.Equal(t, ResolveRulePath(missing), r.Path)
 }

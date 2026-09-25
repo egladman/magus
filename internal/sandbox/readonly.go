@@ -34,16 +34,15 @@ func readOnlyDenied(path string) error {
 
 // ApplyReadOnly confines this process and every process it starts to reads, at the
 // kernel. It adds a landlock layer granting read and execute beneath / and write on
-// the null device alone; landlock layers intersect, so a workspace ruleset applied
-// before or after still narrows reads. Exec stays granted because a child inherits the
-// layer and so cannot write either.
+// the null device alone. Exec stays granted because a child inherits the layer and so
+// cannot write either.
 //
 // The restriction is permanent for the process: call it only from a one-shot command,
 // never from the server or a test binary that goes on to run other work. It reports
 // ErrUnsupported where landlock is unavailable (every non-Linux host, kernels before
 // 5.13), which leaves the interpreter-level checks as the only enforcement.
 func ApplyReadOnly() error {
-	return Apply(&Policy{FS: filesystem.Ruleset{Rules: readOnlyKernelRules()}})
+	return restrictProcess(readOnlyKernelRules())
 }
 
 func readOnlyKernelRules() []filesystem.Rule {

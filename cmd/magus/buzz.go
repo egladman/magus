@@ -500,6 +500,10 @@ func buzzUsage() {
 // and the workspace-reading members raise as before. A standalone script that touches
 // none of them must not be blocked by a magusfile it never asked about.
 //
+// Except under the sandbox: a workspace that failed to load has no policy to apply, and
+// running the script anyway runs it confined by nothing. That is refused, so breaking a
+// magusfile is not a way out of the sandbox.
+//
 // The load error is LOGGED rather than discarded. Silently dropping it made the two
 // absences indistinguishable at the point a reader sees them: MGS1022 says "no
 // workspace on the context" either way, so a script inside a workspace that simply
@@ -510,7 +514,7 @@ func buzzUsage() {
 //
 // The workspace's sandbox policy rides along, because a script reaches the same
 // fs/proc/http bindings a target does and the guard cannot read a script body: it
-// allows `magus buzz -` outright. Without the policy on ctx, sandbox.FromContext
+// allows `magus buzz -` outright. Without the policy on ctx, sandbox.PolicyFromContext
 // returns nil at every binding check and an ad-hoc script writes, execs and fetches
 // with no policy at all in a workspace that asked for one. The trail base beside it
 // is what lets a denial land as sandbox_denial, the way a target's does.
@@ -523,11 +527,15 @@ func buzzUsage() {
 // has to be in force before the first line runs. globalCfg is the config the open
 // would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
-	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Enabled {
+	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Mode.Enabled() {
 		return newLazyWorkspaceContext(ctx, root), nil
 	}
 	m, lerr := buzzLoadWorkspace(ctx, root)
 	if lerr != nil {
+		if globalCfg.Sandbox.Mode.Enabled() {
+			return nil, types.WrapDiagnostic(types.WorkspaceLoadFailed, lerr,
+				"the sandbox is on and the workspace failed to load, so there is no policy to run this script under: %v", lerr)
+		}
 		warnWorkspaceNotAttached(lerr)
 		return ctx, nil
 	}

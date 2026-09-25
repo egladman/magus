@@ -92,8 +92,10 @@ type Config struct {
 	// `magus affected` does not apply them, so CI stays read-only unless explicit.
 	DefaultCharms []string `json:"default_charms" yaml:"default_charms"`
 
-	// Sandbox confines subprocesses and spells to the workspace + allowlist using Linux landlock (≥5.13)
-	// when available, with binding-level fallback. See SandboxConfig for allowlist and env knobs.
+	// Sandbox confines spells and the processes magus starts to the workspace and an
+	// allowlist. Kernel landlock (Linux 5.13+) enforces it on every file access; without
+	// it, magus's own binding checks cover only what goes through a binding.
+	// See SandboxConfig for the mode, allowlist and env knobs.
 	Sandbox SandboxConfig `json:"sandbox" yaml:"sandbox"`
 
 	// Spells configures workspace spell resolution (the import walk and its wards).
@@ -216,24 +218,31 @@ type ShadowAck struct {
 
 // SandboxConfig is the per-workspace sandbox policy.
 type SandboxConfig struct {
-	Enabled bool               `json:"enabled" yaml:"enabled"` // master switch; equivalent to MAGUS_SANDBOX_ENABLED=1
-	Allow   []SandboxAllowPath `json:"allow" yaml:"allow"`     // extra {path, mode} entries extending the filesystem allowlist
-	Env     SandboxEnv         `json:"env" yaml:"env"`         // env-var passthrough rules
+	// Mode is off (the default), best-effort (landlock confines each child where the host has it, magus's own binding checks where it does not), or required (refuse to run, MGS2012, unless the kernel can confine every child: landlock ABI 3).
+	//
+	// MAGUS_SANDBOX is a floor, not an override: a sandboxed run hands its children its
+	// mode there, and a nested workspace's own mode may raise it and never lower it.
+	Mode  types.SandboxMode  `json:"mode" yaml:"mode" cli:"name=sandbox,floor"`
+	Allow []SandboxAllowPath `json:"allow" yaml:"allow"` // extra {path, mode} entries extending the filesystem allowlist
+	Env   SandboxEnv         `json:"env" yaml:"env"`     // env-var passthrough rules
 }
 
-// SandboxAllowPath is one extra filesystem allowlist entry. Mode is "ro" or "rw"; other values emit MGS2004.
+// SandboxAllowPath is one extra filesystem allowlist entry. Mode spells its grants: r
+// read, w write, x exec; empty is ro. Exec is never implied, so a toolchain directory
+// that must run needs rx.
 type SandboxAllowPath struct {
 	// Name is a free-form label for the entry. It is ignored by the sandbox; it
 	// exists so `magus config set sandbox.allow.<name>.path=…` can address the
 	// entry by name (the same convention used for other slice-of-struct config).
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	Path string `json:"path" yaml:"path"`
-	Mode string `json:"mode" yaml:"mode" validate:"omitempty,oneof=ro rw"`
+	Mode string `json:"mode" yaml:"mode" validate:"omitempty,oneof=ro rw rx rwx"`
 }
 
 // SandboxEnv controls per-child env passthrough when the sandbox is active.
 type SandboxEnv struct {
-	// Passthrough adds names/globs (e.g. "MISE_*") to the built-in env allowlist.
+	// Passthrough adds exact names and prefix patterns such as MISE_* to the built-in
+	// env allowlist. A prefix must be at least three characters and end in "_".
 	Passthrough []string `json:"passthrough" yaml:"passthrough"`
 }
 
@@ -814,6 +823,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
 		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
 		{"MAGUS_PROC_SOCKET", "", "", "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
+		{"MAGUS_PROC_TOKEN", "", "", "Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
 		{"MAGUS_CI_MAX_SHARDS", "ci.max_shards", "8", "Maximum number of parallel CI shards; -1 means unlimited"},
 		{"MAGUS_CI_RUNNER_POOL_BUDGET", "ci.runner_pool_budget", "0", "Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited"},
 		{"MAGUS_CI_RECORD_RUNS", "ci.record_runs", "true", "Keep the per-branch run log (which commit a branch passed or failed at) in the history file"},
@@ -869,7 +879,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VOLATILITY_THRESHOLD", "volatility.threshold", "0.05", "Wilson lower-bound volatility rate above which a project+target is considered volatile"},
 		{"MAGUS_VOLATILITY_ANNOTATE_GHA", "volatility.annotate_gha", "true", "When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY"},
 		{"MAGUS_REPORT_FILTER", "report.filter", "", "Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query)"},
-		{"MAGUS_SANDBOX_ENABLED", "sandbox.enabled", "false", "When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
+		{"MAGUS_SANDBOX", "sandbox.mode", "off", "off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and --sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
 		{"MAGUS_SANDBOX_ENV_PASSTHROUGH", "sandbox.env.passthrough", "", "Comma-separated names or globs (e.g. MISE_*) added to the sandbox's child-process env allowlist"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
 		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},

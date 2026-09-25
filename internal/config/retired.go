@@ -35,6 +35,8 @@ var retiredEnv = map[string]retiredVar{
 	"MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED":   {release: "v0.5.0", replacement: "MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED"},
 	"MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH":        {release: "v0.5.0", replacement: "MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH"},
 	"MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW":      {release: "v0.5.0", replacement: "MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW"},
+	// Set and ignored, it would turn a sandbox somebody asked for off without a word.
+	"MAGUS_SANDBOX_ENABLED": {release: "v0.5.0", replacement: "MAGUS_SANDBOX"},
 }
 
 func (r retiredVar) describe(name string) string {

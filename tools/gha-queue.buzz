@@ -125,7 +125,7 @@ export fun validateArgs(dir: str, change: str) > [str] {
 export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", "--provider", "github", "--base", base, "--workflow", WORKFLOW,
         "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", "magus --sandbox-enabled run generate:rw",
+        "--regenerate", "magus --sandbox=best-effort run generate:rw",
         "--reproduce-gate", GATE, "--reproduce-regenerate", REGENERATE];
     foreach (a in SCRATCH) {
         args.append(a);
@@ -332,7 +332,7 @@ test "validation runs the candidate's own magus; apply keeps main's" {
 test "apply follows the validation run as its source, pinned to the base and queue.yaml, as the queue app's bot, regenerating in the sandbox" {
     assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply",
         "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", "magus --sandbox-enabled run generate:rw",
+        "--regenerate", "magus --sandbox=best-effort run generate:rw",
         "--reproduce-gate", "go run ./cmd/magus run ci --no-default-charms", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache",

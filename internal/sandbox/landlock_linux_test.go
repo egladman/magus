@@ -13,6 +13,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// requireLandlock skips a test that needs the kernel sandbox where there is none,
+// and fails it instead under MAGUS_TEST_REQUIRE_LANDLOCK=1, so a host that must
+// have landlock cannot pass by skipping.
+func requireLandlock(t *testing.T) {
+	t.Helper()
+	if _, err := ABI(); err != nil {
+		if os.Getenv("MAGUS_TEST_REQUIRE_LANDLOCK") == "1" {
+			t.Fatalf("landlock is required here and unavailable: %v", err)
+		}
+		t.Skipf("landlock unavailable: %v", err)
+	}
+}
+
 // TestAccessForPathTypeDropsDirRightsOnFiles pins the masking rule that keeps
 // landlock_add_rule from returning EINVAL. Directory-only rights on a regular file are
 // invalid, and an allowlist entry naming a file (a resolv.conf, a socket, a config) is
@@ -69,12 +82,8 @@ func TestApplyReadOnlyProbe(t *testing.T) {
 	os.Exit(0)
 }
 
-// Declared ahead of TestApplyLinuxEnforcement, which confines this binary for good: the
-// re-exec below has to run before it does.
 func TestApplyReadOnlyConfinesTheProcessAndItsChildren(t *testing.T) {
-	if !Supported() {
-		t.Skip("landlock not available on this kernel")
-	}
+	requireLandlock(t)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "in.txt"), []byte("in"), 0o644))
 	self, err := os.Executable()
@@ -92,34 +101,32 @@ func TestApplyReadOnlyConfinesTheProcessAndItsChildren(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(dir, "child.txt"))
 }
 
-// TestApplyLinuxEnforcement verifies that on a kernel with landlock support,
-// Apply actually confines the process: writes inside the allowed dir succeed,
-// reads of paths outside the allowlist fail with EACCES, and child processes
-// inherit the restriction.
-//
-// This test calls Apply which permanently restricts the test process.  It must
-// run in isolation (go test -run TestApplyLinuxEnforcement -count=1) because
-// subsequent tests in the same process will also be restricted.  The test is
-// skipped when Supported() is false (kernel <5.13 or landlock disabled).
-func TestApplyLinuxEnforcement(t *testing.T) {
-	if !Supported() {
-		t.Skip("landlock not available on this kernel; skipping enforcement test")
+// TestHandledRightsFollowTheABI pins which right each ABI adds, since asking a
+// kernel for one it predates fails the whole ruleset with EINVAL.
+func TestHandledRightsFollowTheABI(t *testing.T) {
+	cases := []struct {
+		abi    int
+		fs     uint64
+		scopes uint64
+	}{
+		{1, fsAccessV1, 0},
+		{2, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER, 0},
+		{3, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE, 0},
+		{4, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE, 0},
+		{5, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE | unix.LANDLOCK_ACCESS_FS_IOCTL_DEV, 0},
+		{6, fsAccessV1 | unix.LANDLOCK_ACCESS_FS_REFER | unix.LANDLOCK_ACCESS_FS_TRUNCATE | unix.LANDLOCK_ACCESS_FS_IOCTL_DEV,
+			unix.LANDLOCK_SCOPE_SIGNAL | unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET},
 	}
+	for _, c := range cases {
+		assert.Equal(t, c.fs, handledAccessFS(c.abi), "filesystem rights at ABI %d", c.abi)
+		assert.Equal(t, c.scopes, handledScopes(c.abi), "scopes at ABI %d", c.abi)
+	}
+}
 
-	ws := t.TempDir()
-	p := BuildPolicy(ws, nil, nil, nil, nil)
-
-	require.NoError(t, Apply(p))
-
-	// Write inside workspace must succeed.
-	allowed := filepath.Join(ws, "hello.txt")
-	assert.NoError(t, os.WriteFile(allowed, []byte("ok"), 0o644), "WriteFile inside workspace should succeed")
-
-	// Read of /etc/passwd must be denied.
-	_, err := os.ReadFile("/etc/passwd")
-	assert.Error(t, err, "ReadFile /etc/passwd should be denied after Apply")
-
-	// Child process must also be confined: `cat /etc/passwd` should fail.
-	cmd := exec.Command("cat", "/etc/passwd")
-	assert.Error(t, cmd.Run(), "child `cat /etc/passwd` should fail under landlock")
+func TestABIReportsAVersion(t *testing.T) {
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, abi, 1)
+	t.Logf("landlock ABI %d", abi)
 }

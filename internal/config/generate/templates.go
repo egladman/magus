@@ -172,6 +172,15 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			{{.GoPath}} = d
 		}
 	}
+{{- else if and (eq .Kind "text") .Floor}}
+	if v := getenv("{{.EnvVar}}"); v != "" {
+		floor := {{.GoPath}}
+		if err := floor.UnmarshalText([]byte(v)); err != nil {
+			errs = append(errs, fmt.Errorf("{{.EnvVar}}: %w", err))
+		} else if {{.GoPath}}.WeakerThan(floor) {
+			{{.GoPath}} = floor
+		}
+	}
 {{- else if eq .Kind "text"}}
 	if v := getenv("{{.EnvVar}}"); v != "" {
 		if err := {{.GoPath}}.UnmarshalText([]byte(v)); err != nil {

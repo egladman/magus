@@ -753,7 +753,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		}
 		root = resolveRootOrEmpty(root)
 		if root == "" {
-			return errors.New("magus job exec --vacate: no workspace here: the lease marker lives in a checkout's cache dir, so run from inside one or pass --root <path>")
+			return errors.New("magus job exec --vacate: no workspace here: the lease marker is keyed by a checkout's cache dir, so run from inside one or pass --root <path>")
 		}
 		cacheDir, cerr := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 		if cerr != nil {
@@ -767,7 +767,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	flagRoot := root
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return errors.New("magus job exec: no workspace here: the lease marker lives in a checkout's cache dir, so run from inside one or pass --root <path>")
+		return errors.New("magus job exec: no workspace here: the lease marker is keyed by a checkout's cache dir, so run from inside one or pass --root <path>")
 	}
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {

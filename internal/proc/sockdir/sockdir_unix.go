@@ -9,12 +9,27 @@ import (
 	"syscall"
 )
 
-// Dir prefers $XDG_RUNTIME_DIR/magus/ and falls back to $TMPDIR/magus-$UID/. It panics
-// when the directory exists but is not private to this user, since a socket there is
-// one another account could tamper with.
+// Dir prefers $XDG_RUNTIME_DIR/magus/, then the user cache dir's magus/run/, and only
+// with neither falls back to /tmp/magus-$UID/. It panics when the directory exists
+// but is not private to this user, since a socket there is one another account could
+// tamper with.
+//
+// /tmp is last because it is shared: a process that can write it could unlink a
+// socket there and bind its own in its place, or read the token file beside it (see
+// proc.TokenEnv). Neither of the first two is granted to a sandboxed run.
+//
+// The fallback is /tmp itself, not $TMPDIR: a harness may point $TMPDIR inside the
+// workspace (testscript uses $WORK/.tmp), and the token file there is an untracked
+// file that makes the root project affected.
 func Dir() string {
+	var bases []string
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
-		dir := filepath.Join(xdg, "magus")
+		bases = append(bases, filepath.Join(xdg, "magus"))
+	}
+	if cache, err := os.UserCacheDir(); err == nil {
+		bases = append(bases, filepath.Join(cache, "magus", "run"))
+	}
+	for _, dir := range bases {
 		if err := os.MkdirAll(dir, 0o700); err == nil {
 			if verr := verifySockDir(dir); verr != nil {
 				panic(verr)
@@ -23,10 +38,10 @@ func Dir() string {
 		}
 	}
 	// Fail closed: always return the private per-UID (0700) path. Falling back to
-	// the shared, world-traversable os.TempDir() would drop the isolation the
-	// socket's security depends on; if MkdirAll failed, a later bind errors out
-	// safely instead of placing the socket in a shared directory.
-	dir := filepath.Join(os.TempDir(), fmt.Sprintf("magus-%d", os.Getuid()))
+	// the shared, world-traversable /tmp would drop the isolation the socket's
+	// security depends on; if MkdirAll failed, a later bind errors out safely
+	// instead of placing the socket in a shared directory.
+	dir := fmt.Sprintf("/tmp/magus-%d", os.Getuid())
 	_ = os.MkdirAll(dir, 0o700)
 	if verr := verifySockDir(dir); verr != nil {
 		panic(verr)
@@ -40,7 +55,7 @@ func Dir() string {
 //
 // This exists because os.MkdirAll(dir, 0o700) is a silent no-op when dir
 // already exists: it neither chmods nor checks ownership. The fallback path
-// is $TMPDIR/magus-$UID, and both the parent (/tmp, world-writable; the
+// is /tmp/magus-$UID, and both the parent (/tmp, world-writable; the
 // sticky bit only stops deleting someone else's files, not creating new
 // ones) and the name (UIDs are enumerable) are attacker-reachable: another
 // local user can pre-create the directory loosely permissioned, or as a

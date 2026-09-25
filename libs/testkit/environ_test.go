@@ -116,7 +116,7 @@ func TestEnvironKeepAddsToTheAllowlist(t *testing.T) {
 func TestEnvironRejectsAMalformedKeepGlob(t *testing.T) {
 	for _, keep := range []string{"*", "A*B*", "*_SUFFIX"} {
 		_, err := Environ(t.TempDir(), keep)
-		assert.ErrorIs(t, err, env.ErrInvalidGlob, keep)
+		assert.ErrorIs(t, err, env.ErrInvalidPattern, keep)
 	}
 }
 

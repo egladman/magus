@@ -46,6 +46,7 @@ func reapDeadSocket(path string, e os.DirEntry) {
 		return
 	}
 	_ = os.Remove(path)
+	_ = os.Remove(tokenPath(path))
 }
 
 // ServerSocketName returns the file basename of the server's socket.

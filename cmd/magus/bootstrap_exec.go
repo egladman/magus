@@ -143,8 +143,7 @@ func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
 	return resolved, true
 }
 
-// truthyEnv matches the 1/true/yes convention MAGUS_SANDBOX_ENABLED already uses for a
-// boolean MAGUS_* env var.
+// truthyEnv matches the 1/true/yes convention of the boolean MAGUS_* env vars.
 func truthyEnv(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "1", "true", "yes":

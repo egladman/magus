@@ -347,6 +347,7 @@ func servingSuffix(st *proc.StatusReply) string {
 //
 // MAGUS_PROC_SOCKET: a child inheriting it believes it is already adopted, binds no
 // socket, and reports the parent's, leaving a server `server stop` cannot find.
+// MAGUS_PROC_TOKEN goes with it: it is the secret for that socket and no other.
 //
 // The invocation ancestry and recursion depth, because A BACKGROUND PROCESS DESCENDS FROM
 // NOBODY: the same rule submitJob already applies to a job's context. A run starts the
@@ -356,7 +357,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {

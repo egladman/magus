@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
 )
 
@@ -408,7 +409,9 @@ func PipeDiff(ctx context.Context, artifact map[string]any) error {
 		fmt.Fprintf(prose, "pipe.diff: %s matches every cached version; nothing to diff\n", a.Path)
 		return nil
 	}
-	dir, err := os.MkdirTemp("", "magus-diff-*")
+	// The difftool is a child of the run, so under a policy it can reach only the
+	// policy's temp dir.
+	dir, err := os.MkdirTemp(sandbox.PolicyFromContext(ctx).TempBase(), "magus-diff-*")
 	if err != nil {
 		return err
 	}

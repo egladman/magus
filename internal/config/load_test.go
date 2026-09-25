@@ -207,13 +207,13 @@ func TestLoadDirIntoAbsentBoolInherits(t *testing.T) {
 func TestLoadDirIntoBoolTrueOverridesADefaultOffKey(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte("sandbox:\n  enabled: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte("dry_run: true\n"), 0o644))
 
-	require.False(t, Defaults().Sandbox.Enabled, "precondition: sandbox.enabled defaults false")
+	require.False(t, Defaults().DryRun, "precondition: dry_run defaults false")
 
 	cfg, err := loadDirInto(Defaults(), dir)
 	require.NoError(t, err)
-	assert.True(t, cfg.Sandbox.Enabled)
+	assert.True(t, cfg.DryRun)
 }
 
 // A key magus will not honor must fail the load, naming the key and the file it
@@ -302,8 +302,8 @@ func TestUnknownKeyMessage(t *testing.T) {
 			want: `magus.yaml:1: unknown key "concurrencyy"; did you mean "concurrency"?`,
 		},
 		"nested typo": {
-			doc:  "sandbox:\n  enabledd: true\n",
-			want: `magus.yaml:2: unknown key "enabledd"; did you mean "enabled"?`,
+			doc:  "sandbox:\n  modee: required\n",
+			want: `magus.yaml:2: unknown key "modee"; did you mean "mode"?`,
 		},
 		// No near key to suggest, so the note that this build may simply predate the key
 		// is appended. "unknown key" alone reads as "you misspelled it", and the two
@@ -314,9 +314,9 @@ func TestUnknownKeyMessage(t *testing.T) {
 				ward.StaleBinaryAdvice("", "") + ". If the key is genuinely misspelled, this note does not apply",
 		},
 		"two unknown keys": {
-			doc: "concurrencyy: 4\nsandbox:\n  enabledd: true\n",
+			doc: "concurrencyy: 4\nsandbox:\n  modee: required\n",
 			want: "magus.yaml:1: unknown key \"concurrencyy\"; did you mean \"concurrency\"?\n" +
-				"magus.yaml:3: unknown key \"enabledd\"; did you mean \"enabled\"?",
+				"magus.yaml:3: unknown key \"modee\"; did you mean \"mode\"?",
 		},
 		// A retired key is misconfiguration, and the error names the key that took its
 		// settings rather than guessing at a typo or blaming the binary.

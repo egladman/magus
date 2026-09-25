@@ -138,7 +138,7 @@ env XDG_STATE_HOME=
 # The binding is dropped here, not left for the cases below: every path case in this
 # fixture workspace would otherwise be graded against write paths nobody declared for it, and
 # the lease rules answer before the rule each of those cases is about.
-rm notes-ws/.magus/lease
+rm $WORK/home/state/magus/checkouts
 
 # --- the edges of the whole-event derivation --------------------------------
 #
@@ -860,7 +860,7 @@ stdin $WORK/cursor-push.json
 exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"deny"'
 stdout 'workers do not publish'
-rm .magus/lease
+rm $WORK/home/state/magus/checkouts
 env HOME=/no-home
 env XDG_STATE_HOME=
 

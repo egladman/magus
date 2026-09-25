@@ -1,201 +1,28 @@
-// Package apply builds per-workspace sandbox policies from config and the acting lease's
-// job row, and owns the process-wide landlock application state. It lives here (not in
-// sandbox or config) to break the import cycle.
-package apply
+package sandbox
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
-
-// applyOnce gates landlock_restrict_self; landlock is permanent so it must run at most once per process.
-var applyOnce sync.Once
-
-// applyErr holds the outcome of the one-shot Apply call (success, ErrUnsupported, or kernel error).
-var applyErr error
-
-// warnedUnsupported gates the MGS2005 warning to at most one log line per process.
-var warnedUnsupported sync.Once
-
-// globalsMu guards policyFingerprint and appliedExternally: both are read from Apply
-// on arbitrary goroutines and written from MarkAppliedExternally on arbitrary
-// goroutines, so (unlike applyErr, which only ever changes inside the applyOnce.Do
-// callback) they need their own lock rather than riding on sync.Once's happens-before.
-var globalsMu sync.Mutex
-
-// policyFingerprint is the fingerprint of the applied landlock policy.
-// Subsequent Apply calls with a different fingerprint are rejected (MGS2010) because the ruleset is immutable.
-var policyFingerprint string
-
-// appliedExternally is set when the server has already applied the union ruleset via MarkAppliedExternally.
-// In this mode per-workspace Apply calls are attach-only (no syscall, no fingerprint check).
-var appliedExternally bool
-
-// MarkAppliedExternally records that the server has already applied the union landlock ruleset.
-// Subsequent per-workspace Apply calls become attach-only; the MGS2010 fingerprint check is skipped.
-func MarkAppliedExternally(fp string) {
-	applyOnce.Do(func() {})
-	globalsMu.Lock()
-	policyFingerprint = fp
-	appliedExternally = true
-	globalsMu.Unlock()
-}
-
-// FromConfig assembles a sandbox Policy for root using the sandbox fields of cfg.
-func FromConfig(ctx context.Context, root string, cfg config.Config) *sandbox.Policy {
-	userExtras := make([]filesystem.Rule, 0, len(cfg.Sandbox.Allow))
-	for _, pp := range cfg.Sandbox.Allow {
-		read := true
-		write := pp.Mode == "rw"
-		rule, err := filesystem.ExpandUserRule(pp.Path, read, write)
-		if err != nil {
-			slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-				"sandbox.allow entry failed to resolve; skipped"),
-				"path", pp.Path, "err", err)
-			continue
-		}
-		userExtras = append(userExtras, rule)
-	}
-	var exact, globs []string
-	for _, name := range cfg.Sandbox.Env.Passthrough {
-		if strings.Contains(name, "*") {
-			if err := env.ValidateGlobs([]string{name}); err != nil {
-				slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-					"sandbox.env.passthrough pattern must end in '*'; ignoring"),
-					"pattern", name, "err", err)
-				continue
-			}
-			globs = append(globs, name)
-		} else {
-			exact = append(exact, name)
-		}
-	}
-	return sandbox.BuildPolicy(root, userExtras, nil, exact, globs)
-}
-
-// Apply applies the kernel-level landlock sandbox (once per process) and attaches policy to ctx.
-// ErrUnsupported logs MGS2005 and falls through to interpreter-level enforcement.
-// A fingerprint mismatch rejects the run with MGS2010 (landlock is immutable once set).
-func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Context, error) {
-	// Stamp the live provider as the binding-layer sandbox metrics recorder so the
-	// fs/archive/crypto/exec checks (which run below observability in the import graph
-	// and cannot reach it directly) can report allow/deny decisions and dropped env
-	// counts down the same ctx chain that carries the Policy.
-	if prov := observability.FromContext(ctx); prov != nil {
-		ctx = sandbox.WithMetrics(ctx, prov)
-	}
-
-	globalsMu.Lock()
-	externally := appliedExternally
-	globalsMu.Unlock()
-	if externally { // server applied union policy; attach-only
-		return sandbox.WithPolicy(ctx, policy), nil
-	}
-
-	fp := policy.Fingerprint()
-
-	applyOnce.Do(func() {
-		globalsMu.Lock()
-		policyFingerprint = fp
-		globalsMu.Unlock()
-		start := time.Now()
-		applyErr = sandbox.Apply(policy)
-		secs := time.Since(start).Seconds()
-		switch {
-		case applyErr == nil:
-			RecordApply(ctx, secs, "applied", "workspace", policy)
-		case errors.Is(applyErr, sandbox.ErrUnsupported):
-			warnedUnsupported.Do(func() {
-				slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
-					"kernel landlock unavailable; sandbox running with interpreter-level checks only"),
-					"reason", applyErr.Error())
-			})
-			// ErrUnsupported is the documented fallback path; not fatal. Binding-level
-			// checks still enforce the same rules, so record them under "unsupported".
-			applyErr = nil
-			RecordApply(ctx, secs, "unsupported", "workspace", policy)
-		}
-		// A hard kernel error falls through unrecorded; the run aborts below.
-	})
-	if applyErr != nil {
-		// Fail closed: ruleset was partially built but restrict_self was never called.
-		return ctx, fmt.Errorf("sandbox: kernel sandbox failed: %w", applyErr)
-	}
-
-	globalsMu.Lock()
-	current := policyFingerprint
-	globalsMu.Unlock()
-	if fp != current { // mismatch: kernel-level and binding-level policies would disagree
-		RecordApply(ctx, 0, "mismatch", "workspace", nil) // no ruleset installed; count the outcome, not rules
-		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this server process (fingerprint %s vs %s); restart the server to pick up new sandbox configuration",
-			types.DiagnosticErrorf(types.SandboxPolicyMismatch, "sandbox policy mismatch"),
-			root, fp, current)
-	}
-
-	return sandbox.WithPolicy(ctx, policy), nil
-}
-
-// RecordApply reports one sandbox-apply attempt to the observability provider on ctx
-// (a no-op when none is stamped). secs is the apply wall-clock duration; outcome is
-// applied|unsupported|mismatch; scope is workspace|union. When policy is non-nil its
-// filesystem and env rule counts are also recorded under the same scope; pass nil (a
-// mismatch installs no ruleset) to record only the outcome.
-func RecordApply(ctx context.Context, secs float64, outcome, scope string, policy *sandbox.Policy) {
-	prov := observability.FromContext(ctx)
-	if prov == nil {
-		return
-	}
-	prov.RecordSandboxApply(ctx, secs, outcome, scope)
-	if policy == nil {
-		return
-	}
-	var read, write, exec int64
-	for _, r := range policy.FS.Rules {
-		if r.Read {
-			read++
-		}
-		if r.Write {
-			write++
-		}
-		if r.Exec {
-			exec++
-		}
-	}
-	prov.RecordSandboxRules(ctx, observability.SandboxRules{
-		Read:     read,
-		Write:    write,
-		Exec:     exec,
-		EnvExact: int64(len(policy.Env.Allow)),
-		EnvGlob:  int64(len(policy.Env.Globs)),
-		Scope:    scope,
-	})
-}
 
 // NarrowToLease reduces policy's filesystem WRITE grant to the boundary the lease leaseID
 // names declared in the job store at loc. It returns policy untouched when there is no
 // boundary to derive one from: no lease id, no row, a row that is not live, a ROOT lease
 // (a row with no parent is the orchestrator, and it owns the whole checkout), or a row
 // that declared no write paths and is not read-only. A read-only row narrows the grant
-// to nothing but the cache dir and $TMPDIR, the same answer the guard gives its writes.
+// to nothing but the cache dir and the policy's private temp dir, the same answer the
+// guard gives its writes.
 //
 // The grant is DERIVED from the row rather than declared a second time in magus.yaml,
 // because a boundary written twice is a boundary that disagrees with itself. The agent
@@ -206,8 +33,10 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 // Reads are left exactly as the workspace policy granted them: the job store declares a
 // write boundary only, and a worker has to read the tree it is changing.
 //
-// Beyond the write paths it grants writes to the workspace cache directory and $TMPDIR,
-// which every target run needs to produce output at all.
+// Only write grants on the checkout, or on a directory holding it, are dropped. Grants
+// outside it (/dev/null, tool caches, the git directories of a linked worktree) stay,
+// and the workspace cache directory and the private temp dir are granted back, which
+// every target run needs to produce output at all.
 //
 // A deny path INSIDE a write one costs the directory holding it, not the leased tree:
 // this ruleset and landlock are both allowlists with no deny rule, so an enclosing grant
@@ -218,7 +47,7 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 //
 // from is the source that answered leaseID; the narrowed policy carries it so a denial
 // can say whether the boundary was bound or only claimed.
-func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location, leaseID string, from types.LeaseSource) *sandbox.Policy {
+func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from types.LeaseSource) *Policy {
 	if policy == nil || loc.Root == "" || leaseID == "" {
 		return policy
 	}
@@ -238,15 +67,18 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location
 	if !row.ReadOnly {
 		granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
 	}
+	rootAbs := filesystem.ResolveRulePath(loc.Root)
 	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(granted)+2)
 	for _, r := range policy.FS.Rules {
-		r.Write = false
+		if filesystem.Under(r.Path, rootAbs) || filesystem.Under(rootAbs, r.Path) {
+			r.Write = false
+		}
 		rules = append(rules, r)
 	}
 	for _, p := range granted {
 		rules = append(rules, filesystem.Rule{Path: p, Read: true, Write: true})
 	}
-	for _, p := range []string{loc.CacheDir, os.TempDir()} {
+	for _, p := range []string{loc.CacheDir, policy.TempDir} {
 		if p == "" {
 			continue
 		}

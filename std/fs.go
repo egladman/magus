@@ -3,6 +3,7 @@
 package std
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
 
@@ -128,7 +130,7 @@ var Fs = Module{
 		},
 		{
 			Name: "temp_file",
-			Doc:  "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
+			Doc:  "Create a new empty temporary file with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
 			Args: []Arg{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
@@ -258,7 +260,7 @@ var Fs = Module{
 		},
 		{
 			Name: "temp_dir",
-			Doc:  "Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.",
+			Doc:  "Create a new temporary directory with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise.",
 			Args: []Arg{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
@@ -309,11 +311,11 @@ func FsGlob(ctx context.Context, pattern string) ([]types.Path, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fs.glob %q: %w", pattern, err)
 	}
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	allowed := make([]types.Path, 0, len(matches))
 	for _, m := range matches {
 		// The sandbox sees the absolute match; the caller sees it relative to base.
-		if p != nil && p.CheckReadCtx(ctx, m) != nil {
+		if p != nil && p.CheckRead(ctx, m) != nil {
 			continue
 		}
 		// Rel only succeeds when both sides are absolute; a match that is already
@@ -481,14 +483,16 @@ func FsSize(ctx context.Context, path string) (int, error) {
 	return int(info.Size()), nil
 }
 
-// FsTempFile creates an empty temporary file and returns its path.
+// FsTempFile creates an empty temporary file and returns its path, in the sandbox's
+// private temp dir when a policy is attached.
 func FsTempFile(ctx context.Context, prefix string) (string, error) {
+	base := sandbox.PolicyFromContext(ctx).TempBase()
 	if types.Tracing(ctx) {
 		// Dry run: name a plausible path without creating it, matching temp_dir.
 		// Writes to it are themselves recorded as skipped, so it never needs to exist.
-		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+		return filepath.Join(cmp.Or(base, os.TempDir()), prefix+"magus-dry-run"), nil
 	}
-	f, err := os.CreateTemp("", prefix)
+	f, err := os.CreateTemp(base, prefix)
 	if err != nil {
 		return "", fmt.Errorf("fs.temp_file: %w", err)
 	}
@@ -713,12 +717,12 @@ func copyFile(src, dst string) error {
 // checkRead returns a MGS2001 diag error when ctx carries a sandbox policy
 // that denies path. nil otherwise (sandbox off or path allowed).
 func checkRead(ctx context.Context, path string) error {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	if p == nil {
 		return nil
 	}
-	if err := p.CheckReadCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint(p, "ro", path)
+	if err := p.CheckRead(ctx, path); err != nil {
+		sandbox.EmitDenyHint(p, filesystem.Read, path)
 		return types.DiagnosticErrorf(types.PathReadDenied, "fs read denied: %s", path)
 	}
 	return nil
@@ -727,12 +731,12 @@ func checkRead(ctx context.Context, path string) error {
 // checkWrite returns a MGS2002 diag error when ctx carries a sandbox policy
 // that denies path for writing.
 func checkWrite(ctx context.Context, path string) error {
-	p := sandbox.FromContext(ctx)
+	p := sandbox.PolicyFromContext(ctx)
 	if p == nil {
 		return nil
 	}
-	if err := p.CheckWriteCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint(p, "rw", path)
+	if err := p.CheckWrite(ctx, path); err != nil {
+		sandbox.EmitDenyHint(p, filesystem.Write, path)
 		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
 	}
 	return nil
@@ -935,7 +939,8 @@ func FsChmod(ctx context.Context, path string, mode int) error {
 }
 
 // FsSymlink creates a symbolic link at link pointing to target, subject to the
-// sandbox write policy on link.
+// sandbox write policy on link and the read policy on target: a link is a way to
+// reach its target, so one the policy could not read is refused.
 func FsSymlink(ctx context.Context, target, link string) error {
 	if types.Tracing(ctx) {
 		return nil
@@ -944,6 +949,15 @@ func FsSymlink(ctx context.Context, target, link string) error {
 	// target is the link's stored contents, interpreted relative to the link.
 	link = resolvePath(ctx, link)
 	if err := checkWrite(ctx, link); err != nil {
+		return err
+	}
+	// Concatenated, not joined: Join cleans "..", and the check must resolve the
+	// link's directory before it climbs out of it.
+	reached := target
+	if !filepath.IsAbs(reached) {
+		reached = filepath.Dir(link) + string(filepath.Separator) + reached
+	}
+	if err := checkRead(ctx, reached); err != nil {
 		return err
 	}
 	if err := os.Symlink(target, link); err != nil {
@@ -995,15 +1009,18 @@ func FsWriteLines(ctx context.Context, path string, lines []string) error {
 	return FsWriteFile(ctx, path, content)
 }
 
-// FsTempDir creates a new temporary directory in os.TempDir() with an optional
-// name prefix and returns its path.
+// FsTempDir creates a new temporary directory with an optional name prefix and returns
+// its path. Under a policy it is made in the policy's private temp dir: the shared one
+// is granted to none of the run's children, so a directory there is one they could
+// neither read nor write.
 func FsTempDir(ctx context.Context, prefix string) (string, error) {
+	base := sandbox.PolicyFromContext(ctx).TempBase()
 	if types.Tracing(ctx) {
 		// Dry run: return a plausible path without creating it. Writes into it are
 		// themselves recorded (skipped), so the directory never needs to exist.
-		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+		return filepath.Join(cmp.Or(base, os.TempDir()), prefix+"magus-dry-run"), nil
 	}
-	dir, err := os.MkdirTemp("", prefix)
+	dir, err := os.MkdirTemp(base, prefix)
 	if err != nil {
 		return "", fmt.Errorf("fs.temp_dir: %w", err)
 	}

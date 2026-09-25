@@ -233,7 +233,7 @@ func readOnlyError(member string, why readOnlyRefusal) error {
 // WithReadOnlyPolicy returns ctx carrying sandbox.ReadOnly of the policy already on it,
 // or of none: the policy a RestrictToReads session runs under.
 func WithReadOnlyPolicy(ctx context.Context) context.Context {
-	return sandbox.WithPolicy(ctx, sandbox.ReadOnly(sandbox.FromContext(ctx)))
+	return sandbox.WithPolicy(ctx, sandbox.ReadOnly(sandbox.PolicyFromContext(ctx)))
 }
 
 // ApplyReadOnlyKernel is sandbox.ApplyReadOnly for a one-shot command: where landlock is
