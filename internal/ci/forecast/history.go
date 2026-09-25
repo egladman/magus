@@ -15,7 +15,8 @@
 //	              hit_rate(float64), pass_count(int), fail_count(int),
 //	              volatile_count(int), recent_outcomes([]Outcome)
 //	Outcome:      result(OutcomeResult, a string: "pass"|"fail"|"volatile"), affected(bool),
-//	              duration_ms(int64), at(time), attempts(int)
+//	              duration_ms(int64), at(time), attempts(int), max_rss_bytes(int64),
+//	              charms([]string: charm names), args_hash(string: 32 bits of a hash)
 //	Run:          commit(string: a commit id), ref(string), target(string),
 //	              status(string: "passed"|"failed"), at(time)
 //
@@ -44,6 +45,8 @@ package forecast
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -55,12 +58,14 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // HistoryVersion is the on-disk schema version.
 // v4 adds PassCount/FailCount/VolatileCount/RecentOutcomes; all prior versions load cleanly.
 // v5 adds Runs, the per-branch log of end-to-end run outcomes.
-const HistoryVersion = 5
+// v6 adds Outcome.Charms and Outcome.ArgsHash, the shape of the run an outcome records.
+const HistoryVersion = 6
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
 const SampleWindow = 100
@@ -224,6 +229,62 @@ type Outcome struct {
 	// treats it as a small number will read the targets it knows least about as
 	// the cheapest ones to co-schedule, which is precisely backwards.
 	MaxRSSBytes int64 `json:"max_rss_bytes,omitempty"`
+	// Charms and ArgsHash are the run's [Shape]; the target is the key the outcome is
+	// filed under. Two runs of one target reach different peaks when their shapes
+	// differ (`-- -run TestOne` against the whole suite).
+	//
+	// ArgsHash is never empty on an outcome that recorded its shape, so empty marks one
+	// written before v6, whose shape is unknown rather than "no charms, no args".
+	Charms   []string `json:"charms,omitempty"`
+	ArgsHash string   `json:"args_hash,omitempty"`
+}
+
+// Shape is what separates two runs of one target that can reach different peaks: the
+// active charms, normalized and sorted, and [ArgsHash] of the args forwarded after
+// `--`. Build it with [NewShape]; the zero Shape matches no outcome.
+type Shape struct {
+	Charms   []string
+	ArgsHash string
+}
+
+// NewShape normalizes a run's active charms and forwarded args into its Shape. Charm
+// order and spelling never fork a shape: the cache key sorts charms too, and
+// types.NormalizeCharm is how every consumer compares them.
+func NewShape(charms, args []string) Shape {
+	if len(charms) == 0 {
+		return Shape{ArgsHash: ArgsHash(args)}
+	}
+	norm := make([]string, 0, len(charms))
+	for _, c := range charms {
+		norm = append(norm, types.NormalizeCharm(c))
+	}
+	slices.Sort(norm)
+	return Shape{Charms: slices.Compact(norm), ArgsHash: ArgsHash(args)}
+}
+
+// ArgsHash is the first 32 bits of a SHA-256 over args, hex encoded. nil and empty args
+// hash alike, and the result is never empty.
+//
+// Order matters. magus cannot know an op's grammar: `-count 1 -run X` commutes for go
+// test, a script's positional args do not. The cache key hashes forwarded args in order
+// for the same reason, so two runs it treats as different work are different shapes
+// here too. Each arg is length-prefixed so ["a b"] and ["a", "b"] differ.
+//
+// 32 bits because the history travels through a CI cache and an argument can carry a
+// secret. Equality is all a shape needs; 32 bits cannot identify a secret with more
+// entropy than that, and two shapes of one target colliding costs only a claim sized
+// from both.
+func ArgsHash(args []string) string {
+	h := sha256.New()
+	for _, a := range args {
+		fmt.Fprintf(h, "%d:%s", len(a), a)
+	}
+	return hex.EncodeToString(h.Sum(nil)[:4])
+}
+
+// matches reports whether o recorded shape s. An outcome from before v6 matches none.
+func (s Shape) matches(o Outcome) bool {
+	return s.ArgsHash != "" && s.ArgsHash == o.ArgsHash && slices.Equal(s.Charms, o.Charms)
 }
 
 // PredictDuration returns the predicted runtime for (project, target, tags), scaled by cache-hit probability.
@@ -757,6 +818,75 @@ func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
 		}
 	}
 	return max, max > 0
+}
+
+// MeasuredPeak is the highest peak resident memory among a set of successful runs and
+// how many runs it was taken over.
+type MeasuredPeak struct {
+	MaxBytes int64
+	Runs     int
+}
+
+// fold combines the peaks of two spells serving one target. The step runs both, one
+// after the other, so the peak is the larger; Runs is the smaller, because the
+// least-observed spell bounds how far the maximum can be trusted.
+func (a MeasuredPeak) fold(b MeasuredPeak) MeasuredPeak {
+	switch {
+	case b.Runs == 0:
+		return a
+	case a.Runs == 0:
+		return b
+	}
+	return MeasuredPeak{MaxBytes: max(a.MaxBytes, b.MaxBytes), Runs: min(a.Runs, b.Runs)}
+}
+
+// PeakIndex is the successful measured runs of a [History], copied out so it can be
+// read while that History goes on recording: a run records outcomes concurrently with
+// the steps it is still sizing.
+type PeakIndex struct {
+	projects map[string]map[string]Stats
+}
+
+// PeakIndex snapshots every outcome that passed, on the first attempt or a retry, and
+// recorded a peak. A failed run is left out because it can die early, well below what
+// a finished run reaches, and an unmeasured one because zero means unknown.
+func (h *History) PeakIndex() PeakIndex {
+	x := PeakIndex{projects: map[string]map[string]Stats{}}
+	for project, targets := range h.Projects {
+		for key, st := range targets {
+			var kept []Outcome
+			for _, o := range st.RecentOutcomes {
+				if o.Result != OutcomeFail && o.MaxRSSBytes > 0 {
+					kept = append(kept, Outcome{Result: o.Result, MaxRSSBytes: o.MaxRSSBytes, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash})
+				}
+			}
+			if len(kept) == 0 {
+				continue
+			}
+			if x.projects[project] == nil {
+				x.projects[project] = map[string]Stats{}
+			}
+			x.projects[project][key] = Stats{RecentOutcomes: kept}
+		}
+	}
+	return x
+}
+
+// Peak returns the measured peak of target's runs in project that recorded shape, and
+// of every run of target whatever its shape, which includes the runs from before
+// shapes were recorded. target resolves as [History.PredictPeakRSS] does.
+func (x PeakIndex) Peak(project, target string, shape Shape) (sameShape, anyShape MeasuredPeak) {
+	for _, s := range targetHistories(x.projects[project], target) {
+		var same, all MeasuredPeak
+		for _, o := range s.RecentOutcomes {
+			all.MaxBytes, all.Runs = max(all.MaxBytes, o.MaxRSSBytes), all.Runs+1
+			if shape.matches(o) {
+				same.MaxBytes, same.Runs = max(same.MaxBytes, o.MaxRSSBytes), same.Runs+1
+			}
+		}
+		sameShape, anyShape = sameShape.fold(same), anyShape.fold(all)
+	}
+	return sameShape, anyShape
 }
 
 // FoldTargetHistories combines every spell history a project recorded for target into

@@ -602,7 +602,6 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		}
 	}
 	step.DependsOn = p.DependsOn
-	pol := p.TargetPolicies[target]
 	// A service op is a long-running process: it must never be cached, or a re-run
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
@@ -616,8 +615,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// own declaration while the claim used the chain's would let several composed steps
 	// take one slot each and a full claim each, so a single invocation queued behind
 	// memory its own siblings held.
-	step.MemoryMB, step.MemoryDeclaredBy = m.chainMemoryMB(p, target)
-	step.Slots = slotsForPolicy(pol.Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
+	//
+	// The declarations as written. A run re-sizes them from its measured peaks once it
+	// knows its own shape (executeStages).
+	m.claimMemory(&step, p, target, nil)
 	// A step that only runs installs dispatches each spell's install, and each keys
 	// itself (installStep). Keyed here on the project baseline, a hit would skip the stamp
 	// check that notices a deleted tree.
@@ -1602,10 +1603,23 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
+	// Joined here rather than beside the volatility runtime below: every step's claim is
+	// sized from it, and the probes above already overlapped most of the decode.
+	sizeMemory := memorySizer(m.peakIndex(history), forecast.NewShape(charmKey, opts.ExtraArgs))
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
 	keyedStep := func(p *types.Project, target string) cache.Step {
 		step := m.buildStep(p, target)
+		if sizeMemory != nil {
+			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
+				// TODO: carry sizing on cache.Step into its types.MachineClaim, so a
+				// refusal and `magus status` name it; the claim is built in
+				// internal/cache.claimMachine.
+				slog.DebugContext(ctx, "magus: memory claim sized from measured peaks",
+					slog.String("project", p.Path), slog.String("target", target),
+					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))
+			}
+		}
 		var toolVersions []string
 		if keysTools(p, target) {
 			toolVersions = prober.probeVersions(ctx, []*types.Project{p}, nil, nil)[p.Path]
@@ -2235,6 +2249,20 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 	}
 }
 
+// peakIndex waits for the history and snapshots its measured peaks. nil, when history
+// is disabled or unreadable, leaves every claim at its declaration.
+func (m *Magus) peakIndex(history func() (*forecast.History, error)) *forecast.PeakIndex {
+	if history == nil {
+		return nil
+	}
+	h, err := history()
+	if err != nil {
+		return nil
+	}
+	x := h.PeakIndex()
+	return &x
+}
+
 // buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when
 // history cannot be loaded.
 func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool, history func() (*forecast.History, error)) *volatility.Runtime {
@@ -2343,6 +2371,8 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// must stay zero in the record so a reader can tell it apart from a
 	// measured-and-tiny one.
 	peakRSS := types.PeakRSS(ctx)
+	// The same shape executeStages sizes claims by, read from the same run options.
+	shape := forecast.NewShape(types.CharmsFromContext(ctx), project.ExtraArgs(ctx))
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
 		Result:         result,
 		AffectedByDiff: affected,
@@ -2350,6 +2380,8 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		At:             time.Now(),
 		Attempts:       attempts,
 		MaxRSSBytes:    peakRSS,
+		Charms:         shape.Charms,
+		ArgsHash:       shape.ArgsHash,
 	})
 
 	if decision.Retry {

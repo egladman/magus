@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,12 +17,14 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -1621,6 +1624,57 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "target="+spellName+"/flaky", "the line must name the pair, not just the project")
 	assert.Contains(t, got, "status=retried_volatile")
 	assert.Contains(t, got, "reason=bootstrap")
+}
+
+// TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a run
+// sizes its claim from the measured peaks of runs shaped like it, and records its own
+// outcome under that same shape for the next run to read.
+func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	const spellName = "zzz-shaped-claim-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("work"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	var logged syncBuffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	args := []string{"-run", "X"}
+	shape := forecast.NewShape([]string{types.CharmReadWrite}, args)
+	seeded := forecast.History{Version: forecast.HistoryVersion, Projects: map[string]map[string]forecast.Stats{
+		".": {spellName + "/work": {RecentOutcomes: slices.Repeat([]forecast.Outcome{{
+			Result: forecast.OutcomePass, MaxRSSBytes: 10 << 20, Charms: shape.Charms, ArgsHash: shape.ArgsHash,
+		}}, 3)}},
+	}}
+	historyPath := filepath.Join(root, "history.json")
+	require.NoError(t, seeded.Save(context.Background(), historyPath))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName), WithTarget("work", workspace.MemoryMB(64)))
+	cfg := config.Defaults()
+	cfg.HistoryPath = historyPath
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "work"}},
+		WithCharms(types.CharmReadWrite), WithExtraArgs(args)))
+	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs\"", "ceil(1.25 x 10MB), under the 64MB declared")
+
+	var got forecast.History
+	require.NoError(t, got.Load(context.Background(), historyPath))
+	outcomes := got.Projects["."][spellName+"/work"].RecentOutcomes
+	require.Len(t, outcomes, 4)
+	assert.Equal(t, shape.Charms, outcomes[3].Charms)
+	assert.Equal(t, shape.ArgsHash, outcomes[3].ArgsHash)
 }
 
 // TestUndeclaredScopeEvent pins the scope event MGS1028 rides to the console: which
