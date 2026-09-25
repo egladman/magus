@@ -28,7 +28,7 @@ would rather they ran.
 The store is keyed by repository identity rather than by checkout path, so
 every git worktree of one repo reads and writes the same records \- what
 another worktree just finished, and what it is blocked on, is visible here
-without a daemon, a network, or a shared branch. It is append\-only and never
+without a server, a network, or a shared branch. It is append\-only and never
 rewritten; a line left half\-written by a killed process is skipped and counted
 rather than failing the read.
 .PP
@@ -221,6 +221,7 @@ printf '%s\(rsn' 'needs approval' | magus session notify --outcome permission --
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-broker\fR(1),
 \fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

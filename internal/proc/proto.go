@@ -1,135 +1,84 @@
 // Package proc implements the magus "process adoption" mechanism: child
-// magus processes detect MAGUS_DAEMON_SOCKET and forward work over a
-// Unix-domain socket RPC, sharing the parent's cache, logger, and concurrency budget.
+// magus processes detect [SocketEnv] and forward work over HTTP on a
+// Unix-domain socket, sharing the parent's cache, logger, and concurrency budget.
 package proc
 
 import (
-	"context"
 	"time"
 
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-// protocolV2 identifies the JSONL message shape; distinct from the binary Version.
-// Servers reject an unknown non-empty protocol with ErrProtocolMismatch.
-const protocolV2 = "v2"
+// SocketEnv names the variable a magus process exports to its children: the unix://
+// address of the proc server they forward to, which is either this process's own
+// per-process pool or the `magus server` it adopted. Set by magus, never by a person.
+const SocketEnv = "MAGUS_PROC_SOCKET"
 
-// Wire-type strings embedded in every JSONL frame's "type" field.
+// The paths the proc server answers on its socket, one per operation. The version is in the
+// path: a client and a server that disagree on it meet a 404, never a misread body.
 const (
-	typeRun           = "run"
-	typeRunReply      = "run.reply"
-	typeStatus        = "status"
-	typeStatusReply   = "status.reply"
-	typeShutdown      = "shutdown"
-	typeShutdownReply = "shutdown.reply"
-	typeError         = "error"
-
-	typeServiceAcquire      = "service.acquire"
-	typeServiceAcquireReply = "service.acquire.reply"
-	typeServiceRelease      = "service.release"
-	typeServiceReleaseReply = "service.release.reply"
-	typeServiceStopAll      = "service.stopall"
-	typeServiceStopAllReply = "service.stopall.reply"
-
-	typeConfigReload      = "config.reload"
-	typeConfigReloadReply = "config.reload.reply"
-
-	typeJob      = "job"
-	typeJobReply = "job.reply"
-
-	typeBudgetAcquire      = "budget.acquire"
-	typeBudgetAcquireReply = "budget.acquire.reply"
-	typeBudgetRelease      = "budget.release"
-	typeBudgetReleaseReply = "budget.release.reply"
+	pathRun      = "/proc/v1/run"
+	pathJobs     = "/proc/v1/jobs"
+	pathStatus   = "/proc/v1/status"
+	pathShutdown = "/proc/v1/shutdown"
+	pathReload   = "/proc/v1/reload"
 )
 
-// budgetMagic guards the two frames above. Both MUTATE state shared by every magus on
-// the machine (one takes a claim against the host's memory, the other hands one back)
-// and a release in particular is unauthenticated denial of service if anything on the
-// socket can send it: drop a peer's claim and the budget re-admits work against memory
-// that is still held. The same reasoning as jobMagic and shutdownMagic, and the same
-// shape, so a request without it is answered as unrecognized rather than acted on.
-const budgetMagic = "magus-budget-v1"
+var (
+	needConsoleRead  = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
+	needConsoleWrite = types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
+)
 
-// budgetAcquireRequest asks the machine budget to seat one step. The budget answers
-// immediately, with a grant or a refusal, and keeps nothing for a refused claim; a
-// client that may wait (see types.MachineVerdict.OwnRun) asks again.
-type budgetAcquireRequest struct {
-	Magic    string             `json:"magic"`
-	Protocol string             `json:"protocol"`
-	Claim    types.MachineClaim `json:"claim"`
+// routeNeeds is the Need of every proc route. Reading the pool is a console read; anything
+// that runs magus, drops workspaces or stops the process is a console write, the level the
+// console's own JobService RunJob takes.
+var routeNeeds = map[string]types.Need{
+	pathRun:      needConsoleWrite,
+	pathJobs:     needConsoleWrite,
+	pathStatus:   needConsoleRead,
+	pathShutdown: needConsoleWrite,
+	pathReload:   needConsoleWrite,
 }
 
-// budgetAcquireReply carries the verdict. Err is non-empty only when this server holds
-// no budget to arbitrate, which a client treats as no arbiter rather than as a failure.
-type budgetAcquireReply struct {
-	Verdict types.MachineVerdict `json:"verdict"`
-	Err     string               `json:"err,omitempty"`
-}
-
-// budgetReleaseRequest returns a granted claim.
-type budgetReleaseRequest struct {
-	Magic    string `json:"magic"`
-	Protocol string `json:"protocol"`
-	ID       string `json:"id,omitempty"`
-}
-
-// budgetReleaseReply is the response to a release. It carries no fields: the client
-// only checks the frame's type tag, so a field added here would need a matching decode
-// arm added to the client at the same time.
-type budgetReleaseReply struct{}
-
-// jobMagic guards jobRequest: a fire-and-forget submission that the daemon runs in the
-// background is a privileged operation (it executes arbitrary magus args), so a request
-// without the magic is ignored, matching the statusRequest/shutdownRequest pattern.
-const jobMagic = "magus-job-v1"
-
-// jobRequest submits a background job: the daemon runs `magus <Args>` asynchronously and
+// jobRequest submits a background job: the server runs `magus <Args>` asynchronously and
 // replies immediately, unlike runRequest which blocks until the run completes. Used by
 // the VCS refresh hook to kick a rebuild/reindex without delaying a checkout.
 type jobRequest struct {
-	Magic    string   `json:"magic"`
-	Args     []string `json:"args"`
-	Version  string   `json:"version,omitempty"`
-	Cwd      string   `json:"cwd"`
-	Protocol string   `json:"protocol"`
-	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
+	Args    []string `json:"args"`
+	Version string   `json:"version,omitempty"`
+	Cwd     string   `json:"cwd"`
+	Root    string   `json:"root,omitempty"` // empty → server walks up from Cwd
 }
 
 // jobReply acknowledges a submitted job. Inv is the invocation id (a Dashboard deep-link
-// into the job's live log); Err is non-empty only when the job could not be accepted
-// (the job's own success/failure is observed via the Dashboard, not this reply).
+// into the job's live log), empty when an identical job already in flight absorbed this one.
+// The job's own success/failure is observed via the Dashboard, not this reply.
 type jobReply struct {
 	Inv string `json:"inv,omitempty"`
-	Err string `json:"err,omitempty"`
 }
 
-// runRequest is the JSONL payload sent from a child magus to its parent.
+// runRequest is the payload a child magus sends its parent.
 type runRequest struct {
-	Args     []string `json:"args"`
-	Version  string   `json:"version,omitempty"`
-	Cwd      string   `json:"cwd"`
-	Protocol string   `json:"protocol"`
-	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
-	// Ancestors is the client's invocation ancestry, oldest first. The daemon adopts it
+	Args    []string `json:"args"`
+	Version string   `json:"version,omitempty"`
+	Cwd     string   `json:"cwd"`
+	Root    string   `json:"root,omitempty"` // empty → server walks up from Cwd
+	// Ancestors is the client's invocation ancestry, oldest first. The server adopts it
 	// so a run it executes on this client's behalf can recognize a project lock held by
-	// one of the client's OWN ancestors, which, under the daemon, is a lock this very
-	// process holds. Empty from a client that predates the field: re-entry detection is
-	// then unavailable and the acquire falls back to waiting.
+	// one of the client's OWN ancestors, which, under the server, is a lock this very
+	// process holds.
 	Ancestors []string `json:"ancestors,omitempty"`
 	// Lease is the lease the CLIENT was launched under, carried because the
-	// daemon executes the run in its own process and so reads its own environment, not
+	// server executes the run in its own process and so reads its own environment, not
 	// the client's; without this an adopted run records no lease at all.
 	//
 	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
 	// magus.lease member is (the client's trace context does not cross this socket, so
-	// an adopted run records the lease and no ancestry) and it
-	// arrives over a socket any local process may dial. The server therefore re-validates
+	// an adopted run records the lease and no ancestry). The server therefore re-validates
 	// it with types.ValidJobID and drops a value that fails, matching what
 	// trail.LeaseFromEnv does with a malformed environment value: a lease id is
 	// exempt from the trail's redaction, so an unchecked one is a way to carry a
-	// credential onto an event line. Empty from a client that predates the field.
+	// credential onto an event line.
 	Lease string `json:"lease,omitempty"`
 }
 
@@ -139,17 +88,10 @@ type runReply struct {
 	Err      string `json:"err,omitempty"` // human-readable; non-empty when ExitCode != 0
 }
 
-// statusRequest is the payload for the status JSONL message.
-// Magic must equal statusMagic; unrecognized requests get an empty reply.
-type statusRequest struct {
-	Magic    string `json:"magic"`
-	Protocol string `json:"protocol"`
-}
-
-// Workspace describes one workspace the daemon holds: loading, loaded, or failed.
+// Workspace describes one workspace the server holds: loading, loaded, or failed.
 type Workspace struct {
 	Root string `json:"root"`
-	// State is empty from an older daemon, which reported only loaded workspaces.
+	// State is empty from an older server, which reported only loaded workspaces.
 	// compat: see types.StatusWorkspace.Loaded
 	State types.WorkspaceState `json:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
@@ -157,7 +99,7 @@ type Workspace struct {
 	LoadedAt   time.Time               `json:"loaded_at"`
 	LastAccess time.Time               `json:"last_access"`
 	// Live cache activity for this workspace's long-lived cache. Zero for pre-cache-aware
-	// daemons or an Inspect workspace with no cache.
+	// servers or an Inspect workspace with no cache.
 	CacheHit   int   `json:"cache_hit,omitempty"`
 	CacheMiss  int   `json:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty"`
@@ -168,27 +110,23 @@ type Workspace struct {
 	SecretProvider string `json:"secret_provider,omitempty"`
 }
 
-// Loaded reports whether w is serving: active, or from a daemon that reports no state.
+// Loaded reports whether w is serving: active, or from a server that reports no state.
 // compat: see types.StatusWorkspace.Loaded
 func (w Workspace) Loaded() bool { return types.StatusWorkspace{State: w.State}.Loaded() }
 
 // StatusReply carries a point-in-time view of the parent's pool.
 type StatusReply struct {
-	ParentPID     int         `json:"parent_pid"`
-	DaemonVersion string      `json:"daemon_version,omitempty"`
-	Mode          string      `json:"mode,omitempty"` // "daemon" (multi-workspace) | "proc" (per-process)
-	Capacity      int         `json:"capacity"`
-	Running       int         `json:"running"`
-	Queued        int         `json:"queued"`
-	Calls         []Call      `json:"calls,omitempty"`
-	Workspaces    []Workspace `json:"workspaces,omitempty"` // nil for per-process proc servers
-	// Services are the long-running shared services the daemon is hosting right now.
-	// Nil for a per-process proc server (no cross-invocation service host).
-	Services []types.StatusService `json:"services,omitempty"`
-	// Machine is the host-wide admission budget this daemon arbitrates: what every
-	// magus on the machine holds and who is queued for it. Nil for a per-process proc
-	// server, which arbitrates nothing beyond itself.
-	Machine *types.MachineSnapshot `json:"machine,omitempty"`
+	ParentPID  int         `json:"parent_pid"`
+	Version    string      `json:"version,omitempty"`
+	Capacity   int         `json:"capacity"`
+	Running    int         `json:"running"`
+	Queued     int         `json:"queued"`
+	Calls      []Call      `json:"calls,omitempty"`
+	Workspaces []Workspace `json:"workspaces,omitempty"` // nil for per-process proc servers
+	// Server is the server's own identity and listeners. Only `magus server` sets it,
+	// so its presence is what tells the server from a per-process proc server, which
+	// dies with the command that started it.
+	Server *types.StatusServer `json:"server,omitempty"`
 }
 
 // StatusOutput is r as the status report's pool section, nil for a nil reply. It is the
@@ -201,12 +139,11 @@ func (r *StatusReply) StatusOutput() *types.StatusOutput {
 		return nil
 	}
 	out := &types.StatusOutput{
-		ParentPID:     r.ParentPID,
-		DaemonVersion: r.DaemonVersion,
-		Mode:          r.Mode,
-		Capacity:      r.Capacity,
-		Running:       r.Running,
-		// Floored: a daemon whose capacity was clamped under load can report more running
+		ParentPID: r.ParentPID,
+		Version:   r.Version,
+		Capacity:  r.Capacity,
+		Running:   r.Running,
+		// Floored: a server whose capacity was clamped under load can report more running
 		// than capacity, and "-2 available" is worse than "0".
 		Available: max(0, r.Capacity-r.Running),
 		Queued:    r.Queued,
@@ -235,101 +172,21 @@ type Call struct {
 	Inv       string    `json:"inv,omitempty"`        // the invocation id this call runs under; deep-links to its live log
 }
 
-// statusMagic is the expected value of statusRequest.Magic.
-const statusMagic = "magus-pool-v1"
-
-// shutdownRequest is the payload for the shutdown JSONL message.
-// Magic must equal shutdownMagic; unrecognized requests are ignored.
-type shutdownRequest struct {
-	Magic    string `json:"magic"`
-	Protocol string `json:"protocol"`
-}
-
-// shutdownReply is the response to a shutdown request. It carries no fields: the client
-// only checks the frame's type tag, so a field added here would need a matching decode
-// arm added to Shutdown in client.go at the same time.
-type shutdownReply struct{}
-
-// shutdownMagic is the expected value of shutdownRequest.Magic.
-const shutdownMagic = "magus-shutdown-v1"
-
-// serviceAcquireRequest asks the daemon to start (or reuse) a shared service and
-// keep it warm past this invocation. Key is the service fingerprint; Service is the
-// resolved process description (command, readiness, stop, idle).
-type serviceAcquireRequest struct {
-	Protocol string         `json:"protocol"`
-	Key      string         `json:"key"`
-	Service  spells.Service `json:"service"`
-}
-
-// serviceAcquireReply reports whether the service came up. Err is non-empty when it
-// could not be started or did not become ready.
-type serviceAcquireReply struct {
-	Err string `json:"err,omitempty"`
-}
-
-// serviceReleaseRequest drops this invocation's hold on a shared service. The daemon
-// keeps it warm (idle timeout) and reaps it later, so a later run reuses it.
-type serviceReleaseRequest struct {
-	Protocol string `json:"protocol"`
-	Key      string `json:"key"`
-}
-
-// serviceReleaseReply is the response to a release. It carries no fields: the client
-// only checks the frame's type tag, so a field added here would need a matching decode
-// arm added to ReleaseService in client.go at the same time.
-type serviceReleaseReply struct{}
-
-// serviceStopAllRequest asks the daemon to stop every service it is hosting while
-// staying up, for `magus server stop --services`. It clears warm services (stale
-// data, held ports) without killing the daemon.
-type serviceStopAllRequest struct {
-	Protocol string `json:"protocol"`
-}
-
-// serviceStopAllReply reports how many services were stopped.
-type serviceStopAllReply struct {
-	Count int `json:"count"`
-}
-
-// configReloadRequest asks the daemon to drop the workspaces it is holding open, so the
-// next command against each one reopens it and re-reads magus.yaml. It is the config
-// counterpart of serviceStopAllRequest: a partial reset that leaves the daemon up.
-//
-// There is no "apply this config" payload, and deliberately so: the daemon does not hold
-// a config to patch, it holds OPEN WORKSPACES that each captured one when they loaded.
-// Dropping them is the reload; the config is then read from disk the ordinary way,
-// through exactly the path a cold start uses. Nothing here can disagree with that path
-// because nothing here duplicates it.
-type configReloadRequest struct {
-	Protocol string `json:"protocol"`
-}
-
-// configReloadReply reports how many workspaces were dropped and how many were left
+// configReloadReply reports how many workspaces a reload dropped and how many it left
 // alone because a run was in flight. Busy is not an error: those keep the config they
 // started with, which is what a run in progress should do.
+//
+// A reload carries no "apply this config" payload, and deliberately so: the server does
+// not hold a config to patch, it holds OPEN WORKSPACES that each captured one when they
+// loaded. Dropping them is the reload; the config is then read from disk the ordinary way,
+// through exactly the path a cold start uses.
 type configReloadReply struct {
 	Dropped int `json:"dropped"`
 	Busy    int `json:"busy"`
 }
 
-// ServiceHost hosts long-running shared services on behalf of adopted magus
-// invocations, keeping them warm across separate runs. The daemon supplies one via
-// [Options]; a per-process proc server leaves it nil (no cross-invocation hosting).
-// Acquire/Release mirror the ref-counted lifecycle of cache.Limiter and
-// service.Registry, the shared vocabulary for held resources.
-type ServiceHost interface {
-	// Acquire starts (or reuses) the service identified by key, returning once it is
-	// ready, and increments its dependent count.
-	Acquire(ctx context.Context, key string, svc spells.Service) error
-	// Release drops one dependent of key; the host keeps it warm and reaps it later.
-	Release(key string)
-	// StopAll stops every hosted service and returns how many were stopped, leaving
-	// the daemon running.
-	StopAll() int
-}
-
-// errorReply is returned by the server for transport-level failures.
+// errorReply is the body of a proc route's refusal: the sentinel's message, which the
+// client matches back to the typed error (decodeWireError).
 type errorReply struct {
 	Message string `json:"message"`
 }

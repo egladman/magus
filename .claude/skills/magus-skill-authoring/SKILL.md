@@ -14,7 +14,7 @@ either.
 
 Never teach behavior you have not executed against a freshly built binary in
 this session. Build HEAD (`magus run go-build .`), start the
-daemon, call the actual tool (over MCP HTTP as well as the CLI), and paste the
+server, call the actual tool (over MCP HTTP as well as the CLI), and paste the
 observed output into your analysis before writing a word of skill text.
 
 Cautionary precedent, found here: the registry advertised dry_run as "print

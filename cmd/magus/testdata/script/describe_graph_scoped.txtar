@@ -1,0 +1,68 @@
+# A MAGUS.md scoped to one project is a function of that project alone.
+#
+# `magus affected` only regenerates the indexes of projects a change touches. An index
+# that embedded workspace-wide sizes and anchors went stale whenever another project
+# moved the graph, and the drift surfaced later in an unrelated change's gate.
+
+exec magus describe graph -o markdown libs/foo
+cp stdout scoped-before.md
+exec magus describe graph -o markdown
+cp stdout whole-before.md
+
+# The scoped index routes to its own project and carries no workspace-wide table.
+grep 'Scope a query to this index: `magus query project=libs/foo`' scoped-before.md
+grep -count=1 '^## Project: ' scoped-before.md
+grep 'Builds foo\.' scoped-before.md
+! grep '^\| Kind' scoped-before.md
+! grep 'schema v' scoped-before.md
+grep -count=3 '^## Project: ' whole-before.md
+grep '^\| Kind' whole-before.md
+
+# Move the graph from outside libs/foo: a target, a Go file, a doc full of links.
+cp other-grown.buzz other/magusfile.buzz
+cp notes.md other/notes.md
+cp extra.go other/extra.go
+
+exec magus describe graph -o markdown libs/foo
+cp stdout scoped-after.md
+exec magus describe graph -o markdown
+cp stdout whole-after.md
+
+cmp scoped-before.md scoped-after.md
+! cmp whole-before.md whole-after.md
+
+# A project path that names nothing is an error, not an empty index.
+! exec magus describe graph -o markdown libs/fo
+stderr 'unknown project "libs/fo"; did you mean "libs/foo"'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+// Builds the workspace.
+export fun build(ctx: magus\Context, args: [str]) > void {}
+-- libs/foo/magusfile.buzz --
+import "magus";
+// Builds foo.
+export fun build(ctx: magus\Context, args: [str]) > void {}
+-- other/magusfile.buzz --
+import "magus";
+// Builds other.
+export fun build(ctx: magus\Context, args: [str]) > void {}
+-- other-grown.buzz --
+import "magus";
+// Builds other.
+export fun build(ctx: magus\Context, args: [str]) > void {}
+// Tests other.
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+-- notes.md --
+# Notes
+
+See [a](https://a.example/), [b](https://b.example/), [c](https://c.example/),
+[d](https://d.example/), [e](https://e.example/), [f](https://f.example/),
+[g](https://g.example/), [h](https://h.example/), [i](https://i.example/),
+[j](https://j.example/), [k](https://k.example/).
+-- extra.go --
+package other
+
+func Extra() int { return 1 }

@@ -192,5 +192,8 @@ func isData(p string) bool {
 	return slices.Contains(dataExtensions, strings.ToLower(path.Ext(p)))
 }
 
+// AllUnits is "/", the project reference magus reads as every project.
+func (w *Workspace) AllUnits(context.Context) ([]string, error) { return []string{"/"}, nil }
+
 // Close releases the workspace.
 func (w *Workspace) Close() error { return w.m.Close() }

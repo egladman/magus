@@ -12,8 +12,10 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 )
 
-// stableSocketName is the well-known socket filename used by `magus server start`.
-const stableSocketName = "magus-daemon.sock"
+// serverSocketName is the well-known socket filename `magus server` listens on. It sits
+// outside the magus-*.sock pattern per-process servers use, as does the broker's, so a
+// scan for per-process pools never mistakes either for one.
+const serverSocketName = "server.sock"
 
 // reapGracePeriod is how long a dead socket must have sat untouched before a sweep
 // unlinks it. The window closes a narrow race: a server that has created its socket
@@ -46,14 +48,17 @@ func reapDeadSocket(path string, e os.DirEntry) {
 	_ = os.Remove(path)
 }
 
-// StableSocketName returns the file basename of the stable multi-workspace daemon socket.
-func StableSocketName() string { return stableSocketName }
+// ServerSocketName returns the file basename of the server's socket.
+func ServerSocketName() string { return serverSocketName }
 
-// SocketLive reports whether a daemon is currently accepting on addr, which may be a
+// ServerDefaultAddr is where `magus server` listens when server.address sets nothing.
+func ServerDefaultAddr() string { return "unix://" + filepath.Join(SockDir(), serverSocketName) }
+
+// SocketLive reports whether a server is currently accepting on addr, which may be a
 // unix:// URL or a bare socket path. It is the shared liveness probe behind idempotent
 // `server start` (skip when one is already up) and `server stop` verification (confirm
-// the daemon is actually gone after a shutdown request). A malformed address is treated
-// as not-live rather than an error, since callers only care whether a daemon answers.
+// the server is actually gone after a shutdown request). A malformed address is treated
+// as not-live rather than an error, since callers only care whether a server answers.
 func SocketLive(ctx context.Context, addr string) bool {
 	ep, err := endpoint.Parse(addr)
 	if err != nil {
@@ -62,9 +67,10 @@ func SocketLive(ctx context.Context, addr string) bool {
 	return isSocketLive(ctx, ep.Addr)
 }
 
-// LookupStableSocket returns the address of the stable daemon socket if alive; bool is false when absent.
-func LookupStableSocket(ctx context.Context) (string, bool) {
-	path := filepath.Join(SockDir(), stableSocketName)
+// LookupServerSocket returns the address of the server's default socket if a server
+// answers there; bool is false when none does.
+func LookupServerSocket(ctx context.Context) (string, bool) {
+	path := filepath.Join(SockDir(), serverSocketName)
 	if !isSocketLive(ctx, path) {
 		return "", false
 	}
@@ -77,13 +83,14 @@ func LookupStableSocket(ctx context.Context) (string, bool) {
 // first into the second reports a busy machine as an idle one.
 var ErrMultipleServers = errors.New("multiple proc servers found; use --socket to select one")
 
-// DiscoverSocket scans SockDir for a live magus-*.sock file, preferring the stable daemon
+// DiscoverSocket scans SockDir for a live magus-*.sock file, preferring the server's
 // socket. Used where exactly one server has to be chosen to talk to.
 //
-// The stable socket short-circuits the scan, so a machine running the daemon plus ad-hoc
-// per-process servers still resolves to the daemon rather than reporting an ambiguity.
+// The server's socket short-circuits the scan, so a machine running the server plus
+// ad-hoc per-process servers still resolves to the server rather than reporting an
+// ambiguity.
 func DiscoverSocket(ctx context.Context) (string, error) {
-	if addr, ok := LookupStableSocket(ctx); ok {
+	if addr, ok := LookupServerSocket(ctx); ok {
 		return addr, nil
 	}
 	addrs, err := DiscoverSockets(ctx)
@@ -96,20 +103,20 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 	return addrs[0], nil
 }
 
-// DiscoverSockets returns every live proc-server address in SockDir, the stable daemon
-// socket first. Each one is a separate concurrency pool, so a reporter (`magus status`)
+// DiscoverSockets returns every live proc-server address in SockDir, the server's socket
+// first. Each one is a separate concurrency pool, so a reporter (`magus status`)
 // enumerates them instead of demanding the caller pick one.
 func DiscoverSockets(ctx context.Context) ([]string, error) {
 	var candidates []string
-	if addr, ok := LookupStableSocket(ctx); ok {
+	if addr, ok := LookupServerSocket(ctx); ok {
 		candidates = append(candidates, addr)
 	}
 
 	dir := SockDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		// Only fatal when the scan is the sole source: with the stable daemon already
-		// found there is still a pool to report.
+		// Only fatal when the scan is the sole source: with the server already found
+		// there is still a pool to report.
 		if len(candidates) > 0 {
 			return candidates, nil
 		}
@@ -124,13 +131,9 @@ func DiscoverSockets(ctx context.Context) ([]string, error) {
 		if !strings.HasPrefix(name, "magus-") || !strings.HasSuffix(name, ".sock") {
 			continue
 		}
-		// Skip the stable socket; already probed above.
-		if name == stableSocketName {
-			continue
-		}
 		p := filepath.Join(dir, name)
 		if isSocketLive(ctx, p) {
-			// unix:// URL, matching LookupStableSocket's return format above;
+			// unix:// URL, matching LookupServerSocket's return format above;
 			// functionally inert either way (endpoint.Parse accepts both back-compat),
 			// but a caller comparing addresses across the two branches should not see
 			// two different shapes for the same kind of thing.
@@ -141,7 +144,7 @@ func DiscoverSockets(ctx context.Context) ([]string, error) {
 	}
 
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no running magus proc server found (set MAGUS_DAEMON_SOCKET or use --socket)")
+		return nil, fmt.Errorf("no running magus proc server found (start one with `magus server start`, or use --socket)")
 	}
 	return candidates, nil
 }

@@ -169,7 +169,7 @@ func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetN
 // attrs folded onto it. Both are best effort: a cold or unbuildable graph yields a nil
 // resolver, and every anchor then reports UNVERIFIED rather than a guess.
 //
-// Per request rather than cached, because the daemon holds a warm graph already and a stale
+// Per request rather than cached, because the server holds a warm graph already and a stale
 // answer about whether an anchor resolves is exactly the wrong thing to cache twice.
 func (s *Service) resolver(ctx context.Context) (*knowledge.NoteResolver, map[string]types.KnowledgeNode) {
 	g, err := s.ws.KnowledgeGraphWithSymbols(ctx)

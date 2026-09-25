@@ -16,14 +16,14 @@ export interface WorkspaceReader {
 
 // activeWorkspace, when given, is the workspace THIS BROWSER TAB is scoped to (lib/scope.ts, driven
 // by the title bar's scope picker): the matching row gets [data-active], so the tab's scope has a
-// visible anchor here - the one place per-workspace data (this daemon's cache tallies) actually
+// visible anchor here - the one place per-workspace data (this server's cache tallies) actually
 // exists to scope to. Optional: the standalone case renders unhighlighted.
 export function workspacesTile(activeWorkspace?: WorkspaceReader): Tile {
   const card = new Card("workspaces", "Workspaces", {
     term: "Workspace",
     label: "workspaces",
     why:
-      "Which checkouts this daemon holds warm, and how well the cache serves each. One with a far" +
+      "Which checkouts this server holds warm, and how well the cache serves each. One with a far" +
       " worse hit rate is usually a worktree whose absolute paths differ, so it reuses nothing.",
   });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
@@ -91,7 +91,7 @@ export function workspacesTile(activeWorkspace?: WorkspaceReader): Tile {
 
   // On the board this list simply grows its card and the page scrolls. In Big Picture the card is a
   // fixed grid slot with no scrollbar, so a longer list would lose its tail behind overflow: hidden
-  // and read as though the daemon had fewer workspaces than it has. fitRows trims to fit and says
+  // and read as though the server had fewer workspaces than it has. fitRows trims to fit and says
   // what it dropped; it is a no-op whenever everything already fits, which is the board's case.
   const unfit = fitRows(card.body, list, (hidden) => "+" + String(hidden) + " more");
 

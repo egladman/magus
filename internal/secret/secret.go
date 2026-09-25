@@ -15,7 +15,7 @@
 // unlock prompts for one command) because one magusfile evaluation happens during
 // preload and another during the run.
 //
-// The cost is that the daemon holds an Open for as long as it serves a workspace, so
+// The cost is that the server holds an Open for as long as it serves a workspace, so
 // resolved plaintext lives that long. It is still not process-global: a second
 // workspace gets a second Resolver, and the memo is keyed by provider as well.
 package secret
@@ -128,8 +128,8 @@ type memoKey struct {
 // Resolver holds one run's secret state: which provider the magusfile selected, the
 // values read so far, and the memo of what each reference resolved to.
 //
-// One per run, reached through the context, because magus's daemon outlives any single
-// run. Process-global state here would mean plaintext resident for the daemon's lifetime
+// One per run, reached through the context, because magus's server outlives any single
+// run. Process-global state here would mean plaintext resident for the server's lifetime
 // and visible in a heap or core dump.
 type Resolver struct {
 	mu sync.RWMutex
@@ -474,7 +474,7 @@ func (r *Resolver) registerRedactable(v string) {
 // nothing. A resolved credential is never removed, because it stays valid wherever it
 // was sent.
 //
-// Without this the set grew for the daemon's lifetime: a fresh token plus a base URL
+// Without this the set grew for the server's lifetime: a fresh token plus a base URL
 // plus seven encoded forms of each, per rebind, per run, all of it scanned linearly by
 // Redact on the output-capture hot path.
 func (r *Resolver) unregisterRedactable(v string) {

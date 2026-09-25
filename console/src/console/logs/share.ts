@@ -4,7 +4,7 @@
 // copies to the clipboard, the graph link rides the graph page's own #node= fragment.
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { getLiveToken, parseHash, wantsDemo } from "../../lib/daemon";
+import { getLiveToken, parseHash, wantsDemo } from "../../lib/server";
 import { EventSchema, JournalSchema, Kind } from "@wire/viewer/v1alpha1/viewer_pb";
 import { state, waterfallSource } from "./state";
 import { flashBtnLabel } from "./dom";

@@ -3,9 +3,9 @@
 # Preserve, so a repository preserved ONCE kept that capture for good while the usage text
 # said it was dropped at 30 days.
 #
-# prune-preserved is the pass that has no such precondition. The daemon schedules it; this
+# prune-preserved is the pass that has no such precondition. The server schedules it; this
 # script drives the worker the schedule submits, which is also the standalone spelling for
-# a machine that runs no daemon.
+# a machine that runs no server.
 #
 # The other half is the line pruning must not cross: a namespace is not a signature, so a
 # ref under refs/magus/preserved that magus did not write is not magus's to delete, and a

@@ -102,6 +102,7 @@ concepts/engines/
 concepts/generated-files/
 concepts/knowledge/
 concepts/knowledge/insight/
+concepts/merge-queue/
 concepts/operations/
 concepts/output-refs/
 concepts/remote-cache/
@@ -130,6 +131,7 @@ concepts/targets/
 concepts/targets/ci/
 concepts/telemetry/
 concepts/terminal/
+concepts/tokens/
 concepts/volatility/
 concepts/wards/
 concepts/workspace-providers/
@@ -160,6 +162,7 @@ development/libs-diag/
 development/libs-diagnostics/
 development/libs-diagram/
 development/libs-gopherbuzz/
+development/libs-mergequeue/
 development/libs-orphanator/
 development/libs-pricing/
 development/libs-testlayout/
@@ -230,6 +233,7 @@ guides/integrations/github-actions/
 guides/integrations/mcp/
 guides/integrations/nx/
 guides/integrations/pr-advice/
+guides/integrations/server/
 guides/mcp/
 guides/profiling/
 guides/quickstart/
@@ -384,6 +388,16 @@ reference/codes/auth/MGS9008/
 reference/codes/auth/MGS9009/
 reference/codes/auth/MGS9010/
 reference/codes/auth/MGS9011/
+reference/codes/auth/MGS9012/
+reference/codes/auth/MGS9013/
+reference/codes/auth/MGS9014/
+reference/codes/auth/MGS9015/
+reference/codes/auth/MGS9016/
+reference/codes/auth/MGS9017/
+reference/codes/auth/MGS9018/
+reference/codes/auth/MGS9019/
+reference/codes/auth/MGS9020/
+reference/codes/auth/MGS9021/
 reference/codes/capability/
 reference/codes/capability/MGS1101/
 reference/codes/capability/MGS1102/
@@ -394,6 +408,7 @@ reference/codes/charms/MGS6002/
 reference/codes/knowledge/
 reference/codes/knowledge/MGS7001/
 reference/codes/knowledge/MGS7002/
+reference/codes/knowledge/MGS7003/
 reference/codes/magusfile/
 reference/codes/magusfile/MGS1001/
 reference/codes/magusfile/MGS1002/
@@ -484,6 +499,11 @@ reference/codes/sandbox/MGS3014/
 reference/codes/sandbox/MGS3015/
 reference/codes/sandbox/MGS3016/
 reference/codes/sandbox/MGS3017/
+reference/codes/sandbox/MGS3018/
+reference/codes/sandbox/MGS3019/
+reference/codes/sandbox/MGS3020/
+reference/codes/sandbox/MGS3021/
+reference/codes/sandbox/MGS3022/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -494,12 +514,14 @@ reference/console/
 reference/diagnostics/
 reference/faq/
 reference/go-sdk/
+reference/guard-command/
 reference/guard-spawn/
 reference/logging/
 reference/manpage/
 reference/manpage/magus-affected/
 reference/manpage/magus-agent/
 reference/manpage/magus-attention/
+reference/manpage/magus-broker/
 reference/manpage/magus-buzz/
 reference/manpage/magus-clean/
 reference/manpage/magus-completion/
@@ -523,6 +545,7 @@ reference/manpage/magus-notes/
 reference/manpage/magus-notify/
 reference/manpage/magus-path/
 reference/manpage/magus-query/
+reference/manpage/magus-queue/
 reference/manpage/magus-refs/
 reference/manpage/magus-run/
 reference/manpage/magus-self/
@@ -541,6 +564,7 @@ reference/manpage/magus-x/
 reference/manpage/magus/
 reference/remote-spells/
 reference/rules/
+reference/rules/backtick-substitution/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
 reference/rules/cache-dir-write/
@@ -550,7 +574,10 @@ reference/rules/chained-run/
 reference/rules/checkpoint-state/
 reference/rules/ci-watch/
 reference/rules/code-search/
+reference/rules/credential-verb/
 reference/rules/doc-search/
+reference/rules/exit-status-echo/
+reference/rules/filter-without-input/
 reference/rules/focus/
 reference/rules/gate-repeat/
 reference/rules/generated-write/
@@ -567,6 +594,7 @@ reference/rules/new-source-dir/
 reference/rules/notes-author/
 reference/rules/output-pipe/
 reference/rules/output-redirect/
+reference/rules/person-only/
 reference/rules/precedent-search/
 reference/rules/process-poll/
 reference/rules/push-gate/
@@ -583,11 +611,13 @@ reference/rules/sibling-checkout/
 reference/rules/skill-source/
 reference/rules/source-read/
 reference/rules/spawn-unbriefed/
+reference/rules/split-run/
 reference/rules/stage-all/
 reference/rules/stage-classify/
 reference/rules/stale-binary/
 reference/rules/symbol-search/
 reference/rules/throwaway-copy/
+reference/rules/token-state/
 reference/rules/unleased-write/
 reference/rules/whole-tree/
 reference/rules/worktree-remove/
@@ -642,6 +672,7 @@ spells/py/
 spells/rs/
 spells/ts/
 tags/
+tags/400/
 tags/403/
 tags/activity/
 tags/admission/
@@ -669,11 +700,13 @@ tags/benchmarks/
 tags/bisect/
 tags/bounds/
 tags/breaking-changes/
+tags/broker/
 tags/build/
 tags/buzz/
 tags/cache-key/
 tags/cache/
 tags/capability/
+tags/capacity/
 tags/cargo/
 tags/changed-files/
 tags/changelog/
@@ -762,6 +795,7 @@ tags/github/
 tags/gitlab/
 tags/globs/
 tags/go/
+tags/grant/
 tags/graph/
 tags/graphml/
 tags/grpc/
@@ -802,6 +836,7 @@ tags/logging/
 tags/logs/
 tags/lsp/
 tags/macos/
+tags/magus-broker/
 tags/magus-buzz/
 tags/magus-hook/
 tags/magus-init/
@@ -811,6 +846,7 @@ tags/magus-lock/
 tags/magus-memory/
 tags/magus-no-wait/
 tags/magus-query/
+tags/magus-queue/
 tags/magus-run/
 tags/magus-server/
 tags/magus-status/
@@ -822,6 +858,7 @@ tags/mcp/
 tags/measurement/
 tags/memory-mb/
 tags/memory/
+tags/merge-queue/
 tags/mgs-1010/
 tags/mgs-5001/
 tags/mgs-5002/
@@ -842,12 +879,14 @@ tags/oci/
 tags/onboarding/
 tags/opencode/
 tags/operations/
+tags/operator/
 tags/ordering/
 tags/os/
 tags/output-ref/
 tags/output-refs/
 tags/output/
 tags/outputs/
+tags/overlap/
 tags/override/
 tags/ownership/
 tags/passthrough/
@@ -863,6 +902,7 @@ tags/podman/
 tags/policy/
 tags/pool/
 tags/powershell/
+tags/preflight/
 tags/prettier/
 tags/project/
 tags/projects/
@@ -901,11 +941,13 @@ tags/rust/
 tags/sandbox/
 tags/scanners/
 tags/scheduler/
+tags/scip/
 tags/secret-provider/
 tags/secrets/
 tags/security/
 tags/self-update/
 tags/semver/
+tags/server/
 tags/service-op/
 tags/services/
 tags/session/
@@ -930,6 +972,8 @@ tags/spells/
 tags/stall/
 tags/status/
 tags/stdlib/
+tags/store/
+tags/strengthen-only/
 tags/subscribe/
 tags/supply-chain/
 tags/supported/
@@ -943,6 +987,7 @@ tags/terminology/
 tags/test/
 tags/timeout/
 tags/token/
+tags/tokens/
 tags/toolchain/
 tags/tools/
 tags/troubleshooting/
@@ -967,6 +1012,7 @@ tags/workspace-provider/
 tags/workspace-providers/
 tags/workspace/
 tags/worktrees/
+tags/write/
 tags/writes-files/
 tags/zsh/
 targets/

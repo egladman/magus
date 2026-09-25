@@ -5,9 +5,12 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/prompt"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func renderPrompt(t *testing.T, rev types.Diff, overlap []types.BranchChange) string {
 	t.Helper()

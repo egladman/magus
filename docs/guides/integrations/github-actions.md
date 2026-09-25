@@ -125,8 +125,9 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 
 ## Installing magus
 
-`setup-magus` takes four inputs. `queue-app-client-id` belongs to the
-[merge queue](#merge-queue), and the interesting one is `installation-strategy`:
+`setup-magus` takes five inputs. `queue-app-client-id` belongs to the
+[merge queue](#merge-queue), `restore-history` is covered under
+[Run history](#run-history), and the interesting one is `installation-strategy`:
 
 | strategy    | what it installs                                   |
 | ----------- | -------------------------------------------------- |
@@ -160,6 +161,7 @@ jobs:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, filter: blob:none }
       - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
+        with: { restore-history: 'true' }
       - id: plan
         run: magus affected ci --plan | magus run ci-shard:gha
 
@@ -313,6 +315,7 @@ report:
     - uses: actions/checkout@v5
       with: { fetch-depth: 0, filter: blob:none }
     - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
+      with: { restore-history: 'true' }
     - uses: egladman/magus/.github/actions/ci-outcome@v0.4.0
       with:
         ci-result: ${{ needs.ci.result }}
@@ -332,6 +335,17 @@ the typed `magus\insight` client - so it has nothing to do with the action that 
 volatility and timing data accumulate across runs - on main only, since a pull request's
 history describes a branch about to disappear. `always()`, so a red run's timings are
 kept too.
+
+### Run history
+
+`restore-history: 'true'` restores the newest history the workflow saved, which is what
+`--base last-passed` and the shard forecaster read. It is off by default. The restore
+takes the newest cache entry by prefix, and any run sharing the cache scope can save one,
+including a run that executes pull-request code on main, such as a merge queue's
+validation. So turn it on only in a job that holds no secret, no write token and no
+`id-token`: the plan and the report above, never a job that signs, publishes or pushes.
+The same rule covers every other Actions cache: `jdx/mise-action` restores by default,
+so pass it `cache: false` in those jobs too.
 
 ## Pull request advice
 
@@ -421,6 +435,7 @@ guess.
 | advice                            | `pull-requests: write`                                       |
 | advice with `fix-generated-drift` | `contents: write`                                            |
 | queue validation                  | `contents: read`, `pull-requests: read`                      |
+| queue dispatch                    | `contents: read`, `actions: write`                           |
 | queue apply                       | `contents`, `pull-requests`, `statuses` and `actions: write` |
 
 On a pull request from a fork the default token is read-only whatever you declare, so the

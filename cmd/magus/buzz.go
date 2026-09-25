@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -205,6 +206,15 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A script is a pipe stage: it reads the records a magus stage upstream writes and
+	// emits records downstream. While a magus reads its stdout, stdout carries records
+	// alone and what the script prints goes to stderr, as a run's prose does.
+	scriptOut := io.Writer(os.Stdout)
+	if pipeStageOf(ctx).writesRecords() {
+		scriptOut = os.Stderr
+	}
+	in, upstream := pipeRecordsIn(ctx)
+	ctx = std.WithPipe(ctx, std.PipeIO{In: in, Upstream: upstream, Out: os.Stdout, Prose: scriptOut})
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus
@@ -228,7 +238,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// registration keeps `magus buzz` and magusfile execution in lock-step: any
 	// module a script or test imports resolves the same way in both, with no
 	// per-surface module list.
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(os.Stdout))
+	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(scriptOut))
 	// The magus.* namespace on top, so `import "magus"` resolves here too. The
 	// members that declare into a workspace being loaded (magus\project,
 	// magus\cache.remote, magus\ci.provider) raise MGS1022 on this surface; the rest
@@ -484,7 +494,7 @@ func buzzUsage() {
 //
 // Opening is most of a run's cost, so it waits for the first read unless the policy
 // has to be in force before the first line runs. globalCfg is the config the open
-// would load, and an adopted workspace (daemon, tests) is already open.
+// would load, and an adopted workspace (server, tests) is already open.
 func buzzScriptContext(ctx context.Context, root string) (context.Context, error) {
 	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Enabled {
 		return newLazyWorkspaceContext(ctx, root), nil

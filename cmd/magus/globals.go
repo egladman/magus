@@ -109,6 +109,7 @@ var commandsWithoutOutput = map[string]bool{
 	"buzz":                     true,
 	"clean":                    true,
 	"graph build":              true,
+	"mcp":                      true,
 	"notes capture":            true,
 	"notes edit":               true,
 	"notes promote":            true,
@@ -132,7 +133,7 @@ var commandsWithoutOutput = map[string]bool{
 // It asks the FlagSet whether -o was typed on THIS invocation rather than reading
 // global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
 // live global, so a value left there by an earlier dispatch on the same process (one
-// adopted run in the daemon, one testscript command) would otherwise fail the next
+// adopted run in the server, one testscript command) would otherwise fail the next
 // command for a flag nobody passed it.
 func checkOutputSupported(name string, fs *flag.FlagSet) error {
 	if !commandsWithoutOutput[name] {
@@ -233,8 +234,6 @@ func outputOptionsOrDefault() (OutputOptions, error) {
 // A hand-rolled scanner only accepts the spellings its author happened to write,
 // and the resulting gap is invisible until someone types the missing one:
 //
-//   - `--then outputs export -path=out` was rejected as a bad value, not a bad
-//     syntax, because chainPathFlag handled three of the four.
 //   - `magus affected -explain .` did not error on the flag at all. The scanner
 //     matched only `--explain`, so `-explain` fell through and `.` was read as a
 //     TARGET, producing "target name \".\": must contain only letters, digits..."

@@ -11,17 +11,17 @@ import (
 // that rebuilds the typed value on the client side.
 
 var (
-	// ErrAlreadyAdopted is returned by New when MAGUS_DAEMON_SOCKET is already set.
+	// ErrAlreadyAdopted is returned by New when [SocketEnv] is already set.
 	ErrAlreadyAdopted = errors.New("proc: already running under a parent magus")
 
 	// ErrCycleDetected is set in runReply.Err when the same (target, project) pair is already in-flight.
 	ErrCycleDetected = errors.New("proc: cycle detected in nested magus invocation")
 )
 
-// notAdoptedError is a proc sentinel for a forwarded call the daemon did not adopt:
-// the daemon is alive and answered, but will not take this call: its subcommand does
-// not adopt a daemon, or the client's build/protocol is incompatible with the
-// daemon's. The caller runs the command locally, quietly, rather than warning. The
+// notAdoptedError is a proc sentinel for a forwarded call the server did not adopt:
+// the server is alive and answered, but will not take this call: its subcommand does
+// not adopt a server, or the client's build is incompatible with the
+// server's. The caller runs the command locally, quietly, rather than warning. The
 // classification lives ON the error (a NotAdopted() bool method, in the spirit of
 // net.Error's Temporary()/Timeout() and Temporal's application errors), so callers ask
 // NotAdopted(err) instead of enumerating sentinels.
@@ -30,24 +30,21 @@ type notAdoptedError struct{ msg string }
 func (e *notAdoptedError) Error() string    { return e.msg }
 func (e *notAdoptedError) NotAdopted() bool { return true }
 
-// The not-adopted daemon sentinels. Their MESSAGE strings are the wire contract: the
-// daemon serializes them and the client string-matches to rebuild the typed value
+// The not-adopted server sentinels. Their MESSAGE strings are the wire contract: the
+// server serializes them and the client string-matches to rebuild the typed value
 // (decodeWireError), so keep the messages stable across identifier renames.
 var (
-	// ErrNotAdoptable: the daemon cannot service this subcommand (only run and
-	// affected adopt a daemon); the client runs it locally.
+	// ErrNotAdoptable: the server cannot service this subcommand (only run and
+	// affected adopt a server); the client runs it locally.
 	ErrNotAdoptable error = &notAdoptedError{"proc: subcommand not adoptable"}
 
-	// ErrVersionMismatch: the client's build version differs from the daemon's.
+	// ErrVersionMismatch: the client's build version differs from the server's.
 	ErrVersionMismatch error = &notAdoptedError{"proc: version mismatch between parent and child magus"}
-
-	// ErrProtocolMismatch: the client sent an unrecognized non-empty Protocol value.
-	ErrProtocolMismatch error = &notAdoptedError{"proc: protocol version mismatch"}
 )
 
-// NotAdopted reports whether err (or any error it wraps) is a call the daemon did
-// not adopt (a non-adoptable subcommand, or a build/protocol mismatch on an otherwise
-// adoptable one): the daemon answered but will not take the call, so a caller runs it
+// NotAdopted reports whether err (or any error it wraps) is a call the server did
+// not adopt (a non-adoptable subcommand, or a build mismatch on an otherwise
+// adoptable one): the server answered but will not take the call, so a caller runs it
 // locally and quietly instead of treating it as a failure. Prefer this over matching
 // the individual sentinels: it stays correct as reasons are added and sees through
 // wrapping. Errors that do not implement NotAdopted() (e.g. a transport failure)
@@ -76,7 +73,7 @@ func AlreadyReported(err error) bool {
 // whether it asked at all. Same shape as NotAdopted and AlreadyReported above, and for
 // the same reason: the classification has to cross a process boundary that erases the
 // Go type. The CLI's own error types (a usage misuse exits 2, never 1) are in another
-// package proc must not import, so the daemon asks the error rather than naming them.
+// package proc must not import, so the server asks the error rather than naming them.
 func ExitCode(err error) (int, bool) {
 	var e interface{ ExitCode() int }
 	if !errors.As(err, &e) {
@@ -86,15 +83,13 @@ func ExitCode(err error) (int, bool) {
 }
 
 // decodeWireError rebuilds a typed proc error from the message string a server sent
-// over the wire. The error crossed the daemon->client process boundary as plain text,
+// over the wire. The error crossed the server->client process boundary as plain text,
 // losing its Go type; matching that text back to the known sentinel restores errors.Is
 // and NotAdopted on the client. It is a decode, not a wrap: only ErrNotAdoptable
 // carries trailing context, so that one case wraps the sentinel to keep it; an
 // unrecognized message becomes a plain error.
 func decodeWireError(msg string) error {
 	switch msg {
-	case ErrProtocolMismatch.Error():
-		return ErrProtocolMismatch
 	case ErrVersionMismatch.Error():
 		return ErrVersionMismatch
 	case ErrCycleDetected.Error():

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp/engine"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -389,7 +390,7 @@ func (s *debugSession) CallDepth() int                       { return len(s.fram
 // never touches the real user state directory.
 func isolatePryHistory(t *testing.T) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 }
 
 // runPry drives Pry over input and returns the resume verb, stdout, stderr.

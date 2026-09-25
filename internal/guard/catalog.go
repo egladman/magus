@@ -51,6 +51,12 @@ type RuleDoc struct {
 // denyRuleDocs documents every rule that REFUSES. Ordered by name here only for review;
 // Rules sorts what it returns.
 var denyRuleDocs = []RuleDoc{
+	{Name: string(denyRuleBacktickSubstitution), Decision: "deny",
+		Catches: "a backtick command substitution, which inside double quotes runs a command",
+		Why: "Inside double quotes a backtick starts a command substitution, so a pattern or a message carrying a literal backtick runs code: the backtick pairs with the next one anywhere on the line, and everything between them becomes one command. " +
+			"Measured here: a `grep` whose pattern and a later stage's pattern each held a triple backtick paired them into ONE substitution that swallowed the file operand and the rest of the pipeline. What was left was a `grep` with no file, reading a stdin that never closed, and it held a subagent for two hours. " +
+			"A literal backtick belongs in single quotes, where it is text. A substitution is written `$(...)`, which nests and cannot pair with a stray backtick. " +
+			"Backticks inside single quotes and inside a quoted heredoc (`<<'EOF'`) are text and never fire; neither does a line that does not parse."},
 	{Name: string(denyRuleBusyWait), Decision: "deny",
 		Catches: "a loop polling for work you started, which announces its own completion",
 		Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
@@ -77,6 +83,14 @@ var denyRuleDocs = []RuleDoc{
 			"It fires only on the LAST statement, joined by `;` or a newline, printing nothing but `$?` and literal text. " +
 			"`rc=$?`, `exit $?`, `[ $? -ne 0 ]`, an echo mid-script, one after `&&` or `||`, and one redirected to a file all keep the status for later logic and are untouched. " +
 			"Chain with `&&`, or make separate calls, when a failure must not be masked."},
+	{Name: string(denyRuleFilterWithoutInput), Decision: "deny",
+		Catches: "a filter with no file, pipe or redirect, which reads a stdin nothing feeds",
+		Why: "A filter given no input reads stdin, and under an agent harness stdin is the harness's own: where the harness holds it open, nothing writes to it and nothing closes it, so the call waits past the tool timeout and goes on waiting in the background. Measured: one such `grep` held a subagent for two hours. " +
+			"Name the input: a file operand, a pipe into the command, or a `<`, `<<` or `<<<` redirect on it or on a loop or block around it. " +
+			"It reads each tool's own flag grammar, so `grep -e pat file`, `jq --arg k v . f` and `head -n 5 file` are fed, and `tr`, `tee` and `xargs` fire whenever nothing feeds them, because their operands are never input. " +
+			"A recursive grep with no path fires too: GNU grep searches `.` then, but macOS's BSD grep reads stdin, and writing `.` costs nothing. " +
+			"What the guard cannot classify passes, because it refuses only what it can prove: an unknown flag, an unquoted expansion that may split into several words, `jq -n`, an awk program with a BEGIN block, a command inside a function body. " +
+			"ripgrep with no path passes for the same reason: it searches the working directory unless stdin is a pipe or a file, which a hook cannot see."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
 		Catches: "an inline interpreter rewriting a file this tree already carries",
 		Why: "A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it back is an edit nobody reviewed: it lands before a diff exists, and the script that produced it is gone the moment the line ends. " +
@@ -117,7 +131,7 @@ var denyRuleDocs = []RuleDoc{
 			"This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files."},
 	{Name: string(denyRuleTokenState), Decision: "deny",
 		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
-		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the daemon checks, so reading one hands a session a grant and writing one mints a token. " +
+		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. " +
 			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
 			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
@@ -140,7 +154,7 @@ var denyRuleDocs = []RuleDoc{
 			"One build is exempt, in a checkout of magus itself: `go build -o magus ./cmd/magus`, alone on its line, into a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
 			"Once the binary exists the deny applies again and names `./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
-	{Name: string(denyRulePersonOnly), Decision: "deny",
+	{Name: string(denyRuleAgentSignOff), Decision: "deny",
 		Catches: "an agent stamping a read receipt or closing an attention request, which only a person may do",
 		Why: "This is not a permission an agent is missing: there is no spelling of either an agent may use, because an agent stamping the changeset or closing its own block would make the measure mean nothing for everybody, including the human relying on it. " +
 			"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on. " +

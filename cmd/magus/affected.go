@@ -37,21 +37,6 @@ import (
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Kept before anything reshapes them: --detach re-submits this invocation verbatim.
 	origArgs := args
-	// Same grammar as `magus run`: the chain is split off the RAW args, before
-	// anything partitions or reorders them. affected is the CI-facing twin, and CI
-	// is exactly where "what did this produce" needs answering.
-	args, chainArgs, chained := splitOnThen(args)
-
-	// Parsed before the run, for the same reason `magus run` does: a typo'd verb must
-	// not cost a full CI pipeline before it is rejected.
-	var chain chainPlan
-	if chained {
-		var proceed bool
-		var chainErr error
-		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
-			return chainErr
-		}
-	}
 
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
@@ -135,7 +120,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return usagef("magus affected: --preflight runs targets first; it does not apply to --graph, --stdin or ls")
 	}
 	if af.Detach {
-		return detachToDaemon(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
+		return detachToServer(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
 	}
 
 	if af.Step && af.Stdin {
@@ -194,7 +179,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		sink, closeSink, err := openRunSink(m, opts)
+		sink, closeSink, err := openRunSink(ctx, m, opts)
 		if err != nil {
 			return err
 		}
@@ -253,7 +238,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(m, opts)
+	sink, closeSink, err := openRunSink(ctx, m, opts)
 	if err != nil {
 		return err
 	}
@@ -284,7 +269,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	sink.EmitScope(ctx, scopeLabel, "")
+	sink.EmitScope(ctx, scopeLabel, "", scopePaths(targets))
 	sink.EmitBase(ctx, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
@@ -345,6 +330,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		runOpts = append(runOpts, magus.WithPreflight(preflight...))
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
+	runOpts = append(runOpts, processStdioOption(ctx)...)
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
@@ -362,12 +348,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if target == "ci" {
 		trigger = journal.TriggerCI
 	}
-	// The client's cwd (carried on ctx for an adopted affected run), not the daemon's
+	// The client's cwd (carried on ctx for an adopted affected run), not the server's
 	// process cwd, so the invocation's journal records where the user actually ran.
 	cwd := clientCwd(ctx)
 	liveBC, stopLive := beginLive(ctx, af.Open)
 	defer stopLive()
-	// An adopted affected run (dispatched by the daemon) also feeds the daemon's live-run
+	// An adopted affected run (dispatched by the server) also feeds the server's live-run
 	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable session facts ride the same fan-out here as on the run path: one fact per
@@ -401,9 +387,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 
-	if chained {
-		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))
-	}
+	sink.RecordValues(target, readReturns(target))
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target),
@@ -862,7 +846,7 @@ func planPreflight(ctx context.Context, m *magus.Magus, target string, shards []
 	if target == types.TargetCI {
 		charms = magus.CharmsForCI(charms)
 	}
-	opts := []magus.RunOption{magus.WithPreflight(names...)}
+	opts := append([]magus.RunOption{magus.WithPreflight(names...)}, processStdioOption(ctx)...)
 	if len(charms) > 0 {
 		opts = append(opts, magus.WithCharms(charms...))
 	}
@@ -909,7 +893,7 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 //
 // The message names the SEED PROJECTS and nothing per-changeset, which is what makes
 // it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
-// every request and churn a long-lived daemon's hint set instead of teaching once. The
+// every request and churn a long-lived server's hint set instead of teaching once. The
 // files are already on screen where this is emitted (--impact and --explain both mark
 // each one), and `magus describe file` explains any of them in full.
 func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
@@ -930,7 +914,7 @@ func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 // invocation. Nothing is skipped; the run proceeds exactly as it would have.
 //
 // The file list makes the text vary per changeset, so an adopted run in a long-lived
-// daemon dedupes fewer of these than the project-only twin above. That is the trade for
+// server dedupes fewer of these than the project-only twin above. That is the trade for
 // naming files the reader cannot see anywhere else, and interactive.maxEmittedDedupe
 // bounds what it can cost.
 func noteUndeclaredSeedCost(ctx context.Context, sink *magus.Sink, undeclaredOnly map[string][]string) {
@@ -1222,7 +1206,7 @@ func printImpactText(out *types.ImpactResult) error {
 	// Complementary deep-link into the live Graph Explorer, focused on a single
 	// representative seed with a blast view (what depends on it: the closure the
 	// change ripples out to). The query grammar ANDs its terms with no OR, so the
-	// full affected set cannot be selected in one query. Always printed; the daemon
+	// full affected set cannot be selected in one query. Always printed; the server
 	// may not be up when the browser opens it, hence the hint.
 	if len(out.SeedProjects) > 0 {
 		seed := out.SeedProjects[0]
@@ -1233,7 +1217,7 @@ func printImpactText(out *types.ImpactResult) error {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: types.KindProject + ":" + seed})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
 		fmt.Printf("%s\n", authHint(link))
-		fmt.Printf("(start the magus daemon if the graph does not load)\n")
+		fmt.Printf("(start the magus server if the graph does not load)\n")
 	}
 
 	fmt.Printf("\nRun the full pipeline over this set with: %s\n", hint.Affected.With("ci"))

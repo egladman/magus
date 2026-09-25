@@ -35,7 +35,7 @@ const adapterWaitDelay = 5 * time.Second
 
 // adapterOutputLimit caps what one adapter's output can cost. A summary is three lines;
 // anything approaching this is an adapter logging per file, which is a bug in the adapter
-// rather than something to carry into a caller's memory and the daemon's log.
+// rather than something to carry into a caller's memory and the server's log.
 const adapterOutputLimit = 64 << 10
 
 // Adapter is one host's transcript loader: a command to run from the workspace root.
@@ -123,7 +123,7 @@ func runAdapter(ctx context.Context, root string, a Adapter) AdapterResult {
 	// goroutine, and Wait blocks until every holder of the write end closes it, while
 	// CommandContext's default cancel signals the direct child only. So an adapter that
 	// backgrounds anything leaves a grandchild holding the pipe: sh dies at the deadline,
-	// the grandchild does not, and Run never returns. In the daemon that wedges a run slot
+	// the grandchild does not, and Run never returns. In the server that wedges a run slot
 	// for the process's life, and the maintenance scheduler only submits while idle, so
 	// one such adapter silently ends log rotation and every other scheduled job too.
 	//
@@ -135,7 +135,7 @@ func runAdapter(ctx context.Context, root string, a Adapter) AdapterResult {
 
 	// Capped, and both streams share it: an adapter's useful output is a summary line at
 	// the end, while its failure mode is per-file logging over a whole transcript store.
-	// Uncapped, that lands in memory and then in the daemon's log in full.
+	// Uncapped, that lands in memory and then in the server's log in full.
 	buf := &cappedBuffer{limit: adapterOutputLimit}
 	cmd.Stdout, cmd.Stderr = buf, buf
 	err := cmd.Run()

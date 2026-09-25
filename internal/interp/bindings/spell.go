@@ -306,9 +306,9 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 	out := probeUntilReady(ctx, probe, op.Bin, dir)
 	// A context error means THIS run was interrupted (Ctrl-C, a deadline), not that
 	// the tool is unready: the memo's "cannot change mid-run" justification above
-	// assumes one process per run, but the daemon is one process spanning many runs,
+	// assumes one process per run, but the server is one process spanning many runs,
 	// so storing it here would fail every later run's probe on this (bin, dir) with a
-	// stale "context canceled" for as long as the daemon lives.
+	// stale "context canceled" for as long as the server lives.
 	if !errors.Is(out, context.Canceled) && !errors.Is(out, context.DeadlineExceeded) {
 		readinessMemo.Store(key, out)
 	}

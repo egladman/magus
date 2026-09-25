@@ -31,6 +31,7 @@ const Schema = 5
 // Type values stamped on every event line; stable across versions.
 const (
 	TypeTargetResult          = "run.target.result"
+	TypeTargetValue           = "run.target.value"
 	TypeGraphBuild            = "graph.build"
 	TypeGraphQuery            = "graph.query"
 	TypeGraphError            = "graph.error"
@@ -53,6 +54,7 @@ const (
 	TypeRunDetach             = "run.detach"
 	TypeLockSuperseded        = "lock.superseded"
 	TypeLockSupersedeRefused  = "lock.supersede_refused"
+	TypeLockPipeWait          = "lock.pipe_wait"
 	TypeNotice                = "run.notice"
 )
 
@@ -80,6 +82,15 @@ type TargetResult struct {
 	// field, because the printed line was measured converting at the rate of no hint
 	// at all.
 	Next []hint.Next `json:"next,omitempty"`
+}
+
+// TargetValue is what a target returned for one project, a str or a [str], once the run
+// has finished. A `> void` target records none. It is how a stage downstream in a pipe
+// reads a value (pipe.value) rather than scraping it from prose.
+type TargetValue struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	Value   any    `json:"value"`
 }
 
 // GraphBuild is one graph construction event, emitted once per Build.
@@ -183,6 +194,9 @@ type DiagnosticEmitted struct {
 type RunScope struct {
 	Label  string `json:"label"`
 	Source string `json:"source,omitempty"`
+	// Projects are the selected projects' workspace paths, "." for the root. A magus run
+	// reading this record from the stage upstream of it runs on them when it names none.
+	Projects []string `json:"projects,omitempty"`
 }
 
 // RunCharms reports the charms mixed into a run (e.g. magus.yaml default_charms),
@@ -226,7 +240,7 @@ type RunRemote = cache.RemoteTally
 // run.summary with dry set closes it.
 type RunDry struct{}
 
-// RunDetach is where an invocation handed to the daemon with --detach stands. State is
+// RunDetach is where an invocation handed to the server with --detach stands. State is
 // "coalesced" (an identical one was already running, so none was queued), "queued"
 // (handed over, not waited on), "running" (handed over and waited on), "unwatched"
 // (the wait stopped; the run continues), "passed" or "failed".
@@ -263,6 +277,13 @@ type LockSupersedeRefused struct {
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
 	BoundMs   int64  `json:"bound_ms"`
+}
+
+// LockPipeWait reports that this run is waiting, before taking any project lock, for
+// the magus upstream of it in a shell pipe to release or settle the projects it needs.
+type LockPipeWait struct {
+	UpstreamPID int    `json:"upstream_pid"`
+	Command     string `json:"command,omitempty"`
 }
 
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
@@ -322,6 +343,7 @@ func LevelName(l slog.Level) string {
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
 	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
 	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
+	reflect.TypeOf(TargetValue{}):           TypeTargetValue,
 	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
 	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
 	reflect.TypeOf(GraphError{}):            TypeGraphError,
@@ -342,6 +364,7 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
 	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
 	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
+	reflect.TypeOf(LockPipeWait{}):          TypeLockPipeWait,
 	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }

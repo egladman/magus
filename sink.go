@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/egladman/magus/internal/report"
@@ -68,14 +70,27 @@ type recorder interface {
 type Sink struct {
 	enc     encoder
 	records *report.Writer // the engine's own records; nil unless enc is a recorder
+	// prose is set when records ride beside prose (WithSinkRecords), so a decision the
+	// engine states in one place or the other is stated in prose.
+	prose bool
 }
 
 // SinkOption configures [NewSink].
 type SinkOption func(*sinkOptions)
 
 type sinkOptions struct {
-	level  slog.Level
-	filter []string
+	level   slog.Level
+	filter  []string
+	records io.Writer
+}
+
+// WithSinkRecords also writes every event, and the engine's own records, to w as the
+// JSONL records -o jsonl writes, beside a prose format's rendering. It is how a stage in
+// a pipe of magus processes hands its records to the next while a person still reads
+// the run on stderr. The prose keeps every line it prints without it, notices included,
+// and w gets no notices. A format that already records refuses it.
+func WithSinkRecords(w io.Writer) SinkOption {
+	return func(o *sinkOptions) { o.records = w }
 }
 
 // WithSinkLevel sets the least severe progress a prose format prints: the run's log
@@ -119,7 +134,18 @@ func NewSink(format Format, stdout, stderr io.Writer, opts ...SinkOption) (*Sink
 		}
 		env.filter = f
 	}
-	return sinkOver(build(env)), nil
+	enc := build(env)
+	if o.records == nil {
+		return sinkOver(enc), nil
+	}
+	if _, ok := enc.(recorder); ok {
+		return nil, fmt.Errorf("magus: output format %q already writes records; it takes no second record stream", format)
+	}
+	recEnv := env
+	recEnv.stdout, recEnv.stderr = o.records, o.records
+	s := sinkOver(teeEncoder{prose: enc, records: newJSONL(recEnv)})
+	s.prose = true
+	return s, nil
 }
 
 func sinkOver(enc encoder) *Sink {
@@ -130,6 +156,23 @@ func sinkOver(enc encoder) *Sink {
 	return s
 }
 
+// teeEncoder renders prose and writes records side by side. Notices stay prose.
+type teeEncoder struct {
+	prose   encoder
+	records *jsonlEncoder
+}
+
+func (t teeEncoder) encode(ctx context.Context, ev any) {
+	t.prose.encode(ctx, ev)
+	if _, notice := ev.(report.Notice); !notice {
+		t.records.encode(ctx, ev)
+	}
+}
+
+func (t teeEncoder) close() error { return errors.Join(t.prose.close(), t.records.close()) }
+
+func (t teeEncoder) recordWriter() *report.Writer { return t.records.recordWriter() }
+
 // Close flushes what the sink holds back and waits for it to be written. It does not
 // close the writers. Idempotent.
 func (s *Sink) Close() error { return s.enc.close() }
@@ -139,9 +182,10 @@ func (s *Sink) Close() error { return s.enc.close() }
 func (s *Sink) GraphObserver() types.Observer { return report.GraphObserver(s.records) }
 
 // EmitScope emits the run's project selection, the "projects: ..." header. It starts a
-// run: a terminal's live band forgets the previous one here.
-func (s *Sink) EmitScope(ctx context.Context, label, source string) {
-	s.emit(ctx, report.RunScope{Label: label, Source: source})
+// run: a terminal's live band forgets the previous one here. projects are the selected
+// projects' workspace paths, which the record carries for the stage downstream.
+func (s *Sink) EmitScope(ctx context.Context, label, source string, projects []string) {
+	s.emit(ctx, report.RunScope{Label: label, Source: source, Projects: projects})
 }
 
 // EmitCharms emits the charms mixed into the run, the "charms: ..." header.
@@ -188,15 +232,15 @@ func (s *Sink) EmitShardTotal(ctx context.Context, shard string, nShards int, el
 	s.emit(ctx, report.ShardTotal{Shard: shard, NShards: nShards, DurationMs: elapsed.Milliseconds()})
 }
 
-// DetachState is where an invocation handed to the daemon with --detach stands.
+// DetachState is where an invocation handed to the server with --detach stands.
 type DetachState string
 
 // The states [Sink.EmitDetach] reports.
 const (
 	DetachCoalesced DetachState = "coalesced" // an identical invocation was already running; none was queued
-	DetachQueued    DetachState = "queued"    // handed to the daemon, not waited on
-	DetachRunning   DetachState = "running"   // handed to the daemon and waited on
-	DetachUnwatched DetachState = "unwatched" // the wait stopped; the run continues on the daemon
+	DetachQueued    DetachState = "queued"    // handed to the server, not waited on
+	DetachRunning   DetachState = "running"   // handed to the server and waited on
+	DetachUnwatched DetachState = "unwatched" // the wait stopped; the run continues on the server
 	DetachPassed    DetachState = "passed"
 	DetachFailed    DetachState = "failed"
 )
@@ -208,6 +252,14 @@ func (s *Sink) EmitDetach(ctx context.Context, invocation string, state DetachSt
 	s.emit(ctx, report.RunDetach{Invocation: invocation, State: string(state), DurationMs: elapsed.Milliseconds()})
 }
 
+// RecordValues records what target returned on each project, for a format that
+// records; a person reads a returned value through -o json instead, so prose gets none.
+func (s *Sink) RecordValues(target string, returns types.Returns) {
+	for _, project := range slices.Sorted(maps.Keys(returns)) {
+		_ = report.Record(s.records, report.TargetValue{Project: project, Target: target, Value: returns[project]})
+	}
+}
+
 func (s *Sink) emit(ctx context.Context, e any) { s.enc.encode(ctx, e) }
 
 // WithSink routes the run's progress through s, and for a format that records, the
@@ -215,9 +267,12 @@ func (s *Sink) emit(ctx context.Context, e any) { s.enc.encode(ctx, e) }
 func WithSink(s *Sink) RunOption {
 	return func(o *run) {
 		o.sink = s
-		o.report = nil
+		o.report, o.lockReport = nil, nil
 		if s != nil {
 			o.report = s.records
+			if !s.prose {
+				o.lockReport = s.records
+			}
 		}
 	}
 }
@@ -230,7 +285,9 @@ type jsonlEncoder struct {
 	notices *report.LineEncoder // nil when stdout and stderr are one writer
 }
 
-func newJSONLEncoder(env sinkEnv) encoder {
+func newJSONLEncoder(env sinkEnv) encoder { return newJSONL(env) }
+
+func newJSONL(env sinkEnv) *jsonlEncoder {
 	opts := []report.Option{report.WithBlockOnFull()}
 	if env.filter != nil {
 		opts = append(opts, report.WithFilter(env.filter))

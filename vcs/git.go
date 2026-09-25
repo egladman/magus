@@ -1752,7 +1752,7 @@ func gitHookBody(name, command string) string {
 }
 
 // InstallDriftHook implements types.DriftHookInstaller: after it returns, a commit and
-// the push that follows it (gitDriftHooks) both run command, fail-open, so the daemon
+// the push that follows it (gitDriftHooks) both run command, fail-open, so the server
 // checks for stale generated output in the background. Its section coexists with the
 // refresh section and any hand-written body in the same hook. It returns the hooks it
 // changed, none when all were current. A root outside any git repository installs

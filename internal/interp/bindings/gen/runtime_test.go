@@ -56,6 +56,24 @@ func TestAnyMapValNestsBuzzObject(t *testing.T) {
 	assert.Equal(t, int64(3), minor.AsInt())
 }
 
+// An object a script builds for an Object argument arrives as its field map, like a map
+// literal; before, AnyMap read it as absent and the host saw nil.
+func TestAnyMapReadsAnObjectInstance(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+
+	require.NoError(t, sess.Exec(ctx, `
+		object Retry { attempts: int = 1, note: str = "" }
+		final built = Retry{ attempts = 3 };
+		final literal = {"attempts": 2};
+	`))
+	assert.Equal(t, map[string]any{"attempts": int64(3), "note": ""}, AnyMap([]vm.Value{sess.GetGlobal("built")}, 0))
+	assert.Equal(t, map[string]any{"attempts": int64(2)}, AnyMap([]vm.Value{sess.GetGlobal("literal")}, 0))
+	assert.Nil(t, AnyMap([]vm.Value{vm.StrValue("x")}, 0))
+	assert.Nil(t, AnyMap(nil, 0))
+}
+
 // TestStrUnwrapsAnEnumCase covers the second of two breaks that made an inferred
 // enum case reach a host method empty.
 //

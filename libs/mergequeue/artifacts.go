@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/mergequeue/types"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // The artifact names a validation run uploads under. The plan artifact carries
@@ -39,6 +40,11 @@ const (
 // candidates of the same run are still going. An artifact it cannot fetch or unpack is
 // rejected for its change alone.
 //
+// Every listing must say the run is Definition, started by an event that runs Branch's
+// own copy of it, on Branch of the run's own repository; any other run is refused
+// ([magustypes.QueueRunUntrusted]) before anything of it is downloaded, since a run a
+// change started uploads whatever that change's author wrote.
+//
 // It reports done only after a listing that said the run was complete. Methods must
 // not be called concurrently, and an ArtifactFollower must not be copied after first
 // use.
@@ -46,6 +52,10 @@ type ArtifactFollower struct {
 	Lister types.ArtifactLister
 	Source string // the run, as Lister names it
 	Path   string
+	// Branch is the base branch the run must have run on, and Definition what it must
+	// have run (github: the workflow file's path). Both are required.
+	Branch     string
+	Definition string
 	// Follow keeps reading until the run completes. Without it, one listing is taken as
 	// everything the run will upload.
 	Follow bool
@@ -99,13 +109,16 @@ func (f *ArtifactFollower) Poll(ctx context.Context) (types.VerdictBatch, error)
 // sync unpacks every artifact not yet on disk and reports whether the listing is the
 // last this source reads.
 func (f *ArtifactFollower) sync(ctx context.Context) (bool, error) {
-	if f.Lister == nil || f.Source == "" || f.Path == "" {
-		return false, errors.New("artifact follower needs a lister, a source and a path")
+	if f.Lister == nil || f.Source == "" || f.Path == "" || f.Branch == "" || f.Definition == "" {
+		return false, errors.New("artifact follower needs a lister, a source, a path, a branch and a definition")
 	}
 	f.dir.Path, f.dir.Follow = f.Path, true
 	list, err := f.Lister.ListArtifacts(ctx, f.Source)
 	if err != nil {
 		return false, fmt.Errorf("run %s: %w", f.Source, err)
+	}
+	if err := f.trust(list.Run); err != nil {
+		return false, err
 	}
 	if err := os.MkdirAll(f.Path, 0o755); err != nil {
 		return false, err
@@ -130,6 +143,27 @@ func (f *ArtifactFollower) sync(ctx context.Context) (bool, error) {
 		}
 	}
 	return list.Complete || !f.Follow, nil
+}
+
+// trust refuses a run other than Definition run by its own repository's Branch.
+func (f *ArtifactFollower) trust(o types.RunOrigin) error {
+	var why string
+	switch {
+	case o.Repo == "":
+		why = "the provider named no repository for it"
+	case o.HeadRepo != o.Repo:
+		why = fmt.Sprintf("it ran a commit of %q, not of %q", o.HeadRepo, o.Repo)
+	case !o.BranchEvent:
+		why = fmt.Sprintf("%q started it, and that event runs a definition a change supplied", o.Event)
+	case o.HeadBranch != f.Branch:
+		why = fmt.Sprintf("it ran on %q, not %q", o.HeadBranch, f.Branch)
+	case o.Definition != f.Definition:
+		why = fmt.Sprintf("it ran %q, not %q", o.Definition, f.Definition)
+	default:
+		return nil
+	}
+	return magustypes.DiagnosticErrorf(magustypes.QueueRunUntrusted,
+		"run %s is not %s run by %s's own %s: %s; apply reads nothing it uploaded", f.Source, f.Definition, o.Repo, f.Branch, why)
 }
 
 func (f *ArtifactFollower) unpackPlan(ctx context.Context, a types.Artifact, headers map[string]string) error {

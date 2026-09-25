@@ -25,28 +25,27 @@ import (
 // Service assembles the read-only workspace views the console serves. It holds the
 // opened workspace plus the static status base, and exposes exported methods that return
 // domain types. Construct it with NewService; the optional test seams (With* options)
-// stand in for the workspace and daemon socket so handlers can be exercised without a
+// stand in for the workspace and server socket so handlers can be exercised without a
 // real environment.
 type Service struct {
 	magus        *magus.Magus
 	config       config.Config
 	statusBase   types.StatusBase
 	version      string
-	daemonSocket string
-	// startedAt marks when this service (and thus the daemon it fronts) began observing, stamped
+	serverSocket string
+	// startedAt marks when this service (and thus the server it fronts) began observing, stamped
 	// onto every status report as ObservingSince so the dashboard can say the counters are cumulative
-	// from here, not all-time. Captured at construction; the daemon holds one Service for its lifetime.
+	// from here, not all-time. Captured at construction; the server holds one Service for its lifetime.
 	startedAt time.Time
 
-	// runsFn returns the daemon's live runs, folded onto the status report. Nil when
-	// this service is not backed by a daemon run registry (a plain CLI status query), leaving
+	// runsFn returns the server's live runs, folded onto the status report. Nil when
+	// this service is not backed by a server run registry (a plain CLI status query), leaving
 	// StatusSnapshot.Runs empty.
 	runsFn func() []types.StatusRun
 
-	// servicesFn returns the daemon's hosted shared services, folded onto the status
-	// report. Nil when this service is not backed by a daemon service registry, leaving
-	// StatusSnapshot.Services empty.
-	servicesFn func() []types.StatusService
+	// brokerFn returns the broker's status, folded onto the report as its broker section.
+	// Nil when this service fronts no server, leaving StatusSnapshot.Broker nil.
+	brokerFn func() *types.StatusBroker
 
 	// Insight cache: an assembled InsightView reused for insightTTL so repeated dashboard
 	// polls collapse onto one git-log scan. The mutex also serializes cold-cache assembly.
@@ -54,7 +53,7 @@ type Service struct {
 	insightCache *insightEntry
 	insightTTL   time.Duration
 
-	// Test seams. Production leaves these nil; the real Magus / daemon socket is used.
+	// Test seams. Production leaves these nil; the real Magus / server socket is used.
 	statusSnapshotFn func(ctx context.Context) types.StatusSnapshot
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
@@ -64,17 +63,17 @@ type Service struct {
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
-// daemon socket; production callers pass none.
+// server socket; production callers pass none.
 type Option func(*Service)
 
-// WithDaemonSocket sets an explicit daemon socket address for the status report,
+// WithServerSocket sets an explicit server socket address for the status report,
 // bypassing proc.DiscoverSocket. Empty means auto-discover at request time.
-func WithDaemonSocket(addr string) Option {
-	return func(s *Service) { s.daemonSocket = addr }
+func WithServerSocket(addr string) Option {
+	return func(s *Service) { s.serverSocket = addr }
 }
 
-// WithStatusSnapshotFn replaces the daemon query used to assemble StatusSnapshot. Tests
-// pass this to drive status paths without a running daemon.
+// WithStatusSnapshotFn replaces the server query used to assemble StatusSnapshot. Tests
+// pass this to drive status paths without a running server.
 func WithStatusSnapshotFn(fn func(ctx context.Context) types.StatusSnapshot) Option {
 	return func(s *Service) { s.statusSnapshotFn = fn }
 }
@@ -107,19 +106,18 @@ func WithInsightTTL(d time.Duration) Option {
 	}
 }
 
-// WithRuns supplies the daemon's live-run source (RunRegistry.Snapshot). The status
+// WithRuns supplies the server's live-run source (RunRegistry.Snapshot). The status
 // report then carries the per-target execution state of every adopted run, on both the GET
-// and the SSE frame. Only the daemon sets this; a plain CLI status query omits it.
+// and the SSE frame. Only the server sets this; a plain CLI status query omits it.
 func WithRuns(fn func() []types.StatusRun) Option {
 	return func(s *Service) { s.runsFn = fn }
 }
 
-// WithServices supplies the daemon's hosted-services source (service.Registry.Snapshot).
-// The status report then carries the long-running shared services the daemon is keeping
-// warm, on both the GET and the SSE frame. Only the daemon sets this; a plain CLI status
-// query omits it.
-func WithServices(fn func() []types.StatusService) Option {
-	return func(s *Service) { s.servicesFn = fn }
+// WithBrokerStatus supplies the broker's status: capacity, the claims holding it and the
+// shared services it keeps warm. The status report then carries them, on both the GET and
+// the SSE frame. fn returns nil when no broker answers.
+func WithBrokerStatus(fn func() *types.StatusBroker) Option {
+	return func(s *Service) { s.brokerFn = fn }
 }
 
 // NewService builds a Service from the opened workspace (m), its resolved config, the
@@ -140,34 +138,34 @@ func (s *Service) Version() string { return s.version }
 
 // StatusSnapshot assembles the full status report: the static telemetry/cache/build fields
 // from the status base merged with the live pool state. The pool comes from the injected
-// StatusSnapshotFn when set (tests), otherwise queried from the daemon socket; a query
+// StatusSnapshotFn when set (tests), otherwise queried from the server socket; a query
 // failure is reported as PoolError rather than an error return, matching `magus status`.
 func (s *Service) StatusSnapshot(ctx context.Context) types.StatusSnapshot {
 	out := s.statusSnapshot(ctx)
-	// Live runs come from this daemon's in-process run registry (not the pool query), so
+	// Live runs come from this server's in-process run registry (not the pool query), so
 	// they ride the same report whether the pool is assembled from a seam or a socket query.
 	if s.runsFn != nil {
 		out.Runs = s.runsFn()
 	}
-	// Hosted shared services come from this daemon's in-process service registry (not the
-	// pool query), folded on the same way live runs are.
-	if s.servicesFn != nil {
-		out.Services = s.servicesFn()
+	// The broker is its own process, asked separately from the pool, and folded on the
+	// same way live runs are.
+	if s.brokerFn != nil {
+		out.Broker = s.brokerFn()
 	}
-	// Per-project SCIP index freshness, computed from this daemon's opened workspace so
+	// Per-project SCIP index freshness, computed from this server's opened workspace so
 	// the dashboard shows the same "up to date / out of date" the CLI status does.
 	if s.magus != nil {
 		out.SymbolIndexes = s.magus.SymbolIndexStatus(ctx)
 		// Held locks come from the workspace cache rather than the pool query, because a
 		// lock is taken by whichever process mutates a project, usually a plain
-		// `magus run` the daemon never sees.
+		// `magus run` the server never sees.
 		out.Locks = s.magus.HeldLocks()
 	}
 	return out
 }
 
 // statusSnapshot assembles the base report (telemetry/cache/build plus live pool), before the
-// daemon's live runs are folded on by StatusSnapshot.
+// server's live runs are folded on by StatusSnapshot.
 func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 	if s.statusSnapshotFn != nil {
 		return s.statusSnapshotFn(ctx)
@@ -177,6 +175,7 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 		Cache:          s.statusBase.Cache,
 		Build:          s.statusBase.Build,
 		ObservingSince: s.startedAt,
+		BrokerPolicy:   s.config.Broker.Resolved(),
 		Config: types.StatusConfig{
 			DefaultCharms: s.config.DefaultCharms,
 			Concurrency: types.StatusConcurrency{
@@ -200,15 +199,16 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 	// Affected stays unset; the Graph Explorer's live "affected" view is kept disabled
 	// client-side for that reason (see proc.StatusReply.StatusOutput).
 	out.Pool = reply.StatusOutput()
+	out.Server = reply.Server
 	return out
 }
 
 func (s *Service) resolveStatusAddr(ctx context.Context) (string, error) {
-	if v := s.config.Daemon.Address; v != "" {
+	if v := s.config.Server.Address; v != "" {
 		return v, nil
 	}
-	if s.daemonSocket != "" {
-		return s.daemonSocket, nil
+	if s.serverSocket != "" {
+		return s.serverSocket, nil
 	}
 	return proc.DiscoverSocket(ctx)
 }
@@ -311,7 +311,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 		return types.Diff{}, err
 	}
 	// Fold on the churn lenses from the CACHED insight scan rather than a fresh one. This is
-	// the reason AttachChurn takes its data as an argument: the daemon already keeps a bounded
+	// the reason AttachChurn takes its data as an argument: the server already keeps a bounded
 	// git-log scan warm for the dashboard, so a review costs nothing extra to answer "is this
 	// file being rewritten over and over", which is the question a diff cannot answer and the
 	// one worth asking while somebody is still looking at the file.
@@ -327,7 +327,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	// Which of these files somebody has recorded reading, from the same store `magus diff
 	// --ack` writes. The console gets it because "how much of this has anyone read" is a
 	// question a review surface should answer without the reader dropping to a terminal.
-	// The console reads the daemon's working tree and nothing else, so it names that source
+	// The console reads the server's working tree and nothing else, so it names that source
 	// explicitly rather than inheriting a default.
 	root := s.magus.Root()
 	digest := func(path string) string { return review.DigestFile(filepath.Join(root, filepath.FromSlash(path))) }

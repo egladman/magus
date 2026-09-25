@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	"github.com/egladman/magus/libs/testkit"
 	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1"
 )
 
@@ -24,7 +25,7 @@ func req[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 // real store without a live workspace.
 func newTestService(t *testing.T) *Service {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	return &Service{ws: fakeWorkspace{root: t.TempDir()}}
 }
 

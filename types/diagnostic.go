@@ -295,7 +295,7 @@ const (
 	SandboxUnsupported        DiagnosticCode = "MGS2005"
 	PathShimSuspected         DiagnosticCode = "MGS2006"
 	ExecDenied                DiagnosticCode = "MGS2007"
-	DaemonSocketWithheld      DiagnosticCode = "MGS2008"
+	ProcSocketWithheld        DiagnosticCode = "MGS2008"
 	SandboxPolicyMismatch     DiagnosticCode = "MGS2010"
 	SecretTooShortToMask      DiagnosticCode = "MGS2011"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
@@ -342,7 +342,7 @@ const (
 	// is fine, what already happened on this machine is what changes the answer.
 	//
 	// Machine load used to be required too, and that made this unreachable where
-	// it mattered: the load reading comes from the daemon, ordinary commands run
+	// it mattered: the load reading comes from the server, ordinary commands run
 	// without a persistent one, so an idle machine always advised and ran the
 	// duplicate anyway. Redundancy alone defers now; a nested run still only
 	// advises, because it counts its own ancestors' claims as load.
@@ -395,11 +395,11 @@ const (
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
 	GateSuperseded DiagnosticCode = "MGS3014"
-	// WorkspaceLoadFailed is a daemon call against a workspace whose magusfiles failed to
+	// WorkspaceLoadFailed is a server call against a workspace whose magusfiles failed to
 	// load. The proximate cause of the refusal; the BZZ or MGS code the load stopped on
 	// rides beside it as the underlying one. Retrying cannot help until a source changes.
 	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
-	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
+	// WorkspaceStillLoading is a server call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
 	WorkspaceStillLoading DiagnosticCode = "MGS3017"
 	// WritePathIsDirectory is a job fork whose write paths name an existing directory that
@@ -420,7 +420,39 @@ const (
 	// PreflightOutsideClosure is a --preflight target the invoked target never reaches
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
-	PreflightOutsideClosure   DiagnosticCode = "MGS3021"
+	PreflightOutsideClosure DiagnosticCode = "MGS3021"
+	// BrokerUnavailable is a step magus did not start under `broker: required` because no
+	// broker answered: nothing could arbitrate this host's capacity. Exits 69
+	// (EX_UNAVAILABLE), apart from MGS3009's 75, so a wrapper can tell "no arbiter" from
+	// "the host is busy".
+	BrokerUnavailable DiagnosticCode = "MGS3022"
+	// PipeCycle is a run whose standard input is written, through a chain of processes
+	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
+	// so none ever would; the run is refused before it takes any lock.
+	PipeCycle DiagnosticCode = "MGS3023"
+	// ServerProtocolOutdated is a client that reached a magus server, or a per-process pool,
+	// still speaking the socket protocol from before it carried HTTP: a process started by an
+	// older magus. Restarting it is the fix.
+	ServerProtocolOutdated DiagnosticCode = "MGS3025"
+	// QueueHookNotACommand is a merge queue hook flag whose value is not a command and
+	// its arguments: it holds shell syntax (a variable, a substitution, an operator, a
+	// redirection, a glob, an assignment prefix) that nothing would act on, since the
+	// queue runs a hook with no shell. Refused before anything runs.
+	QueueHookNotACommand DiagnosticCode = "MGS3026"
+	// QueueRunUntrusted is a merge queue apply asked to follow a validation run that
+	// something other than the base branch's own queue workflow started: a pull request's
+	// event, a fork, another branch or another workflow. What such a run uploads is its
+	// author's claim, so apply reads none of it.
+	QueueRunUntrusted DiagnosticCode = "MGS3027"
+	// QueuePlanUnverified is a merge queue plan that disagrees with what apply reads
+	// itself: another base or remote, a base commit the base does not carry, or a stack
+	// base that is not the reviewed head of the change beneath. Apply stops before it
+	// merges anything that rests on it.
+	QueuePlanUnverified DiagnosticCode = "MGS3028"
+	// PipeUpstreamFailed is a magus stage upstream of a run in a shell pipe that exited
+	// non-zero. A run that sees it before taking its locks starts nothing; the last stage
+	// of a pipeline that succeeded exits with it, so the pipeline fails without pipefail.
+	PipeUpstreamFailed        DiagnosticCode = "MGS3030"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -464,7 +496,7 @@ const (
 	NearDuplicateServices DiagnosticCode = "MGS5001"
 	ServiceOpDetached     DiagnosticCode = "MGS5002"
 	CommandOpNeverExits   DiagnosticCode = "MGS5003"
-	DaemonRequired        DiagnosticCode = "MGS5004"
+	ServerRequired        DiagnosticCode = "MGS5004"
 	CharmPatchInvalid     DiagnosticCode = "MGS6001"
 	// CharmRenamed is a run activating a charm under a name magus has retired, with no
 	// selected target declaring that name for itself. The old name matches nothing, so
@@ -486,7 +518,7 @@ const (
 	NoAuthToken              DiagnosticCode = "MGS9004"
 	TokenNameExists          DiagnosticCode = "MGS9005"
 	TokenNotFound            DiagnosticCode = "MGS9006"
-	// HostNotAllowed is a request whose Host or Origin names a host the daemon does not
+	// HostNotAllowed is a request whose Host or Origin names a host the server does not
 	// serve: the DNS-rebinding guard, answered 403.
 	HostNotAllowed DiagnosticCode = "MGS9007"
 	// LoopbackPeerRequired is a request to a local-only route from a peer that is not on
@@ -501,9 +533,9 @@ const (
 	// answered 401. A token that was sent and refused is BearerRejected instead: the two
 	// need different fixes (attach one, or mint a new one).
 	BearerMissing DiagnosticCode = "MGS9011"
-	// MethodNotAllowed is a daemon route asked with a method it does not serve, answered 405.
+	// MethodNotAllowed is a server route asked with a method it does not serve, answered 405.
 	MethodNotAllowed DiagnosticCode = "MGS9012"
-	// ConsoleNotBuilt is a share started while the daemon found no built console to serve.
+	// ConsoleNotBuilt is a share started while the server found no built console to serve.
 	ConsoleNotBuilt DiagnosticCode = "MGS9013"
 	// ShareUnavailable is a share whose LAN listener could not start: no private-range
 	// interface is up, or the listener could not bind.
@@ -529,6 +561,9 @@ const (
 	// TokenRequestInvalid is a mint or revoke that asks for something no token can be: an
 	// invalid or empty grant, or a name that is not a valid name or looks like an id.
 	TokenRequestInvalid DiagnosticCode = "MGS9021"
+	// SocketPeerNotOwner is a connection to the server's MCP unix socket from a process whose
+	// uid is not the server's, or whose uid the kernel did not report, answered 403.
+	SocketPeerNotOwner DiagnosticCode = "MGS9022"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -577,17 +612,20 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
 	SpellOverrideInvalid, GuardRuleMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
-	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
+	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated, QueueHookNotACommand,
+	QueueRunUntrusted, QueuePlanUnverified,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated,
+	QueueRunUntrusted, QueuePlanUnverified, PipeUpstreamFailed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
-	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
+	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, ServerRequired,
 	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
@@ -596,7 +634,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
-	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid,
+	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

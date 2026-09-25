@@ -21,7 +21,7 @@
 import type { DashboardState, StatusView } from "../state";
 import { ALL_WORKSPACES, onWorkspaceScope, workspaceScope } from "../../../lib/scope";
 import { h, helpGlyph, type Tile } from "./card";
-import { logsLink } from "../../../lib/daemon";
+import { logsLink } from "../../../lib/server";
 import { showToast } from "../../../lib/refresh-toast";
 import {
   ageLabel,
@@ -33,7 +33,7 @@ import {
 } from "./attentionQueue";
 
 // The poll cadence and request budget the jobs tile reads on. Same numbers on
-// purpose: both tiles poll a small JSON route on the same daemon, and two boards refreshing at
+// purpose: both tiles poll a small JSON route on the same server, and two boards refreshing at
 // two rhythms would make one of them look stuck.
 const REFRESH_MS = 4_000;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -117,13 +117,13 @@ export interface Verdict {
 // verdictFor derives the headline from the ATTENTION QUEUE, and from nothing else.
 //
 // The queue is the only source here on purpose. Every other signal on this board - failing
-// targets, daemon health, pool depth - is something magus observed; a request is something a
+// targets, server health, pool depth - is something magus observed; a request is something a
 // person was asked for and has not yet given. Folding an observation in would let the headline
 // say "Attention needed" over an empty queue, and a reader who clears that twice stops reading
 // the one line on the board that means somebody is waiting on them.
 //
 // The three reads that are not "ok" get their own verdicts rather than being flattened into a
-// calm one: a daemon with no attention route, and a daemon that could not be read, both mean
+// calm one: a server with no attention route, and a server that could not be read, both mean
 // the queue is UNKNOWN. Rendering unknown as "no open requests" is the single worst thing this
 // tile could do, because it is indistinguishable from the good state.
 export function verdictFor(read: AttentionRead, nowMs: number = Date.now()): Verdict {
@@ -132,7 +132,7 @@ export function verdictFor(read: AttentionRead, nowMs: number = Date.now()): Ver
       state: "warn",
       line: "Queue unavailable",
       sub:
-        "This daemon does not serve an attention queue, so nothing here can say whether" +
+        "This server does not serve an attention queue, so nothing here can say whether" +
         " anyone is blocked.",
     };
   }
@@ -421,7 +421,7 @@ export function attentionTile(): Tile {
     // look like they contradict a scoped tile reporting nothing running.
     if (scoped) {
       metrics.title =
-        "Pool counts are daemon-wide: one pool serves every workspace on this daemon.";
+        "Pool counts are server-wide: one pool serves every workspace on this server.";
     } else {
       metrics.removeAttribute("title");
     }
@@ -628,11 +628,11 @@ export function attentionTile(): Tile {
   }
 
   // send posts the disposal and says what came back. A REFUSAL (unknown id, ambiguous prefix,
-  // already closed by somebody else) is reported in the daemon's own words rather than as a
-  // failure: each one is the daemon working, and each names what the person does next.
+  // already closed by somebody else) is reported in the server's own words rather than as a
+  // failure: each one is the server working, and each names what the person does next.
   async function send(req: AttentionRequest, reason: string): Promise<void> {
     if (!host) {
-      showToast("Attention", "Not connected to a daemon, so nothing can be disposed.", "error");
+      showToast("Attention", "Not connected to a server, so nothing can be disposed.", "error");
       return;
     }
     const res = await disposeAttention(host, req.id, reason);
@@ -716,7 +716,7 @@ export function attentionTile(): Tile {
   const interval = window.setInterval(refresh, REFRESH_MS);
 
   // The counts name whose they are, so they repaint when the tab's scope changes and not only
-  // when the daemon pushes a frame.
+  // when the server pushes a frame.
   let latest: DashboardState | null = null;
   const repaint = (): void => {
     if (latest?.status) render(latest.status, latest.liveHost, latest.conn.state === "demo");
@@ -749,10 +749,10 @@ export function attentionTile(): Tile {
         controller?.abort();
       }
       if (!host) {
-        // No daemon, so the queue genuinely cannot be read. Said out loud rather than left at
+        // No server, so the queue genuinely cannot be read. Said out loud rather than left at
         // whatever the last connected read showed: a stale "nobody waiting" outlives the
         // connection that earned it, and this is the tile where that reads as reassurance.
-        renderQueue({ kind: "unreadable", detail: "not connected to a daemon" });
+        renderQueue({ kind: "unreadable", detail: "not connected to a server" });
         return;
       }
       if (visible && Date.now() - lastRead >= REFRESH_MS) refresh();

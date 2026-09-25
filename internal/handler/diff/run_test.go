@@ -11,9 +11,12 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 type fakeRunSource struct {
 	targets map[string][]string
@@ -78,7 +81,7 @@ func TestDiffRunRefusesAnUnknownProject(t *testing.T) {
 	assert.Contains(t, out.Undeclared, "../../etc")
 }
 
-// TestDiffRunSubmitsADeclaredTarget pins the argv shape the daemon's dispatch allowlist matches
+// TestDiffRunSubmitsADeclaredTarget pins the argv shape the server's dispatch allowlist matches
 // on. A drift here and every inline run is refused as unadoptable.
 func TestDiffRunSubmitsADeclaredTarget(t *testing.T) {
 	var submitted [][]string
@@ -153,13 +156,13 @@ func TestDiffRunReportsNoVerdictAsUnknown(t *testing.T) {
 	assert.Empty(t, out.Error)
 }
 
-// TestDiffRunSurfacesASubmitFailure: a daemon that cannot accept the work must say so, not
+// TestDiffRunSurfacesASubmitFailure: a server that cannot accept the work must say so, not
 // leave the surface polling a run that was never started.
 func TestDiffRunSurfacesASubmitFailure(t *testing.T) {
 	var submitted [][]string
 	h := newTestRunHandler(t, t.TempDir(), &submitted)
 	h.submitFn = func(context.Context, string, []string, string) (string, error) {
-		return "", errors.New("daemon is shutting down")
+		return "", errors.New("server is shutting down")
 	}
 
 	out := postRun(t, h, `{"target":"test","project":"libs/authkit"}`)

@@ -281,7 +281,7 @@ var modules = []Module{
 		Methods: []Method{
 			{Name: "with_env", Doc: "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.", Sig: "os\\withEnv(env, callback)"},
 			{Name: "platform", Doc: "Return the Docker/OCI platform triple: (os, arch, variant).", Sig: "os\\platform() -> string, string, string"},
-			{Name: "exit", Doc: "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.", Sig: "os\\exit(code)"},
+			{Name: "exit", Doc: "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.", Sig: "os\\exit(code)"},
 			{Name: "sleep", Doc: "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.", Sig: "os\\sleep(ms)"},
 			{Name: "num_cpu", Doc: "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).", Sig: "os\\numCpu() -> int"},
 			{Name: "hostname", Doc: "Return the host machine's name.", Sig: "os\\hostname() -> string"},
@@ -303,6 +303,21 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "pipe",
+		Doc:  "Read the records a magus stage upstream in a pipe writes, and write records for the stage downstream.",
+		Methods: []Method{
+			{Name: "more", Doc: "Report whether another record is coming from the magus stage writing this script's stdin, waiting for it or for that stage to end. Errors when no magus stage writing records feeds this script.", Sig: "pipe\\more() -> bool"},
+			{Name: "next", Doc: "Return the next record from the magus stage writing this script's stdin, waiting for it. Errors past the last record, and when no magus stage writing records feeds this script.", Sig: "pipe\\next() -> PipeRecord"},
+			{Name: "all", Doc: "Return every record not yet read, once the magus stage writing this script's stdin has ended. Errors when no magus stage writing records feeds this script.", Sig: "pipe\\all() -> [PipeRecord]"},
+			{Name: "emit", Doc: "Write record to stdout for the stage downstream. A record read from upstream passes through byte for byte; one built here is written from its fields, and needs a type. A run.scope record's projects are what a run downstream that names none runs on.", Sig: "pipe\\emit(record)"},
+			{Name: "outputs", Doc: "Return the files the target of record declared as outputs and that exist on disk now, sorted by workspace-relative path. record names a project and a target, like a run.target.result.", Sig: "pipe\\outputs(record) -> [Artifact]"},
+			{Name: "export_to", Doc: "Copy artifact to dest, keeping its mode, and return dest. It writes a temporary file beside dest and renames it into place, so a symlink at dest is replaced rather than written through and an artifact exported onto itself survives.", Sig: "pipe\\exportTo(artifact, dest) -> string"},
+			{Name: "history", Doc: "Return every version of artifact the cache stored, newest first, with identical consecutive content collapsed: when its bytes changed, which its VCS history cannot say.", Sig: "pipe\\history(artifact) -> [ArtifactVersion]"},
+			{Name: "diff", Doc: "Compare artifact on disk against its most recent different cached version with your difftool: $MAGUS_DIFFTOOL, else $DIFFTOOL, else `git diff --no-index`. It renders nothing itself.", Sig: "pipe\\diff(artifact)"},
+			{Name: "value", Doc: "Return what a target returned, a str or a [str], from its run.target.value record. Errors for any other record.", Sig: "pipe\\value(record) -> any"},
+		},
+	},
+	{
 		Name: "platform",
 		Doc:  "Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin).",
 		Methods: []Method{
@@ -319,7 +334,7 @@ var modules = []Module{
 			{Name: "exec", Doc: "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only.", Sig: "proc\\exec(cmd, [args], [dir], [opts]) -> ExecResult"},
 			{Name: "shell", Doc: "Build the command line that runs `line` through the platform shell, WITHOUT running it: returns {bin, args} for proc.exec. Default shell is /bin/sh (cmd on Windows); pass shell (e.g. \"bash\") to override, resolved via PATH. This is a pure function, so the argv is inspectable before anything executes - print it, log it, or assert on it. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes; for cross-platform logic prefer proc.exec plus the fs/os helpers.", Sig: "proc\\shell(line, [shell]) -> ShellCommand"},
 			{Name: "which", Doc: "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.", Sig: "proc\\which(cmd) -> string"},
-			{Name: "with_slots", Doc: "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.", Sig: "proc\\withSlots(n, callback)"},
+			{Name: "with_slots", Doc: "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make, a test runner) that magus can't see, so the global budget is not oversubscribed. Commands callback starts share a GNU make jobserver of n slots, so make run without -j, and cargo, stay within them.", Sig: "proc\\withSlots(n, callback)"},
 			{Name: "stdin_is_terminal", Doc: "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.", Sig: "proc\\stdinIsTerminal() -> bool"},
 		},
 	},
@@ -382,7 +397,7 @@ var modules = []Module{
 		Name: "term",
 		Doc:  "Terminal interaction: capability probes, an interactive picker, and styled output. Renders to stderr; pick raises rather than hanging when there is no terminal.",
 		Methods: []Method{
-			{Name: "is_interactive", Doc: "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.", Sig: "term\\isInteractive() -> bool"},
+			{Name: "is_interactive", Doc: "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a server this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.", Sig: "term\\isInteractive() -> bool"},
 			{Name: "wants_color", Doc: "Report whether styled output should be emitted: standard error is a terminal and the environment does not ask for plain text (NO_COLOR, TERM=dumb). colorize already consults this, so a caller needs it only to make a wider rendering choice - a box-drawing table versus a plain one.", Sig: "term\\wantsColor() -> bool"},
 			{Name: "size", Doc: "Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.", Sig: "term\\size() -> TermSize"},
 			{Name: "colorize", Doc: "Wrap s in the given style and close it again. Returns s UNCHANGED when the output is not a terminal or the environment asked for plain text, so a magusfile never has to guard the call and escape codes cannot leak into a CI log. A style of none is also pass-through, which lets a conditionally-computed style be passed without branching.", Sig: "term\\colorize(s, style) -> string"},

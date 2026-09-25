@@ -73,6 +73,18 @@ func TestVerdictCheckRefusesAMergeThatNamesNoCandidate(t *testing.T) {
 	require.ErrorContains(t, Verdict{Change: change("1"), Decision: "ship"}.Check(), `unknown decision "ship"`)
 }
 
+func TestHookLinesBelongToValidationsVerdicts(t *testing.T) {
+	v := green("1")
+	v.Regenerate = "magus run generate:rw"
+	require.ErrorContains(t, v.Check(), "names a regeneration but no gate")
+	v.Gate = "magus run ci --no-default-charms"
+	require.NoError(t, v.Check())
+
+	kicked := Verdict{Change: change("1"), Decision: DecisionKick, Code: CodeKickConflict, Report: "conflicts", Gate: "true"}
+	plan := Plan{Base: "main", BaseCommit: base, Depth: 1, Verdicts: []Verdict{kicked}}
+	require.ErrorContains(t, plan.Check(), "planning's verdict on #1 names a gate, which only validation runs")
+}
+
 func TestPlanCheckRefusesAChangeAheadOfWhatItIsStackedOnADuplicateAndAPlanningMerge(t *testing.T) {
 	child := change("2")
 	child.Below = "1"
@@ -89,6 +101,19 @@ func TestPlanCheckRefusesAChangeAheadOfWhatItIsStackedOnADuplicateAndAPlanningMe
 	require.ErrorContains(t, Plan{Base: "main", BaseCommit: base}.Check(), "depth 0 is below 1")
 	require.ErrorContains(t, Plan{Base: "main", BaseCommit: "tip", Depth: 1}.Check(), `base commit "tip" is not a commit id`)
 	require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Partitions: [][]Change{{change("1"), child}}}.Check())
+}
+
+// An applier clears the queued mark from an unqueued change, so the plan carries each
+// one's mark from the listing and refuses a mark outside the set.
+func TestAnUnqueuedChangeCarriesItsMarkIntoThePlan(t *testing.T) {
+	for _, m := range []Mark{MarkNone, MarkQueued, MarkRejected} {
+		u := UnqueuedChange{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: m}
+		require.NoError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{u}}.Check(), m)
+		require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{u}}.Check(), m)
+	}
+	odd := UnqueuedChange{ID: "4", Head: head("4"), Mark: "merged"}
+	require.EqualError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued[0]: #4: mark "merged", want queued, rejected or none`)
+	require.EqualError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued: #4: mark "merged", want queued, rejected or none`)
 }
 
 func TestCapabilitiesCheckRefusesAnUnknownStackMergeAndNoMethod(t *testing.T) {

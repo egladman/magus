@@ -1,7 +1,7 @@
 ---
 title: Changelog
 generated_from: CHANGELOG.md
-description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.
+description: Every change to magus, newest first, in Keep a Changelog format, starting with the unreleased entries. Generated from changes/unreleased/ and releases/*.yaml.
 tags: [changelog, releases, versions, upgrade, breaking-changes]
 ---
 
@@ -10,225 +10,284 @@ tags: [changelog, releases, versions, upgrade, breaking-changes]
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
+Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ## [Unreleased]
 
 ### Added
 
-- **`magus diff` reports where a changed symbol departs from how the workspace declares the
-  same kind of thing:** a missed naming pattern, a name a target already has, a rename's
-  leftover old name, or reversed parameters. Each is a `Check` on
-  `DiffSymbol.checks` stating the workspace's own counts, gated by
-  `--conformance-min-cohort` and `--conformance-min-share`.
-- **`magus diff` brings the symbol index current before it reads it.** Each touched
-  project's `scip` target replays or rebuilds; when it cannot (a missing indexer, cache
-  writes off), the review carries `MGS7003` in place of conformance findings, and the PR
-  section fails its step instead of reading as clean.
-- **Every record says which OS account wrote it, and through which entry point.** Trail
-  events, session records and job rows carry `user`, `uid` and `entry_point` (`cli`,
-  `hook`, `mcp`, `rpc`, `daemon`), read by magus itself. `magus session` gains a USER
-  column. A job row's `registered_by` is an `Origin`.
-- **A subagent's shell and edit calls are graded under its job.** `magus shell --agent`
-  takes the host's subagent id, and the command and path glue forward it (`HOST_AGENT_PATH`,
-  default `agent_id`). Guard templates are at version 17; re-install them.
+- **`AncestryReporter` answers whether one revision reaches another.** All four backends
+  implement `IsAncestor`.
+- **The agent guard refuses a backtick command substitution.** Inside double quotes a
+  backtick runs a command, so a literal backtick in a pattern pairs with the next one and
+  swallows everything between, file operands included. The deny names the fixes: `$(...)`
+  for a substitution, single quotes for a literal backtick.
+- **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
+  other clients of the protocol it runs share the target's slots instead of
+  choosing a width of their own. A target that declares no `slots` is unchanged.
+- **`broker: required | best-effort | off` decides what a run does without a broker.**
+  `required` refuses a step (MGS3022, exit 69), `best-effort` (the default) runs
+  unarbitrated and says so once, and `off` never starts or contacts one. Also
+  `--broker` and `MAGUS_BROKER`; Go callers pass `magus.WithBroker` or
+  `magus.WithBrokerPolicy`.
+- **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
+  `import "path" as alias;` errors when `alias` repeats the default binding, for
+  `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
+  alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
+  harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
+- **The cache refuses an entry whose hashed inputs moved while the target ran.** The run
+  stays green; only the entry is skipped, locally and remotely.
+- **The cache is two tiers under standard two-tier semantics.** Reads go local, then
+  remote; a remote hit is verified and promoted into the local tier; a build is stored in
+  both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
+  unset, it is written when a signing key is held; `true` makes remote writes required.
+- **Claude Code MCP tool calls reach the guard.** A `mcp__magus__.*` `PreToolUse` entry
+  forwards the call envelope. No rule judges MCP calls yet.
+- **`concurrency_profile` sets build width relative to the machine.** `conservative` (half
+  the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
+  `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
+  overrides it.
+- **The doc-section advisory carries the reader's own query** instead of a `<terms>`
+  placeholder.
 - **Each spell's install op is named binary + capability, one per binary.**
   typescript's `pnpm-install` and `npm-ci`, go's `go-mod-download`, python's
   `uv-sync`, rust's `cargo-fetch`. A project composes the one it needs into its
   own top-level `install` target, which `build`/`test`/`lint` need; `:update`
   rewrites the lockfile as before. An unchanged install replays without forking
   the package manager. macOS seeds `node_modules` from a sibling checkout.
-- **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
-  targets run first across every selected project; a failure stops everything, exits 3
-  (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
-  outside the invoked target's `ctx.needs` closure is refused, exit 2 (MGS3021). With
-  `affected --plan` a red pass prints no plan.
-
-- **The guard advises on a split `magus run` (`split-run`).** One target run on two
-  project sets, on one line or in two calls within ten minutes, gets the combined form,
-  once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
-- **The cache is two tiers under standard two-tier semantics.** Reads go local, then
-  remote; a remote hit is verified and promoted into the local tier; a build is stored in
-  both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
-  unset, it is written when a signing key is held; `true` makes remote writes required.
-- **A run that may write the remote tier backfills it.** A local hit whose key the remote
-  tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
-  contract gains that optional function.
-- **A failing remote tier degrades the run to the local tier.** The first failure is
-  reported and counted as failed, never missed, and the run stops asking.
-- **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
-  `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
-  read access only; apply rebuilds each candidate and merges it with the change's own
-  method. The code is `libs/mergequeue`, its contract and mocks in its `types` package;
-  `--facts` serves other build tools.
-- **`magus queue describe` prints what the provider supports.** That includes its queue
-  label and who commits the queue's update commits. The new `merge-queue` pull request
-  advisor, off by default, reads it to name the label that queues an approved pull
-  request.
-- **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
-  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
-  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
-  integration than its token's (MGS3019).
-- **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
-  partitions by them.
-- **The merge queue merges stacked changes.** A change carrying another queued or merged
-  change's head is stacked on it: it merges after it, its own delta measured from that
-  head, and waits without blame when the one beneath is kicked back. On GitHub a
-  `queue: <method>` label on a stack's top queues the stack.
-- **Every wait and kick-back carries a code.** Verdicts, events and `kick_back` name one of
-  a closed set (`WAIT_NOT_APPROVED`, `KICK_CONFLICT`, ...) beside the files at issue, and
-  the GitHub provider writes them under its comment for a workflow to read.
-- **Generated bytes reach a branch only from the base's own regeneration.** Apply runs it
-  where the build tool proves a change touches none of the generator's code, and kicks the
-  change back otherwise. Generated means a declared output, and a review covers a merge of
-  the base only when that regeneration reproduces it.
-- **VCS capabilities that combine revisions without a working copy.** `TreeReporter`,
-  `TreeMerger`, `CommitWriter`, `GeneratedPathReporter`, `CheckoutProvisioner`,
-  `RevisionFetcher`, `Pusher` and `Bundler` join `types.VCSDriver`, with `RangeFiles` and
-  `RangeCommits` on `RangeReporter`. git implements every one; none runs a hook or signs.
-- **`MergeStarter.StartMerge` takes the identity to act as.** A merge started for a
-  machine no longer depends on the box's configured git identity.
-- **`AncestryReporter` answers whether one revision reaches another.** All four backends
-  implement `IsAncestor`.
-- **A merge's kept generated files regenerate after it finishes.** The merge driver records
-  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
-  a `regenerate-owed` job that runs each once, deepest project first, and stages the
-  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
-  record (`owed-regeneration`).
-- **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
-  `import "path" as alias;` errors when `alias` repeats the default binding, for
-  `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
-  alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
-  harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
-- **`magus\guard.spawn` registers a workspace spawn rule.** One Buzz function sees every
-  subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
-  uncommitted loosening waits for a commit. Policy changes land on the trail as
-  `guard_policy`; MGS1045 refuses a bad registration. magus ships no rule.
-- **A spawn rule sees its continue target's facts and the job store.** `target` carries
-  the spawn's `description`, `model` and last observed `contextTokens`;
-  `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
-  grades the child under that job's lease and records its base.
-- **`magus\guard.command` registers a workspace shell-command rule.** One Buzz function
-  sees every agent shell command the built-ins pass, as parsed programs, and may deny or
-  advise, never lift a built-in deny. It fails open and is held to the committed copy as
-  `magus\guard.spawn` is. Both rules now return `GuardVerdict` (was `SpawnVerdict`) and
-  share `once`/`count`.
-- **`magus\guard.write` registers a workspace file-write rule.** One Buzz function sees
-  every file an agent writes through its host's edit tools, with the text the host says
-  it writes, on the same strengthen-only, fail-open, committed-copy terms as
-  `magus\guard.command`. A command rule judging `git push` also gets the checkout's
-  branch and its remotes' branches, read through the VCS driver.
-- **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
-  and its `printf` forms are refused: the harness already reports a nonzero exit, and the
-  echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
-  fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
-- **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
-  is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
-  charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
-  embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
-  and invalid. `magus spell build|push|pull|ls` publish.
-- **`magus job fork` declares a job from the terminal.** Flags cover one row
-  (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
-  `--stdin` takes a full record and `--schema` prints its contract.
-- **Job rows and results carry `schema_version`.** An unknown version is rejected by name
-  rather than field by field. Rows record `registered_by`.
-- **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
-  step, one writing what the other reads with no `ctx.needs` path between them, fail at
-  derivation. `magus doctor` checks every composed target.
-- **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
-  names every holder and what it waits on.
-- **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
-  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
-  immediately instead, like any other contention.
-- **Tools declare `observe` probes; ops declare external effects.** An observation keys
-  only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
-  `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
-  observation nor `skip_cache`. The docker spell gains `trivy-image`.
-- **`concurrency_profile` sets build width relative to the machine.** `conservative` (half
-  the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
-  `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
-  overrides it.
-- **A run held back by its width suggests `concurrency_profile: aggressive`.** It fires
-  once per session, only after 15s or more queued for slots with cores idle. It stays
-  silent under an explicit `concurrency`, an already aggressive profile, or a wait on the
-  machine budget. Uptake is counted by `magus session hints` as `concurrency-profile`.
-- **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses one command
-  declared as both version and observation probe without a narrowing `key`.
-- **MGS1038: a removed `magus.project` option stops the load.** It names the key and the
-  fix. An unrecognized key is still only ignored.
-- **URLs in comments and docs become graph edges.** A URL resolves to a local page,
-  heading or file where it can, otherwise to a `link` node (`kind=link`). Nothing is
-  fetched. Knowledge-graph schema v14.
-- **The guard advises on reads outside the session's focus.** Focus is the working
-  project, its dependencies and nested projects. Under a bound lease it denies, and the job
-  row's `read_paths` grants reads without writes. `magus describe file` reports `focus`.
 - **Every host delivers `advise` verdicts; three rehydrate after compaction.** Codex
   receives advisories and wires `SessionStart` on `compact`, Cursor's write guard moves to
   `preToolUse`, and OpenCode joins advisories by `callID`. Guard template v12: re-copy
   installed copies.
-- **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
-  it before starting (`undeclared_seeds` in `-o json`), and an undeclared build input rings
-  the console's notification center.
-- **`magus session --brief` restores a session's state after history loss.** Branch,
-  unpushed commits, classified dirty tree, live leases and last failing targets, also as
-  `-o json`. The `magus-rehydrate.sh` template wires it to session start.
-- **The doc-section advisory carries the reader's own query** instead of a `<terms>`
-  placeholder.
-- **A target whose inputs have not moved since it failed says so before rerunning.**
-  Nothing is skipped (`hint_id: unchanged-failure`).
-- **A text filter over a backgrounded run's capture is denied like a pipe over magus.**
-  Use `-o jsonl --tee <file>` for a capture a tool may consume.
+- **Every record says which OS account wrote it, and through which entry point.** Trail
+  events, session records and job rows carry `user`, `uid` and `entry_point` (`cli`,
+  `hook`, `mcp`, `rpc`, `daemon`), read by magus itself. `magus session` gains a USER
+  column. A job row's `registered_by` is an `Origin`.
+- **Every wait and kick-back carries a code.** Verdicts, events and `kick_back` name one of
+  a closed set (`WAIT_NOT_APPROVED`, `KICK_CONFLICT`, ...) beside the files at issue, and
+  the GitHub provider writes them under its comment for a workflow to read.
+- **The `extended` charm**, for tests that need more of the host than the gate does.
+  A function target reads it with `ctx.hasCharm("extended")`. This repository's cgo
+  compression and shell completion tests now run only under it.
+- **A failing remote tier degrades the run to the local tier.** The first failure is
+  reported and counted as failed, never missed, and the run stops asking.
+- **The agent guard refuses a filter that nothing feeds.** A `grep`, `sed`, `jq`, `head`,
+  `tr` or similar with no file operand, no pipe into it and no input redirect reads the
+  harness's stdin, which can hang past the tool timeout. Each tool's flags are modeled, and
+  a call the guard cannot classify passes.
+- **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
+  `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
+  `--embedded` for magusfile code.
+- **Generated bytes reach a branch only from the base's own regeneration.** Apply runs it
+  where the build tool proves a change touches none of the generator's code, and kicks the
+  change back otherwise. Generated means a declared output, and a review covers a merge of
+  the base only when that regeneration reproduces it.
+- **Git hooks written in Buzz, kept under version control.** `spells/git/hooks.buzz`
+  installs a shim for each `<hook>.buzz` in a directory you name, honoring
+  `core.hooksPath` and linked worktrees; `remove` deletes only its own. It writes only
+  under `rw`, and a hook it did not write is an error.
+- **The guard advises on reads outside the session's focus.** Focus is the working
+  project, its dependencies and nested projects. Under a bound lease it denies, and the job
+  row's `read_paths` grants reads without writes. `magus describe file` reports `focus`.
+- **The guard advises on a split `magus run` (`split-run`).** One target run on two
+  project sets, on one line or in two calls within ten minutes, gets the combined form,
+  once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
+- **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
+  and its `printf` forms are refused: the harness already reports a nonzero exit, and the
+  echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
+  fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
+- **Diff drivers in the managed `.gitattributes` block**, with funcname patterns for
+  TypeScript and Buzz. `magus doctor` reports a missing one.
+- **A job's footprint.** `magus job wait` names the declaration each changed line lands
+  in, found with git's own funcname patterns and measured from the merge base, and
+  `magus ls jobs` compares footprints when it reports overlapping write paths. Lines
+  above a file's first declaration land in its `(preamble)`.
+- **Job rows and results carry `schema_version`.** An unknown version is rejected by name
+  rather than field by field. Rows record `registered_by`.
 - **A lease's declared boundary is enforced.** The guard denies writes outside
   `write_paths` or inside `deny_paths`, any write by a `read_only` row, and `ci` when
   `check` names a narrower target.
-- **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
-  affected listings and failing results carry up to three `{id, command, argv, why}`
-  entries, filtered by the acting lease's role and journaled per session.
-- **A write that opens an unrelated unit of work draws an advisory** pointing at the
-  magus-multi-agent skill.
-- **`magus session ls` and `--brief` show each provider's published prompt-cache window.**
+- **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
+  partitions by them.
 - **`magus describe job` derives a holder's terms; `magus job wait` grades the result.**
   Terms add reached projects, output globs, sibling holds and hidden coupling. `wait`
   checks paths, descendants and a passing run of the row's `check`, exiting 1 on a
   rejection and 2 when it cannot answer; `magus job exit --schema` prints the result
   contract.
-- **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
+- **`magus diff` brings the symbol index current before it reads it.** Each touched
+  project's `scip` target replays or rebuilds; when it cannot (a missing indexer, cache
+  writes off), the review carries `MGS7003` in place of conformance findings, and the PR
+  section fails its step instead of reading as clean.
+- **`magus diff` reports where a changed symbol departs from how the workspace declares the
+  same kind of thing:** a missed naming pattern, a name a target already has, a rename's
+  leftover old name, or reversed parameters. Each is a `Check` on
+  `DiffSymbol.checks` stating the workspace's own counts, gated by
+  `--conformance-min-cohort` and `--conformance-min-share`.
 - **`magus doctor` reports whether a bound lease is enforced** (`bound-lease`).
+- **`magus\guard.command` registers a workspace shell-command rule.** One Buzz function
+  sees every agent shell command the built-ins pass, as parsed programs, and may deny or
+  advise, never lift a built-in deny. It fails open and is held to the committed copy as
+  `magus\guard.spawn` is. Both rules now return `GuardVerdict` (was `SpawnVerdict`) and
+  share `once`/`count`.
+- **`magus\guard.spawn` registers a workspace spawn rule.** One Buzz function sees every
+  subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
+  uncommitted loosening waits for a commit. Policy changes land on the trail as
+  `guard_policy`; MGS1045 refuses a bad registration. magus ships no rule.
+- **`magus\guard.write` registers a workspace file-write rule.** One Buzz function sees
+  every file an agent writes through its host's edit tools, with the text the host says
+  it writes, on the same strengthen-only, fail-open, committed-copy terms as
+  `magus\guard.command`. A command rule judging `git push` also gets the checkout's
+  branch and its remotes' branches, read through the VCS driver.
+- **`magus job fork` declares a job from the terminal.** Flags cover one row
+  (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
+  `--stdin` takes a full record and `--schema` prints its contract.
+- **`magus mcp` serves MCP over stdio.** An agent host registers `{"command": "magus", "args": ["mcp"]}`
+  and gets every tool for the workspace it launches in, with no daemon and no token. Each call
+  carries a `stdio` credential holding `mcp=write`, and every MCP tool call, over either
+  transport, is refused below that with MGS9015.
+- **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
+- **A `pipe` Buzz module makes `magus buzz <script>` a stage of a magus pipe.** A
+  script reads the records of the run before it with `pipe\more`, `pipe\next` and
+  `pipe\all`, and `pipe\emit` writes records for the stage after it, so `magus run test .
+  | magus buzz failures.buzz` replaces `| grep FAIL`. Its exit status counts like any
+  stage's.
+- **Magus stages in a pipe trade typed records, and projects flow forward.** A run
+  whose stdout another magus reads writes its `-o jsonl` records there and its prose
+  on stderr, so `magus run format libs/x | magus run lint | magus run test` runs all
+  three on libs/x. Named projects still win; an explicit `-o` keeps its format.
+- **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
+  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
+  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
+  integration than its token's (MGS3019).
+- **`magus queue describe` prints what the provider supports.** That includes its queue
+  label and who commits the queue's update commits. The new `merge-queue` pull request
+  advisor, off by default, reads it to name the label that queues an approved pull
+  request.
+- **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
+  `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
+  read access only; apply rebuilds each candidate and merges it with the change's own
+  method. The code is `libs/mergequeue`, its contract and mocks in its `types` package;
+  `--facts` serves other build tools.
+- **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
+  targets run first across every selected project; a failure stops everything, exits 3
+  (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
+  outside the invoked target's `ctx.needs` closure is refused, exit 2 (MGS3021). With
+  `affected --plan` a red pass prints no plan.
+- **`magus session --brief` restores a session's state after history loss.** Branch,
+  unpushed commits, classified dirty tree, live leases and last failing targets, also as
+  `-o json`. The `magus-rehydrate.sh` template wires it to session start.
 - **`magus session hints` reports uptake per suggestion id.**
-- **Claude Code MCP tool calls reach the guard.** A `mcp__magus__.*` `PreToolUse` entry
-  forwards the call envelope. No rule judges MCP calls yet.
-- **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
-  `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
-  `--embedded` for magusfile code.
-- **The cache refuses an entry whose hashed inputs moved while the target ran.** The run
-  stays green; only the entry is skipped, locally and remotely.
-- **Git hooks written in Buzz, kept under version control.** `spells/git/hooks.buzz`
-  installs a shim for each `<hook>.buzz` in a directory you name, honoring
-  `core.hooksPath` and linked worktrees; `remove` deletes only its own. It writes only
-  under `rw`, and a hook it did not write is an error.
+- **`magus session ls` and `--brief` show each provider's published prompt-cache window.**
+- **A merge's kept generated files regenerate after it finishes.** The merge driver records
+  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
+  a `regenerate-owed` job that runs each once, deepest project first, and stages the
+  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
+  record (`owed-regeneration`).
+- **The merge queue merges stacked changes.** A change carrying another queued or merged
+  change's head is stacked on it: it merges after it, its own delta measured from that
+  head, and waits without blame when the one beneath is kicked back. On GitHub a
+  `queue: <method>` label on a stack's top queues the stack.
+- **`MergeStarter.StartMerge` takes the identity to act as.** A merge started for a
+  machine no longer depends on the box's configured git identity.
+- **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
+  it before starting (`undeclared_seeds` in `-o json`), and an undeclared build input rings
+  the console's notification center.
+- **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses one command
+  declared as both version and observation probe without a narrowing `key`.
+- **MGS1038: a removed `magus.project` option stops the load.** It names the key and the
+  fix. An unrecognized key is still only ignored.
+- **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
+  names every holder and what it waits on.
+- **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
+  immediately instead, like any other contention.
+- **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
+  step, one writing what the other reads with no `ctx.needs` path between them, fail at
+  derivation. `magus doctor` checks every composed target.
+- **The merge queue labels pull requests** `merge-queue: queued` while it holds them
+  and `merge-queue: rejected` when it kicks one back.
+- **`--scratch-env NAME=DIR` on `magus queue validate` and `magus queue apply`** points
+  a variable at a directory inside each candidate's scratch space, so cache isolation
+  lives on the queue's flags rather than on the hook's command line. It may repeat.
+- **A kick-back comment reproduces the failure.** Each kick-back is a new comment with
+  the run's link and the command that failed, runnable as written.
+- **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
+  affected listings and failing results carry up to three `{id, command, argv, why}`
+  entries, filtered by the acting lease's role and journaled per session.
+- **A run held back by its width suggests `concurrency_profile: aggressive`.** It fires
+  once per session, only after 15s or more queued for slots with cores idle. It stays
+  silent under an explicit `concurrency`, an already aggressive profile, or a wait on the
+  machine budget. Uptake is counted by `magus session hints` as `concurrency-profile`.
+- **A run that may write the remote tier backfills it.** A local hit whose key the remote
+  tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
+  contract gains that optional function.
+- **A spawn rule sees its continue target's facts and the job store.** `target` carries
+  the spawn's `description`, `model` and last observed `contextTokens`;
+  `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
+  grades the child under that job's lease and records its base.
+- **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
+  is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
+  charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
+  embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
+  and invalid. `magus spell build|push|pull|ls` publish.
+- **A subagent's shell and edit calls are graded under its job.** `magus shell --agent`
+  takes the host's subagent id, and the command and path glue forward it (`HOST_AGENT_PATH`,
+  default `agent_id`). Guard templates are at version 17; re-install them.
+- **A target whose inputs have not moved since it failed says so before rerunning.**
+  Nothing is skipped (`hint_id: unchanged-failure`).
+- **`testkit.Environ`, `Isolate` and `Main` give a test an environment built from an
+  allowlist.** The sandbox's allowlist plus the Go toolchain's settings survive; HOME and
+  the XDG base directories move under a temp root; the broker and server are pinned off;
+  everything else is dropped. A package names any extra variables in its TestMain.
+- **A text filter over a backgrounded run's capture is denied like a pipe over magus.**
+  Use `-o jsonl --tee <file>` for a capture a tool may consume.
+- **Tools declare `observe` probes; ops declare external effects.** An observation keys
+  only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
+  `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
+  observation nor `skip_cache`. The docker spell gains `trivy-image`.
+- **URLs in comments and docs become graph edges.** A URL resolves to a local page,
+  heading or file where it can, otherwise to a `link` node (`kind=link`). Nothing is
+  fetched. Knowledge-graph schema v14.
+- **VCS capabilities that combine revisions without a working copy.** `TreeReporter`,
+  `TreeMerger`, `CommitWriter`, `GeneratedPathReporter`, `CheckoutProvisioner`,
+  `RevisionFetcher`, `Pusher` and `Bundler` join `types.VCSDriver`, with `RangeFiles` and
+  `RangeCommits` on `RangeReporter`. git implements every one; none runs a hook or signs.
+- **A write that opens an unrelated unit of work draws an advisory** pointing at the
+  magus-multi-agent skill.
 
 ### Changed
 
-- **`types.DoctorCheck` is `types.Check`, and `DoctorCheckStatus` is `CheckStatus`** (with
-  `CheckOK`, `CheckFail` and `CheckAdvice`): a conformance finding is the same record. Go
-  names only; JSON keys and proto messages are unchanged. `magus\diff` gains `opts.from`,
-  reading a saved review, so `magus diff --impact`'s advisors share one diff.
+- **The agent guard hook no longer loads the workspace.** `magus shell` reads its rules
+  from the root magusfile alone, and loads the committed copy only while a file that
+  load read is uncommitted. Measured here: about 120ms per call, down from about 1.6s.
+- **The agent surface stops promising a checkpoint restore.** A checkpoint records a
+  digest, not the patch; magus-vcs-hygiene covers recovering work.
+- **`aggressive` now claims memory, not just cores.** `balanced` and `conservative`
+  still reserve a quarter of memory for everything else on the machine; `aggressive`
+  takes every usable megabyte down to a fixed 512 MiB floor for the kernel.
+- **An ambiguous output ref prints a count and three examples.**
 - **A `BAGGAGE` lease claim ranks below every record.** `magus shell --lease` no longer
   defaults to it, so the subagent's spawn record and the checkout's `magus job exec`
   binding answer first, for magusfile job writes and attention requests too. Verdicts,
   activity events, target results and attention requests record `lease_from`: `flag`,
   `agent`, `marker`, `env` or `contested`; the console's session lineage shows it.
-- **`magus agent harness apply|install|remove` is refused under a lease from any source.**
-  The commands refuse under the checkout's binding as well as a `BAGGAGE` claim, and the
-  guard refuses them for a worker attributed by its spawn or its session.
 - **BREAKING: the activity wire's `actor` is a rendered label, and `actors` filters by
   field.** `actor` was a kind (`agent`, `operator`); it is now the origin rendered for a row
   head. An `actors` entry matches one origin field exactly (user, host, agent, credential,
   entry point), never the label. The review-remark telemetry label `human` is now
   `unattributed`.
-- **The trail names the credential, not "operator", and drops `actor`.** Each event records
-  `credential` (the verified token's class, id, name and grant, never its secret) and the
-  MCP client as `host`; the wire's `actor` is a label rendered from them. Console review
-  comments are `unattributed`, not `human`.
+- **Breaking (Go API): the cache's tiers share one shape.** `cache.WithMutable` is
+  `WithLocalWrite`, `WithRemoteStats` is `ContextWithRemoteStats`, `Cache.Remote()` is
+  `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
+  `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
+  `cache.Open` reads no environment.
+- **Breaking: `magus queue apply` requires `--base`, and `--workflow` with a run
+  source.** Verdicts no longer carry `message`, and a provider's `list_artifacts`
+  returns the run's origin as `run`; a provider script without it is refused.
+- **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
+  without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
+  matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
+  name, `RangeDiffReporter` is `RangeReporter`, and `Bisect` moves to `Bisector`.
 - **BREAKING: a token holds a grant, and every route names what it needs.** A grant is
   `none`, `read` or `write` per surface (`tokens`, `mcp`, `console`); a valid token below
   a route's need gets 403 MGS9015. No door mints a token wider than its minter's grant.
@@ -238,318 +297,418 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   which the loopback daemon refuses. Stored tokens live at most 366 days and share links
   24 hours; longer, or `never`, is MGS9018. An old operator file is MGS9016, anything in
   `connectors.d` MGS9017.
+- **Breaking: the `daemon` block in `magus.yaml` is now `server`.** Every key moves as is:
+  `daemon.enabled`, `daemon.address`, `daemon.idle_ttl`, `daemon.workspaces` and
+  `daemon.maintenance.*` become `server.enabled`, `server.address`, `server.idle_ttl`,
+  `server.workspaces` and `server.maintenance.*`. The flags follow, `--daemon-*` to
+  `--server-*`. A `daemon` key is refused with an error naming its replacement.
+- **Breaking: `MAGUS_DAEMON_*` variables are now `MAGUS_SERVER_*`.** `MAGUS_DAEMON_ENABLED`,
+  `MAGUS_DAEMON_ADDRESS`, `MAGUS_DAEMON_IDLE_TTL`, `MAGUS_DAEMON_WORKSPACES` and the
+  `MAGUS_DAEMON_MAINTENANCE_*` family keep their suffix under `MAGUS_SERVER_`; setting an
+  old name is an error that names the new one. The pool pointer magus exports to its
+  children, `MAGUS_DAEMON_SOCKET`, is now `MAGUS_PROC_SOCKET`.
+- **Breaking for SDK callers: `magus.Open` refuses a broker it would never use.**
+  `WithBroker` given a nil client, or a client while `WithBrokerPolicy` or the workspace's
+  `broker` setting resolves to `off`, is an error from `Open` rather than a client silently
+  ignored. Pass one or the other.
+- **Breaking for SDK callers: the daemon names are gone from the Go API.** `magus.Daemon`,
+  `SetDaemon` and `ServeDaemon` are `Server`, `SetServer` and `Serve`;
+  `types.EntryPointDaemon`, `HolderDaemon`, `DaemonRequired` and `DaemonSocketWithheld`
+  are `EntryPointServer`, `HolderServer`, `ServerRequired` and `ProcSocketWithheld`. The
+  `internal/daemon` package is `internal/serverhttp`.
+- **Breaking: the wire says server where it said daemon.** `Pool.daemon_version` is
+  reserved and replaced by `owner_version`; `JOB_HOLDER_DAEMON` is reserved and replaced by
+  `JOB_HOLDER_SERVER`; the entry point recorded on an event is `server`, not `daemon`; and
+  the doctor check `daemon-version` is `server-version`.
+- **Breaking: sockets and logs moved.** `$XDG_RUNTIME_DIR/magus/broker.sock` and
+  `server.sock` replace `magus-daemon.sock`, and a detached broker or server logs to
+  `$XDG_STATE_HOME/magus/`, which survives logout, instead of beside its socket. The
+  detached server runs as `magus server --foreground`.
+- **Breaking for SDK callers: status types name the broker and the server.**
+  `types.StatusSnapshot` gains `Broker`, `Server` and `BrokerPolicy` and drops `Machine`
+  and `Services`; `types.StatusOutput` drops `Mode` and renames `DaemonVersion` to
+  `Version`. The new `broker` package is the client and server, and
+  `workspace.WithMachineAdmitter` is gone.
+- **Breaking: `magus status` reports the broker and the server one fact per row.**
+  `-o json` gains `broker`, `server` and `broker_policy`, moves `machine` and
+  `services` under `broker`, and drops `pool.mode`; `pool.daemon_version` is
+  `pool.version`. `magus version -o json` reports `server` for `daemon`. `magus
+  broker status` exits non-zero when none is running.
+- **Breaking: the daemon is two processes, `magus broker` and `magus server`.** A run
+  starts the broker, which holds host capacity and shared services on a unix socket only
+  and exits after ten minutes holding nothing. Only `magus server start` starts the
+  server, which serves MCP, the console and jobs. `server stop --services` is now
+  `broker stop --services`.
+- **Unreleased changelog entries are fragments under `changes/unreleased/`.** One file
+  per entry, so concurrent pull requests never edit one shared section; `CHANGELOG.md`
+  keeps an empty `[Unreleased]` and the docs changelog page renders the fragments. A
+  malformed fragment or an unknown group fails `pr-changelog`.
+- **CI asks for the whole machine explicitly.** Every `magus` invocation in this
+  repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
+  target now passes `--concurrency-profile aggressive` on the command line, the same
+  flag any other caller would use - not an environment variable read by magus itself.
+- **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
+  wired with `magus\harness.provider`. Adapt one by forking it and changing the import
+  path.
 - **Console links carry a one-time code, never a token.** `#code=` lives a minute and
   works once; the console trades it at `POST /api/v1/token/exchange` for a 12-hour console
   token. The guard denies agents the commands that mint or revoke tokens
   (`credential-verb`) and the token files (`token-state`). A non-loopback `mcp.address`
   needs `mcp.insecure_bind: true`, and the operator token is refused off loopback.
-- **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
-  a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
-  the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
-  caller's grant. Every mint is audited, and a revoked token ends its open streams.
-- **Every Connect procedure and `/api/` route names its own need.** The daemon refuses to
-  start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
-  reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
-  `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
-- **"Session" now means only the host's conversation; magus's per-process id is an
-  invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
-  `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is
-  counted and named as written before the rename (`legacy` in JSON), and pruning never
-  deletes a file this build cannot read.
-- **A lease binding that does not read is an error.** A marker holding anything but a lease
-  id no longer reads as unbound: the guard denies with the path, the CLI commands that
-  resolve a lease fail, and `magus job exec --vacate` clears it. The guard lets that
-  command and help through, so an agent can recover.
-- **A record with no host claim is unattributed, never "a person".** `magus shell` typed at
-  a terminal records `entry_point: cli`, no session, and no longer `actor: "agent"`; its
-  terminal window keys fire-once notices but is not recorded as a session. The OS user
-  says whose account acted.
-- **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
-  `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
-  package leaves the command alone.
-- **`install` probes only its own tools and skips dependency order.** A project's install
-  no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
-  not tsc.
-- **The agent guard hook no longer loads the workspace.** `magus shell` reads its rules
-  from the root magusfile alone, and loads the committed copy only while a file that
-  load read is uncommitted. Measured here: about 120ms per call, down from about 1.6s.
-- **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
-  count. magus reads no environment variable to guess it runs in CI, so the same command
-  behaves the same everywhere, and `concurrency_profile` stays `balanced`
-  (`min(cores, 8)`) unless something asks otherwise.
-- **`aggressive` now claims memory, not just cores.** `balanced` and `conservative`
-  still reserve a quarter of memory for everything else on the machine; `aggressive`
-  takes every usable megabyte down to a fixed 512 MiB floor for the kernel.
-- **CI asks for the whole machine explicitly.** Every `magus` invocation in this
-  repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
-  target now passes `--concurrency-profile aggressive` on the command line, the same
-  flag any other caller would use - not an environment variable read by magus itself.
-- **The merge queue needs no bypass actor.** Apply posts `success` right before a merge,
-  once main is still at the predicted tip, and GitHub's auto-merge merges; apply merges
-  itself after a minute. A success it cannot follow through goes back to `pending`.
-  Breaking for providers: `list_green` is required, and `merge_change` reports
-  `by_provider`, which `merged` events carry.
-- **Breaking (Go API): the cache's tiers share one shape.** `cache.WithMutable` is
-  `WithLocalWrite`, `WithRemoteStats` is `ContextWithRemoteStats`, `Cache.Remote()` is
-  `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
-  `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
-  `cache.Open` reads no environment.
-- **The `run.remote` record says `stored`, not `published`,** which names output bundles
-  only.
-- **`magus query output --publish` is refused when remote writes are off.**
-- **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
-  without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
-  matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
-  name, `RangeDiffReporter` is `RangeReporter`, and `Bisect` moves to `Bisector`.
-- **magus never waits on another magus invocation.** A workspace lock or machine budget
-  held by another invocation refuses immediately (exit 75), naming the holder.
-  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
-  other, as do the nested runs of one root invocation. `--watch` retries on the next
-  change.
-- **A daemon whose workspace fails to load keeps serving and says why.** The console,
-  `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
-  `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
-  `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
-  workspace reloads when a `.buzz` file or `magus.yaml` changes.
 - **The daemon's guards refuse a request as `google.rpc.Status` JSON in the route's protocol.**
   A Connect service answers Connect's envelope; every other route, `/mcp` included,
   AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
+- **A daemon whose workspace fails to load keeps serving and says why.** The console,
+  `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
+  `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
+  `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
+  workspace reloads when a `.buzz` file or `magus.yaml` changes.
+- **A declared `timeout` bounds the target's own time.** A body parks while its
+  `ctx.needs` dependencies run and gets a fresh deadline per stretch of its own work.
+- **A deny on a multi-command line says nothing on it ran.**
+- **Every Connect procedure and `/api/` route names its own need.** The daemon refuses to
+  start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
+  reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
+  `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
+- **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
+  count. magus reads no environment variable to guess it runs in CI, so the same command
+  behaves the same everywhere, and `concurrency_profile` stays `balanced`
+  (`min(cores, 8)`) unless something asks otherwise.
+- **The guard denies every channel a bound lease could use to rewrite its row** (`magus
+  job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
+- **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
+  --watch`.
+- **A `for` loop that sleeps between passes is a polling loop.** The `busy-wait` rule
+  denies `for i in $(seq 1 60); do sleep 10; done`, and a workspace command rule sees
+  each program inside such a loop with `repeats` set, as it already did for `while` and
+  `until`. A `for` loop over a list with no `sleep` still repeats nothing.
+- **The guard routes unbounded source dumps to `magus refs`.**
+- **"Handoff journal" is renamed to memory** across the command, docs and manpage.
+- **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
+  `bootstrap`, a list of `{run, why}`, and the rules and skills blocks are gone.
+- **`install` probes only its own tools and skips dependency order.** A project's install
+  no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
+  not tsc.
+- **The job store refuses a write to another holder's row.** A leased session may record
+  its base, shrink its own `write_paths`, end its own row, and fork inside its paths.
+  `clear` archives what it drops.
+- **Breaking: MGS3018: a job's write paths name files.** `magus job fork`, `magus_job`
+  and `magus\job.put` refuse a write path that is an existing directory, unless it is a
+  project root the job owns whole or does not exist yet. A glob ending in wildcards
+  (`dir/**`) is judged as its directory.
+- **A lease binding that does not read is an error.** A marker holding anything but a lease
+  id no longer reads as unbound: the guard denies with the path, the CLI commands that
+  resolve a lease fail, and `magus job exec --vacate` clears it. The guard lets that
+  command and help through, so an agent can recover.
+- **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
+  `--log-format`. It withheld per-target results with no stream to carry them; `-o jsonl`
+  is the one way to select it.
+- **`magus agent harness apply|install|remove` is refused under a lease from any source.**
+  The commands refuse under the checkout's binding as well as a `BAGGAGE` claim, and the
+  guard refuses them for a worker attributed by its spawn or its session.
+- **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
+  and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
+  and fails when the build does. The graph JSON is no longer committed.
+- **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
+  denial count, session count, and followed rate; the retired advice layer's destination
+  and confidence labels are gone. A human reads the evidence and decides.
+- **MAGUS.md is formatted with the repo's other Markdown.**
+- **Breaking: `magus` must be imported.** A magusfile, spell or script calling `magus\`
+  needs `import "magus";`; without it the load fails with MGS1039, which names the fix.
+- **magus never waits on another magus invocation.** A workspace lock or machine budget
+  held by another invocation refuses immediately (exit 75), naming the holder.
+  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
+  other, as do the nested runs of one root invocation. `--watch` retries on the next
+  change.
+- **`magus query output --publish` is refused when remote writes are off.**
+- **`magus query output` reads trail payloads.** `grd` (guard verdicts) and `mcp` refs
+  resolve beside `out` run outputs.
+- **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
+  of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
+- **The MCP tool catalog is generated from the `std.Magus` descriptor.**
+- **The merge queue needs no bypass actor.** Apply posts `success` right before a merge,
+  once main is still at the predicted tip, and GitHub's auto-merge merges; apply merges
+  itself after a minute. A success it cannot follow through goes back to `pending`.
+  Breaking for providers: `list_green` is required, and `merge_change` reports
+  `by_provider`, which `merged` events carry.
+- **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
+  runs it anyway.
 - **`-o jsonl` runs emit only records.** Headers, progress, summaries, race diagnostics
   and lock decisions are typed events on stdout beside `run.target.result`; notices, other
   log lines and output printed outside a target are `run.notice` records on stderr.
   `magus x`, `affected --stdin` and `--detach` (`run.detach`) do the same. No record is
   dropped; the schema is now 5.
-- **A target's `std\print` is captured with its output.** It is withheld, streamed and
-  stored under the target's ref like a subprocess's output, instead of bypassing both.
-- **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
-  `--log-format`. It withheld per-target results with no stream to carry them; `-o jsonl`
-  is the one way to select it.
-- **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
-  denial count, session count, and followed rate; the retired advice layer's destination
-  and confidence labels are gone. A human reads the evidence and decides.
-- **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
-  and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
-  and fails when the build does. The graph JSON is no longer committed.
-- **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
-  of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
-- **Breaking: the `relock` charm is renamed `update`, with no alias.** A run spelling
-  `relock` fails with MGS6002, which names `update`; rename the suffix. `ci` strips
-  `update` as it stripped `relock`, and `rw` does not include it.
-- **Breaking: `magus` must be imported.** A magusfile, spell or script calling `magus\`
-  needs `import "magus";`; without it the load fails with MGS1039, which names the fix.
-- **Breaking: an unknown key in `magus.yaml` fails the load.** MGS1040 reports each as
-  `file:line` with the nearest known key; a second YAML document in a file is rejected.
-- **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
-  `bootstrap`, a list of `{run, why}`, and the rules and skills blocks are gone.
-- **Breaking: `--skill-form` takes `both`, `short` or `full`.** Skills stamp
-  `skill-variant: short`, and a body brackets short wording with `{{if .Short}}`.
-- **Breaking for SDK implementers: `VCSDriver.Preserve` is required.** Every backend
-  captures and restores the working copy, untracked files included.
-- **Breaking for SDK callers: `RenderedSkills` takes a form, not a variant.** The
-  `*ForForm` methods are gone.
-- **A workspace load reports every broken magusfile and every shadowed spell at once.**
-  `ls`, `doctor` and every other command name them all instead of stopping at the first.
-- **A declared `timeout` bounds the target's own time.** A body parks while its
-  `ctx.needs` dependencies run and gets a fresh deadline per stretch of its own work.
-- **The job store refuses a write to another holder's row.** A leased session may record
-  its base, shrink its own `write_paths`, end its own row, and fork inside its paths.
-  `clear` archives what it drops.
-- **The guard denies every channel a bound lease could use to rewrite its row** (`magus
-  job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
-- **Writes to host guard wiring are denied under a bound lease.** Every verdict names the
-  lease it was graded under; an unknown lease id is a deny.
-- **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
-  --watch`.
-- **The guard routes unbounded source dumps to `magus refs`.**
-- **A deny on a multi-command line says nothing on it ran.**
-- **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
-  wired with `magus\harness.provider`. Adapt one by forking it and changing the import
-  path.
-- **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
-  runs it anyway.
-- **The PR advice comment leads with files no project claims.**
-- **MAGUS.md is formatted with the repo's other Markdown.**
-- **The MCP tool catalog is generated from the `std.Magus` descriptor.**
-- **Upstream-wait messages back off** (15s, 30s, 1m, 2m, …) and name both targets.
-- **An ambiguous output ref prints a count and three examples.**
-- **The agent surface stops promising a checkpoint restore.** A checkpoint records a
-  digest, not the patch; magus-vcs-hygiene covers recovering work.
-- **"Handoff journal" is renamed to memory** across the command, docs and manpage.
-- **A repeated guard deny is one line and a ref.** The first deny from a rule in a session
-  carries the full reason, `nothing ran (N commands)` on a multi-command line, and the
-  rule's page. Later ones name the rule and cite `magus query output grd<hex>`, counted by
-  `magus session hints` as `deny-verdict`.
 - **Per-session guard state is keyed per host.** Facts a rule reads, such as skill loads
   and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
   key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
   the hook form; the shipped sh and Buzz command and path hooks pass `sh` and `buzz`.
-- **`magus query output` reads trail payloads.** `grd` (guard verdicts) and `mcp` refs
-  resolve beside `out` run outputs.
+- **A pipe of magus runs fails at its first failed stage, without `set -o pipefail`.**
+  A run starts nothing once a magus stage upstream of it has failed, and the last
+  stage exits with that stage's status (MGS3030), so `magus run generate:rw . | magus
+  run test .` is a chain whose exit status can be trusted.
+- **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
+  a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
+  the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
+  caller's grant. Every mint is audited, and a revoked token ends its open streams.
+- **The PR advice comment leads with files no project claims.**
+- **The merge queue kicks back stale generated files before its gate runs.** A change
+  that edits generator code must commit outputs that are current on top of the base. If
+  they are stale, the kick-back names the stale files and says how to fix them. If they are
+  current, the change merges.
+- **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
+  `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
+  package leaves the command alone.
+- **A record with no host claim is unattributed, never "a person".** `magus shell` typed at
+  a terminal records `entry_point: cli`, no session, and no longer `actor: "agent"`; its
+  terminal window keys fire-once notices but is not recorded as a session. The OS user
+  says whose account acted.
+- **Breaking: the `relock` charm is renamed `update`, with no alias.** A run spelling
+  `relock` fails with MGS6002, which names `update`; rename the suffix. `ci` strips
+  `update` as it stripped `relock`, and `rw` does not include it.
+- **Breaking for SDK callers: `RenderedSkills` takes a form, not a variant.** The
+  `*ForForm` methods are gone.
+- **A repeated guard deny is one line and a ref.** The first deny from a rule in a session
+  carries the full reason, `nothing ran (N commands)` on a multi-command line, and the
+  rule's page. Later ones name the rule and cite `magus query output grd<hex>`, counted by
+  `magus session hints` as `deny-verdict`.
+- **The `run.remote` record says `stored`, not `published`,** which names output bundles
+  only.
+- **`magus describe graph -o markdown <project>` renders only that project.** A scoped
+  index drops the workspace-wide kind and project tables, so a change elsewhere cannot
+  make it stale; the unscoped index keeps them. A project path that names no project is
+  now an error instead of an empty index.
+- **"Session" now means only the host's conversation; magus's per-process id is an
+  invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
+  `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is
+  counted and named as written before the rename (`legacy` in JSON), and pruning never
+  deletes a file this build cannot read.
+- **Breaking: `--skill-form` takes `both`, `short` or `full`.** Skills stamp
+  `skill-variant: short`, and a body brackets short wording with `{{if .Short}}`.
+- **A target's `std\print` is captured with its output.** It is withheld, streamed and
+  stored under the target's ref like a subprocess's output, instead of bypassing both.
+- **The trail names the credential, not "operator", and drops `actor`.** Each event records
+  `credential` (the verified token's class, id, name and grant, never its secret) and the
+  MCP client as `host`; the wire's `actor` is a label rendered from them. Console review
+  comments are `unattributed`, not `human`.
+- **`types.DoctorCheck` is `types.Check`, and `DoctorCheckStatus` is `CheckStatus`** (with
+  `CheckOK`, `CheckFail` and `CheckAdvice`): a conformance finding is the same record. Go
+  names only; JSON keys and proto messages are unchanged. `magus\diff` gains `opts.from`,
+  reading a saved review, so `magus diff --impact`'s advisors share one diff.
+- **Breaking: an unknown key in `magus.yaml` fails the load.** MGS1040 reports each as
+  `file:line` with the nearest known key; a second YAML document in a file is rejected.
+- **Upstream-wait messages back off** (15s, 30s, 1m, 2m, …) and name both targets.
+- **Breaking for SDK implementers: `VCSDriver.Preserve` is required.** Every backend
+  captures and restores the working copy, untracked files included.
+- **A workspace load reports every broken magusfile and every shadowed spell at once.**
+  `ls`, `doctor` and every other command name them all instead of stopping at the first.
+- **Writes to host guard wiring are denied under a bound lease.** Every verdict names the
+  lease it was graded under; an unknown lease id is a deny.
 
 ### Removed
 
-- **The `preflight` target convention.** The starter magusfile and the docs no longer
-  declare one, and the `typescript` spell's no-op `preflight` op is gone; `--preflight`
-  replaces the idea. A target you named `preflight` keeps working.
-- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
-  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
-  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
-  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
-  forking its spell's import path instead.
-- **Breaking: the `exclusive` target and project option, with no replacement.** A
-  magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
-  the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
-- **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
-  keeps `Magus.TailLog`.
-- **Breaking for SDK callers: `ReportWriter`, `NewReportWriter`, `WithReport`,
-  `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
-  `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
-  headers through it, pass it with `WithSink` and close it after the run.
+- **Breaking: the advice action's `hand-edited-generated` advisor and input.** It named
+  generated files as hand edits whenever no declared input of their project changed, which
+  was false for every output whose target opts out of the cache, such as a `MAGUS.md`
+  rendered from the whole graph. The drift gate already fails on a real hand edit. Delete
+  the key from `with:`.
 - **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
   `head-repo` inputs.** The action reads the pull request from the triggering event and
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
   anything but `true` or `false` now fails the step, and one failing advisor no longer
   stops the rest.
+- **Breaking: the `exclusive` target and project option, with no replacement.** A
+  magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
+  the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
+- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
+- **Breaking: `magus run --then` and `magus affected --then`, with no alias.** Pipe the
+  run into a `magus buzz` script instead: `pipe\outputs`, `pipe\exportTo`,
+  `pipe\history`, `pipe\diff` and `pipe\value` act on the records it reads, and
+  `fs\readFile` and `crypto\sha256File` cover `contents` and `hash`.
+- **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
+  keeps `Magus.TailLog`.
+- **The `preflight` target convention.** The starter magusfile and the docs no longer
+  declare one, and the `typescript` spell's no-op `preflight` op is gone; `--preflight`
+  replaces the idea. A target you named `preflight` keeps working.
+- **Breaking for SDK callers: `ReportWriter`, `NewReportWriter`, `WithReport`,
+  `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
+  `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
+  headers through it, pass it with `WithSink` and close it after the run.
 
 ### Fixed
 
-- **Workspace load is 10x faster.** A bare library import is no longer executed as a
-  candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
-  A run skips re-evaluating a magusfile that does not export the target, and an exact
-  source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
+- **A broken working tree no longer switches off the approved spawn rule.** The committed
+  `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
+  it too slowly denies. A skipped rule says what applied. A workspace advise joins a
+  built-in one, and the idle clock follows the agent's id.
+- **Status, doctor and the console see both background processes.** The liveness probe
+  asks the configured server rather than whichever socket a run inherited; doctor's
+  `sockets` check reports `broker.sock` and `server.sock` by name; the compact status line
+  names each; and the dashboard gains broker and server tiles. `MAGUS_*` settings now
+  apply in a workspace with no `magus.yaml`.
+- **A run killed outright releases its claims and services at once.** Claims and
+  service references ride the run's one broker connection, so the kernel closing it
+  releases them; this replaces pid polling and the 24-hour cap. When the broker
+  restarts under running steps, they re-assert their claims on the new one.
+- **The server keeps the knowledge graph and symbol indexes current with MCP off.**
+  Graph watching and symbol indexing belonged to the MCP listener, so `mcp.enabled:
+  false` quietly stopped both; they now run for as long as the server does.
+- **"Cannot check byte-stability" is recorded.** It fails the gate, and a `-o jsonl` run
+  now carries it as `race.determinism_unchecked` with its error.
+- **Clones of an hg, jj or Sapling repository share one state store.** Identity is read
+  from each backend's config without running it. jj is covered when colocated with git.
+- **Concurrent fetches into one repository no longer fail.** Two `git fetch` runs read
+  each other's refs mid-update and failed with "bad object"; magus now fetches into a
+  repository one at a time.
+- **Config values given as flags are validated.** `--log-level bogus` ran with a value the
+  same setting in `magus.yaml` or the environment is refused for.
+- **The console dashboard connects on the daemon's own origin.** The token exchange sends
+  an expiry the daemon accepts, and a page from an older console build asks for a reload.
+- **Console failures are always shown.** Every failed daemon call, stream or undecodable
+  frame raises a notification, and the console lint rejects a swallowed catch. A page with
+  no token shows one sign-in state with the command that opens it signed in, and a 401
+  returns there.
+- **Console links carry a runnable command.** `magus job fork`, `ls jobs` and the other
+  console hints print `open "<url>#token=$(magus config token print)"`, and
+  `magus_console_present` returns it as `open`. The job hint names a daemon running a
+  different build instead of claiming nothing serves the console.
+- **A coverage record is no longer refused after a squash merge.** Its commit is
+  provenance only; per-file digests keep it honest.
+- **Every git call magus makes is hardened the same way.** `GIT_DIR`, `GIT_REPLACE_REF_BASE`,
+  `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
+  git, including the shallow-clone deepening fetch, which re-added them. git never prompts
+  for credentials, and no signing, rerere or signature line changes what magus reads.
+- **Generated docs examples read the same wherever they are regenerated.** The
+  examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
+  state dir it inherits leaks run history into the captured `magus explain` output.
+- **A failed remote-cache exchange names the step that failed.**
+- **A failed spell import names its magusfile.** A workspace failure located no file for
+  an import error, and an error built without a relative path rendered `magusfile: exec :`.
+- **A failing remote store reads as failed, not missed.** Both shipped cache spells throw
+  on a failed request; `false` means not stored (get) or already stored (put).
+- **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
+  `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
+  it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
+  bare `cd <dir>` no longer trips the `cd` rule.
+- **Generated output no longer depends on the build.** magus requires
+  `GOEXPERIMENT=jsonv2` and refuses to build without it.
+- **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
+  URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
+  the empty URL for an existing entry: every upload reported success, nothing was stored,
+  and every lookup missed. It reads either name.
 - **The GitHub provider no longer offers a merge method a ruleset refuses.** `describe`
   intersected repository settings alone; it now narrows `methods` to what every active
   ruleset rule targeting the base branch also allows, drops `merge` under a required
   linear history, and errors when nothing is left in common.
+- **The graph links a target to a workspace spell imported without an alias.**
+  `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
+  `magus path` and `magus explain` missed every op it runs.
+- **Imported cache files are 0644, and a running target's crash record survives the same
+  target running twice at once.** Stale inflight temp files and staging directories are
+  collected.
+- **Installs of magus-managed git, hg and Sapling sections are atomic.** They are
+  serialized per repository and leave a hook executable. A torn section marker is an error.
+- **Knowledge shards on the remote tier are signed and verified,** and a run that may not
+  write the remote tier stores none.
+- **`log.level` is honored.** It was overwritten at startup by the level `-v` and `-q`
+  imply, so `log.level: debug` in `magus.yaml`, `MAGUS_LOG_LEVEL` and `--log-level` left the
+  process at `info`. A verbosity flag still wins when given.
+- **`magus affected` rebuilds the project a renamed file left.** Under `diff.renames`,
+  git's default, only the new path was reported. Branch-change notices list both too.
+- **`magus bisect` names the culprit on current git.** Newer git writes
+  `# first 'bad' commit:` in the bisect log, which the parser did not read.
+- **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`MAGUS.md` routing indexes are byte-identical on every machine.** Example columns rank
   by the repository's own edges, not the binary's spell catalog; gitignored sources are
   skipped; and the drift gate now catches an output a composed step writes, which let
   five library indexes go stale.
 - **`magus session dispose` refuses without an interactive terminal and is denied to
   agents.** Disposing an attention request records that a PERSON answered it. Outside a
-  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `agent-sign-off`
   (widened from `read-ack`) denies every spelling on every agent channel.
+- **One magus can pipe into another that needs the same project, even through `jq` or
+  `tee`.** The reader, proven from the kernel on linux and macOS, waits until the
+  upstream is done with its projects, draining the pipe; before, the stage that lost
+  the race exited 75. Different projects still stream. A looping pipe is MGS3023.
+- **A `MAGUS_*` value that does not parse stops the load.** A bad number or duration was
+  ignored, and `magus.Open` skipped validating the environment at all.
+- **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
+  A conflicted merge there read as one that never started, and a file named `*.txt`
+  staged every `.txt` file. A merge already underway is now refused.
 - **The `output-pipe`/`output-redirect` exemption for `magus query output` and
   `magus refs --text` now sees past a global flag.** It anchored on the first argument
   after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
   the check now reads argv the same way the read-ack rule does, ignoring where a global
   flag sits.
-- **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
-  URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
-  the empty URL for an existing entry: every upload reported success, nothing was stored,
-  and every lookup missed. It reads either name.
-- **A failing remote store reads as failed, not missed.** Both shipped cache spells throw
-  on a failed request; `false` means not stored (get) or already stored (put).
+- **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
+  Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
+  queue provider both read, in place of `GH_TOKEN`.
+- **A remote hit is one `cache.hit` record, counted once its replay succeeds.** A local
+  replay that fails tries the remote tier before rebuilding.
 - **A remote-tier miss is visible.** Each prints `<project> not in the remote cache
   (out...)` with the producing run's ref, the end-of-run line counts misses, and `-v`
   adds a digest per key-input class.
-- **A remote hit is one `cache.hit` record, counted once its replay succeeds.** A local
-  replay that fails tries the remote tier before rebuilding.
-- **Knowledge shards on the remote tier are signed and verified,** and a run that may not
-  write the remote tier stores none.
-- **An unrecognized boolean in a `MAGUS_*` variable is an error** instead of silently
-  keeping the previous value.
-- **Imported cache files are 0644, and a running target's crash record survives the same
-  target running twice at once.** Stale inflight temp files and staging directories are
-  collected.
-- **Concurrent fetches into one repository no longer fail.** Two `git fetch` runs read
-  each other's refs mid-update and failed with "bad object"; magus now fetches into a
-  repository one at a time.
-- **Every git call magus makes is hardened the same way.** `GIT_DIR`, `GIT_REPLACE_REF_BASE`,
-  `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
-  git, including the shallow-clone deepening fetch, which re-added them. git never prompts
-  for credentials, and no signing, rerere or signature line changes what magus reads.
-- **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
-  A conflicted merge there read as one that never started, and a file named `*.txt`
-  staged every `.txt` file. A merge already underway is now refused.
-- **`magus affected` rebuilds the project a renamed file left.** Under `diff.renames`,
-  git's default, only the new path was reported. Branch-change notices list both too.
-- **`magus bisect` names the culprit on current git.** Newer git writes
-  `# first 'bad' commit:` in the bisect log, which the parser did not read.
-- **A failed spell import names its magusfile.** A workspace failure located no file for
-  an import error, and an error built without a relative path rendered `magusfile: exec :`.
-- **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
-  merge.
-- **"Cannot check byte-stability" is recorded.** It fails the gate, and a `-o jsonl` run
-  now carries it as `race.determinism_unchecked` with its error.
-- **A broken working tree no longer switches off the approved spawn rule.** The committed
-  `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
-  it too slowly denies. A skipped rule says what applied. A workspace advise joins a
-  built-in one, and the idle clock follows the agent's id.
-- **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
-  wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
-  its message and Help link. Health reports down when every workspace failed, and the
-  Windows sign-in line is PowerShell's `Start-Process`.
+- **Replaying a fully cached run is fast again.** Tool probes run concurrently and skip
+  tools no selected target drives. Cache keys are unchanged.
+- **`--root` from another directory no longer loads that directory's modules.** A
+  magusfile's imports resolve against its project, then the workspace root.
 - **A run the machine's build budget refuses says so.** It exited 75 with nothing after
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and
   `run.diagnostic` records.
-- **The graph links a target to a workspace spell imported without an alias.**
-  `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
-  `magus path` and `magus explain` missed every op it runs.
-- **Console failures are always shown.** Every failed daemon call, stream or undecodable
-  frame raises a notification, and the console lint rejects a swallowed catch. A page with
-  no token shows one sign-in state with the command that opens it signed in, and a 401
-  returns there.
-- **The console dashboard connects on the daemon's own origin.** The token exchange sends
-  an expiry the daemon accepts, and a page from an older console build asks for a reload.
-- **Console links carry a runnable command.** `magus job fork`, `ls jobs` and the other
-  console hints print `open "<url>#token=$(magus config token print)"`, and
-  `magus_console_present` returns it as `open`. The job hint names a daemon running a
-  different build instead of claiming nothing serves the console.
-- **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
-  `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
-  it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
-  bare `cd <dir>` no longer trips the `cd` rule.
-- **Installs of magus-managed git, hg and Sapling sections are atomic.** They are
-  serialized per repository and leave a hook executable. A torn section marker is an error.
-- **A `MAGUS_*` value that does not parse stops the load.** A bad number or duration was
-  ignored, and `magus.Open` skipped validating the environment at all.
-- **`--root` from another directory no longer loads that directory's modules.** A
-  magusfile's imports resolve against its project, then the workspace root.
-- **Config values given as flags are validated.** `--log-level bogus` ran with a value the
-  same setting in `magus.yaml` or the environment is refused for.
-- **`log.level` is honored.** It was overwritten at startup by the level `-v` and `-q`
-  imply, so `log.level: debug` in `magus.yaml`, `MAGUS_LOG_LEVEL` and `--log-level` left the
-  process at `info`. A verbosity flag still wins when given.
-- **A vulnerability database release no longer invalidates every Go target's cache.** The
-  database date keys only targets that run govulncheck.
-- **Replaying a fully cached run is fast again.** Tool probes run concurrently and skip
-  tools no selected target drives. Cache keys are unchanged.
-- **Clones of an hg, jj or Sapling repository share one state store.** Identity is read
-  from each backend's config without running it. jj is covered when colocated with git.
-- **A step waiting on an upstream target no longer masks a stall.** Only a moving step
-  beats the heartbeat; MGS3013 and MGS3012 still catch a wedge.
-- **A coverage record is no longer refused after a squash merge.** Its commit is
-  provenance only; per-file digests keep it honest.
+- **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
+  wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
+  its message and Help link. Health reports down when every workspace failed, and the
+  Windows sign-in line is PowerShell's `Start-Process`.
 - **A shared step no longer inherits one caller's timeout.** It runs under the
   invocation's cancellation. MGS3012 lists what was still admitted.
-- **Generated output no longer depends on the build.** magus requires
-  `GOEXPERIMENT=jsonv2` and refuses to build without it.
-- **A failed remote-cache exchange names the step that failed.**
-- **`magus doctor` sees the checkpoint hook template again** (template revision 11).
-- **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **A step waiting on an upstream target no longer masks a stall.** Only a moving step
+  beats the heartbeat; MGS3013 and MGS3012 still catch a wedge.
 - **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
   command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
   an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
   the long forms its matcher already covered.
-- **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
-  Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
-  queue provider both read, in place of `GH_TOKEN`.
+- **An unrecognized boolean in a `MAGUS_*` variable is an error** instead of silently
+  keeping the previous value.
+- **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
+  merge.
+- **A vulnerability database release no longer invalidates every Go target's cache.** The
+  database date keys only targets that run govulncheck.
+- **Workspace load is 10x faster.** A bare library import is no longer executed as a
+  candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
+  A run skips re-evaluating a magusfile that does not export the target, and an exact
+  source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
 
 ### Security
 
-- **A leased worker can no longer slip past the harness refusal or borrow another job.**
-  A global flag's value (`magus --root . agent harness apply`) or a single-dash word with
-  an `h` (`-o=template=hi`) hid the command from the guard. A spawn title naming a job
-  outside the spawner's own lease tree is recorded as untrusted and attributes nothing.
 - **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
   built console file, including the demo graph JSON holding the whole knowledge graph and
   its notes. Other files and directory listings now return 404, on loopback and on the LAN
   share, and an attached graph explorer never falls back to that demo data.
+- **A leased worker can no longer slip past the harness refusal or borrow another job.**
+  A global flag's value (`magus --root . agent harness apply`) or a single-dash word with
+  an `h` (`-o=template=hi`) hid the command from the guard. A spawn title naming a job
+  outside the spawner's own lease tree is recorded as untrusted and attributes nothing.
+- **`magus queue apply` follows only the base's own validation run.** A pull
+  request's run executes its own copy of the queue workflow and could upload a forged
+  plan and verdicts that merged ungated. Apply now refuses any run but `--workflow`
+  started by a push or dispatch on `--base` of its repository (MGS3027), and
+  `queue-apply.yaml` dispatches main's run instead.
+- **`magus queue apply` checks the plan against what it reads itself.** A plan naming
+  another base or remote, a base commit the base lacks, or a stack base that is not
+  the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
+  a revert of the base. Apply writes the squash message itself.
+- **Breaking: no job holding a secret or a write token restores an Actions cache.** A
+  merge queue hook can read the runner's runtime token and plant cache entries in the
+  default branch's scope, so trusted jobs now install cold. `setup-magus` restores run
+  history only with `restore-history: 'true'`. A conventions test enforces both.
 
 ## [v0.4.3] - 2026-09-06
 

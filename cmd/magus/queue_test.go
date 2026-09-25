@@ -46,9 +46,13 @@ export fun list_green(io: {str: any}) > any { return {"changes": [<any>]}; }
 export fun post_status(io: {str: any}) > bool { return true; }
 export fun retarget(io: {str: any}) > bool { return true; }
 export fun kick_back(io: {str: any}) > bool { return true; }
+export fun mark(io: {str: any}) > bool { return true; }
+export fun flag(io: {str: any}) > bool { return true; }
 export fun merge_change(io: {str: any}) > any { return {"merged": false, "reason": "the test merges nothing"}; }
 export fun list_artifacts(io: {str: any}) > any {
-    return {"complete": true, "headers": {"Authorization": "Bearer tok"}, "artifacts": RUN};
+    final run = {"repo": "acme/widgets", "head_repo": "acme/widgets", "head_branch": "main", "event": "push", "branch_event": true,
+        "definition": ".github/workflows/queue.yaml"};
+    return {"run": run, "complete": true, "headers": {"Authorization": "Bearer tok"}, "artifacts": RUN};
 }
 `
 
@@ -333,7 +337,8 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	assert.FileExists(t, filepath.Join(f.root, "verdicts", mergequeue.PlanFile))
 	assert.FileExists(t, filepath.Join(f.root, "verdicts", mergequeue.DoneFile))
 
-	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--facts", "true", "--once", "verdicts")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
+	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--facts", "true", "--once", "verdicts")
 	require.NoError(t, err)
 }
 
@@ -360,15 +365,16 @@ func dryRun(t *testing.T) {
 func TestQueueApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil)
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
 	dryRun(t)
 	validated(t, filepath.Join(f.root, "verdicts"))
-	out, err := f.run(t, "", "apply", "--provider", "local.buzz", "--facts", "true", "--once", "verdicts")
+	out, err := f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--facts", "true", "--once", "verdicts")
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "dry run: would merge candidate cccccccccccc")
 
 	require.NoError(t, os.Remove(filepath.Join(f.root, "verdicts", mergequeue.PlanFile)))
 	for _, mode := range [][]string{{"--once"}, {"--interval", "10ms"}} {
-		args := append(append([]string{"apply", "--provider", "local.buzz", "--facts", "true"}, mode...), "verdicts")
+		args := append(append([]string{"apply", "--provider", "local.buzz", "--base", "main", "--facts", "true"}, mode...), "verdicts")
 		_, err = f.run(t, "", args...)
 		require.ErrorContains(t, err, "magus queue apply: "+filepath.Join(f.root, "verdicts")+" holds no plan.json", "%v", mode)
 	}
@@ -419,15 +425,17 @@ func TestQueueApplyFollowsARun(t *testing.T) {
 	})
 	f := newQueueFixture(t, "", run)
 	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil)
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
 	dryRun(t)
-	out, err := f.run(t, "", "apply", "--provider", "local.buzz", "--facts", "true", "--interval", "10ms", "run:acme/widgets/runs/7")
+	out, err := f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--workflow", queueWorkflow, "--facts", "true", "--interval", "10ms", "run:acme/widgets/runs/7")
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "dry run: would merge candidate cccccccccccc")
 }
 
 func TestQueueApplyFromARunThatPlannedNothingMergesNothing(t *testing.T) {
 	f := newQueueFixture(t, "", artifactRun(t, nil))
-	out, err := f.run(t, "", "apply", "--provider", "local.buzz", "--facts", "true", "--interval", "10ms", "run:acme/widgets/runs/7")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
+	out, err := f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--workflow", queueWorkflow, "--facts", "true", "--interval", "10ms", "run:acme/widgets/runs/7")
 	require.NoError(t, err)
 	evs := queueEvents(t, out)
 	require.Len(t, evs, 1)
@@ -442,8 +450,47 @@ func TestQueueApplyFromARunNeedsAProviderThatListsArtifacts(t *testing.T) {
 	src, err := os.ReadFile(f.provider)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(f.provider, []byte(strings.Split(string(src), "export fun list_artifacts")[0]), 0o644))
-	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "run:acme/widgets/runs/7")
+	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--workflow", queueWorkflow, "run:acme/widgets/runs/7")
 	require.ErrorContains(t, err, "does not export list_artifacts, which reading run:acme/widgets/runs/7 needs")
+}
+
+// queueWorkflow is the definition a followed run must have run.
+const queueWorkflow = ".github/workflows/queue.yaml"
+
+// Apply's base is its own, never the plan's, and a run is followed only against the
+// definition it must have run; neither has a default, and a directory, the caller's own,
+// takes no definition.
+func TestQueueApplyRequiresItsBaseAndARunsDefinition(t *testing.T) {
+	f := newQueueFixture(t, "", "")
+	for name, tc := range map[string]struct {
+		args []string
+		want string
+	}{
+		"no base":                   {[]string{"--provider", "local.buzz", "verdicts"}, "magus queue apply: --base is required"},
+		"a run without a workflow":  {[]string{"--provider", "local.buzz", "--base", "main", "run:acme/widgets/runs/7"}, "a run: source needs --workflow"},
+		"a directory with workflow": {[]string{"--provider", "local.buzz", "--base", "main", "--workflow", queueWorkflow, "verdicts"}, "--workflow has no effect on a directory source"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.run(t, "", append([]string{"apply"}, tc.args...)...)
+			var misuse errUsage
+			require.ErrorAs(t, err, &misuse)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+// A run the base's own queue workflow did not make is refused before anything of it is
+// downloaded: here a pull request's run of the same file.
+func TestQueueApplyRefusesARunAPullRequestStarted(t *testing.T) {
+	f := newQueueFixture(t, "", artifactRun(t, nil))
+	src, err := os.ReadFile(f.provider)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(f.provider, []byte(strings.Replace(string(src), `"event": "push", "branch_event": true`, `"event": "pull_request", "branch_event": false`, 1)), 0o644))
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
+	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--workflow", queueWorkflow, "--facts", "true", "--once", "run:acme/widgets/runs/7")
+	var diag *magustypes.DiagnosticError
+	require.ErrorAs(t, err, &diag)
+	assert.Equal(t, magustypes.QueueRunUntrusted, diag.Code)
 }
 
 // Without --facts, plan asks the magus workspace at the checkout, loaded once in process.

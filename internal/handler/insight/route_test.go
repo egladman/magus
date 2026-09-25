@@ -9,8 +9,11 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // fakeInsightSource is an insightSource returning a canned view or a fixed error.
 type fakeInsightSource struct {
@@ -51,7 +54,7 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	}
 }
 
-// The error names the daemon's workspace path, so it stays in the log.
+// The error names the server's workspace path, so it stays in the log.
 func TestInsightHandler_ErrorReturns500(t *testing.T) {
 	h := NewHandler(fakeInsightSource{insightErr: errors.New("git -C /Users/dev/repo log: scan boom")}, nil)
 	w := httptest.NewRecorder()

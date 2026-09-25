@@ -107,13 +107,13 @@ Passthrough matching is **exact name or suffix glob**: a pattern must end in a s
 
 Env scrubbing runs in **pure Go**, independent of any kernel support, so it is enforced on every platform.
 
-### The daemon socket is withheld, independent of the sandbox switch
+### The server socket is withheld, independent of the sandbox switch
 
-`MAGUS_DAEMON_SOCKET` and `MAGUS_DAEMON_ADDRESS` are magus's own pool pointers, not user configuration. The daemon socket is unauthenticated: anything that can reach it can drive the daemon, so a compromised spell that inherited it could issue daemon commands and escape confinement. magus therefore strips both from **every** op subprocess.
+`MAGUS_PROC_SOCKET` and `MAGUS_SERVER_ADDRESS` are magus's own pool pointers, not user configuration. The server socket is unauthenticated: anything that can reach it can drive the server, so a compromised spell that inherited it could issue server commands and escape confinement. magus therefore strips both from **every** op subprocess.
 
-This holds **regardless of `sandbox.enabled`**, and that distinction matters because the sandbox is off by default. With the sandbox on the two vars are simply absent from the environment allowlist. But "off" rebuilds nothing - the child would otherwise inherit the whole parent environment - so the withholding is carried by an explicit code path (`childEnv`) that runs either way. Turning the sandbox off relaxes filesystem and secret-env confinement; it does **not** hand magus's daemon pointers to spells. When a pointer is withheld from a child, magus logs [MGS2008](../reference/codes/sandbox/MGS2008.md) at debug level naming the var - so a subprocess that cannot see it (or magus's own tooling, which reads an inherited socket as "already running under a parent magus") has a traceable reason instead of a mystery.
+This holds **regardless of `sandbox.enabled`**, and that distinction matters because the sandbox is off by default. With the sandbox on the two vars are simply absent from the environment allowlist. But "off" rebuilds nothing - the child would otherwise inherit the whole parent environment - so the withholding is carried by an explicit code path (`childEnv`) that runs either way. Turning the sandbox off relaxes filesystem and secret-env confinement; it does **not** hand magus's server pointers to spells. When a pointer is withheld from a child, magus logs [MGS2008](../reference/codes/sandbox/MGS2008.md) at debug level naming the var - so a subprocess that cannot see it (or magus's own tooling, which reads an inherited socket as "already running under a parent magus") has a traceable reason instead of a mystery.
 
-The one case that keeps the vars is a **recursive `magus` invocation**: the same trusted binary re-executing itself, which genuinely needs daemon coordination. For that case magus re-injects the two vars as explicit overrides on the child (also logged under [MGS2008](../reference/codes/sandbox/MGS2008.md)). The socket stays hidden from ordinary spell subprocesses; it is handed only to nested magus processes.
+The one case that keeps the vars is a **recursive `magus` invocation**: the same trusted binary re-executing itself, which genuinely needs server coordination. For that case magus re-injects the two vars as explicit overrides on the child (also logged under [MGS2008](../reference/codes/sandbox/MGS2008.md)). The socket stays hidden from ordinary spell subprocesses; it is handed only to nested magus processes.
 
 ## How a target's declared footprint becomes the allowlist
 
@@ -140,9 +140,9 @@ What that degradation means precisely:
 - **What is lost is confinement of the subprocess.** Say this first, because it is the ordinary case rather than an exotic one: the interpreter layer checks what _Buzz_ does, plus the binary path at spawn. Once `sh`, `go test`, `cargo` or `prettier` is running, its reads and writes are arbitrary code that no user-space Go check can observe. Landlock is the only layer that ever confined a subprocess, so on macOS and Windows a build step can read any file the user can, inside or outside the workspace. Since running subprocesses is most of what a build tool does, treat non-Linux hosts as having **no filesystem sandbox for build steps** - the exec allowlist still fires, and nothing after it does.
 - **The kernel backstop is also what would contain a binding-layer bypass.** A spell using native code, a Go plugin, or embedded cgo could not be confined by user-space checks alone. No such spell type exists today; the spell API routes everything through the bindings. If one is ever added it must require landlock or be rejected up front.
 
-### The daemon and policy immutability
+### The server and policy immutability
 
-Because `landlock_restrict_self` is process-global and irreversible, a long-running daemon serving many workspaces cannot re-apply a different policy per request. It instead computes the **set-union** of every declared workspace's policy at startup and applies landlock exactly once; per-workspace binding-layer checks stay strict, and only the kernel layer sees the union. Each policy carries a stable **fingerprint** (a hash of its FS rules and env config). If a workspace's config later resolves to a fingerprint that differs from the applied union, the kernel and binding layers would disagree, so magus **fails closed** with [MGS2010](../reference/codes/sandbox/MGS2010.md) rather than run under a mismatched policy - the fix is to restart the daemon so it rebuilds the union.
+Because `landlock_restrict_self` is process-global and irreversible, a long-running server serving many workspaces cannot re-apply a different policy per request. It instead computes the **set-union** of every declared workspace's policy at startup and applies landlock exactly once; per-workspace binding-layer checks stay strict, and only the kernel layer sees the union. Each policy carries a stable **fingerprint** (a hash of its FS rules and env config). If a workspace's config later resolves to a fingerprint that differs from the applied union, the kernel and binding layers would disagree, so magus **fails closed** with [MGS2010](../reference/codes/sandbox/MGS2010.md) rather than run under a mismatched policy - the fix is to restart the server so it rebuilds the union.
 
 ## What the sandbox does not confine
 
@@ -169,18 +169,18 @@ Being explicit about the boundary is part of the threat model:
 
 Every sandbox violation maps to a boundary described above.
 
-| Code                                                                       | Fires when                                                                                       | Layer / disposition                             |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| [MGS2001](../reference/codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                                                        | binding + kernel; denied                        |
-| [MGS2002](../reference/codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                                                      | binding + kernel; denied                        |
-| [MGS2003](../reference/codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                        | pure Go; informational                          |
-| [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                          | policy build; entry skipped, non-fatal          |
-| [MGS2005](../reference/codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                                              | once per process; non-fatal fallback            |
-| [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a mise/asdf shim directory is on PATH but its data var was scrubbed                              | heuristic hint                                  |
-| [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                        |
-| [MGS2008](../reference/codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                                |
-| [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                     |
-| [MGS3001](../reference/codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                   | audit rail; target fails, write not rolled back |
+| Code                                                                       | Fires when                                                                                      | Layer / disposition                             |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [MGS2001](../reference/codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                                                       | binding + kernel; denied                        |
+| [MGS2002](../reference/codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                                                     | binding + kernel; denied                        |
+| [MGS2003](../reference/codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                       | pure Go; informational                          |
+| [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                         | policy build; entry skipped, non-fatal          |
+| [MGS2005](../reference/codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                                             | once per process; non-fatal fallback            |
+| [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a mise/asdf shim directory is on PATH but its data var was scrubbed                             | heuristic hint                                  |
+| [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                            | binding + kernel; denied                        |
+| [MGS2008](../reference/codes/sandbox/MGS2008.md) ProcSocketWithheld        | magus socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                                |
+| [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a server is asked to serve a workspace outside its applied union                                | fail closed                                     |
+| [MGS3001](../reference/codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                  | audit rail; target fails, write not rolled back |
 
 ## Glossary
 
@@ -193,8 +193,8 @@ Every sandbox violation maps to a boundary described above.
 | **Interpreter layer**  | The pure-Go checks the Buzz `fs.*` / `sh.*` / `env.*` bindings run before any operation. Enforced on every platform; the only layer where the kernel one is absent.                                                                                                                     |
 | **Env scrubbing**      | Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go, on every platform - but it needs a policy, so it runs only when `sandbox.enabled` is on. With the sandbox off a child inherits the whole parent environment. |
 | **Passthrough**        | The `sandbox.env.passthrough` opt-in that adds exact names or suffix-glob patterns (`NAME_*`) back into the child environment.                                                                                                                                                          |
-| **Fingerprint**        | A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a daemon's applied union raises MGS2010.                                                                                                                     |
-| **Union policy**       | The set-union of every declared workspace's policy, applied once by a multi-workspace daemon because landlock is irreversible.                                                                                                                                                          |
+| **Fingerprint**        | A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a server's applied union raises MGS2010.                                                                                                                     |
+| **Union policy**       | The set-union of every declared workspace's policy, applied once by a multi-workspace server because landlock is irreversible.                                                                                                                                                          |
 | **SandboxUnsupported** | The `ErrUnsupported` fallback: kernel landlock is unavailable, so only the interpreter layer runs (MGS2005). Non-fatal by design.                                                                                                                                                       |
 
 ## See also
@@ -203,4 +203,4 @@ Every sandbox violation maps to a boundary described above.
 - [operations.md](operations.md): the Operation and Target model whose declared footprint the sandbox confines.
 - [targets.md](targets.md): the workspace-scope "descend only, never ascend" rule and the resolved-path guarantee.
 - [config.md](../reference/config.md): the `sandbox.*` configuration keys (`enabled`, `allow`, `env.passthrough`).
-- [daemon.md](../guides/integrations/daemon.md): the long-running daemon, its declared workspaces, and the union-policy application MGS2010 guards.
+- [server.md](../guides/integrations/server.md): the long-running server, its declared workspaces, and the union-policy application MGS2010 guards.

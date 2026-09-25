@@ -63,7 +63,7 @@ type PreflightError struct {
 	Fix string
 }
 
-// ExitCode is the status the CLI and the daemon exit with.
+// ExitCode is the status the CLI and the server exit with.
 func (e *PreflightError) ExitCode() int { return ExitCodePreflightFailed }
 
 // Unwrap exposes the diagnostic, so errors.Is(err, types.PreflightFailed) holds. The

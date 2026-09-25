@@ -87,6 +87,8 @@ const (
 	FlagAgentSkillForm = "skill-form"
 	// agent: --tar
 	FlagAgentTar = "tar"
+	// broker stop: --services
+	FlagBrokerStopServices = "services"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --check
@@ -395,6 +397,8 @@ const (
 	FlagQueryURL = "url"
 	// queue apply: --app
 	FlagQueueApplyApp = "app"
+	// queue apply: --base
+	FlagQueueApplyBase = "base"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -409,12 +413,16 @@ const (
 	FlagQueueApplyRegenerate = "regenerate"
 	// queue apply: --remote
 	FlagQueueApplyRemote = "remote"
+	// queue apply: --scratch-env
+	FlagQueueApplyScratchEnv = "scratch-env"
 	// queue apply: --status-context
 	FlagQueueApplyStatusContext = "status-context"
 	// queue apply: --target
 	FlagQueueApplyTarget = "target"
 	// queue apply: --vcs
 	FlagQueueApplyVCS = "vcs"
+	// queue apply: --workflow
+	FlagQueueApplyWorkflow = "workflow"
 	// queue describe: --app
 	FlagQueueDescribeApp = "app"
 	// queue describe: --base
@@ -467,6 +475,8 @@ const (
 	FlagQueueValidateRegenerate = "regenerate"
 	// queue validate: --remote
 	FlagQueueValidateRemote = "remote"
+	// queue validate: --scratch-env
+	FlagQueueValidateScratchEnv = "scratch-env"
 	// queue validate: --target
 	FlagQueueValidateTarget = "target"
 	// queue validate: --vcs
@@ -541,8 +551,6 @@ const (
 	FlagServerStartForeground = "foreground"
 	// server status: --socket
 	FlagServerStatusSocket = "socket"
-	// server stop: --services
-	FlagServerStopServices = "services"
 	// server stop: --socket
 	FlagServerStopSocket = "socket"
 	// session checkpoint: --agent-name
@@ -744,7 +752,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.IntVar(&f.Depth, FlagRunDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
 	fs.BoolVar(&f.NoCache, FlagRunNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	fs.BoolVar(&f.NoDefaultCharms, FlagRunNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
-	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
+	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagRunWait, false, "With --detach, block until the run finishes and exit with its status")
 	fs.BoolVar(&f.Open, FlagRunOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
@@ -813,7 +821,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagAffectedPreflight, "", "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green")
-	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
+	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagAffectedWait, false, "With --detach, block until the run finishes and exit with its status")
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagAffectedStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
@@ -983,7 +991,7 @@ func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags 
 	fs.BoolVar(&f.Global, FlagGraphExportGlobal, false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
 	fs.BoolVar(&f.Reproducible, FlagGraphExportReproducible, false, "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes")
 	fs.BoolVar(&f.Open, FlagGraphExportOpen, false, "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine")
-	fs.BoolVar(&f.Follow, FlagGraphExportFollow, false, "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)")
+	fs.BoolVar(&f.Follow, FlagGraphExportFollow, false, "With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)")
 	fs.BoolVar(&f.Targets, FlagGraphExportTargets, false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
 	fs.BoolVar(&f.Serve, FlagGraphExportServe, false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
@@ -1174,7 +1182,7 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
 	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
-	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
+	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	return &f
@@ -1323,7 +1331,7 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1 document is written to")
 	fs.IntVar(&f.Depth, FlagQueuePlanDepth, 3, "Candidates of one partition that validate at once")
 	fs.IntVar(&f.Parallel, FlagQueuePlanParallel, 0, "Changes admitted at once; 0 is one per CPU")
-	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueuePlanTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueuePlanRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueuePlanVCS, "git", "Version control `backend` of the checkout at --root")
@@ -1331,6 +1339,9 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 }
 
 // QueueValidateFlags are the flags declared for `magus queue validate`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueValidateFlags struct {
 	Plan       string // --plan
 	Gate       string // --gate
@@ -1348,12 +1359,12 @@ type QueueValidateFlags struct {
 func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	var f QueueValidateFlags
 	fs.StringVar(&f.Plan, FlagQueueValidatePlan, "", "The mergequeue.plan/v1 `file`")
-	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` run in each candidate's checkout; exit 0 is green")
-	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` run in a candidate with the generated files to rewrite listed on stdin")
+	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green")
+	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin")
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
-	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueValidateVCS, "git", "Version control `backend` of the checkout at --root")
@@ -1361,8 +1372,13 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 }
 
 // QueueApplyFlags are the flags declared for `magus queue apply`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueApplyFlags struct {
 	Provider      string        // --provider
+	Base          string        // --base
+	Workflow      string        // --workflow
 	StatusContext string        // --status-context
 	Once          bool          // --once
 	Interval      time.Duration // --interval
@@ -1379,13 +1395,15 @@ type QueueApplyFlags struct {
 func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	var f QueueApplyFlags
 	fs.StringVar(&f.Provider, FlagQueueApplyProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueApplyBase, "", "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it")
+	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)")
 	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
 	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)")
-	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it")
-	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
+	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it")
+	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueApplyRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueApplyVCS, "git", "Version control `backend` of the checkout at --root")
@@ -1803,15 +1821,13 @@ func BindServerStart(fs *flag.FlagSet) *ServerStartFlags {
 
 // ServerStopFlags are the flags declared for `magus server stop`.
 type ServerStopFlags struct {
-	Socket   string // --socket
-	Services bool   // --services
+	Socket string // --socket
 }
 
 // BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
 func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
-	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
-	fs.BoolVar(&f.Services, FlagServerStopServices, false, "Stop the daemon's hosted services, leaving the daemon running")
+	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 	return &f
 }
 
@@ -1823,7 +1839,7 @@ type ServerStatusFlags struct {
 // BindServerStatus registers `magus server status`'s flags on fs and returns the destination.
 func BindServerStatus(fs *flag.FlagSet) *ServerStatusFlags {
 	var f ServerStatusFlags
-	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 	return &f
 }
 
@@ -1835,7 +1851,19 @@ type ServerReloadFlags struct {
 // BindServerReload registers `magus server reload`'s flags on fs and returns the destination.
 func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 	var f ServerReloadFlags
-	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
+	return &f
+}
+
+// BrokerStopFlags are the flags declared for `magus broker stop`.
+type BrokerStopFlags struct {
+	Services bool // --services
+}
+
+// BindBrokerStop registers `magus broker stop`'s flags on fs and returns the destination.
+func BindBrokerStop(fs *flag.FlagSet) *BrokerStopFlags {
+	var f BrokerStopFlags
+	fs.BoolVar(&f.Services, FlagBrokerStopServices, false, "Stop the broker's hosted services, leaving the broker running")
 	return &f
 }
 
@@ -2094,6 +2122,6 @@ type VersionFlags struct {
 // BindVersion registers `magus version`'s flags on fs and returns the destination.
 func BindVersion(fs *flag.FlagSet) *VersionFlags {
 	var f VersionFlags
-	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the daemon probe entirely")
+	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the server probe entirely")
 	return &f
 }

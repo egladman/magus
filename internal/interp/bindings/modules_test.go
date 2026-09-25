@@ -799,7 +799,7 @@ export fun fooBar(ctx: magus\Context, _a: [str]) > void {}
 
 // TestOsExitRaisesExitError verifies os.exit(code) aborts the target with a
 // types.ExitError carrying the code (it must NOT call os.Exit), and that the
-// typed error survives the VM boundary so the CLI/daemon can honor the code.
+// typed error survives the VM boundary so the CLI/server can honor the code.
 func TestOsExitRaisesExitError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")

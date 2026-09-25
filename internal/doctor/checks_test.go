@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -733,7 +734,7 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 
 func TestCheckSessionLoadStates(t *testing.T) {
 	t.Run("never loaded", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		testkit.Isolate(t)
 
 		got := (&runner{root: t.TempDir()}).checkSessionLoad()
 
@@ -743,7 +744,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 	})
 
 	t.Run("stale", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		testkit.Isolate(t)
 		root := t.TempDir()
 		loadOneEvent(t, root, time.Now().Add(-30*24*time.Hour))
 
@@ -754,7 +755,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 	})
 
 	t.Run("current", func(t *testing.T) {
-		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		testkit.Isolate(t)
 		root := t.TempDir()
 		loadOneEvent(t, root, time.Now().Add(-time.Hour))
 
@@ -1000,32 +1001,32 @@ func TestCheckConcurrencySizing(t *testing.T) {
 func TestCheckWorkspaceRegistration(t *testing.T) {
 	loaded := time.Now().Add(-90 * time.Second)
 
-	t.Run("no daemon", func(t *testing.T) {
+	t.Run("no server", func(t *testing.T) {
 		got := (&runner{}).checkWorkspaceRegistration()
 		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no loaded workspaces in daemon", got.Message)
+		assert.Equal(t, "no loaded workspaces in server", got.Message)
 	})
 
-	t.Run("daemon reachable but holding nothing", func(t *testing.T) {
-		r := &runner{opts: options{daemonInfo: &DaemonInfo{Reachable: true}}}
-		assert.Equal(t, "no loaded workspaces in daemon", r.checkWorkspaceRegistration().Message)
+	t.Run("server reachable but holding nothing", func(t *testing.T) {
+		r := &runner{opts: options{serverInfo: &ServerInfo{Reachable: true}}}
+		assert.Equal(t, "no loaded workspaces in server", r.checkWorkspaceRegistration().Message)
 	})
 
-	t.Run("unreachable daemon", func(t *testing.T) {
-		r := &runner{opts: options{daemonInfo: &DaemonInfo{
+	t.Run("unreachable server", func(t *testing.T) {
+		r := &runner{opts: options{serverInfo: &ServerInfo{
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
 		}}}
-		assert.Equal(t, "no loaded workspaces in daemon", r.checkWorkspaceRegistration().Message)
+		assert.Equal(t, "no loaded workspaces in server", r.checkWorkspaceRegistration().Message)
 	})
 
 	t.Run("registered", func(t *testing.T) {
-		r := &runner{root: "/repo", opts: options{daemonInfo: &DaemonInfo{
+		r := &runner{root: "/repo", opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}, {Root: "/other", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
 		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Contains(t, got.Message, "loaded in daemon")
+		assert.Contains(t, got.Message, "loaded in server")
 		assert.Contains(t, got.Message, "(2 workspace(s) total)")
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "/repo")
@@ -1035,30 +1036,30 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 	// Not yet loaded is normal (a workspace loads on first use), so this stays OK
 	// and only says what it sees.
 	t.Run("not registered", func(t *testing.T) {
-		r := &runner{root: "/repo", opts: options{daemonInfo: &DaemonInfo{
+		r := &runner{root: "/repo", opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
 			Workspaces: []LoadedWorkspace{{Root: "/elsewhere", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
 		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Contains(t, got.Message, "not yet loaded in daemon")
+		assert.Contains(t, got.Message, "not yet loaded in server")
 	})
 
-	// The daemon passes the workspace through r.ws, leaving r.root empty on that path.
+	// The server passes the workspace through r.ws, leaving r.root empty on that path.
 	t.Run("root comes from the workspace when set", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: "/repo"}, opts: options{daemonInfo: &DaemonInfo{
+		r := &runner{ws: rootStubWorkspace{root: "/repo"}, opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
 		}}}
-		assert.Contains(t, r.checkWorkspaceRegistration().Message, "loaded in daemon")
+		assert.Contains(t, r.checkWorkspaceRegistration().Message, "loaded in server")
 	})
 }
 
 func TestSockDirOrDefault(t *testing.T) {
-	var absent *DaemonInfo
+	var absent *ServerInfo
 	assert.Equal(t, "", absent.sockDirOrDefault())
-	assert.Equal(t, "", (&DaemonInfo{}).sockDirOrDefault())
-	assert.Equal(t, "/run/magus", (&DaemonInfo{SockDir: "/run/magus"}).sockDirOrDefault())
+	assert.Equal(t, "", (&ServerInfo{}).sockDirOrDefault())
+	assert.Equal(t, "/run/magus", (&ServerInfo{SockDir: "/run/magus"}).sockDirOrDefault())
 }
 
 // listenUnix opens a real socket so the dial probe has something live to find. macOS
@@ -1094,64 +1095,90 @@ func TestCheckStaleSockets(t *testing.T) {
 	})
 
 	t.Run("socket directory does not exist", func(t *testing.T) {
-		r := &runner{opts: options{daemonInfo: &DaemonInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
+		r := &runner{opts: options{serverInfo: &ServerInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
 		got := r.checkStaleSockets()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no socket directory", got.Message)
 	})
 
+	// named is a ServerInfo carrying the socket names the CLI passes, over dir.
+	named := func(dir string) *ServerInfo {
+		return &ServerInfo{SockDir: dir, ServerSocket: "server.sock", BrokerSocket: "broker.sock"}
+	}
+
 	t.Run("empty directory", func(t *testing.T) {
-		r := &runner{opts: options{daemonInfo: &DaemonInfo{SockDir: t.TempDir()}}}
-		got := r.checkStaleSockets()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "0 live socket(s)", got.Message)
+		got := (&runner{opts: options{serverInfo: named(t.TempDir())}}).checkStaleSockets()
+		assert.Equal(t, types.Check{
+			Name: "sockets", Status: types.CheckOK,
+			Message: "server not running, broker not running, 0 per-process pool(s)",
+		}, got)
 	})
 
-	// Leftover dead sockets are harmless cruft, so they are context rather than a
-	// failure. Anything not named magus-*.sock, and any directory, is not ours.
-	t.Run("stale sockets are reported, not failed", func(t *testing.T) {
+	// The regression: the check globbed magus-*.sock only, so the server and the broker,
+	// on their fixed names, were invisible to it.
+	t.Run("the server and the broker are reported by role", func(t *testing.T) {
 		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-a.sock"), nil, 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-b.sock"), nil, 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "other.sock"), nil, 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-notasocket"), nil, 0o644))
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "magus-dir.sock"), 0o755))
-
-		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "2 stale socket(s)", got.Message)
-		require.Len(t, got.Details, 2)
-		for _, d := range got.Details {
-			assert.True(t, strings.HasPrefix(d, "stale: "), d)
-		}
-	})
-
-	// Multiple live daemons is a real conflict, and the only shape that fails.
-	t.Run("two live daemons", func(t *testing.T) {
-		dir := t.TempDir()
-		listenUnix(t, filepath.Join(dir, "magus-a.sock"))
-		listenUnix(t, filepath.Join(dir, "magus-b.sock"))
-
-		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
-		assert.Equal(t, types.CheckFail, got.Status)
-		assert.Contains(t, got.Message, "multiple daemons running")
-		require.Len(t, got.Details, 2)
-		for _, d := range got.Details {
-			assert.True(t, strings.HasPrefix(d, "live: "), d)
-		}
-	})
-
-	// A daemon plus a run in flight is the ORDINARY state now that a run takes its
-	// admission from the daemon and hosts its own pool for its children. Counting the
-	// pool as a daemon reported that state as a conflict.
-	t.Run("a live per-process pool beside the daemon is not a conflict", func(t *testing.T) {
-		dir := t.TempDir()
-		listenUnix(t, filepath.Join(dir, "magus-daemon.sock"))
+		listenUnix(t, filepath.Join(dir, "server.sock"))
+		listenUnix(t, filepath.Join(dir, "broker.sock"))
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
-		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		assert.Equal(t, types.Check{
+			Name: "sockets", Status: types.CheckOK,
+			Message: "server live, broker live, 1 per-process pool(s)",
+		}, got)
+	})
+
+	// Leftover dead sockets are harmless cruft (each is reclaimed on the next bind), so
+	// they are context rather than a failure. Anything not named magus-*.sock or one of the
+	// well-known names, and any directory, is not ours.
+	t.Run("stale sockets are reported, not failed", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, name := range []string{"magus-a.sock", "server.sock", "broker.sock", "other.sock", "magus-notasocket"} {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, name), nil, 0o644))
+		}
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "magus-dir.sock"), 0o755))
+
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		assert.Equal(t, types.Check{
+			Name: "sockets", Status: types.CheckOK,
+			Message: "server stale, broker stale, 0 per-process pool(s), 3 stale socket(s)",
+			Details: []string{
+				"stale: " + filepath.Join(dir, "broker.sock"),
+				"stale: " + filepath.Join(dir, "magus-a.sock"),
+				"stale: " + filepath.Join(dir, "server.sock"),
+			},
+		}, got)
+	})
+
+	// Two live servers is a real conflict, and the only shape that fails: one on
+	// server.sock and one on a configured address inside the same directory.
+	t.Run("two live servers", func(t *testing.T) {
+		dir := t.TempDir()
+		listenUnix(t, filepath.Join(dir, "server.sock"))
+		listenUnix(t, filepath.Join(dir, "magus-custom.sock"))
+
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		assert.Equal(t, types.Check{
+			Name: "sockets", Status: types.CheckFail,
+			Message: "2 live server sockets: more than one server is running",
+			Details: []string{
+				"live: " + filepath.Join(dir, "server.sock"),
+				"live: " + filepath.Join(dir, "magus-custom.sock"),
+			},
+		}, got)
+	})
+
+	// A server plus a run in flight is the ORDINARY state: a run hosts its own pool for
+	// its children. Counting the pool as a server reported that state as a conflict.
+	t.Run("a live per-process pool beside the server is not a conflict", func(t *testing.T) {
+		dir := t.TempDir()
+		listenUnix(t, filepath.Join(dir, "server.sock"))
+		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
+
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
 		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "1 live socket(s)", got.Message)
+		assert.Equal(t, "server live, broker not running, 1 per-process pool(s)", got.Message)
 	})
 }
 
@@ -1565,7 +1592,7 @@ func TestConfigFilePaths(t *testing.T) {
 		assert.NoError(t, err, p)
 	}
 
-	// An empty root is the daemon's path, where the workspace arrives through r.ws.
+	// An empty root is the server's path, where the workspace arrives through r.ws.
 	assert.NotPanics(t, func() { configFilePaths("") })
 }
 

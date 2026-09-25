@@ -176,6 +176,75 @@ func (_c *MockProvider_Describe_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
+// Flag provides a mock function for the type MockProvider
+func (_mock *MockProvider) Flag(ctx context.Context, c types.Change, f types.Flag, on bool) error {
+	ret := _mock.Called(ctx, c, f, on)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Flag")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, types.Flag, bool) error); ok {
+		r0 = returnFunc(ctx, c, f, on)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProvider_Flag_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Flag'
+type MockProvider_Flag_Call struct {
+	*mock.Call
+}
+
+// Flag is a helper method to define mock.On call
+//   - ctx context.Context
+//   - c types.Change
+//   - f types.Flag
+//   - on bool
+func (_e *MockProvider_Expecter) Flag(ctx interface{}, c interface{}, f interface{}, on interface{}) *MockProvider_Flag_Call {
+	return &MockProvider_Flag_Call{Call: _e.mock.On("Flag", ctx, c, f, on)}
+}
+
+func (_c *MockProvider_Flag_Call) Run(run func(ctx context.Context, c types.Change, f types.Flag, on bool)) *MockProvider_Flag_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Change
+		if args[1] != nil {
+			arg1 = args[1].(types.Change)
+		}
+		var arg2 types.Flag
+		if args[2] != nil {
+			arg2 = args[2].(types.Flag)
+		}
+		var arg3 bool
+		if args[3] != nil {
+			arg3 = args[3].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvider_Flag_Call) Return(err error) *MockProvider_Flag_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProvider_Flag_Call) RunAndReturn(run func(ctx context.Context, c types.Change, f types.Flag, on bool) error) *MockProvider_Flag_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // KickBack provides a mock function for the type MockProvider
 func (_mock *MockProvider) KickBack(ctx context.Context, c types.Change, commit string, k types.Kick) error {
 	ret := _mock.Called(ctx, c, commit, k)
@@ -381,6 +450,69 @@ func (_c *MockProvider_ListGreen_Call) Return(greenChanges []types.GreenChange, 
 }
 
 func (_c *MockProvider_ListGreen_Call) RunAndReturn(run func(ctx context.Context, q types.ListQuery, statusContext string) ([]types.GreenChange, error)) *MockProvider_ListGreen_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Mark provides a mock function for the type MockProvider
+func (_mock *MockProvider) Mark(ctx context.Context, c types.Change, m types.Mark) error {
+	ret := _mock.Called(ctx, c, m)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Mark")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, types.Mark) error); ok {
+		r0 = returnFunc(ctx, c, m)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProvider_Mark_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Mark'
+type MockProvider_Mark_Call struct {
+	*mock.Call
+}
+
+// Mark is a helper method to define mock.On call
+//   - ctx context.Context
+//   - c types.Change
+//   - m types.Mark
+func (_e *MockProvider_Expecter) Mark(ctx interface{}, c interface{}, m interface{}) *MockProvider_Mark_Call {
+	return &MockProvider_Mark_Call{Call: _e.mock.On("Mark", ctx, c, m)}
+}
+
+func (_c *MockProvider_Mark_Call) Run(run func(ctx context.Context, c types.Change, m types.Mark)) *MockProvider_Mark_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Change
+		if args[1] != nil {
+			arg1 = args[1].(types.Change)
+		}
+		var arg2 types.Mark
+		if args[2] != nil {
+			arg2 = args[2].(types.Mark)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvider_Mark_Call) Return(err error) *MockProvider_Mark_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProvider_Mark_Call) RunAndReturn(run func(ctx context.Context, c types.Change, m types.Mark) error) *MockProvider_Mark_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -15,7 +15,7 @@ A build system sits in the hot path of development. You touch it constantly, so 
 
 magus does not try to define what "build", "test", or "lint" mean for your tools. That is the job of [spells](concepts/spells.md): libraries of tool-native operations. The `go` spell exposes ops like `go-build`, `go-test`, `go-vet`, `golangci-lint`, and `go-fmt`; the `rust` spell `cargo-build`, `cargo-test`, `cargo-clippy`, and `cargo-fmt`; and your magusfile composes them into the canonical targets you run (`build`, `test`, `lint`, `format`). magus handles the orchestration around them: it computes the affected projects from a change, caches their results, and runs only the minimum.
 
-That machinery stays transparent. The cache, the daemon socket, and the run log are all files on disk; inspect them with `ls` and `cat`.
+That machinery stays transparent. The cache, the server socket, and the run log are all files on disk; inspect them with `ls` and `cat`.
 
 [Doctrine](doctrine.md) records what magus automates and what it leaves to your judgment; [Scope](scope.md) records what belongs in the tool at all.
 
@@ -81,7 +81,7 @@ Start here to understand the model magus is built on.
 Once the basics click, these cover running magus at scale and in CI.
 
 - [CI](concepts/targets/ci.md) - compose a `ci` target with `magus\needs`, and the shared-cache trust model.
-- [Daemon and concurrency](guides/integrations/daemon.md) - one persistent process, one shared pool across every client.
+- [Server and concurrency](guides/integrations/server.md) - one persistent process, one shared pool across every client.
 - [Concurrency](concepts/concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations, which never waits.
 - [Remote caching](concepts/cache/remote.md) - share the build cache across machines and CI, with a signing-based trust model.
 - [Editor setup](guides/integrations/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
@@ -113,7 +113,7 @@ The magusfile API and diagnostics:
 
 - [Configuration](reference/config.md) - every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
 - [Standard library modules](reference/buzz/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
-- [Daemon API](reference/api/index.md) - the Connect, gRPC, and gRPC-Web contract the daemon serves, generated from the `.proto` schema. Every service, method, message, and enum, so you can build your own client or frontend against it.
+- [Server API](reference/api/index.md) - the Connect, gRPC, and gRPC-Web contract the server serves, generated from the `.proto` schema. Every service, method, message, and enum, so you can build your own client or frontend against it.
 - [Spells reference](concepts/spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
 - Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](concepts/wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](reference/codes/services/MGS5002.md)). Browse by family: [magusfile](reference/codes/magusfile/README.md), [race](reference/codes/race/README.md), [sandbox](reference/codes/sandbox/README.md), [services](reference/codes/services/README.md), and [knowledge graph](reference/codes/knowledge/README.md).
 - [Conventions](conventions.md) - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.

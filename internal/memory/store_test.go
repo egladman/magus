@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ import (
 // two checkouts of one repository read and write one memory. repo owns how identity
 // is derived; what is pinned here is that memory keys on it.
 func TestDirIsSharedByEveryCloneOfARepo(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	a, b := gitClone(t, "git@github.com:egladman/magus.git"), gitClone(t, "https://github.com/egladman/magus.git")
 
 	dirA, err := Dir(a)
@@ -71,11 +72,11 @@ func TestDirIsOutsideRepoAndStable(t *testing.T) {
 	assert.Equal(t, dir, again, "the key is deterministic")
 }
 
-// testRoot isolates the store: XDG_STATE_HOME points at a temp dir, and root is an
+// testRoot isolates the store: the environment is testkit's, and root is an
 // empty temp dir (no .git, so repoIdentity is root itself).
 func testRoot(t *testing.T) string {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	return t.TempDir()
 }
 

@@ -17,13 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
-// isolatedStore pins XDG_STATE_HOME to a temp dir and opens the store there.
+// isolatedStore isolates the environment, so XDG_STATE_HOME is a fresh temp dir, and
+// opens the store there.
 func isolatedStore(t *testing.T) *Store {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	return reopen(t)
 }
 
@@ -254,9 +256,9 @@ func TestMintRefusesAnInvalidOrEmptyGrant(t *testing.T) {
 }
 
 // A disk that refuses the write is not the caller's mistake: the error wraps no request
-// sentinel, so the daemon answers it Internal rather than InvalidArgument.
+// sentinel, so the server answers it Internal rather than InvalidArgument.
 func TestMintDiskFailureIsNotARequestError(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	dir, err := StoreDir()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o700))

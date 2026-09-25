@@ -29,7 +29,7 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
 
 # magus-utils:subcommands:begin
-    local subcommands="ls describe where run affected x clean shell query refs explain path graph diff vcs session memory job notes queue watch events server mcp status buzz spell agent init doctor config completion man self version help"
+    local subcommands="ls describe where run affected x clean shell query refs explain path graph diff vcs session memory job notes queue watch events server broker mcp status buzz spell agent init doctor config completion man self version help"
 # magus-utils:subcommands:end
     local nouns="spell charm target graph project workspace module mcp-tool file tool"
     local graph_subs="deps export stats"
@@ -37,11 +37,7 @@ _magus_complete() {
     local server_subs="start stop"
     local self_subs="update install-shorthand"
     local shells="bash zsh fish powershell"
-    # Verbs chained after --then. `outputs` and `file` read the target's declared
-    # outputs; `value` reads what the target returned.
-    local chain_verbs="outputs file value"
-    local chain_actions="contents export"
-    local run_flags="--dry-run --graph --upstream --depth --timeout --skip --shard --n-shards --no-volatility-retry --race --step --no-default-charms --live --no-cache --then"
+    local run_flags="--dry-run --graph --upstream --depth --timeout --skip --shard --n-shards --no-volatility-retry --race --step --no-default-charms --live --no-cache"
     local affected_flags="--dry-run --base --stdin --null --graph --upstream --depth --explain --plan --max-shards --max-parallel-budget --bisect --good --target --timeout --step --race"
     local graph_deps_flags="--upstream --depth --spell --target"
     local graph_export_flags="--refresh"
@@ -70,27 +66,6 @@ _magus_complete() {
             return 0
             ;;
         run)
-            # Everything after --then is the chain's, so its verbs win over run's own
-            # flags and project names.
-            local ti=-1 i
-            for ((i = 2; i < COMP_CWORD; i++)); do
-                if [[ "${COMP_WORDS[i]}" == "--then" ]]; then ti=$i; break; fi
-            done
-            if [[ "$ti" -ge 0 ]]; then
-                local depth=$((COMP_CWORD - ti))
-                if [[ "$depth" -eq 1 ]]; then
-                    COMPREPLY=( $(compgen -W "$chain_verbs" -- "$cur") )
-                elif [[ "${COMP_WORDS[ti+1]}" == "outputs" ]]; then
-                    COMPREPLY=( $(compgen -W "export --path" -- "$cur") )
-                elif [[ "${COMP_WORDS[ti+1]}" == "file" ]]; then
-                    if [[ "$depth" -eq 2 ]]; then
-                        COMPREPLY=( $(compgen -W "$(magus run "${COMP_WORDS[2]}" --then outputs 2>/dev/null)" -- "$cur") )
-                    else
-                        COMPREPLY=( $(compgen -W "$chain_actions --path" -- "$cur") )
-                    fi
-                fi
-                return 0
-            fi
             if [[ "$cur" == -* ]]; then
                 COMPREPLY=( $(compgen -W "$run_flags" -- "$cur") )
             elif [[ "$COMP_CWORD" -eq 2 ]]; then

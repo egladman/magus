@@ -60,7 +60,7 @@ export function locksTile(): Tile {
       // should stand out without recolouring the whole tile.
       const tip: string[] = [];
       if (l.command) tip.push(l.command);
-      // The threshold comes from the daemon, not from a constant here: it was decided
+      // The threshold comes from the server, not from a constant here: it was decided
       // in two places once, and a CLI warning sat beside a dashboard row styled healthy.
       const staleAfterMs = l.staleAfterSeconds * 1000;
       const heldMs = l.acquireTime ? Date.now() - tsMillisOrNow(l.acquireTime) : 0;

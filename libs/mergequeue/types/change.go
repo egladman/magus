@@ -56,6 +56,11 @@ type Change struct {
 	// unmerged, so it merges first.
 	StackBase string `json:"stack_base,omitempty"`
 	Below     string `json:"below,omitempty"`
+	// AuthorRegenerates is planning's too, set on every change it admits: the generated
+	// files the change touches that the build tool cannot prove regenerate without
+	// running the change's code, so only its author can regenerate them. An applier
+	// shows [FlagChangesGenerator] on an admitted change exactly when it holds any.
+	AuthorRegenerates []string `json:"author_regenerates,omitempty"`
 }
 
 // Label is how the change is named in reports.
@@ -138,7 +143,11 @@ func (m MergedChange) check() error {
 // its head waits: merging it would merge this one's commits, which nobody queued.
 type UnqueuedChange struct {
 	ID   string `json:"id"`
+	Repo string `json:"repo,omitempty"` // provider's name for the repository, handed back to [Provider.Mark]
 	Head string `json:"head"`
+	// Mark is the mark the change shows now. An applier clears [MarkQueued] from it: the
+	// change left the queue without the queue seeing it go.
+	Mark Mark `json:"mark,omitempty"`
 }
 
 func (u UnqueuedChange) check() error {
@@ -147,6 +156,9 @@ func (u UnqueuedChange) check() error {
 	}
 	if !IsObjectID(u.Head) {
 		return fmt.Errorf("#%s: head %q is not a full commit id", u.ID, u.Head)
+	}
+	if !u.Mark.Valid() {
+		return fmt.Errorf("#%s: mark %q, want queued, rejected or none", u.ID, u.Mark)
 	}
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -24,6 +25,8 @@ import (
 	// Link the host bindings so magusfile.buzz targets execute.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // writeProject creates root/name/magusfile.buzz with body. No magus.project
 // call is written: a bare magusfile that defines targets is expected to run via
@@ -417,7 +420,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
 //
 // The chain: the shard's own `magus` run claims the machine's memory, then execs `go
 // test`, which runs THIS process, which drives magus in-process. Only the CLI and the
-// daemon stamp invocation ancestry onto a context, so a library caller has none, and
+// server stamp invocation ancestry onto a context, so a library caller has none, and
 // admission read the context alone, judged this process a nested magus that had lost
 // its ancestry, and refused it against its own parent's claim.
 //

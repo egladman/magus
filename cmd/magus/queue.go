@@ -227,7 +227,11 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 		if targetGiven {
 			return nil, nil, usagef("magus queue %s: --target has no effect with --facts", verb)
 		}
-		return mergequeue.CommandFacts(facts, e.dir, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
+		cmd, err := mergequeue.ParseCommand("--facts", facts)
+		if err != nil {
+			return nil, nil, err
+		}
+		return mergequeue.CommandFacts(cmd, e.dir, mergequeue.NewHookLog(e.stderr)), func() error { return nil }, nil
 	}
 	ws, err := client.OpenWorkspace(ctx, e.dir, target)
 	if err != nil {
@@ -445,7 +449,12 @@ func queueScratch(prefix string) (string, func(), error) {
 // queueValidate takes no --provider: it runs the changes' code, so it never talks to
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
-	f, _, fs, err := queueParse(e, "validate", "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]", args, gen.BindQueueValidate)
+	var vars queueScratchVars
+	f, _, fs, err := queueParse(e, "validate", "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]", args,
+		func(fs *flag.FlagSet) *gen.QueueValidateFlags {
+			fs.Var(&vars, gen.FlagQueueValidateScratchEnv, "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable")
+			return gen.BindQueueValidate(fs)
+		})
 	if err != nil {
 		return err
 	}
@@ -454,6 +463,16 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	}
 	if f.Parallel < 0 {
 		return usagef("magus queue validate: --parallel must not be negative")
+	}
+	gate, err := mergequeue.ParseCommand("--gate", f.Gate)
+	if err != nil {
+		return err
+	}
+	var regenerate mergequeue.Command
+	if f.Regenerate != "" {
+		if regenerate, err = mergequeue.ParseCommand("--regenerate", f.Regenerate); err != nil {
+			return err
+		}
 	}
 	dir := &mergequeue.VerdictDir{Path: e.path(f.Verdicts)}
 	// A single-change run is one of several filling out; whoever gathers them marks it.
@@ -485,15 +504,39 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	}
 	defer cleanup()
 	log := mergequeue.NewHookLog(e.stderr)
-	v, err := mergequeue.NewValidator(drv, cl, mergequeue.CommandGate(f.Gate, pl, log), dir, bf, scratch)
+	v, err := mergequeue.NewValidator(drv, cl, mergequeue.CommandGate(gate, vars, log), dir, bf, scratch)
 	if err != nil {
 		return err
 	}
 	v.Only, v.Parallel, v.Events = f.Only, f.Parallel, mergequeue.NewEvents(e.stdout)
-	if f.Regenerate != "" {
-		v.Regenerate = mergequeue.CommandRegenerate(f.Regenerate, pl, log)
+	v.Reproduce = types.Reproduction{Gate: f.Gate, Regenerate: f.Regenerate}
+	if regenerate != nil {
+		v.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, log)
 	}
 	return v.Run(ctx, pl)
+}
+
+// queueScratchVars is --scratch-env, which may repeat.
+type queueScratchVars []mergequeue.ScratchVar
+
+func (s *queueScratchVars) String() string {
+	if s == nil {
+		return ""
+	}
+	specs := make([]string, len(*s))
+	for i, v := range *s {
+		specs[i] = v.Name + "=" + v.Dir
+	}
+	return strings.Join(specs, ",")
+}
+
+func (s *queueScratchVars) Set(spec string) error {
+	v, err := mergequeue.ParseScratchVar(spec)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, v)
+	return nil
 }
 
 // queuePlanSource is a verdict source that also carries the plan its verdicts answer to.
@@ -503,11 +546,16 @@ type queuePlanSource interface {
 }
 
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
-	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> [flags] <source>", args, gen.BindQueueApply, "source")
+	var vars queueScratchVars
+	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args,
+		func(fs *flag.FlagSet) *gen.QueueApplyFlags {
+			fs.Var(&vars, gen.FlagQueueApplyScratchEnv, "`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable")
+			return gen.BindQueueApply(fs)
+		}, "source")
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("apply", [2]string{"provider", f.Provider}); err != nil {
+	if err := queueRequired("apply", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
 	switch {
@@ -520,9 +568,21 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return usagef("magus queue apply: %v", err)
 	}
+	switch {
+	case src.run != "" && f.Workflow == "":
+		return usagef("magus queue apply: a run: source needs --workflow, the definition the run must have run")
+	case src.dir != "" && f.Workflow != "":
+		return usagef("magus queue apply: --workflow has no effect on a directory source")
+	}
 	who, err := parseCommitter(f.Committer)
 	if err != nil {
 		return usagef("magus queue apply: --committer: %v", err)
+	}
+	var regenerate mergequeue.Command
+	if f.Regenerate != "" {
+		if regenerate, err = mergequeue.ParseCommand("--regenerate", f.Regenerate); err != nil {
+			return err
+		}
 	}
 	p, err := e.openProvider(ctx, f.Provider)
 	if err != nil {
@@ -533,6 +593,10 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		return fmt.Errorf("provider %q does not export list_artifacts, which reading run:%s needs", f.Provider, src.run)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
+	if err != nil {
+		return err
+	}
+	remoteURL, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
 	if err != nil {
 		return err
 	}
@@ -552,7 +616,8 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 			return err
 		}
 		defer cleanup()
-		from = &mergequeue.ArtifactFollower{Lister: p, Source: src.run, Path: tmp, Follow: !f.Once, Interval: f.Interval, Client: queueDownloads, Events: events}
+		from = &mergequeue.ArtifactFollower{Lister: p, Source: src.run, Path: tmp, Branch: f.Base, Definition: f.Workflow,
+			Follow: !f.Once, Interval: f.Interval, Client: queueDownloads, Events: events}
 	}
 	pl, planned, err := from.Plan(ctx)
 	if err != nil {
@@ -578,9 +643,10 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, events
-	if f.Regenerate != "" {
-		a.Regenerate = mergequeue.CommandRegenerate(f.Regenerate, pl, mergequeue.NewHookLog(e.stderr))
+	a.Base, a.RemoteURL = f.Base, remoteURL
+	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
+	if regenerate != nil {
+		a.Regenerate = mergequeue.CommandRegenerate(regenerate, vars, mergequeue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
 }

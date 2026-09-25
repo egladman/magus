@@ -35,7 +35,7 @@ Return the Docker/OCI platform triple: (os, arch, variant).
 
 ### exit
 
-Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.
+Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.
 
 **Signature:** `os\exit(code)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L231)
 

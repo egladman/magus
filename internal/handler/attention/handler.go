@@ -53,7 +53,7 @@ type Handler struct {
 //
 // The store is resolved per request from root rather than once here: sessions.Dir is a hash
 // and a path join, and resolving it live keeps the handler saying what the CLI would say from
-// the same checkout even if the state directory moves under a long-lived daemon.
+// the same checkout even if the state directory moves under a long-lived server.
 //
 // tel may be nil; it records how long each closed request waited. Only the disposals that come
 // through THIS route are measured (the CLI's `magus session dispose` closes requests in a

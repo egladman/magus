@@ -93,7 +93,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	}
 	_ = interactive.SaveLastTarget(chosen.Dir, targetName)
 
-	sink.EmitScope(ctx, chosen.Path, "")
+	sink.EmitScope(ctx, chosen.Path, "", []string{chosen.Path})
 
 	if *step {
 		ctx = withStepGate(ctx)
@@ -139,7 +139,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 // the way out) is unchanged; only where the candidates come from moves.
 //
 // Degrades to nil rather than failing. A workspace whose graph has never been
-// built, or a daemon that is not running, still gets the path filter it always
+// built, or a server that is not running, still gets the path filter it always
 // had; a picker that refused to open because a search index was cold would be
 // strictly worse than one that searches less.
 func graphLookup(ctx context.Context, root string, byPath map[string]*types.Project) func(string) []string {
@@ -340,7 +340,7 @@ func openXRun(ctx context.Context, root string) (*magus.Magus, *magus.Sink, func
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	sink, cleanup, err := openRunSink(m, opts)
+	sink, cleanup, err := openRunSink(ctx, m, opts)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -404,7 +404,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 		}
 	}
 
-	sink.EmitScope(ctx, d.Project, "ref "+ref)
+	sink.EmitScope(ctx, d.Project, "ref "+ref, []string{d.Project})
 	if step {
 		ctx = withStepGate(ctx)
 	}

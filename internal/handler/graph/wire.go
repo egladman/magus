@@ -1,4 +1,4 @@
-// Package graph holds the graph surfaces the daemon serves and the magus.graph.v1alpha1 wire
+// Package graph holds the graph surfaces the server serves and the magus.graph.v1alpha1 wire
 // mapping behind them: the GET /api/v1/graph route (a bulk subgraph document) and the
 // GraphService RPCs (ranked retrieval: query, resolve, explain, path, stats). Both consume
 // DOMAIN values and map them onto the versioned protobuf; the route encodes as snake_case

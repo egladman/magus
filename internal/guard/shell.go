@@ -83,7 +83,7 @@ type denyRuleName string
 
 const (
 	denyRuleNotesAuthor       denyRuleName = "notes-author"
-	denyRulePersonOnly        denyRuleName = "person-only"
+	denyRuleAgentSignOff      denyRuleName = "agent-sign-off"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
@@ -104,6 +104,9 @@ const (
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
+
+	denyRuleBacktickSubstitution denyRuleName = "backtick-substitution"
+	denyRuleFilterWithoutInput   denyRuleName = "filter-without-input"
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 
@@ -438,6 +441,24 @@ func isBareExitStatus(p *syntax.ParamExp) bool {
 		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
 		p.NestedParam == nil && p.Index == nil && len(p.Modifiers) == 0 &&
 		p.Slice == nil && p.Repl == nil && p.Names == 0 && p.Exp == nil
+}
+
+// backtickSubstFires reports a backtick command substitution anywhere on the line. Only the
+// parse can tell: a backtick inside single quotes or a quoted heredoc is text, and one
+// inside double quotes is a command.
+func backtickSubstFires(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if cs, ok := n.(*syntax.CmdSubst); ok && cs.Backquotes {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // throwawayDirRe matches a path under a temp root, or any path with a scratchpad
@@ -914,7 +935,7 @@ var (
 	// so `capture`, which defaults to the private one, has no other rule that sees it.
 	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
-	// personOnlyRe matches an invocation of either verb this package folds into one
+	// agentSignOffRe matches an invocation of either verb this package folds into one
 	// rule: minting a read receipt, or closing an attention request.
 	//
 	// A receipt is a claim that a PERSON read something, and a disposed request is a
@@ -927,7 +948,7 @@ var (
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
 	// The unparsable-line fallback for magusInvokes, as above.
-	personOnlyRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
+	agentSignOffRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
@@ -1089,7 +1110,7 @@ var (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyPersonOnly = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
+	denyAgentSignOff = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
 		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
@@ -1127,6 +1148,9 @@ var (
 	denyCaptureFilter = "Read that file whole (`cat`, or your editor tool), or give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
+
+	denyBacktickSubstitution = "Write a command substitution as `$(...)`, and put a literal backtick in single quotes, as in grep -n '```' README.md.\n" +
+		"Inside double quotes a backtick RUNS a command: it pairs with the next backtick anywhere on the line, and everything between them, file operands and pipes included, becomes that command."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
@@ -1209,6 +1233,20 @@ func redirectDeny(verb, dest string) string {
 		answer = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
 	}
 	return lead + answer + mintedLogNote(verb)
+}
+
+// filterWithoutInputDeny names the tool, since on a pipeline the reader cannot otherwise
+// tell which stage was left without input.
+func filterWithoutInputDeny(tool string) string {
+	lead := "Give `" + tool + "` its input: name a file, pipe into it, or redirect one with `<`."
+	switch {
+	case stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand:
+		lead = "`" + tool + "` reads only stdin, and its operands are never input: pipe into it or redirect a file with `<`."
+	case tool == "grep" || tool == "egrep" || tool == "fgrep":
+		lead += " A recursive grep names its path too (`" + tool + " -r <pattern> .`): macOS's BSD grep reads stdin without one."
+	}
+	return lead + "\n" +
+		"As written it reads the shell's own stdin, which nothing on this line feeds: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
 }
 
 // mintedLogNote names where the output already lives, and ONLY for a verb that mints one.
@@ -1360,13 +1398,13 @@ func notesWriteFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	})
 }
 
-// personOnlyFires is magusRuleFires over two shapes it cannot express as one word set:
+// agentSignOffFires is magusRuleFires over two shapes it cannot express as one word set:
 // minting a read receipt (`diff --ack`) and closing an attention request (`session
 // dispose`) are different verbs recording different acts, but both record that a PERSON
 // did something, so one rule and one deny cover both rather than a third rule per verb.
-func personOnlyFires(cmds []hint.Invocation, parsed bool, command string) bool {
+func agentSignOffFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	if !parsed {
-		return personOnlyRe.MatchString(command)
+		return agentSignOffRe.MatchString(command)
 	}
 	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
 }
@@ -1574,8 +1612,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if personOnlyFires(cmds, parsed, command) {
-		return ShellVerdict{Deny: denyPersonOnly, Rule: denyRule{Name: denyRulePersonOnly}}
+	if agentSignOffFires(cmds, parsed, command) {
+		return ShellVerdict{Deny: denyAgentSignOff, Rule: denyRule{Name: denyRuleAgentSignOff}}
 	}
 	// A credential rule, so it holds however the line is spelled, before any rule about shape.
 	if credentialVerbFires(cmds, parsed, command) {
@@ -1591,6 +1629,15 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(cmds) {
 		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}
+	}
+	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
+	// waiting in the background. The backtick is judged first because a stray one is how a
+	// filter loses its file operand in the first place.
+	if backtickSubstFires(command, d) {
+		return ShellVerdict{Deny: denyBacktickSubstitution, Rule: denyRule{Name: denyRuleBacktickSubstitution}}
+	}
+	if tool, ok := unfedReader(command, d); ok {
+		return ShellVerdict{Deny: filterWithoutInputDeny(tool), Rule: denyRule{Name: denyRuleFilterWithoutInput, Arg: tool}}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
 	// a task capture, this one refuses trimming it once it arrives. It has to sit above

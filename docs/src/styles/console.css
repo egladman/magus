@@ -1,7 +1,7 @@
 /* console.css - the console-app-ONLY shell: the slim top app bar and its waffle app launcher,
    the fixed bottom status bar, the full-height (console-fill) layout, the console-app button
    contrast, and the small accent palette + layout custom properties they consume. Loaded by the
-   daemon-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
+   server-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
    the status bar - after site.css. It is deliberately NOT loaded on the documentation pages:
    that is the console-vs-docs distinction. The shared nav panels the docs pages DO need (the
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
@@ -28,9 +28,9 @@
 :root[data-theme="dark"] { --c-miss: #fbbf24; --c-warn: #fbbf24; }
 :root[data-theme="light"] { --c-miss: #d97706; --c-warn: #d97706; }
 
-/* Console-only typeface: the daemon apps use the platform system-ui stack so they read as a
+/* Console-only typeface: the server apps use the platform system-ui stack so they read as a
    native app, visibly distinct from the documentation site (which keeps Pico's default stack).
-   Scoped to pages that carry the console app bar (only the three daemon apps have .console-bar)
+   Scoped to pages that carry the console app bar (only the three server apps have .console-bar)
    rather than a bare `body` rule - the playground also loads console.css (for the status bar) but
    keeps Pico's docs typeface. Setting --pico-font-family too so Pico components that read the
    token track the same stack. */
@@ -85,7 +85,7 @@ body:has(.console-bar) ::selection {
   color: var(--pico-color); white-space: nowrap;
 }
 /* Shared demo-mode indicator: one affordance across all three console apps, sitting in the app
-   bar beside the title so "this surface is showing synthesized data, not a live daemon" reads the
+   bar beside the title so "this surface is showing synthesized data, not a live server" reads the
    same everywhere (each app's script unhides #console-demo when it enters #demo). A quiet info
    .status-tag with a leading dot - square + normal case like every other chip, not a rounded pill. */
 .console-demo-tag {
@@ -225,9 +225,9 @@ body.console-app button[aria-disabled="true"] {
 .js .console-bar .app-grid .app-cell-current span { font-size: 0.76rem; line-height: 1.15; }
 
 /* Bottom status bar: a slim, fixed strip pinned to the bottom of the viewport, the way a
-   native app / IDE surface carries its liveness (VS Code-style). It holds the daemon status
-   that used to crowd the top app bar - the browser<->daemon connection with its liveness dot,
-   the daemon's health rollup, and a quiet mode note on the left; the demo-data and offline
+   native app / IDE surface carries its liveness (VS Code-style). It holds the server status
+   that used to crowd the top app bar - the browser<->server connection with its liveness dot,
+   the server's health rollup, and a quiet mode note on the left; the demo-data and offline
    flags on the right when they apply. Sectioning-tinted with a subtle top border so it reads
    as a distinct rail; main reserves --console-statusbar-h of bottom padding (above) so it never
    covers the last tile. */
@@ -413,7 +413,7 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 .status-item[data-health="warn"] { color: var(--c-warn); }
 .status-item[data-health="fail"] { color: var(--c-err); }
 
-/* Connection item: a leading liveness dot, colored by the browser<->daemon link state. */
+/* Connection item: a leading liveness dot, colored by the browser<->server link state. */
 .status-item.conn::before {
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
   border-radius: 50%; background: var(--pico-muted-color); vertical-align: middle;
@@ -426,7 +426,7 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 .status-item.conn[data-state="reconnecting"]::before { background: var(--c-warn); }
 .status-item.conn[data-state="disconnected"] { color: var(--c-err); }
 .status-item.conn[data-state="disconnected"]::before { background: var(--c-err); }
-/* When connected, the dot takes the daemon's HEALTH color so the one indicator carries both "live"
+/* When connected, the dot takes the server's HEALTH color so the one indicator carries both "live"
    and "well": ok stays green (the connected default above), degraded goes amber, down goes red. */
 .status-item.conn[data-state="connected"][data-health="warn"] { color: var(--c-warn); }
 .status-item.conn[data-state="connected"][data-health="warn"]::before { background: var(--c-warn); }
@@ -438,7 +438,7 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 .status-demo { color: var(--c-info); }
 .status-offline { color: var(--c-warn); }
 
-/* Observing-since: a quiet, borderless note (not a chip) of when the daemon began collecting. */
+/* Observing-since: a quiet, borderless note (not a chip) of when the server began collecting. */
 .status-observing { color: var(--pico-muted-color); }
 /* Mobile: drop the least-important items (mode + observing-since) before the bar can crowd. */
 @media (max-width: 480px) { .status-mode, .status-observing { display: none; } }

@@ -328,3 +328,9 @@ tags/magus-no-wait/
 # policy, written with magus\guard.command. A rule page is generated per shipped rule,
 # so it retires rather than aliases.
 reference/rules/ci-watch/
+reference/rules/read-ack/
+tags/fingerprint/
+
+# person-only was renamed agent-sign-off, named for what it catches like the other rules.
+# A rule page is generated per shipped rule, so the old page retires rather than aliases.
+reference/rules/person-only/

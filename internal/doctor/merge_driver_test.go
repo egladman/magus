@@ -36,7 +36,7 @@ func TestCheckOwedRegeneration(t *testing.T) {
 		Message: "1 regeneration(s) a merge kept one side for have not run, so those generated files are stale",
 		Details: []string{
 			hint.Run.With("generate:rw", ".") + " (1 kept file(s): MAGUS.md)",
-			"settle them with `" + hint.JobRun.With("regenerate-owed") + "`, or `magus server regenerate-owed` without a daemon",
+			"settle them with `" + hint.JobRun.With("regenerate-owed") + "`, or `magus server regenerate-owed` when no server is running",
 			"record: " + path,
 		},
 	}, r.checkOwedRegeneration())

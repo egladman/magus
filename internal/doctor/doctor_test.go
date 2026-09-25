@@ -10,11 +10,14 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestCheckLanguageCoverage(t *testing.T) {
 	r := &runner{}
@@ -261,7 +264,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		assert.Contains(t, got.Details[1], "web/magusfile.buzz")
 	})
 	// A detail line exists to name a file. Doctor runs with an empty root on the
-	// daemon path, where filepath.Rel fails and used to leave the path blank:
+	// server path, where filepath.Rel fails and used to leave the path blank:
 	// the failure said a name was wrong without saying where it lived.
 	t.Run("an empty root still names the file", func(t *testing.T) {
 		root := t.TempDir()
@@ -602,8 +605,8 @@ func TestCheckEnvVars(t *testing.T) {
 	})
 }
 
-// TestDisplayPath covers the daemon path displayPath's own doc cites as the
-// motivation: r.root empty but r.ws set (the daemon passes the workspace
+// TestDisplayPath covers the server path displayPath's own doc cites as the
+// motivation: r.root empty but r.ws set (the server passes the workspace
 // through r.ws instead of root), which must fall back to r.ws.Root() rather
 // than leaving filepath.Rel to fail against an empty root and print nothing.
 func TestDisplayPath(t *testing.T) {

@@ -110,6 +110,24 @@ func TestPlanOfNoChangesSaysSo(t *testing.T) {
 	assert.Contains(t, out.String(), "no change carries merge intent against main")
 }
 
+// An applier clears the queued mark from what left the queue, reading the marks the
+// listing reported out of the plan, even one that admits nothing.
+func TestPlanCarriesTheMarkEachUnqueuedChangeShows(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	in := changes()
+	in.Unqueued = []types.UnqueuedChange{
+		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
+		{ID: "5", Repo: "acme/acme", Head: head("5"), Mark: types.MarkRejected},
+		{ID: "6", Repo: "acme/acme", Head: head("6")},
+	}
+	plan, err := planner(t, d).Run(t.Context(), in)
+	require.NoError(t, err)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1, Unqueued: in.Unqueued}, plan)
+	require.NoError(t, plan.Check())
+}
+
 // admitting is one change's way through admission as far as want says it gets.
 type admitting struct {
 	onBase    bool
@@ -118,6 +136,12 @@ type admitting struct {
 	outputs   map[string]types.Writes
 	affected  []string
 	factsErr  error
+	// changed are the files the change touches, "a/x.go" when empty; generated are how
+	// the build tool writes them, and generation its account of regenerating those it
+	// declares as outputs.
+	changed    []string
+	generated  map[string]types.Writes
+	generation types.Generation
 }
 
 func (d doubles) admit(c types.Change, a admitting) {
@@ -135,7 +159,11 @@ func (d doubles) admit(c types.Change, a admitting) {
 	if !approved.Approved || !approved.Queued || approved.Head != c.Head {
 		return
 	}
-	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
+	changed := a.changed
+	if len(changed) == 0 {
+		changed = []string{"a/x.go"}
+	}
+	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return(changed, nil)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
 		Return(magustypes.TreeMergeResult{Tree: "t", Conflicts: a.conflicts}, nil)
 	if len(a.conflicts) > 0 {
@@ -147,7 +175,20 @@ func (d doubles) admit(c types.Change, a admitting) {
 		return
 	}
 	if c.Affected == nil {
-		d.facts.EXPECT().Affected(mock.Anything, c, []string{"a/x.go"}).Return(a.affected, "", a.factsErr)
+		d.facts.EXPECT().Affected(mock.Anything, c, changed).Return(a.affected, "", a.factsErr)
+		if a.factsErr != nil {
+			return
+		}
+	}
+	d.facts.EXPECT().Classify(mock.Anything, changed).Return(a.generated, nil)
+	var outputs []string
+	for _, p := range changed {
+		if a.generated[p].Output {
+			outputs = append(outputs, p)
+		}
+	}
+	if len(outputs) > 0 {
+		d.facts.EXPECT().Generation(mock.Anything, outputs, changed).Return(a.generation, nil)
 	}
 }
 
@@ -160,6 +201,8 @@ func TestPlanAdmission(t *testing.T) {
 		want     types.Decision
 		wantCode types.Code
 		wantSet  []string
+		// wantRegen is what the admitted change records only its author can regenerate.
+		wantRegen []string
 	}{
 		// Alone in the listing, nothing can be built on a fork, so its head is never fetched.
 		"a fork is kicked back unfetched": {c: types.Change{ID: "1", Head: head("1"), Base: "main", Method: types.MethodSquash, Fork: true},
@@ -173,6 +216,18 @@ func TestPlanAdmission(t *testing.T) {
 			wantSet: []string{"a"}},
 		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
 		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},
+		"generated files regenerated from the change's own code are its author's": {c: change("1", "a"), admit: &admitting{
+			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
+			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
+		}, wantSet: []string{"a"}, wantRegen: []string{"gen/x.go"}},
+		"generated files the base's regeneration provably makes are not": {c: change("1", "a"), admit: &admitting{
+			changed: []string{"a/x.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
+			generation: types.Generation{Units: []string{"gen"}},
+		}, wantSet: []string{"a"}},
+		"generated files no regeneration can be bounded for are the author's": {c: change("1", "a"), admit: &admitting{
+			changed: []string{"gen/x.go", "magusfile.buzz"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
+			generation: types.Generation{Units: []string{"gen"}, Unbounded: "magusfile.buzz edits the declarations"},
+		}, wantSet: []string{"a"}, wantRegen: []string{"gen/x.go"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -191,6 +246,7 @@ func TestPlanAdmission(t *testing.T) {
 				require.Empty(t, plan.Verdicts)
 				require.Len(t, plan.Partitions, 1)
 				assert.Equal(t, tc.wantSet, plan.Partitions[0][0].Affected)
+				assert.Equal(t, tc.wantRegen, plan.Partitions[0][0].AuthorRegenerates)
 				return
 			}
 			require.Len(t, plan.Verdicts, 1)
@@ -200,7 +256,10 @@ func TestPlanAdmission(t *testing.T) {
 			if v.Code == types.CodeKickConflict {
 				assert.Equal(t, []string{"a/x.go"}, v.Paths)
 				assert.Equal(t, []string{head("x")[:12] + " change a/x.go"}, v.With)
-				assert.Contains(t, v.Report, "Merge `main` into this branch, resolve these by hand")
+				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.\n\n"+
+					"Merge `main` into this branch and resolve the conflict by hand.\n", v.Report, "the files travel in paths and with, not in the prose")
+				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.", v.Reason)
+				assert.Empty(t, v.Gate, "planning runs no hook")
 			}
 		})
 	}
@@ -231,6 +290,7 @@ func TestPlanPeelsAMergeOfTheBaseOffTheChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, child.Head, base).Return(false, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, child.Head).Return(types.Approval{Approved: true, Head: child.Head, Base: "main", Method: types.MethodSquash, Queued: true}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, child.Head, []string(nil)).Return([]string{"b/y.go"}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"b/y.go"}).Return(nil, nil)
 	// The parent's merge of the base adds nothing, so its review covers its top, where
 	// nobody approved it.
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, parent.Head, base).Return(false, nil)
@@ -306,6 +366,7 @@ func TestPlanHoldsAChangeBuiltOnAForkBeneathAMergeOfTheBase(t *testing.T) {
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, c.Head, base).Return(false, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(nil, nil)
 
 	plan, err := planner(t, d).Run(t.Context(), changes(fork, c))
 	require.NoError(t, err)

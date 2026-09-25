@@ -1,9 +1,9 @@
 package proc
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,7 +13,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +34,7 @@ func TestSubmitJobRunsAsync(t *testing.T) {
 	})
 
 	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Magic: jobMagic, Args: []string{"graph", "build"}}, &reply))
+	require.NoError(t, s.submitJob(jobRequest{Args: []string{"graph", "build"}}, &reply))
 	assert.NotEmpty(t, reply.Inv, "an accepted job returns an invocation id")
 
 	select {
@@ -59,7 +58,7 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 	}
 
 	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Magic: jobMagic, Args: []string{"reindex"}}, &reply))
+	require.NoError(t, s.submitJob(jobRequest{Args: []string{"reindex"}}, &reply))
 
 	select {
 	case got := <-done:
@@ -68,16 +67,6 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("onJobDone was not called for a background job")
 	}
-}
-
-func TestSubmitJobIgnoresBadMagic(t *testing.T) {
-	var ran bool
-	s := newJobService(func(context.Context, []string) error { ran = true; return nil })
-	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Magic: "wrong", Args: []string{"x"}}, &reply))
-	assert.Empty(t, reply.Inv, "an unauthenticated submission is ignored")
-	time.Sleep(50 * time.Millisecond)
-	assert.False(t, ran, "the handler never runs for a bad-magic request")
 }
 
 func TestSubmitJobCoalescesDuplicates(t *testing.T) {
@@ -92,7 +81,7 @@ func TestSubmitJobCoalescesDuplicates(t *testing.T) {
 		return nil
 	})
 
-	req := jobRequest{Magic: jobMagic, Args: []string{"graph", "build"}}
+	req := jobRequest{Args: []string{"graph", "build"}}
 	var r1, r2 jobReply
 	require.NoError(t, s.submitJob(req, &r1))
 	// Give the first job's goroutine a moment to register as in-flight.
@@ -109,111 +98,8 @@ func TestSubmitJobCoalescesDuplicates(t *testing.T) {
 	assert.Equal(t, 1, starts, "the handler ran once for two identical submissions")
 }
 
-type fakeServiceHost struct {
-	mu         sync.Mutex
-	acquired   []string
-	released   []string
-	stoppedAll bool
-	acquireErr error
-}
-
-func (h *fakeServiceHost) Acquire(_ context.Context, key string, _ spells.Service) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.acquireErr != nil {
-		return h.acquireErr
-	}
-	h.acquired = append(h.acquired, key)
-	return nil
-}
-
-func (h *fakeServiceHost) Release(key string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.released = append(h.released, key)
-}
-
-func (h *fakeServiceHost) StopAll() int {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	n := len(h.acquired) - len(h.released)
-	h.stoppedAll = true
-	return n
-}
-
-func TestServiceAcquireReleaseRoundTrip(t *testing.T) {
-	host := &fakeServiceHost{}
-	srv, err := New(Options{
-		Handler:     func(context.Context, []string) error { return nil },
-		ServiceHost: host,
-	})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	svc := spells.Service{Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
-	require.NoError(t, AcquireService(context.Background(), srv.Addr(), "pg", svc))
-	require.NoError(t, ReleaseService(context.Background(), srv.Addr(), "pg"))
-
-	host.mu.Lock()
-	defer host.mu.Unlock()
-	assert.Equal(t, []string{"pg"}, host.acquired)
-	assert.Equal(t, []string{"pg"}, host.released)
-}
-
-func TestStopAllServicesRoundTrip(t *testing.T) {
-	host := &fakeServiceHost{}
-	srv, err := New(Options{
-		Handler:     func(context.Context, []string) error { return nil },
-		ServiceHost: host,
-	})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	svc := spells.Service{Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
-	require.NoError(t, AcquireService(context.Background(), srv.Addr(), "a", svc))
-	require.NoError(t, AcquireService(context.Background(), srv.Addr(), "b", svc))
-
-	n, err := StopAllServices(context.Background(), srv.Addr())
-	require.NoError(t, err)
-	assert.Equal(t, 2, n, "both hosted services reported stopped")
-
-	host.mu.Lock()
-	defer host.mu.Unlock()
-	assert.True(t, host.stoppedAll)
-}
-
-func TestServiceAcquireError(t *testing.T) {
-	host := &fakeServiceHost{acquireErr: errors.New("readiness failed")}
-	srv, err := New(Options{
-		Handler:     func(context.Context, []string) error { return nil },
-		ServiceHost: host,
-	})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	err = AcquireService(context.Background(), srv.Addr(), "pg", spells.Service{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "readiness failed")
-}
-
-func TestServiceAcquireNoHost(t *testing.T) {
-	// A per-process proc server (no ServiceHost) reports hosting unavailable, so the
-	// client falls back to running the service in-process for this run.
-	srv, err := New(Options{Handler: func(context.Context, []string) error { return nil }})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	err = AcquireService(context.Background(), srv.Addr(), "pg", spells.Service{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not host shared services")
-}
-
-// TestRunAdoptsClientAncestry pins the plumbing the daemon's re-entrancy check rests on.
-// The daemon, not the client, takes the project locks for an adopted run, so without the
+// TestRunAdoptsClientAncestry pins the plumbing the server's re-entrancy check rests on.
+// The server, not the client, takes the project locks for an adopted run, so without the
 // client's ancestry on ctx it cannot tell a lock it holds for THIS client's parent (a
 // deadlock it must refuse) from one it holds for an unrelated client (a wait that will
 // end). The ancestry only reaches it over the wire.
@@ -232,8 +118,8 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 }
 
 // TestRunAdoptsClientLease pins the other half of the same seam the ancestry uses. The
-// daemon runs the work in its own process, so the lease it would read from the environment is
-// whoever started the daemon; only the request carries the lease of the process that ASKED.
+// server runs the work in its own process, so the lease it would read from the environment is
+// whoever started the server; only the request carries the lease of the process that ASKED.
 func TestRunAdoptsClientLease(t *testing.T) {
 	got := make(chan string, 1)
 	s := newJobService(func(ctx context.Context, _ []string) error {
@@ -270,26 +156,20 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 	}
 }
 
-// TestRunRequestLeaseCrossesTheWire pins the field on the frame rather than on the struct: a
-// tag typo would leave every assertion above green while the daemon still saw nothing. The
-// missing-field case is the compatibility half: an older client sends no lease and must
-// decode to "" rather than failing the frame.
+// TestRunRequestLeaseCrossesTheWire pins the field on the encoded body rather than on the
+// struct: a tag typo would leave every assertion above green while the server still saw
+// nothing. A body with no lease decodes to "" rather than failing.
 func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeFrame(&buf, typeRun, runRequest{
-		Args: []string{"run", "build"}, Cwd: "/w", Protocol: protocolV2, Lease: "fleet/f3",
-	}))
-
-	typ, line, err := readFrame(&buf)
+	raw, err := json.Marshal(runRequest{Args: []string{"run", "build"}, Cwd: "/w", Lease: "fleet/f3"})
 	require.NoError(t, err)
-	require.Equal(t, typeRun, typ)
+	assert.Contains(t, string(raw), `"lease":"fleet/f3"`)
 	var got runRequest
-	require.NoError(t, json.Unmarshal(line, &got))
+	require.NoError(t, json.Unmarshal(raw, &got))
 	assert.Equal(t, "fleet/f3", got.Lease)
 
-	var old runRequest
-	require.NoError(t, json.Unmarshal([]byte(`{"type":"run","args":["run","build"],"cwd":"/w"}`), &old))
-	assert.Empty(t, old.Lease)
+	var none runRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"args":["run","build"],"cwd":"/w"}`), &none))
+	assert.Empty(t, none.Lease)
 }
 
 // TestRunWithholdsReportedError pins that a failure the handler already explained does not
@@ -325,19 +205,19 @@ func (misuseErr) Error() string { return "no such target" }
 func (misuseErr) ExitCode() int { return 2 }
 
 // TestRunHonorsTheErrorsOwnExitCode pins the 1-vs-2 split through adoption. Every
-// non-ExitError failure used to reply 1, so a misuse reported 2 with no daemon running
+// non-ExitError failure used to reply 1, so a misuse reported 2 with no server running
 // and 1 with one.
 func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
 	var reply runReply
 	s := newJobService(func(context.Context, []string) error { return misuseErr{} })
 	require.NoError(t, s.run(runRequest{Args: []string{"run", "bogus-target"}}, &reply))
-	assert.Equal(t, 2, reply.ExitCode, "a misuse stays a misuse when the daemon adopts it")
+	assert.Equal(t, 2, reply.ExitCode, "a misuse stays a misuse when the server adopts it")
 	assert.Equal(t, "no such target", reply.Err, "and it still says why")
 }
 
 // TestShutdownClosesServer pins the fix for the silent `server stop` no-op: a shutdown RPC
 // must actually tear the server down, not just acknowledge. It asserts the observable
-// signals a blocking daemon loop and `server stop`'s verification rely on (Done() closing
+// signals a blocking server loop and `server stop`'s verification rely on (Done() closing
 // and the socket going dead), because the shutdown handler cancels only the listener's own
 // context, and a caller cannot see that from the reply alone.
 func TestShutdownClosesServer(t *testing.T) {
@@ -349,7 +229,7 @@ func TestShutdownClosesServer(t *testing.T) {
 	addr := srv.Addr()
 	require.True(t, SocketLive(context.Background(), addr), "server should be live before shutdown")
 
-	// Done must not have fired yet; the daemon loop would still be blocked here.
+	// Done must not have fired yet; the server loop would still be blocked here.
 	select {
 	case <-srv.Done():
 		t.Fatal("Done fired before shutdown was requested")
@@ -358,25 +238,25 @@ func TestShutdownClosesServer(t *testing.T) {
 
 	require.NoError(t, Shutdown(context.Background(), addr))
 
-	// The blocking daemon loop wakes on Done(); it must close after the RPC shutdown.
+	// The blocking server loop wakes on Done(); it must close after the RPC shutdown.
 	select {
 	case <-srv.Done():
 	case <-time.After(2 * time.Second):
-		t.Fatal("Done did not close after shutdown; the daemon process would keep running")
+		t.Fatal("Done did not close after shutdown; the server process would keep running")
 	}
 
 	// And the socket must actually stop answering, which is what `server stop` polls to
-	// verify the daemon is gone instead of trusting the shutdown reply.
+	// verify the server is gone instead of trusting the shutdown reply.
 	require.Eventually(t, func() bool {
 		return !SocketLive(context.Background(), addr)
 	}, 2*time.Second, 20*time.Millisecond, "socket kept answering after shutdown")
 }
 
 // TestSocketLiveFalseForBogusAddr guards the negative path the stop/start probes depend on:
-// an address with no daemon (or a malformed one) reports not-live rather than erroring, so a
-// stop against nothing exits cleanly non-zero and a start does not think a daemon exists.
+// an address with no server (or a malformed one) reports not-live rather than erroring, so a
+// stop against nothing exits cleanly non-zero and a start does not think a server exists.
 func TestSocketLiveFalseForBogusAddr(t *testing.T) {
-	assert.False(t, SocketLive(context.Background(), "unix:///nonexistent/magus-daemon.sock"))
+	assert.False(t, SocketLive(context.Background(), "unix:///nonexistent/magus-server.sock"))
 	assert.False(t, SocketLive(context.Background(), "not-a-valid-endpoint::::"))
 }
 
@@ -395,7 +275,7 @@ func TestForwardVersionGate(t *testing.T) {
 	}{
 		{"same release adopts", "v1.0.0", "v1.0.0", true},
 		{"different release refuses", "v1.0.0", "v2.0.0", false},
-		{"release daemon refuses dev client", "v1.0.0", devVersionSentinel, false},
+		{"release server refuses dev client", "v1.0.0", devVersionSentinel, false},
 		{"empty server version disables the gate", "", devVersionSentinel, true},
 		{"same dev build adopts (identical fingerprint)", devVersionSentinel, devVersionSentinel, true},
 	}
@@ -409,7 +289,7 @@ func TestForwardVersionGate(t *testing.T) {
 			require.NoError(t, err)
 			defer srv.Close()
 			require.NoError(t, srv.Start())
-			t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+			t.Setenv(SocketEnv, srv.Addr())
 
 			code, err := Forward(context.Background(), []string{"run", "build", "x"}, tc.clientVersion, "")
 			if tc.wantAdopt {
@@ -427,10 +307,10 @@ func TestForwardVersionGate(t *testing.T) {
 }
 
 // TestForwardDevDifferentFingerprintRefused proves the core fix at the wire level: a dev
-// daemon (identity fingerprinted from its build) refuses a forwarded run whose version is a
+// server (identity fingerprinted from its build) refuses a forwarded run whose version is a
 // DIFFERENT dev fingerprint. Two distinct dev builds can't coexist in one test process, so
-// the mismatching client frame is hand-crafted with a fabricated "dev-*" identity that
-// cannot equal this binary's own. This is the stale-daemon incident in miniature.
+// the mismatching client request is hand-crafted with a fabricated "dev-*" identity that
+// cannot equal this binary's own. This is the stale-server incident in miniature.
 func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	var called atomic.Bool
 	srv, err := New(Options{
@@ -443,26 +323,18 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
-	conn, err := ep.Dial(context.Background())
-	require.NoError(t, err)
-	defer conn.Close()
-
 	// A dev identity that provably differs from any real fingerprint of this binary.
-	frame := `{"type":"run","args":["run","build","x"],"version":"dev-0000000000000000deadbeef","cwd":"/tmp","protocol":"v2"}` + "\n"
-	_, err = conn.Write([]byte(frame))
+	body := `{"args":["run","build","x"],"version":"dev-0000000000000000deadbeef","cwd":"/tmp"}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, socketURL(pathRun), strings.NewReader(body))
 	require.NoError(t, err)
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
+	resp, err := socketClient(ep).Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	var envelope struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, json.Unmarshal(bytes.TrimRight(buf[:n], "\n"), &envelope))
-	assert.Equal(t, "error", envelope.Type)
-	assert.Equal(t, ErrVersionMismatch.Error(), envelope.Message, "a mismatched dev fingerprint is refused as a version mismatch")
+	var refusal errorReply
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&refusal))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode, "a not-adopted refusal is a 409")
+	assert.Equal(t, ErrVersionMismatch.Error(), refusal.Message, "a mismatched dev fingerprint is refused as a version mismatch")
 	assert.False(t, called.Load(), "the refused run must not execute")
 }
 
@@ -474,7 +346,7 @@ func TestSubmitJobVersionGate(t *testing.T) {
 	t.Run("mismatched version refused", func(t *testing.T) {
 		var reply jobReply
 		s := &service{gateVersion: "v1.0.0", parentCtx: context.Background()}
-		err := s.submitJob(jobRequest{Magic: jobMagic, Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
+		err := s.submitJob(jobRequest{Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
 		assert.ErrorIs(t, err, ErrVersionMismatch)
 		assert.Empty(t, reply.Inv, "a refused job returns no invocation id")
 	})

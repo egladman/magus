@@ -23,10 +23,13 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // fakeShare stands in for *share.Manager: a fixed active share (or none), recording whether
 // CloseIf fired and with what id.
@@ -55,7 +58,7 @@ func liveShare(id string) *fakeShare {
 
 func newIsolatedService(t *testing.T, view shareView) *Service {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	return &Service{share: view}
 }
 
@@ -66,7 +69,7 @@ func as(grant types.Grant) context.Context {
 	return trail.ContextWithCredential(context.Background(), types.Credential{Class: types.ClassStored, ID: "0badf00d", Grant: grant})
 }
 
-// operator is the context the daemon's guard gives the operator token.
+// operator is the context the server's guard gives the operator token.
 func operator() context.Context { return as(types.GrantOperator) }
 
 func store(t *testing.T) *auth.Store {
@@ -220,7 +223,7 @@ func TestRevokeTakesNoPrefix(t *testing.T) {
 }
 
 func TestNilShareManagerConstructor(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	s := NewService((*share.Manager)(nil))
 	assert.Nil(t, s.share)
 	list, err := s.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
@@ -317,7 +320,7 @@ func TestCreateTokenRefusesAnExpiryItCannotHonor(t *testing.T) {
 	assert.WithinDuration(t, asked, resp.Msg.GetToken().GetExpireTime().AsTime(), time.Second)
 }
 
-// A disk that refuses the write is the daemon's fault, not the caller's: Internal, never
+// A disk that refuses the write is the server's fault, not the caller's: Internal, never
 // InvalidArgument.
 func TestCreateTokenDiskFailureIsInternal(t *testing.T) {
 	s := newIsolatedService(t, nil)
@@ -347,7 +350,7 @@ func TestCreateTokenMintsTheGrantItNames(t *testing.T) {
 	}
 }
 
-// Mounted behind the daemon's own guard (auth.Verify, tokens=write), a connector, console or
+// Mounted behind the server's own guard (auth.Verify, tokens=write), a connector, console or
 // viewer token is refused with 403 on every RPC and the operator is admitted.
 func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	s := newIsolatedService(t, nil)

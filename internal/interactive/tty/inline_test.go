@@ -149,7 +149,7 @@ func TestInlineViewWritesNothingForAnUnchangedFrame(t *testing.T) {
 	t.Parallel()
 	var buf fakeTerm
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 24}}
-	frame := "daemon running\npool 2/8\nuptime 3h\n"
+	frame := "server running\npool 2/8\nuptime 3h\n"
 	require.True(t, p.Paint(frame))
 	buf.Reset()
 

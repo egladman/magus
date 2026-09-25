@@ -400,11 +400,11 @@ func gitRun2(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// TestDriftHookBodyNeverBlocksAndNeedsNoDaemon runs the installed hook scripts directly,
-// with a command that cannot possibly succeed and no daemon anywhere nearby, and pins
+// TestDriftHookBodyNeverBlocksAndNeedsNoServer runs the installed hook scripts directly,
+// with a command that cannot possibly succeed and no server anywhere nearby, and pins
 // that both still exit 0. This is the whole safety contract types.DriftHookInstaller
 // promises: whatever the command does, the hook itself never fails a commit or a push.
-func TestDriftHookBodyNeverBlocksAndNeedsNoDaemon(t *testing.T) {
+func TestDriftHookBodyNeverBlocksAndNeedsNoServer(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
 

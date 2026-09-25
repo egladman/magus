@@ -72,7 +72,7 @@ func skipMergeDriverRefresh(ctx context.Context) bool {
 
 type magusCtxKey struct{}
 
-// withMagus injects a per-workspace Magus for daemon-adopted handlers.
+// withMagus injects a per-workspace Magus for server-adopted handlers.
 func withMagus(ctx context.Context, m *magus.Magus) context.Context {
 	return context.WithValue(ctx, magusCtxKey{}, m)
 }
@@ -111,11 +111,11 @@ var (
 )
 
 // loadMagus opens (once) the process's singleton workspace handle. extra Options apply only
-// to the first, memoizing call: the daemon serve path passes magus.WithMetricsCollection()
+// to the first, memoizing call: the server serve path passes magus.WithMetricsCollection()
 // so the bridge Magus feeds the /dashboard, while one-shot CLI callers pass none and stay a
 // true no-op.
 func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) (*magus.Magus, error) {
-	if m, ok := magusFromContext(ctx); ok { // daemon-adopted handlers bypass the singleton
+	if m, ok := magusFromContext(ctx); ok { // server-adopted handlers bypass the singleton
 		return m, nil
 	}
 	t := traceFromContext(ctx)
@@ -132,6 +132,9 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		opts := []magus.Option{magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
+		}
+		if globalCfg.Broker.Resolved() != types.BrokerOff {
+			opts = append(opts, magus.WithBroker(processBrokerClient()))
 		}
 		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
@@ -165,7 +168,7 @@ var (
 // the environment is the caller's choice and is left alone.
 //
 // Refcounted and shared across callers because loadMagus and inspectWorkspace can both
-// first-load concurrently (the daemon bootstraps both in parallel goroutines): a plain
+// first-load concurrently (the server bootstraps both in parallel goroutines): a plain
 // save/restore pair races there, since either could observe the other's already-raised
 // GOGC as "the prior value" and restore to it instead of the true original, or one
 // restoring early could drop GOGC out from under the other's still-running load. Only
@@ -251,9 +254,9 @@ func (errSilent) Error() string { return "silent exit" }
 func (errSilent) AlreadyReported() bool { return true }
 
 // ExitCode states the process status this failure carries, for the ADOPTED path.
-// exitCodeOf reads the field directly; the daemon holds the error as a plain `error`
+// exitCodeOf reads the field directly; the server holds the error as a plain `error`
 // and cannot, so without the method every forwarded failure collapsed to 1 and the
-// documented 1-vs-2 split existed only when no daemon was running.
+// documented 1-vs-2 split existed only when no server was running.
 func (e errSilent) ExitCode() int { return e.exitCode }
 
 // exitUsage is the exit code for a command-line misuse: a missing or unknown
@@ -276,7 +279,7 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // contended no-wait project lock (lockContendedExit) and a step the machine's build
 // budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here:
 // each error states its own code and exitCodeOf reads it through proc.ExitCode, which
-// is what lets the daemon report the same status for a run it executed on a client's
+// is what lets the server report the same status for a run it executed on a client's
 // behalf. A caller that cannot tell either from 1 reads a busy machine as a broken
 // build: CI retries nothing, and an agent debugs a target that never ran.
 const exitUsage = 2
@@ -288,7 +291,7 @@ type errUsage struct{ msg string }
 
 func (e errUsage) Error() string { return e.msg }
 
-// ExitCode carries exitUsage across the daemon boundary; see errSilent.ExitCode.
+// ExitCode carries exitUsage across the server boundary; see errSilent.ExitCode.
 func (errUsage) ExitCode() int { return exitUsage }
 
 // usagef builds an errUsage with a formatted message.
@@ -326,41 +329,10 @@ func splitOnDashDash(args []string) (before, after []string) {
 	return args, nil
 }
 
-// splitOnThen splits args at the chain separator, returning the run's own args and
-// the verbs to apply to what it produced.
-//
-// The separator is "--then" rather than "--" because "--" already forwards extra
-// args to spells (`magus run test -- -run TestFoo`), and it is a separator rather
-// than bare words because `magus run build web api` already takes trailing project
-// args: `magus run build file x` would otherwise be indistinguishable from a
-// project named "file".
-// found distinguishes an ABSENT separator from one with no verb after it. Without
-// it, `magus run build --then` silently ran as a plain build: the same
-// accepted-and-ignored failure this grammar exists to avoid.
-//
-// "--" is split off FIRST and outranks it, because everything after "--" is the
-// spell's verbatim argv: scanning the whole slice let `magus run test -- --then`
-// hijack an argument the spell was meant to receive. The "--" and its arguments are
-// re-attached to the run's own args, so `magus run test --then value -- -run TestFoo`
-// still forwards -run TestFoo.
-func splitOnThen(args []string) (before, after []string, found bool) {
-	head, extra := splitOnDashDash(args)
-	i := slices.Index(head, "--then")
-	if i < 0 {
-		return args, nil, false
-	}
-	before = slices.Clone(head[:i])
-	if len(head) != len(args) {
-		before = append(before, "--")
-		before = append(before, extra...)
-	}
-	return before, head[i+1:], true
-}
-
 // hintCanonicalSpelling nudges toward the canonical name when the user typed
 // another one. The fact comes off the parsed Target (Declared/DeclaredCharms), so
 // this is presentation only: types.ParseTarget stays a pure function and the
-// daemon and MCP paths get the same information without inheriting stderr output.
+// server and MCP paths get the same information without inheriting stderr output.
 //
 // Silent on canonical input, and deduped by interactive.Emit, so it teaches once
 // rather than nagging.

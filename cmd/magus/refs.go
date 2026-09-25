@@ -132,7 +132,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
 		}
 		if len(ans.Gaps) > 0 {
-			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", hint.ServerStart)
+			fmt.Fprintf(os.Stderr, "  the server's auto-indexer also keeps indexes current while `%s` runs\n", hint.ServerStart)
 		}
 		emitNearest(os.Stderr, g.NearestSymbol(pos[0]))
 		return exitForVerdict(ans.Verdict)

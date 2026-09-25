@@ -10,7 +10,7 @@
 //
 // What belongs here: a preference someone chose deliberately and would want on their other
 // machine. What does not: one-time bookkeeping (dashboard-collapse-seeded), session state (open
-// tabs, the last daemon connected to), and test fixtures. See settings/model.ts for why each of
+// tabs, the last server connected to), and test fixtures. See settings/model.ts for why each of
 // those is excluded rather than merely forgotten.
 
 import { persisted } from "../lib/persist";

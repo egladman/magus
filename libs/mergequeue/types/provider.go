@@ -35,7 +35,43 @@ type Provider interface {
 	MergeChange(ctx context.Context, c Change, m MergeOptions) (MergeResult, error)
 	// KickBack removes c's merge intent, wherever it lives, and tells its author why.
 	KickBack(ctx context.Context, c Change, commit string, k Kick) error
+	// Mark leaves c showing m and no other mark; [MarkNone] clears both. Marking a change
+	// that already shows m is success.
+	Mark(ctx context.Context, c Change, m Mark) error
+	// Flag shows f on c when on and clears it otherwise, leaving c's mark and other flags
+	// as they are. Either when c already shows it so is success.
+	Flag(ctx context.Context, c Change, f Flag, on bool) error
 }
+
+// Mark is which of the two states the queue tracks at a service level a change shows
+// where people look (github: a label). A mark is a courtesy: the status and the
+// kick-back comment are the record, and the queue reads a mark back only to clear one
+// left on a change it no longer holds.
+type Mark string
+
+const (
+	MarkNone     Mark = ""         // neither
+	MarkQueued   Mark = "queued"   // the queue holds the change
+	MarkRejected Mark = "rejected" // the queue kicked the change back
+)
+
+// Valid reports whether m is one of the three marks.
+func (m Mark) Valid() bool {
+	return m == MarkNone || m == MarkQueued || m == MarkRejected
+}
+
+// Flag is a property of a change the queue shows where people look (github: a label).
+// Unlike a [Mark], flags are independent of the queue's state and of each other: a
+// queued change can show any of them. A flag is a courtesy, as a mark is.
+type Flag string
+
+// FlagChangesGenerator says the queue cannot regenerate the change's generated files
+// itself, since the build tool cannot prove their regeneration runs none of the change's
+// code. When the base moves them, only the author can regenerate them.
+const FlagChangesGenerator Flag = "changes_generator"
+
+// Valid reports whether f is a flag the queue shows.
+func (f Flag) Valid() bool { return f == FlagChangesGenerator }
 
 // Approval is the review state of a change at one exact commit, and what the provider
 // says of the change now.
@@ -280,6 +316,23 @@ type Kick struct {
 	Paths           []string // the files at issue: conflicting, or outside what may differ
 	With            []string // base-branch commits touching Paths ("abc123 subject")
 	CandidateCommit string   // the candidate it was validated in, when one was built
+	// Source is the validation run apply followed, as the provider names it
+	// ("acme/widgets/runs/7"); empty when apply read a directory.
+	Source string
+	// Reproduce is how to run what validation ran on the change's candidate again; nil
+	// when validation did not decide the kick-back, as for a conflict planning found.
+	Reproduce *Reproduction
+	// Flag is the flag the change shows for the reason it was kicked back, for the report
+	// to name; empty when none explains it.
+	Flag Flag
+}
+
+// Reproduction is the hook command lines validation ran on a candidate, as given to
+// `magus queue validate`: run with its --gate and --regenerate, and --only the change,
+// they build and gate that candidate again.
+type Reproduction struct {
+	Gate       string
+	Regenerate string // empty when validation ran no regeneration
 }
 
 // ArtifactLister is the CI system's side of the queue: what one validation run has
@@ -292,12 +345,28 @@ type ArtifactLister interface {
 
 // ArtifactListing is one listing of a validation run's artifacts.
 type ArtifactListing struct {
+	// Run is what started the run and what it ran, read in the same listing.
+	Run RunOrigin
 	// Complete says the run has finished, so nothing more will be uploaded.
 	Complete bool
 	// Headers are what a download needs, its credential included. They are sent to each
 	// artifact's URL and dropped on a redirect to another host.
 	Headers   map[string]string
 	Artifacts []Artifact
+}
+
+// RunOrigin is what the provider says started a validation run and what it ran. A run
+// a change started ran that change's own definition, so what it uploaded is the change
+// author's claim, never validation's.
+type RunOrigin struct {
+	Repo       string // repository the run belongs to
+	HeadRepo   string // repository whose commit it ran
+	HeadBranch string // branch it ran on
+	Event      string // what started it, in the provider's words (github: push, pull_request, ...)
+	// BranchEvent says Event runs the definition HeadBranch holds (github: push and
+	// workflow_dispatch), never one a change supplied.
+	BranchEvent bool
+	Definition  string // what it ran (github: the workflow file's path)
 }
 
 // Artifact is one uploaded zip archive.

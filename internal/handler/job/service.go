@@ -1,10 +1,10 @@
-// Package job is the console-facing JobService handler: the daemon's CONTROL surface, the
+// Package job is the console-facing JobService handler: the server's CONTROL surface, the
 // mutating sibling of the read-only activity/status/viewer handlers. Its RPCs submit background
 // maintenance jobs (graph sync, activity-trail rotate, cache clear) through the same
 // fire-and-forget, coalescing proc mechanism the CLI's `magus job run` uses, so a double-click never
 // starts a second copy. Each response carries a metadata snapshot: the job's running state, its
 // last completed run (from the activity trail), and the current size of what it maintains, so a
-// caller renders a job's state in one round trip. The daemon mounts it behind the bearer guard;
+// caller renders a job's state in one round trip. The server mounts it behind the bearer guard;
 // it is never served unauthenticated.
 package job
 
@@ -38,7 +38,7 @@ type workspace interface {
 	CacheDiskBytes() int64
 }
 
-// Service implements jobv1alpha1connect.JobServiceHandler. It submits jobs to the daemon's own proc
+// Service implements jobv1alpha1connect.JobServiceHandler. It submits jobs to the server's own proc
 // socket (self-dial, so it rides the exact coalescing/journal path an external submit would) and
 // reads the workspace trail + cache for the metadata it returns.
 type Service struct {
@@ -48,11 +48,11 @@ type Service struct {
 	// rows unwritten, which is what a server with no store does rather than failing a
 	// submit: the job still runs, and only its row is missing.
 	store *jobstore.Store
-	// socket returns the daemon's proc socket address to submit to. The daemon sets
-	// MAGUS_DAEMON_SOCKET on itself before serving, so the default reads that.
+	// socket returns the server's proc socket address to submit to. The server sets
+	// MAGUS_PROC_SOCKET on itself before serving, so the default reads that.
 	socket func() string
 	// submitFn and statusFn are the proc entry points, injectable so the submit/coalesce mapping
-	// is unit-testable without a live daemon socket. They default to the real proc calls.
+	// is unit-testable without a live server socket. They default to the real proc calls.
 	submitFn func(ctx context.Context, addr string, argv []string, version string) (string, error)
 	statusFn func(ctx context.Context, addr string) (*proc.StatusReply, error)
 }
@@ -64,7 +64,7 @@ func NewService(ws workspace, version string, store *jobstore.Store) *Service {
 		ws:       ws,
 		version:  version,
 		store:    store,
-		socket:   func() string { return os.Getenv("MAGUS_DAEMON_SOCKET") },
+		socket:   func() string { return os.Getenv("MAGUS_PROC_SOCKET") },
 		submitFn: proc.SubmitJob,
 		statusFn: proc.QueryStatus,
 	}
@@ -76,7 +76,7 @@ var _ jobv1alpha1connect.JobServiceHandler = (*Service)(nil)
 // and the CLI both speak the bare id, so this is the only place the two spellings meet.
 const jobsPrefix = "jobs/"
 
-// ListJobs returns every job, the daemon's own catalog beside the delegated ones, with each
+// ListJobs returns every job, the server's own catalog beside the delegated ones, with each
 // one's holder, state, last run and target size.
 //
 // The catalog leads and the stored rows follow, so the fixed set a reader can act on stays
@@ -107,7 +107,7 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 
 // rows reads the job store, empty when there is none or it will not read. A listing that
 // drops the delegated jobs beats one that fails: the catalog beside it is still true, and
-// the daemon's maintenance surface must not go dark because a plan file is unreadable.
+// the server's maintenance surface must not go dark because a plan file is unreadable.
 func (s *Service) rows() []types.Job {
 	if s.store == nil {
 		return nil
@@ -152,7 +152,7 @@ func (s *Service) RunJob(ctx context.Context, req *connect.Request[jobv1.RunJobR
 	return s.submit(ctx, id)
 }
 
-// submit resolves name to its worker argv, submits it to the daemon, and builds the response.
+// submit resolves name to its worker argv, submits it to the server, and builds the response.
 // A coalesced submit (empty invocation id back) is ALREADY_RUNNING, not an error: the response
 // still carries the running job's id and its metadata. Only real failures use error codes.
 func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jobv1.RunJobResponse], error) {
@@ -162,7 +162,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	}
 	addr := s.socket()
 	if addr == "" {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("job: no daemon socket to submit to; run `magus server start`"))
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("job: no server socket to submit to; run `magus server start`"))
 	}
 	// Snapshot the running set BEFORE submitting: on a coalesced submit the already-running job
 	// predates our call, so it is reliably in this snapshot; a query taken AFTER the submit could
@@ -176,7 +176,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	info := s.job(j, running, s.row(j.Name))
 
 	state := jobv1.SubmitState_SUBMIT_STATE_SUBMITTED
-	if inv == "" { // the daemon coalesced this into an identical in-flight job
+	if inv == "" { // the server coalesced this into an identical in-flight job
 		state = jobv1.SubmitState_SUBMIT_STATE_ALREADY_RUNNING
 		inv = running[argvKey(j.Argv)] // report the already-running invocation
 	}
@@ -194,15 +194,15 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 // duration and error and no invocation, so a run first written when it ends could never
 // name the log it produced.
 //
-// Best-effort, like the trail the daemon writes beside it. The store refuses a write from
-// a checkout bound to a lease, so a daemon serving a worker's worktree leaves the row
+// Best-effort, like the trail the server writes beside it. The store refuses a write from
+// a checkout bound to a lease, so a server serving a worker's worktree leaves the row
 // alone rather than failing a submit that otherwise succeeded.
 func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv string) {
 	if s.store == nil {
 		return
 	}
 	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
-		row.Holder = types.HolderDaemon
+		row.Holder = types.HolderServer
 		row.Criteria = j.Desc
 		row.State = types.StateRunning
 		if row.LastRun == nil {
@@ -222,7 +222,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 	info := &jobv1.Job{
 		Name:        jobsPrefix + j.Name,
 		Id:          j.Name,
-		Holder:      jobv1.JobHolder_JOB_HOLDER_DAEMON,
+		Holder:      jobv1.JobHolder_JOB_HOLDER_SERVER,
 		Description: j.Desc,
 		State:       string(types.StateDeclared),
 		Target:      s.targetSize(j),
@@ -274,8 +274,8 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Result:          wireJobResult(row.Result),
 		Deadline:        row.Deadline,
 	}
-	if row.Holder.OrSession() == types.HolderDaemon {
-		j.Holder = jobv1.JobHolder_JOB_HOLDER_DAEMON
+	if row.Holder.OrSession() == types.HolderServer {
+		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
 	}
 	for _, r := range row.Releases {
 		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt})
@@ -376,7 +376,7 @@ func (s *Service) targetSize(j jobstore.CatalogEntry) *jobv1.ResourceSize {
 	}
 }
 
-// runningByArgv snapshots the daemon's live calls into a map from worker-argv key to invocation
+// runningByArgv snapshots the server's live calls into a map from worker-argv key to invocation
 // id, so callers can tell whether a given job is in flight (and which invocation). A failed
 // status query yields an empty map: nothing shows as running, never an error.
 func (s *Service) runningByArgv(ctx context.Context) map[string]string {
@@ -399,9 +399,9 @@ func argvKey(argv []string) string { return strings.Join(argv, "\x00") }
 // surface, scoped to this invocation.
 //
 // Empty when there is no invocation, which is the one case the proto's "empty when no
-// console is mounted" covers: a submit the daemon could not name cannot be linked to. It
+// console is mounted" covers: a submit the server could not name cannot be linked to. It
 // is a PATH rather than an absolute URL because the reader is the console, served from the
-// daemon it just called, so it resolves this against its own origin; see
+// server it just called, so it resolves this against its own origin; see
 // console.SurfaceLink.
 func consoleURL(inv string) string {
 	if inv == "" {

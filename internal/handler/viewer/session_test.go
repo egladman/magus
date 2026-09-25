@@ -15,15 +15,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 )
 
 // serveSessions mounts a Service over a real session store seeded with events, behind a real
-// transport so the RPC sees a loopback peer the way the daemon's does.
+// transport so the RPC sees a loopback peer the way the server's does.
 func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1connect.ViewerServiceClient {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
@@ -120,7 +121,7 @@ func TestGetSessionActivityNoWrite(t *testing.T) {
 	assert.Len(t, resp.Msg.GetUnrecorded(), 3)
 }
 
-// TestGetSessionActivityRefusals pins the three refusals: an unwired daemon, a malformed id, and
+// TestGetSessionActivityRefusals pins the three refusals: an unwired server, a malformed id, and
 // a peer that is not loopback.
 func TestGetSessionActivityRefusals(t *testing.T) {
 	unwired := NewService(&fakeOutputs{}, &fakeRuns{})

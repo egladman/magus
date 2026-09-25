@@ -3,11 +3,14 @@ package url
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/require"
 )
 
-// loopHost is the discovered daemon host:port the caller would pass in. It is the
-// link's ORIGIN under the daemon-origin grammar: http://<loopHost>/console/graph/.
+func TestMain(m *testing.M) { testkit.Main(m) }
+
+// loopHost is the discovered server host:port the caller would pass in. It is the
+// link's ORIGIN under the server-origin grammar: http://<loopHost>/console/graph/.
 const loopHost = "127.0.0.1:7391"
 
 // tok is a representative exchange code (mgx_ + alnum, no chars that encode).
@@ -63,13 +66,13 @@ func TestGraphLink(t *testing.T) {
 			want: "http://127.0.0.1:7391/console/graph/#code=mgx_abc123DEF456",
 		},
 		{
-			name: "no daemon: empty host yields sentinel",
+			name: "no server: empty host yields sentinel",
 			opts: GraphLinkOpts{
 				Host:  "",
 				Code:  tok,
 				Query: "kind:target",
 			},
-			err: ErrNoDaemon,
+			err: ErrNoServer,
 		},
 		{
 			name: "empty token omits the token directive",

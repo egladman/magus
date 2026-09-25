@@ -183,21 +183,11 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 			return built{}, err
 		}
 	}
-	// A directory of its own per candidate, so no hook run on one can have planted
-	// anything where another will look.
-	box, err := os.MkdirTemp(s.scratch, "candidate-"+c.ID+"-")
+	cand, err := checkout(ctx, v, root, s.scratch, "candidate-"+c.ID, from)
 	if err != nil {
 		return built{}, err
 	}
-	cand := types.Candidate{Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
-	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
-		_ = os.RemoveAll(box)
-		return built{}, err
-	}
-	if err := v.CreateCheckout(ctx, root, cand.Dir, from); err != nil {
-		_ = os.RemoveAll(box)
-		return built{}, err
-	}
+	cand.Change = c.ID
 	defer func() {
 		if err != nil {
 			// The build's own error is what the caller acts on.
@@ -216,6 +206,26 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 		return built{}, err
 	}
 	return built{Candidate: cand, touched: slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled)))), settled: settled}, nil
+}
+
+// checkout checks commit out in a directory of its own under scratch, named from name,
+// beside a scratch directory private to it, so no hook run in another checkout can have
+// planted anything where one run here will look. On error nothing is left behind.
+func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit string) (types.Candidate, error) {
+	box, err := os.MkdirTemp(scratch, name+"-")
+	if err != nil {
+		return types.Candidate{}, err
+	}
+	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
+	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	if err := v.CreateCheckout(ctx, root, cand.Dir, commit); err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	return cand, nil
 }
 
 // discard removes a candidate's checkout and its private directory.
@@ -288,26 +298,37 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 	if err != nil {
 		return "", err
 	}
-	if len(regen) == 0 {
-		return b.Commit, nil
+	keep, err := regenerateWrites(ctx, v, s, b, regenerate, regen, units)
+	if err != nil || len(keep) == 0 {
+		return b.Commit, err
 	}
-	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Onto: s.onto, Change: s.change, Paths: regen, Units: units}); err != nil {
-		return "", err
+	return commitRegenerated(ctx, v, b, keep)
+}
+
+// regenerateWrites runs regenerate on regen in b's checkout and returns the declared files
+// it rewrote, uncommitted. A file the build tool maintains is put back, and a write
+// nothing declares is refused.
+func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b built, regenerate types.RegenerateFunc, regen, units []string) ([]string, error) {
+	if len(regen) == 0 {
+		return nil, nil
+	}
+	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Change: s.change, Paths: regen, Units: units}); err != nil {
+		return nil, err
 	}
 	written, err := v.DirtyFiles(ctx, b.Dir, nil)
 	if err != nil || len(written) == 0 {
-		return b.Commit, err
+		return nil, err
 	}
 	writes, err := s.facts.Classify(ctx, written)
 	if err != nil {
-		return "", fmt.Errorf("classify: %w", err)
+		return nil, fmt.Errorf("classify: %w", err)
 	}
 	var keep, stray []string
 	for _, p := range written {
 		switch w := writes[p]; {
 		case w.Maintained:
 			if err := restore(ctx, v, b.Candidate, p); err != nil {
-				return "", err
+				return nil, err
 			}
 		case w.Declared():
 			keep = append(keep, p)
@@ -316,12 +337,40 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 		}
 	}
 	if len(stray) > 0 {
-		return "", &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
+		return nil, &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
 	}
-	if len(keep) == 0 {
-		return b.Commit, nil
-	}
+	return keep, nil
+}
+
+func commitRegenerated(ctx context.Context, v types.BuildVCS, b built, keep []string) (string, error) {
 	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: keep})
+}
+
+// generationOf asks the build tool what regenerating outputs runs, against every file c
+// changed since baseCommit.
+func generationOf(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, baseCommit string, c types.Change, outputs []string) (types.Generation, error) {
+	changed, err := v.RangeFiles(ctx, root, baseCommit, c.Head, nil)
+	if err != nil {
+		return types.Generation{}, err
+	}
+	g, err := f.Generation(ctx, outputs, changed)
+	if err != nil {
+		return types.Generation{}, fmt.Errorf("generation of %s: %w", joinPaths(outputs), err)
+	}
+	return g, nil
+}
+
+// unprovenWhy says why g does not prove a regeneration runs none of a change's code, and
+// the paths that say so, falling back to outputs.
+func unprovenWhy(g types.Generation, outputs []string) (string, []string) {
+	why, paths := g.Unbounded, g.Code
+	if why == "" {
+		why = "it changes code their regeneration runs"
+	}
+	if len(paths) == 0 {
+		paths = outputs
+	}
+	return why, paths
 }
 
 // restore writes path in cand's checkout back to its content at cand's commit.

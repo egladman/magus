@@ -11,6 +11,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // plantStore points the per-repository session store at a temp directory and returns the
@@ -22,7 +23,7 @@ import (
 // failure a fake store could not catch.
 func plantStore(t *testing.T) (root, dir string) {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	root = t.TempDir()
 	dir, err := sessions.Dir(root)
 	if err != nil {
@@ -288,7 +289,7 @@ func TestAttentionHandler_MalformedBodyReturns400(t *testing.T) {
 
 // TestAttentionHandler_OversizedBodyIsRefused proves the request body is capped: a POST
 // larger than handler.MaxWireBodyBytes fails the decode instead of being read whole into
-// memory, so an authenticated or LAN-reachable client cannot exhaust the daemon with one
+// memory, so an authenticated or LAN-reachable client cannot exhaust the server with one
 // giant body. attention stands in for every raw-JSON route wrapped with LimitRequestBody.
 func TestAttentionHandler_OversizedBodyIsRefused(t *testing.T) {
 	root, _ := plantStore(t)

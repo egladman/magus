@@ -1,9 +1,11 @@
 name: CI
 
-# Validates a change. Nothing here publishes an artifact. The top-level default is
-# contents: read; the advisor holds pull-requests: write for its comment, and the
-# regenerate job alone holds contents: write, for the one thing anything here pushes:
-# regenerated output on a pull request a human labelled FIX_LABEL.
+# Validates a change. Nothing here publishes an artifact or pushes. The top-level default
+# is contents: read; the advisor holds pull-requests: write for its comment.
+#
+# Cache rule: a job holding a secret, a write token or id-token restores no Actions cache.
+# main's cache scope is writable by any main-scoped run, the merge queue's validation
+# included, and that runs pull-request code.
 #
 # Four workflows, one trigger each, and the name says which: ci.yaml validates (pull
 # request), cd.yaml ships what a merge produces (main push), release.yaml cuts a release
@@ -84,10 +86,6 @@ env:
   # The cost is real: output from concurrently running projects interleaves, so
   # read a shard log by target rather than top to bottom.
   MAGUS_LOG_STREAM: '1'
-  # STANDING consent for magus to push regenerated output to a pull request's branch:
-  # present means "keep this branch settled against main", so the same PR is fixed again
-  # the next time main breaks it. Remove the label to stop.
-  FIX_LABEL: 'magus:regenerate:requested'
 
 jobs:
   plan:
@@ -119,20 +117,29 @@ jobs:
       # later `mise install` step put pnpm and node somewhere no subsequent step could
       # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
       # the install also re-enables its cache: it only saves when it installed.
+      #
+      # No cache on main: this plan's matrix becomes the argv of the shard job that holds
+      # the cache signing key, so a poisoned toolchain here reaches that key.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
+          cache: ${{ github.event_name == 'pull_request' }}
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
       # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
       # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
       # is rejected by the action's reachable-from-main gate every single time.
+      #
+      # The history is what last-passed reads on main. It is unsigned, so a main-scoped
+      # run can plant one; the worst it buys is a main run that gates less. This job holds
+      # no secret and no write token.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+          restore-history: 'true'
 
       # setup-magus's source build provisions its own Go via actions/setup-go, which
       # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
@@ -190,14 +197,10 @@ jobs:
           # Read by the github spell's last_green_run alone. Unset, it answers null
           # and the plan fans out as it always has.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Two commands through a file, never a pipe: the preflight holds project `.`'s
-        # lock while it runs, so a piped ci-shard starting in `.` beside it found the
-        # lock held and failed fast. `-e` stops at a failed plan, so ci-shard never
-        # runs on a partial file.
+        # ci-shard waits for its kernel-proven magus upstream to finish with `.` before
+        # locking it. `shell: bash` for pipefail, so a failed plan fails the step itself.
         shell: bash
-        run: |
-          magus affected ci --plan --preflight generate --no-default-charms --concurrency-profile aggressive > "$RUNNER_TEMP/plan.json"
-          magus run ci-shard:gha --no-default-charms < "$RUNNER_TEMP/plan.json"
+        run: magus affected ci --plan --preflight generate --no-default-charms --concurrency-profile aggressive | magus run ci-shard:gha --no-default-charms
 
       # Determinism, in this job rather than its own: the saving is a runner and a from-source
       # magus build, not a generate pass.
@@ -216,156 +219,6 @@ jobs:
       # only; drift against HEAD is decided here and in the shards, nowhere else.
       - name: Replay every gated generator and compare declared outputs
         run: magus run generate:rw --race=replay --concurrency-profile aggressive
-
-  # Pushes regenerated output to a pull request a human labelled FIX_LABEL, and settles the
-  # labelled pull requests a push to main put in conflict. Nothing requires it: a failed fix
-  # leaves the pull request as it already was.
-  #
-  # Its own job because a token's scopes belong to the whole JOB, not to a step. This is the
-  # only job holding contents: write, and it runs a pull request's code only after the label
-  # confirms a human asked, so an unlabelled pull request's code never runs beside a token
-  # that can push. A fork is excluded outright: its token is read-only whatever this asks.
-  #
-  # The label is read live rather than from the event payload, which is why the job runs on
-  # every same-repo pull request instead of being skipped by an `if:` on the payload: a
-  # re-run replays the payload, so labelling and re-running would read the old labels.
-  #
-  # A push by the Actions token starts no workflow run, so a fix cannot trigger itself.
-  regenerate:
-    name: magus regenerate
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-      pull-requests: write
-    # One settle at a time per pull request, and one per main: two pushes racing to merge main
-    # into the same branch would have the second push rejected.
-    concurrency:
-      group: regenerate-${{ github.event.pull_request.number || 'main' }}
-      cancel-in-progress: false
-    steps:
-      # What wants regenerating, decided before anything is checked out or built, so a pull
-      # request nobody labelled and a push that conflicts nothing cost one API call.
-      #
-      # On a push, mergeable is GitHub's own answer to "did main just break this", recomputed
-      # when the base moves. UNKNOWN means still computing, so poll rather than read it as
-      # fine. Generated drift is not chased on a push: it comes from a pull request's own
-      # commits, which arrive as a pull_request run.
-      - id: work
-        name: Find what wants regenerating
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
-          CONFLICTING: ${{ runner.temp }}/conflicting.txt
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            labels=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name')
-            if grep -qxF "$FIX_LABEL" <<<"$labels"; then
-              echo "requested=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "no $FIX_LABEL label; nothing to regenerate"
-            fi
-            exit 0
-          fi
-          prs="$RUNNER_TEMP/prs.json"
-          for _ in 1 2 3 4 5 6; do
-            gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main --label "$FIX_LABEL" --limit 50 \
-              --json number,headRefName,isCrossRepository,mergeable > "$prs"
-            [ "$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' "$prs")" = "0" ] && break
-            sleep 10
-          done
-          jq -r '.[] | select(.mergeable == "CONFLICTING" and (.isCrossRepository | not))
-                     | "\(.number) \(.headRefName)"' "$prs" > "$CONFLICTING"
-          echo "labelled and open: $(jq length "$prs"), conflicting: $(wc -l < "$CONFLICTING")"
-          if [ -s "$CONFLICTING" ]; then
-            echo "requested=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # The head BRANCH by name on a pull request: the default refs/pull/N/merge is
-      # base-already-merged, and the fixers refuse to push it. A push checks out main itself,
-      # so the magus and the scripts that settle other branches are main's.
-      - if: steps.work.outputs.requested == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.sha }}
-          fetch-depth: 0
-          filter: blob:none
-
-      # cache_save: false because this job runs a pull request's code, and on a push to main
-      # a saved cache is one every later trusted run restores.
-      - if: steps.work.outputs.requested == 'true'
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: '2026.4.8'
-          env: false
-          cache_save: false
-
-      - if: steps.work.outputs.requested == 'true'
-        uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          source-path: .
-
-      - name: Restore the mise-pinned Go toolchain
-        if: steps.work.outputs.requested == 'true'
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-
-      # Only the writing advisors: the read-only ones run in the advisor job.
-      - name: Regenerate the pull request
-        if: github.event_name == 'pull_request' && steps.work.outputs.requested == 'true'
-        uses: ./.github/actions/advice
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          fix-merge-conflict: 'true'
-          fix-generated-drift: 'true'
-          fix-label: ${{ env.FIX_LABEL }}
-          merge-conflicts: 'false'
-          hand-edited-generated: 'false'
-          target-outputs: 'false'
-          doctor: 'false'
-          version-floor: 'false'
-          blast-radius: 'false'
-          unclaimed: 'false'
-          skip-cache: 'false'
-          conformance: 'false'
-          missing-target: 'false'
-          api-surface: 'false'
-          first-contribution: 'false'
-
-      # The script, not the advice action: an action step cannot loop, and each pull request
-      # needs its own branch checked out by name. main's copy of it, taken before any branch
-      # is checked out over the workspace.
-      #
-      # A push event carries no pull request, so each one gets the event a pull_request run
-      # would have had: GitHub's own pull request object, under the same key.
-      - name: Settle labelled pull requests this push put in conflict
-        if: github.event_name != 'pull_request' && steps.work.outputs.requested == 'true'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUZZ_INCLUDE_PATH: ${{ runner.temp }}/advice
-          CONFLICTING: ${{ runner.temp }}/conflicting.txt
-        run: |
-          set -euo pipefail
-          cp -R .github/actions/advice "$BUZZ_INCLUDE_PATH"
-          ADVICE_INPUTS=$(jq -cn --arg label "$FIX_LABEL" '{"fix-merge-conflict": "true", "fix-label": $label}')
-          export ADVICE_INPUTS
-          status=0
-          while read -r number ref; do
-            event="$RUNNER_TEMP/event-$number.json"
-            gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '{pull_request: .}' > "$event"
-            git fetch --no-tags origin "+refs/heads/$ref:refs/remotes/origin/$ref"
-            git merge --abort 2>/dev/null || true
-            git clean -fd
-            git checkout --force -B "$ref" "origin/$ref"
-            GITHUB_EVENT_PATH="$event" magus buzz "$BUZZ_INCLUDE_PATH/fix-merge-conflict.buzz" </dev/null \
-              || { echo "::warning::could not settle #$number"; status=1; }
-          done < "$CONFLICTING"
-          exit "$status"
 
   ci:
     name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
@@ -397,10 +250,13 @@ jobs:
       # later `mise install` step put pnpm and node somewhere no subsequent step could
       # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
       # the install also re-enables its cache: it only saves when it installed.
+      #
+      # Both restores are pull-request only: on main this job holds the cache signing key.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
+          cache: ${{ github.event_name == 'pull_request' }}
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
@@ -411,6 +267,7 @@ jobs:
         with:
           installation-strategy: source
           source-path: .
+          restore-history: ${{ github.event_name == 'pull_request' }}
 
       # setup-magus's source build provisions its own Go via actions/setup-go, which
       # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
@@ -448,10 +305,16 @@ jobs:
       # here, silently, because usage errors exited 0 and continue-on-error hid
       # what was left. Exit codes became meaningful in #22, which is what finally
       # made a step that never worked start saying so.
+      #
+      # The matrix comes from the plan job's output: env, never interpolated into the script.
       - name: Annotate affected projects
         continue-on-error: true
+        env:
+          PROJECTS: ${{ matrix.projects }}
+        shell: bash
         run: |
-          for p in ${{ matrix.projects }}; do
+          read -ra projects <<<"$PROJECTS"
+          for p in "${projects[@]}"; do
             magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
 
@@ -587,10 +450,13 @@ jobs:
       # later `mise install` step put pnpm and node somewhere no subsequent step could
       # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
       # the install also re-enables its cache: it only saves when it installed.
+      #
+      # cache: false because this job holds pull-requests: write.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
+          cache: false
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -635,13 +501,12 @@ jobs:
       # action so other workspaces get them with one `uses:` line; turn one off by name
       # (merge-conflicts: 'false') rather than by editing this step.
       #
-      # The fixers are not here: they write, and the regenerate job runs them on the label.
-      # offer-fix-label is what tells the conflict comment that job exists.
+      # No fixer and no fix label: a fixer runs the pull request's own generators beside a
+      # token that can push. Regeneration for a merge is the queue's, from main's code.
       - uses: ./.github/actions/advice
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          offer-fix-label: 'true'
           baseline: ${{ steps.baseline.outputs.path }}
 
   # One stable check name a branch rule can require, standing for the whole run.
@@ -708,10 +573,12 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # merge-history folds this run into the restored history. Holds only contents: read.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+          restore-history: 'true'
 
       # Outcome first: it describes the run that just finished, and the history merge
       # below changes what a later reader would see.

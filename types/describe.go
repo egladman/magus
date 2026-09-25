@@ -123,7 +123,7 @@ type Spell struct {
 // CharmDefinition is the human-readable description of a charm shown by "magus describe charms".
 const CharmDefinition = "A charm is a named, shared execution modifier applied as an " +
 	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
-	"never which target or project runs. See docs/charms.md."
+	"never which project runs; a target may read one to need more (extended). See docs/charms.md."
 
 // Charm is one charm in the inverse index: its name, whether it is a reserved
 // built-in or a workspace default, its built-in doc (empty for a spell-defined
