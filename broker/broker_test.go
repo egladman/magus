@@ -34,6 +34,9 @@ func TestMain(m *testing.M) {
 	if addr := os.Getenv(holderEnv); addr != "" {
 		os.Exit(holdUntilKilled(addr))
 	}
+	if addr := os.Getenv(activatedEnv); addr != "" {
+		os.Exit(serveActivated(addr))
+	}
 	testkit.Main(m)
 }
 
@@ -334,13 +337,15 @@ func TestAConnectionWithoutStateDoesNotPinTheBroker(t *testing.T) {
 type fakeHost struct {
 	mu       sync.Mutex
 	refs     map[string]int
+	last     ServiceSpec
 	stopped  bool
 	startErr error
 }
 
-func (h *fakeHost) Acquire(_ context.Context, key string, _ spells.Service) error {
+func (h *fakeHost) Acquire(_ context.Context, key string, spec ServiceSpec) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.last = spec
 	if h.startErr != nil {
 		return h.startErr
 	}
@@ -387,7 +392,7 @@ func TestServiceReferencesRideTheConnection(t *testing.T) {
 	host := &fakeHost{}
 	serve(t, addr, WithServices(host))
 	c := dial(t, addr)
-	svc := spells.Service{Command: spells.Command{Bin: "postgres"}}
+	svc := ServiceSpec{Command: []string{"postgres"}}
 	require.NoError(t, c.AcquireService(t.Context(), "pg", svc))
 	require.NoError(t, c.AcquireService(t.Context(), "pg", svc))
 	require.NoError(t, c.ReleaseService(t.Context(), "pg"))
@@ -412,17 +417,58 @@ func TestServiceErrorsCarryTheirCode(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr)
 	c := dial(t, addr)
-	err := c.AcquireService(t.Context(), "pg", spells.Service{})
+	pg := ServiceSpec{Command: []string{"postgres"}}
+	err := c.AcquireService(t.Context(), "pg", pg)
 	var be *Error
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, CodeNoServices, be.Code, "a broker hosting nothing says so by code, and the run hosts the service itself")
 
 	failing := testAddr(t)
 	serve(t, failing, WithServices(&fakeHost{startErr: errors.New("readiness failed")}))
-	err = dial(t, failing).AcquireService(t.Context(), "pg", spells.Service{})
+	fc := dial(t, failing)
+	err = fc.AcquireService(t.Context(), "pg", pg)
 	require.ErrorAs(t, err, &be)
-	assert.Equal(t, CodeService, be.Code)
-	assert.Contains(t, be.Message, "readiness failed")
+	assert.Equal(t, &Error{Code: CodeService, Message: "readiness failed"}, be)
+
+	err = fc.AcquireService(t.Context(), "pg", ServiceSpec{})
+	require.ErrorAs(t, err, &be)
+	assert.Equal(t, CodeMalformed, be.Code, "a service with no command is refused before any host sees it")
+}
+
+// TestAServiceSpecCrossesTheWireWhole pins what a host receives: the argv, probe, stop
+// command and idle window the run resolved, and nothing lost in between.
+func TestAServiceSpecCrossesTheWireWhole(t *testing.T) {
+	addr := testAddr(t)
+	host := &fakeHost{}
+	serve(t, addr, WithServices(host))
+	want := ServiceSpec{
+		Command:   []string{"postgres", "-D", "/data"},
+		Readiness: []string{"pg_isready"},
+		Stop:      []string{"pg_ctl", "stop"},
+		Idle:      90 * time.Second,
+	}
+	require.NoError(t, dial(t, addr).AcquireService(t.Context(), "pg", want))
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	assert.Equal(t, want, host.last)
+}
+
+func TestServiceSpecRoundTripsASpellService(t *testing.T) {
+	svc := spells.Service{
+		Command:   spells.Command{Bin: "postgres", Args: []string{"-D", "/data"}},
+		Readiness: spells.Command{Bin: "pg_isready"},
+		Idle:      "5m0s",
+	}
+	spec := NewServiceSpec(svc)
+	assert.Equal(t, ServiceSpec{
+		Command:   []string{"postgres", "-D", "/data"},
+		Readiness: []string{"pg_isready"},
+		Idle:      5 * time.Minute,
+	}, spec)
+	assert.Equal(t, svc, spec.Service())
+
+	assert.Zero(t, NewServiceSpec(spells.Service{Command: spells.Command{Bin: "x"}, Idle: "soon"}).Idle,
+		"an idle window that does not parse is the broker's default, as it is in-process")
 }
 
 func TestNoBrokerIsUnavailable(t *testing.T) {

@@ -1187,8 +1187,14 @@ The broker setting in magus.yaml decides what a run does about it: required
 refuses a step when none answers (MGS3022, exit 69), best-effort (the default)
 runs unarbitrated and says so once, off never starts or contacts one.
 
-Run with no target, it serves in this process and logs to stderr.`,
-	Usage: "magus broker [status|stop] [flags]",
+Run with no target, it serves in this process and logs to stderr. Under
+systemd it takes the socket the supervisor hands over (LISTEN_FDS), refusing
+one that is malformed or bound anywhere but broker.sock. ` + "`magus broker units`" + `
+prints the systemd or launchd units for it; magus never installs them.`,
+	Usage: "magus broker [status|stop|units] [flags]",
+	Flags: []Flag{
+		{Name: "idle-exit", Kind: FlagDuration, Default: 10 * time.Minute, Doc: "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive"},
+	},
 	Children: []Command{
 		{
 			Name:        "status",
@@ -1203,10 +1209,17 @@ Run with no target, it serves in this process and logs to stderr.`,
 				{Name: "services", Kind: FlagBool, Doc: "Stop the broker's hosted services, leaving the broker running"},
 			},
 		},
+		{
+			Name:        "units",
+			Short:       "Print the systemd or launchd units that supervise the broker",
+			Description: "Print the unit files a supervisor needs to run the broker: a systemd socket and service that socket-activate it, or a launchd agent that keeps it alive. magus prints them and never installs them.",
+			Usage:       "magus broker units [systemd|launchd] [flags]",
+		},
 	},
 	Examples: []Example{
 		{"Is a broker up, and what holds capacity", "magus broker status"},
 		{"Stop the services it keeps warm", "magus broker stop --services"},
+		{"Print the systemd units that socket-activate it", "magus broker units systemd"},
 		{"Never start or ask one, for this run", "magus run test . --broker off"},
 	},
 }
