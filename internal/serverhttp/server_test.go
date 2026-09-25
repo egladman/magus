@@ -14,11 +14,17 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
+	statusv1alpha1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -710,4 +716,131 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 			t.Fatal("server did not shut down")
 		}
 	}
+}
+
+// serverSocket starts a real proc server on a socket in a fresh short directory (t.TempDir's
+// can exceed the unix socket length limit on macOS), skipping where a peer's uid cannot be
+// read, and returns it with a client that dials it.
+func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
+	t.Helper()
+	if !httpx.PeerCredentialsSupported() {
+		t.Skip("no peer credentials on this platform")
+	}
+	t.Setenv(proc.SocketEnv, "")
+	dir, err := os.MkdirTemp("", "srv")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "server.sock")
+	srv, err := proc.New(proc.Options{
+		Handler: func(context.Context, []string) error { return nil },
+		Address: "unix://" + path,
+	})
+	require.NoError(t, err)
+	require.NoError(t, srv.Start())
+	t.Cleanup(srv.Close)
+	return srv, srv.Addr(), &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", path)
+		},
+	}}
+}
+
+// TestServerSocketCarriesMCPAndTheAPIs mounts a loaded server on a real server socket and
+// drives each surface there without a token: an MCP session whose tool call the trail
+// attributes to the socket peer, a Connect call, and a proc route beside them. The socket's
+// route table is the loopback one minus the browser-only /api routes, Need for Need. The
+// loopback /mcp still refuses the same tokenless request.
+func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
+	srv, addr, client := serverSocket(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	builtConsole(t)
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	require.NoError(t, err)
+
+	socketNeeds := make(chan map[string]types.Need, 1)
+	d, tcp := testServer(t, func(opts mcp.Options) *Server {
+		opts.Magus = m
+		return New(opts, WithSocket(srv))
+	})
+	d.onSocketMounted = func(n map[string]types.Need) { socketNeeds <- n }
+	base, _, tcpNeeds := serveMounted(t, d, tcp)
+
+	onSocket := <-socketNeeds
+	want := map[string]types.Need{}
+	for path, need := range tcpNeeds {
+		if !strings.HasPrefix(path, "/api/") {
+			want[path] = need
+		}
+	}
+	assert.Equal(t, want, onSocket, "the socket serves every loopback route but the browser's /api, held to the same Need")
+	assert.Contains(t, onSocket, "/mcp")
+
+	call := func(c *http.Client, url, session, body string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if session != "" {
+			req.Header.Set("Mcp-Session-Id", session)
+		}
+		resp, err := c.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		out, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp, string(out)
+	}
+
+	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"socket-test","version":"1"}}}`
+	resp, out := call(client, "http://magus/mcp", "", initialize)
+	require.Equal(t, http.StatusOK, resp.StatusCode, out)
+	session := resp.Header.Get("Mcp-Session-Id")
+	require.NotEmpty(t, session)
+
+	resp, out = call(client, "http://magus/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"magus_config_get","arguments":{}}}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, out)
+	assert.Contains(t, out, `"result"`)
+	assert.NotContains(t, out, `"isError":true`, "the socket peer's grant reaches every tool")
+
+	events, err := os.ReadFile(filepath.Join(m.CacheDir(), "activity", "events.jsonl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(events), `"action":"magus_config_get"`)
+	assert.Contains(t, string(events), `"class":"socket-peer"`, "the call is attributed to the socket peer")
+
+	status := statusv1alpha1connect.NewStatusServiceClient(client, "http://magus")
+	_, err = status.GetStatus(t.Context(), connect.NewRequest(&statusv1alpha1.GetStatusRequest{}))
+	require.NoError(t, err, "a Connect service answers the socket peer")
+
+	pool, err := proc.QueryStatus(t.Context(), addr)
+	require.NoError(t, err, "the proc routes share the socket")
+	assert.Equal(t, os.Getpid(), pool.ParentPID)
+
+	resp, out = call(http.DefaultClient, base+"/mcp", "", initialize)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "loopback HTTP still needs a bearer: %s", out)
+}
+
+// A server whose workspace failed mounts on the socket too, and its services answer there with
+// the load failure, as they do on loopback.
+func TestServerSocketCarriesTheUnloadedFailure(t *testing.T) {
+	srv, _, client := serverSocket(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	builtConsole(t)
+	root := t.TempDir()
+	failure := &types.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
+	d, tcp := testServer(t, func(opts mcp.Options) *Server {
+		return NewUnloaded(opts, Unloaded{Root: root, Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed(root, failure) }}, WithSocket(srv))
+	})
+	serveMounted(t, d, tcp)
+
+	req, err := http.NewRequest(http.MethodPost, "http://magus/"+jobv1alpha1connect.JobServiceName+"/ListJobs", strings.NewReader(`{}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "FAILED_PRECONDITION: %s", body)
+	assert.Contains(t, string(body), string(types.WorkspaceLoadFailed))
 }
