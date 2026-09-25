@@ -1612,9 +1612,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		step := m.buildStep(p, target)
 		if sizeMemory != nil {
 			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
-				// TODO: carry sizing on cache.Step into its types.MachineClaim, so a
-				// refusal and `magus status` name it; the claim is built in
-				// internal/cache.claimMachine.
+				step.MemorySizing = sizing
 				slog.DebugContext(ctx, "magus: memory claim sized from measured peaks",
 					slog.String("project", p.Path), slog.String("target", target),
 					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))

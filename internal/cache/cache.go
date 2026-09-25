@@ -222,7 +222,10 @@ type Step struct {
 	// with ctx.needs. A refusal names it so the reader is sent to the magusfile line
 	// to change rather than to the target they typed. Never hashed.
 	MemoryDeclaredBy string
-	Label            string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// MemorySizing says whether MemoryMB is the declaration or a figure sized from
+	// measured runs, so a refusal names where it came from. Never hashed.
+	MemorySizing types.MemorySizing
+	Label        string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output
@@ -1090,7 +1093,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	}
 	release, err := c.machine.acquire(ctx, types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
-		MemoryMB: s.MemoryMB, Slots: slots,
+		MemoryMB: s.MemoryMB, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
 	})
