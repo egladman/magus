@@ -36,30 +36,42 @@ type Policy struct {
 	Lease string
 	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
 	LeaseFrom types.LeaseSource
+	// ReadOnly refuses every write and every exec whatever FS grants. Set only by
+	// [ReadOnly], the policy `magus buzz --read-only` runs under.
+	ReadOnly bool
+	// unconfined marks a read-only policy derived from no policy at all: reads and the
+	// environment pass as they would with the sandbox off.
+	unconfined bool
 }
 
 // CheckRead reports whether the policy permits a read of path; nil Policy permits everything.
 func (p *Policy) CheckRead(path string) error {
-	if p == nil {
+	if p == nil || p.unconfined {
 		return nil
 	}
 	return p.FS.CheckRead(path)
 }
 
 // CheckWrite reports whether the policy permits a write to path. A nil Policy
-// permits everything.
+// permits everything; a ReadOnly one permits nothing.
 func (p *Policy) CheckWrite(path string) error {
 	if p == nil {
 		return nil
+	}
+	if p.ReadOnly {
+		return readOnlyDenied(path)
 	}
 	return p.FS.CheckWrite(path)
 }
 
 // CheckExec reports whether the policy permits execution of the binary at
-// path. A nil Policy permits everything.
+// path. A nil Policy permits everything; a ReadOnly one permits nothing.
 func (p *Policy) CheckExec(path string) error {
 	if p == nil {
 		return nil
+	}
+	if p.ReadOnly {
+		return readOnlyDenied(path)
 	}
 	return p.FS.CheckExec(path)
 }
@@ -146,7 +158,7 @@ func (p *Policy) ScrubEnv(environ []string) (kept, dropped []string) {
 // AllowEnv reports whether name is allowed by the policy. A nil Policy permits
 // everything.
 func (p *Policy) AllowEnv(name string) bool {
-	if p == nil {
+	if p == nil || p.unconfined {
 		return true
 	}
 	return p.Env.Allows(name)

@@ -2510,7 +2510,13 @@ pass.
 It cannot resolve magus/spell/*, which the workspace loader binds, so a
 magusfile or a target definition reports an unresolved import. Those are
 the files magus already checks by loading them; --check is for the ones
-nothing loads.`,
+nothing loads.
+
+--read-only runs a script that may read, compute and print but change
+nothing: every host member that writes a file, a magus store or the
+network raises MGS2002, and every one that starts a process (proc, the
+VCS, a nested magus, zdef) raises MGS2007. Where landlock is available
+the kernel also confines the process and its children to reads.`,
 	Flags: []Flag{
 		// Backticks are load-bearing: flag.UnquoteUsage reads the quoted word as the
 		// value's name, so this renders `-e code` rather than `-e string`. The
@@ -2522,6 +2528,7 @@ nothing loads.`,
 		{Name: "check", Kind: FlagBool, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
 		{Name: "coverprofile", Kind: FlagString, Doc: "Write an LCOV coverprofile for the file under `-t` (requires `-t`)"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
+		{Name: "read-only", Kind: FlagBool, Doc: "Refuse every write and process start the script attempts (MGS2002, MGS2007); reads, stdin, stdout and stderr work"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
 		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
 	},
@@ -2536,6 +2543,7 @@ nothing loads.`,
 		{"Run a file's test blocks", "magus buzz -t scripts/report.buzz"},
 		{"Check files without running them", "magus buzz --check scripts/report.buzz scripts/build.buzz"},
 		{"Run a magusfile-style file", "magus buzz --embedded scripts/target.buzz"},
+		{"Transform JSON on stdin, refusing any write", `magus describe spells -o json | magus buzz --read-only scripts/ids.buzz`},
 		{"Write an LCOV coverprofile while testing", "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},
 	},
 }

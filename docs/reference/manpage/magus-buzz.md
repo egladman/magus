@@ -50,6 +50,12 @@ magusfile or a target definition reports an unresolved import. Those are
 the files magus already checks by loading them; --check is for the ones
 nothing loads.
 
+--read-only runs a script that may read, compute and print but change
+nothing: every host member that writes a file, a magus store or the
+network raises MGS2002, and every one that starts a process (proc, the
+VCS, a nested magus, zdef) raises MGS2007. Where landlock is available
+the kernel also confines the process and its children to reads.
+
 ## Options
 
 **-C** *string*
@@ -69,6 +75,9 @@ nothing loads.
 
 **--no-autoload**
 : Start the REPL without executing the magusfile
+
+**--read-only**
+: Refuse every write and process start the script attempts (MGS2002, MGS2007); reads, stdin, stdout and stderr work
 
 **-t**
 : Run the file's test "..." {} blocks and report pass/fail
@@ -117,6 +126,12 @@ magus buzz --check scripts/report.buzz scripts/build.buzz
 
 ```sh
 magus buzz --embedded scripts/target.buzz
+```
+
+*Transform JSON on stdin, refusing any write*
+
+```sh
+magus describe spells -o json | magus buzz --read-only scripts/ids.buzz
 ```
 
 *Write an LCOV coverprofile while testing*
