@@ -5,6 +5,7 @@ package run
 import (
 	"os/exec"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -37,11 +38,29 @@ func KillGroup(c *exec.Cmd) {
 	_ = exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(c.Process.Pid)).Run()
 }
 
+// procGroup is a started child's process group.
+type procGroup struct {
+	c         *exec.Cmd
+	cancelled atomic.Bool
+}
+
 // setCancel configures c to use CTRL_BREAK_EVENT (in its own process group) on
 // context cancellation of a CommandContext.
-func setCancel(c *exec.Cmd) {
+func setCancel(c *exec.Cmd) *procGroup {
 	SetupProcessGroup(c)
+	g := &procGroup{c: c}
 	c.Cancel = func() error {
+		g.cancelled.Store(true)
 		return TerminateGroup(c)
 	}
+	return g
+}
+
+// wait reaps the child and, when it was cancelled, kills the tree it leaves.
+func (g *procGroup) wait() error {
+	err := g.c.Wait()
+	if g.cancelled.Load() {
+		KillGroup(g.c)
+	}
+	return err
 }

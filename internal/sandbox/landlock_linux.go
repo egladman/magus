@@ -35,20 +35,15 @@ const fsAccessV1 uint64 = unix.LANDLOCK_ACCESS_FS_EXECUTE |
 const fsAccessReadOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_FILE |
 	unix.LANDLOCK_ACCESS_FS_READ_DIR
 
-// fsAccessDirOnly are the rights only a directory can carry. Requesting any of them on
-// a regular file makes landlock_add_rule fail with EINVAL, which is how a rule for
-// /run/systemd/resolve/stub-resolv.conf (a FILE in an allowlist that assumed a
-// directory) took down every sandboxed run on a systemd host.
-const fsAccessDirOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_DIR |
-	unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
-	unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
-	unix.LANDLOCK_ACCESS_FS_MAKE_CHAR |
-	unix.LANDLOCK_ACCESS_FS_MAKE_DIR |
-	unix.LANDLOCK_ACCESS_FS_MAKE_REG |
-	unix.LANDLOCK_ACCESS_FS_MAKE_SOCK |
-	unix.LANDLOCK_ACCESS_FS_MAKE_FIFO |
-	unix.LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-	unix.LANDLOCK_ACCESS_FS_MAKE_SYM
+// fsAccessFile are the only rights a non-directory can carry: the kernel's ACCESS_FILE
+// (security/landlock/fs.c). Any other right on a file or device makes landlock_add_rule
+// fail with EINVAL. It is an allowlist because a list of directory-only rights missed
+// REFER, and rw("/dev/null") then failed every sandboxed run on ABI v2 and later.
+const fsAccessFile uint64 = unix.LANDLOCK_ACCESS_FS_EXECUTE |
+	unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
+	unix.LANDLOCK_ACCESS_FS_READ_FILE |
+	unix.LANDLOCK_ACCESS_FS_TRUNCATE |
+	unix.LANDLOCK_ACCESS_FS_IOCTL_DEV
 
 // accessForPathType drops the rights a non-directory cannot hold. Split out from
 // addPathRule so the masking rule is testable without a kernel.
@@ -56,7 +51,7 @@ func accessForPathType(access uint64, isDir bool) uint64 {
 	if isDir {
 		return access
 	}
-	return access &^ fsAccessDirOnly
+	return access & fsAccessFile
 }
 
 // fsAccessWrite is the full write/create/rename surface. Device ioctls ride with

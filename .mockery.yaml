@@ -71,3 +71,11 @@ packages:
   github.com/egladman/magus/internal/dry:
     interfaces:
       SpellCatalog:
+  # Internal: the merge queue's contract, which the queue's own tests fake.
+  github.com/egladman/magus/internal/queue/types:
+    interfaces:
+      Provider:
+      Gate:
+      BuildFacts:
+      VerdictSource:
+      ArtifactLister:
