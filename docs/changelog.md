@@ -291,6 +291,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Breaking: `magus queue apply` requires `--base`, and `--workflow` with a run
   source.** Verdicts no longer carry `message`, and a provider's `list_artifacts`
   returns the run's origin as `run`; a provider script without it is refused.
+- **Breaking: the GitHub merge queue requires its own GitHub App.** `magus queue describe
+  --status-context` and `apply` refuse to run without `--app`, and nothing falls back to
+  the job's Actions token: a run or merge that token makes starts no workflow, so the
+  queue validated changes and merged none. Register the app with the link `describe`
+  prints.
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
   without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
   matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
