@@ -198,10 +198,15 @@ jobs:
       # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
       # gate replays as green. The remote cache it reads is main's, verified against
       # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every hook.
+      # Candidates are checked out under TMPDIR, outside the workspace mise-action
+      # trusts, so the trust list names both; hooks receive it through magus.yaml's
+      # sandbox passthrough.
       - name: Validate #${{ matrix.change }}
         env:
           CHANGE: ${{ matrix.change }}
           MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
         run: magus buzz tools/gha-queue.buzz -- validate --change "$CHANGE"
 
       # The directory's contents become the artifact's root: verdict.json, and
