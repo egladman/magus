@@ -13,6 +13,11 @@ func Apply(p *Policy) error {
 	return ErrUnsupported
 }
 
+// ABI returns ErrUnsupported on every non-Linux host.
+func ABI() (int, error) {
+	return 0, ErrUnsupported
+}
+
 // Supported reports false on every non-Linux host.
 func Supported() bool {
 	return false
