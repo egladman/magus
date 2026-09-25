@@ -239,6 +239,28 @@ func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
 	assert.NotContains(t, inherited, "Affected CI plan")
 }
 
+// TestPlanRiskOnATrivialChange: a trivial change plans no shard, and the summary is
+// the per-path proof rather than an empty table.
+func TestPlanRiskOnATrivialChange(t *testing.T) {
+	t.Parallel()
+
+	rep := types.RiskReport{Base: "0123456789abcdef", Tier: types.RiskTrivial, Gate: []types.RiskGateStep{},
+		Evidence: []types.RiskEvidence{{Path: "notes/v1.md", Class: "prose", Tier: types.RiskTrivial, Why: "nothing in ci's chain reads it"}}}
+	risk := newPlanRisk(rep)
+	assert.Equal(t, &planRisk{Tier: types.RiskTrivial, Base: "0123456789abcdef", Paths: rep.Evidence, Summary: "### Gate sized trivial\n\n" +
+		"No shard runs: the change against `01234567` tiers trivial, so no step of the gate can observe it.\n\n" +
+		"| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n" +
+		"| `notes/v1.md` | trivial | prose | nothing in ci's chain reads it |\n\n" +
+		"To run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n"}, risk)
+
+	out := planOutput{Matrix: []planShard{}, Risk: risk}
+	assert.Equal(t, risk.Summary, planSummaryMarkdown(out))
+	got, err := planOutputs(out)
+	require.NoError(t, err)
+	assert.Contains(t, got, planPublish{Name: "count", Value: "0"}, "the workflow's count guard skips every shard")
+	assert.Contains(t, got, planPublish{Name: "inherit", Value: "false"})
+}
+
 // TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected: the run-path report is
 // narrower than --impact's. A seed with one declared changed file among the undeclared
 // ones had a keyed reason to run, and naming it at the point of cost would claim the

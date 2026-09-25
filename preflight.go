@@ -236,7 +236,7 @@ func (m *Magus) runPreflight(ctx context.Context, stages []stage, newStep func(*
 			// No ExtraArgs and no Spell: both belong to the target the user named, the
 			// boundary a ctx.needs dependency draws too.
 			step := newStep(p, st.target)
-			if raceForcesNoCache(opts) {
+			if forcesNoCache(opts) {
 				step.NoCache = true
 			}
 			if opts.NoCache {

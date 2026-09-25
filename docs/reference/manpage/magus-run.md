@@ -61,7 +61,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Ignore magus.yaml default_charms for this run
 
 **--no-redundancy-check**
-: Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only
+: Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only
 
 **--no-volatility-retry**
 : Disable volatility auto-retry for this run

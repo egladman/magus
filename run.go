@@ -63,6 +63,7 @@ type run struct {
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	Preflight         []string // targets run first as a separate pass; see WithPreflight
 	preflight         []stage  // Preflight resolved against the selection by runResolved
+	narrowing         *project.OpNarrowing
 	stdio             *ProcessStdio
 }
 
@@ -449,8 +450,10 @@ func (f targetInterceptorFunc) InterceptTarget(ctx context.Context, name string,
 	return f(ctx, name, invoke)
 }
 
-// raceForcesNoCache reports whether o requires bypassing the cache so race
-// diagnostics always observe a genuine execution. Race diagnostics (watch:
+// forcesNoCache reports whether o requires bypassing the cache entirely: race
+// diagnostics, and a narrowed op.
+//
+// Race diagnostics must always observe a genuine execution. Race diagnostics (watch:
 // MGS4001/4002/4004 via raceRT.TrackProject; replay: MGS4003 via runReplay)
 // both need one: a cache hit skips the body entirely, so raceRT never wraps
 // it, and replay's "before" snapshot would come from a stale artifact instead
@@ -458,8 +461,11 @@ func (f targetInterceptorFunc) InterceptTarget(ctx context.Context, name string,
 // ever snapshotting: its steps carry no race-specific cache key of their own,
 // so a snapshot here would otherwise sit in the ordinary entry and satisfy a
 // later, non-race run.
-func raceForcesNoCache(o run) bool {
-	return o.Race || o.RaceReplay
+//
+// A narrowed op runs less than its target declares, under the same key, so a snapshot
+// of that run would satisfy a later whole one.
+func forcesNoCache(o run) bool {
+	return o.Race || o.RaceReplay || o.narrowing != nil
 }
 
 // buildStep assembles the cache.Step for running target on p.
@@ -1367,6 +1373,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if len(opts.ExtraArgs) > 0 {
 		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
+	if opts.narrowing != nil {
+		ctx = project.WithOpNarrowing(ctx, *opts.narrowing)
+	}
 
 	// Every dispatch funnels through here, which is why the return sink is installed
 	// here and not at the CLI: the cache snapshots a target's return value off this
@@ -1641,7 +1650,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// same way; without it a compile-only go::go-build recorded a pass
 			// the real go-build target then replayed around a stale binary.
 			step.Spell = opts.Spell
-			if raceForcesNoCache(opts) {
+			if forcesNoCache(opts) {
 				step.NoCache = true
 			}
 			if opts.NoCache {
@@ -1871,7 +1880,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 					memberCtx = cache.SharedStepContext(memberCtx)
 					member := newStep(p, name)
 					member.SkipReplay = opts.NoCache
-					if raceForcesNoCache(opts) {
+					if forcesNoCache(opts) {
 						member.NoCache = true
 					}
 					// A cache hit skips the member's body, so repair any skip_cache

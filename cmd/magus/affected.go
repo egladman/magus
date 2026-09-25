@@ -299,6 +299,15 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if gateErr := gate.evaluate(ctx, af.NoRedundancyCheck); gateErr != nil {
 		return gateErr
 	}
+	// Sized once the gate is going to run. A trivial change is proven to need no gate,
+	// which is a verdict on the change rather than a deferral, so it exits 0.
+	sized := gate.size(ctx, af.Base, af.NoRedundancyCheck)
+	if sized != nil {
+		fmt.Fprint(os.Stderr, renderSizing(target, *sized))
+		if sized.Tier == types.RiskTrivial {
+			return nil
+		}
+	}
 	// After the gate agreed to run, because a refused gate pays for nothing.
 	noteUndeclaredSeedCost(ctx, sink, undeclaredOnly)
 	reportUndeclaredSeeds(ctx, sink, undeclaredOnly)
@@ -367,9 +376,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	defer func() { endInvocation(err) }()
 
 	invCtx, readReturns := types.WithReturnCapture(invCtx)
-	if target == "ci" {
+	switch {
+	case sized != nil:
+		err = m.RunGate(invCtx, *sized, runOpts...)
+	case target == "ci":
 		err = m.RunCI(invCtx, targets, runOpts...)
-	} else {
+	default:
 		err = m.Run(invCtx, targets, runOpts...)
 	}
 	// Read the instant the run returns: after this line a cancellation means the signal
@@ -450,6 +462,9 @@ type planOutput struct {
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
+	// Risk is present only when the change tiers trivial; see planRisk. The matrix
+	// beside it is then empty on purpose.
+	Risk *planRisk `json:"risk,omitempty"`
 	// Detail is keyed by shard id and present only under --detail.
 	//
 	// A SIBLING of Matrix rather than fields on its entries, and that is a hard
@@ -523,8 +538,36 @@ type planInherit struct {
 
 type planInheritPath struct {
 	Path  string `json:"path"`
+	Tier  string `json:"tier"`
 	Class string `json:"class"`
 	Why   string `json:"why"`
+}
+
+// planRisk is the --plan block of a change that tiers trivial against the plan's base:
+// no gate step can observe it, so the matrix is empty, and every changed path rides
+// along with its tier and what decided it.
+type planRisk struct {
+	Tier    types.RiskTier       `json:"tier"`
+	Base    string               `json:"base"`
+	Paths   []types.RiskEvidence `json:"paths"`
+	Summary string               `json:"summary"`
+}
+
+func newPlanRisk(rep types.RiskReport) *planRisk {
+	var b strings.Builder
+	b.WriteString("### Gate sized " + string(rep.Tier) + "\n\n")
+	b.WriteString("No shard runs: the change against `" + shortCommit(rep.Base) + "` tiers " + string(rep.Tier) +
+		", so no step of the gate can observe it.\n\n")
+	if len(rep.Evidence) == 0 {
+		b.WriteString("No paths changed.\n")
+	} else {
+		b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
+		for _, e := range rep.Evidence {
+			b.WriteString("| `" + e.Path + "` | " + string(e.Tier) + " | " + e.Class + " | " + e.Why + " |\n")
+		}
+	}
+	b.WriteString("\nTo run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n")
+	return &planRisk{Tier: rep.Tier, Base: rep.Base, Paths: rep.Evidence, Summary: b.String()}
 }
 
 // planOutputs renders the plan's CI job outputs. The matrix is wrapped in the
@@ -556,6 +599,9 @@ func planOutputs(out planOutput) ([]planPublish, error) {
 func planSummaryMarkdown(out planOutput) string {
 	if out.Inherit != nil {
 		return out.Inherit.Summary
+	}
+	if out.Risk != nil {
+		return out.Risk.Summary
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Affected CI plan\n\n%d shard(s), max parallel %d\n\n", out.Count, out.MaxParallel)
@@ -751,6 +797,18 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 				slog.String("run", inherit.Run), slog.String("commit", inherit.Commit))
 		}
 	}
+	// A change that tiers trivial against the plan's base needs no shard. Any other tier
+	// keeps the whole matrix: a shard runs `magus run ci <projects>`, and narrowing one
+	// waits on a multi-target run.
+	var trivial *planRisk
+	if target == types.TargetCI && !pf.Stdin && len(only) == 0 && inherit == nil {
+		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == types.RiskTrivial {
+			trivial = newPlanRisk(rep)
+			plan.Shards = nil
+			plan.MaxParallel = 0
+			slog.InfoContext(ctx, "ci plan sized trivial", slog.String("base", rep.Base))
+		}
+	}
 
 	totalProjects := 0
 	for _, s := range plan.Shards {
@@ -792,11 +850,12 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	if inherit != nil {
 		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit, Summary: inherit.SummaryMarkdown()}
-		for _, p := range inherit.Delta.Paths {
-			pi.Paths = append(pi.Paths, planInheritPath{Path: p.Path, Class: p.Class.String(), Why: p.Why})
+		for _, e := range inherit.Report.Evidence {
+			pi.Paths = append(pi.Paths, planInheritPath{Path: e.Path, Tier: string(e.Tier), Class: e.Class, Why: e.Why})
 		}
 		out.Inherit = pi
 	}
+	out.Risk = trivial
 	if pf.Detail {
 		out.Detail, err = planDetail(ctx, m, target, plan.Shards)
 		if err != nil {

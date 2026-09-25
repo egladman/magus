@@ -257,7 +257,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "shard", Kind: FlagString, Doc: "This run's shard index within a CI matrix; paired with --n-shards"},
 		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
-		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
+		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
 	},
 	Targets: commonTargets,
@@ -383,6 +383,15 @@ JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
 plan of proposed paths before editing. --bisect drives VCS bisect using run
 history to find the commit that introduced a regression.
 
+magus affected ci sizes its gate to the change. Each changed path gets a risk
+tier (trivial, mechanical, scoped, full) and the change takes the highest. Below
+full, the gate runs only what the tier needs (the drift check and lint, the
+targets that declare a changed doc, or the project's test with go-test narrowed
+to the packages that can observe the change) and prints every path
+with its tier to stderr; a trivial change runs nothing and exits 0. With --plan,
+a trivial change emits an empty matrix beside a risk block.
+--no-redundancy-check runs the full gate.
+
 --preflight works as it does for magus run: the named targets run first across
 the affected set, a failure stops everything with exit 3 (MGS3020), and a name
 outside the invoked target's ctx.needs closure is refused (MGS3021). With --plan
@@ -398,7 +407,7 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact"}, Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
-		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
+		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
 		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the server and return immediately; follow it with magus status --watch"},
 		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
