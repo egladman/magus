@@ -207,6 +207,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
   step, one writing what the other reads with no `ctx.needs` path between them, fail at
   derivation. `magus doctor` checks every composed target.
+- **`magus queue validate --remote-cache-read` gives hooks the signed remote cache.**
+  The queue serves the GitHub Actions cache service to hooks through a loopback proxy
+  that forwards lookups with the runner's token and refuses every write. Hooks get a
+  stand-in token, the base's trusted keys and remote writes off; without the runner's
+  credentials or a trusted key, validate refuses to start.
 - **Breaking: the merge queue labels `merge-queue: changes a generator` on a queued pull
   request whose generated files it cannot regenerate itself.** The author learns before
   any kick-back that main moving them means merging main in and regenerating. A provider
@@ -733,6 +738,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   another base or remote, a base commit the base lacks, or a stack base that is not
   the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
   a revert of the base. Apply writes the squash message itself.
+- **Queue hooks run on an allowlisted environment.** A hook inherits only the sandbox's
+  default names and the base's `sandbox.env.passthrough`, so no token or Actions file
+  command reaches it. A unit starting with `-` or holding a line break is refused, and a
+  hook's process group is reaped without a race.
+- **A merge queue kick-back shows what validation reported as text.** The claim, file
+  names and commits render as code spans or fences no backtick run can close, and the
+  facts line escapes every character that could end its HTML comment. The reproduce
+  lines come from `magus queue apply --reproduce-gate` and `--reproduce-regenerate`,
+  never from a verdict.
 - **Breaking: no job holding a secret or a write token restores an Actions cache.** A
   merge queue hook can read the runner's runtime token and plant cache entries in the
   default branch's scope, so trusted jobs now install cold. `setup-magus` restores run
