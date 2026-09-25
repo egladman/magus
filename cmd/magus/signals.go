@@ -37,12 +37,30 @@ func ownsItsSignals(args []string) bool {
 	return false
 }
 
+// early queues the signals a process ownsItsSignals names receives before its lifecycle
+// watches. The broker's and the server's sockets bind during startup, which is what a
+// supervisor reads as ready, and the lifecycle is installed only after; a SIGHUP in that
+// window met the default disposition and ended the process.
+var early chan os.Signal
+
+// captureSignals starts queueing SIGHUP, SIGINT and SIGTERM for the next lifecycle to
+// watch. Call it before anything binds a socket.
+func captureSignals() {
+	early = make(chan os.Signal, 4)
+	signal.Notify(early, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+}
+
 // watch answers SIGHUP, SIGINT and SIGTERM for l until ctx ends or stopNow ran, and
-// returns the function that stops answering. Windows delivers no SIGHUP, and its console
-// close and shutdown events arrive as SIGTERM.
+// returns the function that stops answering. It first answers what captureSignals
+// queued. Windows delivers no SIGHUP, and its console close and shutdown events arrive
+// as SIGTERM.
 func (l lifecycle) watch(ctx context.Context) (release func()) {
-	sigs := make(chan os.Signal, 4)
-	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	sigs := early
+	early = nil
+	if sigs == nil {
+		sigs = make(chan os.Signal, 4)
+		signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {

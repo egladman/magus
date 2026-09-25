@@ -88,11 +88,11 @@ magus broker --log FILE         # the same, appending to FILE (a run passes brok
 
 The broker answers signals the way a supervisor expects:
 
-| Signal | The broker |
-| --- | --- |
-| `SIGHUP` | reopens its `--log` file, so a log rotator can move the old one aside |
-| first `SIGTERM` | drains: turns away every new claim and service reference, naming itself as shutting down, and exits once the runs holding it finish or `shutdown_grace` passes |
-| second `SIGTERM`, or `SIGINT` | stops its services and exits now |
+| Signal                        | The broker                                                                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SIGHUP`                      | reopens its `--log` file, so a log rotator can move the old one aside                                                                                          |
+| first `SIGTERM`               | drains: turns away every new claim and service reference, naming itself as shutting down, and exits once the runs holding it finish or `shutdown_grace` passes |
+| second `SIGTERM`, or `SIGINT` | stops its services and exits now                                                                                                                               |
 
 A run the drain turns away is refused under `broker: required` and runs unarbitrated under
 `best-effort`, each with the draining broker's pid in the message. `magus broker status`
@@ -132,11 +132,11 @@ current process, which is what a supervisor wants (see
 `$XDG_STATE_HOME/magus/server.log`, which survives logout; under `--foreground` it logs to
 stderr for the supervisor to keep.
 
-| Signal | The server |
-| --- | --- |
-| `SIGHUP` | reloads configuration, the same as `magus server reload` |
+| Signal                      | The server                                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `SIGHUP`                    | reloads configuration, the same as `magus server reload`                                            |
 | first `SIGTERM` or `SIGINT` | closes its socket, cancels the runs it adopted, and waits up to `shutdown_grace` for them to unwind |
-| a second one | exits now |
+| a second one                | exits now                                                                                           |
 
 `shutdown_grace` (default `5m`, `MAGUS_SHUTDOWN_GRACE`) bounds both processes' stop, and
 `0` stops at once; a negative value is a configuration error. The server cancels its runs

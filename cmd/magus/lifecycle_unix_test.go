@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -236,6 +237,29 @@ func TestBrokerInterruptStopsNow(t *testing.T) {
 
 // TestServerHangupReloadsAndTermStops runs a real foreground server: SIGHUP reloads it
 // the way `magus server reload` does and leaves it serving, and SIGTERM stops it cleanly.
+// A SIGHUP that lands after startup bound the socket and before the lifecycle watches is
+// queued and answered once the watch starts, rather than meeting the default disposition
+// and ending the process.
+func TestASignalBeforeTheLifecycleWatchesIsAnsweredLater(t *testing.T) {
+	captureSignals()
+	t.Cleanup(func() {
+		if early != nil {
+			signal.Stop(early)
+			early = nil
+		}
+	})
+	require.NoError(t, syscall.Kill(os.Getpid(), syscall.SIGHUP))
+
+	hangups := make(chan struct{}, 1)
+	release := lifecycle{hangup: func() { hangups <- struct{}{} }, stop: func() {}, stopNow: func() {}}.watch(t.Context())
+	defer release()
+	select {
+	case <-hangups:
+	case <-time.After(lifecycleBound):
+		t.Fatal("the queued SIGHUP was never answered")
+	}
+}
+
 func TestServerHangupReloadsAndTermStops(t *testing.T) {
 	stateDir := brokerEnv(t)
 	t.Setenv("MAGUS_BROKER", "off")

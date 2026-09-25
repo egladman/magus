@@ -111,6 +111,7 @@ func runCLI() int {
 	// A broker or a foreground server answers its own signals (see lifecycle); a run's
 	// Ctrl+C policy would cancel it on the first SIGTERM it means to drain on.
 	if ownsItsSignals(args) {
+		captureSignals()
 		rootCtx, stopSignals = context.WithCancel(context.Background())
 		interrupted = func() (syscall.Signal, bool) { return 0, false }
 	} else {
