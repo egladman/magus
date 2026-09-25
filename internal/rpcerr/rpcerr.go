@@ -79,6 +79,7 @@ var titles = map[types.DiagnosticCode]string{
 	types.TokenRecordInvalid:        "invalid token record skipped",
 	types.ShareRequestMalformed:     "malformed share request",
 	types.TokenRequestInvalid:       "invalid token request",
+	types.SocketPeerNotOwner:        "socket peer is not the server's user",
 }
 
 // Error returns the rendered message, so an Error can travel as a Go error.
