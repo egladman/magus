@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -26,6 +27,9 @@ import (
 )
 
 var queueBase = strings.Repeat("b", 40)
+
+// queueDate dates every commit the queue tests name.
+var queueDate = time.Unix(1_788_000_000, 0).UTC()
 
 func queueHead(id string) string { return strings.Repeat("0", 39) + id }
 
@@ -321,6 +325,7 @@ func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
 func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	f := newQueueFixture(t, "", "")
 	f.vcs.EXPECT().FetchRef(mock.Anything, f.root, "origin", "refs/heads/main").Return(queueBase, nil)
+	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
 	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil)
 	var changes bytes.Buffer
 	require.NoError(t, mergequeue.WriteChanges(&changes, types.Changes{Base: "main"}))
@@ -348,7 +353,7 @@ func validated(t *testing.T, dir string) {
 	t.Helper()
 	c := types.Change{ID: "1", Head: queueHead("1"), Base: "main", Method: types.MethodSquash, Affected: []string{"app"}}
 	vd := &mergequeue.VerdictDir{Path: dir}
-	require.NoError(t, vd.WritePlan(types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: queueBase, Depth: 1, Partitions: [][]types.Change{{c}}}))
+	require.NoError(t, vd.WritePlan(types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: queueBase, CommitDate: queueDate, Depth: 1, Partitions: [][]types.Change{{c}}}))
 	require.NoError(t, vd.Record(types.Verdict{BaseCommit: queueBase, Change: c, Decision: types.DecisionMerge, Onto: queueBase,
 		CandidateCommit: strings.Repeat("c", 40), Method: types.MethodSquash, Depth: 1}))
 	require.NoError(t, vd.MarkDone())
@@ -506,10 +511,11 @@ func TestQueuePlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 	paths := map[string]string{queueHead("1"): "app/a.txt", queueHead("2"): "lib/b.txt"}
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/r.git", nil)
 	f.vcs.EXPECT().FetchRef(mock.Anything, f.root, "origin", "refs/heads/main").Return(queueBase, nil)
+	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
 	for head, path := range paths {
 		f.vcs.EXPECT().FetchCommit(mock.Anything, f.root, "origin", head).Return(nil)
 		f.vcs.EXPECT().RangeCommits(mock.Anything, f.root, queueBase, head, []string(nil)).Return([]magustypes.Commit{{ID: head, Parents: []string{queueBase}}}, nil)
-		f.vcs.EXPECT().FindCommit(mock.Anything, f.root, head).Return(magustypes.Commit{ID: head, Parents: []string{queueBase}}, nil)
+		f.vcs.EXPECT().FindCommit(mock.Anything, f.root, head).Return(magustypes.Commit{ID: head, Parents: []string{queueBase}, Date: queueDate}, nil)
 		f.vcs.EXPECT().IsAncestor(mock.Anything, f.root, head, queueBase).Return(false, nil)
 		f.vcs.EXPECT().RangeFiles(mock.Anything, f.root, queueBase, head, []string(nil)).Return([]string{path}, nil)
 		f.vcs.EXPECT().MergeTrees(mock.Anything, f.root, magustypes.TreeMerge{Ours: queueBase, Theirs: head}).Return(magustypes.TreeMergeResult{Tree: "t"}, nil)

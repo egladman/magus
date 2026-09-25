@@ -671,7 +671,7 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 // What does not match is kicked back, never merged.
 func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (string, error) {
 	c := v.Change
-	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch}
+	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}
 	b, err := buildMerge(ctx, r.vcs, s)
 	if conf, ok := asConflict(err); ok {
 		return "", &waitError{code: types.CodeWaitRevalidate, reason: "rebuilding its candidate conflicted in " + joinPaths(conf.paths) + ", which validation did not; validated again next run"}
@@ -753,12 +753,18 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 			}
 			return unreviewed("its plain merge conflicts in " + joinPaths(src))
 		}
-		from, err := r.vcs.CommitTree(ctx, r.clone.Root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: plain merge of " + short(ob.Commit)),
+		// Dated as the merge it stands in for, so a regeneration that reads HEAD's date
+		// makes the same tree of both.
+		date, err := newestDate(ctx, r.vcs, r.clone.Root, time.Time{}, ob.Commit)
+		if err != nil {
+			return err
+		}
+		from, err := r.vcs.CommitTree(ctx, r.clone.Root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: plain merge of "+short(ob.Commit), date),
 			Tree: plain.Tree, Parents: []string{ob.First, ob.Onto}})
 		if err != nil {
 			return err
 		}
-		got, err := r.regenerateAt(ctx, c, from, ob.Paths, g.Units)
+		got, err := r.regenerateAt(ctx, c, from, date, ob.Paths, g.Units)
 		if err != nil {
 			return err
 		}
@@ -775,13 +781,13 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 
 // regenerateAt regenerates paths in a checkout of commit and returns the tree that
 // leaves.
-func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit string, paths, units []string) (string, error) {
+func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit string, date time.Time, paths, units []string) (string, error) {
 	cand, err := checkout(ctx, r.vcs, r.clone.Root, r.scratch, "proof-"+c.ID, commit)
 	if err != nil {
 		return "", err
 	}
 	defer r.discard(ctx, cand)
-	b := built{Candidate: cand, touched: paths}
+	b := built{Candidate: cand, touched: paths, date: date}
 	s := candidateSpec{clone: r.clone, facts: r.facts, change: c, scratch: r.scratch}
 	after, err := regenerateIn(ctx, r.vcs, s, b, r.Regenerate, units)
 	if err != nil {
@@ -1285,7 +1291,7 @@ func (r *applyRun) ownDeltas(ctx context.Context, tip string, steps []*ready) (b
 	for i, st := range steps {
 		if i > 0 {
 			var err error
-			if below, err = r.vcs.CommitTree(ctx, r.clone.Root, magustypes.TreeCommit{CommitMeta: queueMeta("expected"), Tree: steps[i-1].tree, Parents: []string{below}}); err != nil {
+			if below, err = r.vcs.CommitTree(ctx, r.clone.Root, magustypes.TreeCommit{CommitMeta: queueMeta("expected", r.plan.CommitDate), Tree: steps[i-1].tree, Parents: []string{below}}); err != nil {
 				return false, err
 			}
 		}

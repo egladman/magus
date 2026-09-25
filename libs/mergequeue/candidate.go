@@ -24,10 +24,6 @@ import (
 // one sees it; it is fixed so the same inputs yield the same commit.
 var candidateIdentity = magustypes.Person{Name: "merge queue", Email: "queue@mergequeue.invalid"}
 
-// candidateDate dates every candidate commit, so the same inputs yield the same commit
-// in every job that builds it.
-var candidateDate = time.Unix(946684800, 0).UTC()
-
 // reviewDepth bounds how many merges of the base reviewTarget and ownTop look through.
 const reviewDepth = 8
 
@@ -145,14 +141,16 @@ type candidateSpec struct {
 	facts   types.BuildFacts
 	onto    string
 	change  types.Change
-	scratch string // the directory each candidate gets a private one under
+	scratch string    // the directory each candidate gets a private one under
+	date    time.Time // the plan's CommitDate
 }
 
 // built is a candidate whose merge is committed, and what regenerating it would rewrite.
 type built struct {
 	types.Candidate
-	touched []string // the paths the merge changed or settled, sorted
-	settled []string // the generated files it conflicted in, which took the change's side
+	touched []string  // the paths the merge changed or settled, sorted
+	settled []string  // the generated files it conflicted in, which took the change's side
+	date    time.Time // what the candidate and a regeneration on it are dated
 }
 
 // buildMerge checks out onto in a directory of its own, merges the change, settles
@@ -177,7 +175,7 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 		if err != nil {
 			return built{}, err
 		}
-		from, err = v.CommitTree(ctx, root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: #" + c.ID + " is stacked on " + short(mb)),
+		from, err = v.CommitTree(ctx, root, magustypes.TreeCommit{CommitMeta: queueMeta("merge queue: #"+c.ID+" is stacked on "+short(mb), s.date),
 			Tree: tree, Parents: []string{s.onto, mb}})
 		if err != nil {
 			return built{}, err
@@ -198,14 +196,14 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 	if err != nil {
 		return built{}, err
 	}
-	if cand.Commit, err = v.Commit(ctx, cand.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #" + c.ID)}); err != nil {
+	if cand.Commit, err = v.Commit(ctx, cand.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, s.date)}); err != nil {
 		return built{}, err
 	}
 	touched, err := v.DiffTrees(ctx, root, s.onto, cand.Commit)
 	if err != nil {
 		return built{}, err
 	}
-	return built{Candidate: cand, touched: slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled)))), settled: settled}, nil
+	return built{Candidate: cand, touched: slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled)))), settled: settled, date: s.date}, nil
 }
 
 // checkout checks commit out in a directory of its own under scratch, named from name,
@@ -343,7 +341,7 @@ func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b 
 }
 
 func commitRegenerated(ctx context.Context, v types.BuildVCS, b built, keep []string) (string, error) {
-	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: keep})
+	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", b.date), Paths: keep})
 }
 
 // generationOf asks the build tool what regenerating outputs runs, against every file c
@@ -387,8 +385,8 @@ func restore(ctx context.Context, v types.BuildVCS, cand types.Candidate, path s
 	return os.WriteFile(abs, []byte(content), mode)
 }
 
-func queueMeta(msg string) magustypes.CommitMeta {
-	return magustypes.CommitMeta{Message: msg, Author: candidateIdentity, Committer: candidateIdentity, Date: candidateDate}
+func queueMeta(msg string, date time.Time) magustypes.CommitMeta {
+	return magustypes.CommitMeta{Message: msg, Author: candidateIdentity, Committer: candidateIdentity, Date: date}
 }
 
 // predict is the tree the base carries once the candidate built onto onto merges onto

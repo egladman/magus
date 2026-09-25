@@ -1,6 +1,10 @@
 package types
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 // Schema names. Each document carries its own under "schema"; a reader refuses any
 // other, so a format change is a new name rather than a silent misread.
@@ -131,6 +135,11 @@ type Plan struct {
 	Base       string `json:"base"`
 	RemoteURL  string `json:"remote_url,omitempty"` // URL of the remote the provider names its repository by
 	BaseCommit string `json:"base_commit"`          // tip of Base every candidate is built on
+	// CommitDate dates every commit the queue writes: the newest commit date of the base
+	// commit and each admitted head. It is read from the commits rather than a clock, so
+	// the same queue plans the same candidates and nothing a cache keys on moves, and no
+	// admitted commit is newer, so a build reading HEAD's date as "now" finds none ahead.
+	CommitDate time.Time `json:"commit_date"`
 	// Depth is how many candidates of one partition validate at once.
 	Depth int `json:"depth"`
 	// Partitions hold the admitted changes in queue order, every change after the one
@@ -148,7 +157,7 @@ type Plan struct {
 
 // Check reports whether p is a plan the queue can validate and apply: a valid base and
 // base commit, every change once, each after the change it is stacked on, and planning's
-// verdicts deciding anything but merge, with no gate.
+// verdicts deciding anything but merge, with no gate, and a commit date.
 func (p Plan) Check() error {
 	if err := checkBranch(p.Base); err != nil {
 		return fmt.Errorf("base: %w", err)
@@ -207,6 +216,9 @@ func (p Plan) Check() error {
 		if err := u.check(); err != nil {
 			return fmt.Errorf("unqueued: %w", err)
 		}
+	}
+	if p.CommitDate.IsZero() {
+		return errors.New("the plan records no commit date")
 	}
 	return nil
 }

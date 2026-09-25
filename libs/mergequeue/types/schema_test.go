@@ -2,9 +2,12 @@ package types
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+var dated = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
 func green(id string) Verdict {
 	return Verdict{BaseCommit: base, Change: change(id), Decision: DecisionMerge, Onto: base, CandidateCommit: head("c" + id), Method: MethodSquash}
@@ -100,7 +103,8 @@ func TestPlanCheckRefusesAChangeAheadOfWhatItIsStackedOnADuplicateAndAPlanningMe
 	require.ErrorContains(t, merge.Check(), "planning decides merge for #1, which only validation decides")
 	require.ErrorContains(t, Plan{Base: "main", BaseCommit: base}.Check(), "depth 0 is below 1")
 	require.ErrorContains(t, Plan{Base: "main", BaseCommit: "tip", Depth: 1}.Check(), `base commit "tip" is not a commit id`)
-	require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Partitions: [][]Change{{change("1"), child}}}.Check())
+	require.ErrorContains(t, Plan{Base: "main", BaseCommit: base, Depth: 1}.Check(), "the plan records no commit date")
+	require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, CommitDate: dated, Partitions: [][]Change{{change("1"), child}}}.Check())
 }
 
 // An applier clears the queued mark from an unqueued change, so the plan carries each
@@ -109,7 +113,7 @@ func TestAnUnqueuedChangeCarriesItsMarkIntoThePlan(t *testing.T) {
 	for _, m := range []Mark{MarkNone, MarkQueued, MarkRejected} {
 		u := UnqueuedChange{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: m}
 		require.NoError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{u}}.Check(), m)
-		require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, Unqueued: []UnqueuedChange{u}}.Check(), m)
+		require.NoError(t, Plan{Base: "main", BaseCommit: base, Depth: 1, CommitDate: dated, Unqueued: []UnqueuedChange{u}}.Check(), m)
 	}
 	odd := UnqueuedChange{ID: "4", Head: head("4"), Mark: "merged"}
 	require.EqualError(t, Changes{Base: "main", Unqueued: []UnqueuedChange{odd}}.Check(), `unqueued[0]: #4: mark "merged", want queued, rejected or none`)

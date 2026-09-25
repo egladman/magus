@@ -370,7 +370,7 @@ func (r *validation) candidate(ctx context.Context, onto string, c types.Change)
 	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
 		return types.Candidate{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
-	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch}
+	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}
 	b, err := buildMerge(ctx, r.vcs, s)
 	if err != nil || r.Regenerate == nil {
 		return b.Candidate, err
