@@ -275,6 +275,9 @@ func TestLocatePushFollowsTheLine(t *testing.T) {
 		"git -C /b push":                            at("/b"),
 		"git -C ../b push origin HEAD:refs/heads/x": at("/b"),
 		"git -C b -C c push":                        at("/w/b/c"),
+		"git --no-pager -c x=y -C /b -P push":       at("/b"),
+		`git -C "" push`:                            here,
+		"git --namespace ns push origin topic":      {dir: "/w", rev: "topic"},
 		"cd /b && git push":                         at("/b"),
 		"cd /b; git push":                           at("/b"),
 		"cd b && git -C c push":                     at("/w/b/c"),
@@ -298,6 +301,10 @@ func TestLocatePushFollowsTheLine(t *testing.T) {
 		"cd /b || git push",
 		"bash -c 'git -C /b push'",
 		"git --git-dir=/b/.git push",
+		"git --work-tree /b push",
+		"git -C /b --git-dir .git push",
+		"git -c alias.p=push p",
+		"git --help push",
 		"if true; then git push; fi",
 		"echo git push",
 		"git status",
@@ -370,6 +377,22 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 	t.Run("a plain push still grades the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git push" })
 		assert.Equal(t, "ask", v.Decision)
+		assert.Contains(t, v.Reason, "abc1234")
+	})
+
+	t.Run("global options around -C still grade the checkout it names", func(t *testing.T) {
+		v := judgeRelocatedPush(t, true, false, func(b string) string {
+			return "git --no-pager -c color.ui=never -C " + b + " -P push origin HEAD:refs/heads/x"
+		})
+		assert.Equal(t, "ask", v.Decision)
+		assert.Equal(t, string(denyRulePushUngated), v.Rule)
+		assert.Contains(t, v.Reason, "def5678")
+	})
+
+	t.Run("a pager option does not hide a push from the hook's checkout", func(t *testing.T) {
+		v := judgeRelocatedPush(t, false, true, func(string) string { return "git -P push" })
+		assert.Equal(t, "ask", v.Decision)
+		assert.Equal(t, string(denyRulePushUngated), v.Rule)
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 

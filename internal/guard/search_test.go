@@ -26,6 +26,10 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		{`grep -rnE 'HandleRequest|ParseConfig' internal/`, "HandleRequest,ParseConfig"},
 		{`rg 'HandleRequest|ParseConfig'`, "HandleRequest,ParseConfig"},
 		{`git grep -n 'HandleRequest\|ParseConfig'`, "HandleRequest,ParseConfig"},
+		{`git --no-pager grep -n 'HandleRequest\|ParseConfig'`, "HandleRequest,ParseConfig"},
+		// -C searches another tree, and -c can change the pattern dialect.
+		{`git -C /tmp/other-repo grep -n 'HandleRequest\|ParseConfig'`, ""},
+		{`git -c grep.patternType=perl grep -n 'HandleRequest\|ParseConfig'`, ""},
 		{`rg '\bHandleRequest\b'`, "HandleRequest"},
 		{`grep -rn 'func Judge' internal/`, "Judge"},
 		{`grep -rn 'func Judge(' internal/`, "Judge"},

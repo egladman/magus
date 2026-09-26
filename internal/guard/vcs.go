@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -70,10 +71,14 @@ func isDependencyMutation(c hint.Invocation) bool {
 // matches however it is reached.
 func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if c.Name != "git" || len(c.Args) == 0 {
+		if c.Name != "git" {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		g := parseGit(c.Args)
+		if g.alias != "" {
+			return denyInlineAlias("git", g.alias), true
+		}
+		sub, rest := g.sub, g.rest
 		switch sub {
 		case "stash":
 			// Reading a stash is safe. RESTORING one is not, which this rule used to
@@ -164,10 +169,11 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 		if isPush(c) {
 			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 		}
-		if c.Name != "git" || len(c.Args) == 0 {
+		if c.Name != "git" {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		g := parseGit(c.Args)
+		sub, rest := g.sub, g.rest
 		switch sub {
 		case "push":
 			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
@@ -207,6 +213,254 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	return ShellVerdict{}, false
 }
 
+// gitCommand is a git argv split where git itself splits it: the global options git reads
+// before its subcommand (git(1) OPTIONS), the subcommand, and what follows it. Every git
+// rule reads the subcommand from here, so an option in front of it (`git -C . reset
+// --hard`, `git --no-pager stash`) cannot hide it from one of them.
+type gitCommand struct {
+	// at indexes sub in the argv, -1 when the argv names no subcommand.
+	at   int
+	sub  string
+	rest []string
+	// dirs are the -C operands in order. git resolves each relative one against the
+	// directory the one before it reached, so they apply in sequence.
+	dirs []string
+	// opaque is set by --git-dir or --work-tree, which point git at a repository by a path
+	// that need not be a checkout's directory, so no location can be read off them.
+	opaque bool
+	// configured is set by any -c or --config-env, which can change what the subcommand
+	// does: grep.patternType makes `git grep` a PCRE search.
+	configured bool
+	// alias is the first inline config key that can define an alias, "" for none.
+	alias string
+}
+
+// gitValuedGlobals are the global options that take their value as the NEXT word. Each
+// long one also accepts `--opt=value`; git reads -C and -c only in the separate form.
+var gitValuedGlobals = map[string]bool{
+	"-C": true, "-c": true, "--config-env": true, "--git-dir": true, "--work-tree": true,
+	"--namespace": true, "--attr-source": true, "--shallow-file": true, "--super-prefix": true,
+}
+
+// parseGit reads a git argv, the words after `git`, up to its subcommand.
+//
+// `--help`, `-h`, `--version` and `-v` end the options and become the `help` or `version`
+// command, as git rewrites them. Any other flag is skipped as one word: git refuses an
+// option it does not know before running anything, so reading past one can only judge a
+// command that never runs. The options that print and exit (`--exec-path` with no value,
+// `--list-cmds=`, `--html-path`) are read past for the same reason, and judging the words
+// after them costs a deny on a line nobody writes.
+func parseGit(args []string) gitCommand {
+	g := gitCommand{at: -1}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--help", "-h":
+			g.at, g.sub, g.rest = i, "help", args[i+1:]
+			return g
+		case "--version", "-v":
+			g.at, g.sub, g.rest = i, "version", args[i+1:]
+			return g
+		}
+		if !strings.HasPrefix(a, "-") {
+			g.at, g.sub, g.rest = i, a, args[i+1:]
+			return g
+		}
+		name, value, joined := strings.Cut(a, "=")
+		switch {
+		case !joined && gitValuedGlobals[a]:
+			if i+1 >= len(args) {
+				return g
+			}
+			i++
+			value = args[i]
+		case !joined || name == "-C" || name == "-c":
+			continue
+		}
+		switch name {
+		case "-C":
+			// git skips an empty -C rather than failing on it.
+			if value != "" {
+				g.dirs = append(g.dirs, value)
+			}
+		case "--git-dir", "--work-tree":
+			g.opaque = true
+		case "-c", "--config-env":
+			g.configured = true
+			if key, _, _ := strings.Cut(value, "="); g.alias == "" && definesAlias(key) {
+				g.alias = key
+			}
+		}
+	}
+	return g
+}
+
+// definesAlias reports a config key that can make a git word run another command: an
+// alias, or an include, which loads a file that may define one. Section names are
+// case-insensitive, so `ALIAS.x` counts.
+func definesAlias(key string) bool {
+	section, _, _ := strings.Cut(strings.ToLower(key), ".")
+	return section == "alias" || section == "include" || section == "includeif"
+}
+
+// denyInlineAlias refuses a prog line that defines an alias inline, key naming the config
+// key or option that does.
+//
+// A deny rather than judging the line as every destructive verb at once: the arguments
+// those rules read (--hard, the pathspec, --all) come from the alias body too, and a
+// config file or git's `--config-env` keeps that body off the line altogether. Spelling
+// the expansion out loses nothing.
+func denyInlineAlias(prog, key string) ShellVerdict {
+	return ShellVerdict{
+		Deny: "Spell out the " + prog + " command the alias stands for, and run that.\n" +
+			"`" + key + "` on this line can define what a " + prog + " word runs, so no " + prog + " rule can read which command it is: one that discards work or pushes would pass unjudged.",
+		Rule: denyRule{Name: denyRuleInlineAlias, Arg: key},
+	}
+}
+
+// vcsCommand is an hg, sl or jj argv split at its subcommand. Unlike git, each reads its
+// global options anywhere on the line, so rest is what follows the subcommand with every
+// known global option and its value taken out.
+type vcsCommand struct {
+	sub  string
+	rest []string
+	// alias is the first config key or option that can define an alias, "" for none.
+	alias string
+}
+
+// vcsGlobals are, per backend other than git, the global options each documents (`hg help
+// -v`, `sl help -v`, `jj help`), true for one taking a value. A value follows as the next
+// word or after `=`. git's are gitValuedGlobals.
+var vcsGlobals = map[string]map[string]bool{
+	"hg": hgGlobals,
+	"sl": func() map[string]bool {
+		sl := maps.Clone(hgGlobals)
+		sl["--configfile"] = true
+		return sl
+	}(),
+	"jj": {
+		"-R": true, "--repository": true, "--at-operation": true, "--at-op": true,
+		"--color": true, "--config": true, "--config-toml": true, "--config-file": true,
+		"--ignore-working-copy": false, "--ignore-immutable": false, "--debug": false,
+		"--quiet": false, "--no-pager": false,
+	},
+}
+
+// hgGlobals are Mercurial's; Sapling adds --configfile. `--repo` is the one abbreviation
+// hg accepts for --repository ahead of the others.
+var hgGlobals = map[string]bool{
+	"-R": true, "--repository": true, "--repo": true, "--cwd": true, "--config": true,
+	"--config-file": true, "--color": true, "--encoding": true, "--encodingmode": true,
+	"--pager": true,
+	"-y":      false, "--noninteractive": false, "-q": false, "--quiet": false, "-v": false,
+	"--verbose": false, "--debug": false, "--debugger": false, "--traceback": false,
+	"--time": false, "--profile": false, "--hidden": false,
+}
+
+// parseVCS reads an hg, sl or jj argv: its first positional word is the subcommand, and
+// the known global options are taken out wherever they sit. After `--` every word is
+// positional. An unknown flag is kept as one word, since it may be the subcommand's own.
+//
+// hg and sl also accept a unique prefix of a long option. One is expanded only ahead of
+// the subcommand, where nothing but a global can stand, so a subcommand's own flag that
+// happens to prefix a global is never taken out.
+func parseVCS(prog string, args []string) vcsCommand {
+	opts := vcsGlobals[prog]
+	var v vcsCommand
+	rest := []string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			tail := args[i:]
+			if v.sub == "" && len(tail) > 1 {
+				v.sub, tail = tail[1], tail[2:]
+			}
+			rest = append(rest, tail...)
+			break
+		}
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			if v.sub == "" {
+				v.sub = a
+			} else {
+				rest = append(rest, a)
+			}
+			continue
+		}
+		name, value, joined := strings.Cut(a, "=")
+		valued, known := opts[name]
+		if !known && v.sub == "" && prog != "jj" {
+			name, valued, known = abbreviatedGlobal(opts, name)
+		}
+		if !known {
+			if v.sub != "" {
+				rest = append(rest, a)
+			}
+			continue
+		}
+		if valued && !joined {
+			if i+1 >= len(args) {
+				break
+			}
+			i++
+			value = args[i]
+		}
+		if v.alias == "" {
+			v.alias = aliasOption(prog, name, value)
+		}
+	}
+	v.rest = rest
+	return v
+}
+
+// abbreviatedGlobal expands name when it is a unique prefix of one long global option.
+func abbreviatedGlobal(opts map[string]bool, name string) (string, bool, bool) {
+	if !strings.HasPrefix(name, "--") || len(name) < 3 {
+		return name, false, false
+	}
+	match := ""
+	for opt := range opts {
+		if strings.HasPrefix(opt, name) {
+			if match != "" {
+				return name, false, false
+			}
+			match = opt
+		}
+	}
+	if match == "" {
+		return name, false, false
+	}
+	return match, opts[match], true
+}
+
+// aliasOption reports what in one global option can define an alias for prog, or "": a
+// `--config` key in the alias section (hg's and sl's `alias`, jj's `aliases`), or an
+// option loading config from a file or a TOML string, which can hold one unseen.
+func aliasOption(prog, name, value string) string {
+	switch name {
+	case "--config":
+		key, _, _ := strings.Cut(value, "=")
+		section, _, _ := strings.Cut(strings.ToLower(key), ".")
+		want := "alias"
+		if prog == "jj" {
+			want = "aliases"
+		}
+		if strings.Trim(section, `"'`) == want {
+			return key
+		}
+	case "--config-toml", "--config-file", "--configfile":
+		return name
+	}
+	return ""
+}
+
+// aliasFlag spells an alias source as the option that set it.
+func aliasFlag(alias string) string {
+	if strings.HasPrefix(alias, "-") {
+		return alias
+	}
+	return "--config " + alias
+}
+
 // isTreeIdentityQuery reports whether a `git rev-parse` invocation is asking WHICH
 // REVISION this is, rather than one of the many repository-layout questions the
 // same subcommand answers (`--show-toplevel`, `--git-dir`, `--is-inside-work-tree`).
@@ -241,6 +495,9 @@ func isTreeIdentityQuery(args []string) bool {
 // over-eager deny really is the safe direction, because these rules guard work
 // that cannot be recovered.
 func gitGuardFallback(command string) (ShellVerdict, bool) {
+	if m := inlineAliasRe.FindStringSubmatch(command); m != nil {
+		return denyInlineAlias("git", m[1]), true
+	}
 	switch {
 	case stashRe.MatchString(command) && !stashSafeRe.MatchString(command):
 		return denyWholeTree("git stash"), true
@@ -385,10 +642,14 @@ func isDeletingClean(args []string) bool {
 // touches, and only the whole-tree flags below discard a tree the caller did not enumerate.
 func nonGitVCSGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if len(c.Args) == 0 {
+		if _, ok := vcsGlobals[c.Name]; !ok {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		v := parseVCS(c.Name, c.Args)
+		if v.alias != "" {
+			return denyInlineAlias(c.Name, v.alias), true
+		}
+		sub, rest := v.sub, v.rest
 		if c.Name == "jj" {
 			if v, matched := jjRule(c.Name, sub, rest); matched {
 				return v, true

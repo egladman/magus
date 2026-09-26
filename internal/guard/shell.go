@@ -99,6 +99,7 @@ const (
 	denyRuleWholeTree         denyRuleName = "whole-tree"
 	denyRuleSharedStash       denyRuleName = "shared-stash"
 	denyRuleWorktreeRemove    denyRuleName = "worktree-remove"
+	denyRuleInlineAlias       denyRuleName = "inline-alias"
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 	denyRuleCd                denyRuleName = "cd"
@@ -150,6 +151,11 @@ type denyRule struct {
 // preceding char is consumed by a negated class; `^` keeps the start-of-string
 // case.
 const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
+
+// gitOpts is `git` and the global options before its subcommand, each flag optionally
+// followed by one value word, so a fallback pattern reads `git -C . stash` as `git stash`.
+// It is the text counterpart of parseGit, looser in the safe direction.
+const gitOpts = `git(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+`
 
 // chainedRunRe matches a second `magus run` on the same line.
 //
@@ -1022,20 +1028,22 @@ func subcommandWord(arg string) bool {
 // These remain ONLY as the unparsable-line fallback: gitGuard above is the
 // primary path, and it reads an AST instead of the raw text.
 var (
-	stashRe = regexp.MustCompile(`\bgit\s+stash\b`)
+	stashRe = regexp.MustCompile(`\b` + gitOpts + `stash\b`)
 	// Reading a stash is safe; RESTORING one is not, and the parsed rule denies the bare
 	// restore forms. Listing pop/apply/drop/branch as safe here left the destructive
 	// spellings with no verdict at all on a line that does not parse, which is the one
 	// place an over-eager deny is the right answer.
-	stashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show)\b`)
-	resetRe     = regexp.MustCompile(`\bgit\s+reset\b[^&|;]*--hard`)
-	checkoutRe  = regexp.MustCompile(`\bgit\s+checkout\s+(--\s+)?\.(\s|$)`)
-	restoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
-	cleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
-	stageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
+	stashSafeRe = regexp.MustCompile(`\b` + gitOpts + `stash\s+(list|show)\b`)
+	resetRe     = regexp.MustCompile(`\b` + gitOpts + `reset\b[^&|;]*--hard`)
+	checkoutRe  = regexp.MustCompile(`\b` + gitOpts + `checkout\s+(--\s+)?\.(\s|$)`)
+	restoreRe   = regexp.MustCompile(`\b` + gitOpts + `restore\b[^&|;]*\s\.(\s|$)`)
+	cleanRe     = regexp.MustCompile(`\b` + gitOpts + `clean\b[^&|;]*\s-\w*[fdxX]`)
+	stageRe     = regexp.MustCompile(`\b` + gitOpts + `(commit|add)\b`)
 	// `git add -A` / `git add .` / `git add --all` / `git add -u`: stage-everything
 	// forms. Split out from stageRe because these DENY; see Evaluate.
-	stageAllRe = regexp.MustCompile(cmdPos + `git\s+add\s+(-A\b|--all\b|-u\b|--update\b|\.(\s|$))`)
+	stageAllRe = regexp.MustCompile(cmdPos + gitOpts + `add\s+(-A\b|--all\b|-u\b|--update\b|\.(\s|$))`)
+	// An alias defined inline, which parseGit refuses on a line that parses.
+	inlineAliasRe = regexp.MustCompile(`\bgit\s(?:[^&|;]*\s)?(?:-c|--config-env)(?:\s+|=)['"]?((?i:alias|include|includeif)\.[^\s='"]*)`)
 	// Push, NOT commit. Committing in a half-finished state is ordinary and
 	// sometimes necessary; a gate there would fire constantly and be tuned out.
 	// Publishing is where the work stops being yours alone, so that is where the
@@ -1052,7 +1060,7 @@ var (
 	// all; without it the argument is a branch (`git checkout main`, `-b foo`),
 	// which is not this rule's business. `git restore` targets worktree files by
 	// definition, so its bare form counts.
-	scopedRevertRe = regexp.MustCompile(`\bgit\s+checkout\b[^&|;]*\s--\s|\bgit\s+restore\b`)
+	scopedRevertRe = regexp.MustCompile(`\b` + gitOpts + `checkout\b[^&|;]*\s--\s|\b` + gitOpts + `restore\b`)
 	// Unparseable-line fallback for shellUsesCd. Anchored at a command position
 	// so a `cd` inside a commit message or a quoted string does not trip it.
 	cdCmdRe = regexp.MustCompile(cmdPos + `cd\b`)

@@ -484,62 +484,77 @@ func moveTo(at shellDir, target string) shellDir {
 	return at
 }
 
-// relocatingFlags are, per backend, the options naming the checkout a command runs
-// against. git reads -C before its subcommand only; the others accept theirs anywhere.
+// relocatingFlags are, per backend other than git, the options naming the checkout a
+// command runs against, accepted anywhere on the line. git's is -C, read by parseGit.
 var relocatingFlags = map[string][]string{
-	"git": {"-C"},
-	"hg":  {"-R", "--repository", "--repo", "--cwd"},
-	"sl":  {"-R", "--repository", "--repo", "--cwd"},
-	"jj":  {"-R", "--repository"},
+	"hg": {"-R", "--repository", "--repo", "--cwd"},
+	"sl": {"-R", "--repository", "--repo", "--cwd"},
+	"jj": {"-R", "--repository"},
 }
-
-// opaqueGitFlags point git at a repository by a path that need not be the checkout's own
-// directory, so no workspace can be read off them.
-var opaqueGitFlags = []string{"--git-dir", "--work-tree"}
 
 // vcsRelocates reports whether rendered args carry a flag moving the program off its
 // working directory.
 func vcsRelocates(program string, args []string) bool {
 	if program == "git" {
-		_, rest := vcsSubcommand(hint.Invocation{Name: program, Args: args})
-		args = args[:len(args)-len(rest)]
+		g := parseGit(args)
+		return len(g.dirs) > 0 || g.opaque
 	}
 	for _, a := range args {
 		name, _, _ := strings.Cut(a, "=")
-		if slices.Contains(relocatingFlags[program], name) || program == "git" && slices.Contains(opaqueGitFlags, name) {
+		if slices.Contains(relocatingFlags[program], name) {
 			return true
 		}
 	}
 	return false
 }
 
+// gitPushFrom is pushFrom for git: where its -C chain leads from at, and the revision the
+// refspec names. False when a word git reads before its subcommand is not literal, since
+// a variable there may be the subcommand itself, or when --git-dir or --work-tree name
+// the repository by a path no checkout can be read off.
+func gitPushFrom(args []*syntax.Word, at shellDir) (pushSite, bool) {
+	lits := make([]string, 0, len(args))
+	for _, w := range args {
+		lit, ok := literalArg(w.Parts)
+		if !ok {
+			break
+		}
+		lits = append(lits, lit)
+	}
+	g := parseGit(lits)
+	if g.at < 0 || g.opaque {
+		return pushSite{}, false
+	}
+	for _, dir := range g.dirs {
+		if strings.HasPrefix(dir, "~") {
+			return pushSite{}, false
+		}
+		at = moveTo(at, dir)
+	}
+	if !at.known {
+		return pushSite{}, false
+	}
+	return pushSite{dir: at.dir, relocated: at.moved, rev: pushedRev(args[g.at+1:])}, true
+}
+
 // pushFrom is where a push spelled with args runs, starting from at, and the revision a
 // git push publishes. False when a relocating operand is not one literal path.
 func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool) {
-	valued := vcsGlobalValueFlags[program]
+	if program == "git" {
+		return gitPushFrom(args, at)
+	}
+	globals := vcsGlobals[program]
 	moving := relocatingFlags[program]
-	var rest []*syntax.Word
 	for i := 0; i < len(args); i++ {
 		lit, ok := literalArg(args[i].Parts)
 		if !ok {
-			if program == "git" {
-				// Where git's options end, a variable may be the subcommand itself.
-				return pushSite{}, false
-			}
 			continue
 		}
 		name, value, joined := strings.Cut(lit, "=")
-		if program == "git" && slices.Contains(opaqueGitFlags, name) {
-			return pushSite{}, false
-		}
 		if !strings.HasPrefix(lit, "-") {
-			if program == "git" {
-				rest = args[i+1:]
-				break
-			}
 			continue
 		}
-		if !joined && slices.Contains(valued, name) {
+		if !joined && globals[name] {
 			i++
 			if i >= len(args) {
 				return pushSite{}, false
@@ -557,7 +572,7 @@ func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool)
 	if !at.known {
 		return pushSite{}, false
 	}
-	return pushSite{dir: at.dir, relocated: at.moved, rev: pushedRev(rest)}, true
+	return pushSite{dir: at.dir, relocated: at.moved}, true
 }
 
 // pushedRev is the source of the one refspec a `git push` names, or "" for the checkout's
