@@ -242,12 +242,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
-		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
-		// a check bypasses nothing, and what it bypasses is the cache, the sandbox and
-		// the affected set, exactly as the rewriting form does. The deny names the charm,
-		// so the reader is not sent at a target that would rewrite the tree.
-		{command: "gofmt -l ./libs", rule: rawTool(`gofmt -l ./libs`)},
-		{command: "gofmt -d x.go", rule: rawTool(`gofmt -d x.go`)},
+		// A check rendering is covered too: it bypasses the cache, the sandbox and the
+		// affected set, exactly as the rewriting form does. gofmt's listing and diff are
+		// the exemption, pinned in TestRawToolPassesAGofmtListing.
 		// One per tool family a spell renders without a subcommand. Each passed before,
 		// because the rendering names no verb and the prefix match had nothing to compare.
 		{command: "golangci-lint run ./...", rule: rawTool(`golangci-lint run ./...`)},
@@ -556,7 +553,7 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		// version flag after a subcommand (go test hands it to the compiled test binary),
 		// and `help` given to a program with no subcommands, which reads it as a file.
 		{command: "go test -run X -h", rule: rawTool("go test -run X -h")},
-		{command: "gofmt -l --help", rule: rawTool("gofmt -l --help")},
+		{command: "gofmt -w --help", rule: rawTool("gofmt -w --help")},
 		{command: "go test ./... --version", rule: rawTool("go test ./... --version")},
 		{command: "gofmt help", rule: rawTool("gofmt help")},
 		// One per exempted rule. The silent advisory rows are the dependency and install
@@ -819,6 +816,46 @@ func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
 // agent does not need to intend evasion to evade; it just needs a habit and a
 // toolchain that is awkward to reach. Treat any new entry here as a bug report,
 // not a nice-to-have.
+// TestRawToolPassesAGofmtListing: a gofmt that lists or diffs writes nothing, so it leaves
+// no drift for the format target to report; a write, and the other checks a spell
+// renders, stay refused.
+func TestRawToolPassesAGofmtListing(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		{command: "gofmt -l ."},
+		{command: "gofmt -l ./libs"},
+		{command: "gofmt -d x.go"},
+		{command: "gofmt -l -s internal/guard"},
+		{command: "gofmt -d -r 'a -> b' x.go"},
+		{command: "gofmt -l -w=false ."},
+		{command: "/usr/local/go/bin/gofmt -l ."},
+		{command: "gofmt -l . | head"},
+		// go list reads the module graph and runs nothing a spell renders.
+		{command: "go list ./..."},
+		{command: "go list -m all"},
+
+		{command: "gofmt -w x.go", denied: true},
+		{command: "gofmt -l -w .", denied: true},
+		{command: "gofmt -d -w=true x.go", denied: true},
+		{command: "gofmt --w -l .", denied: true},
+		// Printing formatted source is neither a listing nor a diff.
+		{command: "gofmt x.go", denied: true},
+		{command: "gofmt -l=false x.go", denied: true},
+		// Other single-purpose checks keep the deny.
+		{command: "govulncheck ./...", denied: true},
+		{command: "shellcheck scripts/release.sh", denied: true},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.denied {
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, tc.command)
+			continue
+		}
+		assert.NotEqual(t, denyRuleRawTool, v.Rule.Name, tc.command)
+	}
+}
+
 func TestGuardAdversarial(t *testing.T) {
 	denied := []struct{ name, command string }{
 		// Wrapper smuggling, the observed failure mode.

@@ -834,15 +834,15 @@ func rawToolDenied(deps Dependencies, c hint.Invocation) bool {
 //
 // A rendering that carries a SUBCOMMAND is matched on it, which is what keeps `go env`
 // available in a workspace whose spells render `go test`. A rendering that carries none is
-// a single-purpose program, and then every spelling of it is the covered one: a read-only
-// form (`gofmt -l`, `govulncheck ./...`, `shellcheck`) bypasses the cache, the sandbox and
-// the affected set exactly as the rewriting form does, and the exemption those used to
-// have is what let a whole tool family run raw.
+// a single-purpose program, and then every spelling of it is the covered one: a check
+// (`govulncheck ./...`, `shellcheck`) bypasses the cache, the sandbox and the affected set
+// exactly as the rewriting form does. gofmt's listing and diff (gofmtReadOnly) are the one
+// exemption: they read files and print, where the others run an analysis.
 //
 // A help or version request passes (helpRequest): it reads the tool's documentation and
 // runs nothing over the tree, and a guard funnels a capability rather than removing one.
 func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
-	if helpRequest(deps, c) {
+	if helpRequest(deps, c) || gofmtReadOnly(c) {
 		return toolMatch{}, false
 	}
 	// Read once: every rendering that reaches the comparison below has already been
@@ -869,6 +869,32 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 		}
 	}
 	return toolMatch{}, false
+}
+
+// gofmtReadOnly reports a gofmt that lists (-l) or diffs (-d) and does not write (-w). It
+// changes nothing on disk, so it leaves no drift for the owning target to report, and a
+// refusal sends the reader through a target whose check form prints the same list.
+// gofmt parses its flags with Go's flag package: no clusters, `-w=false` writes nothing.
+func gofmtReadOnly(c hint.Invocation) bool {
+	if filepath.Base(c.Name) != "gofmt" {
+		return false
+	}
+	lists := false
+	for _, a := range c.Args {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		switch name {
+		case "w":
+			if !hasValue || (value != "false" && value != "0") {
+				return false
+			}
+		case "l", "d":
+			lists = lists || !hasValue || (value != "false" && value != "0")
+		}
+	}
+	return lists
 }
 
 // helpRequest reports an invocation whose only effect is printing the tool's usage or
