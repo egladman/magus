@@ -543,7 +543,7 @@ func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool)
 	if program == "git" {
 		return gitPushFrom(args, at)
 	}
-	valued := vcsGlobalValueFlags[program]
+	globals := vcsGlobals[program]
 	moving := relocatingFlags[program]
 	for i := 0; i < len(args); i++ {
 		lit, ok := literalArg(args[i].Parts)
@@ -554,7 +554,7 @@ func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool)
 		if !strings.HasPrefix(lit, "-") {
 			continue
 		}
-		if !joined && slices.Contains(valued, name) {
+		if !joined && globals[name] {
 			i++
 			if i >= len(args) {
 				return pushSite{}, false

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -75,7 +76,7 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 		}
 		g := parseGit(c.Args)
 		if g.alias != "" {
-			return denyInlineAlias(g.alias), true
+			return denyInlineAlias("git", g.alias), true
 		}
 		sub, rest := g.sub, g.rest
 		switch sub {
@@ -302,19 +303,162 @@ func definesAlias(key string) bool {
 	return section == "alias" || section == "include" || section == "includeif"
 }
 
-// denyInlineAlias refuses a git line that defines an alias inline, key naming the config
-// key that does.
+// denyInlineAlias refuses a prog line that defines an alias inline, key naming the config
+// key or option that does.
 //
 // A deny rather than judging the line as every destructive verb at once: the arguments
-// those rules read (--hard, the pathspec, the stash entry) come from the alias body too,
-// and `--config-env` or an include keeps that body off the line altogether. Spelling the
-// expansion out loses nothing.
-func denyInlineAlias(key string) ShellVerdict {
+// those rules read (--hard, the pathspec, --all) come from the alias body too, and a
+// config file or git's `--config-env` keeps that body off the line altogether. Spelling
+// the expansion out loses nothing.
+func denyInlineAlias(prog, key string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "Spell out the git command the alias stands for, and run that.\n" +
-			"`" + key + "` set inline defines what a git word runs on this line alone, so no git rule can read which command it is: one that resets, cleans or pushes would pass unjudged.",
+		Deny: "Spell out the " + prog + " command the alias stands for, and run that.\n" +
+			"`" + key + "` on this line can define what a " + prog + " word runs, so no " + prog + " rule can read which command it is: one that discards work or pushes would pass unjudged.",
 		Rule: denyRule{Name: denyRuleInlineAlias, Arg: key},
 	}
+}
+
+// vcsCommand is an hg, sl or jj argv split at its subcommand. Unlike git, each reads its
+// global options anywhere on the line, so rest is what follows the subcommand with every
+// known global option and its value taken out.
+type vcsCommand struct {
+	sub  string
+	rest []string
+	// alias is the first config key or option that can define an alias, "" for none.
+	alias string
+}
+
+// vcsGlobals are, per backend other than git, the global options each documents (`hg help
+// -v`, `sl help -v`, `jj help`), true for one taking a value. A value follows as the next
+// word or after `=`. git's are gitValuedGlobals.
+var vcsGlobals = map[string]map[string]bool{
+	"hg": hgGlobals,
+	"sl": func() map[string]bool {
+		sl := maps.Clone(hgGlobals)
+		sl["--configfile"] = true
+		return sl
+	}(),
+	"jj": {
+		"-R": true, "--repository": true, "--at-operation": true, "--at-op": true,
+		"--color": true, "--config": true, "--config-toml": true, "--config-file": true,
+		"--ignore-working-copy": false, "--ignore-immutable": false, "--debug": false,
+		"--quiet": false, "--no-pager": false,
+	},
+}
+
+// hgGlobals are Mercurial's; Sapling adds --configfile. `--repo` is the one abbreviation
+// hg accepts for --repository ahead of the others.
+var hgGlobals = map[string]bool{
+	"-R": true, "--repository": true, "--repo": true, "--cwd": true, "--config": true,
+	"--config-file": true, "--color": true, "--encoding": true, "--encodingmode": true,
+	"--pager": true,
+	"-y":      false, "--noninteractive": false, "-q": false, "--quiet": false, "-v": false,
+	"--verbose": false, "--debug": false, "--debugger": false, "--traceback": false,
+	"--time": false, "--profile": false, "--hidden": false,
+}
+
+// parseVCS reads an hg, sl or jj argv: its first positional word is the subcommand, and
+// the known global options are taken out wherever they sit. After `--` every word is
+// positional. An unknown flag is kept as one word, since it may be the subcommand's own.
+//
+// hg and sl also accept a unique prefix of a long option. One is expanded only ahead of
+// the subcommand, where nothing but a global can stand, so a subcommand's own flag that
+// happens to prefix a global is never taken out.
+func parseVCS(prog string, args []string) vcsCommand {
+	opts := vcsGlobals[prog]
+	var v vcsCommand
+	rest := []string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			tail := args[i:]
+			if v.sub == "" && len(tail) > 1 {
+				v.sub, tail = tail[1], tail[2:]
+			}
+			rest = append(rest, tail...)
+			break
+		}
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			if v.sub == "" {
+				v.sub = a
+			} else {
+				rest = append(rest, a)
+			}
+			continue
+		}
+		name, value, joined := strings.Cut(a, "=")
+		valued, known := opts[name]
+		if !known && v.sub == "" && prog != "jj" {
+			name, valued, known = abbreviatedGlobal(opts, name)
+		}
+		if !known {
+			if v.sub != "" {
+				rest = append(rest, a)
+			}
+			continue
+		}
+		if valued && !joined {
+			if i+1 >= len(args) {
+				break
+			}
+			i++
+			value = args[i]
+		}
+		if v.alias == "" {
+			v.alias = aliasOption(prog, name, value)
+		}
+	}
+	v.rest = rest
+	return v
+}
+
+// abbreviatedGlobal expands name when it is a unique prefix of one long global option.
+func abbreviatedGlobal(opts map[string]bool, name string) (string, bool, bool) {
+	if !strings.HasPrefix(name, "--") || len(name) < 3 {
+		return name, false, false
+	}
+	match := ""
+	for opt := range opts {
+		if strings.HasPrefix(opt, name) {
+			if match != "" {
+				return name, false, false
+			}
+			match = opt
+		}
+	}
+	if match == "" {
+		return name, false, false
+	}
+	return match, opts[match], true
+}
+
+// aliasOption reports what in one global option can define an alias for prog, or "": a
+// `--config` key in the alias section (hg's and sl's `alias`, jj's `aliases`), or an
+// option loading config from a file or a TOML string, which can hold one unseen.
+func aliasOption(prog, name, value string) string {
+	switch name {
+	case "--config":
+		key, _, _ := strings.Cut(value, "=")
+		section, _, _ := strings.Cut(strings.ToLower(key), ".")
+		want := "alias"
+		if prog == "jj" {
+			want = "aliases"
+		}
+		if strings.Trim(section, `"'`) == want {
+			return key
+		}
+	case "--config-toml", "--config-file", "--configfile":
+		return name
+	}
+	return ""
+}
+
+// aliasFlag spells an alias source as the option that set it.
+func aliasFlag(alias string) string {
+	if strings.HasPrefix(alias, "-") {
+		return alias
+	}
+	return "--config " + alias
 }
 
 // isTreeIdentityQuery reports whether a `git rev-parse` invocation is asking WHICH
@@ -352,7 +496,7 @@ func isTreeIdentityQuery(args []string) bool {
 // that cannot be recovered.
 func gitGuardFallback(command string) (ShellVerdict, bool) {
 	if m := inlineAliasRe.FindStringSubmatch(command); m != nil {
-		return denyInlineAlias(m[1]), true
+		return denyInlineAlias("git", m[1]), true
 	}
 	switch {
 	case stashRe.MatchString(command) && !stashSafeRe.MatchString(command):
@@ -498,10 +642,14 @@ func isDeletingClean(args []string) bool {
 // touches, and only the whole-tree flags below discard a tree the caller did not enumerate.
 func nonGitVCSGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if len(c.Args) == 0 {
+		if _, ok := vcsGlobals[c.Name]; !ok {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		v := parseVCS(c.Name, c.Args)
+		if v.alias != "" {
+			return denyInlineAlias(c.Name, v.alias), true
+		}
+		sub, rest := v.sub, v.rest
 		if c.Name == "jj" {
 			if v, matched := jjRule(c.Name, sub, rest); matched {
 				return v, true

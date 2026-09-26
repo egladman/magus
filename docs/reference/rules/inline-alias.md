@@ -1,20 +1,20 @@
 ---
-title: "inline-alias: a git line defining an alias inline (`-c alias.x=...`), which hides the command it runs"
-description: "A deny rule: it refuses a git line defining an alias inline (`-c alias.x=...`), which hides the command it runs, and names what to run instead."
+title: "inline-alias: a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs"
+description: "A deny rule: it refuses a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs, and names what to run instead."
 tags: [guard, rules, inline-alias, deny]
 ---
 
 # inline-alias
 
-A deny rule: it refuses a git line defining an alias inline (`-c alias.x=...`), which hides the command it runs, and names what to run instead.
+A deny rule: it refuses a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs, and names what to run instead.
 
 ## What it catches
 
-A git line defining an alias inline (`-c alias.x=...`), which hides the command it runs.
+A VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs.
 
 ## Why
 
-git expands `git -c alias.x='reset --hard' x` into `git reset --hard`, so the word every git rule reads as the subcommand names nothing, and a reset, clean or push would pass unjudged. The guard refuses the line rather than judging it as every destructive verb at once: the arguments those rules read come from the alias body too, and `--config-env` or an inline `include.path`, which loads a file that may define aliases, keeps the body off the line altogether. Spell out the command the alias stands for. Any other `-c` setting is untouched, and the global options before a subcommand (`-C`, `--no-pager`, `--git-dir`) are read past the way git reads them.
+git expands `git -c alias.x='reset --hard' x` into `git reset --hard`, so the word every git rule reads as the subcommand names nothing, and a reset, clean or push would pass unjudged. The guard refuses the line rather than judging it as every destructive verb at once: the arguments those rules read come from the alias body too, and `--config-env` or an inline `include.path`, which loads a file that may define aliases, keeps the body off the line altogether. The other backends are held to the same bar: hg's and sl's `--config alias.x=...`, jj's `--config aliases.x=...`, and the options that load config from a file or a TOML string (`--config-file`, sl's `--configfile`, jj's `--config-toml`). Spell out the command the alias stands for. Any other config setting is untouched, and each tool's global options (`git -C`, `hg -R`, `jj --at-op`, `--no-pager`) are read past the way the tool reads them.
 
 ## Seeing it
 

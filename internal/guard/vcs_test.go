@@ -220,3 +220,119 @@ func TestGitGuardFollowsDashCIntoAnotherCheckout(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, pushSite{dir: wt, relocated: true}, site)
 }
+
+// TestParseVCS pins hg's, sl's and jj's global options, which each reads anywhere on the
+// line: taken out of what follows the subcommand, separate or `=`, and abbreviated only
+// where hg and sl accept it.
+func TestParseVCS(t *testing.T) {
+	t.Parallel()
+	cmd := func(sub string, rest ...string) vcsCommand {
+		if rest == nil {
+			rest = []string{}
+		}
+		return vcsCommand{sub: sub, rest: rest}
+	}
+	aliased := func(c vcsCommand, alias string) vcsCommand {
+		c.alias = alias
+		return c
+	}
+	for line, want := range map[string]vcsCommand{
+		"hg purge":                                        cmd("purge"),
+		"hg -R . purge":                                   cmd("purge"),
+		"hg --repository . purge":                         cmd("purge"),
+		"hg --repository=. purge":                         cmd("purge"),
+		"hg --repo . purge":                               cmd("purge"),
+		"hg --cwd . purge":                                cmd("purge"),
+		"hg --cwd=. purge":                                cmd("purge"),
+		"hg --config ui.x=y purge":                        cmd("purge"),
+		"hg --config=ui.x=y purge":                        cmd("purge"),
+		"hg -y -q -v --debug --traceback purge":           cmd("purge"),
+		"hg --noninteractive --quiet --verbose purge":     cmd("purge"),
+		"hg --time --profile --hidden --debugger purge":   cmd("purge"),
+		"hg --color never --pager never purge":            cmd("purge"),
+		"hg --encoding utf-8 --encodingmode strict purge": cmd("purge"),
+		"hg --pag never purge":                            cmd("purge"),
+		"hg --col=never purge":                            cmd("purge"),
+		"hg revert -R . --all":                            cmd("revert", "--all"),
+		"hg update --cwd . -C":                            cmd("update", "-C"),
+		"hg revert -- -R":                                 cmd("revert", "--", "-R"),
+		"hg -- purge":                                     cmd("purge"),
+		"sl --cwd . purge":                                cmd("purge"),
+		"sl goto --config ui.x=y --clean":                 cmd("goto", "--clean"),
+		"jj -R . abandon":                                 cmd("abandon"),
+		"jj --repository=. abandon":                       cmd("abandon"),
+		"jj --at-op @ restore":                            cmd("restore"),
+		"jj --at-operation=@ restore":                     cmd("restore"),
+		"jj --ignore-working-copy --ignore-immutable --debug --quiet --no-pager abandon": cmd("abandon"),
+		"jj --color never --config ui.x=y abandon":                                       cmd("abandon"),
+		"jj restore -R ../x":          cmd("restore"),
+		"jj restore --from @- a.go":   cmd("restore", "--from", "@-", "a.go"),
+		"jj workspace --quiet forget": cmd("workspace", "forget"),
+		// jj takes no abbreviation, so an unknown flag is kept as the subcommand's own.
+		"jj restore --col never":            cmd("restore", "--col", "never"),
+		"hg --config alias.x=purge x":       aliased(cmd("x"), "alias.x"),
+		"hg --config=ALIAS.x=purge x":       aliased(cmd("x"), "ALIAS.x"),
+		"hg --config-file /tmp/rc x":        aliased(cmd("x"), "--config-file"),
+		"sl --config alias.x=purge x":       aliased(cmd("x"), "alias.x"),
+		"sl --configfile /tmp/rc x":         aliased(cmd("x"), "--configfile"),
+		"jj --config aliases.x=abandon x":   aliased(cmd("x"), "aliases.x"),
+		`jj --config "aliases".x=abandon x`: aliased(cmd("x"), `"aliases".x`),
+		"jj --config-toml ui.x=1 x":         aliased(cmd("x"), "--config-toml"),
+		"jj --config-file /tmp/c.toml x":    aliased(cmd("x"), "--config-file"),
+		// hg's section is alias, jj's is aliases: each is only the other's ordinary key.
+		"hg --config aliases.x=purge status": cmd("status"),
+		"jj --config alias.x=abandon log":    cmd("log"),
+		"hg":                                 cmd(""),
+	} {
+		words := strings.Fields(line)
+		assert.Equal(t, want, parseVCS(words[0], words[1:]), line)
+	}
+}
+
+// TestNonGitVCSGuardReadsPastGlobalOptions is TestGitGuardReadsPastGlobalOptions for hg,
+// sl and jj: every destructive form reached past a global option before the fix.
+func TestNonGitVCSGuardReadsPastGlobalOptions(t *testing.T) {
+	t.Parallel()
+	wholeTree := func(op string) denyRule { return denyRule{Name: denyRuleWholeTree, Arg: op} }
+	for command, want := range map[string]denyRule{
+		"hg -R . purge":                                wholeTree("hg purge"),
+		"hg --cwd . --config ui.x=y clean":             wholeTree("hg clean"),
+		"hg -y --pager never revert --all":             wholeTree("hg revert --all"),
+		"hg --pag never purge":                         wholeTree("hg purge"),
+		"hg --repository=. update -C":                  wholeTree("hg update --clean"),
+		"sl --cwd . purge":                             wholeTree("sl purge"),
+		"sl --configfile=x -R . goto --clean":          {Name: denyRuleInlineAlias, Arg: "--configfile"},
+		"sl -q goto --clean":                           wholeTree("sl goto --clean"),
+		"jj -R . abandon":                              wholeTree("jj abandon"),
+		"jj --at-op @ --ignore-working-copy abandon":   wholeTree("jj abandon"),
+		"jj --config ui.x=y restore":                   wholeTree("jj restore"),
+		"jj restore -R ../x":                           wholeTree("jj restore"),
+		"jj --no-pager workspace forget":               {Name: denyRuleWorktreeRemove},
+		"hg --config alias.x=purge x":                  {Name: denyRuleInlineAlias, Arg: "alias.x"},
+		"sl --config alias.x=purge x":                  {Name: denyRuleInlineAlias, Arg: "alias.x"},
+		"jj --config aliases.x=abandon x":              {Name: denyRuleInlineAlias, Arg: "aliases.x"},
+		"jj --config-toml 'aliases.x=[\"abandon\"]' x": {Name: denyRuleInlineAlias, Arg: "--config-toml"},
+	} {
+		v := Evaluate(testDependencies(), command)
+		assert.Equal(t, want, v.Rule, "%q", command)
+		assert.NotEmpty(t, v.Deny, "%q", command)
+	}
+	for _, command := range []string{
+		"hg -R . status",
+		"hg --cwd . log -l 3",
+		"hg --config ui.x=y revert a.go",
+		"sl --cwd . status",
+		"sl -R . goto main",
+		"jj -R . log",
+		"jj --at-op @ restore a.go",
+		"jj --ignore-working-copy status",
+		"jj --config ui.x=y workspace list",
+	} {
+		v := Evaluate(testDependencies(), command)
+		assert.Empty(t, v.Deny, "%q", command)
+		assert.Empty(t, v.Context, "%q", command)
+	}
+	for _, command := range []string{"hg -R . push", "sl --cwd . push --to main", "jj --at-op @ -R . git push"} {
+		assert.Equal(t, string(advisoryPushGate), Evaluate(testDependencies(), command).RuleName(), "%q", command)
+	}
+}
