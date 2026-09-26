@@ -53,6 +53,33 @@ func TestMain(m *testing.M) {
 // script is a hook running body with sh, which reads the appended inputs as $1 onward.
 func script(body string) Command { return Command{"sh", "-c", body, "hook"} }
 
+// newBox makes a box's home and temporary directory as checkout does, and removes them
+// even when a hook left them unwritable.
+func newBox(t *testing.T) (home, tmp string) {
+	t.Helper()
+	box := t.TempDir()
+	home, tmp = filepath.Join(box, "home"), filepath.Join(box, "tmp")
+	for _, dir := range []string{home, tmp} {
+		require.NoError(t, os.Mkdir(dir, 0o700))
+	}
+	t.Cleanup(func() { makeWritable(box) })
+	return home, tmp
+}
+
+// boxed is cand in a box of its own, as checkout gives every candidate.
+func boxed(t *testing.T, cand types.Candidate) types.Candidate {
+	t.Helper()
+	cand.Home, cand.TempDir = newBox(t)
+	return cand
+}
+
+// boxedRegen is r in a box of its own, as a candidate's regeneration runs.
+func boxedRegen(t *testing.T, r types.Regeneration) types.Regeneration {
+	t.Helper()
+	r.Home, r.TempDir = newBox(t)
+	return r
+}
+
 // lines is what a hook log holds, one entry per line.
 func lines(log *bytes.Buffer) []string { return strings.Split(strings.TrimSpace(log.String()), "\n") }
 
@@ -120,13 +147,13 @@ func TestGateGetsExactlyItsWordsAndUnitsAndNoQueueEnvironment(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "x.go"), nil, 0o644))
 	var log bytes.Buffer
 	g := CommandGate(Command{"printf", `[%s]\n`, "*", "$HOME"}, HookEnv{}, NewHookLog(&log))
-	res, err := g.Validate(context.Background(), types.Candidate{Commit: "s1", Change: "7", Dir: dir}, []string{"libs/a b", "$HOME", "*", "/"})
+	res, err := g.Validate(context.Background(), boxed(t, types.Candidate{Commit: "s1", Change: "7", Dir: dir}), []string{"libs/a b", "$HOME", "*", "/"})
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 	assert.Equal(t, []string{"[s1 #7] [*]", "[s1 #7] [$HOME]", "[s1 #7] [libs/a b]", "[s1 #7] [$HOME]", "[s1 #7] [*]", "[s1 #7] [/]"}, lines(&log))
 
 	log.Reset()
-	_, err = CommandGate(script(`env`), HookEnv{}, NewHookLog(&log)).Validate(context.Background(), types.Candidate{Commit: "s1", Change: "7", Dir: dir}, hookUnits)
+	_, err = CommandGate(script(`env`), HookEnv{}, NewHookLog(&log)).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s1", Change: "7", Dir: dir}), hookUnits)
 	require.NoError(t, err)
 	assert.NotContains(t, log.String(), "MERGEQUEUE_")
 }
@@ -134,7 +161,7 @@ func TestGateGetsExactlyItsWordsAndUnitsAndNoQueueEnvironment(t *testing.T) {
 func TestGateIsGreenOnExitZeroAndRedOtherwise(t *testing.T) {
 	dir := t.TempDir()
 	g := CommandGate(script(`test -f ok`), HookEnv{}, nil)
-	cand := types.Candidate{Commit: "s1", Change: "7", Dir: dir}
+	cand := boxed(t, types.Candidate{Commit: "s1", Change: "7", Dir: dir})
 	res, err := g.Validate(context.Background(), cand, hookUnits)
 	require.NoError(t, err)
 	assert.False(t, res.Green)
@@ -159,45 +186,102 @@ func seenEnv(t *testing.T, dir string) map[string]string {
 	return seen
 }
 
+// boxedNames are the variables boxEnv sets.
+var boxedNames = []string{"HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "TMPDIR",
+	"MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "GOTOOLCHAIN", "MISE_DATA_DIR", "MISE_CONFIG_DIR", "MISE_TRUSTED_CONFIG_PATHS"}
+
 // A hook runs the changes' code, so its environment is the sandbox's, built from the
-// base's config: the names a sandboxed child gets and the base's passthrough, TMPDIR in
-// the candidate's scratch directory and the mode, raised to best-effort, for a magus the
-// hook runs. A credential, a GitHub Actions file command and anything else unnamed
-// never reach it.
-func TestAHooksEnvironmentIsTheSandboxes(t *testing.T) {
+// base's config: the names a sandboxed child gets and the base's passthrough, the mode,
+// raised to best-effort, for a magus the hook runs, and over them the candidate's box.
+// A credential, a GitHub Actions file command and anything else unnamed never reach it,
+// and neither does any location of the queue's own caches, whatever the passthrough
+// names: nothing inherited overrides the box.
+func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV"} {
 		t.Setenv(name, "leaked")
 	}
+	runner := t.TempDir()
+	for _, name := range []string{"GOCACHE", "GOMODCACHE", "GOPATH", "npm_config_cache", "XDG_RUNTIME_DIR", "XDG_CACHE_HOME", "MAGUS_CACHE_DIR", "TOOL_CACHE"} {
+		t.Setenv(name, filepath.Join(runner, name))
+	}
+	t.Setenv("MAGUS_CACHE_WRITE_ENABLED", "false")
+	t.Setenv("GOTOOLCHAIN", "auto")
+	t.Setenv("MISE_DATA_DIR", "/runner/mise")
+	t.Setenv("MISE_CONFIG_DIR", "/runner/mise-config")
+	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", "/work:/tmp")
 	t.Setenv("PASSED", "p")
 	t.Setenv("GLOB_X", "g")
-	dir, scratch := t.TempDir(), t.TempDir()
+	dir := t.TempDir()
 	env := HookEnv{
-		Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"PASSED", "GLOB_*"}}},
-		Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}},
-		Fixed:   []string{"SET=s"},
+		Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{
+			"PASSED", "GLOB_*", "GOCACHE", "GOMODCACHE", "GOPATH", "npm_config_cache", "XDG_*", "MAGUS_CACHE_DIR", "TOOL_CACHE", "HOME",
+		}}},
+		Spells: map[string]spells.Sandbox{"tool": {Allow: []spells.SandboxAllow{{Env: "TOOL_CACHE", Base: "xdgCache", Path: "tool", Mode: spells.SandboxAccessRW}}}},
+		Fixed:  []string{"SET=s", "HOME=/fixed"},
 	}
-	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
+	cand := boxed(t, types.Candidate{Commit: "s", Dir: dir})
+	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), cand, hookUnits)
 	require.NoError(t, err)
 	seen := seenEnv(t, dir)
 
-	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV"} {
+	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV", "GOCACHE", "GOMODCACHE", "GOPATH", "npm_config_cache", "XDG_RUNTIME_DIR", "TOOL_CACHE"} {
 		assert.NotContains(t, seen, name, "%s reaches the hook", name)
 	}
+	home := cand.Home
+	box := map[string]string{}
+	for _, name := range boxedNames {
+		box[name] = seen[name]
+	}
+	assert.Equal(t, map[string]string{
+		"HOME":                      home,
+		"XDG_CACHE_HOME":            filepath.Join(home, ".cache"),
+		"XDG_CONFIG_HOME":           filepath.Join(home, ".config"),
+		"XDG_DATA_HOME":             filepath.Join(home, ".local", "share"),
+		"XDG_STATE_HOME":            filepath.Join(home, ".local", "state"),
+		"TMPDIR":                    cand.TempDir,
+		"MAGUS_CACHE_DIR":           filepath.Join(home, ".cache", "magus"),
+		"MAGUS_CACHE_WRITE_ENABLED": "true",
+		"GOTOOLCHAIN":               "local",
+		"MISE_DATA_DIR":             "/runner/mise",
+		"MISE_CONFIG_DIR":           "/runner/mise-config",
+		"MISE_TRUSTED_CONFIG_PATHS": "/work:/tmp",
+	}, box)
 	assert.Equal(t, os.Getenv("PATH"), seen["PATH"])
-	assert.Equal(t, filepath.Join(scratch, "go-build"), seen["GOCACHE"])
-	assert.Equal(t, filepath.Join(scratch, "tmp"), seen["TMPDIR"])
 	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[procrun.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
 	assert.Equal(t, "s", seen["SET"])
-	allowed := slices.Concat(sandboxenv.DefaultAllow(), []string{"PASSED", "GLOB_X", "GOCACHE", "SET"},
-		// What magus gives every sandboxed child: itself, its mode, and where its cache
-		// and job store are when this process was told.
-		[]string{"MAGUS", "MAGUS_LEVEL", procrun.AncestorsEnvVar, procrun.SandboxEnvVar, "MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "XDG_STATE_HOME"},
+	allowed := slices.Concat(sandboxenv.DefaultAllow(), boxedNames, []string{"PASSED", "GLOB_X", "SET"},
+		// What magus gives every sandboxed child: itself and its mode.
+		[]string{"MAGUS", "MAGUS_LEVEL", procrun.AncestorsEnvVar, procrun.SandboxEnvVar},
 		[]string{"SHLVL", "_", "OLDPWD", "PWD"}) // what sh sets itself
 	for name := range seen {
 		assert.Contains(t, allowed, name, "%s reaches the hook", name)
 	}
+}
+
+// Where the runner names no mise directory, a hook's is where the runner's mise looks by
+// default, and a runner with no trust list hands none on.
+func TestBoxEnvFindsTheRunnersMiseByItsDefaults(t *testing.T) {
+	t.Setenv("MISE_DATA_DIR", "")
+	t.Setenv("MISE_CONFIG_DIR", "")
+	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", "")
+	t.Setenv("XDG_DATA_HOME", "/runner/data")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "/runner/home")
+	assert.Equal(t, []string{
+		"HOME=/box/home",
+		"XDG_CACHE_HOME=/box/home/.cache",
+		"XDG_CONFIG_HOME=/box/home/.config",
+		"XDG_DATA_HOME=/box/home/.local/share",
+		"XDG_STATE_HOME=/box/home/.local/state",
+		"TMPDIR=/box/tmp",
+		"MAGUS_CACHE_DIR=/box/home/.cache/magus",
+		"MAGUS_CACHE_WRITE_ENABLED=true",
+		"GOTOOLCHAIN=local",
+		"MISE_DATA_DIR=/runner/data/mise",
+		"MISE_CONFIG_DIR=/runner/home/.config/mise",
+	}, boxEnv("/box/home", "/box/tmp"))
 }
 
 // A base that requires the kernel sandbox keeps that mode for its hooks: where the
@@ -205,7 +289,7 @@ func TestAHooksEnvironmentIsTheSandboxes(t *testing.T) {
 func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 	dir := t.TempDir()
 	env := HookEnv{Sandbox: config.SandboxConfig{Mode: magustypes.SandboxModeRequired}}
-	res, err := CommandGate(script(`echo "$MAGUS_SANDBOX" > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	res, err := CommandGate(script(`echo "$MAGUS_SANDBOX" > seen`), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
 	if abi, abiErr := sandbox.ABI(); abiErr != nil || abi < sandbox.RequiredABI {
 		require.ErrorIs(t, err, magustypes.SandboxRequired)
 		assert.NoFileExists(t, filepath.Join(dir, "seen"))
@@ -218,32 +302,187 @@ func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 	assert.Equal(t, "required\n", string(seen))
 }
 
-// A hook's scratch directory holds the tool caches its scratch variables point at, and
-// go run executes the binaries it caches there.
-func TestAHookMayExecuteWhatItBuildsInItsScratchDirectory(t *testing.T) {
-	scratch := t.TempDir()
-	p, err := hookCommand{Dir: t.TempDir(), Scratch: scratch}.policy()
-	require.NoError(t, err)
-	cached := filepath.Join(scratch, "go-build", "29", "29d7-d", "magus-utils")
-	assert.NoError(t, p.CheckExec(t.Context(), cached))
-	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(scratch, "cache", "buf", "x")))
+// goDecl stands in for the go spell's declaration: its toolchain read and run where the
+// runner installed it, its caches written.
+func goDecl(goroot string) map[string]spells.Sandbox {
+	return map[string]spells.Sandbox{"go": {Allow: []spells.SandboxAllow{
+		{Env: "MAGUS_TEST_GOROOT", Mode: spells.SandboxAccessRX},
+		{Env: "GOCACHE", Base: "userCache", Path: "go-build", Mode: spells.SandboxAccessRWX},
+		{Env: "GOMODCACHE", Base: "home", Path: "go/pkg/mod", Mode: spells.SandboxAccessRW},
+	}}}
 }
 
-// Where the kernel has landlock, a hook writes in its checkout and its scratch
-// directory and nowhere else, and a process it starts is held to the same.
-func TestAHookIsConfinedToItsCheckoutWhereTheKernelCan(t *testing.T) {
+// A hook's policy is built from its box's environment: every cache a declaration grants
+// resolves in its home, which it may write and run from, as go run runs what it caches in
+// GOCACHE, while the runner's own caches are out of reach and the toolchain the runner
+// installed is read and run where it is.
+func TestABoxedHooksPolicyGrantsItsBoxAndNotTheRunnersCaches(t *testing.T) {
+	runner := filesystem.ResolveRulePath(t.TempDir())
+	goroot := filepath.Join(runner, "go")
+	t.Setenv("GOCACHE", filepath.Join(runner, "gocache"))
+	t.Setenv("GOMODCACHE", filepath.Join(runner, "gomod"))
+	t.Setenv("MAGUS_TEST_GOROOT", goroot)
+	home, tmp := newBox(t)
+	c := hookCommand{Dir: t.TempDir(), Spells: goDecl(goroot), Home: home, TempDir: tmp, Env: boxEnv(home, tmp)}
+	p, err := c.policy()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	for _, path := range []string{
+		filepath.Join(home, ".cache", "go-build", "29", "29d7-d", "magus-utils"),
+		filepath.Join(home, "Library", "Caches", "go-build", "29", "29d7-d", "magus-utils"),
+		filepath.Join(home, "go", "pkg", "mod", "cache", "x"),
+		filepath.Join(tmp, "go-build1", "b001", "exe", "main"),
+	} {
+		assert.NoError(t, p.CheckWrite(ctx, path), path)
+		assert.NoError(t, p.CheckExec(ctx, path), path)
+	}
+	assert.NoError(t, p.CheckExec(ctx, filepath.Join(goroot, "bin", "go")))
+	for _, path := range []string{
+		filepath.Join(runner, "gocache", "ab", "x-d"),
+		filepath.Join(runner, "gomod", "cache", "x"),
+		filepath.Join(goroot, "bin", "go"),
+		filepath.Join(filepath.Dir(home), "beside"),
+	} {
+		assert.ErrorIs(t, p.CheckWrite(ctx, path), filesystem.ErrDenied, path)
+	}
+	assert.Empty(t, p.WritesOutside(c.Dir, home, tmp))
+}
+
+// A hook whose policy would still write outside its box, as a base's config granting the
+// runner's own GOCACHE would, is the machine's error: another candidate's hook could
+// plant there what this one's gate replays. It never runs.
+func TestAHookIsRefusedWhenItsPolicyWouldWriteOutsideItsBox(t *testing.T) {
+	gocache := filesystem.ResolveRulePath(t.TempDir())
+	env := HookEnv{Sandbox: config.SandboxConfig{Allow: []spells.SandboxAllow{{Path: gocache, Mode: spells.SandboxAccessRW}}}}
+	dir := t.TempDir()
+	res, err := CommandGate(script(`touch ran`), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
+	require.ErrorContains(t, err, "the sandbox grants a hook write on `"+gocache+"`, outside its candidate's box")
+	assert.Equal(t, types.GateResult{}, res)
+	assert.NoFileExists(t, filepath.Join(dir, "ran"))
+
+	err = CommandRegenerate(script(`touch ran`), env, nil)(context.Background(), boxedRegen(t, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+	var refused *types.RefusedError
+	require.False(t, errors.As(err, &refused), "the machine's, not the change's: %v", err)
+	require.ErrorContains(t, err, "outside its candidate's box")
+}
+
+// Only a hook the change ran can have changed its box, so a box whose home or temporary
+// directory is not the private directory the queue made, or that holds a link leading a
+// grant out of it, makes that change red and the run goes on.
+func TestABoxAHookChangedIsTheChangesRed(t *testing.T) {
+	outside := t.TempDir()
+	cacheGrant := map[string]spells.Sandbox{"tool": {Allow: []spells.SandboxAllow{{Base: "xdgCache", Path: "tool", Mode: spells.SandboxAccessRW}}}}
+	for name, tc := range map[string]struct {
+		change func(t *testing.T, home string)
+		why    string
+	}{
+		"home is a link": {func(t *testing.T, home string) {
+			require.NoError(t, os.Remove(home))
+			require.NoError(t, os.Symlink(outside, home))
+		}, "is a symbolic link"},
+		"home is a file": {func(t *testing.T, home string) {
+			require.NoError(t, os.Remove(home))
+			require.NoError(t, os.WriteFile(home, nil, 0o600))
+		}, "is not a directory"},
+		"home is mode 000": {func(t *testing.T, home string) {
+			require.NoError(t, os.Chmod(home, 0))
+		}, "is mode 0000, not 0700"},
+		"a link in home leads a grant out": {func(t *testing.T, home string) {
+			require.NoError(t, os.Symlink(outside, filepath.Join(home, ".cache")))
+		}, "found a link in its box leading a grant out of it, to `" + filepath.Join(filesystem.ResolveRulePath(outside), "tool") + "`"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			env := HookEnv{Spells: cacheGrant}
+			dir := t.TempDir()
+			cand := boxed(t, types.Candidate{Commit: "s", Dir: dir})
+			tc.change(t, cand.Home)
+			res, err := CommandGate(script(`touch ran`), env, nil).Validate(context.Background(), cand, hookUnits)
+			require.NoError(t, err)
+			assert.False(t, res.Green)
+			assert.Contains(t, res.Summary, tc.why)
+			assert.NoFileExists(t, filepath.Join(dir, "ran"))
+
+			r := boxedRegen(t, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
+			tc.change(t, r.Home)
+			err = CommandRegenerate(script(`touch ran`), env, nil)(context.Background(), r)
+			var refused *types.RefusedError
+			require.ErrorAs(t, err, &refused)
+			assert.Contains(t, refused.Reason, tc.why)
+		})
+	}
+}
+
+// A hook builds a tool into its cache and runs it from there.
+func TestAHookRunsWhatItBuildsInItsCache(t *testing.T) {
+	dir := t.TempDir()
+	body := `mkdir -p "$XDG_CACHE_HOME/go-build" && printf '#!/bin/sh\necho ran\n' > "$XDG_CACHE_HOME/go-build/tool" &&
+		chmod +x "$XDG_CACHE_HOME/go-build/tool" && "$XDG_CACHE_HOME/go-build/tool" > seen`
+	cand := boxed(t, types.Candidate{Commit: "s", Dir: dir})
+	res, err := CommandGate(script(body), HookEnv{}, nil).Validate(context.Background(), cand, hookUnits)
+	require.NoError(t, err)
+	assert.True(t, res.Green, res.Summary)
+	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+	require.NoError(t, err)
+	assert.Equal(t, "ran\n", string(seen))
+	assert.FileExists(t, filepath.Join(cand.Home, ".cache", "go-build", "tool"))
+}
+
+// Two candidates of one validation keep separate caches: neither's hook finds the
+// other's entries in its own, and where the kernel confines hooks, cannot read them.
+func TestTwoCandidatesCannotSeeEachOthersCaches(t *testing.T) {
+	first := boxed(t, types.Candidate{Commit: "a", Change: "1", Dir: t.TempDir()})
+	res, err := CommandGate(script(`mkdir -p "$MAGUS_CACHE_DIR" && echo first > "$MAGUS_CACHE_DIR/entry"`), HookEnv{}, nil).
+		Validate(context.Background(), first, hookUnits)
+	require.NoError(t, err)
+	require.True(t, res.Green, res.Summary)
+	planted := filepath.Join(first.Home, ".cache", "magus", "entry")
+	require.FileExists(t, planted)
+
+	second := boxed(t, types.Candidate{Commit: "b", Change: "2", Dir: t.TempDir()})
+	body := `ls -A "$MAGUS_CACHE_DIR" > own 2>/dev/null; echo "$MAGUS_CACHE_DIR" > dir; cat "$1" > read 2>/dev/null; true`
+	res, err = CommandGate(Command{"sh", "-c", body, "hook", planted}, HookEnv{}, nil).Validate(context.Background(), second, nil)
+	require.NoError(t, err)
+	require.True(t, res.Green, res.Summary)
+	own, err := os.ReadFile(filepath.Join(second.Dir, "own"))
+	require.NoError(t, err)
+	assert.Empty(t, string(own), "the second candidate's cache holds nothing the first wrote")
+	cacheDir, err := os.ReadFile(filepath.Join(second.Dir, "dir"))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(second.Home, ".cache", "magus")+"\n", string(cacheDir))
+	if abi, err := sandbox.ABI(); err == nil && abi >= 1 {
+		read, err := os.ReadFile(filepath.Join(second.Dir, "read"))
+		require.NoError(t, err)
+		assert.Empty(t, string(read), "landlock keeps the first candidate's box out of reach")
+	}
+}
+
+// Where the kernel has landlock, a hook writes in its checkout and its box and nowhere
+// else, and a process it starts is held to the same.
+func TestAHookIsConfinedToItsBoxWhereTheKernelCan(t *testing.T) {
 	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
 		t.Skip("no landlock on this host: best-effort confines the environment only")
 	}
-	dir, scratch, outside := t.TempDir(), t.TempDir(), t.TempDir()
-	body := `touch in "$1/scratch-file" && sh -c 'touch "$1/escaped"' child "$2"`
-	res, err := CommandGate(Command{"sh", "-c", body, "hook", scratch, outside}, HookEnv{}, nil).
-		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, nil)
+	dir, outside := t.TempDir(), t.TempDir()
+	body := `touch in "$HOME/home-file" "$TMPDIR/tmp-file" && sh -c 'touch "$1/escaped"' child "$1"`
+	cand := boxed(t, types.Candidate{Commit: "s", Dir: dir})
+	res, err := CommandGate(Command{"sh", "-c", body, "hook", outside}, HookEnv{}, nil).Validate(context.Background(), cand, nil)
 	require.NoError(t, err)
 	assert.False(t, res.Green, "the write outside the grant fails")
 	assert.FileExists(t, filepath.Join(dir, "in"))
-	assert.FileExists(t, filepath.Join(scratch, "scratch-file"))
+	assert.FileExists(t, filepath.Join(cand.Home, "home-file"))
+	assert.FileExists(t, filepath.Join(cand.TempDir, "tmp-file"))
 	assert.NoFileExists(t, filepath.Join(outside, "escaped"))
+}
+
+// git needs nothing from the runner's home: a hook runs it in its checkout with its box's.
+func TestAHookRunsGitWithItsBoxsHome(t *testing.T) {
+	dir := t.TempDir()
+	res, err := CommandGate(script(`git init -q . && git status --porcelain > seen`), HookEnv{}, nil).
+		Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
+	require.NoError(t, err)
+	assert.True(t, res.Green, res.Summary)
+	assert.FileExists(t, filepath.Join(dir, "seen"))
 }
 
 // Every kind of hook takes the same HookEnv: a passthrough name and a fixed assignment
@@ -256,10 +495,10 @@ func TestEveryHookTakesItsHookEnv(t *testing.T) {
 	ctx := context.Background()
 
 	gated := t.TempDir()
-	_, err := CommandGate(record, env, nil).Validate(ctx, types.Candidate{Commit: "s", Dir: gated, Scratch: t.TempDir()}, hookUnits)
+	_, err := CommandGate(record, env, nil).Validate(ctx, boxed(t, types.Candidate{Commit: "s", Dir: gated}), hookUnits)
 	require.NoError(t, err)
 	regenerated := t.TempDir()
-	require.NoError(t, CommandRegenerate(record, env, nil)(ctx, types.Regeneration{Dir: regenerated, Scratch: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+	require.NoError(t, CommandRegenerate(record, env, nil)(ctx, boxedRegen(t, types.Regeneration{Dir: regenerated, Change: hookChange, Paths: []string{"x"}, Units: hookUnits})))
 	asked := t.TempDir()
 	_, err = CommandFacts(record, asked, env, nil).AllUnits(ctx)
 	require.NoError(t, err)
@@ -272,24 +511,32 @@ func TestEveryHookTakesItsHookEnv(t *testing.T) {
 }
 
 // A hook is usually a nested magus, and landlock domains stack, so the hook gets the
-// declarations of every spell the base loaded: a spell's variable reaches it and a
-// spell's cache is writable from it.
+// declarations of every spell the base loaded: a spell's toolchain variable reaches a
+// gate, which may run the toolchain, and a facts hook, which runs in the base's own
+// checkout with the queue's own caches, may write a spell's cache there.
 func TestAHookGetsEverySpellTheBaseLoaded(t *testing.T) {
-	cache := filesystem.ResolveRulePath(t.TempDir())
+	tool, cache := filesystem.ResolveRulePath(t.TempDir()), filesystem.ResolveRulePath(t.TempDir())
+	t.Setenv("MAGUS_TEST_SPELL_TOOL", tool)
 	t.Setenv("MAGUS_TEST_SPELL_CACHE", cache)
 	dir := t.TempDir()
 	env := HookEnv{Spells: map[string]spells.Sandbox{"tool": {
-		Allow: []spells.SandboxAllow{{Env: "MAGUS_TEST_SPELL_CACHE", Base: "userCache", Path: "tool", Mode: spells.SandboxAccessRW}},
-		Env:   spells.SandboxEnv{Passthrough: []string{"MAGUS_TEST_SPELL_CACHE"}},
+		Allow: []spells.SandboxAllow{
+			{Env: "MAGUS_TEST_SPELL_TOOL", Mode: spells.SandboxAccessRX},
+			{Env: "MAGUS_TEST_SPELL_CACHE", Base: "userCache", Path: "tool", Mode: spells.SandboxAccessRW},
+		},
+		Env: spells.SandboxEnv{Passthrough: []string{"MAGUS_TEST_SPELL_TOOL", "MAGUS_TEST_SPELL_CACHE"}},
 	}}}
-	res, err := CommandGate(script(`echo "$MAGUS_TEST_SPELL_CACHE" > seen && touch "$MAGUS_TEST_SPELL_CACHE/written"`), env, nil).
-		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: t.TempDir()}, hookUnits)
+	cand := boxed(t, types.Candidate{Commit: "s", Dir: dir})
+	res, err := CommandGate(script(`echo "$MAGUS_TEST_SPELL_TOOL" > seen`), env, nil).Validate(context.Background(), cand, hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
-	assert.Equal(t, cache+"\n", string(seen))
-	assert.FileExists(t, filepath.Join(cache, "written"))
+	assert.Equal(t, tool+"\n", string(seen))
+	gate, err := hookCommand{Dir: dir, Spells: env.Spells, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir)}.policy()
+	require.NoError(t, err)
+	assert.NoError(t, gate.CheckExec(context.Background(), filepath.Join(tool, "bin", "tool")))
+	assert.ErrorIs(t, gate.CheckWrite(context.Background(), filepath.Join(cache, "x")), filesystem.ErrDenied, "the runner's cache is not the box's")
 
 	p, err := hookCommand{Dir: dir, Spells: env.Spells}.policy()
 	require.NoError(t, err)
@@ -302,7 +549,7 @@ func TestAHookGetsEverySpellTheBaseLoaded(t *testing.T) {
 
 func TestAPassthroughThatIsNoGlobIsAnError(t *testing.T) {
 	env := HookEnv{Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"*"}}}}
-	_, err := CommandGate(Command{"true"}, env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	_, err := CommandGate(Command{"true"}, env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
 	require.ErrorIs(t, err, magustypes.AllowlistUnresolved)
 }
 
@@ -311,23 +558,23 @@ func TestAPassthroughThatIsNoGlobIsAnError(t *testing.T) {
 func TestGateTagsEveryOutputLineWithTheCommitAndWhatItHolds(t *testing.T) {
 	var log bytes.Buffer
 	g := CommandGate(script(`printf 'one\ntwo\n'; echo three >&2; printf 'no newline'`), HookEnv{}, NewHookLog(&log))
-	_, err := g.Validate(context.Background(), types.Candidate{Commit: "0123456789abcdef", Change: "7", Dir: t.TempDir()}, hookUnits)
+	_, err := g.Validate(context.Background(), boxed(t, types.Candidate{Commit: "0123456789abcdef", Change: "7", Dir: t.TempDir()}), hookUnits)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"[0123456789ab #7] one", "[0123456789ab #7] two", "[0123456789ab #7] three", "[0123456789ab #7] no newline"}, lines(&log))
 
 	log.Reset()
-	_, err = CommandGate(script(`echo one`), HookEnv{}, NewHookLog(&log)).Validate(context.Background(), types.Candidate{Commit: "fedcba9876543210", Dir: t.TempDir()}, hookUnits)
+	_, err = CommandGate(script(`echo one`), HookEnv{}, NewHookLog(&log)).Validate(context.Background(), boxed(t, types.Candidate{Commit: "fedcba9876543210", Dir: t.TempDir()}), hookUnits)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"[fedcba987654 base] one"}, lines(&log))
 }
 
 func TestGateRunsATemporaryFailureAgainAndThenCallsItRed(t *testing.T) {
 	g := CommandGate(script(`echo x >> tries; test "$(wc -l < tries)" -ge 3 || exit 75`), HookEnv{}, nil)
-	res, err := g.Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	res, err := g.Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 
-	res, err = CommandGate(script(`exit 75`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	res, err = CommandGate(script(`exit 75`), HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
 	require.NoError(t, err, "the change's processes chose the exit status, so it proves nothing about the machine")
 	assert.False(t, res.Green)
 	assert.Equal(t, "the gate exited 75 (temporary failure) 3 times", res.Summary)
@@ -341,7 +588,7 @@ func TestAGateKilledByASignalIsTheChangesRedVerdict(t *testing.T) {
 		`sh -c 'kill -KILL $$'; exit $?`: "exited 137",
 		`exit 143`:                       "exited 143",
 	} {
-		res, err := CommandGate(script(body), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+		res, err := CommandGate(script(body), HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
 		require.NoError(t, err, body)
 		assert.False(t, res.Green)
 		assert.Contains(t, res.Summary, why, body)
@@ -352,7 +599,7 @@ func TestAGateKilledByASignalIsTheChangesRedVerdict(t *testing.T) {
 // the gate returned, into the next candidate and past the verdict it led to.
 func TestAHooksProcessesDoNotOutliveIt(t *testing.T) {
 	dir := t.TempDir()
-	res, err := CommandGate(script(`(sleep 0.3; touch late) & echo started`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	res, err := CommandGate(script(`(sleep 0.3; touch late) & echo started`), HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 	time.Sleep(600 * time.Millisecond)
@@ -362,7 +609,7 @@ func TestAHooksProcessesDoNotOutliveIt(t *testing.T) {
 func TestARegenerationGetsItsUnitsAsArgumentsAndIsRefusedWhenItFails(t *testing.T) {
 	regen := CommandRegenerate(script(`cat > got; printf '[%s]' "$@" > units`), HookEnv{}, nil)
 	dir := t.TempDir()
-	require.NoError(t, regen(context.Background(), types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"app/gen/a", "app/gen/b"}, Units: []string{"app", "lib"}}))
+	require.NoError(t, regen(context.Background(), boxedRegen(t, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"app/gen/a", "app/gen/b"}, Units: []string{"app", "lib"}})))
 	got, err := os.ReadFile(filepath.Join(dir, "got"))
 	require.NoError(t, err)
 	assert.Equal(t, "app/gen/a\napp/gen/b\n", string(got))
@@ -370,59 +617,33 @@ func TestARegenerationGetsItsUnitsAsArgumentsAndIsRefusedWhenItFails(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "[app][lib]", string(units))
 
-	err = CommandRegenerate(script(`exit 3`), HookEnv{}, nil)(context.Background(), types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
+	err = CommandRegenerate(script(`exit 3`), HookEnv{}, nil)(context.Background(), boxedRegen(t, types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
 	var refused *types.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, &types.RefusedError{Reason: "the regeneration exited 3", Paths: []string{"x"}}, refused)
 
-	err = CommandRegenerate(script(`kill -KILL $$`), HookEnv{}, nil)(context.Background(), types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
+	err = CommandRegenerate(script(`kill -KILL $$`), HookEnv{}, nil)(context.Background(), boxedRegen(t, types.Regeneration{Dir: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, refused.Reason, "was killed")
 }
 
-func TestScratchVarsPointIntoEachHooksOwnScratchDirectory(t *testing.T) {
-	vars := HookEnv{Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}, {Name: "XDG_CACHE_HOME", Dir: "cache/xdg"}}}
-	dir, scratch := t.TempDir(), t.TempDir()
-	res, err := CommandGate(script(`echo "$GOCACHE $XDG_CACHE_HOME" > seen; test -d "$XDG_CACHE_HOME"`), vars, nil).
-		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
-	require.NoError(t, err)
-	assert.True(t, res.Green, "the queue creates each directory")
-	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(scratch, "go-build")+" "+filepath.Join(scratch, "cache/xdg")+"\n", string(seen))
-
-	regenDir, regenScratch := t.TempDir(), t.TempDir()
-	require.NoError(t, CommandRegenerate(script(`echo "$GOCACHE" > seen`), vars, nil)(context.Background(),
-		types.Regeneration{Dir: regenDir, Scratch: regenScratch, Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
-	seen, err = os.ReadFile(filepath.Join(regenDir, "seen"))
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(regenScratch, "go-build")+"\n", string(seen))
-}
-
-func TestParseScratchVarRefusesWhatWouldLeaveTheScratchDirectory(t *testing.T) {
-	got, err := ParseScratchVar("MAGUS_CACHE_DIR=magus/./c")
-	require.NoError(t, err)
-	assert.Equal(t, ScratchVar{Name: "MAGUS_CACHE_DIR", Dir: "magus/c"}, got)
-	for spec, want := range map[string]string{
-		"GOCACHE":                "is not NAME=DIR",
-		"GOCACHE=":               "is not NAME=DIR",
-		"1X=d":                   "is not NAME=DIR",
-		"A-B=d":                  "is not NAME=DIR",
-		"GOCACHE=../out":         "../out leaves the scratch directory",
-		"GOCACHE=/tmp/go":        "/tmp/go leaves the scratch directory",
-		"GOCACHE=a/../../escape": "a/../../escape leaves the scratch directory",
-	} {
-		_, err := ParseScratchVar(spec)
-		require.ErrorContains(t, err, want, spec)
-	}
+// A gate or a regeneration always runs in a box; one with none never runs with the
+// queue's own home and caches instead.
+func TestAHookWithNoBoxIsTheMachinesError(t *testing.T) {
+	dir := t.TempDir()
+	_, err := CommandGate(script(`touch ran`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	require.EqualError(t, err, "gate on `s`: the candidate has no box to run its hooks in")
+	err = CommandRegenerate(script(`touch ran`), HookEnv{}, nil)(context.Background(), types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"x"}, Units: hookUnits})
+	require.EqualError(t, err, "regenerate "+hookChange.Label()+": the candidate has no box to run its hooks in")
+	assert.NoFileExists(t, filepath.Join(dir, "ran"))
 }
 
 // A hook that cannot start is a machine failure: a checkout gone, or a program nothing
 // provides, which no change's code chose.
 func TestAHookThatCannotStartIsTheMachinesFailure(t *testing.T) {
-	_, err := CommandGate(Command{"true"}, HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: filepath.Join(t.TempDir(), "gone")}, hookUnits)
+	_, err := CommandGate(Command{"true"}, HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: filepath.Join(t.TempDir(), "gone")}), hookUnits)
 	require.ErrorContains(t, err, "gate on `s`")
-	_, err = CommandGate(Command{"no-such-gate-program"}, HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: t.TempDir()}, hookUnits)
+	_, err = CommandGate(Command{"no-such-gate-program"}, HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
 	require.ErrorContains(t, err, "gate on `s`")
 }
 
@@ -518,7 +739,7 @@ func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
 func TestAUnitAHookCouldReadAsAnOptionIsNeverAppended(t *testing.T) {
 	for _, unit := range []string{"-x", "--gate=sh", ""} {
 		dir := t.TempDir()
-		_, err := CommandGate(script(`touch ran`), HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, []string{"app", unit})
+		_, err := CommandGate(script(`touch ran`), HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), []string{"app", unit})
 		require.ErrorContains(t, err, "which a hook would read as an option", "%q", unit)
 		assert.NoFileExists(t, filepath.Join(dir, "ran"), "%q", unit)
 	}
@@ -530,7 +751,7 @@ func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
 	ctx := context.Background()
 	for _, broken := range []string{"gen/a\napp/main.go", "gen/a\r"} {
 		dir := t.TempDir()
-		err := CommandRegenerate(script(`cat > got`), HookEnv{}, nil)(ctx, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"gen/ok", broken}, Units: hookUnits})
+		err := CommandRegenerate(script(`cat > got`), HookEnv{}, nil)(ctx, boxedRegen(t, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"gen/ok", broken}, Units: hookUnits}))
 		var refused *types.RefusedError
 		require.ErrorAs(t, err, &refused, "%q", broken)
 		assert.Equal(t, []string{broken}, refused.Paths)

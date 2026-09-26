@@ -144,10 +144,10 @@ func TestHooksReadTheCacheThroughTheProxyAndNeverHoldTheRealToken(t *testing.T) 
 	env := HookEnv{Fixed: p.Env()}
 	dir, regenDir := t.TempDir(), t.TempDir()
 
-	_, err := CommandGate(script(`env > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir}, hookUnits)
+	_, err := CommandGate(script(`env > seen`), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
 	require.NoError(t, err)
 	require.NoError(t, CommandRegenerate(script(`env > seen`), env, nil)(context.Background(),
-		types.Regeneration{Dir: regenDir, Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+		boxedRegen(t, types.Regeneration{Dir: regenDir, Change: hookChange, Paths: []string{"x"}, Units: hookUnits})))
 	for _, d := range []string{dir, regenDir} {
 		seen, err := os.ReadFile(filepath.Join(d, "seen"))
 		require.NoError(t, err)

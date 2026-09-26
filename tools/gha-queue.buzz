@@ -86,19 +86,13 @@ export fun planArgs(dir: str, depth: str) > [str] {
         "--out", dir + "/plan.json"];
 }
 
-// SCRATCH puts every cache a hook writes in the candidate's own scratch directory: a
-// cache shared between candidates would let one change's hook plant a result, or a
-// module, another candidate's gate then trusts. The queue sets them, so the hook lines
-// stay ones a person can run as they are.
-final SCRATCH = ["--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
-    "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"];
-
 // candidateMagus is a magus command run by the candidate's own magus. The job's magus is
 // main's, and a change that adds host surface its own magusfile uses cannot even be
 // loaded by it. Validation runs the change's code anyway; apply never does, and keeps
 // main's binary. `go run` builds it as one argv, since a hook gets no shell, into the
-// candidate's own GOCACHE through SCRATCH. The spell bytecode that build embeds is
-// committed output the gate's drift check holds to its sources.
+// GOCACHE of the candidate's own home, which the queue gives every hook. The spell
+// bytecode that build embeds is committed output the gate's drift check holds to its
+// sources.
 export fun candidateMagus(args: str) > str {
     return "go run ./cmd/magus " + args;
 }
@@ -118,12 +112,8 @@ final REGENERATE = candidateMagus("run generate:rw");
 // through the queue's read-only proxy; the runner's cache token stays with the queue.
 // The plan arrives on stdin; validate() feeds it.
 export fun validateArgs(dir: str, change: str) > [str] {
-    final args = mut ["queue", "validate", SANDBOX, "--stdin", "--only", change, "--verdicts", dir + "/verdicts",
+    return ["queue", "validate", SANDBOX, "--stdin", "--only", change, "--verdicts", dir + "/verdicts",
         "--gate", GATE, "--regenerate", REGENERATE, "--remote-cache-read"];
-    foreach (a in SCRATCH) {
-        args.append(a);
-    }
-    return args;
 }
 
 // applyArgs polls every 15s: each poll is two API requests on the queue app's token,
@@ -137,9 +127,6 @@ export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) >
         "--status-context", "merge-queue", "--interval", "15s",
         "--regenerate", "magus run generate:rw",
         "--reproduce-gate", GATE, "--reproduce-regenerate", REGENERATE];
-    foreach (a in SCRATCH) {
-        args.append(a);
-    }
     args.append("--committer");
     args.append(committer);
     args.append("--app");
@@ -396,9 +383,7 @@ test "validation hooks are lines a person can run once they name the projects, w
         "--verdicts", "/t/queue/verdicts",
         "--gate", "go run ./cmd/magus run ci --no-default-charms",
         "--regenerate", "go run ./cmd/magus run generate:rw",
-        "--remote-cache-read",
-        "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
-        "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"], message: "argv");
+        "--remote-cache-read"], message: "argv");
 }
 
 test "validation runs the candidate's own magus; apply keeps main's" {
@@ -414,8 +399,6 @@ test "apply follows the validation run as its source, pinned to the base and que
         "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
         "--regenerate", "magus run generate:rw",
         "--reproduce-gate", "go run ./cmd/magus run ci --no-default-charms", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
-        "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
-        "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache",
         "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>", "--app", "q", "run:o/r/runs/99"], message: "argv");
 }
 

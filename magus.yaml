@@ -31,10 +31,14 @@ sandbox:
     passthrough:
       # The tools this repo pins run through mise. Without its trust list a sandboxed
       # child refuses a checkout's mise.toml, and without MISE_SAFE a pull request's
-      # mise.toml could run its own hooks inside the merge queue's candidates. Named,
-      # not MISE_*, which would carry MISE_GITHUB_TOKEN too.
+      # mise.toml could run its own hooks inside the merge queue's candidates. The
+      # queue gives each candidate a home of its own and points mise's data and config
+      # back at the runner's, which its shims find the installed tools by. Named, not
+      # MISE_*, which would carry MISE_GITHUB_TOKEN too.
       - MISE_TRUSTED_CONFIG_PATHS
       - MISE_SAFE
+      - MISE_DATA_DIR
+      - MISE_CONFIG_DIR
 
 cache:
   remote:

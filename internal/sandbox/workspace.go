@@ -33,14 +33,39 @@ func FromConfig(root, cacheDir string, cfg config.SandboxConfig, spellGrants map
 	if err != nil {
 		return nil, err
 	}
-	return FromConfigWithTempDir(root, cacheDir, tmp, cfg, spellGrants)
+	home, _ := os.UserHomeDir()
+	return buildFromConfig(root, cfg, spellGrants, PolicyOptions{CacheDir: cacheDir, TempDir: tmp, Home: home, Environ: os.Environ()})
 }
 
-// FromConfigWithTempDir is FromConfig with tempDir, a directory the caller keeps private
-// to this policy's children, as their TMPDIR in place of one FromConfig creates. It
-// must lie outside root.
-func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox) (*Policy, error) {
+// Box is a home and a temporary directory of their own for a policy's children, apart
+// from the host's, so that no cache they write is shared with anything outside it.
+type Box struct {
+	// Environ is the children's environment before the scrub, HOME the box's home
+	// among it. Every writable grant resolves against it.
+	Environ []string
+	// TempDir is the children's TMPDIR. It must lie outside the workspace.
+	TempDir string
+}
+
+// FromConfigBoxed is FromConfig for children living in box, with no cache dir of
+// magus's own: a writable grant resolves against box.Environ and its HOME, so a tool's
+// cache lands wherever the box points it, while a read-only or read+exec grant resolves
+// against this process's environment and home, where the host's toolchains are
+// installed. It creates nothing. WritesOutside reports what the policy writes outside
+// the box.
+func FromConfigBoxed(root string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox, box Box) (*Policy, error) {
 	home, _ := os.UserHomeDir()
+	return buildFromConfig(root, cfg, spellGrants, PolicyOptions{
+		TempDir: box.TempDir,
+		Home:    envMap(box.Environ)["HOME"],
+		Environ: box.Environ,
+		Tools:   &ToolHost{Environ: os.Environ(), Home: home},
+	})
+}
+
+// buildFromConfig refuses what FromConfig documents and builds the policy o describes
+// with root, cfg, spellGrants and the rest of this host filled in.
+func buildFromConfig(root string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox, o PolicyOptions) (*Policy, error) {
 	var errs []error
 	for i, a := range cfg.Allow {
 		if err := checkAllow(a); err != nil {
@@ -49,8 +74,13 @@ func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxCon
 		}
 		// A literal path is resolved strictly here, where an unset $VAR or a missing home
 		// can still be refused; BuildPolicy would only drop it.
-		if a.Base == "" && a.Path != "" && (a.Env == "" || os.Getenv(a.Env) == "") {
-			if _, err := filesystem.ExpandUserRule(a.Path, string(a.Mode), home, os.LookupEnv); err != nil {
+		vars, home := envMap(o.Environ), o.Home
+		if rule, _ := filesystem.ModeRule(string(a.Mode)); !rule.Write && o.Tools != nil {
+			vars, home = envMap(o.Tools.Environ), o.Tools.Home
+		}
+		if a.Base == "" && a.Path != "" && (a.Env == "" || vars[a.Env] == "") {
+			lookup := func(name string) (string, bool) { v, ok := vars[name]; return v, ok }
+			if _, err := filesystem.ExpandUserRule(a.Path, string(a.Mode), home, lookup); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -61,28 +91,17 @@ func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxCon
 		return nil, types.WrapDiagnostic(types.AllowlistUnresolved, err, "sandbox config for %s", root)
 	}
 
-	if filesystem.Under(filesystem.ResolveRulePath(tempDir), filesystem.ResolveRulePath(root)) {
-		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s; point TMPDIR outside it", tempDir, root)
+	if filesystem.Under(filesystem.ResolveRulePath(o.TempDir), filesystem.ResolveRulePath(root)) {
+		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s; point TMPDIR outside it", o.TempDir, root)
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: locate the running binary: %w", err)
 	}
-	gitDir, commonDir := gitDirs(root)
-	return BuildPolicy(PolicyOptions{
-		Mode:         cfg.Mode,
-		Workspace:    root,
-		CacheDir:     cacheDir,
-		TempDir:      tempDir,
-		Executable:   exe,
-		GitDir:       gitDir,
-		GitCommonDir: commonDir,
-		Home:         home,
-		GOOS:         runtime.GOOS,
-		Environ:      os.Environ(),
-		Sandbox:      cfg.Declaration(),
-		Spells:       spellGrants,
-	}), nil
+	o.Mode, o.Workspace, o.Executable = cfg.Mode, root, exe
+	o.GitDir, o.GitCommonDir = gitDirs(root)
+	o.GOOS, o.Sandbox, o.Spells = runtime.GOOS, cfg.Declaration(), spellGrants
+	return BuildPolicy(o), nil
 }
 
 // privateTempDir returns base/magus-sandbox-<uid>-<hash of root>, creating it 0700.

@@ -160,27 +160,64 @@ generated file, a candidate tree or a review proof from a verdict.
   `--facts` command) runs under the policy magus builds from the base's `sandbox` config,
   never a candidate's: its mode raised to at least `best-effort`, its `sandbox.allow`
   entries and its `sandbox.env.passthrough`, and the declarations of every spell the
-  base loaded, rooted at the hook's checkout, with the candidate's scratch directory
-  writable and `TMPDIR` inside it. Every spell's, not one project's: a hook is usually a
-  nested magus, and a grant the hook lacks is one no target under it can have.
+  base's projects resolved, rooted at the hook's checkout. Every such spell's, not one
+  project's: a hook is usually a nested magus, and a grant the hook lacks is one no
+  target under it can have.
+  - Each candidate is a box of three directories, each `0700`: `checkout`, `home` and
+    `tmp`. A gate or a regeneration runs in `checkout` with its own environment, set
+    after anything it would inherit:
+
+    | Variable                    | Value                                            |
+    | --------------------------- | ------------------------------------------------ |
+    | `HOME`                      | `home`                                           |
+    | `XDG_CACHE_HOME`            | `home/.cache`                                    |
+    | `XDG_CONFIG_HOME`           | `home/.config`                                   |
+    | `XDG_DATA_HOME`             | `home/.local/share`                              |
+    | `XDG_STATE_HOME`            | `home/.local/state`                              |
+    | `TMPDIR`                    | `tmp`                                            |
+    | `MAGUS_CACHE_DIR`           | `home/.cache/magus`                              |
+    | `MAGUS_CACHE_WRITE_ENABLED` | `true`                                           |
+    | `GOTOOLCHAIN`               | `local`                                          |
+    | `MISE_DATA_DIR`             | the runner's, where its mise installed the tools |
+    | `MISE_CONFIG_DIR`           | the runner's                                     |
+    | `MISE_TRUSTED_CONFIG_PATHS` | the queue's own, when it has one                 |
+
+    So every cache a tool keeps by default, magus's, Go's build and module caches,
+    npm's, pnpm's and the rest, is in the candidate's own home, and the toolchains the
+    runner installed are used where they are. A variable that would point a tool at
+    another cache never reaches the hook, even when the passthrough names it: every
+    variable a writable grant of the base's config or spells names (`GOCACHE`,
+    `GOMODCACHE`, `GOPATH`, `CARGO_HOME`, `npm_config_cache`, `PIP_CACHE_DIR`,
+    `UV_CACHE_DIR`, `MISE_CACHE_DIR` and the like) and every `XDG_` variable. There is
+    nothing to configure.
+  - The policy is built from that environment. A grant a declaration makes writable
+    resolves against the candidate's home, so `GOCACHE`'s grant is `home/.cache/go-build`
+    (`home/Library/Caches/go-build` on macOS), and the hook may read, write and run
+    anything in `home` and `tmp`. A read-only or read+exec grant, a toolchain's install,
+    resolves against the runner's own environment and home and is never writable. The
+    queue refuses to run a hook whose policy would still let it write outside its box,
+    other than its checkout's own git directory and object store and the terminal
+    devices: that is the machine's error, and it stops the run. A box a hook of the
+    change left changed, `home` or `tmp` no longer the private directory the queue made
+    or a link there leading a grant out of the box, makes that change red.
   - Everywhere, the environment is an allowlist. A hook gets only the names magus's
-    sandbox gives a sandboxed child (`PATH`, `HOME`, `USER`, the locale, `TERM`, and on
-    Linux the XDG directories) and the base's passthrough, then the queue's
-    `--scratch-env` variables and its own, and `MAGUS_SANDBOX` naming its mode, so a
-    magus the hook runs confines its own targets at least as hard
-    ([MGS2010](../reference/codes/sandbox/MGS2010.md) refuses a weaker `--sandbox`).
-    `MERGEQUEUE_TOKEN`, `GITHUB_TOKEN`, the Actions runtime token and every other
-    variable nothing names never reach it. A credential the passthrough names reaches
-    every hook: that is the workspace's choice.
+    sandbox gives a sandboxed child (`PATH`, `USER`, the locale, `TERM`) and the base's
+    passthrough, less the cache locations above, then the queue's own variables, and
+    `MAGUS_SANDBOX` naming its mode, so a magus the hook runs confines its own targets at
+    least as hard ([MGS2010](../reference/codes/sandbox/MGS2010.md) refuses a weaker
+    `--sandbox`). `MERGEQUEUE_TOKEN`, `GITHUB_TOKEN`, the Actions runtime token and every
+    other variable nothing names never reach it. A credential the passthrough names
+    reaches every hook: that is the workspace's choice.
+  - A `--facts` command reads only the base, in the base's own checkout, so it runs
+    with the queue's own home and caches and no spell's grants.
   - Everywhere, the hook's program must be one the policy lets run
     ([MGS2007](../reference/codes/sandbox/MGS2007.md)): on `PATH`, in the system and
     toolchain trees, in the checkout, or under a `sandbox.allow` entry.
   - Where the kernel has landlock (Linux), it holds the hook and every process the hook
-    starts to the policy: read, write and run in the checkout, write in the scratch
-    directory and in the tool caches the spells declare (`GOCACHE`, `GOMODCACHE`, npm,
-    pip, buf and the like), read and run on the system and toolchain trees. Nothing else is
-    reachable: not another candidate's checkout, not a credential under the home
-    directory, not `/proc/<pid>/environ` of the queue or the runner, not a GitHub
+    starts to the policy: read, write and run in its box, read and run on the system and
+    toolchain trees. Nothing else is reachable: not another candidate's box, not the
+    runner's own caches, not a credential under the runner's home directory, not
+    `/proc/<pid>/environ` of the queue or the runner, not a GitHub
     Actions file command. Landlock also sets no-new-privileges, so `sudo` cannot lift a
     confined hook, and from landlock ABI 6 a hook cannot signal a process outside its
     sandbox.
@@ -191,9 +228,9 @@ generated file, a candidate tree or a review proof from a verdict.
     hook runs under the environment allowlist and the program check alone: `magus queue
     validate` runs on a laptop, and confines nothing on its filesystem there.
 
-  What the sandbox does not confine: the network; the tool caches the policy grants,
-  which candidates share unless `--scratch-env` points each tool into the scratch
-  directory; the filesystem wherever the kernel cannot confine; and a process that leaves
+  What the sandbox does not confine: the network; the repository's object store, which
+  every candidate's checkout shares and may write; the filesystem wherever the kernel
+  cannot confine; and a process that leaves
   the hook's process group, which lives until the CI job ends. The queue itself writes
   into a candidate only through its root, and never regenerates in a checkout where the
   change holds a symbolic link at or above a path it changes or regeneration writes. The
@@ -272,10 +309,10 @@ generated file, a candidate tree or a review proof from a verdict.
   differently only makes the change wait, since it may have changed after planning.
 - **Apply writes its own words.** The squash message is apply's, from the change's own
   commits; a verdict carries none.
-- **Candidates share nothing.** Each candidate gets a checkout and a scratch directory
-  of its own, so no change's hook can plant a cache entry another candidate's gate
-  replays; `tools/gha-queue.buzz` points magus's and Go's caches there
-  with `--scratch-env`. Every
+- **Candidates share no cache.** Each candidate gets a box of its own, and every cache
+  its hooks keep is in the box's home, so no hook run on another candidate can plant an
+  entry this candidate's gate replays. A change's own regeneration runs its code before
+  its own gate, in the same home, and so decides only that change's own verdict. Every
   process a hook starts is killed when the hook exits, before its verdict is recorded; a
   process that leaves the hook's process group ends with the CI job. magus runs a hook as
   it runs a target's command: the group is killed once the hook's exit is seen and
@@ -319,13 +356,11 @@ magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
 magus queue validate --stdin --verdicts verdicts \
   --gate 'magus run ci --no-default-charms' \
-  --regenerate 'magus run generate:rw' \
-  --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build < plan.json
+  --regenerate 'magus run generate:rw' < plan.json
 magus queue apply --provider github --base main \
   --regenerate 'magus --sandbox=best-effort run generate:rw' \
   --reproduce-gate 'magus run ci --no-default-charms' \
-  --reproduce-regenerate 'magus run generate:rw' \
-  --scratch-env MAGUS_CACHE_DIR=magus verdicts
+  --reproduce-regenerate 'magus run generate:rw' verdicts
 ```
 
 `--reproduce-gate` and `--reproduce-regenerate` repeat validation's `--gate` and
@@ -333,11 +368,9 @@ magus queue apply --provider github --base main \
 them as the way to run it again. A verdict records its own, but apply never shows a line
 a job running the change's code wrote. Without them a kick-back shows no reproduction.
 
-`--scratch-env NAME=DIR`, on `validate` and `apply` and repeatable, sets `NAME` to `DIR`
-inside the checkout's scratch directory in every hook's environment, creating the
-directory. It keeps
-each candidate's caches its own without the hook line saying so, which leaves the line
-one a person can paste and run; each verdict records the lines validation ran.
+A hook line needs no cache variable: the queue gives every hook its candidate's own home
+(see [the trust model](#trust-model)), so the line is one a person can paste and run as it
+stands; each verdict records the lines validation ran.
 
 The checkout the queue works in is the one at magus's global `--root` (`-C`), before the
 subcommand as with git, and every relative path resolves against it. magus's other global
@@ -548,8 +581,9 @@ and the same projects, once a run for every change that asks. Red there, the cha
 with `WAIT_BASE_RED`, keeps its place and is told nothing; green, it is kicked back with
 `KICK_RED`. The gate's output lines on stderr are tagged with the commit and the change
 (`[4b1c0e9a2f31 #482]`), or with `base` for a commit gated as it stands. Each candidate
-is a checkout of its own (a git worktree) with a scratch directory of its own; point
-every cache there with `--scratch-env`.
+is a checkout of its own (a git worktree) in a box with a home and a temporary directory
+of its own, where every cache its hooks keep lands ([the trust model](#trust-model)
+lists the environment).
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
 the generated paths on stdin; without a hook, a file either side deleted stays deleted.

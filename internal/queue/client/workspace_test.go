@@ -1,8 +1,10 @@
 package client
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -162,6 +164,27 @@ func TestWorkspaceAutoResolvableIsTheChangeClassifier(t *testing.T) {
 		assert.Equal(t, want.ok, ok, path)
 		assert.Equal(t, want.verdict, verdict, path)
 	}
+}
+
+// The hooks get the grants of the spells the base's projects resolved, not of every
+// spell this magus has registered.
+func TestWorkspaceSpellSandboxesAreTheResolvedSpells(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n",
+		"api/go.mod":         "module example.com/api\n\ngo 1.25\n",
+		"api/main.go":        "package main\n",
+	} {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+	w, err := OpenWorkspace(t.Context(), root, "ci")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = w.Close() })
+
+	assert.Equal(t, []string{"go"}, slices.Sorted(maps.Keys(w.SpellSandboxes())))
 }
 
 func TestOpenWorkspaceNeedsATarget(t *testing.T) {

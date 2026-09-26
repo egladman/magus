@@ -20,7 +20,6 @@ import (
 	"github.com/egladman/magus/internal/queue/client"
 	"github.com/egladman/magus/internal/queue/provider"
 	"github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -210,13 +209,6 @@ func flagGiven(fs *flag.FlagSet, name string) bool {
 	return set
 }
 
-// queueSpellGrants is the sandbox declaration of every spell this magus loaded, the
-// built-ins among them, for the hooks. Like the sandbox config it is the base's: a
-// candidate's spells widen nothing.
-func queueSpellGrants() map[string]spells.Sandbox {
-	return spells.Sandboxes(project.DefaultSpellRegistry().All())
-}
-
 // open opens the checkout.
 func (e *queueEnv) open(ctx context.Context, remote, backend string) (magustypes.VCSDriver, queue.Clone, error) {
 	drv, err := queueOpenVCS(ctx, e.dir, backend, remote)
@@ -232,22 +224,26 @@ func (e *queueEnv) openProvider(ctx context.Context, spec string) (*provider.Scr
 
 // openFacts opens what answers the build tool's side: facts, another build tool's
 // command, else the magus workspace at the checkout, computing affected sets for target.
-func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, func() error, error) {
+// It also returns the sandbox declaration of every spell the workspace's projects
+// resolved, for the hooks: like the sandbox config they are the base's, so a
+// candidate's spells widen nothing. Another build tool's base loaded no spell.
+func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, map[string]spells.Sandbox, func() error, error) {
 	if facts != "" {
 		if targetGiven {
-			return nil, nil, usagef("magus queue %s: --target has no effect with --facts", verb)
+			return nil, nil, nil, usagef("magus queue %s: --target has no effect with --facts", verb)
 		}
 		cmd, err := queue.ParseCommand("--facts", facts)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return queue.CommandFacts(cmd, e.dir, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants()}, queue.NewHookLog(e.stderr)), func() error { return nil }, nil
+		return queue.CommandFacts(cmd, e.dir, queue.HookEnv{Sandbox: globalCfg.Sandbox}, queue.NewHookLog(e.stderr)), nil, func() error { return nil }, nil
 	}
 	ws, err := client.OpenWorkspace(ctx, e.dir, target)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open the magus workspace at %s (pass --facts for another build tool): %w", e.dir, err)
+		return nil, nil, nil, fmt.Errorf("open the magus workspace at %s (pass --facts for another build tool): %w", e.dir, err)
 	}
-	return ws, ws.Close, nil
+	grants := ws.SpellSandboxes()
+	return ws, grants, ws.Close, nil
 }
 
 func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
@@ -410,7 +406,7 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	bf, closeFacts, err := e.openFacts(ctx, "plan", flagGiven(fs, gen.FlagQueuePlanTarget), f.Facts, f.Target)
+	bf, _, closeFacts, err := e.openFacts(ctx, "plan", flagGiven(fs, gen.FlagQueuePlanTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -464,12 +460,7 @@ func queueScratch(prefix string) (string, func(), error) {
 // queueValidate takes no --provider: it runs the changes' code, so it never talks to
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
-	var vars queueScratchVars
-	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args,
-		func(fs *flag.FlagSet) *gen.QueueValidateFlags {
-			fs.Var(&vars, gen.FlagQueueValidateScratchEnv, "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable")
-			return gen.BindQueueValidate(fs)
-		})
+	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args, gen.BindQueueValidate)
 	if err != nil {
 		return err
 	}
@@ -495,7 +486,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	log := queue.NewHookLog(e.stderr)
 	// The sandbox is the base's, like the trust set: a candidate's magus.yaml widens
 	// neither.
-	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Scratch: vars}
+	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox}
 	if f.RemoteCacheRead {
 		var proxy *queue.CacheReadProxy
 		if proxy, hookEnv.Fixed, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
@@ -522,10 +513,11 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if err != nil {
 		return err
 	}
-	bf, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, gen.FlagQueueValidateTarget), f.Facts, f.Target)
+	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, gen.FlagQueueValidateTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
+	hookEnv.Spells = grants
 	defer func() { _ = closeFacts() }()
 	scratch, cleanup, err := queueScratch("mergequeue-")
 	if err != nil {
@@ -571,29 +563,6 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 	), nil
 }
 
-// queueScratchVars is --scratch-env, which may repeat.
-type queueScratchVars []queue.ScratchVar
-
-func (s *queueScratchVars) String() string {
-	if s == nil {
-		return ""
-	}
-	specs := make([]string, len(*s))
-	for i, v := range *s {
-		specs[i] = v.Name + "=" + v.Dir
-	}
-	return strings.Join(specs, ",")
-}
-
-func (s *queueScratchVars) Set(spec string) error {
-	v, err := queue.ParseScratchVar(spec)
-	if err != nil {
-		return err
-	}
-	*s = append(*s, v)
-	return nil
-}
-
 // queuePlanSource is a verdict source that also carries the plan its verdicts answer to.
 type queuePlanSource interface {
 	types.VerdictSource
@@ -601,12 +570,7 @@ type queuePlanSource interface {
 }
 
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
-	var vars queueScratchVars
-	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args,
-		func(fs *flag.FlagSet) *gen.QueueApplyFlags {
-			fs.Var(&vars, gen.FlagQueueApplyScratchEnv, "`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable")
-			return gen.BindQueueApply(fs)
-		}, "source")
+	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, gen.BindQueueApply, "source")
 	if err != nil {
 		return err
 	}
@@ -667,7 +631,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	bf, closeFacts, err := e.openFacts(ctx, "apply", flagGiven(fs, gen.FlagQueueApplyTarget), f.Facts, f.Target)
+	bf, grants, closeFacts, err := e.openFacts(ctx, "apply", flagGiven(fs, gen.FlagQueueApplyTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -714,7 +678,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
-		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Scratch: vars}, queue.NewHookLog(e.stderr))
+		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants}, queue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
 }
