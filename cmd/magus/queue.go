@@ -603,7 +603,7 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	if err := closeFacts(); err != nil {
 		return err
 	}
-	env, err := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}.Pass(names)
+	env, err := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache), GoCache: e.path(f.GoCache)}.Pass(names)
 	if err != nil {
 		return usagef("magus queue gate: --env: %v", err)
 	}

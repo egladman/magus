@@ -960,6 +960,86 @@ func TestGateCommitKeepsTheCallersCacheAndReportsTheExitStatus(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// A caller restoring Go's caches for the gate gets them used where it keeps them: the
+// gate's go builds into the directory the caller saves from once the box is gone.
+func TestGateCommitBuildsWithTheCallersGoCaches(t *testing.T) {
+	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	drv := gitDriver(t, root)
+	dir := t.TempDir()
+	env := HookEnv{GoCache: dir, Spells: map[string]spells.Sandbox{"go": {Env: spells.SandboxEnv{Passthrough: []string{"GOCACHE", "GOMODCACHE"}}}}}
+	require.NoError(t, GateCommit(t.Context(), drv, root, t.TempDir(), commit,
+		Command{"sh", "-c", `test "$GOCACHE" = "$1/go-build" && test "$GOMODCACHE" = "$1/pkg/mod" && mkdir -p "$GOCACHE/ab" "$GOMODCACHE" && echo built > "$GOCACHE/ab/entry" && echo fetched > "$GOMODCACHE/entry"`, "hook", dir}, env, nil, nil))
+	for path, want := range map[string]string{filepath.Join(dir, "go-build", "ab", "entry"): "built\n", filepath.Join(dir, "pkg", "mod", "entry"): "fetched\n"} {
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got))
+	}
+
+	env.GoCache = "relative"
+	err := GateCommit(t.Context(), drv, root, t.TempDir(), commit, script(`true`), env, nil, nil)
+	require.ErrorContains(t, err, "the Go cache directory relative is not absolute")
+	_, _, failed := HookFailed(err)
+	assert.False(t, failed, "the caller's, not the change's")
+}
+
+// GoCache moves the Go spell's two caches, and only them, out of the box into the
+// caller's directory, in the modes the spell grants: the build cache is run from, the
+// module cache is not, and nothing else in the directory is reachable. Without it the
+// box is as the queue gives every candidate.
+func TestAGoCacheMovesOnlyTheGoCachesOutOfTheBox(t *testing.T) {
+	runner := filesystem.ResolveRulePath(t.TempDir())
+	goroot := filepath.Join(runner, "go")
+	t.Setenv("GOCACHE", filepath.Join(runner, "gocache"))
+	t.Setenv("GOMODCACHE", filepath.Join(runner, "gomod"))
+	t.Setenv("MAGUS_TEST_GOROOT", goroot)
+	dir := filesystem.ResolveRulePath(t.TempDir())
+	gocache, gomodcache := filepath.Join(dir, "go-build"), filepath.Join(dir, "pkg", "mod")
+	home, tmp := newBox(t)
+
+	queued, err := HookEnv{}.of(home, tmp)
+	require.NoError(t, err)
+	assert.Equal(t, boxEnv(home, tmp, ""), queued, "the queue's box is unchanged")
+	carried, err := HookEnv{GoCache: dir}.of(home, tmp)
+	require.NoError(t, err)
+	assert.Equal(t, append(boxEnv(home, tmp, ""), "GOCACHE="+gocache, "GOMODCACHE="+gomodcache), carried)
+
+	without := hookCommand{Dir: t.TempDir(), Spells: goDecl(goroot), Home: home, TempDir: tmp, Env: queued}
+	with := without
+	with.GoCache, with.Env = dir, carried
+	before, err := without.policy()
+	require.NoError(t, err)
+	after, err := with.policy()
+	require.NoError(t, err)
+
+	added := slices.DeleteFunc(slices.Clone(after.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(before.FS.Rules, r) })
+	dropped := slices.DeleteFunc(slices.Clone(before.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(after.FS.Rules, r) })
+	assert.ElementsMatch(t, []filesystem.Rule{
+		{Path: gocache, Read: true, Write: true, Exec: true, Create: true},
+		{Path: gomodcache, Read: true, Write: true, Create: true},
+	}, added)
+	// The user cache dir is per-OS (~/Library/Caches on darwin), so the paths are checked by base.
+	require.Len(t, dropped, 2, "the spell's grants follow GOCACHE and GOMODCACHE out of the box")
+	for _, r := range dropped {
+		assert.True(t, filesystem.Under(r.Path, filesystem.ResolveRulePath(home)), "%s is the box's", r.Path)
+		assert.Equal(t, filepath.Base(r.Path) == "go-build", r.Exec, r.Path)
+	}
+	assert.Empty(t, after.WritesOutside(with.Dir, home, tmp, gocache, gomodcache))
+
+	ctx := t.Context()
+	assert.NoError(t, after.CheckExec(ctx, filepath.Join(gocache, "29", "29d7-d", "magus-utils")))
+	assert.NoError(t, after.CheckWrite(ctx, filepath.Join(gomodcache, "cache", "x")))
+	assert.ErrorIs(t, after.CheckExec(ctx, filepath.Join(gomodcache, "cache", "x")), filesystem.ErrDenied)
+	for _, path := range []string{
+		filepath.Join(dir, "beside"),
+		filepath.Join(dir, "pkg", "sumdb", "x"),
+		filepath.Join(runner, "gocache", "ab", "x-d"),
+		filepath.Join(runner, "gomod", "cache", "x"),
+	} {
+		assert.ErrorIs(t, after.CheckWrite(ctx, path), filesystem.ErrDenied, path)
+		assert.ErrorIs(t, after.CheckRead(ctx, path), filesystem.ErrDenied, path)
+	}
+}
+
 // Pass carries what a caller names to the gate's own magus, and nothing that would move
 // the box: a variable the box sets, one locating a cache it withholds, or the mode.
 func TestPassCarriesNamedVariablesAndRefusesWhatWouldMoveTheBox(t *testing.T) {

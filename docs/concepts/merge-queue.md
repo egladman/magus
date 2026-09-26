@@ -597,11 +597,15 @@ lists the environment).
 a checkout of the commit `HEAD` names, the base's sandbox over it, the global
 `--sandbox` as the mode. A CI job gating through it gates in the environment the queue
 will, so a change green there is not red in the queue for where it ran; this
-repository's `ci.yaml` shards do. Two flags serve such a job and never move the box.
-`--cache <dir>` keeps the command's local cache tier in a directory the job carries
-between runs, the one write the box grants outside itself. `--env <names>` passes the
-named variables to the command's own magus (a CI provider, a remote cache's
-credentials), which its children never see; a variable the box sets is refused.
+repository's `ci.yaml` shards do. Three flags serve such a job and move nothing else of
+the box. `--cache <dir>` keeps the command's local cache tier in a directory the job
+carries between runs. `--go-cache <dir>` makes `<dir>/go-build` and `<dir>/pkg/mod` the
+command's `GOCACHE` and `GOMODCACHE`, granted as the go spell grants them and nothing
+else in `<dir>`; the job restores a verified toolchain bundle there before the gate and,
+on its trusted branch alone, saves one after. `--env <names>` passes the named variables
+to the command's own magus (a CI provider, a remote cache's credentials), which its
+children never see; a variable the box sets is refused. `validate` takes none of the
+first two: a candidate's caches stay in its box.
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
 the generated paths on stdin; without a hook, a file either side deleted stays deleted.

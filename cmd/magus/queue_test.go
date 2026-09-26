@@ -175,6 +175,13 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	// validate runs the changes' code, so it takes no provider at all.
 	_, err := f.run(t, "", "validate", "--provider", "github", "--stdin", "--gate", "true", "--verdicts", "v")
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
+	// A candidate's caches stay in its box: validate and apply carry none out of it.
+	for _, verb := range [][]string{{"validate", "--stdin", "--gate", "true", "--verdicts", "v"}, {"apply", "--provider", "github", "s"}} {
+		for _, flag := range []string{"--go-cache", "--cache"} {
+			_, err = f.run(t, "", slices.Concat(verb[:1], []string{flag, "c"}, verb[1:])...)
+			require.ErrorContains(t, err, "flag provided but not defined: -"+flag[2:], "%s %s", verb[0], flag)
+		}
+	}
 	// A reproduce line is only shown, but never one validate would refuse to run.
 	_, err = f.run(t, "", "apply", "--provider", "github", "--base", "main", "--reproduce-gate", "curl x | sh", "s")
 	require.ErrorContains(t, err, "--reproduce-gate")
@@ -683,6 +690,7 @@ type workflowStep struct {
 	Name string            `yaml:"name"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
+	If   string            `yaml:"if"`
 	Env  map[string]string `yaml:"env"`
 	With map[string]string `yaml:"with"`
 }
@@ -776,13 +784,54 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	assert.NoError(t, err, "nothing ci.yaml passes moves the box")
 }
 
+// The gate builds with the Go caches CI carries: restored before it into the directory
+// --go-cache names, and saved from there after it, on main only, once the run is green,
+// so nothing a pull request's code writes there is ever signed.
+func TestCIShardsCarryTheGoCachesTheGateBuildsWith(t *testing.T) {
+	_, gate := ciShardGate(t)
+	m := regexp.MustCompile(`--go-cache ((?:\$\{\{[^}]*\}\}|\S)+)`).FindStringSubmatch(gate.With["command"])
+	require.NotNil(t, m, "the shards gate with no --go-cache")
+	dir := m[1]
+	want := map[string]string{"GOCACHE": dir + "/go-build", "GOMODCACHE": dir + "/pkg/mod"}
+
+	at := map[string]int{}
+	var steps []workflowStep
+	for i, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+		steps = append(steps, s)
+		switch {
+		case s.Run == "magus config cache import --toolchain go --remote":
+			at["restore"] = i
+		case strings.HasPrefix(s.Run, "magus config cache export --toolchain go --remote"):
+			at["save"] = i
+		case s.Name == gate.Name:
+			at["gate"] = i
+		}
+	}
+	require.Len(t, at, 3, "ci.yaml's shards restore and save the Go toolchain cache around the gate")
+	assert.Less(t, at["restore"], at["gate"])
+	assert.Less(t, at["gate"], at["save"])
+	for _, s := range []workflowStep{steps[at["restore"]], steps[at["save"]]} {
+		for name, value := range want {
+			assert.Equal(t, value, s.Env[name], "%s: %s is not where the gate builds", s.Name, name)
+		}
+	}
+	save := steps[at["save"]]
+	assert.True(t, strings.HasPrefix(save.If, "success() && "), save.If)
+	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'"} {
+		assert.Contains(t, save.If, cond)
+	}
+	assert.Contains(t, save.Run, "--used-within", "the save keeps only what the gate used")
+}
+
 // Moving a shard's gate into the queue's box must not move a cache key: main's shards
 // store the remote tier inside the box and a pull request or the queue replays it from
 // another box, a laptop from none. The box's home, temporary directory, XDG directories,
-// toolchain pin and sandbox mode, and the checkout's own location, key no step.
+// Go caches, toolchain pin and sandbox mode, and the checkout's own location, key no
+// step.
 func TestTheBoxKeysNoStep(t *testing.T) {
 	argv, _ := ciShardGate(t)
 	gate := argv[slices.Index(argv, "--")+1:]
+	require.Contains(t, argv[:slices.Index(argv, "--")], "--go-cache", "the shards gate with the Go caches this test keys")
 	cfg, err := config.LoadFile(filepath.Join("..", "..", "magus.yaml"), false)
 	require.NoError(t, err)
 	target, err := magustypes.ParseTarget(gate[2])
@@ -823,6 +872,9 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		"XDG_DATA_HOME":   filepath.Join(home, ".local", "share"),
 		"TMPDIR":          filepath.Join(box, "tmp"),
 		"GOTOOLCHAIN":     "local",
+		// Where --go-cache puts them, outside the box itself.
+		"GOCACHE":    filepath.Join(box, "go-cache", "go-build"),
+		"GOMODCACHE": filepath.Join(box, "go-cache", "pkg", "mod"),
 		// required where the kernel has landlock; best-effort keys the same wherever it runs.
 		"MAGUS_SANDBOX": string(magustypes.SandboxModeBestEffort),
 	} {

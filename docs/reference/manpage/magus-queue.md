@@ -147,6 +147,9 @@ apply report what would merge and call nothing on the provider.
 **--env** *names*
 : Comma-separated \`names\` of variables passed from this environment to the command's own magus
 
+**--go-cache** *directory*
+: \`directory\` whose go-build and pkg/mod are the command's GOCACHE and GOMODCACHE, outside the box; empty keeps them in the box, as validate does
+
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from
 

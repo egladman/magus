@@ -1865,14 +1865,19 @@ it in, so a change green in CI is not red in the queue for where it ran. The
 global --sandbox is the mode, raised to best-effort as validate raises it.
 
 --cache keeps the local cache tier of the command's magus in a directory outside
-the box that the caller carries between runs, the one write the box grants outside
-itself. --env passes the named variables of this environment to the command's own
+the box that the caller carries between runs. --go-cache does the same for Go: the directory's go-build and pkg/mod are
+the command's GOCACHE and GOMODCACHE, written and run from as the go spell grants
+them, for a caller that restores a verified toolchain bundle there before the gate
+and saves one after (magus config cache import|export --toolchain go, with GOCACHE
+and GOMODCACHE naming them). validate takes neither: a candidate's caches stay in its
+box. --env passes the named variables of this environment to the command's own
 magus, over the sandbox's scrub, and no further: its children get the scrubbed
-environment. Neither may move the box: a variable the box sets, or one naming a
-cache it withholds, is refused.`,
+environment. What it names may not move the box: a variable the box sets, or one
+naming a cache it withholds (GOCACHE among them), is refused.`,
 			Usage: "magus queue gate [flags] -- <command> [args...]",
 			Flags: append([]Flag{
 				{Name: "cache", Kind: FlagString, Doc: "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does"},
+				{Name: "go-cache", Kind: FlagString, Doc: "`directory` whose go-build and pkg/mod are the command's GOCACHE and GOMODCACHE, outside the box; empty keeps them in the box, as validate does"},
 				{Name: "env", Kind: FlagString, Doc: "Comma-separated `names` of variables passed from this environment to the command's own magus"},
 			}, queueCheckout...),
 		},

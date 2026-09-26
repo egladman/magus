@@ -141,6 +141,9 @@ Version control `backend` of the checkout at \-\-root
 \fB\-\-env\fR \fInames\fR
 Comma\-separated `names` of variables passed from this environment to the command's own magus
 .TP
+\fB\-\-go\-cache\fR \fIdirectory\fR
+`directory` whose go\-build and pkg/mod are the command's GOCACHE and GOMODCACHE, outside the box; empty keeps them in the box, as validate does
+.TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
 .TP

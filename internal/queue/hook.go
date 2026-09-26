@@ -171,13 +171,16 @@ type hookCommand struct {
 	// Home and TempDir are the candidate's box (see [types.Candidate]); both empty for a
 	// facts hook, which runs in the base's own checkout with the queue's own.
 	Home, TempDir string
-	// Cache is a directory outside the box its magus keeps its local cache tier in, the
-	// one write the box grants outside itself; empty keeps that tier in the box.
-	Cache  string
-	Env    []string // set over what the sandbox passes from the queue's environment
-	Stdin  string
-	Stdout io.Writer // nil discards
-	Stderr io.Writer // nil discards
+	// Cache is a directory outside the box its magus keeps its local cache tier in;
+	// empty keeps that tier in the box.
+	Cache string
+	// GoCache is a directory outside the box holding the Go caches (see [goCaches]) the
+	// hook's go builds with; empty keeps them in the box.
+	GoCache string
+	Env     []string // set over what the sandbox passes from the queue's environment
+	Stdin   string
+	Stdout  io.Writer // nil discards
+	Stderr  io.Writer // nil discards
 	// Capture also returns stdout in the result, redacted.
 	Capture bool
 }
@@ -226,7 +229,8 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 // grant a declaration makes writable resolves in the box, with c.Home read, write and
 // exec: go run executes what it caches in GOCACHE. The toolchains the runner installed
 // are read and run where they are, and the object store every candidate's checkout
-// shares is read and never written. c.Cache, when set, is read and written where it is.
+// shares is read and never written. c.Cache, when set, is read and written where it is,
+// and so are c.GoCache's two caches, in the modes the go spell grants them.
 // The nested magus a hook runs stacks its own sandbox on this one, so a right withheld
 // here is withheld from every child whatever that inner policy grants.
 //
@@ -252,6 +256,13 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 	if c.Cache != "" {
 		cfg.Allow = append(cfg.Allow, spells.SandboxAllow{Path: c.Cache, Mode: spells.SandboxAccessRW})
 	}
+	var gocache, gomodcache string
+	if c.GoCache != "" {
+		gocache, gomodcache = goCaches(c.GoCache)
+		cfg.Allow = append(cfg.Allow,
+			spells.SandboxAllow{Path: gocache, Mode: spells.SandboxAccessRWX},
+			spells.SandboxAllow{Path: gomodcache, Mode: spells.SandboxAccessRW})
+	}
 	p, err := sandbox.FromConfigBoxed(c.Dir, cfg, c.Spells, sandbox.Box{Environ: c.environ(), TempDir: c.TempDir})
 	if err != nil {
 		return nil, err
@@ -262,7 +273,7 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 		return nil, err
 	}
 	var placed, linked []string
-	for _, w := range p.WritesOutside(c.Dir, c.Home, c.TempDir, c.Cache) {
+	for _, w := range p.WritesOutside(c.Dir, c.Home, c.TempDir, c.Cache, gocache, gomodcache) {
 		if w.Linked {
 			linked = append(linked, w.Path)
 		} else {
@@ -391,6 +402,12 @@ func runnerMise(name, xdg, under string) string {
 	return ""
 }
 
+// goCaches are the Go build and module caches under dir, laid out as a default GOPATH
+// and user cache lay them out.
+func goCaches(dir string) (gocache, gomodcache string) {
+	return filepath.Join(dir, "go-build"), filepath.Join(dir, "pkg", "mod")
+}
+
 // pathLines is paths one per line, as a hook reads them on stdin. Git allows a line
 // break in a path, which that protocol would read as two paths, so such paths are
 // returned as refused and left out rather than carried.
@@ -493,15 +510,29 @@ type HookEnv struct {
 	// for a caller that carries that tier from one run to the next; empty keeps it in the
 	// box, as the queue does, so no candidate replays what another's hook wrote.
 	Cache string
+	// GoCache is an absolute directory outside the box whose go-build and pkg/mod a boxed
+	// hook's go uses as GOCACHE and GOMODCACHE, for a caller that restores a verified
+	// toolchain bundle into it before the gate and saves one from it after. Empty keeps
+	// both in the box, as the queue does: a candidate's hook may write them, and no other
+	// candidate may build with what it wrote.
+	GoCache string
 }
 
 // of is every assignment a gate or a regeneration in the box at home and tmp takes:
-// e.Fixed, then [boxEnv], which nothing overrides.
+// e.Fixed, then [boxEnv] and e.GoCache's caches, which nothing overrides.
 func (e HookEnv) of(home, tmp string) ([]string, error) {
-	if home == "" || tmp == "" {
+	switch {
+	case home == "" || tmp == "":
 		return nil, errors.New("the candidate has no box to run its hooks in")
+	case e.GoCache != "" && !filepath.IsAbs(e.GoCache):
+		return nil, fmt.Errorf("the Go cache directory %s is not absolute", e.GoCache)
 	}
-	return slices.Concat(e.Fixed, boxEnv(home, tmp, e.Cache)), nil
+	env := slices.Concat(e.Fixed, boxEnv(home, tmp, e.Cache))
+	if e.GoCache != "" {
+		gocache, gomodcache := goCaches(e.GoCache)
+		env = append(env, "GOCACHE="+gocache, "GOMODCACHE="+gomodcache)
+	}
+	return env, nil
 }
 
 // Pass returns e with every variable in names that this process's environment sets
@@ -541,7 +572,7 @@ func (e HookEnv) gate(ctx context.Context, cmd Command, args []string, cand type
 		return err
 	}
 	_, err = runHook(ctx, hookCommand{Command: cmd, Args: args, Dir: cand.Dir, Sandbox: e.Sandbox, Spells: e.Spells,
-		Home: cand.Home, TempDir: cand.TempDir, Cache: e.Cache, Env: env, Stdout: stdout, Stderr: stderr})
+		Home: cand.Home, TempDir: cand.TempDir, Cache: e.Cache, GoCache: e.GoCache, Env: env, Stdout: stdout, Stderr: stderr})
 	return err
 }
 
@@ -624,6 +655,7 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 			Home:    r.Home,
 			TempDir: r.TempDir,
 			Cache:   hookEnv.Cache,
+			GoCache: hookEnv.GoCache,
 			Env:     env,
 			Stdin:   stdin,
 			Stdout:  out,

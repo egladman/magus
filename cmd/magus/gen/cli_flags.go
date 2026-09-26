@@ -453,6 +453,8 @@ const (
 	FlagQueueGateCache = "cache"
 	// queue gate: --env
 	FlagQueueGateEnv = "env"
+	// queue gate: --go-cache
+	FlagQueueGateGoCache = "go-cache"
 	// queue gate: --remote
 	FlagQueueGateRemote = "remote"
 	// queue gate: --vcs
@@ -1404,16 +1406,18 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 
 // QueueGateFlags are the flags declared for `magus queue gate`.
 type QueueGateFlags struct {
-	Cache  string // --cache
-	Env    string // --env
-	Remote string // --remote
-	VCS    string // --vcs
+	Cache   string // --cache
+	GoCache string // --go-cache
+	Env     string // --env
+	Remote  string // --remote
+	VCS     string // --vcs
 }
 
 // BindQueueGate registers `magus queue gate`'s flags on fs and returns the destination.
 func BindQueueGate(fs *flag.FlagSet) *QueueGateFlags {
 	var f QueueGateFlags
 	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does")
+	fs.StringVar(&f.GoCache, FlagQueueGateGoCache, "", "`directory` whose go-build and pkg/mod are the command's GOCACHE and GOMODCACHE, outside the box; empty keeps them in the box, as validate does")
 	fs.StringVar(&f.Env, FlagQueueGateEnv, "", "Comma-separated `names` of variables passed from this environment to the command's own magus")
 	fs.StringVar(&f.Remote, FlagQueueGateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueGateVCS, "git", "Version control `backend` of the checkout at --root")
