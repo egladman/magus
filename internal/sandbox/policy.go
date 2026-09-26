@@ -107,6 +107,33 @@ func (p *Policy) Scoped(names []string, target *spells.Sandbox) *Policy {
 	return q
 }
 
+// WithReadOnlyObjects returns p with the object store of its checkout's repository
+// readable and not writable, so no object a child writes there is later read as one a
+// fetch brought. The checkout's own git directory, where its index lives, stays writable.
+// A write grant on a directory holding the store is an error, since no rule beneath it
+// can take the write back. A policy with no git directory is returned as it is. The
+// result is never Scoped, which would build the store's write grant again.
+func (p *Policy) WithReadOnlyObjects() (*Policy, error) {
+	if p == nil || p.opts == nil || p.opts.GitCommonDir == "" {
+		return p, nil
+	}
+	objects := filesystem.ResolveRulePath(filepath.Join(p.opts.GitCommonDir, "objects"))
+	rules := slices.Clone(p.FS.Rules)
+	for i, r := range rules {
+		switch {
+		case !r.Write:
+		case filesystem.Under(r.Path, objects):
+			rules[i].Write = false
+		case filesystem.Under(objects, r.Path):
+			return nil, fmt.Errorf("sandbox: %s is granted write, and it holds the git object store %s", r.Path, objects)
+		}
+	}
+	q := *p
+	q.FS = filesystem.Ruleset{Rules: rules}
+	q.opts, q.scoped = nil, nil
+	return &q, nil
+}
+
 // scopedPolicies memoizes the policies Scoped builds from one workspace policy.
 type scopedPolicies struct {
 	mu       sync.Mutex

@@ -234,7 +234,13 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 		return nil, err
 	}
 	cfg.Allow = append(slices.Clone(cfg.Allow), spells.SandboxAllow{Path: c.Scratch, Mode: spells.SandboxAccessRWX})
-	return sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg, c.Spells)
+	p, err := sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg, c.Spells)
+	if err != nil {
+		return nil, err
+	}
+	// Every candidate shares the store, and git fetches no object it already holds: one
+	// planted by an earlier candidate's hook would stand in for a later one's head.
+	return p.WithReadOnlyObjects()
 }
 
 // pathLines is paths one per line, as a hook reads them on stdin. Git allows a line

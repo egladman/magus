@@ -12,7 +12,7 @@ import (
 )
 
 // isGraphRelevant reports whether any changed path feeds the knowledge graph. Mirrors
-// magus.graphRelevant (warm_graph.go) without importing the root package to avoid an import
+// magus.graphRelevant (graph.go) without importing the root package to avoid an import
 // cycle.
 func isGraphRelevant(paths []string) bool {
 	for _, p := range paths {

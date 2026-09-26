@@ -559,6 +559,8 @@ func buildCtx(tr *Tracer) vm.Value {
 	c.MapSet("needs", fn("ctx.needs", traceNeeds(tr)))
 	c.MapSet("glob", fn("ctx.glob", traceGlob(tr)))
 	c.MapSet("hasCharm", fn("ctx.hasCharm", traceHasCharm(tr)))
+	// A dry run narrows nothing, so it traces the whole-suite arm.
+	c.MapSet("narrowed", fn("ctx.narrowed", func(context.Context, []vm.Value) (vm.Value, error) { return vm.BoolValue(false), nil }))
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
 	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))

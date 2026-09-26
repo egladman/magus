@@ -584,10 +584,10 @@ whole file conflicted, as does a side that only deleted lines, a file main's his
 does not share with the change, or a symlink. Lines keep their own endings, so a CRLF
 file stays CRLF and a missing final newline stays missing.
 
-Low risk is the one change classifier magus has, the one the ci gate's redundancy check
-([MGS3010](../reference/codes/sandbox/MGS3010.md)) uses, applied to the edit from the
-merge base to the merge: generated, prose (`gate_low_risk`, markdown by default) or
-comment-only. Code settles only where its project opts it in with `merge_low_risk`,
+Low risk is a class from the one change classifier magus has, the one
+[gate sizing](ci/risk.md) tiers from, applied to the edit from the merge base to the
+merge: generated, prose (`gate_low_risk`, markdown by default) or comment-only. A merge
+reads the class alone, not the tier. Code settles only where its project opts it in with `merge_low_risk`,
 project-relative globs beside `gate_low_risk`:
 
 ```buzz

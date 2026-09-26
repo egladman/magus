@@ -1009,6 +1009,11 @@ type GeneratedPathReporter interface {
 // worktree). It manages only the checkouts it created, and nothing runs a hook while it
 // does. Here dir is the exception to VCSDriver's rule: it names the secondary checkout,
 // an absolute path outside the repository, not a directory inside root.
+//
+// Code run in such a checkout can rewrite the files that tell the VCS where its
+// repository is. So any call on a checkout CreateCheckout made in this process reads the
+// repository through what it recorded at creation, never through those files, and
+// fails with a *CheckoutTamperedError once one of them has changed.
 type CheckoutProvisioner interface {
 	// CreateCheckout materializes rev at dir, detached from any branch. dir must be
 	// absolute, must not exist, and must lie outside root, symlinks resolved, where
@@ -1023,6 +1028,19 @@ type CheckoutProvisioner interface {
 	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
 	// resolved.
 	Checkouts(ctx context.Context, root string) ([]string, error)
+}
+
+// CheckoutTamperedError is a checkout CheckoutProvisioner made no longer holding what
+// creating it wrote: File, one of the files naming the checkout's repository, changed
+// since. Only something run in the checkout changes it, so the error is about that code,
+// not the machine.
+type CheckoutTamperedError struct {
+	Checkout string
+	File     string
+}
+
+func (e *CheckoutTamperedError) Error() string {
+	return "vcs: " + e.File + " changed since the checkout at " + e.Checkout + " was made"
 }
 
 // RevisionFetcher is the capability to bring revisions from a configured remote into the

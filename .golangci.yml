@@ -123,6 +123,16 @@ linters:
         original-url: github.com/egladman/magus/libs/testlayout
         settings:
           unpaired: true
+          # Every unpaired test file names its reason here rather than in its own
+          # header, so the exceptions are one list a reviewer can read.
+          ignore-marker: true
+          allow:
+            # Repo-wide gates over the tree's shape; no one source file owns them.
+            - conventions_test.go
+          # Benchmarks live in the _test.go of what they measure.
+          pair-benchmarks: true
+          # Name the platforms (X_linux.go, X_darwin.go, X_other.go), never unix.
+          no-unix-suffix: true
 
       coldread:
         type: module
@@ -341,6 +351,72 @@ linters:
         linters: [sloglint]
       - path: ^internal/report/
         linters: [sloglint]
+
+      # testlayout's ignore-marker, pair-benchmarks and no-unix-suffix landed with the
+      # root package clean and the files below outstanding. This list is the backlog,
+      # not a set of exemptions: each entry is a file to rename or fold into its
+      # source's _test.go, and the fix deletes the entry, so the list only shrinks.
+      # Exact names rather than globs, so a new offender in the same directory still
+      # fails the gate. rusage_unix.go is excluded from darwin builds, so only a linux
+      # run reports it.
+      - path: ^benchmarks/e2e/e2e_test\.go$
+        linters: [testlayout]
+      - path: ^broker/(activation_unix|activation_unix_test|broker_test)\.go$
+        linters: [testlayout]
+      - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
+        linters: [testlayout]
+      - path: ^internal/audit/inode_unix\.go$
+        linters: [testlayout]
+      - path: ^internal/cache/(bench_test|json_bench_test|manifest_bench_test|stat_bench_test)\.go$
+        linters: [testlayout]
+      - path: ^internal/ci/forecast/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/describe/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/file/identity_unix\.go$
+        linters: [testlayout]
+      - path: ^internal/file/record/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/file/watch/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/graph/dependency/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/graph/knowledge/(bench_test|extract_fs_bench_test|scale_test)\.go$
+        linters: [testlayout]
+      - path: ^internal/httpx/refusal_test\.go$
+        linters: [testlayout]
+      - path: ^internal/interactive/tty/(bench_test|silence_test)\.go$
+        linters: [testlayout]
+      - path: ^internal/job/store_unix_test\.go$
+        linters: [testlayout]
+      - path: ^internal/journal/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/proc/adopt_bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/proc/run/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
+        linters: [testlayout]
+      - path: ^internal/proc/sockdir/(sockdir_unix|sockdir_unix_test)\.go$
+        linters: [testlayout]
+      - path: ^internal/queue/fakes_test\.go$
+        linters: [testlayout]
+      - path: ^internal/report/bench_test\.go$
+        linters: [testlayout]
+      - path: ^internal/sandbox/owner_unix\.go$
+        linters: [testlayout]
+      - path: ^internal/server/grant_matrix_test\.go$
+        linters: [testlayout]
+      - path: ^internal/sessions/adapter_unix\.go$
+        linters: [testlayout]
+      - path: ^internal/sys/mem/mem_test\.go$
+        linters: [testlayout]
+      - path: ^internal/textindex/mmap_unix\.go$
+        linters: [testlayout]
+      - path: ^project/bench_test\.go$
+        linters: [testlayout]
+      - path: ^std/examples_test\.go$
+        linters: [testlayout]
+      - path: ^vcs/parity_test\.go$
+        linters: [testlayout]
 
 # Formatting is gated HERE, not by the format target, because `gofmt -l` cannot fail: it
 # reports on stdout and exits 0, and magus reads an op's verdict from the exit code alone.

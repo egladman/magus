@@ -877,8 +877,8 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
-// ChangeClassifier is the workspace's change risk classifier (internal/risk), the one the
-// ci gate, CI verdict inheritance and merge auto-resolution share: describe-file roles,
+// ChangeClassifier is the workspace's change risk classifier (internal/risk), the classes
+// AssessChange tiers and merge auto-resolution settles by: describe-file roles,
 // the effective gate_low_risk prose globs, and the comment syntax the projects' spells
 // declare. at reads a file at the revision a delta is measured from and working its
 // changed content; with either nil, a comment-only edit classifies as code.

@@ -11,26 +11,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDeltaLines pins the per-file rendering a refusal prints: every path, its class
-// word, and the fact behind it, never a summary.
-func TestDeltaLines(t *testing.T) {
-	d := Delta{Paths: []Classified{
-		{Path: "gen/a.go", Class: ClassGenerated, Why: "a declared output glob claims it"},
-		{Path: "docs/x.md", Class: ClassProse, Why: `matches "**/*.md" (built-in default)`},
-		{Path: "run.go", Class: ClassCommentOnly, Why: "only comments differ from the revision compared against"},
-		{Path: "internal/y.go", Class: ClassCode, Why: "differs beyond comments from the revision compared against"},
-	}}
-	assert.False(t, d.LowRiskOnly())
-	assert.Equal(t, []string{
-		"gen/a.go: generated (a declared output glob claims it)",
-		`docs/x.md: prose (matches "**/*.md" (built-in default))`,
-		"run.go: comment-only (only comments differ from the revision compared against)",
-		"internal/y.go: code (differs beyond comments from the revision compared against)",
-	}, d.Lines())
-
-	empty := Delta{}
-	assert.True(t, empty.LowRiskOnly(), "an empty delta is low risk")
-	assert.Empty(t, empty.Lines())
+// TestClassifiedLine pins the per-file rendering a merge report prints: the path, its
+// class word, and the fact behind it.
+func TestClassifiedLine(t *testing.T) {
+	for _, tc := range []struct {
+		c    Classified
+		want string
+		low  bool
+	}{
+		{Classified{Path: "gen/a.go", Class: ClassGenerated, Why: "a declared output glob claims it"}, "gen/a.go: generated (a declared output glob claims it)", true},
+		{Classified{Path: "docs/x.md", Class: ClassProse, Why: `matches "**/*.md" (built-in default)`}, `docs/x.md: prose (matches "**/*.md" (built-in default))`, true},
+		{Classified{Path: "run.go", Class: ClassCommentOnly, Why: "only comments differ"}, "run.go: comment-only (only comments differ)", true},
+		{Classified{Path: "internal/y.go", Class: ClassCode, Why: "differs beyond comments"}, "internal/y.go: code (differs beyond comments)", false},
+	} {
+		assert.Equal(t, tc.want, tc.c.Line())
+		assert.Equal(t, tc.low, tc.c.LowRisk(), tc.want)
+	}
 }
 
 const goCode = `package p
@@ -219,10 +215,6 @@ func TestClassifyChanges(t *testing.T) {
 		{Path: "magus.yaml", Class: ClassCode, Why: "no comment syntax is declared for this language; classified as code"},
 	}
 	assert.Equal(t, want, got.Paths)
-	assert.False(t, got.LowRiskOnly())
-
-	lowOnly := c.Classify(context.Background(), []string{"a.go", "docs/guide.md"}, "green")
-	assert.True(t, lowOnly.LowRiskOnly())
 }
 
 // TestClassifyDeclaredScopes: a workspace declaration replaces the defaults, scopes to

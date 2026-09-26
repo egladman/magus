@@ -20,13 +20,21 @@ same ops against the same declared inputs, and the same cache key decides whethe
 any of it has to run at all. That is the point: a pipeline you cannot reproduce
 locally is a pipeline you debug through the web UI.
 
-Four things do change, and each has a page.
+Five things do change, and each has a page.
 
 ## The pipeline verb
 
 `ci` is an ordinary target you compose in your magusfile, not a mode magus enters.
 It strips the write-granting charms before it dispatches, so a pipeline cannot
 mutate the tree even when someone asks it to. See [CI](targets/ci.md).
+
+## The gate's size
+
+`magus affected ci` runs only the part of the gate a change can reach: nothing
+for prose no target reads, the drift check and lint for a comment edit, tests
+narrowed to the packages that import a changed Go package. Every tier below the
+full gate rests on a proof, and the run prints the evidence for every file. See
+[Gate sizing](ci/risk.md).
 
 ## The checkout
 

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -860,4 +861,35 @@ func TestConditionalNeedsDispatchesOnlyTheTakenBranch(t *testing.T) {
 	assert.NotContains(t, ran, "container",
 		"the UNTAKEN arm must not run; pre-resolving the declared graph would have run it")
 	assert.Contains(t, ran, "body", "the body must continue after its dependencies")
+}
+
+// TestCtxNarrowedReportsTheRunsNarrowing: ctx.narrowed() is true exactly when the run
+// carries an op narrowing, which is what lets a whole-suite check stand down.
+func TestCtxNarrowedReportsTheRunsNarrowing(t *testing.T) {
+	const mf = `import "magus";
+import "fs";
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    fs\writeFile("narrowed.txt", "{ctx.narrowed()}");
+}
+`
+	for name, tc := range map[string]struct {
+		ctx  context.Context
+		want string
+	}{
+		"a whole run": {context.Background(), "false"},
+		"a narrowed run": {project.WithOpNarrowing(context.Background(), project.OpNarrowing{Op: "go-test", Bin: "go",
+			Rewrite: func(_ context.Context, _ string, _ map[string]string, args []string) []string { return args }}), "true"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(mf), 0o644))
+			_, err := interp.RunDir(tc.ctx, dir, "test", nil)
+			require.NoError(t, err)
+			got, err := os.ReadFile(filepath.Join(dir, "narrowed.txt"))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(got))
+		})
+	}
 }

@@ -9,9 +9,9 @@
 // running. A gate that is not redundant always runs, silently. The machine pool
 // is probed for the refusal message and decides nothing; see DecideGate.
 //
-// "Equivalent" means every path changed since the green gate's commit falls in
-// one of the low-risk classes internal/risk classifies: generated output, prose
-// and comment-only edits. A merge commit in the range is never equivalent,
+// "Equivalent" means the change since the green gate's commit tiers trivial
+// (internal/risk): prose nothing in the gate reads, and generated output whose
+// generator the change left untouched. A merge commit in the range is never equivalent,
 // however clean: a merge is the moment two verified histories combine into a
 // tree neither gate ever saw, so it always re-gates.
 //
@@ -30,7 +30,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/types"
 )
 
@@ -49,7 +48,7 @@ const (
 // GateFacts are what DecideGate combines. Zero value decides GateRun.
 type GateFacts struct {
 	// Redundant: a green gate is on record for this branch with an identical
-	// input fingerprint, or with a delta that classifies entirely low-risk.
+	// input fingerprint, or with a delta that tiers trivial.
 	Redundant bool
 	// Forced: the caller passed the override flag; the check is off.
 	Forced bool
@@ -168,11 +167,11 @@ func PRMergeFreeRange(history []types.Commit, green string) bool {
 }
 
 // InheritFinding is a fired verdict-inheritance decision: the green run being
-// inherited, its head commit, and the classified delta a reader disputes it by.
+// inherited, its head commit, and the tiered delta a reader disputes it by.
 type InheritFinding struct {
 	Run    string
 	Commit string
-	Delta  risk.Delta
+	Report types.RiskReport
 }
 
 // InheritProbe gathers the CI verdict-inheritance inputs. Dependencies are
@@ -187,17 +186,15 @@ type InheritProbe struct {
 	// History lists commits from HEAD, newest first, deep enough to reach a
 	// green run worth inheriting.
 	History func(ctx context.Context) ([]types.Commit, error)
-	// Changed lists the paths whose content differs between the working tree
-	// and the green commit.
-	Changed    func(ctx context.Context, green string) ([]string, error)
-	Classifier risk.Classifier
+	// Assess tiers the change between the working tree and the green commit.
+	Assess func(ctx context.Context, green string) (types.RiskReport, error)
 }
 
 // Evaluate decides. ok=false means the plan proceeds exactly as it would
 // have before this feature existed, with no output at all; ok=true carries
 // the full finding, because an inherited verdict is never a silent skip.
 func (p InheritProbe) Evaluate(ctx context.Context) (InheritFinding, bool) {
-	if p.Disabled || p.LastGreenRun == nil || p.History == nil || p.Changed == nil {
+	if p.Disabled || p.LastGreenRun == nil || p.History == nil || p.Assess == nil {
 		return InheritFinding{}, false
 	}
 	run, commit, ok := p.LastGreenRun(ctx)
@@ -208,53 +205,49 @@ func (p InheritProbe) Evaluate(ctx context.Context) (InheritFinding, bool) {
 	if err != nil || !PRMergeFreeRange(history, commit) {
 		return InheritFinding{}, false
 	}
-	changed, err := p.Changed(ctx, commit)
-	if err != nil {
+	rep, err := p.Assess(ctx, commit)
+	if err != nil || rep.Tier != types.RiskTrivial {
 		return InheritFinding{}, false
 	}
-	delta := p.Classifier.Classify(ctx, changed, commit)
-	if !delta.LowRiskOnly() {
-		return InheritFinding{}, false
-	}
-	return InheritFinding{Run: run, Commit: commit, Delta: delta}, true
+	return InheritFinding{Run: run, Commit: commit, Report: rep}, true
 }
 
 // AnnotationText renders the finding for a CI annotation: the inherited run,
-// its commit, and every changed path with its class, so the annotation alone
-// lets a reader reconstruct and dispute the decision.
+// its commit, and every changed path with its tier and class, so the
+// annotation alone lets a reader reconstruct and dispute the decision.
 func (f InheritFinding) AnnotationText() string {
 	var b strings.Builder
 	b.WriteString("verdict inherited from run " + f.Run + " (commit " + shortRev(f.Commit) +
-		"): every path changed since that green run classifies low-risk")
-	if len(f.Delta.Paths) == 0 {
+		"): the change since that green run tiers trivial")
+	if len(f.Report.Evidence) == 0 {
 		b.WriteString("\nno paths changed since that run")
 		return b.String()
 	}
-	for _, line := range f.Delta.Lines() {
+	for _, line := range f.Report.Lines() {
 		b.WriteString("\n" + line)
 	}
 	return b.String()
 }
 
 // SummaryMarkdown renders the finding for the workflow's job summary, under
-// the same explicitness contract: every file, its class, and what classified
-// it, never a count.
+// the same explicitness contract: every file, its tier and class, and what
+// decided it, never a count.
 func (f InheritFinding) SummaryMarkdown() string {
 	var b strings.Builder
 	b.WriteString("### Inherited verdict\n\n")
-	b.WriteString("The shard fan-out was short-circuited: every path changed since this " +
-		"branch's last green CI run classifies low-risk, so that run's verdict stands.\n\n")
+	b.WriteString("The shard fan-out was short-circuited: the change since this " +
+		"branch's last green CI run tiers trivial, so that run's verdict stands.\n\n")
 	b.WriteString("Inherited run: " + f.Run + " at commit `" + shortRev(f.Commit) + "`.\n\n")
-	if len(f.Delta.Paths) == 0 {
+	if len(f.Report.Evidence) == 0 {
 		b.WriteString("No paths changed since that run.\n")
 		return b.String()
 	}
-	b.WriteString("| Changed path | Class | Classified by |\n| --- | --- | --- |\n")
-	for _, p := range f.Delta.Paths {
-		b.WriteString("| `" + p.Path + "` | " + p.Class.String() + " | " + p.Why + " |\n")
+	b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
+	for _, e := range f.Report.Evidence {
+		b.WriteString("| `" + e.Path + "` | " + string(e.Tier) + " | " + e.Class + " | " + e.Why + " |\n")
 	}
 	b.WriteString("\nTo dispute a row, its last column names the declaration or mechanism " +
-		"that classified it; to turn inheritance off, declare `gate_inherit = false` in magus.project.\n")
+		"that decided it; to turn inheritance off, declare `gate_inherit = false` in magus.project.\n")
 	return b.String()
 }
 

@@ -1,7 +1,9 @@
-// Package risk classifies how risky a change to a path is: generated output, prose, a
-// comment-only edit, or code. It is magus's one classifier of change risk: the ci gate
-// asks it whether a delta since a green run needs the gate again, and a merge asks it
-// whether a conflicted path may be settled without a person.
+// Package risk is magus's one classifier of change risk. Each changed path gets a class
+// (generated output, prose, a comment-only edit, or code), and Assess lifts the classes,
+// with what language provers can prove, into a tier: how much of the gate the change
+// needs. The ci gate's redundancy check, CI verdict inheritance, job completion and
+// `magus affected ci`'s gate sizing read the tier; a merge settles a conflicted path by
+// its class alone.
 //
 // The classes rest on the workspace's declarations. A path a declared output glob or
 // magus itself owns is generated; a path an effective gate_low_risk glob claims is prose
@@ -68,22 +70,6 @@ func (c Classified) Line() string { return c.Path + ": " + c.Class.String() + " 
 // Delta is the per-path verdict over one delta.
 type Delta struct {
 	Paths []Classified
-}
-
-// LowRiskOnly reports whether every classified path avoided ClassCode. An empty delta is
-// low-risk: nothing changed.
-func (d Delta) LowRiskOnly() bool {
-	return !slices.ContainsFunc(d.Paths, func(v Classified) bool { return v.Class == ClassCode })
-}
-
-// Lines renders one verdict line per path: every file, never a summary, because the
-// reader of a refusal must be able to reconstruct the decision.
-func (d Delta) Lines() []string {
-	out := make([]string, len(d.Paths))
-	for i, v := range d.Paths {
-		out[i] = v.Line()
-	}
-	return out
 }
 
 // DefaultProseGlobs are the prose globs magus ships: markdown sources, which covers docs

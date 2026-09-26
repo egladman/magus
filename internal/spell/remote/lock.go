@@ -100,6 +100,9 @@ func (l Lock) Marshal() ([]byte, error) {
 // UpdateLock rewrites root's magus.lock with what next returns for the current lock,
 // holding an OS file lock so two updates cannot interleave their read and write. The
 // flock lives under .magus/, not beside magus.lock, because it is never committed.
+//
+// A result that pins nothing removes magus.lock rather than writing one: a workspace
+// with no remote spells has no lock, which ReadLock already reads as an empty one.
 func UpdateLock(ctx context.Context, root string, next func(Lock) (Lock, error)) error {
 	dir := filepath.Join(root, ".magus")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -131,11 +134,18 @@ func UpdateLock(ctx context.Context, root string, next func(Lock) (Lock, error))
 	if err != nil {
 		return err
 	}
+	path := filepath.Join(root, LockFile)
+	if len(l.Spells) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
 	raw, err := l.Marshal()
 	if err != nil {
 		return err
 	}
-	return file.WriteFileAtomic(filepath.Join(root, LockFile), raw, 0o644)
+	return file.WriteFileAtomic(path, raw, 0o644)
 }
 
 // The file lock's shape, matching the job store's: a lock rewrite is a small file, so

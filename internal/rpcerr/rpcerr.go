@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -52,8 +53,8 @@ type Error struct {
 }
 
 // titles names each reason in its Help link, the heading of the reason's own page under
-// docs/reference/codes, which TestTitlesMatchTheCodePages holds them to. Every MGS9xxx code
-// is here, since that range is the server's and any of it can reach a writer;
+// docs/reference/codes, which `magus doctor`'s diagnostic-docs check holds them to. Every
+// MGS9xxx code is here, since that range is the server's and any of it can reach a writer;
 // TestEveryServerReasonHasATitle holds that.
 var titles = map[types.DiagnosticCode]string{
 	types.WorkspaceLoadFailed:       "workspace failed to load",
@@ -81,6 +82,9 @@ var titles = map[types.DiagnosticCode]string{
 	types.TokenRequestInvalid:       "invalid token request",
 	types.SocketPeerNotOwner:        "socket peer is not the server's user",
 }
+
+// Titles returns a copy of the Help link description for each reason that has one.
+func Titles() map[types.DiagnosticCode]string { return maps.Clone(titles) }
 
 // Error returns the rendered message, so an Error can travel as a Go error.
 func (e Error) Error() string { return e.message() }
