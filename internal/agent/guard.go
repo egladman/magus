@@ -1,8 +1,8 @@
 package agent
 
 // The guard's wire contract: the vocabulary every host glue must handle, in
-// the one package that both the CLI producing a verdict and the repo-root
-// dogfood tests can import.
+// the one package that the CLI producing a verdict imports and the parity tests
+// beside it read.
 //
 // It lived here because package main could not be imported. The rules are now
 // internal/guard, so that reason has expired: the lists could move beside the Verdict

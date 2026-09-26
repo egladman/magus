@@ -12,7 +12,7 @@ import "lib/conventions" as _;   // ConventionFinding
 
 // TEMPLATE_PAGES names the page under docs/guides/integrations/agents that embeds each
 // shipped hook template verbatim, so a reader browsing the site sees exactly what they
-// would download. Its keys are the shipped set: conventions_test.go holds them equal to
+// would download. Its keys are the shipped set: internal/agent/guard_test.go holds them equal to
 // hookTemplates, which is what makes a new template owe a page here.
 export final TEMPLATE_PAGES = {
     "magus-command.sh": "guard-templates.md",
@@ -207,7 +207,7 @@ fun saysYes(cell: str) > bool { return cell.lower().startsWith("yes"); }
 // guardParityFindings holds the guide's "Parity across hosts" table to the coverage the
 // templates declare. The table is what a reader chooses a host by, so a wrong cell is a
 // promise magus does not keep. Whether each declaration is complete against the guard
-// contract is conventions_test.go's question; this one only compares.
+// contract is internal/agent/guard_test.go's question; this one only compares.
 export fun guardParityFindings(templates: {str: str}, guide: str, guideFile: str) > [str] {
     final found: mut [str] = mut [<str>];
     final cov = mut {<str: {str: str}>};
