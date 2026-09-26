@@ -239,6 +239,31 @@ func TestUngatedPushAsksTheOrchestrator(t *testing.T) {
 	assert.Contains(t, failed.Reason, "failed")
 }
 
+// TestUngatedPushAskStillAsksTheCommandRule pins the line that merged a pull request past
+// the queue: the person was asked about the push, and their approval carried a
+// `gh pr merge --admin` the workspace rule denies but was never asked about.
+func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir), 0o755))
+	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "queue it"}}
+	deps := Dependencies{
+		Revision:    func(context.Context, string, string) string { return "abc1234" },
+		CommandRule: probe.rule(),
+	}
+	line := "git push -q -u origin topic && gh pr merge topic --squash --admin"
+
+	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, "queue it", v.Reason)
+	require.Len(t, probe.asked, 1)
+	assert.Equal(t, []string{"git", "gh"}, []string{probe.asked[0].Commands[0].Program, probe.asked[0].Commands[1].Program})
+
+	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
+	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
+	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "ask", Reason: v.Reason, Rule: string(denyRulePushUngated)}, v, "an advise leaves the ask as it stood")
+	assert.NotContains(t, v.Reason, "batch it")
+}
+
 // TestUngatedPushDeniesALeasedWorker pins that a bound session is never offered the prompt:
 // approving it would publish from a boundary that does not own the branch.
 func TestUngatedPushDeniesALeasedWorker(t *testing.T) {

@@ -45,8 +45,11 @@ type commandRuleInput struct {
 }
 
 // gradeWorkspaceCommand asks the workspace's magus\guard.command rule about a command the
-// built-in rules let through, and merges its answer the way the spawn rule's is merged:
+// built-in rules did not deny, and merges its answer the way the spawn rule's is merged:
 // strengthen only.
+//
+// A built-in ask is still graded: the person approves the one thing the ask names, so a
+// deny elsewhere on the line must replace it rather than ride through on that approval.
 //
 // A command magus itself served stays served: the rule's advice stands down on it as every
 // advisory does, while its deny still holds, like the other workspace-wide denies.
@@ -54,7 +57,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
-	if verdict.Decision != "pass" && verdict.Decision != "advise" {
+	if verdict.Decision == "deny" {
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())

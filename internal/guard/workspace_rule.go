@@ -124,7 +124,8 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 
 // applyWorkspaceAnswer merges a workspace rule's answer into the built-in verdict, which
 // decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
-// fills a pass or is added to a built-in advice, and an allow changes nothing.
+// fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
+// on a built-in ask is dropped, as every notice is on an ask.
 func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, rule string) (Verdict, string) {
 	answer := asked.answer
 	switch {
@@ -132,7 +133,7 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, ru
 		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == "pass":
 		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "advise", Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
-	case answer.Decision == types.GuardAdvise:
+	case answer.Decision == types.GuardAdvise && verdict.Decision == "advise":
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		verdict.Context += "\n\n" + answer.Reason
 		return verdict, decided + decidedByJoin + asked.by
