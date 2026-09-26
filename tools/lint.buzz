@@ -21,6 +21,10 @@ import "tools/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "tools/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "tools/lint/landing-rotator-slots-match-headline-count" as landing;
 import "tools/lint/lockfiles-are-sorted" as lockfiles;
+import "tools/lint/package-install-targets-never-replay" as installs;
+import "tools/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
+import "tools/lint/skills-generate-declares-every-shipped-skill" as skills;
+import "tools/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
 
 export object Rule {
     name: str,
@@ -32,6 +36,10 @@ export object Rule {
 export fun rules() > [Rule] {
     return [
         Rule{ name = "lockfiles-are-sorted", reads = lockfiles\reads(), check = lockfiles\check },
+        Rule{ name = "package-install-targets-never-replay", reads = installs\reads(), check = installs\check },
+        Rule{ name = "whole-tree-targets-key-on-the-go-tree", reads = wholetree\reads(), check = wholetree\check },
+        Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
+        Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },
         Rule{ name = "generate-drift-throw-names-the-engine-drift-code", reads = generatedrift\reads(), check = generatedrift\check },
         Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },

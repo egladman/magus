@@ -3,7 +3,10 @@
 // does not name it.
 namespace support;
 
+import "encoding/json";
 import "fs";
+import "magus";
+import "serialize";
 import "strings";
 import "magus/lint";
 
@@ -48,6 +51,56 @@ export fun lineOf(src: str, needle: str) > int {
         return 0;
     }
     return lineAt(src, off: i! + needle.len() - strings\trimPrefix(needle, prefix: "\n").len());
+}
+
+// The workspace reads several rules share, each made once per run.
+var graphMemo: TargetGraph? = null;
+var projectsMemo: Projects? = null;
+var skipCacheMemo: {str: bool}? = null;
+
+// targets is magus\targets(): every target of every project, read statically from the
+// magusfiles.
+export fun targets() > TargetGraph !> any {
+    if (graphMemo == null) {
+        graphMemo = magus\targets();
+    }
+    return graphMemo!;
+}
+
+// projects is magus\projects(): each project with its resolved source globs.
+export fun projects() > Projects !> any {
+    if (projectsMemo == null) {
+        projectsMemo = magus\projects();
+    }
+    return projectsMemo!;
+}
+
+// skipsCache is every target that declares skip_cache, keyed `<project>:<target>`.
+// Nothing typed carries a target's cache policy yet, so this reads the evaluated
+// projects describe prints.
+export fun skipsCache() > {str: bool} !> any {
+    if (skipCacheMemo == null) {
+        final res = magus\describe(["projects", "--evaluated", "-o", "json"], opts: {"quiet": true});
+        final acc = mut {<str: bool>};
+        foreach (p in serialize\Boxed.init(json\parse(res.stdout)).q(["projects"]).listValue()) {
+            final project = p.q(["path"]).stringValue();
+            foreach (target, policy in p.q(["target_policies"]).mapValue()) {
+                if (policy.q(["skip_cache"]).booleanValue()) {
+                    acc["{project}:{target}"] = true;
+                }
+            }
+        }
+        skipCacheMemo = acc;
+    }
+    return skipCacheMemo!;
+}
+
+// magusfileOf is the workspace path of the magusfile declaring project.
+export fun magusfileOf(project: str) > str {
+    if (project == ".") {
+        return "magusfile.buzz";
+    }
+    return project + "/magusfile.buzz";
 }
 
 // sorted returns keys in byte order, so a rule reports in the same order every run.
