@@ -151,13 +151,14 @@ func buildRuleset(rules []filesystem.Rule, abi int, scopes uint64) (int, error) 
 // a Rust toolchain allowlist may name $CARGO_HOME on a host that only builds Go, and an
 // unlisted path is denied either way.
 //
-// A missing writable path is created first, as a directory: landlock attaches a rule
-// only to a path that exists, so a cache a tool has not made yet (buf's under a fresh
-// XDG_CACHE_HOME) would otherwise be denied to the very tool that would create it.
+// A missing writable path a declaration may create (Rule.Create) is made first, as a
+// directory: landlock attaches a rule only to a path that exists, so a cache a tool has
+// not made yet (buf's under a fresh XDG_CACHE_HOME) would otherwise be denied to the
+// very tool that would create it.
 func addPathRules(rulesetFD int, rules []filesystem.Rule, handledFS uint64) error {
 	for _, r := range rules {
 		err := addPathRule(rulesetFD, r, handledFS)
-		if errors.Is(err, syscall.ENOENT) && r.Write {
+		if errors.Is(err, syscall.ENOENT) && r.Write && r.Create {
 			if mkErr := os.MkdirAll(r.Path, 0o700); mkErr == nil {
 				err = addPathRule(rulesetFD, r, handledFS)
 			}
