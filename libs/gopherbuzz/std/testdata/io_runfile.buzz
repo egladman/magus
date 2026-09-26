@@ -1,7 +1,9 @@
 // @expect: ok
 import "io";
-final f = io\File.open("/tmp/buzz_runfile_test.buzz", io\FileMode.write);
+import "os";
+final path = os\tmpFilename("buzz_runfile_test");
+final f = io\File.open(path, io\FileMode.write);
 f.write("final _rftmp = 2 + 2;");
 f.close();
-io\runFile("/tmp/buzz_runfile_test.buzz");
+io\runFile(path);
 final __r = "ok";
