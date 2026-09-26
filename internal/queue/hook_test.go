@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -907,6 +908,34 @@ func TestGateCommitGatesInTheBoxAndEnvironmentValidationGivesACandidate(t *testi
 	for _, want := range []string{"HOME=<box>/home", "TMPDIR=<box>/tmp", "MAGUS_CACHE_DIR=<box>/home/.cache/magus", "GOTOOLCHAIN=local", "PASSED=p", "SET=s"} {
 		assert.Contains(t, got, want)
 	}
+}
+
+// The box reads its repository's config and nothing the config includes from outside
+// it. actions/checkout persists its credential that way, in a file under runner.temp, and
+// git reads a denied include as a broken config, so a gate on such a checkout fails
+// every git call: the reason a gated checkout persists no credential.
+func TestTheBoxReadsNoConfigIncludedFromOutsideIt(t *testing.T) {
+	if abi, err := sandbox.ABI(); err != nil || abi < sandbox.RequiredABI {
+		t.Skip("only the kernel sandbox confines git itself")
+	}
+	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	drv := gitDriver(t, root)
+	env := HookEnv{Sandbox: config.SandboxConfig{Mode: magustypes.SandboxModeRequired}}
+	status := script(`git status --porcelain`)
+	require.NoError(t, GateCommit(t.Context(), drv, root, t.TempDir(), commit, status, env, nil, nil))
+
+	creds := filepath.Join(t.TempDir(), "git-credentials.config")
+	require.NoError(t, os.WriteFile(creds, []byte("[http]\n\textraheader = AUTHORIZATION: basic x\n"), 0o600))
+	include := exec.Command("git", "config", "--local", "include.path", creds)
+	include.Dir = root
+	out, err := include.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	var log bytes.Buffer
+	err = GateCommit(t.Context(), drv, root, t.TempDir(), commit, status, env, &log, &log)
+	_, code, ok := HookFailed(err)
+	require.True(t, ok, "%v", err)
+	assert.Equal(t, 128, code)
+	assert.Contains(t, log.String(), creds)
 }
 
 // A caller carrying its cache tier between runs gets it written where it keeps it, and

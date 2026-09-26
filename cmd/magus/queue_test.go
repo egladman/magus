@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -716,7 +717,7 @@ func ciShardGate(t *testing.T) ([]string, workflowStep) {
 
 // A green shard must mean a green queue gate, so the shards gate through the verb and
 // code path validate uses, in its mode, under queue.yaml's TMPDIR and mise trust, from a
-// full clone as validate's, and what they pass in cannot move the box.
+// checkout made as validate's, and what they pass in cannot move the box.
 func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	argv, step := ciShardGate(t)
 	sep := slices.Index(argv, "--")
@@ -745,11 +746,22 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	for _, name := range []string{"TMPDIR", "MISE_TRUSTED_CONFIG_PATHS"} {
 		assert.Equal(t, validate.Env[name], step.Env[name], "%s differs from queue.yaml's validate", name)
 	}
-	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
-		if strings.HasPrefix(s.Uses, "actions/checkout@") {
-			assert.NotContains(t, s.With, "filter", "the shards clone in full, as validate does")
+	// The box reads the repository's .git/config and every file it includes. A checkout
+	// that persists its credential includes one under runner.temp, outside the box, which
+	// the sandbox denies and git reads as a bad config line: every git status fails.
+	checkout := func(path, job string) map[string]string {
+		for _, s := range workflowJob(t, path, job) {
+			if strings.HasPrefix(s.Uses, "actions/checkout@") {
+				with := maps.Clone(s.With)
+				delete(with, "ref")
+				return with
+			}
 		}
+		require.FailNow(t, "no checkout", "%s %s", path, job)
+		return nil
 	}
+	assert.Equal(t, checkout(".github/workflows/queue.yaml", "validate"), checkout(".github/workflows/ci.yaml", "ci"),
+		"the shards check out as validate does, the ref aside")
 
 	cache := flags[slices.Index(flags, "--cache")+1]
 	assert.Equal(t, ".magus", cache)

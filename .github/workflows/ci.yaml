@@ -265,12 +265,15 @@ jobs:
       max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
-      # A full clone, as queue.yaml's validate takes: the gate runs in a checkout of HEAD
-      # whose object store it may only read, so a partial clone's lazy fetch of a blob
-      # would fail here and nowhere in the queue.
+      # Checked out as queue.yaml's validate checks out, since the gate runs in the same
+      # box. A full clone: the box may only read the object store, so a partial clone's
+      # lazy fetch of a blob would fail here and nowhere in the queue. No persisted
+      # credential: checkout keeps it in a file under runner.temp that .git/config
+      # includes, the box may not read it, and git then fails every call on the config.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # install stays ON (the default). With install: false the action adds the shims
       # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
