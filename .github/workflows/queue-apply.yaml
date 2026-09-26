@@ -182,12 +182,15 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-actions: write
 
-      - name: Start a validation run on main
+      # On a `completed` event the run's updated_at is when CI finished: a validation that
+      # read the queue before then saw the change not yet ready.
+      - name: Start a validation run on main, unless one covers it
         if: steps.ci.outputs.queued == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: magus buzz tools/gha-queue.buzz -- start --base "$MAIN"
+          INTENT_AT: ${{ github.event.workflow_run.updated_at }}
+        run: magus buzz tools/gha-queue.buzz -- start --base "$MAIN" --intent-at "$INTENT_AT"
 
   # Follows only a run main's own queue.yaml made: a push or a dispatch, on main, of this
   # repository. Queue's plan job is skipped on a run cancelled before it started, and

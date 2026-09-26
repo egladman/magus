@@ -16,7 +16,10 @@
 //	magus buzz tools/gha-queue.buzz -- ci-queued --run <id> --base <branch>
 //	                                                            write whether CI run <id> finished on the
 //	                                                            head of a queued pull request
-//	magus buzz tools/gha-queue.buzz -- start --base <branch>    start a validation run on the base
+//	magus buzz tools/gha-queue.buzz -- start --base <branch> --intent-at <time>
+//	                                                            start a validation run on the base for
+//	                                                            what became ready at <time>, unless an
+//	                                                            unfinished run covers it
 //
 // The `--` hands the rest to the script; without it magus would parse the flags itself.
 // What the runner provides (GITHUB_REPOSITORY, RUNNER_TEMP, GITHUB_OUTPUT, the token) is
@@ -224,7 +227,7 @@ export object Validation {
     planFailed: bool,
 }
 
-// Decision is dispatch's verdict: whether to start a run, and the notice that says why.
+// Decision is start's verdict: whether to start a run, and the notice that says why.
 export object Decision {
     start: bool,
     notice: str,
@@ -237,7 +240,7 @@ export object Decision {
 export fun unfinishedIDs(runs: str, repo: str) > [str] !> any {
     final list = serialize\jsonDecode(runs).q("workflow_runs").list();
     if (list == null) {
-        throw "queue: dispatch: the run listing names no workflow_runs: {runs}";
+        throw "queue: start: the run listing names no workflow_runs: {runs}";
     }
     final ids = mut [<str>];
     foreach (r in list!) {
@@ -255,7 +258,7 @@ export fun unfinishedIDs(runs: str, repo: str) > [str] !> any {
 export fun validation(id: str, jobs: str) > Validation !> any {
     final list = serialize\jsonDecode(jobs).q("jobs").list();
     if (list == null) {
-        throw "queue: dispatch: run {id}'s job listing names no jobs: {jobs}";
+        throw "queue: start: run {id}'s job listing names no jobs: {jobs}";
     }
     foreach (j in list!) {
         if (j.q("name").stringValue() != PLAN_JOB) {
@@ -307,12 +310,24 @@ export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
 // intentAt, unless an unfinished run covers it. That run's jobs are the pull request's
 // own file, so its intent job is a hint and never a verdict: the worst a forged one does
 // is start one more run on base, which validates only what the base's own queue.yaml
-// plans. Any API error fails the step: skipping on one could strand the intent.
+// plans.
 fun dispatch(run: str, base: str, intentAt: str) > void !> any {
     if (!awaitJob(run, job: "queue intent")) {
         std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent");
         return;
     }
+    start(base, intentAt: intentAt);
+}
+
+// START_FLAGS are start's flags and DISPATCH_FLAGS dispatch's, all required: neither
+// step starts a run without the moment the change became ready to weigh it against.
+final START_FLAGS = ["--base", "--intent-at"];
+final DISPATCH_FLAGS = ["--run", "--base", "--intent-at"];
+
+// start starts a validation run of queue.yaml on base for what became ready at intentAt,
+// unless an unfinished run covers it. Any API error fails the step: skipping on one could
+// strand the change.
+fun start(base: str, intentAt: str) > void !> any {
     final repo = need("GITHUB_REPOSITORY");
     final began = os\time();
     final ids = unfinishedIDs(capture("gh", args: ["api", "repos/{repo}/actions/workflows/queue.yaml/runs?branch={base}&exclude_pull_requests=true&per_page=100"]), repo: repo);
@@ -320,17 +335,12 @@ fun dispatch(run: str, base: str, intentAt: str) > void !> any {
     foreach (id in ids) {
         runs.append(validation(id, jobs: capture("gh", args: ["api", "repos/{repo}/actions/runs/{id}/jobs"])));
     }
-    std\print("queue: dispatch read {ids.len()} unfinished queue.yaml run(s) on {base} from api.github.com in {ids.len() + 1} request(s), {std\toInt(os\time() - began)}ms");
+    std\print("queue: read {ids.len()} unfinished queue.yaml run(s) on {base} from api.github.com in {ids.len() + 1} request(s), {std\toInt(os\time() - began)}ms");
     final d = decide(runs, intentAt: intentAt);
     std\print("::notice title={d.notice}::{d.message}");
     if (d.start) {
-        start(base);
+        proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: {});
     }
-}
-
-// start starts a validation run of queue.yaml on base.
-fun start(base: str) > void !> any {
-    proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", need("GITHUB_REPOSITORY"), "--ref", base], opts: {});
 }
 
 // QUEUE_LABELS are the labels that queue a pull request, one per merge method; the
@@ -402,7 +412,7 @@ final usage = "usage: magus buzz tools/gha-queue.buzz -- <step> <flags>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
     + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
     + "  ci-queued --run <id> --base <branch>\n"
-    + "  start --base <branch>";
+    + "  start --base <branch> --intent-at <time>";
 
 // options parses one step's flags, all valued. Each name in required must be given a
 // value; optional ones may be empty. Anything the step does not declare is refused.
@@ -438,13 +448,14 @@ export fun main(args: [str]) > void !> any {
         final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
         apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
     } else if (step == "dispatch") {
-        final o = options(step, argv: argv, required: ["--run", "--base", "--intent-at"], optional: [<str>]);
+        final o = options(step, argv: argv, required: DISPATCH_FLAGS, optional: [<str>]);
         dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
     } else if (step == "ci-queued") {
         final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
         ciQueued(o["--run"]!, base: o["--base"]!);
     } else if (step == "start") {
-        start(options(step, argv: argv, required: ["--base"], optional: [<str>])["--base"]!);
+        final o = options(step, argv: argv, required: START_FLAGS, optional: [<str>]);
+        start(o["--base"]!, intentAt: o["--intent-at"]!);
     } else {
         throw "queue: unknown step \"{step}\"\n{usage}";
     }
@@ -661,6 +672,48 @@ test "dispatch starts a run only when no unfinished run plans the intent" {
     assert\equal(decide([early], intentAt: intent).message,
         want: "run 7 (read the queue at 2026-09-26T17:02:00Z) planned before this intent at 2026-09-26T17:10:00Z; starting one follow-up",
         message: "the notice names the run and both times");
+}
+
+test "start and dispatch refuse to run without the moment the change became ready" {
+    assert\equal(options("start", argv: ["--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: START_FLAGS, optional: [<str>])["--intent-at"],
+        want: "2026-09-26T17:10:00Z", message: "start with every flag");
+    assert\equal(options("dispatch", argv: ["--run", "7", "--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: DISPATCH_FLAGS, optional: [<str>])["--run"],
+        want: "7", message: "dispatch with every flag");
+    foreach (c in [["start", "--base", "main"], ["start", "--base", "main", "--intent-at", ""], ["dispatch", "--run", "7", "--base", "main"]]) {
+        var refused = false;
+        try {
+            if (c[0] == "start") {
+                options(c[0], argv: c.sub(1), required: START_FLAGS, optional: [<str>]);
+            } else {
+                options(c[0], argv: c.sub(1), required: DISPATCH_FLAGS, optional: [<str>]);
+            }
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: c.join(" "));
+    }
+}
+
+test "CI finishing on a queued head starts a run only when no unfinished run plans after it" {
+    // A validation run already running when CI finished planned the change as not yet
+    // ready, so it needs a follow-up; one that has yet to read the queue sees CI green.
+    final finished = "2026-09-26T18:40:00Z";
+    final verdict = fun (runs: [Validation]) > [any] {
+        final d = decide(runs, intentAt: finished);
+        return [d.start, d.notice];
+    };
+    final queued = validation("9", jobs: planJobs("", conclusion: "", readAt: ""));
+    final setup = validation("9", jobs: planJobs("in_progress", conclusion: "", readAt: ""));
+    final before = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:20:00Z"));
+    final after = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:41:00Z"));
+    final failed = validation("8", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T18:41:00Z"));
+    assert\equal(verdict([<Validation>]), want: [true, "queue-dispatch-idle"], message: "no run");
+    assert\equal(verdict([queued]), want: [false, "queue-dispatch-pending"], message: "a run waiting its turn");
+    assert\equal(verdict([setup]), want: [false, "queue-dispatch-pending"], message: "a run still setting up its plan");
+    assert\equal(verdict([before]), want: [true, "queue-dispatch-follow-up"], message: "the running run planned while CI ran");
+    assert\equal(verdict([after]), want: [false, "queue-dispatch-covered"], message: "the running run planned after CI finished");
+    assert\equal(verdict([before, queued]), want: [false, "queue-dispatch-pending"], message: "running and pending");
+    assert\equal(verdict([failed]), want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
 }
 
 test "plan args carry the depth and leave the affected sets to the workspace" {
