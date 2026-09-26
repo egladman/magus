@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -284,7 +285,7 @@ var configTypeName = reflect.TypeOf(Config{}).String()
 type UnknownKeysError struct {
 	// File is the magus.yaml path, relative to the workspace root while inside one.
 	File string `json:"file"`
-	// Keys holds one entry per key and level, in order of first appearance.
+	// Keys holds one entry per dotted key path, in order of first appearance.
 	Keys []UnknownKey `json:"keys"`
 	// Build carries the version gap. Its Running is "" as the loader returns it, since
 	// the loader is never told the binary's version; [WithRunningVersion] fills it in.
@@ -372,15 +373,22 @@ func WithRunningVersion(err error, running string) error {
 // A key with no near match reads as one this build predates, which is exactly what a
 // magus older than the workspace prints; a near miss is a typo, and telling someone
 // their binary might be old when they wrote "vcs" for "vsc" is noise. Keys are grouped
-// by name and level, so the version gap is stated once however often a key repeats.
+// by dotted path, so the version gap is stated once however often a key repeats.
 func unknownKeyError(path string, data []byte, err error) error {
 	var terr *yaml.TypeError
 	if !errors.As(err, &terr) || len(terr.Errors) == 0 {
 		return nil
 	}
-	root := findWorkspaceRoot()
+	// The workspace holding the file, not the cwd's: --root may name another tree, and a
+	// user-global file belongs to no workspace at all.
+	root := ""
+	if abs, err := filepath.Abs(path); err == nil {
+		root = workspaceRootFrom(filepath.Dir(abs))
+	}
 	ue := &UnknownKeysError{File: relToRoot(root, path)}
-	at := map[[2]string]int{}
+	var doc yaml.Node
+	_ = yaml.Unmarshal(data, &doc)
+	at := map[string]int{}
 	for _, issue := range terr.Errors {
 		m := unknownFieldIssue.FindStringSubmatch(issue)
 		if m == nil {
@@ -388,17 +396,21 @@ func unknownKeyError(path string, data []byte, err error) error {
 		}
 		line, _ := strconv.Atoi(m[1])
 		key, goType := m[2], m[3]
-		if i, ok := at[[2]string{key, goType}]; ok {
+		dotted := keyPath(&doc, key, line)
+		if dotted == "" {
+			dotted = key
+		}
+		if i, ok := at[dotted]; ok {
 			ue.Keys[i].Lines = append(ue.Keys[i].Lines, line)
 			continue
 		}
-		k := UnknownKey{Key: key, Lines: []int{line}}
+		k := UnknownKey{Key: dotted, Lines: []int{line}}
 		if renamed, ok := retiredKeys[key]; ok && goType == configTypeName {
 			k.RenamedTo = renamed
 		} else {
 			k.Suggestion = hint.Nearest(key, knownKeysIn(goType))
 		}
-		at[[2]string{key, goType}] = len(ue.Keys)
+		at[dotted] = len(ue.Keys)
 		ue.Keys = append(ue.Keys, k)
 	}
 	// The strict decode that produced this error never completed, so the floor is
@@ -414,6 +426,34 @@ func unknownKeyError(path string, data []byte, err error) error {
 		}
 	}
 	return ue.diagnostic()
+}
+
+// keyPath is the dotted path of the mapping key named key on line in doc, such as
+// "watch.env", or "" when no such key is found. Sequence items add no segment.
+func keyPath(doc *yaml.Node, key string, line int) string {
+	var walk func(n *yaml.Node, prefix []string) []string
+	walk = func(n *yaml.Node, prefix []string) []string {
+		if n.Kind == yaml.MappingNode {
+			for i := 0; i+1 < len(n.Content); i += 2 {
+				k, v := n.Content[i], n.Content[i+1]
+				here := append(slices.Clone(prefix), k.Value)
+				if k.Value == key && k.Line == line {
+					return here
+				}
+				if found := walk(v, here); found != nil {
+					return found
+				}
+			}
+			return nil
+		}
+		for _, c := range n.Content {
+			if found := walk(c, prefix); found != nil {
+				return found
+			}
+		}
+		return nil
+	}
+	return strings.Join(walk(doc, nil), ".")
 }
 
 // knownKeysIn returns the document keys accepted by the struct type yaml.v3 named
@@ -562,10 +602,16 @@ func LoadFile(path string, strict bool) (Config, error) {
 // findWorkspaceRoot walks up from cwd until it finds a directory containing
 // go.mod, which magus treats as the workspace root. Returns "" on failure.
 func findWorkspaceRoot() string {
-	cur, err := os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
+	return workspaceRootFrom(cwd)
+}
+
+// workspaceRootFrom is [findWorkspaceRoot] walking up from dir instead of cwd.
+func workspaceRootFrom(dir string) string {
+	cur := dir
 	for {
 		if _, err := os.Stat(filepath.Join(cur, "go.mod")); err == nil {
 			return cur

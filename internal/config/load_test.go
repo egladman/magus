@@ -313,8 +313,8 @@ func TestUnknownKeyMessage(t *testing.T) {
 			sourceTree: true,
 			running:    devBuild,
 			want: "magus.yaml has keys this magus does not know:\n" +
-				"  - env   (lines 16, 21, 26)\n" +
-				"  - base  (lines 17, 22, 27; did you mean \"name\"?)\n" +
+				"  - spells.allow_shadow.env   (lines 16, 21, 26)\n" +
+				"  - spells.allow_shadow.base  (lines 17, 22, 27; did you mean \"name\"?)\n" +
 				"\n" +
 				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
@@ -370,8 +370,19 @@ func TestUnknownKeyMessage(t *testing.T) {
 		"two typos at different levels": {
 			doc: "concurrencyy: 4\nsandbox:\n  modee: required\n",
 			want: "magus.yaml has keys this magus does not know:\n" +
-				"  - concurrencyy  (line 1; did you mean \"concurrency\"?)\n" +
-				"  - modee         (line 3; did you mean \"mode\"?)",
+				"  - concurrencyy   (line 1; did you mean \"concurrency\"?)\n" +
+				"  - sandbox.modee  (line 3; did you mean \"mode\"?)",
+		},
+		// One name at two levels is two keys, each named by its path.
+		"one name at two levels": {
+			doc: "zzzzzzzz: 1\nwatch:\n  zzzzzzzz: 2\n",
+			want: "magus.yaml has keys this magus does not know:\n" +
+				"  - zzzzzzzz        (line 1)\n" +
+				"  - watch.zzzzzzzz  (line 3)\n" +
+				"\n" +
+				"This magus's version is unknown here, and the workspace declares no required_version floor.\n" +
+				"Fix it:\n" +
+				"  - released binary: magus self update",
 		},
 		// A retired key is misconfiguration, and the error names the key that took its
 		// settings rather than guessing at a typo or blaming the binary.
@@ -396,7 +407,8 @@ func TestUnknownKeyMessage(t *testing.T) {
 }
 
 // unknownKeyWorkspace writes doc as the magus.yaml of a fresh workspace root, with
-// cmd/magus in it when sourceTree, and chdirs there so paths render workspace-relative.
+// cmd/magus in it when sourceTree. The cwd stays elsewhere: the file's own workspace
+// decides how its path renders and whether it is a source tree.
 func unknownKeyWorkspace(t *testing.T, doc string, sourceTree bool) string {
 	t.Helper()
 	dir, err := filepath.EvalSymlinks(t.TempDir())
@@ -406,15 +418,13 @@ func unknownKeyWorkspace(t *testing.T, doc string, sourceTree bool) string {
 	if sourceTree {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "cmd", "magus"), 0o755))
 	}
-	t.Chdir(dir)
 	return dir
 }
 
 // TestUnknownKeysDropsNothing pins that grouping removes only repeated prose: twenty
 // keys, each on three lines, all reach both the message and the structured error.
-//
-// Not t.Parallel: it chdirs into its workspace.
 func TestUnknownKeysDropsNothing(t *testing.T) {
+	t.Parallel()
 	var item strings.Builder
 	item.WriteString("    - name: spells/a\n      reason: r\n")
 	for i := range 20 {
@@ -430,7 +440,7 @@ func TestUnknownKeysDropsNothing(t *testing.T) {
 	want := UnknownKeysError{File: "magus.yaml"}
 	lines := []string{"magus.yaml has keys this magus does not know:"}
 	for i := range 20 {
-		key := fmt.Sprintf("zq%02dxv", i)
+		key := fmt.Sprintf("spells.allow_shadow.zq%02dxv", i)
 		at := []int{5 + i, 27 + i, 49 + i}
 		want.Keys = append(want.Keys, UnknownKey{Key: key, Lines: at})
 		lines = append(lines, fmt.Sprintf("  - %s  (lines %d, %d, %d)", key, at[0], at[1], at[2]))
