@@ -369,13 +369,6 @@ jobs:
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
 
-      # Go's own build and module caches, from a bundle main signed, so a magus miss
-      # recompiles only the packages that changed. It restores nothing that fails
-      # verification, and a miss or a refusal leaves the build cold rather than red.
-      # Main restores too: the bundle is verified, which is what the cache rule asks.
-      - name: Restore the Go toolchain cache
-        run: magus config cache import --toolchain go --remote
-
       - name: Run CI for shard
         uses: ./.github/actions/magus
         with:
@@ -389,14 +382,6 @@ jobs:
           command:  run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
-
-      # Signed with MAGUS_CACHE_SIGNING_KEY, which only main holds. Only the shard that
-      # runs the root module saves: the day's first bundle stands, and one from a shard
-      # that compiled a corner of the tree would claim the key. --used-within drops the
-      # restored entries this run never touched.
-      - name: Save the Go toolchain cache
-        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && contains(format(' {0} ', matrix.projects), ' . ')
-        run: magus config cache export --toolchain go --remote --used-within 12h
 
       # Saved on a red shard too: what passed before the failure is a valid hit for the
       # rerun, the run that most needs it. Not on cancel, where the store may be half
