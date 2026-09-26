@@ -26,6 +26,9 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type VersionKey -out gen/types/versionkey.buzz
 //go:generate go run ../../cmd/magus-utils types -type VersionBounds -out gen/types/versionbounds.buzz
 //go:generate go run ../../cmd/magus-utils types -type Tool -out gen/types/tool.buzz
+//go:generate go run ../../cmd/magus-utils types -type SandboxAllow -out gen/types/sandboxallow.buzz
+//go:generate go run ../../cmd/magus-utils types -type SandboxEnv -out gen/types/sandboxenv.buzz
+//go:generate go run ../../cmd/magus-utils types -type Sandbox -out gen/types/sandbox.buzz
 //go:generate go run ../../cmd/magus-utils types -type CommentBlock -out gen/types/commentblock.buzz
 //go:generate go run ../../cmd/magus-utils types -type Quote -out gen/types/quote.buzz
 //go:generate go run ../../cmd/magus-utils types -type CommentSyntax -out gen/types/commentsyntax.buzz

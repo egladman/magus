@@ -40,3 +40,11 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 export fun mgs_getTools() > {str: Tool} {
     return {"cosign": Tool{probe = Command{bin = "cosign", args = ["version"]}}};
 }
+
+// cosign caches the sigstore TUF root it verifies against.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [SandboxAllow{env = "TUF_ROOT", base = "home", path = ".sigstore", mode = SandboxAccess.rw}],
+        env = SandboxEnv{passthrough = ["TUF_ROOT"]},
+    };
+}

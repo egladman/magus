@@ -130,3 +130,12 @@ export fun mgs_getTools() > {str: Tool} {
         },
     };
 }
+
+// trivy keeps its vulnerability database in Go's user cache dir. ~/.docker is left out:
+// its config.json holds registry credentials.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [SandboxAllow{env = "TRIVY_CACHE_DIR", base = "userCache", path = "trivy", mode = SandboxAccess.rw}],
+        env = SandboxEnv{passthrough = ["TRIVY_CACHE_DIR"]},
+    };
+}

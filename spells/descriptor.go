@@ -157,6 +157,95 @@ type Install struct {
 	Tools []string `json:"tools,omitempty"`
 }
 
+// Sandbox is a sandbox declaration: the locations outside the workspace a child may
+// use, and the environment variables it keeps. The same shape is declared at three
+// layers, each merged over the one before and none narrowing another: magus.yaml's
+// sandbox for the workspace, mgs_getSandbox for a spell's tools, and a target's
+// `sandbox` policy key for that target alone.
+//
+// Toolchain knowledge lives in the spell layer because the spell is what knows its
+// tools. The sandbox itself grants only the operating system, the workspace, magus's
+// cache, a private temp dir and the checkout's git directories; what a toolchain keeps
+// under the user's home (a module cache, a registry, an installed toolchain) arrives
+// through the spells a project binds.
+type Sandbox struct {
+	Allow []SandboxAllow `json:"allow,omitempty" yaml:"allow,omitempty"`
+	Env   SandboxEnv     `json:"env,omitzero" yaml:"env,omitempty"`
+}
+
+// SandboxEnv is the environment half of a Sandbox declaration.
+type SandboxEnv struct {
+	// Passthrough names the variables a child keeps from magus's environment beyond the
+	// sandbox's own list: exact names, or a prefix of at least three characters ending
+	// in "_*" (MISE_*).
+	Passthrough []string `json:"passthrough,omitempty" yaml:"passthrough,omitempty"`
+}
+
+// SandboxAllow is one location a child may use, and how.
+//
+// The location is the value of Env when that variable is set. Otherwise it is Path:
+// relative to Base when Base is given, else absolute or starting with ~. A spell and a
+// target always name a Base, so neither spells out a home directory; magus.yaml may
+// also write $VAR into an absolute Path, where an unset variable is an error.
+type SandboxAllow struct {
+	// Name is a free-form label. The sandbox ignores it; `magus config set
+	// sandbox.allow.<name>.path=...` addresses a magus.yaml entry by it.
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// Env is the variable that relocates the location (GOCACHE, CARGO_HOME, MISE_DATA_DIR).
+	Env string `json:"env,omitempty" yaml:"env,omitempty"`
+	// Base is the directory Path is relative to, resolved per host: home, userCache and
+	// userConfig (Go's os.UserCacheDir and os.UserConfigDir), xdgCache, xdgData and
+	// xdgState (the XDG layout on every OS), $VAR (that variable's value, the first
+	// entry of a path list; unset, the entry grants nothing), or binRoot (the install
+	// root of Bin found on PATH, the directory above the bin/ its symlinks resolve into).
+	Base string `json:"base,omitempty" yaml:"base,omitempty"`
+	// Bin is the binary a binRoot base is found from.
+	Bin string `json:"bin,omitempty" yaml:"bin,omitempty"`
+	// Path is the location, under Base when one is given.
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+	// Requires is a path under Base that must exist for the entry to grant anything. It
+	// tells a toolchain's own install root from a shim that shares the binary's name.
+	Requires string `json:"requires,omitempty" yaml:"requires,omitempty"`
+	// Mode is what the entry permits: r read, w write, x exec. Empty is ro. Exec is
+	// never implied, so a toolchain directory that must run needs rx.
+	Mode SandboxAccess `json:"mode,omitempty" yaml:"mode,omitempty" validate:"omitempty,oneof=ro rw rx rwx"`
+}
+
+// SandboxAccess is what a SandboxAllow entry permits.
+type SandboxAccess string
+
+const (
+	// SandboxAccessNone is the zero value, read as ro.
+	SandboxAccessNone SandboxAccess = ""
+	SandboxAccessRO   SandboxAccess = "ro"
+	SandboxAccessRX   SandboxAccess = "rx"
+	SandboxAccessRW   SandboxAccess = "rw"
+	SandboxAccessRWX  SandboxAccess = "rwx"
+)
+
+// Symbolic bases a SandboxAllow may name; see SandboxAllow.Base.
+const (
+	SandboxBaseHome       = "home"
+	SandboxBaseUserCache  = "userCache"
+	SandboxBaseUserConfig = "userConfig"
+	SandboxBaseXDGCache   = "xdgCache"
+	SandboxBaseXDGData    = "xdgData"
+	SandboxBaseXDGState   = "xdgState"
+	SandboxBaseBinRoot    = "binRoot"
+)
+
+// Sandboxes returns each spell's declared Sandbox keyed by spell name, leaving out the
+// spells that declare none.
+func Sandboxes(ss []*Spell) map[string]Sandbox {
+	out := make(map[string]Sandbox, len(ss))
+	for _, s := range ss {
+		if sb := s.Sandbox(); sb != nil {
+			out[s.Name()] = *sb
+		}
+	}
+	return out
+}
+
 // InstallChoice is the Install one project resolved to: which manifest it has, which
 // lock candidate is live, and how that lock installs.
 type InstallChoice struct {
@@ -233,6 +322,12 @@ type Descriptor struct {
 	// fact (which authoring form an op used), not part of the spell's cache identity,
 	// so it stays out of BuiltinsHash.
 	DocOps []string `json:"-"`
+	// Sandbox is what the spell's tools need from the host under the sandbox, from
+	// mgs_getSandbox; nil for a spell that needs nothing beyond the sandbox's own
+	// grants. Not serialized, so it stays out of BuiltinsHash: a grant changes what a
+	// child may touch, never what a build produces, and keying on it would invalidate
+	// every cached entry each time a spell's grants were corrected.
+	Sandbox *Sandbox `json:"-"`
 }
 
 // OpNames returns the spell's op names in sorted order.

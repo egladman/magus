@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -37,7 +38,10 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 		rec.MapSet("command", commandToMap(si.Command))
 		h.MapSet("symbol_indexer", rec)
 	}
-	bindBuzzTargetDispatch(h, m.Ops)
+	if m.Sandbox != nil {
+		h.MapSet("sandbox", bindinggen.ObjectSandbox(*m.Sandbox))
+	}
+	bindBuzzTargetDispatch(h, m.Name, m.Ops)
 	return h
 }
 
@@ -51,18 +55,18 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 // the target's base argv and overlays opts.env on the subprocess, so
 // flag-carrying and cross-compile invocations need no proc.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
-func bindBuzzTargetDispatch(h vm.Value, targets map[string]spells.Op) {
+func bindBuzzTargetDispatch(h vm.Value, spellName string, targets map[string]spells.Op) {
 	h.MapSet("listTargets", vm.DirectValue("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return strSliceToBuzzList(commandTargetNames(targets)), nil
 	}))
 	for name, tgt := range targets {
-		bindBuzzCommandMethod(h, name, tgt)
+		bindBuzzCommandMethod(h, spellName, name, tgt)
 	}
 }
 
 // bindBuzzCommandMethod attaches tgt as a callable method named target on h,
 // so spell.<target>(opts?) forks the target.
-func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
+func bindBuzzCommandMethod(h vm.Value, spellName, target string, tgt spells.Op) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		// The leading magus.Context is REQUIRED, not optional. Optional would overload
 		// argument one on TYPE: f(), f(ctx), f({args:...}), f(ctx, {args:...}), which
@@ -78,7 +82,7 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 		if err != nil {
 			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
-		opts.op, opts.cwd, opts.env = target, base.cwd, base.env
+		opts.spell, opts.op, opts.cwd, opts.env = spellName, target, base.cwd, base.env
 		if tgt.Kind == spells.OpKindInstall {
 			if !opts.hasArgs {
 				opts.args = project.ExtraArgs(ctx)
@@ -282,7 +286,7 @@ func buzzSpellObject(name string) vm.Value {
 	m.MapSet("provides", strSliceToBuzzList(spec.Provides))
 
 	// listTargets() + a callable per fork target (go.test(), docker.build()).
-	bindBuzzTargetDispatch(m, spec.Ops)
+	bindBuzzTargetDispatch(m, name, spec.Ops)
 
 	return m
 }
