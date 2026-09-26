@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                    |
 | ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
-| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `buzz-test`                                                                            |
+| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `lint-files`                                                                           |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `typescript`                                                                                              |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                             |
@@ -65,7 +65,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      55 | `magus query project=.`                               | `buzz-test`, `lint-files`, `test`                        |
+| .                               |      55 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
 | console                         |       8 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
 | docs                            |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
