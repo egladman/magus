@@ -766,8 +766,13 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(raw, &workflow))
 	var shard string
 	for _, s := range workflow.Jobs["ci"].Steps {
-		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "run ci") {
-			shard = regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
+		command := s.With["command"]
+		// A shard gated in the queue's box names the command it runs after `-- magus`.
+		if _, inner, boxed := strings.Cut(command, " -- magus "); boxed && strings.HasPrefix(command, "queue gate ") {
+			command = inner
+		}
+		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(command, "run ci") {
+			shard = regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(command, "")
 		}
 	}
 	require.NotEmpty(t, shard, "ci.yaml's shards run no `run ci` command")

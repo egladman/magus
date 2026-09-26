@@ -242,6 +242,14 @@ type policyCase struct {
 	worker string
 	// checkout is what the guard reads about a pushing checkout, nil for any other line.
 	checkout *types.CheckoutState
+	// jobs are the rows the job store holds when the input arrives.
+	jobs []types.Job
+	// corruptStore replaces the job store with bytes it cannot decode.
+	corruptStore bool
+}
+
+func agentSpawn(toolInput map[string]any) map[string]any {
+	return map[string]any{"tool_name": "Agent", "tool_input": toolInput}
 }
 
 func bash(command string) map[string]any {
@@ -277,12 +285,27 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "worker-runs-gate", name: "an integrate worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: "pass"},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "HEAD:refs/heads/guard-pr-polling"},
-		{rule: "change-role-spawn-not-isolated", name: "a feat worker sharing the checkout", input: map[string]any{
-			"tool_name": "Agent", "tool_input": map[string]any{"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet"},
-		}, decision: "deny", reason: `isolation: "worktree"`},
-		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: map[string]any{
-			"tool_name": "Agent", "tool_input": map[string]any{"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree"},
-		}, decision: "pass"},
+		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
+			"description": "audit the store", "prompt": "Audit it.", "model": "sonnet",
+		}), decision: "deny", reason: "magus job fork <job> --model sonnet"},
+		{rule: "spawn-without-job-row", name: "a spawn naming a row the store lacks", input: agentSpawn(map[string]any{
+			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
+		}), decision: "deny", reason: "magus job fork footprint --parent root --model sonnet --read-only"},
+		{rule: "spawn-without-job-row", name: "a spawn naming an ended row", input: agentSpawn(map[string]any{
+			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StatePass}}, decision: "deny", reason: "has ended (pass)"},
+		{rule: "spawn-without-job-row", name: "a spawn naming a live nested row", input: agentSpawn(map[string]any{
+			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
+		}), jobs: []types.Job{{ID: "root/footprint", Parent: "root", State: types.StateDeclared, ReadOnly: true}}, decision: "pass"},
+		{rule: "spawn-without-job-row", name: "a spawn while the store cannot be read", input: agentSpawn(map[string]any{
+			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
+		}), corruptStore: true, decision: "advise", reason: "went unchecked"},
+		{rule: "change-role-spawn-not-isolated", name: "a feat worker sharing the checkout", input: agentSpawn(map[string]any{
+			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: `isolation: "worktree"`},
+		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
+			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 	}
 
 	covered := map[string]bool{}
@@ -290,6 +313,17 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		covered[tc.rule] = true
 		t.Run(tc.rule+"/"+tc.name, func(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
+			store := job.NewStore(job.Location{CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
+			for _, row := range tc.jobs {
+				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+				require.NoError(t, err)
+			}
+			if tc.corruptStore {
+				p, err := store.Path()
+				require.NoError(t, err)
+				require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+				require.NoError(t, os.WriteFile(p, []byte("{not a job store"), 0o644))
+			}
 			input := map[string]any{"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse"}
 			for k, v := range tc.input {
 				input[k] = v

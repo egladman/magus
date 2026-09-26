@@ -55,6 +55,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   remote; a remote hit is verified and promoted into the local tier; a build is stored in
   both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
   unset, it is written when a signing key is held; `true` makes remote writes required.
+- **`magus queue gate` runs a command in the box `queue validate` gives a candidate.** It
+  checks HEAD out with a private home and temporary directory under the hook sandbox.
+  `--cache` keeps the local tier outside the box; `--env` passes named variables to the
+  command's own magus. CI's shards now gate through it.
 - **Claude Code MCP tool calls reach the guard.** A `mcp__magus__.*` `PreToolUse` entry
   forwards the call envelope. No rule judges MCP calls yet.
 - **A command rule sees where a line runs and which binary judges it.** The request
@@ -888,6 +892,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Guard advisories no longer fire on paths outside the workspace.** A command whose every
   path lies outside the root, or a write into a scratch directory, is advised nothing, and
   scripted-rewrite no longer refuses a script whose every named path is outside it.
+- **A workspace command rule's deny holds on a line the guard asks about.** A built-in
+  ask, such as an ungated push, skipped `magus\guard.command`, so approving the push
+  also ran what the workspace denies on the same line, such as a chained
+  `gh pr merge --admin`.
 - **Global options no longer hide a VCS command from the guard.** `git -C . reset --hard`,
   `hg -R . purge` and `jj --at-op @ abandon` reach the rule their subcommand triggers.
   An inline alias such as `git -c alias.x=...` is refused under the new `inline-alias`
