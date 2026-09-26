@@ -60,6 +60,7 @@ import "project/libs/gopherbuzz";
 // the two lint-library modules' profiles beside it.
 import "project/libs/diagnostics";
 import "project/libs/coldread";
+import "project/libs/conventions";
 import "project/libs/testlayout";
 
 // Cross-shard remote cache via GitHub Actions Cache. The spell reads the service
@@ -2914,7 +2915,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // write Go files. Left unordered, a reader waiting for those writers while holding
     // its slot stalled a gate for fifteen minutes with nothing running (2026-09-10).
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
-        testlayout\test, buzz_test);
+        conventions\test, testlayout\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -2934,7 +2935,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/coldread/coverage.out", "libs/testlayout/coverage.out"]));
+         "libs/coldread/coverage.out", "libs/conventions/coverage.out",
+         "libs/testlayout/coverage.out"]));
     final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -3138,7 +3140,9 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/coldread/go.mod", "libs/coldread/go.sum",
-                   "libs/coldread/**/*.go");
+                   "libs/coldread/**/*.go",
+                   "libs/conventions/go.mod", "libs/conventions/go.sum",
+                   "libs/conventions/**/*.go");
     // Remove the old binary first, so the link lands on a FRESH inode. `golangci-lint
     // custom` otherwise rewrites .magus/custom-gcl in place, and macOS keeps a code
     // signature keyed on that inode: the new bytes no longer match it, so the kernel
@@ -3180,7 +3184,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go",
-                   "libs/coldread/**/*.go",
+                   "libs/coldread/**/*.go", "libs/conventions/**/*.go",
                    // A project, so the tree globs below stop at its directory, but also a
                    // package of this module that golangci-lint and go vet both compile.
                    "libs/pricing/**/*.go", "libs/pricing/pricing.json");
