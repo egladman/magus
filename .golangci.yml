@@ -631,6 +631,10 @@ linters:
       - path: ^project/insight\.go$
         linters: [stutter]
         text: ^project\.(ProjectStat|ProjectStats) stutters
+      # The lib modules, linted from their own directories; paths stay root-relative.
+      - path: ^libs/gopherbuzz/token/token\.go$
+        linters: [stutter]
+        text: ^token\.Tokenize stutters
       - path: ^std/encoding/[a-z0-9]+/[a-z0-9]+\.go$
         linters: [stutter]
         text: ^(base64\.Base64(URL)?(Encode|Decode)|csv\.CSV(Parse|Stringify)|hex\.Hex(Encode|Decode)|ini\.INI(Parse|Stringify)|json\.JSON(Parse|Stringify)|toml\.TOML(Parse|Stringify)|url\.URL(Encode|Decode|Parse|Build)|xml\.XML(Element|Render|Parse)|yaml\.YAML(Parse|Stringify)) stutters

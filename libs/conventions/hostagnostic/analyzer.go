@@ -31,7 +31,8 @@ var hostNames = regexp.MustCompile(`(?i)\b(claude|opencode|codex|aider|windsurf)
 var cursorHostUse = regexp.MustCompile(`\(Cursor\)|(?i:\bcursor (hooks?|ide|editor|rules)\b|[!=]=\s*"cursor")`)
 
 // hostPathUse allows a host name that names something on disk: a path, or a
-// bare quoted filename stem such as the "claude" classifying CLAUDE.md.
+// bare quoted filename stem such as the "claude" classifying a host's
+// instruction file.
 var hostPathUse = regexp.MustCompile(`(?i)([./~][a-z0-9_.-]*\b(claude|opencode|codex|aider|windsurf)\b[a-z0-9_.-]*)|("(claude|opencode|codex|aider|windsurf)")`) //nolint:hostagnostic // the rule's own host list
 
 const message = "names an agent host outside a filesystem path: magus may name a host only in a path " +
