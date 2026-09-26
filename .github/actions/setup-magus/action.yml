@@ -495,16 +495,18 @@ runs:
     # to a flat estimate rather than failing.
     #
     # The path is set either way: a shard writes its history there for the magus action
-    # to upload, restored or not.
+    # to upload, restored or not. It lives in the workspace's magus directory because a
+    # gate run by `magus queue gate --cache .magus` may write there and nowhere else
+    # outside its box.
     - name: Set the run history path
       shell: bash
-      run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
+      run: echo "MAGUS_HISTORY_PATH=$GITHUB_WORKSPACE/.magus/run-history.json" >> "$GITHUB_ENV"
 
     - name: Restore the run history
       if: inputs.restore-history == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ runner.temp }}/magus-history.json
+        path: ${{ github.workspace }}/.magus/run-history.json
         key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
         restore-keys: |
           ${{ github.workflow }}-magus-history-v1-

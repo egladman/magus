@@ -265,10 +265,12 @@ jobs:
       max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
+      # A full clone, as queue.yaml's validate takes: the gate runs in a checkout of HEAD
+      # whose object store it may only read, so a partial clone's lazy fetch of a blob
+      # would fail here and nowhere in the queue.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
 
       # install stays ON (the default). With install: false the action adds the shims
       # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
@@ -369,8 +371,28 @@ jobs:
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
 
+      # The gate runs in the environment the merge queue gates a candidate in, built by
+      # the same code (`magus queue gate`, internal/queue's GateCommit): a checkout of
+      # HEAD in a box under TMPDIR with a private home and temporary directory, the
+      # hook sandbox over it, and the mode queue.yaml's validate passes. A change green
+      # here is not red in the queue for where it ran.
+      #
+      # What differs from the queue, and why:
+      # - --cache .magus keeps the gate's local tier where the restore and save steps
+      #   around this one carry it between pushes, and where the logs are uploaded from.
+      #   The queue keeps it in the box, since one candidate must not replay another's.
+      # - --env hands the gate's own magus what reports and caches: the CI provider, the
+      #   shard, the history path, and the remote tier read directly with the runner's
+      #   token and the same trust set, where the queue reads through a read-only proxy.
+      #   On main the signing key too, so main still writes the signed remote tier; it
+      #   reaches that magus alone, since the box scrubs every child's environment.
+      # TMPDIR and MISE_TRUSTED_CONFIG_PATHS are queue.yaml's validate values: the box,
+      # and so the checkout mise must trust, lands under runner.temp.
       - name: Run CI for shard
         uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
         with:
           # ci:gha, not bare ci. The gha charm swaps a tool's reporter to GitHub's
           # inline annotation format, so a lint or test failure lands on the diff instead
@@ -379,7 +401,7 @@ jobs:
           # touching an explicitly named one. --concurrency-profile aggressive is the
           # explicit ask for the whole runner: magus reads no environment variable to
           # guess it is in CI, so every invocation that wants the machine says so itself.
-          command:  run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }}
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
