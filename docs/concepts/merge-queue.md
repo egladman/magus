@@ -311,16 +311,16 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 | `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1` document with `-o json` | read                         |
 | `ls`       | the provider                                   | a `mergequeue.changes/v1` document                                     | read                         |
 | `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                                            | read                         |
-| `validate` | the plan                                       | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
+| `validate` | the plan (stdin, with `--stdin`)               | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
 | `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                            | write; runs no change's code |
 
 ```sh
 magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
-magus queue validate --plan plan.json --verdicts verdicts \
+magus queue validate --stdin --verdicts verdicts \
   --gate 'magus run ci --no-default-charms' \
   --regenerate 'magus run generate:rw' \
-  --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build
+  --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build < plan.json
 magus queue apply --provider github --base main \
   --regenerate 'magus --sandbox=best-effort run generate:rw' \
   --reproduce-gate 'magus run ci --no-default-charms' \

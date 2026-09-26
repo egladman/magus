@@ -151,6 +151,7 @@ Two layers run together:
 - [MGS3026](MGS3026.md): a merge queue hook flag holding shell syntax rather than a command and its arguments.
 - [MGS3027](MGS3027.md): the merge queue refused a validation run the base's own queue workflow did not start.
 - [MGS3028](MGS3028.md): the merge queue's plan disagrees with what apply reads itself.
+- [MGS3029](MGS3029.md): a `run --stdin` that reads a malformed plan, or names a shard, target or count the plan does not have.
 - [MGS3030](MGS3030.md): a magus stage upstream of this run in a pipe exited non-zero.
 - [MGS3031](MGS3031.md): a job forked with a declaration claim no footprint can grade.
 

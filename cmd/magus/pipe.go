@@ -131,7 +131,9 @@ func tradesRecords(args []string) bool {
 	own, _ := splitOnDashDash(subArgs)
 	switch sub {
 	case "run":
-		if isUsageOnlyInvocation(subArgs) || hasDetachFlag(subArgs) || hasModeFlag(own, "graph") {
+		// A run reading a saved plan takes stdin as its input, like a buzz script read from
+		// stdin, not as records.
+		if isUsageOnlyInvocation(subArgs) || hasDetachFlag(subArgs) || hasModeFlag(own, "graph") || runReadsPlan(subArgs) {
 			return false
 		}
 		raw, _, ok := splitTargetFromArgs(own, func(fs *flag.FlagSet) { bindRunFlags(fs, nil) })
@@ -310,7 +312,7 @@ func takesProjectLocks(argv []string) bool {
 	switch sub {
 	case "affected":
 		// --plan runs nothing, except the --preflight pass it gates the plan on: the
-		// shape `affected ci --plan --preflight generate | magus run ci-shard` exists for.
+		// shape `affected ci --plan --preflight generate | magus run --stdin` exists for.
 		if hasModeFlag(subArgs, "preflight") {
 			return true
 		}

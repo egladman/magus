@@ -191,6 +191,7 @@ flag run/preflight
 flag run/race
 flag run/shard
 flag run/skip
+flag run/stdin
 flag run/step
 flag run/timeout
 flag run/upstream
