@@ -282,6 +282,7 @@ linters:
         description: holds a package's imports under a prefix at or below a ceiling
         original-url: github.com/egladman/magus/libs/conventions
         settings:
+          module: github.com/egladman/magus
           rules:
             # A RATCHET on cmd/magus's internal/ imports: it may fall, never rise.
             # It was 25 in May, 36 in July, 48 in August and 63 in September, while
@@ -308,6 +309,7 @@ linters:
         description: requires every name-format switch arm to render through an emitter
         original-url: github.com/egladman/magus/libs/conventions
         settings:
+          module: github.com/egladman/magus
           package: github.com/egladman/magus/cmd/magus
           case: outputName
           emitters: [emitNames, emitNamesOf, outputDst]
@@ -319,6 +321,7 @@ linters:
         settings:
           # Where magus resolves the per-user runtime directory the broker and the
           # server listen in. libs/testkit points a test process somewhere private.
+          module: github.com/egladman/magus
           package: github.com/egladman/magus/internal/proc/sockdir
           calls: [testkit.Main, testkit.Isolated]
 
