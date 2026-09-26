@@ -896,6 +896,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Guard advisories no longer fire on paths outside the workspace.** A command whose every
   path lies outside the root, or a write into a scratch directory, is advised nothing, and
   scripted-rewrite no longer refuses a script whose every named path is outside it.
+- **A workspace command rule's deny holds on a line the guard asks about.** A built-in
+  ask, such as an ungated push, skipped `magus\guard.command`, so approving the push
+  also ran what the workspace denies on the same line, such as a chained
+  `gh pr merge --admin`.
 - **Global options no longer hide a VCS command from the guard.** `git -C . reset --hard`,
   `hg -R . purge` and `jj --at-op @ abandon` reach the rule their subcommand triggers.
   An inline alias such as `git -c alias.x=...` is refused under the new `inline-alias`
