@@ -22,7 +22,6 @@ name is the entry below. `magus describe rules` prints the same list.
 | [busy-wait](busy-wait.md)                         | a loop polling for work you started, which announces its own completion                           |
 | [buzz-unbriefed](buzz-unbriefed.md)               | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                              |
-| [capture-filter](capture-filter.md)               | a filter over a run capture or log, which cuts the failure block apart                            |
 | [cd](cd.md)                                       | a `cd` before a magus command, when the project is an argument                                    |
 | [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)           |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
@@ -54,6 +53,7 @@ name is the entry below. `magus describe rules` prints the same list.
 
 | Rule                                    | Catches                                                                                 |
 | --------------------------------------- | --------------------------------------------------------------------------------------- |
+| [capture-filter](capture-filter.md)     | a filter over a run capture or log, which cuts the failure block apart                  |
 | [chained-run](chained-run.md)           | several magus runs chained on one line, where the dependency graph would have run them  |
 | [checkpoint-state](checkpoint-state.md) | a command reaching for a tree's identity, which a revision alone cannot give            |
 | [focus](focus.md)                       | a read or write outside the paths the running job declared                              |

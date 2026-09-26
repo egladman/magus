@@ -40,6 +40,9 @@ const (
 	// advisorySharedCheckout fires on a SPAWN, which is the one moment the choice between
 	// one checkout and two is still free to make.
 	advisorySharedCheckout hint.MarkerKind = "shared-checkout"
+	// advisoryCaptureFilter is a text filter over a run capture or run log; see
+	// captureFilterFires for why it advises.
+	advisoryCaptureFilter hint.MarkerKind = "capture-filter"
 
 	// Enrolled late. These five and the three VCS kinds below shipped anonymous, which
 	// an empty kind spells as "speak every time": they had no marker, so they repeated in

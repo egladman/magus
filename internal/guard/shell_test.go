@@ -1657,16 +1657,21 @@ func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
 // A backgrounded gate's capture is magus output one step removed, and nothing on the
 // filter line is a magus invocation, so the pipe rule cannot see it. Measured twice in
 // one session: a grep for `cause:` dropped the `output:` and `inspect:` lines two below
-// it, which are the only way to read the rest of the failure.
-func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
+// it, which are the only way to read the rest of the failure. It advises: about three in
+// four denies were a search the reader needed.
+func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 	for _, cmd := range []string{
 		// The measured command.
 		`grep -n "^\[fail\]\|cause:" /Users/x/.claude/tasks/abc123.output | head -8`,
 		`grep -c fail tasks/abc123.output`,
-		`tail -40 /tmp/t.output`,
+		`grep '^--- FAIL' .magus/logs/9f2c1a.log`,
+		`tail -40 /tmp/claude-501/p/s/tasks/b6h6o001e.output`,
 		`cat tasks/abc123.output | grep cause:`,
 		`awk '/cause:/ {print}' tasks/abc123.output`,
 		`wc -l tasks/abc123.output`,
+		// A pattern supplied by a flag leaves every positional a file.
+		`grep -e cause: tasks/abc123.output`,
+		`grep -A 3 cause: tasks/abc123.output`,
 		// A range print cuts by position, which is a filter with extra steps.
 		`sed -n '1,200p' tasks/abc123.output`,
 		// The persisted run log is the same content by another route.
@@ -1678,31 +1683,34 @@ func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
 		`LC_ALL=C grep cause: tasks/abc123.output`,
 	} {
 		v := Evaluate(testDependencies(), cmd)
-		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
-		assert.Equal(t, denyRuleCaptureFilter, v.Rule.Name, cmd)
+		assert.Empty(t, v.Deny, "advise, never deny: %s", cmd)
+		assert.Equal(t, advisoryCaptureFilter, v.Kind, cmd)
+		assert.Equal(t, captureFilterBrief, v.Brief, cmd)
 	}
+
+	// A deny elsewhere on the line still outranks the advice.
+	v := Evaluate(testDependencies(), `grep cause: tasks/abc123.output; git add -A`)
+	assert.Equal(t, denyRuleStageAll, v.Rule.Name)
 }
 
-// The deny has to name what the filter was about to cut, or the reader corrects the
+// The advice has to name what the filter was about to cut, or the reader corrects the
 // spelling instead of the mistake, and it has to route somewhere that works.
 //
-// It used to reproduce the whole five-line failure block, which was eight lines of a
-// message that still owed the reader three lines of advice. The PAIR is what carries the
-// argument: `cause:` is what a filter matches and `output:` is the ref it drops, two lines
-// below it. Naming the other three proved nothing the pair does not.
-func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
+// The PAIR is what carries the argument: `cause:` is what a filter matches and `output:`
+// is the ref it drops, two lines below it.
+func TestCaptureFilterAdviceNamesTheFailureBlock(t *testing.T) {
 	v := Evaluate(testDependencies(), `grep -n "cause:" tasks/abc123.output | head -8`)
-	require.NotEmpty(t, v.Deny)
+	require.NotEmpty(t, v.Context)
 	for _, field := range []string{"cause:", "output: out<hex>"} {
-		assert.Contains(t, v.Deny, field, "the matched line and the dropped ref are what the filter costs")
+		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs")
 	}
-	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
-	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
-	assert.Contains(t, v.Deny, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+	assert.Contains(t, v.Context, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Context, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
+	assert.Contains(t, v.Context, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
 }
 
 // The rule is about the CAPTURE, not about text filters. Reading the file whole, and
-// filtering anything else, both stay allowed.
+// filtering anything else, both stay silent.
 func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 	for _, cmd := range []string{
 		// No filter at all: the whole file is the sanctioned read.
@@ -1714,8 +1722,18 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		// A --tee'd file has a contract, so consuming it is composition.
 		`jq -r 'select(.level=="error")' gate.jsonl`,
 		`cat gate.jsonl | jq -r .target`,
+		// A PATTERN shaped like a capture reads no capture: the measured non-log denies.
+		`grep -rn "global\.silent\|global\.output" cmd/magus/`,
+		`grep -rn 'tasks/x.output' docs/`,
+		`grep -e cause: -e 'tasks/x.output' notes.md`,
+		`awk '/tasks\/x.output/' notes.md`,
+		// A file named like a capture outside a host's tasks directory is not one.
+		`tail -40 /tmp/t.output`,
+		`grep x testdata/golden.output`,
+		// A run log's name is a content hash.
+		`grep x .magus/logs/notes.log`,
 	} {
-		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, advisoryCaptureFilter, Evaluate(testDependencies(), cmd).Kind, "should not fire: %s", cmd)
 	}
 }
 

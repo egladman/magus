@@ -23,7 +23,7 @@ import (
 // workspace's own committed scripts legitimately run raw tools and git.
 var scriptJudgedRules = []denyRuleName{
 	denyRuleBusyWait, denyRuleScriptedRewrite, denyRuleCd, denyRuleThrowawayCopy,
-	denyRuleOutputPipe, denyRuleOutputRedirect, denyRuleCaptureFilter, denyRuleUnknownEnv,
+	denyRuleOutputPipe, denyRuleOutputRedirect, denyRuleUnknownEnv,
 }
 
 // maxScriptBytes bounds what is read. A program larger than this is not a scratch script.

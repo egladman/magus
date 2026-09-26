@@ -88,7 +88,6 @@ const (
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
-	denyRuleCaptureFilter     denyRuleName = "capture-filter"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
 	denyRuleRawTool           denyRuleName = "raw-tool"
@@ -449,12 +448,12 @@ func redirectTarget(r *syntax.Redirect) string {
 }
 
 // capturePathRe matches the files that hold magus console output verbatim:
-// the host's task capture for a backgrounded command (`<id>.output`, whatever
-// directory the host keeps it in) and a persisted run log.
+// the host's task capture for a backgrounded command (`tasks/<id>.output`) and a
+// persisted run log.
 //
 // It is the same shape the busy-wait rule is pinned against, which polls a
 // capture by grepping it.
-var capturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
+var capturePathRe = regexp.MustCompile(`(?:^|/)(?:tasks/[^/.]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
 
 // captureFilterFires reports a text filter aimed at one of those files.
 //
@@ -462,6 +461,10 @@ var capturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-
 // reaches it: the filter drops the output ref and the inspect line that sit two
 // lines under the `cause:` an agent greps for. Measured twice in one session,
 // with nothing on the line the pipe rule could recognize as magus.
+//
+// It advises rather than refuses: measured 2026-09-26, about three in four denies
+// were a search the reader needed, and the refused agent read the whole file
+// instead, which is the context cost the rule meant to spare.
 //
 // `cat <capture>` alone is not a filter and stays allowed, which is why the
 // pipeline arm asks what the SOURCE of the pipe named rather than only what each
@@ -490,11 +493,54 @@ func captureFilterFires(cmds []hint.Invocation, command string, d Dialect) bool 
 	return found
 }
 
-// namesCapture reports whether a command was pointed at a capture. Every
-// argument is checked rather than the operands alone, because each filter spells
-// its value-taking flags differently and no flag value looks like this path.
+// namesCapture reports whether a command reads a capture: a file operand, never the
+// pattern or script a filter takes first. `grep 'global\.output' cmd/` searches for
+// text shaped like a capture's name and reads no capture.
 func namesCapture(c hint.Invocation) bool {
-	return slices.ContainsFunc(c.Args, capturePathRe.MatchString)
+	return slices.ContainsFunc(fileOperands(c), capturePathRe.MatchString)
+}
+
+// fileOperands are the positionals a filter reads as files, by the tool's grammar in
+// stdinReaders: flag values are skipped, and so is the leading program (grep's
+// pattern, awk's and sed's script) unless a flag supplied it. A tool the table does
+// not model yields every positional.
+func fileOperands(c hint.Invocation) []string {
+	r, modeled := stdinReaders[filepath.Base(c.Name)]
+	var out []string
+	programFromFlag, done := false, false
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		switch {
+		case done || a == "-" || !strings.HasPrefix(a, "-"):
+			out = append(out, a)
+			continue
+		case a == "--":
+			done = true
+			continue
+		case !modeled:
+			continue
+		}
+		name, _, joined := strings.Cut(a, "=")
+		kind := r.kind(name)
+		takesNext := !joined && (strings.HasPrefix(a, "--") || len(a) == 2)
+		switch kind {
+		case flagValue:
+			if takesNext {
+				i++
+			}
+		case flagProgram:
+			programFromFlag = true
+			if takesNext {
+				i++
+			}
+		case flagPair:
+			i += 2
+		}
+	}
+	if modeled && !programFromFlag && r.program > 0 {
+		out = out[min(r.program, len(out)):]
+	}
+	return out
 }
 
 // backtickSubstFires reports a backtick command substitution anywhere on the line. Only the
@@ -1273,11 +1319,12 @@ var (
 	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age).\n" +
 		"`pgrep`, `pidof` and `ps` invent an unbounded poll that answers what the lock message already said."
 
-	// LEADS with the replacement, like the pipe and redirect messages it extends,
+	// LEADS with the better route, like the pipe and redirect messages it extends,
 	// and spells out the block because the reader cannot lose what they can see.
-	denyCaptureFilter = "Read that file whole (`cat`, or your editor tool), or give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
+	captureFilterAdvice = "magus workspace: this filters a run capture. Next time give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
-		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
+		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION."
+	captureFilterBrief = "magus workspace: a filter over a run capture drops the `output:` ref under `cause:`; `-o jsonl --tee <file>` gives the run a contract."
 
 	denyBacktickSubstitution = "Write a command substitution as `$(...)`, and put a literal backtick in single quotes, as in grep -n '```' README.md.\n" +
 		"Inside double quotes a backtick RUNS a command: it pairs with the next backtick anywhere on the line, and everything between them, file operands and pipes included, becomes that command."
@@ -1596,8 +1643,9 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 	builtin := evaluateRules(deps, command, d)
 	// A built-in advisory is about this workspace, so a line that only touches paths
 	// outside it has nothing to be advised about. Denies are exempt: each one decides for
-	// itself whether a path outside the tree changes its answer.
-	if builtin.Deny == "" && builtin.Context != "" && deps.scope.lineOutside(command, d) {
+	// itself whether a path outside the tree changes its answer. So is capture-filter: a
+	// host keeps its task captures outside the tree, and what they hold is a run of it.
+	if builtin.Deny == "" && builtin.Context != "" && builtin.Kind != advisoryCaptureFilter && deps.scope.lineOutside(command, d) {
 		builtin = ShellVerdict{}
 	}
 	v := strengthenWithWorkspace(builtin, matchWorkspaceShell(deps.ShellRules, command, d))
@@ -1672,11 +1720,12 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Deny: filterWithoutInputDeny(tool), Rule: denyRule{Name: denyRuleFilterWithoutInput, Arg: tool}}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
-	// a task capture, this one refuses trimming it once it arrives. It has to sit above
-	// the search advisories, which would otherwise answer for the grep and say nothing
-	// about what it was cutting away.
+	// a task capture, this one advises against trimming it once it arrives. It is held
+	// until every deny has had its turn, then answers above the search advisories, which
+	// would otherwise speak for the grep and say nothing about what it was cutting away.
+	var captureAdvice ShellVerdict
 	if parsed && captureFilterFires(cmds, command, d) {
-		return ShellVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
+		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
 	if scriptedRewriteFires(command, d, deps.scope) {
 		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
@@ -1759,6 +1808,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// tool is the correction worth reading first.
 	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
 		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+	}
+	if captureAdvice.Context != "" {
+		return captureAdvice
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):

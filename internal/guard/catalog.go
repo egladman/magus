@@ -62,7 +62,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 			"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. " +
-			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the cd, output-pipe, output-redirect, capture-filter and unknown-env rules."},
+			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the cd, output-pipe, output-redirect and unknown-env rules."},
 	{Name: string(denyRuleCacheDirWrite), Decision: "deny", Catches: "a write into this checkout's magus cache dir, which magus alone owns"},
 	{Name: string(denyRuleClaimedDeclaration), Decision: "deny",
 		Catches: "a leased edit landing in a declaration another live job claims (`run.go#executeStages`)",
@@ -71,12 +71,6 @@ var denyRuleDocs = []RuleDoc{
 			"The edit is applied to the file in memory and its changed lines are placed by the same diff-driver matching the job footprint uses, so the declaration this names is the one `magus job wait` would report. " +
 			"It fires only for a job-bound writer whose own claims in the file do not name the declaration, and only when another live job claims a declaration of that file; an edit that lands in the writer's claims, in no one's, or above the first declaration passes. " +
 			"A payload carrying no edit, such as a whole-file write, and a file whose lines cannot be placed stay graded by path alone."},
-	{Name: string(denyRuleCaptureFilter), Decision: "deny",
-		Catches: "a filter over a run capture or log, which cuts the failure block apart",
-		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
-			"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
-			"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
-			"Read the file whole, or give the run an output contract up front with `-o jsonl --tee <file>` and query that. Reading the whole file is not a filter and stays allowed."},
 	{Name: string(denyRuleCd), Decision: "deny",
 		Catches: "a `cd` before a magus command, when the project is an argument",
 		Why: "magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project. " +
@@ -244,6 +238,14 @@ var denyRuleDocs = []RuleDoc{
 // catalogued anyway, because a reader asking what this workspace enforces is owed the
 // whole set rather than the half that happens to apply to them today.
 var advisoryDocs = []RuleDoc{
+	{Name: string(advisoryCaptureFilter), Decision: "advise",
+		Catches: "a filter over a run capture or log, which cuts the failure block apart",
+		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
+			"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
+			"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
+			"The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. " +
+			"It ADVISES rather than refuses: measured 2026-09-26, about three in four denies were a search the reader needed, and the refused agent then read the whole file into context. " +
+			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
 	{Name: string(advisoryChainedRun), Decision: "advise",
 		Catches: "several magus runs chained on one line, where the dependency graph would have run them",
@@ -328,7 +330,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryRegenSource, advisoryGraphStale, advisoryGateRepeat, advisoryFocus,
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
-	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun,
+	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the
