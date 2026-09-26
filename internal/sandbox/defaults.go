@@ -80,7 +80,16 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		layers = append(layers, *o.Target)
 	}
 	declared, allow := host.mergeLayers(layers...)
+	core := make(map[string]bool, len(rules))
+	for _, r := range rules {
+		core[r.Path] = true
+	}
 	rules = mergeRulesByPath(append(rules, declared...))
+	// A path a core grant names (the workspace, a git dir) is never created, whatever a
+	// declaration says: a missing workspace is a failure to report, not a directory to make.
+	for i := range rules {
+		rules[i].Create = rules[i].Create && !core[rules[i].Path]
+	}
 
 	kept, dropped := allow.Scrub(o.Environ)
 	kept = slices.DeleteFunc(kept, func(kv string) bool { return strings.HasPrefix(kv, "TMPDIR=") })
@@ -206,6 +215,7 @@ func (h hostDirs) mergeLayers(layers ...spells.Sandbox) ([]filesystem.Rule, env.
 				continue
 			}
 			rule.Path = filesystem.ResolveRulePath(path)
+			rule.Create = rule.Write
 			rules = append(rules, rule)
 		}
 		if pass, err := env.Parse(layer.Env.Passthrough); err == nil {
@@ -423,6 +433,7 @@ func mergeRulesByPath(rules []filesystem.Rule) []filesystem.Rule {
 			out[idx].Read = out[idx].Read || r.Read
 			out[idx].Write = out[idx].Write || r.Write
 			out[idx].Exec = out[idx].Exec || r.Exec
+			out[idx].Create = out[idx].Create || r.Create
 			continue
 		}
 		seen[r.Path] = len(out)
