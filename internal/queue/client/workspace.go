@@ -8,6 +8,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 
 	// Without the engine no magusfile is evaluated, and every path would be attributed
@@ -76,6 +77,17 @@ func OpenWorkspace(ctx context.Context, root, target string, opts ...WorkspaceOp
 		})
 	}
 	return &Workspace{m: m, target: target, regenerates: regenerates}, nil
+}
+
+// SpellSandboxes is the sandbox declaration of every spell a project of the workspace
+// resolved, keyed by spell name: the toolchains the workspace builds with, and no
+// spell it merely has registered.
+func (w *Workspace) SpellSandboxes() map[string]spells.Sandbox {
+	var resolved []*spells.Spell
+	for _, p := range w.m.All() {
+		resolved = append(resolved, p.ResolvedSpells...)
+	}
+	return spells.Sandboxes(resolved)
 }
 
 // regenerationKey names a target of project; an empty target names the project, whose

@@ -196,13 +196,15 @@ jobs:
 
       # Pull request refs are fetched over the checkout's remote, which carries no
       # credential; the repository is public, so the read needs none.
-      # Every hook keeps its caches in its own candidate's scratch directory
-      # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
-      # gate replays as green. The remote cache it reads is main's, verified against
-      # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every hook.
+      # The queue gives every hook a home of its candidate's own and keeps every cache
+      # there, so no hook run on another candidate can plant an entry this gate replays
+      # as green. The change's own regeneration runs before its gate in the same home,
+      # which decides only the change's own verdict. The remote cache it reads is main's,
+      # verified against MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every
+      # hook.
       # Candidates are checked out under TMPDIR, outside the workspace mise-action
-      # trusts, so the trust list names both; hooks receive it through magus.yaml's
-      # sandbox passthrough.
+      # trusts, so the trust list names both; the queue hands it to every hook, and a
+      # magus a hook runs passes it on through magus.yaml's sandbox passthrough.
       - name: Validate #${{ matrix.change }}
         env:
           CHANGE: ${{ matrix.change }}

@@ -59,6 +59,10 @@ type Policy struct {
 	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
 	LeaseFrom types.LeaseSource
 
+	// writtenAt maps a rule's path to the path it was declared at, where following
+	// links moved it. Read by WritesOutside.
+	writtenAt map[string]string
+
 	// opts is what BuildPolicy built the workspace policy from, every spell's
 	// declaration included and no target's, kept so Scoped can build the policy a step
 	// gets. nil on a policy assembled by hand, which Scoped returns unchanged.
@@ -330,6 +334,58 @@ func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path
 		Outcome: trail.OutcomeError,
 		Error:   err.Error(),
 	})
+}
+
+// OutsideWrite is a path a policy grants write on outside the directories it was held
+// to (see Policy.WritesOutside).
+type OutsideWrite struct {
+	Path string // as the rule holds it, links followed
+	// Linked is set when the grant was declared inside those directories and a symbolic
+	// link there leads it out.
+	Linked bool
+}
+
+// WritesOutside returns every path p grants write on that lies under none of dirs,
+// leaving out the devices every policy grants and the checkout's own git directory (see
+// PolicyOptions.GitDir), where its index lives. The repository's object store is not
+// left out: every checkout of the repository shares it, so a caller holding its
+// children to their own directories takes its write away first (WithReadOnlyObjects).
+// dirs are resolved as rule paths are. A nil policy grants every write and reports none:
+// the caller decides what off means.
+func (p *Policy) WritesOutside(dirs ...string) []OutsideWrite {
+	if p == nil {
+		return nil
+	}
+	var resolved, written []string
+	for _, d := range dirs {
+		if d != "" {
+			resolved = append(resolved, filesystem.ResolveRulePath(d))
+			written = append(written, filepath.Clean(d))
+		}
+	}
+	under := func(path string, dirs []string) bool {
+		return slices.ContainsFunc(dirs, func(d string) bool { return filesystem.Under(path, d) })
+	}
+	exempt := map[string]bool{}
+	for _, r := range systemRules {
+		if r.Write {
+			exempt[filesystem.ResolveRulePath(r.Path)] = true
+		}
+	}
+	// GitDirs, not opts: WithReadOnlyObjects keeps the one and drops the other.
+	if len(p.GitDirs) > 0 {
+		exempt[p.GitDirs[0]] = true
+	}
+	var out []OutsideWrite
+	for _, r := range p.FS.Rules {
+		if !r.Write || exempt[r.Path] || under(r.Path, resolved) {
+			continue
+		}
+		at, moved := p.writtenAt[r.Path]
+		at = filepath.Clean(at)
+		out = append(out, OutsideWrite{Path: r.Path, Linked: moved && (under(at, written) || under(at, resolved))})
+	}
+	return out
 }
 
 // TempBase is the directory a run under p makes its temp files in: p's private temp

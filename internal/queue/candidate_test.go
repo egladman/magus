@@ -84,7 +84,62 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, head("cand"), b.Commit)
 	assert.Equal(t, []string{"lib/x.txt"}, b.touched)
-	assert.DirExists(t, b.Scratch, "a private directory for the hooks run on it")
+	box := filepath.Dir(b.Dir)
+	assert.Equal(t, types.Candidate{Commit: head("cand"), Change: "2", Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: filepath.Join(box, "tmp")}, b.Candidate)
+	for _, dir := range []string{box, b.Dir, b.Home, b.TempDir} {
+		info, err := os.Stat(dir)
+		require.NoError(t, err)
+		assert.Equal(t, os.ModeDir|0o700, info.Mode(), "%s is private to the candidate", dir)
+	}
+}
+
+// A hook's tools can leave its box unremovable as it stands: Go leaves its module cache
+// read-only, and a hook can take its owner's rights away from its checkout or a
+// directory it cannot then list. Discarding the candidate removes all of it.
+func TestDiscardRemovesABoxAHookLeftUnwritable(t *testing.T) {
+	d := newDoubles(t)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
+		RunAndReturn(func(_ context.Context, _, dir string) error { return os.RemoveAll(dir) })
+	cand, err := checkout(t.Context(), d.vcs, clone.Root, t.TempDir(), "candidate-1", base)
+	require.NoError(t, err)
+	mod := filepath.Join(cand.Home, "go", "pkg", "mod", "example.com", "m@v1.0.0")
+	require.NoError(t, os.MkdirAll(mod, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(mod, "m.go"), []byte("package m\n"), 0o444))
+	for _, dir := range []string{mod, filepath.Dir(mod)} {
+		require.NoError(t, os.Chmod(dir, 0o555))
+	}
+	unlistable := filepath.Join(cand.TempDir, "a", "b")
+	require.NoError(t, os.MkdirAll(unlistable, 0o700))
+	require.NoError(t, os.Chmod(filepath.Dir(unlistable), 0o300))
+	require.NoError(t, os.Chmod(cand.Dir, 0))
+
+	require.NoError(t, discard(t.Context(), d.vcs, clone.Root, cand))
+	assert.NoDirExists(t, filepath.Dir(cand.Dir))
+}
+
+// makeWritable goes on past what it cannot read, and never changes a mode through a
+// link a hook left in the box.
+func TestMakeWritableSkipsWhatItCannotReadAndFollowsNoLink(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	locked := filepath.Join(dir, "a", "b")
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	require.NoError(t, os.Symlink(outside, filepath.Join(locked, "out")))
+	require.NoError(t, os.Chmod(outside, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(outside, 0o700) })
+	require.NoError(t, os.Chmod(locked, 0o555))
+	require.NoError(t, os.Chmod(dir, 0o500))
+
+	makeWritable(dir)
+	for _, d := range []string{dir, filepath.Join(dir, "a"), locked} {
+		info, err := os.Stat(d)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o700), info.Mode().Perm()&0o700, d)
+	}
+	info, err := os.Stat(outside)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o500), info.Mode().Perm(), "the link's target keeps its mode")
+	makeWritable(filepath.Join(dir, "missing"))
 }
 
 func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) {
@@ -344,9 +399,9 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
-			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}, changed: []string{"a.go", "gen/a.go"}, date: when}
+			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Home: "/box/home", TempDir: "/box/tmp"}, touched: []string{"a.go", "gen/a.go"}, changed: []string{"a.go", "gen/a.go"}, date: when}
 			regenerate := func(_ context.Context, r types.Regeneration) error {
-				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
+				assert.Equal(t, types.Regeneration{Dir: dir, Home: "/box/home", TempDir: "/box/tmp", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
 				return nil
 			}
 			d := newDoubles(t)

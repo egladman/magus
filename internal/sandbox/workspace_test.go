@@ -117,18 +117,68 @@ func TestFromConfigGivesChildrenAPrivateTempDir(t *testing.T) {
 	assert.NotEqual(t, p.TempDir, fromConfig(t, t.TempDir(), cacheDir, config.SandboxConfig{}).TempDir)
 }
 
-// A caller's own temp dir replaces the one FromConfig would make, under the same rule
-// that it stays out of the workspace.
-func TestFromConfigWithTempDirUsesTheCallersTempDir(t *testing.T) {
-	root, tmp := t.TempDir(), t.TempDir()
-	p, err := FromConfigWithTempDir(root, "", tmp, config.SandboxConfig{}, nil)
+// A box's children get its temp dir, under the same rule that it stays out of the
+// workspace, and its environment: every writable grant resolves against the box's home,
+// every other one against this process's, where the toolchains are installed. A
+// literal path is refused strictly against the environment its grant resolves in.
+func TestFromConfigBoxedResolvesWritesInTheBoxAndToolsOnTheHost(t *testing.T) {
+	root, runner, box := t.TempDir(), filesystem.ResolveRulePath(t.TempDir()), filesystem.ResolveRulePath(t.TempDir())
+	home, tmp := filepath.Join(box, "home"), filepath.Join(box, "tmp")
+	t.Setenv("MAGUS_TEST_TOOL", filepath.Join(runner, "tool"))
+	t.Setenv("MAGUS_TEST_CACHE", filepath.Join(runner, "cache"))
+	environ := []string{"PATH=/usr/bin", "HOME=" + home, "XDG_CACHE_HOME=" + filepath.Join(home, ".cache")}
+	cfg := config.SandboxConfig{Allow: []spells.SandboxAllow{{Path: "~/notes", Mode: spells.SandboxAccessRW}}}
+	grants := map[string]spells.Sandbox{"tool": {Allow: []spells.SandboxAllow{
+		{Env: "MAGUS_TEST_TOOL", Mode: spells.SandboxAccessRX},
+		{Env: "MAGUS_TEST_CACHE", Base: spells.SandboxBaseXDGCache, Path: "tool", Mode: spells.SandboxAccessRW},
+	}}}
+	p, err := FromConfigBoxed(root, cfg, grants, Box{Environ: environ, TempDir: tmp})
 	require.NoError(t, err)
 	assert.Equal(t, tmp, p.TempDir)
 	assert.Contains(t, p.BaseEnv, "TMPDIR="+tmp)
-	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(tmp, "x")))
+	assert.Contains(t, p.BaseEnv, "HOME="+home)
+	ctx := t.Context()
+	for _, path := range []string{filepath.Join(tmp, "x"), filepath.Join(home, ".cache", "tool", "x"), filepath.Join(home, "notes", "x")} {
+		assert.NoError(t, p.CheckWrite(ctx, path), path)
+	}
+	assert.NoError(t, p.CheckExec(ctx, filepath.Join(runner, "tool", "bin", "tool")))
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(runner, "tool", "x")), filesystem.ErrDenied)
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(runner, "cache", "x")), filesystem.ErrDenied)
+	assert.Empty(t, p.WritesOutside(root, home, tmp))
 
-	_, err = FromConfigWithTempDir(root, "", filepath.Join(root, "tmp"), config.SandboxConfig{}, nil)
+	_, err = FromConfigBoxed(root, config.SandboxConfig{}, nil, Box{Environ: environ, TempDir: filepath.Join(root, "tmp")})
 	assert.ErrorContains(t, err, "inside the workspace")
+	_, err = FromConfigBoxed(root, config.SandboxConfig{Allow: []spells.SandboxAllow{{Path: "$MAGUS_TEST_TOOL/x", Mode: spells.SandboxAccessRW}}}, nil, Box{Environ: environ, TempDir: tmp})
+	assert.ErrorIs(t, err, filesystem.ErrUnsetVariable, "a writable grant reads the box's environment, which does not set it")
+}
+
+// WritesOutside names each write a policy grants outside the directories given, other
+// than the devices and the checkout's git directories every policy grants, and says
+// which a link inside them leads out.
+func TestWritesOutside(t *testing.T) {
+	root := filesystem.ResolveRulePath(t.TempDir())
+	box, outside := filepath.Join(root, "box"), filepath.Join(root, "outside")
+	for _, d := range []string{box, outside, filepath.Join(root, "repo", ".git", "worktrees", "ws")} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	require.NoError(t, os.Symlink(outside, filepath.Join(box, "link")))
+	p := BuildPolicy(PolicyOptions{
+		Workspace:    filepath.Join(box, "ws"),
+		TempDir:      filepath.Join(box, "tmp"),
+		GitDir:       filepath.Join(root, "repo", ".git", "worktrees", "ws"),
+		GitCommonDir: filepath.Join(root, "repo", ".git"),
+		Sandbox: spells.Sandbox{Allow: []spells.SandboxAllow{
+			{Path: filepath.Join(box, "cache"), Mode: spells.SandboxAccessRW},
+			{Path: filepath.Join(box, "link", "cache"), Mode: spells.SandboxAccessRW},
+			{Path: filepath.Join(root, "gocache"), Mode: spells.SandboxAccessRWX},
+			{Path: filepath.Join(root, "toolchain"), Mode: spells.SandboxAccessRX},
+		}},
+	})
+	assert.Equal(t, []OutsideWrite{
+		{Path: filepath.Join(outside, "cache"), Linked: true},
+		{Path: filepath.Join(root, "gocache")},
+	}, p.WritesOutside(box))
+	assert.Nil(t, (*Policy)(nil).WritesOutside(box))
 }
 
 // A temp dir inside the checkout changes what tools see: a repository a test creates

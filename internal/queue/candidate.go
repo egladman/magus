@@ -329,36 +329,75 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 	return built{Candidate: cand, touched: all, settled: settled, resolved: resolved, date: s.date, changed: all}, nil
 }
 
-// checkout checks commit out in a directory of its own under scratch, named from name,
-// beside a scratch directory private to it, so no hook run in another checkout can have
-// planted anything where one run here will look. On error nothing is left behind.
+// checkout checks commit out in a box of its own under scratch, named from name: the
+// checkout, and beside it the home and temporary directory of the hooks run on it, each
+// 0700, so no hook run in another box can have planted anything where one run here will
+// look. On error nothing is left behind.
 func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit string) (types.Candidate, error) {
 	box, err := os.MkdirTemp(scratch, name+"-")
 	if err != nil {
 		return types.Candidate{}, err
 	}
-	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
-	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
-		_ = os.RemoveAll(box)
-		return types.Candidate{}, err
+	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: filepath.Join(box, "tmp")}
+	for _, dir := range []string{cand.Home, cand.TempDir} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			_ = os.RemoveAll(box)
+			return types.Candidate{}, err
+		}
 	}
 	if err := v.CreateCheckout(ctx, root, cand.Dir, commit); err != nil {
 		_ = os.RemoveAll(box)
 		return types.Candidate{}, err
 	}
+	if err := os.Chmod(cand.Dir, 0o700); err != nil {
+		_ = discard(ctx, v, root, cand)
+		return types.Candidate{}, err
+	}
 	return cand, nil
 }
 
-// discard removes a candidate's checkout and its private directory.
+// discard removes a candidate's checkout and its box.
 func discard(ctx context.Context, v types.BuildVCS, root string, cand types.Candidate) error {
 	if cand.Dir == "" {
 		return nil
 	}
+	box := filepath.Dir(cand.Dir)
+	// First, since the VCS cannot remove a checkout a hook left unwritable either.
+	makeWritable(box)
 	err := v.RemoveCheckout(context.WithoutCancel(ctx), root, cand.Dir)
-	if rmErr := os.RemoveAll(filepath.Dir(cand.Dir)); err == nil {
+	if rmErr := os.RemoveAll(box); err == nil {
 		err = rmErr
 	}
 	return err
+}
+
+// makeWritable gives its owner read, write and search on dir and every directory under
+// it that can be reached, so removing the tree does not stop where a hook's tool left
+// one read-only, as Go leaves its module cache, or a hook took its owner's rights away.
+// It works through an [os.Root] on dir, so no link a hook left there turns a change of
+// mode onto anything outside it, and it goes on past whatever it cannot read or change:
+// the removal after it reports what is left.
+func makeWritable(dir string) {
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	if info.Mode().Perm()&0o700 != 0o700 {
+		_ = os.Chmod(dir, info.Mode().Perm()|0o700)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	_ = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr == nil && d.IsDir() && p != "." {
+			if info, err := d.Info(); err == nil && info.Mode().Perm()&0o700 != 0o700 {
+				_ = root.Chmod(p, info.Mode().Perm()|0o700)
+			}
+		}
+		return nil
+	})
 }
 
 // mergeIn merges the change into dir, whose checkout is of ours, settles the generated
@@ -500,7 +539,7 @@ func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b 
 		return nil, &types.RefusedError{Paths: linked, Reason: "regenerating " + strings.Join(regen, ", ") + " would write in a checkout where it holds " +
 			strings.Join(linked, ", ") + " as a symbolic link", Remedy: "Regenerate the generated files yourself and push them, or commit those paths as regular files."}
 	}
-	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Change: s.change, Paths: regen, Units: units}); err != nil {
+	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Home: b.Home, TempDir: b.TempDir, Change: s.change, Paths: regen, Units: units}); err != nil {
 		return nil, err
 	}
 	written, err := v.DirtyFiles(ctx, b.Dir, nil)

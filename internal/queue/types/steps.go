@@ -49,9 +49,11 @@ type Candidate struct {
 	// commit as it stands, such as the one a red candidate was built onto.
 	Change string
 	Dir    string
-	// Scratch is a directory private to this candidate, for the caches and temporary
-	// files of the hooks run on it: nothing another candidate's hooks wrote is in it.
-	Scratch string
+	// Home and TempDir are private to this candidate, beside Dir in a box of its own:
+	// the HOME, which holds every cache, and the TMPDIR of the hooks run on it. Nothing
+	// another candidate's hooks wrote is in either.
+	Home    string
+	TempDir string
 }
 
 // GateResult is one gate run's outcome.
@@ -124,7 +126,8 @@ type Generation struct {
 // Regeneration is one run of a regeneration hook.
 type Regeneration struct {
 	Dir     string // the checkout to regenerate in
-	Scratch string // a directory private to that checkout
+	Home    string // that checkout's candidate's (see Candidate)
+	TempDir string // likewise
 	Change  Change
 	Paths   []string // the generated files to rewrite
 	// Units are what the build tool regenerates Paths by, handed to the hook as its

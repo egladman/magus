@@ -35,6 +35,11 @@ type PolicyOptions struct {
 	// Environ is the host environment. Children's BaseEnv is scrubbed from it, and PATH
 	// and the variables the declarations name are read from it.
 	Environ []string
+	// Tools, when set, locates every entry that grants no write in place of Environ and
+	// Home: the host the toolchains were installed on, when Environ and Home are a box of
+	// the children's own (see FromConfigBoxed). A writable entry always resolves against
+	// Environ and Home.
+	Tools *ToolHost
 	// Sandbox is the workspace layer: magus.yaml's sandbox.allow and env.passthrough.
 	Sandbox spells.Sandbox
 	// Spells is the spell layer: each loaded spell's mgs_getSandbox, keyed by spell
@@ -42,6 +47,12 @@ type PolicyOptions struct {
 	Spells map[string]spells.Sandbox
 	// Target is the target layer, the running target's own `sandbox` policy; nil for none.
 	Target *spells.Sandbox
+}
+
+// ToolHost is the environment and home a host's toolchains were installed under.
+type ToolHost struct {
+	Environ []string
+	Home    string
 }
 
 // BuildPolicy assembles the Policy o describes: the core grants, and over them every
@@ -61,16 +72,18 @@ type PolicyOptions struct {
 func BuildPolicy(o PolicyOptions) *Policy {
 	vars := envMap(o.Environ)
 	host := hostDirs{vars: vars, home: o.Home, goos: o.GOOS}
+	pathHome := o.Home
+	if o.Tools != nil {
+		host.tools = &hostDirs{vars: envMap(o.Tools.Environ), home: o.Tools.Home, goos: o.GOOS}
+		pathHome = o.Tools.Home
+	}
 	rules := []filesystem.Rule{
 		rwx(o.Workspace), rw(o.CacheDir), rwx(o.TempDir), rx(o.Executable),
 		rw(o.GitDir), ro(o.GitCommonDir), rw(join(o.GitCommonDir, "objects")),
 	}
 	rules = append(rules, systemRules...)
-	rules = append(rules, pathRules(vars["PATH"], o.Home)...)
+	rules = append(rules, pathRules(vars["PATH"], pathHome)...)
 	rules = slices.DeleteFunc(rules, func(r filesystem.Rule) bool { return r.Path == "" })
-	for i := range rules {
-		rules[i].Path = filesystem.ResolveRulePath(rules[i].Path)
-	}
 
 	layers := []spells.Sandbox{o.Sandbox}
 	for _, name := range slices.Sorted(maps.Keys(o.Spells)) {
@@ -80,11 +93,21 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		layers = append(layers, *o.Target)
 	}
 	declared, allow := host.mergeLayers(layers...)
-	core := make(map[string]bool, len(rules))
-	for _, r := range rules {
-		core[r.Path] = true
+	cores := len(rules)
+	rules = append(rules, declared...)
+	writtenAt := map[string]string{}
+	core := make(map[string]bool, cores)
+	for i := range rules {
+		written := rules[i].Path
+		rules[i].Path = filesystem.ResolveRulePath(written)
+		if rules[i].Path != written {
+			writtenAt[rules[i].Path] = written
+		}
+		if i < cores {
+			core[rules[i].Path] = true
+		}
 	}
-	rules = mergeRulesByPath(append(rules, declared...))
+	rules = mergeRulesByPath(rules)
 	// A path a core grant names (the workspace, a git dir) is never created, whatever a
 	// declaration says: a missing workspace is a failure to report, not a directory to make.
 	for i := range rules {
@@ -116,6 +139,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		Mode:       o.Mode.Resolved(),
 		Workspace:  workspace,
 		GitDirs:    slices.Compact(gitDirs),
+		writtenAt:  writtenAt,
 		opts:       &o,
 		scoped:     newScopedPolicies(),
 	}
@@ -188,13 +212,15 @@ func pathRules(path, home string) []filesystem.Rule {
 type hostDirs struct {
 	vars       map[string]string
 	home, goos string
+	// tools, when set, resolves the entries that grant no write (see PolicyOptions.Tools).
+	tools *hostDirs
 }
 
 // mergeLayers merges sandbox declarations into the rules and the variable allowlist
-// they grant. It is the one merge every layer goes through, workspace, spells and
-// target alike: entries union, a path two entries name gets both their modes (rx and
-// rw make rwx), and passthrough patterns union. No layer can take away what another
-// granted.
+// they grant, each rule at the path it was declared at, links not yet followed. It is
+// the one merge every layer goes through, workspace, spells and target alike: entries
+// union, a path two entries name gets both their modes (rx and rw make rwx), and
+// passthrough patterns union. No layer can take away what another granted.
 //
 // An entry resolving nowhere grants nothing. So does a location read from a variable
 // or a base that is not absolute, or is home or an ancestor of it: GOCACHE=off is
@@ -206,15 +232,19 @@ func (h hostDirs) mergeLayers(layers ...spells.Sandbox) ([]filesystem.Rule, env.
 	allow := env.Allowlist{Names: env.DefaultAllow()}
 	for _, layer := range layers {
 		for _, a := range layer.Allow {
-			path, literal := h.locate(a)
-			if path == "" || (!literal && (!filepath.IsAbs(path) || h.holdsHome(path))) {
-				continue
-			}
 			rule, err := filesystem.ModeRule(string(a.Mode))
 			if err != nil {
 				continue
 			}
-			rule.Path = filesystem.ResolveRulePath(path)
+			on := h
+			if !rule.Write && h.tools != nil {
+				on = *h.tools
+			}
+			path, literal := on.locate(a)
+			if path == "" || (!literal && (!filepath.IsAbs(path) || on.holdsHome(path))) {
+				continue
+			}
+			rule.Path = path
 			rule.Create = rule.Write
 			rules = append(rules, rule)
 		}
