@@ -39,14 +39,6 @@ func (s *actionStep) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-// label names a step the way a reader finds it in the file.
-func (s actionStep) label() string {
-	if s.Name != "" {
-		return s.Name
-	}
-	return s.Uses
-}
-
 // setupMagusMintsTheQueueAppTokenOnlyAsAnOutput: setup-magus mints the merge
 // queue's app token, and the rules around it are ones no run exercises until a
 // repository adds the app. A key is never an action input (the calling step puts
@@ -60,8 +52,8 @@ func setupMagusMintsTheQueueAppTokenOnlyAsAnOutput(fsys fs.FS) []finding {
 		return bad
 	}
 	var findings []finding
-	flag := func(p string, line int, problem, fix string) {
-		findings = append(findings, finding{path: p, line: line, problem: problem, fix: fix})
+	flag := func(line int, problem, fix string) {
+		findings = append(findings, finding{path: setupMagusAction, line: line, problem: problem, fix: fix})
 	}
 
 	var action struct {
@@ -82,14 +74,14 @@ func setupMagusMintsTheQueueAppTokenOnlyAsAnOutput(fsys fs.FS) []finding {
 	credential := regexp.MustCompile(`(?i)key|token|secret|password`)
 	for name := range action.Inputs {
 		if credential.MatchString(name) {
-			flag(setupMagusAction, lineOf(raw, "\n  "+name+":"), "input "+name+" carries a credential",
+			flag(lineOf(raw, "\n  "+name+":"), "input "+name+" carries a credential",
 				"A credential reaches setup-magus through the calling step's env, never an input.")
 		}
 	}
 	if id, ok := action.Inputs["queue-app-client-id"]; !ok {
-		flag(setupMagusAction, 0, "declares no queue-app-client-id input", "The queue app's client id is an input.")
+		flag(0, "declares no queue-app-client-id input", "The queue app's client id is an input.")
 	} else if id.Default != "" {
-		flag(setupMagusAction, lineOf(raw, "queue-app-client-id:"), "queue-app-client-id has a default",
+		flag(lineOf(raw, "queue-app-client-id:"), "queue-app-client-id has a default",
 			"No app unless the caller names one: drop the default.")
 	}
 
@@ -99,7 +91,7 @@ func setupMagusMintsTheQueueAppTokenOnlyAsAnOutput(fsys fs.FS) []finding {
 	}
 	const halfApp = "(inputs.queue-app-client-id == '') != (env.MAGUS_QUEUE_APP_PRIVATE_KEY == '')"
 	if steps[0].If != halfApp || !strings.Contains(steps[0].Run, "exit 1") {
-		flag(setupMagusAction, steps[0].line, "the first step does not refuse half an app",
+		flag(steps[0].line, "the first step does not refuse half an app",
 			"Half an app is refused first, before anything installs: the first step runs `exit 1` if: "+halfApp)
 	}
 
@@ -109,15 +101,15 @@ func setupMagusMintsTheQueueAppTokenOnlyAsAnOutput(fsys fs.FS) []finding {
 			mint = &steps[i]
 		}
 		if strings.Contains(steps[i].Run, "GITHUB_ENV") && strings.Contains(steps[i].Run, "queue") {
-			flag(setupMagusAction, steps[i].line, fmt.Sprintf("step %q writes the queue app's credential to $GITHUB_ENV", steps[i].Name),
+			flag(steps[i].line, fmt.Sprintf("step %q writes the queue app's credential to $GITHUB_ENV", steps[i].Name),
 				"The token leaves only as an action output; this action runs in jobs that execute pull-request code.")
 		}
 	}
 	if mint == nil {
-		flag(setupMagusAction, 0, "setup-magus does not mint the queue app's token", "Mint it with "+appTokenAction+"<commit>.")
+		flag(0, "setup-magus does not mint the queue app's token", "Mint it with "+appTokenAction+"<commit>.")
 	} else {
 		if !regexp.MustCompile(`@[0-9a-f]{40}$`).MatchString(mint.Uses) {
-			flag(setupMagusAction, mint.line, mint.Uses+" is not pinned by full commit", "Pin the minting action to a 40-hex commit.")
+			flag(mint.line, mint.Uses+" is not pinned by full commit", "Pin the minting action to a 40-hex commit.")
 		}
 		want := map[string]string{
 			"if":           "inputs.queue-app-client-id != ''",
@@ -137,14 +129,14 @@ func setupMagusMintsTheQueueAppTokenOnlyAsAnOutput(fsys fs.FS) []finding {
 				got = mint.If
 			}
 			if got != want[key] {
-				flag(setupMagusAction, mint.line, fmt.Sprintf("the minting step's %s is %q", key, got),
+				flag(mint.line, fmt.Sprintf("the minting step's %s is %q", key, got),
 					fmt.Sprintf("Set it to %q: the token is this repository's alone, with exactly the permissions the queue uses.", want[key]))
 			}
 		}
 	}
 	for _, out := range []string{"queue-token", "queue-committer", "queue-app-slug"} {
 		if _, ok := action.Outputs[out]; !ok {
-			flag(setupMagusAction, 0, "declares no "+out+" output", "The queue app's token and identity leave as outputs.")
+			flag(0, "declares no "+out+" output", "The queue app's token and identity leave as outputs.")
 		}
 	}
 
