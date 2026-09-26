@@ -153,8 +153,9 @@ func TestFromConfigBoxedResolvesWritesInTheBoxAndToolsOnTheHost(t *testing.T) {
 }
 
 // WritesOutside names each write a policy grants outside the directories given, other
-// than the devices and the checkout's git directories every policy grants, and says
-// which a link inside them leads out.
+// than the devices and the checkout's own git directory every policy grants, and says
+// which a link inside them leads out. The shared object store is named until
+// WithReadOnlyObjects takes its write away.
 func TestWritesOutside(t *testing.T) {
 	root := filesystem.ResolveRulePath(t.TempDir())
 	box, outside := filepath.Join(root, "box"), filepath.Join(root, "outside")
@@ -175,9 +176,16 @@ func TestWritesOutside(t *testing.T) {
 		}},
 	})
 	assert.Equal(t, []OutsideWrite{
+		{Path: filepath.Join(root, "repo", ".git", "objects")},
 		{Path: filepath.Join(outside, "cache"), Linked: true},
 		{Path: filepath.Join(root, "gocache")},
 	}, p.WritesOutside(box))
+	readOnly, err := p.WithReadOnlyObjects()
+	require.NoError(t, err)
+	assert.Equal(t, []OutsideWrite{
+		{Path: filepath.Join(outside, "cache"), Linked: true},
+		{Path: filepath.Join(root, "gocache")},
+	}, readOnly.WritesOutside(box))
 	assert.Nil(t, (*Policy)(nil).WritesOutside(box))
 }
 
