@@ -226,7 +226,7 @@ settles such a file when two things hold, the same two the
   region both sides changed settles only when both made the same change, one side's
   change holds the other's, or both only added lines where the base had none (ours
   first, then theirs).
-- the change is low risk by magus's one change classifier, the ci gate's: generated,
+- the change is low risk by magus's one change classifier, the one gate sizing tiers from: generated,
   prose (`gate_low_risk`, markdown by default) or comment-only. Code qualifies only where
   its project lists it in `merge_low_risk`.
 

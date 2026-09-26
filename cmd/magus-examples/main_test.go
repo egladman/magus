@@ -47,24 +47,3 @@ func TestReviewFixtureHasNoIndexer(t *testing.T) {
 		assert.Contains(t, fixtures, ex.fixture, "example %q names an unknown fixture", ex.slug)
 	}
 }
-
-// TestDocsHaveExampleMarkers: every example the generator produces has a marker pair on
-// the page it names, so `content-generate` can never render an example with nowhere to
-// land. Each example is checked against ITS OWN page rather than one shared file: an
-// example whose markers live on a different page than it declares is exactly the failure
-// that would otherwise surface as a generate error in CI.
-func TestDocsHaveExampleMarkers(t *testing.T) {
-	pages := map[string]string{}
-	for _, ex := range examples {
-		doc, ok := pages[ex.docs]
-		if !ok {
-			raw, err := os.ReadFile(filepath.Join("..", "..", "docs", ex.docs))
-			require.NoError(t, err, "example %q names a page that does not exist", ex.slug)
-			doc = string(raw)
-			pages[ex.docs] = doc
-		}
-		assert.Contains(t, doc, "<!-- example:"+ex.slug+" -->", "docs/%s needs an open marker for %q", ex.docs, ex.slug)
-		assert.Contains(t, doc, "<!-- /example -->", "docs/%s needs a closing marker", ex.docs)
-		assert.Contains(t, doc, ex.command(), "docs/%s should mention the command %q near its example", ex.docs, ex.command())
-	}
-}

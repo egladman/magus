@@ -1,0 +1,128 @@
+# magus affected ci sizes its gate to the change, with no flag asking for it.
+#
+# The fixture's ci needs `docs`, which declares notes/*.md, and `test`, whose body gives
+# go-test an env var and fails a whole-suite check unless the run is narrowed. Package
+# a's test fails unless that var arrives; package b's test always fails and imports
+# nothing a exports, so any run that reaches b is red.
+
+[!exec:git] skip 'the change is measured by a git diff'
+[!exec:go] skip 'the Go prover asks go list'
+env GOCACHE=$WORK/.gocache
+env GOPATH=$WORK/.gopath
+env GOTOOLCHAIN=local
+env GOFLAGS=
+env XDG_STATE_HOME=$WORK/.state
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .gitignore magusfile.buzz go.mod a b notes README.md
+exec git commit -m initial
+exec git tag base
+
+# Markdown nothing in ci's chain reads is trivial: every path listed, nothing runs,
+# exit 0.
+cp README.md.v2 README.md
+exec magus affected ci --base=base
+stderr 'ci gate sized trivial against [0-9a-f]{8}; override: --no-redundancy-check'
+stderr 'README.md: trivial \(prose: '
+stderr 'gate: none'
+exec git checkout -- README.md
+
+# Markdown a chain target declares runs that reader, not the whole of ci.
+cp notes/release.md.v2 notes/release.md
+exec magus affected ci --base=base
+stderr 'ci gate sized scoped against [0-9a-f]{8};'
+stderr 'notes/release.md: scoped \(prose: read by .:docs, which ci reaches\)'
+stderr 'gate: magus run docs . --no-default-charms'
+! stderr 'b ran'
+exec git checkout -- notes/release.md
+
+# A code change narrows go-test to the packages that import it, inside the project's
+# own test target: a's test sees the env the target's body passes, b never runs, and
+# ctx.narrowed() is true, so the whole-suite check stands down.
+cp a/a.go.v2 a/a.go
+exec magus affected ci --base=base
+stderr 'ci gate sized scoped against [0-9a-f]{8};'
+stderr 'a/a.go: scoped \(code: Go package example.com/w/a: its tests and every package importing it\)'
+stderr 'narrowed: go::go-test in . test runs 1 package\(s\): example.com/w/a'
+! stderr 'b ran'
+! stderr 'whole-suite floor ran'
+
+# Forcing the full gate is not narrowed, so the whole-suite check runs.
+! exec magus affected ci --base=base --no-redundancy-check
+! stderr 'gate sized'
+stderr 'whole-suite floor ran'
+
+-- .gitignore --
+.magus/
+.gocache/
+.gopath/
+.state/
+*.v2
+-- go.mod --
+module example.com/w
+
+go 1.25
+-- magusfile.buzz --
+import "magus";
+import "magus/spell/go";
+
+magus\project({"spells": [go], "sources": ["**/*.md"]});
+
+export fun docs(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("notes/*.md");
+}
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    // Stands in for a whole-suite check such as a coverage floor.
+    if (!ctx.narrowed()) {
+        throw "whole-suite floor ran";
+    }
+    go["go-test"](ctx.withEnv({"NARROW_ENV": "from-the-target"}), {"args": ["-count=1", "./..."]});
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(docs, test);
+}
+-- a/a.go --
+package a
+
+func A() int { return 1 }
+-- a/a.go.v2 --
+package a
+
+func A() int { return 2 }
+-- a/a_test.go --
+package a
+
+import (
+	"os"
+	"testing"
+)
+
+func TestEnv(t *testing.T) {
+	if got := os.Getenv("NARROW_ENV"); got != "from-the-target" {
+		t.Fatalf("NARROW_ENV = %q", got)
+	}
+}
+-- b/b.go --
+package b
+-- b/b_test.go --
+package b
+
+import "testing"
+
+func TestOutsideTheClosure(t *testing.T) { t.Fatal("b ran") }
+-- notes/release.md --
+# Release
+-- notes/release.md.v2 --
+# Release
+
+Notes.
+-- README.md --
+# w
+-- README.md.v2 --
+# w
+
+More.

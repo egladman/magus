@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -53,11 +52,13 @@ type gateRedundancy struct {
 	// selected; set by the affected path, empty on the `magus run ci` one, which
 	// names its own selection.
 	undeclared []string
+	// tier is what size narrowed the gate to; empty runs the full gate.
+	tier types.RiskTier
 }
 
 // gateFinding is one redundancy match: the green gate, and either an identical
-// fingerprint (no delta, identical true) or an all-low-risk delta, as the change
-// classifier's verdict line per path.
+// fingerprint (no delta, identical true) or a delta that tiers trivial, as one
+// tier line per path.
 type gateFinding struct {
 	rec       sessions.GateRecord
 	identical bool
@@ -164,7 +165,7 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 
 // finding looks up the newest gate verdict for this branch and reports whether
 // this run would re-verify it: an identical input fingerprint, or a delta that
-// classifies entirely low-risk.
+// tiers trivial.
 func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFinding, bool) {
 	if disabled {
 		return gateFinding{}, false
@@ -198,20 +199,57 @@ func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 			return gateFinding{}, false
 		}
 	}
-	changed, err := g.drv.ChangedFiles(ctx, g.root, rec.Commit)
+	rep, err := g.m.AssessChange(ctx, g.target, magus.AssessOptions{Base: rec.Commit})
+	if err != nil || rep.Tier != types.RiskTrivial {
+		return gateFinding{}, false
+	}
+	return gateFinding{rec: rec, delta: rep.Lines()}, true
+}
+
+// size tiers the change against base once the gate is going to run, and returns the
+// report when a gate smaller than full suffices. nil runs the full gate: an inert gate,
+// a forced run, a change that could not be assessed, or one that tiers full.
+func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *types.RiskReport {
+	if g == nil || forced {
+		return nil
+	}
+	rep, err := g.m.AssessChange(ctx, g.target, magus.AssessOptions{Base: base})
 	if err != nil {
-		return gateFinding{}, false
+		slog.DebugContext(ctx, "gate sizing: change not assessed; running the full gate", slog.String("error", err.Error()))
+		return nil
 	}
-	delta := g.m.ChangeClassifier(g.readAt(), g.readWorking).Classify(ctx, changed, rec.Commit)
-	if !delta.LowRiskOnly() {
-		return gateFinding{}, false
+	if rep.Tier == types.RiskFull {
+		return nil
 	}
-	return gateFinding{rec: rec, delta: delta.Lines()}, true
+	g.tier = rep.Tier
+	return &rep
+}
+
+// renderSizing prints a sized gate in the redundancy refusal's shape: the decision and
+// its override, every changed path with its tier, and the commands that run instead.
+func renderSizing(target string, rep types.RiskReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "magus: %s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
+	for _, line := range rep.Lines() {
+		b.WriteString("  " + line + "\n")
+	}
+	gate := "none"
+	if cmds := rep.Commands(); len(cmds) > 0 {
+		gate = strings.Join(cmds, " && ")
+	}
+	b.WriteString("  gate: " + gate + "\n")
+	for _, s := range rep.Gate {
+		if s.Op != "" {
+			fmt.Fprintf(&b, "  narrowed: %s in %s %s runs %d package(s): %s\n",
+				s.Op, strings.Join(s.Projects, " "), s.Target, len(s.Packages), strings.Join(s.Packages, " "))
+		}
+	}
+	return b.String()
 }
 
 // renderFinding prints every input a reader needs to reconstruct the decision:
-// the matched green gate, and the delta with each file's class and the
-// declaration or mechanism that classified it.
+// the matched green gate, and the delta with each file's tier, class and the
+// declaration or mechanism that decided it.
 func (g *gateRedundancy) renderFinding(f gateFinding) string {
 	var b strings.Builder
 	inv := f.rec.Inv
@@ -237,23 +275,6 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 		b.WriteString("\n    " + line)
 	}
 	return b.String()
-}
-
-// readAt reads a file at a revision through the VCS, the older side of the delta the
-// change classifier compares; nil without a VCS.
-func (g *gateRedundancy) readAt() func(ctx context.Context, rev, p string) (string, error) {
-	if g.drv == nil {
-		return nil
-	}
-	return func(ctx context.Context, rev, p string) (string, error) {
-		return g.drv.ReadFileAt(ctx, g.root, rev, p)
-	}
-}
-
-// readWorking reads a file from the working tree, the newer side of the delta.
-func (g *gateRedundancy) readWorking(p string) (string, error) {
-	b, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(p)))
-	return string(b), err
 }
 
 // record files the gate's verdict in the per-repository session store, so a
@@ -297,6 +318,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 		Projects:        g.projects,
 		Charms:          g.charms,
 		UndeclaredSeeds: g.undeclared,
+		Tier:            string(g.tier),
 		Inv:             journal.InvocationIDFromContext(ctx),
 	})
 }
@@ -332,13 +354,13 @@ func (g *gateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 // planInheritance is the CI-shaped entry of the verdict-inheritance decision
 // for `magus affected ci --plan`. It fires only when the wired CI provider is
 // active (the github spell answers only under Actions) and names a green run
-// whose delta classifies entirely low-risk; every other path (no provider,
-// no green run, a merge in the range, code in the delta, gate_inherit false)
-// returns nil, and the plan proceeds with no output from this feature.
+// whose delta tiers trivial; every other path (no provider, no green run, a
+// merge in the range, a delta above trivial, gate_inherit false) returns nil,
+// and the plan proceeds with no output from this feature.
 //
-// The classification runs HEAD's tree against the GREEN run's commit, through
-// the same classifier the local redundancy check uses, so both features share
-// one definition of low-risk. The annotation emitted on a hit is the run-page
+// The assessment runs HEAD's tree against the GREEN run's commit through
+// AssessChange, the same one the local redundancy check uses, so both features
+// share one definition of trivial. The annotation emitted on a hit is the run-page
 // half of the explicitness contract; the summary rides the plan output to the
 // workflow's report job.
 func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFinding {
@@ -363,10 +385,9 @@ func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFin
 		History: func(ctx context.Context) ([]types.Commit, error) {
 			return g.drv.History(ctx, g.root, gateMergeScanLimit)
 		},
-		Changed: func(ctx context.Context, green string) ([]string, error) {
-			return g.drv.ChangedFiles(ctx, g.root, green)
+		Assess: func(ctx context.Context, green string) (types.RiskReport, error) {
+			return m.AssessChange(ctx, types.TargetCI, magus.AssessOptions{Base: green})
 		},
-		Classifier: m.ChangeClassifier(g.readAt(), g.readWorking),
 	}
 	finding, ok := probe.Evaluate(ctx)
 	if !ok {

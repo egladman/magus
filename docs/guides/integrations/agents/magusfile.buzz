@@ -10,7 +10,8 @@
 // ships to users, so it must be held to the same gates as the rest of the workspace instead
 // of being prose in a markdown file nobody type-checks. The shell templates are POSIX sh and
 // are exercised by the Go tests at the repo root (conventions_test.go), which assert that this
-// repository's own agent config invokes these files and that the guide embeds them verbatim.
+// repository's own agent config invokes these files. That the guide embeds them verbatim is
+// the docs project's conventions target (docs/lib/crosscheck.buzz).
 //
 // There is deliberately NO build target: nothing here is compiled. The shell templates are
 // copied into a host's hook config, and the plugin is loaded FROM SOURCE by OpenCode's own
@@ -246,9 +247,10 @@ export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
 
 // 'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is
 // lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked
-// at the repo root: conventions_test.go verifies that this repository's own hook config invokes them,
-// that the guide embeds them verbatim, and that each declares a stance for every decision and
-// surface in the guard contract (the magus-guard-coverage lines).
+// elsewhere: conventions_test.go verifies that this repository's own hook config invokes them and
+// that each declares a stance for every decision and surface in the guard contract (the
+// magus-guard-coverage lines); the docs conventions target verifies that the guide embeds them
+// verbatim and that its parity tables match those lines.
 //
 // This comment used to claim the templates' behavior was asserted from the repo root when
 // nothing executed them at all, which is why the gap went unnoticed for so long. It is closed

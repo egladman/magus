@@ -104,3 +104,42 @@ func ExtraArgs(ctx context.Context) []string {
 	v, _ := ctx.Value(extraArgsKey{}).([]string)
 	return v
 }
+
+// OpNarrowing rewrites the argv of one spell op wherever a run invokes it, after the op's
+// own args, charms and the call site's args are assembled and before it spawns. A sized
+// gate narrows a test op's package list this way, so the target body around the op, its
+// env and flags included, runs as written.
+type OpNarrowing struct {
+	// Op is the op's name as the spell lists it (`go-test`).
+	Op string
+	// Bin is the op's binary, so a same-named op of another spell is left alone.
+	Bin string
+	// Rewrite returns the argv to run. dir is the op's working directory and env the
+	// overlay its call site passed.
+	Rewrite func(ctx context.Context, dir string, env map[string]string, args []string) []string
+}
+
+type opNarrowingKey struct{}
+
+// WithOpNarrowing returns a context whose op invocations n rewrites.
+func WithOpNarrowing(ctx context.Context, n OpNarrowing) context.Context {
+	return context.WithValue(ctx, opNarrowingKey{}, n)
+}
+
+// Narrowed reports whether ctx carries an op narrowing: the run executes less than its
+// targets declare, so a check a target body makes over its whole suite has nothing
+// whole to check.
+func Narrowed(ctx context.Context) bool {
+	n, ok := ctx.Value(opNarrowingKey{}).(OpNarrowing)
+	return ok && n.Rewrite != nil
+}
+
+// NarrowOp returns args rewritten by the narrowing on ctx when it names op and bin, and
+// args unchanged otherwise.
+func NarrowOp(ctx context.Context, op, bin, dir string, env map[string]string, args []string) []string {
+	n, ok := ctx.Value(opNarrowingKey{}).(OpNarrowing)
+	if !ok || n.Rewrite == nil || n.Op != op || n.Bin != bin {
+		return args
+	}
+	return n.Rewrite(ctx, dir, env, args)
+}

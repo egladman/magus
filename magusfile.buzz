@@ -2716,19 +2716,17 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // is safe and put every doc, blog post and README in the key, so editing CLAUDE.md
     // re-ran the whole race-enabled suite. Each root is here because something reads it:
     //
-    //   docs/**/*.md                      internal/selfupdate's trust anchor reads
-    //                                     docs/setup/verify.md; conventions_test walks all
-    //                                     of docs/ for leaked tokens; the docs tools assert
-    //                                     their generated pages byte-for-byte; and
-    //                                     diagnostics_test resolves every MGS code to a page
     //   internal/agent/skills/**          go:embed pulls in the DIRECTORY, so a non-.md file
     //                                     added there is a compile-time input too
     //   internal/agent/agents-section.md  go:embed
-    //   CHANGELOG.md, changes/**/*.md     cmd/magus-utils/release_test.go parses them
+    //   docs/reference/codes/**/*.md      internal/doctor grades every MGS code's page
+    //                                     (exists, names a next step, titled as its Help
+    //                                     link) with the Go check `magus doctor` runs
     //
-    // Narrowing this does NOT stop a markdown edit re-running `format`, which reads every
-    // .md because dprint and markdownlint genuinely format them all. What it stops is the
-    // Go suite re-running, which is the expensive half.
+    // Nothing else here reads docs/, CHANGELOG.md or changes/. A check of what a page says
+    // runs in the docs project's conventions target, and a page generated from Go is gated
+    // by the generate target that writes it, so a docs edit outside the code pages re-runs
+    // no part of this suite. A test that opens one of those roots breaks that.
     //
     // The non-.md fixtures below are the same enumeration for the same reason. They sit
     // in the project's sources too, which is what keys go_build, but a readsFiles call
@@ -2747,8 +2745,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "go.mod", "go.sum", "go.work", "go.work.sum",
                    "**/*.buzz", "mise.toml", "magus.yaml",
                    "**/*.lock",
-                   "docs/**/*.md", "internal/agent/skills/**",
-                   "internal/agent/agents-section.md", "CHANGELOG.md", "changes/**/*.md",
+                   "internal/agent/skills/**", "internal/agent/agents-section.md",
+                   "docs/reference/codes/**/*.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
                    "internal/registry/testdata/*", "internal/queue/testdata/**",
                    "benchmarks/agent/internal/bench/testdata/*",
@@ -2760,9 +2758,14 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
-    // The setup action and the workflows: the release trust anchor, the queue app's
-    // credential rules and the no-cache rule for trusted jobs are asserted against them.
-    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/*.yaml");
+    // The setup action, the installer and the workflows: the release trust anchor, the
+    // queue app's credential rules and the no-cache rule for trusted jobs are asserted
+    // against them. The installer is committed under docs/gen but is a script, not a page.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
+    // The hook templates a reader installs and the site stylesheet: conventions_test reads
+    // them as code (coverage lines, wiring, the landing palette), never as prose.
+    ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.json",
+                   "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2806,7 +2809,10 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile(COVERAGE_HAND_PROFILE,
         cov\stripGenerated(fs\readFile(COVERAGE_PROFILE),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    if (std\parseInt(coverage_percent().split(".")[0]) < 70) {
+    // The floor is a property of the whole suite. A sized gate that narrowed go-test to
+    // the packages a change reaches measured only those, so the floor has no whole to
+    // judge there; main's full gate still holds it.
+    if (!ctx.narrowed() and std\parseInt(coverage_percent().split(".")[0]) < 70) {
         throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
     }
 }

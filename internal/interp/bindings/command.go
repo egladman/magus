@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -96,6 +97,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		args = append(args, tgt.TrailingArgs...)
 	}
 	args = append(args, opts.args...)
+	args = project.NarrowOp(ctx, opts.op, tgt.Bin, dir, opts.env, args)
 	// A static op is resolved to {bin, args} ONCE, with no Target (see recordOp in
 	// internal/spell/resolve.go), so it cannot compute a value only the
 	// runner knows (its own binary path, a per-run cache destination), which is

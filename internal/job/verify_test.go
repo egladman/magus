@@ -136,6 +136,49 @@ func TestVerifyCompletionGatesRejectUndeclaredEvidence(t *testing.T) {
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared completion gate \"invented\"")
 }
 
+// TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta: a check gate on ci passes on a
+// green ci gate when the change since it tiers trivial, with no output ref of its own and
+// even though that gate ran before the job was declared.
+func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
+	t.Parallel()
+
+	ciRow := func(target, project string) types.Job {
+		row := acceptRow()
+		row.Created = 100
+		row.Check = &types.LeaseCheck{Target: target, Project: project}
+		return row
+	}
+	rep := passingResult()
+	rep.Validation.OutputRef = ""
+	green := GreenGate{Commit: "c1", Projects: []string{".", "docs"}, Tier: types.RiskTrivial}
+
+	seen := claimed(rep)
+	seen.GreenGate = green
+	status := VerifyGates(ciRow("ci", "."), rep, types.JobAttempt{}, nil, nil, seen)
+	assert.True(t, status.Verified, status.Violations)
+	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryCompletionGateID, Verified: true}}, status.Gates)
+
+	for name, tc := range map[string]struct {
+		row  types.Job
+		gate GreenGate
+	}{
+		"no green gate":               {ciRow("ci", "."), GreenGate{}},
+		"a mechanical delta":          {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: types.RiskMechanical}},
+		"a scoped delta":              {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: types.RiskScoped}},
+		"a project the gate skipped":  {ciRow("ci", "site"), green},
+		"a check that is not ci":      {ciRow("go::go-test", "."), green},
+		"a spell-qualified ci target": {ciRow("go::ci", "."), green},
+	} {
+		t.Run(name, func(t *testing.T) {
+			seen := claimed(rep)
+			seen.GreenGate = tc.gate
+			status := VerifyGates(tc.row, rep, types.JobAttempt{}, nil, nil, seen)
+			assert.False(t, status.Verified)
+			assert.Contains(t, strings.Join(status.Violations, "\n"), "carries no output_ref")
+		})
+	}
+}
+
 func TestVerifyRejectsEvidenceCapturedBeforeJobDeclaration(t *testing.T) {
 	t.Parallel()
 

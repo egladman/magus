@@ -16,6 +16,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Added
 
+- **`magus affected ci` sizes its gate to the change.** Every changed file gets a tier
+  (trivial, mechanical, scoped, full) with its evidence. Below full the gate runs only
+  the drift check and lint, or Go tests narrowed through `go list` by the go spell's new
+  `go-test-packages` op. A trivial change runs nothing and exits 0.
+  `--no-redundancy-check` runs the full gate.
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
 - **The agent guard refuses a backtick command substitution.** Inside double quotes a
@@ -197,7 +202,7 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
   `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
   read access only; apply rebuilds each candidate and merges it with the change's own
-  method. The code is `internal/queue`, its contract and mocks in its `types` package;
+  method. The code is `libs/mergequeue`, its contract and mocks in its `types` package;
   `--facts` serves other build tools.
 - **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
   targets run first across every selected project; a failure stops everything, exits 3
@@ -441,6 +446,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
   reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
   `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
+- **The redundancy check, CI verdict inheritance and job completion skip only a trivial
+  change.** A comment-only edit, and markdown a package embeds or a gate target reads,
+  no longer skip the gate. A job's completion gate on `ci` passes on a green `ci` gate
+  when the change since it is trivial.
 - **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
   count. magus reads no environment variable to guess it runs in CI, so the same command
   behaves the same everywhere, and `concurrency_profile` stays `balanced`
@@ -567,10 +576,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   setting `MERGEQUEUE_*` variables, so a gate becomes `magus run ci
   --no-default-charms`; `--facts` gets the fact asked for. Shell syntax is refused
   with MGS3026: point the flag at a script.
-- **The queue keeps a change whose generated files its merge leaves alone.** It kicks
-  back with `KICK_REGENERATION` only when the merge needs them regenerated (a conflict,
-  or main changed them) by code the change touches; otherwise the drift gate checks them.
-  A kicked-back change merges main in, regenerates, and is queued again.
 - **The merge queue kicks back stale generated files before its gate runs.** A change
   that edits generator code must commit outputs that are current on top of the base. If
   they are stale, the kick-back names the stale files and says how to fix them. If they are
@@ -640,11 +645,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   was false for every output whose target opts out of the cache, such as a `MAGUS.md`
   rendered from the whole graph. The drift gate already fails on a real hand edit. Delete
   the key from `with:`.
-- **Breaking: the advice action's `fix-generated-drift`, `fix-merge-conflict`,
-  `offer-fix-label` and `fix-label` inputs.** Both fixers pushed to the pull request's
-  branch and neither ever ran: their consent label never matched `gh`'s JSON. The merge
-  queue now settles drift and conflicts at merge time. Delete the keys from `with:`; the
-  action needs only `pull-requests: write`.
 - **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
   `head-repo` inputs.** The action reads the pull request from the triggering event and
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
@@ -737,10 +737,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Generated docs examples read the same wherever they are regenerated.** The
   examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
   state dir it inherits leaks run history into the captured `magus explain` output.
-- **A command magus runs leaves no process behind.** On Linux, macOS and the BSDs,
-  whatever of a target's process group outlives its command is killed when the command
-  exits, before it is reaped, so a background process it started stops there and no
-  longer holds the run open for five seconds on its output.
 - **A failed remote-cache exchange names the step that failed.**
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
@@ -873,11 +869,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   signed the manifest alone, so a store could replay a genuine entry with its log and
   descriptor swapped or stripped. Every magus from 0.4.0 signs the domain-separated form;
   an entry signed by 0.3.x is now a miss and rebuilds.
-- **Breaking: queue hooks run in the base's sandbox.** The gate, the regeneration and a
-  `--facts` command run under the base's `sandbox` policy, at least `best-effort`,
-  rooted at their checkout: landlock confines their files on Linux, and everywhere their
-  environment is the sandbox's. `--sandbox=required` refuses a hook the kernel cannot
-  confine; `tools/gha-queue.buzz` passes it.
 - **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
   built console file, including the demo graph JSON holding the whole knowledge graph and
   its notes. Other files and directory listings now return 404, on loopback and on the LAN

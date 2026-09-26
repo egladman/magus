@@ -87,8 +87,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 | `exclusive`      | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
 | `watch_ignore`   | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
 | `no_language`    | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                           |
-| `gate_low_risk`  | project-relative globs the ci-gate redundancy check ([MGS3010](../reference/codes/sandbox/MGS3010.md)) classifies as prose; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off           |
-| `gate_inherit`   | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta classifies; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                  |
+| `gate_low_risk`  | project-relative globs whose paths classify as prose, which [gate sizing](ci/risk.md) tiers trivial unless something reads them; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off      |
+| `gate_inherit`   | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta tiers; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                       |
 | `merge_low_risk` | project-relative globs of code a merge may settle without a person when merge3 settles it; prose, generated and comment-only edits qualify without it (see below)                                                                                     |
 | `tools`          | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
 | `targets`        | a per-target policy table (see below)                                                                                                                                                                                                                 |
@@ -142,20 +142,21 @@ magus\project({
 });
 ```
 
-`gate_low_risk` configures the prose class of the ci-gate redundancy check
-([MGS3010](../reference/codes/sandbox/MGS3010.md)): the paths whose changes,
-on their own, never make a passed gate worth re-running. magus ships markdown
+`gate_low_risk` configures the prose class that [gate sizing](ci/risk.md) starts
+from: paths whose changes, on their own, need no gate unless something reads
+them. Prose a target in `ci`'s chain declares with `ctx.readsFiles` is that
+target's input and gates that target, and prose a Go package compiles in with
+`go:embed` gates that package's tests; the rest is `trivial`. magus ships markdown
 defaults (`**/*.md`, `**/*.markdown`). Declaring the key on any project
 replaces those defaults workspace-wide with the union of declared globs (each
 relative to its declaring project, like `review_required`); to extend the
 defaults, restate them alongside the additions. `[]` is a legal declaration
-that turns the prose class off entirely. Every refusal and advisory names, per
-path, the glob that classified it and where it was declared, so the decision
-reads straight back to this key. Only the prose class is a glob list: the
-generated class stays structural (declared outputs), and comment-only stays a
-mechanism - Go and Buzz through the lexers magus owns, other spelled languages
-through a declared comment/string syntax table, and a language with no
-declaration is always code.
+that turns the prose class off entirely. Every sized gate, refusal and advisory
+names, per path, the glob that classified it and where it was declared, so the
+decision reads straight back to this key. Only the prose class is a glob list:
+the generated class stays structural (declared outputs), and comment-only stays
+a mechanism - every spelled language through a declared comment/string syntax
+table, and a language with no declaration is always code.
 
 ```buzz
 magus\project({
@@ -163,14 +164,14 @@ magus\project({
 });
 ```
 
-`gate_inherit` governs the same classification one layer out, in CI rather than
-on a laptop. When a CI provider is wired (`magus\ci.provider(...)`) and answers
-which run of this pipeline last passed on this branch, `magus affected ci --plan`
-classifies everything changed since that run's head commit with the classifier
-above; if nothing classifies as code, the plan emits no shards and an `inherit`
-block instead, and the workflow reads that one output to skip its fan-out. The
-verdict is green with a report - the inherited run, its commit, and every changed
-path with what classified it - never a silent skip. A merge pushed into the range
+`gate_inherit` governs the same tiers one layer out, in CI rather than on a
+laptop. When a CI provider is wired (`magus\ci.provider(...)`) and answers which
+run of this pipeline last passed on this branch, `magus affected ci --plan` tiers
+everything changed since that run's head commit; if the change tiers `trivial`,
+the plan emits no shards and an `inherit` block instead, and the workflow reads
+that one output to skip its fan-out. The verdict is green with a report - the
+inherited run, its commit, and every changed path with its tier and what decided
+it - never a silent skip. A merge pushed into the range
 re-runs the fan-out regardless. Declaring `false` on any project turns the whole
 mechanism off workspace-wide, the same reach a `gate_low_risk` declaration has,
 because inheritance is one decision over the plan rather than a per-project one.
@@ -181,7 +182,7 @@ magus\project({
 });
 ```
 
-`merge_low_risk` applies the same classifier to a merge conflict. The merge queue and
+`merge_low_risk` applies the same classes, without tiers, to a merge conflict. The merge queue and
 magus's merge driver settle a conflicted source file when every region both sides
 changed settles (the same change, one side's change holding the other's, or both only
 adding lines at one place) and the edit from the merge base to the merge classifies low
