@@ -214,7 +214,10 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 
 // policy is the base's sandbox for a hook in c.Dir: its mode raised to at least
 // best-effort, since a hook runs a change's code whatever the base asks, with c.Scratch
-// writable and TMPDIR inside it.
+// read, write and exec and TMPDIR inside it. Exec because the scratch variables put tool
+// caches there, and go run executes the binaries it caches in GOCACHE; the nested magus
+// a hook runs stacks its own sandbox on this one, so a right withheld here is withheld
+// from every child whatever that inner policy grants.
 func (c hookCommand) policy() (*sandbox.Policy, error) {
 	cfg := c.Sandbox
 	if cfg.Mode.WeakerThan(magustypes.SandboxModeBestEffort) {
@@ -227,7 +230,7 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		return nil, err
 	}
-	cfg.Allow = append(slices.Clone(cfg.Allow), config.SandboxAllowPath{Path: c.Scratch, Mode: "rw"})
+	cfg.Allow = append(slices.Clone(cfg.Allow), config.SandboxAllowPath{Path: c.Scratch, Mode: "rwx"})
 	return sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg)
 }
 
