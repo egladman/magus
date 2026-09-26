@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,7 +20,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
@@ -670,5 +674,157 @@ func TestParseCommitter(t *testing.T) {
 	for _, bad := range []string{"bot@example.invalid", "<bot@example.invalid>", "Bot <>", "Bot <a b>", "Bot <x"} {
 		_, err := parseCommitter(bad)
 		require.Error(t, err, bad)
+	}
+}
+
+// workflowStep is what the gate tests read of a workflow step.
+type workflowStep struct {
+	Name string            `yaml:"name"`
+	Uses string            `yaml:"uses"`
+	Run  string            `yaml:"run"`
+	Env  map[string]string `yaml:"env"`
+	With map[string]string `yaml:"with"`
+}
+
+// workflowJob reads job's steps from the workflow file at path under the repository root.
+func workflowJob(t *testing.T, path, job string) []workflowStep {
+	t.Helper()
+	var wf struct {
+		Jobs map[string]struct {
+			Steps []workflowStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", path))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &wf))
+	require.Contains(t, wf.Jobs, job, path)
+	return wf.Jobs[job].Steps
+}
+
+// ciShardGate is the argv ci.yaml's shards hand magus, expressions dropped, and the step
+// running it.
+func ciShardGate(t *testing.T) ([]string, workflowStep) {
+	t.Helper()
+	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
+			return strings.Fields(regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")), s
+		}
+	}
+	require.FailNow(t, "ci.yaml's shards run no `queue gate`")
+	return nil, workflowStep{}
+}
+
+// A green shard must mean a green queue gate, so the shards gate through the verb and
+// code path validate uses, in its mode, under queue.yaml's TMPDIR and mise trust, from a
+// full clone as validate's, and what they pass in cannot move the box.
+func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
+	argv, step := ciShardGate(t)
+	sep := slices.Index(argv, "--")
+	require.Positive(t, sep, "the gate command follows --: %v", argv)
+	flags, gate := argv[2:sep], argv[sep+1:]
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "tools", "gha-queue.buzz"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`final SANDBOX = "([^"]+)";`).FindSubmatch(raw)
+	require.NotNil(t, m, "tools/gha-queue.buzz declares no SANDBOX")
+	assert.Contains(t, flags, string(m[1]), "the shards gate in the queue's sandbox mode")
+
+	require.GreaterOrEqual(t, len(gate), 2)
+	assert.Equal(t, []string{"magus", "run"}, gate[:2])
+	target, err := magustypes.ParseTarget(gate[2])
+	require.NoError(t, err)
+	assert.Equal(t, magustypes.TargetCI, target.Name)
+
+	var validate workflowStep
+	for _, s := range workflowJob(t, ".github/workflows/queue.yaml", "validate") {
+		if strings.Contains(s.Run, "gha-queue.buzz -- validate") {
+			validate = s
+		}
+	}
+	require.NotEmpty(t, validate.Run, "queue.yaml runs no validate step")
+	for _, name := range []string{"TMPDIR", "MISE_TRUSTED_CONFIG_PATHS"} {
+		assert.Equal(t, validate.Env[name], step.Env[name], "%s differs from queue.yaml's validate", name)
+	}
+	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+		if strings.HasPrefix(s.Uses, "actions/checkout@") {
+			assert.NotContains(t, s.With, "filter", "the shards clone in full, as validate does")
+		}
+	}
+
+	cache := flags[slices.Index(flags, "--cache")+1]
+	assert.Equal(t, ".magus", cache)
+	setup, err := os.ReadFile(filepath.Join("..", "..", ".github", "actions", "setup-magus", "action.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(setup), `MAGUS_HISTORY_PATH=$GITHUB_WORKSPACE/`+cache+`/`, "the gate writes its history where --cache lets it")
+
+	cfg, err := config.LoadFile(filepath.Join("..", "..", "magus.yaml"), false)
+	require.NoError(t, err)
+	names := strings.Split(flags[slices.Index(flags, "--env")+1], ",")
+	_, err = queue.HookEnv{Sandbox: cfg.Sandbox}.Pass(names)
+	assert.NoError(t, err, "nothing ci.yaml passes moves the box")
+}
+
+// Moving a shard's gate into the queue's box must not move a cache key: main's shards
+// store the remote tier inside the box and a pull request or the queue replays it from
+// another box, a laptop from none. The box's home, temporary directory, XDG directories,
+// toolchain pin and sandbox mode, and the checkout's own location, key no step.
+func TestTheBoxKeysNoStep(t *testing.T) {
+	argv, _ := ciShardGate(t)
+	gate := argv[slices.Index(argv, "--")+1:]
+	cfg, err := config.LoadFile(filepath.Join("..", "..", "magus.yaml"), false)
+	require.NoError(t, err)
+	target, err := magustypes.ParseTarget(gate[2])
+	require.NoError(t, err)
+	charms := magus.CharmsForCI(withDefaultCharms(target.Charms, cfg.DefaultCharms, slices.Contains(gate, "--no-default-charms")))
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
+	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
+	const project = "libs/diagnostics"
+	targets := []string{"ci", "test"}
+	type keyed struct {
+		key   string
+		lines []string
+	}
+	keyAll := func() []keyed {
+		w, err := magus.Open(t.Context(), root)
+		require.NoError(t, err)
+		defer func() { _ = w.Close() }()
+		var out []keyed
+		for _, target := range targets {
+			key, lines, err := w.ComputeTargetKey(t.Context(), project, target, charms)
+			require.NoError(t, err)
+			out = append(out, keyed{key, lines})
+		}
+		return out
+	}
+	runner := keyAll()
+
+	box := t.TempDir()
+	home := filepath.Join(box, "home")
+	for name, value := range map[string]string{
+		"HOME":            home,
+		"XDG_CACHE_HOME":  filepath.Join(home, ".cache"),
+		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"XDG_DATA_HOME":   filepath.Join(home, ".local", "share"),
+		"TMPDIR":          filepath.Join(box, "tmp"),
+		"GOTOOLCHAIN":     "local",
+		// required where the kernel has landlock; best-effort keys the same wherever it runs.
+		"MAGUS_SANDBOX": string(magustypes.SandboxModeBestEffort),
+	} {
+		t.Setenv(name, value)
+	}
+	boxed := keyAll()
+
+	for i, target := range targets {
+		if assert.Equal(t, runner[i].lines, boxed[i].lines, "%s:%s keys differently in the box", project, target) {
+			assert.Equal(t, runner[i].key, boxed[i].key)
+		}
+		for _, line := range boxed[i].lines {
+			assert.NotContains(t, line, root, "%s:%s keys the checkout's location", project, target)
+			assert.NotContains(t, line, box, "%s:%s keys the box", project, target)
+		}
 	}
 }
