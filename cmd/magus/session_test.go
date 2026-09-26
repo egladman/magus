@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -485,4 +486,36 @@ func TestSessionShowJoinsThisCheckoutsTrail(t *testing.T) {
 
 	assert.Contains(t, out, "Guard trail in this checkout: 2 command(s) observed, 1 denied, under lease fleet/w1, fleet/w1-child")
 	assert.Contains(t, out, "spawned Explore (lease fleet/w1-child)")
+}
+
+// sessionAdapterCases is the testscript that executes a session adapter against a
+// synthetic transcript. Synthetic on purpose: a real one carries a person's own
+// commands and prompts, and a fixture is committed forever.
+const sessionAdapterCases = "testdata/script/session_load_adapters.txtar"
+
+// TestSessionAdapterCasesCoverEveryKind ties the executed cases to the contract
+// the declarations answer to.
+//
+// Coverage parity asks an adapter to DECLARE what its host supplies; this asks that
+// somebody ran it and looked at what came out. Without it, adding a kind would
+// demand new declarations while the test cases quietly kept asserting the old ones,
+// which is exactly how a shell artifact ships broken with a correct declaration
+// on top of it.
+//
+// A kind no adapter can currently produce is declared rather than skipped:
+// `# kind: file.read unreachable - <why>` satisfies this in the file where the
+// next person will look.
+func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
+	body, err := os.ReadFile(sessionAdapterCases)
+	require.NoError(t, err, "read %s", sessionAdapterCases)
+	cases := string(body)
+
+	for _, kind := range agent.SessionKinds() {
+		label := "# kind: " + kind
+		assert.Contains(t, cases, label,
+			"%s has no case labeled %q.\n"+
+				"Every kind in the session contract needs one executed case, or an explicit\n"+
+				"`%s unreachable - <why>` line when no adapter can produce it.",
+			sessionAdapterCases, label, label)
+	}
 }
