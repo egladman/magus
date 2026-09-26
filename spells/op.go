@@ -121,6 +121,13 @@ type Command struct {
 	// patch Args only. Refs are static data, so the op stays hashable and describable
 	// without ever holding a secret.
 	Secrets map[string]string `json:"secrets,omitempty"`
+	// EnvKeys names environment variables whose PROCESS value this command's result
+	// depends on, the op's own counterpart to a magusfile's ctx.envInputs: a target that
+	// composes the op inherits these into its cache key whether or not its body declares
+	// ctx.envInputs itself. It exists because a value like GOOS never touches argv (Go
+	// reads it from the environment), so nothing else names it, and an author composing
+	// the op has no way to know it needs declaring at all.
+	EnvKeys []string `json:"env_keys,omitempty"`
 	// Hints classify a FAILURE of this command into a next step. Each entry pairs a
 	// substring of the tool's output with the advice magus prints when the command
 	// exits non-zero and that substring appeared. The first declared match wins; a

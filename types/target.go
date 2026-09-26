@@ -155,7 +155,8 @@ type Target struct {
 	// exactly the behavior that existed before this field.
 	//
 	// A COMPOSED target inherits the largest declaration in its chain; see
-	// ChainMemoryMB, which is the figure both halves of admission actually read.
+	// ChainMemoryMB. A run claims less than this when it has measured less: see
+	// SizedChainMemory, which is the figure both halves of admission actually read.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
 	// Timeout is the wall-clock ceiling for one run of this target, as a Go duration
 	// string ("15m", "90s"). Empty means undeclared, which is unbounded: the behavior
@@ -473,30 +474,84 @@ func (t Target) Key() []string {
 // contributes nothing rather than a guess. It lives here because admission and
 // doctor must agree on one figure.
 func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string) {
+	c := SizedChainMemory(p, target, lookup, nil)
+	return c.MB, c.DeclaredBy
+}
+
+// MemorySizing says where a memory claim's figure came from. The zero value is a
+// figure read straight from a declaration.
+type MemorySizing struct {
+	// Samples is how many successful measured runs the figure was sized from; 0 when
+	// it is the declaration itself.
+	Samples int `json:"samples,omitzero" yaml:"samples,omitempty"`
+	// AnyShape is set when runs with this invocation's charms and forwarded args were
+	// too few, so the figure was sized from every run of the target.
+	AnyShape bool `json:"any_shape,omitzero" yaml:"any_shape,omitempty"`
+}
+
+// Measured reports whether the figure came from recorded peaks rather than a declaration.
+func (s MemorySizing) Measured() bool { return s.Samples > 0 }
+
+// String renders the provenance for a person: "declared", or how many runs it was
+// measured over.
+func (s MemorySizing) String() string {
+	switch {
+	case !s.Measured():
+		return "declared"
+	case s.AnyShape:
+		return fmt.Sprintf("measured over %d runs of any shape", s.Samples)
+	default:
+		return fmt.Sprintf("measured over %d runs", s.Samples)
+	}
+}
+
+// MemorySizer turns one target's own memory declaration, always positive, into the
+// figure it claims. It must not return more than declaredMB.
+type MemorySizer func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing)
+
+// ChainMemory is a folded memory claim: the figure, the target whose declaration it
+// came from, and how that declaration was sized.
+type ChainMemory struct {
+	MB         int
+	DeclaredBy string
+	Sizing     MemorySizing
+}
+
+// SizedChainMemory is ChainMemoryMB with every declaration in the chain passed through
+// size before it folds, so a composed step claims the sized figures of its members
+// rather than their declarations. A nil size folds the declarations as written. A
+// target declaring nothing is never sized: it claims slots, not memory.
+//
+// Sizing names the largest single contributor's provenance, as DeclaredBy names it.
+func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory {
 	seen := map[string]bool{}
 
-	var walk func(proj *Project, name string) (int, string)
-	walk = func(proj *Project, name string) (int, string) {
+	var walk func(proj *Project, name string) ChainMemory
+	walk = func(proj *Project, name string) ChainMemory {
 		if proj == nil {
-			return 0, ""
+			return ChainMemory{}
 		}
 		key := proj.Path + "\x00" + name
 		if seen[key] {
-			return 0, "" // a cycle is rejected elsewhere; here it must simply terminate
+			return ChainMemory{} // a cycle is rejected elsewhere; here it must simply terminate
 		}
 		seen[key] = true
 
-		peak, from := proj.TargetPolicies[name].MemoryMB, ""
-		if peak > 0 {
-			from = name
+		var peak ChainMemory
+		if declared := proj.TargetPolicies[name].MemoryMB; declared > 0 {
+			peak = ChainMemory{MB: declared, DeclaredBy: name}
+			if size != nil {
+				peak.MB, peak.Sizing = size(proj, name, declared)
+			}
 		}
 		// One sum per call; a call's members run together, and the calls run in turn.
-		callMB, callFrom, callTop, callIndex := 0, "", 0, 0
+		var call, top ChainMemory
+		callIndex := 0
 		close := func() {
-			if callMB > peak {
-				peak, from = callMB, callFrom
+			if call.MB > peak.MB {
+				peak = ChainMemory{MB: call.MB, DeclaredBy: top.DeclaredBy, Sizing: top.Sizing}
 			}
-			callMB, callFrom, callTop = 0, "", 0
+			call, top = ChainMemory{}, ChainMemory{}
 		}
 		for _, step := range proj.TargetChains[name] {
 			if step.CallIndex != callIndex {
@@ -510,14 +565,14 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 				}
 				next = lookup(step.Project)
 			}
-			stepMB, stepFrom := walk(next, step.Target)
-			callMB += stepMB
-			if stepMB > callTop {
-				callTop, callFrom = stepMB, stepFrom
+			member := walk(next, step.Target)
+			call.MB += member.MB
+			if member.MB > top.MB {
+				top = member
 			}
 		}
 		close()
-		return peak, from
+		return peak
 	}
 	return walk(p, target)
 }

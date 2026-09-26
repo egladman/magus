@@ -589,6 +589,80 @@ func (_c *MockProvider_PostStatus_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// RequiredChecks provides a mock function for the type MockProvider
+func (_mock *MockProvider) RequiredChecks(ctx context.Context, c types.Change, commit string) ([]types.Check, error) {
+	ret := _mock.Called(ctx, c, commit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequiredChecks")
+	}
+
+	var r0 []types.Check
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, string) ([]types.Check, error)); ok {
+		return returnFunc(ctx, c, commit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Change, string) []types.Check); ok {
+		r0 = returnFunc(ctx, c, commit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.Check)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, types.Change, string) error); ok {
+		r1 = returnFunc(ctx, c, commit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProvider_RequiredChecks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequiredChecks'
+type MockProvider_RequiredChecks_Call struct {
+	*mock.Call
+}
+
+// RequiredChecks is a helper method to define mock.On call
+//   - ctx context.Context
+//   - c types.Change
+//   - commit string
+func (_e *MockProvider_Expecter) RequiredChecks(ctx interface{}, c interface{}, commit interface{}) *MockProvider_RequiredChecks_Call {
+	return &MockProvider_RequiredChecks_Call{Call: _e.mock.On("RequiredChecks", ctx, c, commit)}
+}
+
+func (_c *MockProvider_RequiredChecks_Call) Run(run func(ctx context.Context, c types.Change, commit string)) *MockProvider_RequiredChecks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Change
+		if args[1] != nil {
+			arg1 = args[1].(types.Change)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvider_RequiredChecks_Call) Return(checks []types.Check, err error) *MockProvider_RequiredChecks_Call {
+	_c.Call.Return(checks, err)
+	return _c
+}
+
+func (_c *MockProvider_RequiredChecks_Call) RunAndReturn(run func(ctx context.Context, c types.Change, commit string) ([]types.Check, error)) *MockProvider_RequiredChecks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Retarget provides a mock function for the type MockProvider
 func (_mock *MockProvider) Retarget(ctx context.Context, c types.Change, base string) error {
 	ret := _mock.Called(ctx, c, base)

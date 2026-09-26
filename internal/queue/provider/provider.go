@@ -13,9 +13,11 @@
 //	kick_back(change + {commit, code, report, claim, paths, with, candidate_commit, source, reproduce?}) > bool
 //	mark(change + {mark})                          > bool
 //	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
+//	required_checks(change + {commit})             > {checks: [{name, state}]}
 //
-// Every op but list_artifacts is required; list_artifacts is required of a provider
-// apply follows a validation run through. A change record carries the fields of
+// Every op but list_artifacts and required_checks is required; list_artifacts is
+// required of a provider apply follows a validation run through, and without
+// required_checks apply reads no required check. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
 // unqueued record those of [types.UnqueuedChange]. describe's setup, asked for with a
 // status_context, carries [types.Setup] as status_context, credential {id, name?},
@@ -61,22 +63,27 @@ var builtin = map[string]string{"github": githubSource}
 
 // Contract op names.
 const (
-	opDescribe      = "describe"
-	opListChanges   = "list_changes"
-	opApprovalAt    = "approval_at"
-	opListGreen     = "list_green"
-	opPostStatus    = "post_status"
-	opRetarget      = "retarget"
-	opMergeChange   = "merge_change"
-	opKickBack      = "kick_back"
-	opMark          = "mark"
-	opListArtifacts = "list_artifacts"
+	opDescribe       = "describe"
+	opListChanges    = "list_changes"
+	opApprovalAt     = "approval_at"
+	opListGreen      = "list_green"
+	opPostStatus     = "post_status"
+	opRetarget       = "retarget"
+	opMergeChange    = "merge_change"
+	opKickBack       = "kick_back"
+	opMark           = "mark"
+	opListArtifacts  = "list_artifacts"
+	opRequiredChecks = "required_checks"
 )
 
-// Every op but list_artifacts is required: branch protection requires the queue's status
-// once it is wired, so a provider that can list changes but not merge them would hold
-// every change forever.
+// Every op but those in optionalOps is required: branch protection requires the queue's
+// status once it is wired, so a provider that can list changes but not merge them would
+// hold every change forever.
 var ops = []string{opDescribe, opListChanges, opApprovalAt, opListGreen, opPostStatus, opRetarget, opMergeChange, opKickBack, opMark}
+
+// optionalOps are the ops a provider script may leave out: without list_artifacts apply
+// follows only a directory, and without required_checks it reads no required check.
+var optionalOps = []string{opListArtifacts, opRequiredChecks}
 
 // Script is a [types.Provider] backed by a Buzz script, and a
 // [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
@@ -127,12 +134,12 @@ func newScript(ctx context.Context, name, source string) (*Script, error) {
 	exports := sess.Exports()
 	p := &Script{name: name, sess: sess, fns: map[string]vm.Value{}}
 	var missing []string
-	for _, op := range slices.Concat(ops, []string{opListArtifacts}) {
+	for _, op := range slices.Concat(ops, optionalOps) {
 		fn, ok := exports[op]
 		switch {
 		case ok && fn.IsFun():
 			p.fns[op] = fn
-		case op != opListArtifacts:
+		case !slices.Contains(optionalOps, op):
 			missing = append(missing, op)
 		}
 	}
@@ -384,6 +391,39 @@ func (p *Script) ApprovalAt(ctx context.Context, c types.Change, commit string) 
 		return types.Approval{}, fmt.Errorf("%s: head: %w", r.where, err)
 	}
 	return a, nil
+}
+
+// RequiredChecks calls required_checks, and answers none when the script does not
+// export it. A state outside pending, success and failure is an error.
+func (p *Script) RequiredChecks(ctx context.Context, c types.Change, commit string) ([]types.Check, error) {
+	if _, ok := p.fns[opRequiredChecks]; !ok {
+		return nil, nil
+	}
+	params := changeParams(c)
+	params["commit"] = commit
+	r, err := p.callRecord(ctx, opRequiredChecks, params)
+	if err != nil {
+		return nil, err
+	}
+	var rows []record
+	if err := r.decode(required("checks", &rows)); err != nil {
+		return nil, err
+	}
+	out := make([]types.Check, 0, len(rows))
+	for _, row := range rows {
+		var ch types.Check
+		var state string
+		if err := row.decode(required("name", &ch.Name), required("state", &state)); err != nil {
+			return nil, err
+		}
+		switch ch.State = types.CommitState(state); ch.State {
+		case types.StatePending, types.StateSuccess, types.StateFailure:
+		default:
+			return nil, fmt.Errorf("%s: check %q has state %q, want pending, success or failure", r.where, ch.Name, state)
+		}
+		out = append(out, ch)
+	}
+	return out, nil
 }
 
 // ListGreen calls list_green. A record whose id or head git could read as something else

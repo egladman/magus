@@ -267,7 +267,7 @@ func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
 		}
 		out = append(out, types.MachineClaimant{
 			Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
-			MemoryMB: e.claim.MemoryMB, Slots: e.claim.Slots,
+			MemoryMB: e.claim.MemoryMB, Sizing: e.claim.Sizing, Slots: e.claim.Slots,
 			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started,
 		})
 	}

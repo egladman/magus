@@ -11,6 +11,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // ResolveProjects resolves targets to project records; unmatched targets are silently dropped.
@@ -63,10 +64,24 @@ func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Proj
 	return slices.CompactFunc(found, func(a, b types.TargetArtifact) bool { return a.Path == b.Path }), nil
 }
 
-// CleanOutputs removes files matched by each project's declared Outputs globs.
-// It returns the list of removed absolute file paths. When dryRun is true, no
-// files are deleted — only the matched paths are collected and returned.
-func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dryRun bool) ([]string, error) {
+// CleanedOutputs is what [Magus.CleanOutputs] did, or would do under a dry run.
+// Both lists hold absolute file paths.
+type CleanedOutputs struct {
+	Removed []string
+	// Tracked are matched outputs the VCS tracks. Clean never removes them: they
+	// are committed, so deleting one dirties the tree instead of dropping a
+	// build product.
+	Tracked []string
+}
+
+// CleanOutputs removes files matched by each project's declared Outputs globs,
+// except those the workspace's VCS tracks. When dryRun is true nothing is
+// deleted and the result reports what a real run would do.
+//
+// A workspace no VCS claims tracks nothing, so every match is removed. When the
+// VCS cannot say which matches it tracks, CleanOutputs returns an error and
+// removes nothing.
+func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dryRun bool) (CleanedOutputs, error) {
 	// A real clean deletes declared outputs, so take each project's EXCLUSIVE
 	// workspace lock (sorted, deadlock-safe) up front so a concurrent magus process
 	// cannot be regenerating the same outputs mid-delete. A dry run removes nothing
@@ -74,47 +89,116 @@ func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dry
 	if !dryRun {
 		hold, err := m.acquireProjectLocks(ctx, projects, false, nil, nil)
 		if err != nil {
-			return nil, err
+			return CleanedOutputs{}, err
 		}
 		defer hold.release()
 	}
 
-	var removed []string
+	type match struct{ project, rel, abs string }
+	var matched []match
 	for _, p := range projects {
 		if ctx.Err() != nil {
-			return removed, ctx.Err()
+			return CleanedOutputs{}, ctx.Err()
 		}
 		fsys := os.DirFS(p.Dir)
 		for _, glob := range p.AllOutputs() {
 			if ctx.Err() != nil {
-				return removed, ctx.Err()
+				return CleanedOutputs{}, ctx.Err()
 			}
-			matches, err := doublestar.Glob(fsys, glob)
+			found, err := doublestar.Glob(fsys, glob)
 			if err != nil {
-				return removed, fmt.Errorf("clean %s: expand %q: %w", p.Path, glob, err)
+				return CleanedOutputs{}, fmt.Errorf("clean %s: expand %q: %w", p.Path, glob, err)
 			}
-			for _, rel := range matches {
+			for _, rel := range found {
 				abs := filepath.Join(p.Dir, rel)
 				info, err := os.Lstat(abs)
 				if err != nil {
 					if os.IsNotExist(err) {
 						continue
 					}
-					return removed, fmt.Errorf("clean %s: stat %q: %w", p.Path, rel, err)
+					return CleanedOutputs{}, fmt.Errorf("clean %s: stat %q: %w", p.Path, rel, err)
 				}
 				if info.IsDir() {
 					continue // globs may match containing dirs; only remove files
 				}
-				if !dryRun {
-					if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
-						return removed, fmt.Errorf("clean %s: remove %q: %w", p.Path, rel, err)
-					}
-				}
-				removed = append(removed, abs)
+				matched = append(matched, match{project: p.Path, rel: rel, abs: abs})
 			}
 		}
 	}
-	return removed, nil
+
+	abs := make([]string, len(matched))
+	for i, mt := range matched {
+		abs[i] = mt.abs
+	}
+	tracked, err := m.trackedPaths(ctx, abs)
+	if err != nil {
+		return CleanedOutputs{}, fmt.Errorf("nothing removed: %w", err)
+	}
+
+	var out CleanedOutputs
+	for _, mt := range matched {
+		if tracked[mt.abs] {
+			out.Tracked = append(out.Tracked, mt.abs)
+			continue
+		}
+		if !dryRun {
+			if err := os.Remove(mt.abs); err != nil && !os.IsNotExist(err) {
+				return out, fmt.Errorf("clean %s: remove %q: %w", mt.project, mt.rel, err)
+			}
+		}
+		out.Removed = append(out.Removed, mt.abs)
+	}
+	return out, nil
+}
+
+// trackedPaths returns the subset of absPaths the workspace's VCS tracks, keyed
+// by the path as given. A workspace outside any checkout, or one with the VCS
+// disabled, tracks nothing.
+func (m *Magus) trackedPaths(ctx context.Context, absPaths []string) (map[string]bool, error) {
+	tracked := make(map[string]bool)
+	if len(absPaths) == 0 {
+		return tracked, nil
+	}
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return nil, fmt.Errorf("resolve VCS to find tracked outputs: %w", err)
+	}
+	if res.VCS == nil {
+		return tracked, nil
+	}
+	// Resolve looks for a VCS marker only at the root itself, so a workspace
+	// nested inside a checkout lands here too. Reading that as "nothing tracked"
+	// would delete committed files, so find the enclosing checkout instead.
+	if res.Source == types.VCSSourceDefault {
+		checkout, _, _ := vcs.Checkouts(m.ws.Root)
+		if checkout == "" {
+			return tracked, nil
+		}
+		if res, err = vcs.Resolve(ctx, checkout, "", m.ws.VCSOptions); err != nil {
+			return nil, fmt.Errorf("resolve VCS to find tracked outputs: %w", err)
+		}
+	}
+	byRel := make(map[string]string, len(absPaths))
+	rels := make([]string, 0, len(absPaths))
+	for _, abs := range absPaths {
+		rel, err := filepath.Rel(m.ws.Root, abs)
+		if err != nil {
+			return nil, fmt.Errorf("%s is outside the workspace: %w", abs, err)
+		}
+		rel = filepath.ToSlash(rel)
+		byRel[rel] = abs
+		rels = append(rels, rel)
+	}
+	known, err := res.VCS.TrackedFiles(ctx, m.ws.Root, rels)
+	if err != nil {
+		return nil, fmt.Errorf("%s could not report which outputs are tracked: %w", res.VCS.Name(), err)
+	}
+	for _, rel := range known {
+		if abs, ok := byRel[rel]; ok {
+			tracked[abs] = true
+		}
+	}
+	return tracked, nil
 }
 
 // CleanCache removes all cached build entries for the given projects.

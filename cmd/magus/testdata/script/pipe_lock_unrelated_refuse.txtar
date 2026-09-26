@@ -21,6 +21,7 @@ exec bash -c '(exec -a magus sleep 2) | magus run consume .; [ $? -eq 75 ]'
 stderr 'locked by another magus process'
 ! stderr 'waiting for pid'
 
+exec touch release
 wait
 
 -- plan.json --
@@ -42,8 +43,10 @@ magus\project({
     },
 });
 
+// holdslow holds the project until a release file appears, bounded so a stuck
+// script cannot hang CI.
 export fun holdslow(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sh", ["-c", "touch ready; sleep 4"]);
+    proc\exec("sh", ["-c", "touch ready; for i in $(seq 400); do [ -f release ] && exit 0; sleep 0.05; done"]);
 }
 
 export fun consume(ctx: magus\Context, args: [str]) > void !> any {

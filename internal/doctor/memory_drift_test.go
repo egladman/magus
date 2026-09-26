@@ -42,6 +42,28 @@ func newRunner(historyPath string) *runner {
 	return &runner{opts: options{cfg: config.Config{HistoryPath: historyPath}}}
 }
 
+// Outcomes carry their run's shape from history v6 on. MGS1030 judges the declaration,
+// so it reads every shape: a narrowed `-- -run` run's small peak must not hide the full
+// suite's, and the claim admission sizes from them is not what it compares against.
+func TestMemoryDeclarationsReadsEveryShape(t *testing.T) {
+	full, narrow := forecast.NewShape(nil, nil), forecast.NewShape([]string{"rw"}, []string{"-run", "TestOne"})
+	h := forecast.History{
+		Version: forecast.HistoryVersion,
+		Projects: map[string]map[string]forecast.Stats{".": {"go/test": {RecentOutcomes: []forecast.Outcome{
+			{Result: forecast.OutcomePass, MaxRSSBytes: 9000 * mb, Charms: full.Charms, ArgsHash: full.ArgsHash},
+			{Result: forecast.OutcomePass, MaxRSSBytes: 300 * mb, Charms: narrow.Charms, ArgsHash: narrow.ArgsHash},
+		}}}},
+	}
+	path := filepath.Join(t.TempDir(), "history.json")
+	require.NoError(t, h.Save(context.Background(), path))
+
+	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
+		projectWith(".", map[string]types.Target{"test": {MemoryMB: 2048}}),
+	})
+	require.Len(t, got.Details, 1)
+	assert.Contains(t, got.Details[0], "declares 2048MB and reached at least 9000MB")
+}
+
 // The dangerous direction: the gate keeps admitting the target against a figure it
 // has outgrown, and nothing else would ever say so.
 func TestMemoryDeclarationsReportsUnderDeclaration(t *testing.T) {

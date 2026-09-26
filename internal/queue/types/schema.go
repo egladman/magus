@@ -120,12 +120,14 @@ const (
 	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the commits of an open change nobody queued
 	CodeWaitNoCommitter     Code = "WAIT_NO_COMMITTER"     // it needs an update commit, and nothing names who commits it
 	CodeWaitBaseRed         Code = "WAIT_BASE_RED"         // the gate was red on its candidate and on what that was built onto
+	CodeWaitChecks          Code = "WAIT_CHECKS"           // the base's required checks are running on its head, or run again on the base
 
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
-	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate and green on what that was built onto
+	CodeKickRed      Code = "KICK_RED"      // the gate, or a required check on a head carrying the base, was red
 	CodeKickRefused  Code = "KICK_REFUSED"  // something the author has to fix that is neither
 	// CodeKickRegeneration: its own code changes what regenerates generated files it
-	// needs regenerated, so the queue cannot prove that regeneration runs none of it.
+	// needs regenerated, so the queue cannot prove that regeneration runs none of it, and
+	// validation left no regenerated candidate applying can check.
 	CodeKickRegeneration Code = "KICK_REGENERATION"
 )
 
@@ -135,7 +137,7 @@ func (c Code) decision() Decision {
 	case CodeWaitNotApproved, CodeWaitHeadMoved, CodeWaitBehind, CodeWaitConflictAhead, CodeWaitRevalidate,
 		CodeWaitBranchMoved, CodeWaitProviderRefused, CodeWaitBelow, CodeWaitBelowKicked, CodeWaitRestack,
 		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter,
-		CodeWaitBaseRed:
+		CodeWaitBaseRed, CodeWaitChecks:
 		return DecisionWait
 	case CodeKickConflict, CodeKickRed, CodeKickRefused, CodeKickRegeneration:
 		return DecisionKick

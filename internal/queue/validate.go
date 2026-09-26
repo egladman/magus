@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/queue/types"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // Validator is the read-only step of a queue run. It executes the changes' code (the
@@ -134,6 +136,9 @@ type flight struct {
 	done   chan outcome
 	// resolved names the source files auto-resolution settled in cand, "" for none.
 	resolved string
+	// merged is cand's merge before its regeneration, which cand is when the
+	// regeneration committed nothing.
+	merged string
 }
 
 type outcome struct {
@@ -361,13 +366,11 @@ func (r *validation) only(ctx context.Context) error {
 	return nil
 }
 
-// candidate builds f's change's candidate onto f.onto, regenerated with v.Regenerate.
-//
-// What the regeneration rewrites is committed only when the build tool proves it runs
-// none of c's code, the same proof an Applier needs before it can reproduce those bytes
-// with the base's own regeneration. Otherwise c's committed outputs are stale on top of
-// onto and only its author can regenerate them, so the candidate is refused before its
-// gate runs on a tree that could never merge.
+// candidate builds f's change's candidate onto f.onto, regenerated with v.Regenerate,
+// and the gate runs on what the regeneration committed, whatever code it ran. An
+// Applier reproduces those bytes with the base's own regeneration where it can prove
+// that runs none of the change's code, and otherwise checks the bundle of them its
+// verdict carries.
 //
 // What auto-resolution settled is recorded on f, for its verdict to name.
 func (r *validation) candidate(ctx context.Context, f *flight) (types.Candidate, error) {
@@ -381,6 +384,7 @@ func (r *validation) candidate(ctx context.Context, f *flight) (types.Candidate,
 		f.resolved = resolvedNote(b.resolved)
 		r.Events.Emit(Event{Kind: EventResolved, Change: c.ID, Commit: b.Commit, Reason: f.resolved})
 	}
+	f.merged = b.Commit
 	if err != nil || r.Regenerate == nil {
 		return b.Candidate, err
 	}
@@ -392,30 +396,11 @@ func (r *validation) candidate(ctx context.Context, f *flight) (types.Candidate,
 }
 
 func (r *validation) regenerate(ctx context.Context, s candidateSpec, b built) (string, error) {
-	regen, err := outputs(ctx, s.facts, b.touched)
-	if err != nil {
-		return "", err
-	}
 	units, err := r.units(s.change)
 	if err != nil {
 		return "", err
 	}
-	keep, err := regenerateWrites(ctx, r.vcs, s, b, r.Regenerate, regen, units)
-	if err != nil || len(keep) == 0 {
-		return b.Commit, err
-	}
-	g, err := generationOf(ctx, r.vcs, r.facts, r.clone.Root, r.plan.BaseCommit, s.change, regen)
-	if err != nil {
-		return "", err
-	}
-	if !regenerationProven(g) {
-		why, code := unprovenWhy(g, regen)
-		return "", &types.RefusedError{Paths: keep,
-			Reason: joinPaths(keep) + " are stale on top of " + short(s.onto) + ", and " + why + " (" + joinPaths(code) +
-				"), so the queue cannot regenerate them for it",
-			Remedy: "Merge `" + r.plan.Base + "` in, regenerate, commit what it writes, push, and queue it again."}
-	}
-	return commitRegenerated(ctx, r.vcs, b, keep)
+	return regenerateIn(ctx, r.vcs, s, b, r.Regenerate, units)
 }
 
 func (r *validation) acquire(ctx context.Context) error {
@@ -529,7 +514,31 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		return v.Decision, r.decide(v)
 	}
 	v.Decision, v.Reason = types.DecisionMerge, f.resolved
-	return v.Decision, r.decide(v)
+	if f.merged == "" || f.merged == f.cand.Commit {
+		return v.Decision, r.decide(v)
+	}
+	bundle, cleanup, err := r.bundle(ctx, f)
+	if err != nil {
+		return "", fmt.Errorf("bundle the candidate of %s: %w", f.change.Label(), err)
+	}
+	defer cleanup()
+	return v.Decision, r.decideWithBundle(v, bundle)
+}
+
+// bundle writes f's regenerated candidate, on the merge beneath it, to a file under
+// the scratch directory, which the returned func removes.
+func (r *validation) bundle(ctx context.Context, f *flight) (string, func(), error) {
+	dir, err := os.MkdirTemp(r.scratch, "bundle-")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	file := filepath.Join(dir, CandidateBundle)
+	if err := r.vcs.Bundle(ctx, r.clone.Root, file, magustypes.BundleRange{Base: f.merged, Head: f.cand.Commit}); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return file, cleanup, nil
 }
 
 // ground stops a flight's gate, waits for it, and removes its checkout.
@@ -547,14 +556,17 @@ func (r *validation) discard(ctx context.Context, cand types.Candidate) {
 
 // decide records v. A verdict the Applier would refuse to read is refused here, where
 // the step that wrote it can say so.
-func (r *validation) decide(v types.Verdict) error {
+func (r *validation) decide(v types.Verdict) error { return r.decideWithBundle(v, "") }
+
+// decideWithBundle is decide, recording bundle beside the verdict; "" records none.
+func (r *validation) decideWithBundle(v types.Verdict, bundle string) error {
 	v.BaseCommit, v.Gate, v.Regenerate = r.plan.BaseCommit, r.Reproduce.Gate, r.Reproduce.Regenerate
 	if err := v.Check(); err != nil {
 		return err
 	}
 	r.Events.Emit(Event{Kind: EventDecided, Change: v.Change.ID, Decision: v.Decision, Code: v.Code, Reason: v.Reason,
 		Commit: v.CandidateCommit, Depth: v.Depth, DurationMS: v.DurationMS})
-	if err := r.dir.Record(v); err != nil {
+	if err := r.dir.RecordWithBundle(v, bundle); err != nil {
 		return fmt.Errorf("record the verdict on %s: %w", v.Change.Label(), err)
 	}
 	return nil

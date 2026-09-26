@@ -1,9 +1,14 @@
 # Under -o jsonl the wait is a typed record, not a prose line.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe'
 
+# generate holds the lock until a release file appears; this watcher supplies it
+# only once magus status proves the reader has actually registered its wait, so
+# the release can never race ahead of the thing it is meant to unblock.
+exec bash -c 'for i in $(seq 400); do [ -f generate-ready ] && break; sleep 0.05; done; for i in $(seq 400); do magus status -o json 2>/dev/null | grep -q pipe_waits && break; sleep 0.05; done; touch release' &
 exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms 2>upstream.err | magus run consume . -o jsonl'
 jsonl-records lock.pipe_wait
 ! stderr 'magus: waiting for pid'
+wait
 
 -- magus.yaml --
 {}
@@ -17,13 +22,15 @@ import "proc";
 magus\project({
     "name": "pipe-root",
     "targets": {
-        "generate": {"skip_cache": "holds the lock long enough to meet the reader"},
+        "generate": {"skip_cache": "holds the lock until the reader has proven the wait"},
         "consume": {"skip_cache": "reads stdin per invocation"},
     },
 });
 
+// generate holds the project until a release file appears, bounded so a stuck
+// script cannot hang CI.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sleep", ["1"]);
+    proc\exec("sh", ["-c", "touch generate-ready; for i in $(seq 400); do [ -f release ] && exit 0; sleep 0.05; done"]);
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {

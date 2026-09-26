@@ -202,7 +202,9 @@ func toolRules(vars map[string]string, home, goos string) []filesystem.Rule {
 		rx(vars["GOROOT"]),
 		rx(join(gopath, "bin")),
 		rw(pick("GOMODCACHE", join(gopath, "pkg", "mod"))),
-		rw(pick("GOCACHE", join(userCache, "go-build"))),
+		// Executable as well: since Go 1.24, go run and go tool cache the binaries they
+		// build here and exec them from the cache, so go generate fails without it.
+		rwx(pick("GOCACHE", join(userCache, "go-build"))),
 		ro(pick("GOENV", join(userConfig, "go", "env"))),
 		rw(pick("GOLANGCI_LINT_CACHE", join(userCache, "golangci-lint"))),
 		// Rust
