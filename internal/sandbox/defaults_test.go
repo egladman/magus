@@ -226,6 +226,24 @@ func TestBuildPolicyMergesDuplicatePaths(t *testing.T) {
 	assert.Equal(t, 1, n)
 }
 
+// A declared writable grant may be created when missing; a path a core grant names may
+// not, even when a declaration also names it writable, so a missing workspace stays a
+// failure rather than a directory the sandbox makes.
+func TestBuildPolicyCreatesOnlyDeclaredPaths(t *testing.T) {
+	root := t.TempDir()
+	ws, cache := filepath.Join(root, "gone"), filepath.Join(root, "cache")
+	p := BuildPolicy(PolicyOptions{Workspace: ws, Sandbox: spells.Sandbox{Allow: []spells.SandboxAllow{
+		{Path: ws, Mode: spells.SandboxAccessRW},
+		{Path: cache, Mode: spells.SandboxAccessRW},
+	}}})
+	creates := map[string]bool{}
+	for _, r := range p.FS.Rules {
+		creates[r.Path] = r.Create
+	}
+	assert.False(t, creates[filesystem.ResolveRulePath(ws)], "the workspace is a core grant")
+	assert.True(t, creates[filesystem.ResolveRulePath(cache)], "a declared cache may be created")
+}
+
 // mergeLayers is the one merge every layer goes through. Entries union, the same path
 // at two layers gets both modes, passthrough unions, and an entry reads its variable
 // before its base.
@@ -235,6 +253,11 @@ func TestMergeLayers(t *testing.T) {
 	}
 	layer := func(pass []string, allow ...spells.SandboxAllow) spells.Sandbox {
 		return spells.Sandbox{Allow: allow, Env: spells.SandboxEnv{Passthrough: pass}}
+	}
+	// A declared writable grant may be created when it is missing.
+	created := func(r filesystem.Rule) filesystem.Rule {
+		r.Create = true
+		return r
 	}
 	for name, tc := range map[string]struct {
 		vars      map[string]string
@@ -249,14 +272,14 @@ func TestMergeLayers(t *testing.T) {
 				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRX)),
 				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRW)),
 			},
-			want: []filesystem.Rule{rwx("/opt/tool")},
+			want: []filesystem.Rule{created(rwx("/opt/tool"))},
 		},
 		"a later ro layer never narrows": {
 			layers: []spells.Sandbox{
 				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRW)),
 				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRO)),
 			},
-			want: []filesystem.Rule{rw("/opt/tool")},
+			want: []filesystem.Rule{created(rw("/opt/tool"))},
 		},
 		"an empty mode is ro": {
 			layers: []spells.Sandbox{layer(nil, entry("", "", "/opt/tool", ""))},
@@ -265,17 +288,17 @@ func TestMergeLayers(t *testing.T) {
 		"the variable wins over the base": {
 			vars:   map[string]string{"GOCACHE": "/fast/gocache"},
 			layers: []spells.Sandbox{layer(nil, entry("GOCACHE", "userCache", "go-build", spells.SandboxAccessRWX))},
-			want:   []filesystem.Rule{rwx("/fast/gocache")},
+			want:   []filesystem.Rule{created(rwx("/fast/gocache"))},
 		},
 		"the base when the variable is unset": {
 			vars:   map[string]string{"XDG_CACHE_HOME": "/xdg"},
 			layers: []spells.Sandbox{layer(nil, entry("GOCACHE", "userCache", "go-build", spells.SandboxAccessRWX))},
-			want:   []filesystem.Rule{rwx("/xdg/go-build")},
+			want:   []filesystem.Rule{created(rwx("/xdg/go-build"))},
 		},
 		"a $VAR base takes the first entry of a list": {
 			vars:   map[string]string{"GOPATH": "/a:/b"},
 			layers: []spells.Sandbox{layer(nil, entry("", "$GOPATH", "pkg/mod", spells.SandboxAccessRW))},
-			want:   []filesystem.Rule{rw("/a/pkg/mod")},
+			want:   []filesystem.Rule{created(rw("/a/pkg/mod"))},
 		},
 		"an unset $VAR base grants nothing": {
 			layers: []spells.Sandbox{layer(nil, entry("", "$CARGO_HOME", "registry", spells.SandboxAccessRW))},
