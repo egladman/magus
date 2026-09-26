@@ -3686,6 +3686,88 @@ func TestTrustedJobsRestoreNoActionsCache(t *testing.T) {
 	}
 }
 
+// A magus one job publishes runs in later jobs of the run, some holding a signing key or a
+// write token, so it carries the publisher's trust into theirs. The publisher builds it
+// before any step of its own restores a cache, the action uploads it before its history
+// restore, and every consumer checks the digest the publisher recorded, carried as an
+// output of a job it needs, never anything the artifact says about itself.
+func TestPublishedMagusIsBuiltFirstAndVerifiedByDigest(t *testing.T) {
+	var action struct {
+		Runs struct {
+			Steps []actionStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	raw, err := os.ReadFile(filepath.Join(".github", "actions", "setup-magus", "action.yml"))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &action))
+	publish, restore := -1, -1
+	for i, step := range action.Runs.Steps {
+		if step.ID == "publish" {
+			publish = i
+		}
+		if strings.HasPrefix(step.Uses, "actions/cache/restore@") {
+			restore = i
+		}
+	}
+	require.NotEqual(t, -1, publish, "setup-magus publishes the binary it built")
+	require.NotEqual(t, -1, restore, "setup-magus restores the run history")
+	assert.Less(t, publish, restore, "the binary is uploaded before a cache entry is extracted")
+
+	outputRe := regexp.MustCompile(`^\$\{\{ needs\.([\w-]+)\.outputs\.([\w-]+) \}\}$`)
+	paths, err := filepath.Glob(filepath.Join(".github", "workflows", "*.yaml"))
+	require.NoError(t, err)
+	published := 0
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var wf struct {
+			Jobs map[string]struct {
+				Needs   yaml.Node         `yaml:"needs"`
+				Outputs map[string]string `yaml:"outputs"`
+				Steps   []actionStep      `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal(raw, &wf), path)
+		file := filepath.Base(path)
+		for name, job := range wf.Jobs {
+			for i, step := range job.Steps {
+				if step.Uses != "./.github/actions/setup-magus" {
+					continue
+				}
+				if step.With["publish-artifact"] != "" {
+					published++
+					for _, prior := range job.Steps[:i] {
+						assert.True(t, strings.HasPrefix(prior.Uses, "actions/checkout@"),
+							"%s/%s: %q runs before the magus it publishes is built", file, name, prior.Uses+prior.Run)
+					}
+				}
+				if step.With["installation-strategy"] != "artifact" {
+					continue
+				}
+				m := outputRe.FindStringSubmatch(step.With["artifact-sha256"])
+				require.NotNil(t, m, "%s/%s: artifact-sha256 is a job output of the publisher", file, name)
+				var needs []string
+				if job.Needs.Kind == yaml.ScalarNode {
+					needs = []string{job.Needs.Value}
+				} else {
+					require.NoError(t, job.Needs.Decode(&needs))
+				}
+				assert.Contains(t, needs, m[1], "%s/%s", file, name)
+				var producer string
+				for _, s := range wf.Jobs[m[1]].Steps {
+					if s.Uses == "./.github/actions/setup-magus" && s.With["publish-artifact"] != "" {
+						producer = s.ID
+					}
+				}
+				require.NotEmpty(t, producer, "%s/%s: %s publishes magus from a step with an id", file, name, m[1])
+				assert.Equal(t, "${{ steps."+producer+".outputs.sha256 }}", wf.Jobs[m[1]].Outputs[m[2]], "%s/%s", file, name)
+				assert.Equal(t, "${{ github.sha }}", step.With["artifact-commit"], "%s/%s", file, name)
+			}
+		}
+	}
+	assert.Positive(t, published, "ci.yaml builds magus once and shares it")
+}
+
 // sockdirPackage is the one place magus resolves the per-user runtime directory, where
 // the broker and the server listen.
 const sockdirPackage = "github.com/egladman/magus/internal/proc/sockdir"
