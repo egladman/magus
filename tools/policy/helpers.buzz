@@ -127,6 +127,27 @@ export fun request(argvs: [[str]]) > [Program] {
     return programs;
 }
 
+// JobRow is what the spawn rule reads of one job store row, copied out of magus\job.list
+// because a Buzz test cannot build the host's Job.
+export object JobRow {
+    id: str,
+    parent: str = "",
+    state: str,
+}
+
+// jobRows is a job store, each row spelled as [id, state] or [id, state, parent].
+export fun jobRows(specs: [[str]]) > [JobRow] {
+    final rows = mut [<JobRow>];
+    foreach (spec in specs) {
+        var parent = "";
+        if (spec.len() > 2) {
+            parent = spec[2];
+        }
+        rows.append(JobRow{ id = spec[0], state = spec[1], parent = parent });
+    }
+    return rows;
+}
+
 // counter is a fresh once-per-session gate.
 export fun counter() > fun (key: str) > bool {
     final seen = mut {<str: bool>};
