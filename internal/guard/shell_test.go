@@ -399,7 +399,6 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// reported an exit code with no cause and forced a re-run to learn it.
 		{command: "magus run lint . > /tmp/x.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
 		{command: "magus run build . >> /tmp/log.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
-		{command: "magus run lint . -s 2>&1", rule: denyRule{Name: denyRuleOutputRedirect}},
 		{command: "magus affected ci --silent > /dev/null 2>&1", rule: denyRule{Name: denyRuleOutputRedirect}},
 		// --silent plus a redirect is the WORST case, not the careful one: silent
 		// mode is quiet until it fails, so the redirect discards exactly the
@@ -1137,6 +1136,54 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	assert.NotContains(t, noRef, "magus query output", "ls mints no ref, so the log pointer would be a dead end")
 
 	assert.NotEqual(t, piped, discarded, "the two shapes need different corrections")
+}
+
+// TestOutputRedirectJudgesWhereEachStreamEnds: the rule refuses output that is lost, not
+// a redirect operator. Measured 2026-09-26: 556 of 841 denies were stderr-only, where
+// both streams still reached the reader.
+func TestOutputRedirectJudgesWhereEachStreamEnds(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		dest    string // "" when the line passes
+	}{
+		// Both streams still reach the console.
+		{command: "magus ls 2>&1"},
+		{command: "magus run lint . -s 2>&1"},
+		{command: "magus affected ci 1>&2"},
+		{command: "magus run lint . 2>/dev/stderr"},
+		// A read verb's stderr carries at most an error line the exit status also reports.
+		{command: "magus --version 2>/dev/null"},
+		{command: "magus ls targets . 2>/dev/null"},
+		{command: "magus -o json describe targets 2>/dev/null"},
+
+		// A file keeps console text the run log already holds, on either stream.
+		{command: "magus run lint . > /tmp/x.txt", dest: ">/tmp/x.txt"},
+		{command: "magus run build . >> /tmp/log.txt", dest: ">>/tmp/log.txt"},
+		{command: "magus ls 2> err.txt", dest: "2>err.txt"},
+		{command: "magus run lint . > out.log 2>&1", dest: ">out.log"},
+		{command: "magus run lint . &> out.log", dest: "&>out.log"},
+		{command: "magus run lint . >&out.log", dest: ">&out.log"},
+		{command: "magus ls 2>&1 >/tmp/x", dest: ">/tmp/x"},
+		{command: `magus run lint . > "$LOG"`, dest: ">"},
+		// Stdout discarded, whatever the verb.
+		{command: "magus ls > /dev/null", dest: ">/dev/null"},
+		{command: "magus affected ci --silent > /dev/null 2>&1", dest: ">/dev/null"},
+		{command: "magus run lint . 1>&-", dest: "1>&-"},
+		// A run writes its failure block to stderr, so discarding that is silence too.
+		{command: "magus run lint . 2>/dev/null", dest: "2>/dev/null"},
+		{command: "./magus -s affected ci 2>/dev/null", dest: "2>/dev/null"},
+		{command: "magus x out1a2b 2>/dev/null", dest: "2>/dev/null"},
+	} {
+		verb, dest, ok := magusRedirected(tc.command, DialectBash)
+		if tc.dest == "" {
+			assert.False(t, ok, "should pass: %s (got %s %s)", tc.command, verb, dest)
+			assert.NotEqual(t, denyRuleOutputRedirect, Evaluate(testDependencies(), tc.command).Rule.Name, tc.command)
+			continue
+		}
+		assert.True(t, ok, "should be denied: %s", tc.command)
+		assert.Equal(t, tc.dest, dest, tc.command)
+		assert.Equal(t, denyRuleOutputRedirect, Evaluate(testDependencies(), tc.command).Rule.Name, tc.command)
+	}
 }
 
 // TestGuardExemptsRefsTextFromOutputRules pins the --text exemption's SCOPE: it

@@ -266,12 +266,18 @@ func magusVerb(cmds []hint.Invocation) string {
 	return ""
 }
 
-// magusRedirected reports a magus command whose stdout or stderr is being sent
-// to a file, to /dev/null, or folded together with 2>&1.
+// magusRedirected reports a magus command whose output ends up in a file, or whose
+// stdout, or a run's stderr, ends up in /dev/null.
 //
 // Denied for the pipe rule's reason. `--silent > /dev/null 2>&1` is the worst
 // case: silent mode stays quiet UNTIL something fails, then prints the likely
 // diagnostics and the full-log path, and the redirect discards exactly that.
+//
+// It judges where each stream ENDS, not whether a redirect appears. `2>&1` alone
+// moves stderr onto a console stdout, where both still reach the reader, and a
+// `2>/dev/null` on a verb that does no run work drops at most an error line the
+// exit status also reports. A run's failure block (cause, output ref, reproduce
+// line) is written to stderr, so discarding a run's stderr is refused.
 //
 // `magus query output <ref>` is exempt, as with the pipe rule. Note --tee is NOT
 // the escape hatch a reader might assume (it mirrors STRUCTURED output only),
@@ -293,13 +299,9 @@ func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
 		if !isStmt || len(stmt.Redirs) == 0 || !trimmableMagus(stmtCommands(stmt, d)) {
 			return true
 		}
-		for _, r := range stmt.Redirs {
-			// Output redirects only. A HEREDOC or an input redirect feeds magus
-			// rather than hiding what it said, so neither is this rule's business.
-			if !writesToFile(r.Op) {
-				continue
-			}
-			verb, dest, ok = magusVerb(stmtCommands(stmt, d)), redirectTarget(r), true
+		cmds := stmtCommands(stmt, d)
+		if r := discardingRedirect(stmt.Redirs, magusDoesRunWork(cmds)); r != nil {
+			verb, dest, ok = magusVerb(cmds), redirectTarget(r), true
 			return false
 		}
 		return true
@@ -307,18 +309,143 @@ func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
 	return verb, dest, ok
 }
 
+// streamEnd is where one output stream lands once every redirect has applied.
+type streamEnd struct {
+	sink sinkKind
+	// by is the redirect that sent the stream there, for the message to quote.
+	by *syntax.Redirect
+}
+
+type sinkKind int
+
+const (
+	sinkConsole sinkKind = iota
+	sinkNull
+	sinkFile
+)
+
+// discardingRedirect replays a statement's redirects over stdout and stderr and returns
+// the one that loses output: either stream landing in a file, stdout landing in
+// /dev/null, or stderr landing there on a command doing run work. nil when both streams
+// still reach the console, which is what `2>&1` alone, `1>&2` and `2>/dev/null` on a
+// read verb leave.
+func discardingRedirect(redirs []*syntax.Redirect, runWork bool) *syntax.Redirect {
+	fds := map[string]streamEnd{"1": {}, "2": {}}
+	for _, r := range redirs {
+		if !writesToFile(r.Op) {
+			continue
+		}
+		target := redirectWord(r)
+		switch r.Op {
+		case syntax.RdrAll, syntax.AppAll, syntax.RdrAllClob, syntax.AppAllClob:
+			end := streamEnd{sink: sinkFor(target), by: r}
+			fds["1"], fds["2"] = end, end
+			continue
+		case syntax.DplOut:
+			// `>&2` duplicates a descriptor; `>&file` is bash's spelling of `&>file`.
+			if src, isFd := fds[target]; isFd {
+				fds[redirectFd(r)] = src
+				continue
+			}
+			if target == "-" {
+				fds[redirectFd(r)] = streamEnd{sink: sinkNull, by: r}
+				continue
+			}
+			if r.N == nil {
+				end := streamEnd{sink: sinkFor(target), by: r}
+				fds["1"], fds["2"] = end, end
+				continue
+			}
+		}
+		fds[redirectFd(r)] = streamEnd{sink: sinkFor(target), by: r}
+	}
+	for _, fd := range []string{"1", "2"} {
+		if fds[fd].sink == sinkFile {
+			return fds[fd].by
+		}
+	}
+	if fds["1"].sink == sinkNull {
+		return fds["1"].by
+	}
+	if runWork && fds["2"].sink == sinkNull {
+		return fds["2"].by
+	}
+	return nil
+}
+
+// redirectFd is the descriptor a redirect writes: its explicit number, else stdout.
+func redirectFd(r *syntax.Redirect) string {
+	if r.N != nil {
+		return r.N.Value
+	}
+	return "1"
+}
+
+// redirectWord is a redirect's literal target, or "" when it is computed.
+func redirectWord(r *syntax.Redirect) string {
+	if r.Word == nil {
+		return ""
+	}
+	return r.Word.Lit()
+}
+
+// sinkFor classifies a redirect target. A computed target is a file: it names somewhere
+// that is not the console, and the guard cannot see where.
+func sinkFor(target string) sinkKind {
+	switch target {
+	case "/dev/null":
+		return sinkNull
+	case "/dev/stdout", "/dev/stderr", "/dev/tty":
+		return sinkConsole
+	}
+	return sinkFile
+}
+
+// magusDoesRunWork reports a magus invocation whose verb runs targets, the verbs whose
+// failure block is written to stderr.
+func magusDoesRunWork(cmds []hint.Invocation) bool {
+	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		return isMagusInvocation(c) && isRunVerb(magusSubcommand(c.Args))
+	})
+}
+
+// isRunVerb names the verbs that run targets and mint a log per run.
+func isRunVerb(verb string) bool {
+	return verb == "run" || verb == "affected" || verb == "x"
+}
+
+// magusSubcommand is the first word of a magus argv that is not a global flag or its
+// value, or "" when a flag it cannot place comes first.
+func magusSubcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") {
+			return a
+		}
+		name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		takesValue, known := MagusFlagTakesValue(name)
+		if !known {
+			return ""
+		}
+		if takesValue && !joined {
+			i++
+		}
+	}
+	return ""
+}
+
 // redirectTarget names where the output was being sent, for the message to quote. The
 // word is the reader's own, so an unprintable or computed target degrades to the operator
 // rather than to a guess.
 func redirectTarget(r *syntax.Redirect) string {
+	op := r.Op.String()
+	if r.N != nil {
+		op = r.N.Value + op
+	}
 	if r.Word == nil {
-		return r.Op.String()
+		return op
 	}
-	lit := r.Word.Lit()
-	if lit == "" {
-		return r.Op.String()
-	}
-	return r.Op.String() + lit
+	return op + r.Word.Lit()
 }
 
 // capturePathRe matches the files that hold magus console output verbatim:
@@ -1257,7 +1384,7 @@ func filterWithoutInputDeny(tool string) string {
 // and it is worth more care here because the suggestion LOOKS specific.
 func mintedLogNote(verb string) string {
 	head, _, _ := strings.Cut(verb, " ")
-	if head != "run" && head != "affected" && head != "x" {
+	if !isRunVerb(head) {
 		return ""
 	}
 	return "\nThe run already wrote its full log: `" + hint.QueryOutput.With("<ref>") + "` reads it back, and a failure prints the .magus/logs/ path itself."

@@ -148,9 +148,11 @@ var denyRuleDocs = []RuleDoc{
 		Why: "magus projects its own record, so the filter is answering a question the command takes a flag for: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field, `-s` to silence progress. " +
 			"The half a reader cannot discover by trying again is the exit status: a pipe takes it from the LAST stage, so a failing magus reads as exit 0 and nothing says so."},
 	{Name: string(denyRuleOutputRedirect), Decision: "deny",
-		Catches: "magus output redirected to a file, which the run log already holds",
-		Why: "There is no legitimate shape of this against magus. Silencing and keeping are the only two intents and magus has a lever for each: `--silent` says nothing until something fails, and `-o json --tee <file>` keeps the STRUCTURED output rather than console text, which is not a format anything should parse. " +
-			"A target run persists its whole log either way and prints a ref for it, so capturing the console is redundant."},
+		Catches: "magus output sent to a file or discarded, which the run log already holds",
+		Why: "Silencing and keeping are the only two intents and magus has a lever for each: `--silent` says nothing until something fails, and `-o json --tee <file>` keeps the STRUCTURED output rather than console text, which is not a format anything should parse. " +
+			"A target run persists its whole log either way and prints a ref for it, so capturing the console is redundant. " +
+			"It judges where each stream ENDS. Either stream landing in a file fires, and so does stdout landing in /dev/null. `2>/dev/null` fires on `run`, `affected` and `x`, which write their failure block (cause, output ref, reproduce line) to stderr, and passes on every other verb, whose stderr carries at most an error line the exit status also reports. " +
+			"`2>&1` alone passes: both streams still reach the reader. Measured 2026-09-26: 556 of 841 denies were stderr-only."},
 	{Name: string(denyRuleProcessPoll), Decision: "deny",
 		Catches: "a process table inspected to wait on magus work the lock already reports",
 		Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. " +
