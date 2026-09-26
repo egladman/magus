@@ -1721,10 +1721,10 @@ commands that finish the wiring; magus never runs them, a person does.
 
 --app names the app whose credential apply will write with (github: a GitHub
 App's slug), and the steps become that app's: install it, store its credential,
-and pin the status to its id. The provider reads that id itself where it can;
-where it cannot, describe says where the provider shows it, and --app takes it
-after the slug. Every read goes to the provider over the network, with the
-credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
+and pin the status to its id. The provider reads --app, never the queue. When it
+needs more, describe says what, where the provider shows it, and the command to
+run next. Every read goes to the provider over the network, with the credential
+the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 
 -o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
 			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
@@ -1732,7 +1732,7 @@ credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
 				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
-				{Name: "app", Kind: FlagString, Doc: "App apply writes with, as `slug[:id]`; the id only where the provider cannot read it (github: a GitHub App, required with a --status-context)"},
+				{Name: "app", Kind: FlagString, Doc: "`app` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)"},
 			}, queueCheckout...),
 		},
 		{
@@ -1783,7 +1783,7 @@ credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
-				{Name: "app", Kind: FlagString, Doc: "App whose credential the provider writes with, as `slug[:id]` (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
+				{Name: "app", Kind: FlagString, Doc: "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
@@ -1794,7 +1794,7 @@ credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 	Examples: []Example{
 		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
 		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
-		{"The same for an app whose id the provider cannot read", "magus queue describe --provider github --base main --app acme-magus-queue:2034567"},
+		{"The same for a private app whose App ID GitHub hides", "magus queue describe --provider github --base main --app acme-magus-queue:2034567"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'"},

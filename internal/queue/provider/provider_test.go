@@ -96,9 +96,7 @@ export fun retarget(io: {str: any}) > bool {
 export fun merge_change(io: {str: any}) > any {
     final through = serialize\Boxed.init(io["through"]).listValue();
     final pinned = through.len() == 1 and through[0].q("id").stringValue() == "5" and through[0].q("commit").stringValue() == "` + headE + `";
-    final app = serialize\Boxed.init(io["app"]);
-    final named = app.q("slug").stringValue() == "q" and app.q("id").stringValue() == "812";
-    return {"merged": io["message"] == "* body" and named and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
+    return {"merged": io["message"] == "* body" and io["app"] == "q" and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
 }
 
 export fun kick_back(io: {str: any}) > bool {
@@ -146,16 +144,13 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 
 // setupScript answers describe with a setup built from what it was asked.
 const setupScript = `
-import "serialize";
-
 export fun describe(io: {str: any}) > any {
-    final slug = serialize\Boxed.init(io["app"]).q("slug").stringValue();
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
         "status_context": io["status_context"],
-        "credential": {"id": "812", "name": slug},
+        "credential": {"id": "812", "name": io["app"]},
         "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
         "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
-        "app": {"slug": slug, "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
+        "app": {"slug": io["app"], "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
             "environment": "magus-queue", "variable": "V", "secret": "S"},
         "steps": [{"title": "Install it", "url": "https://github.com/apps/q/installations/new"}, {"title": "Store it", "command": "gh secret set S"}],
     }};
@@ -171,7 +166,7 @@ export fun mark(io: {str: any}) > bool { return true; }
 `
 
 func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
-	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q"}, SetupSteps: true})
+	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", SetupSteps: true})
 	require.NoError(t, err)
 	assert.Equal(t, &types.Setup{
 		StatusContext: "gate",
@@ -193,37 +188,35 @@ func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
 // A setup a person could not follow is the provider's error, named where it broke.
 func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
-		{`"credential": {"id": "812", "name": slug},`, ``, `setup: field "credential" is missing`},
-		{`{"id": "812", "name": slug}`, `{"id": "", "name": slug}`, `without the integration its credential posts as`},
-		{`"app": {"slug": slug, "id": "812",`, `"app": {"slug": slug, "id": "",`, `app "q" as integration "", and its credential as "812"`},
+		{`"credential": {"id": "812", "name": io["app"]},`, ``, `setup: field "credential" is missing`},
+		{`{"id": "812", "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
 		{`"command": "gh secret set S"`, `"command": "gh secret set S", "url": "https://x"`, `exactly one of a command or a URL`},
 		{`"status_context": io["status_context"],`, `"status_context": "",`, `setup for no status context`},
 	} {
-		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q"}})
+		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate"})
 		require.ErrorContains(t, err, tc.want, tc.to)
 	}
 }
 
-// missingAppScript declines to describe a setup for an app named without an id, and
-// describes one for an app named with one.
-const missingAppScript = `
-import "serialize";
-
+// refusedScript declines to describe a setup for the app "q", asking for "q:<id>", and
+// describes one for any other app, which it echoes as the credential's name. Its base
+// picks a refusal that leaves something out.
+const refusedScript = `
 export fun describe(io: {str: any}) > any {
-    final app = serialize\Boxed.init(io["app"]);
-    final slug = app.q("slug").stringValue();
-    final id = app.q("id").stringValue();
     if (io["base"] == "no reason") {
-        return {"missing_app": {"url": "https://example.invalid/apps/{slug}", "slug": slug}};
+        return {"refused": {"url": "https://example.invalid/apps/q", "app": "q:<id>"}};
     }
     if (io["base"] == "no url") {
-        return {"missing_app": {"reason": "no id for {slug}", "url": "", "slug": slug}};
+        return {"refused": {"reason": "no id for q", "url": "", "app": "q:<id>"}};
     }
-    if (id == "") {
-        return {"missing_app": {"reason": "no id for {slug}", "url": "https://example.invalid/apps/{slug}", "slug": slug}};
+    if (io["base"] == "no app") {
+        return {"refused": {"reason": "no id for q", "url": "https://example.invalid/apps/q", "app": ""}};
+    }
+    if (io["app"] == "q") {
+        return {"refused": {"reason": "no id for q", "url": "https://example.invalid/apps/q", "app": "q:<id>"}};
     }
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
-        "status_context": io["status_context"], "credential": {"id": id}, "app": {"slug": slug, "id": id}, "steps": [<any>],
+        "status_context": io["status_context"], "credential": {"id": "812", "name": io["app"]}, "steps": [<any>],
     }};
 }
 export fun list_changes(io: {str: any}) > any { return {}; }
@@ -236,30 +229,32 @@ export fun kick_back(io: {str: any}) > bool { return true; }
 export fun mark(io: {str: any}) > bool { return true; }
 `
 
-// The id a person gives travels in the app record, and a provider that needs it and was
-// given none says so as a *types.MissingAppError.
-func TestDescribePassesTheAppAsOneRecordAndDecodesAMissingApp(t *testing.T) {
-	p := open(t, missingAppScript)
-	_, err := p.Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q"}})
-	var missing *types.MissingAppError
-	require.ErrorAs(t, err, &missing)
-	assert.Equal(t, &types.MissingAppError{Reason: "no id for q", URL: "https://example.invalid/apps/q", Slug: "q"}, missing)
+// --app reaches the provider as the person wrote it, and a provider that declines to
+// describe a setup for it says so as a *types.SetupRefusedError naming the app to ask
+// again with.
+func TestDescribePassesTheAppAsGivenAndDecodesARefusal(t *testing.T) {
+	p := open(t, refusedScript)
+	_, err := p.Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q"})
+	var refused *types.SetupRefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, &types.SetupRefusedError{Reason: "no id for q", URL: "https://example.invalid/apps/q", App: "q:<id>"}, refused)
 
-	got, err := p.Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q", ID: "2034567"}})
+	got, err := p.Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q:2034567"})
 	require.NoError(t, err)
-	assert.Equal(t, &types.Setup{StatusContext: "gate", Credential: types.Integration{ID: "2034567"}, App: &types.App{Slug: "q", ID: "2034567"}}, got.Setup)
+	assert.Equal(t, &types.Setup{StatusContext: "gate", Credential: types.Integration{ID: "812", Name: "q:2034567"}}, got.Setup)
 }
 
-// A missing_app without a reason or a URL cannot tell a person what to do.
-func TestDescribeRefusesAMissingAppThatSaysNothing(t *testing.T) {
-	p := open(t, missingAppScript)
+// A refusal without a reason, a URL or an app cannot tell a person what to run next.
+func TestDescribeRefusesARefusalThatSaysNothing(t *testing.T) {
+	p := open(t, refusedScript)
 	for base, want := range map[string]string{
 		"no reason": `field "reason" is missing`,
-		"no url":    `field "missing_app" needs a reason and a URL`,
+		"no url":    `field "refused" needs a reason, a URL and an app`,
+		"no app":    `field "refused" needs a reason, a URL and an app`,
 	} {
-		_, err := p.Describe(context.Background(), types.ListQuery{Base: base, App: types.App{Slug: "q"}})
+		_, err := p.Describe(context.Background(), types.ListQuery{Base: base, App: "q"})
 		require.ErrorContains(t, err, want, base)
-		assert.NotErrorAs(t, err, new(*types.MissingAppError), base)
+		assert.NotErrorAs(t, err, new(*types.SetupRefusedError), base)
 	}
 }
 
@@ -369,18 +364,17 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	require.ErrorContains(t, p.PostStatus(ctx, change, headA, types.CommitStatus{Context: "other", State: types.StateSuccess}), "provider refused")
 	require.NoError(t, p.Retarget(ctx, change, "main"))
 	require.ErrorContains(t, p.Retarget(ctx, change, "dev"), "provider refused")
-	app := types.App{Slug: "q", ID: "812"}
-	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: app,
+	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: "q",
 		Through: []types.PinnedChange{{ID: "5", Commit: headE}}})
 	require.NoError(t, err)
 	assert.Equal(t, types.MergeResult{}, merged, "the queue's own call merged the stack")
-	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: app})
+	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: "q"})
 	require.NoError(t, err)
 	assert.Equal(t, types.MergeResult{ByProvider: true}, merged)
-	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other", App: app})
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other", App: "q"})
 	require.ErrorContains(t, err, "not merged: head moved")
-	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: types.App{Slug: "q"}})
-	require.ErrorContains(t, err, "not merged", "the app's slug and id reach the script")
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body"})
+	require.ErrorContains(t, err, "not merged", "the app reaches the script")
 	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Claim: "exit 1", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c",
 		Source: "o/r/runs/7", Reproduce: &types.Reproduction{Gate: "make test"}}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))
@@ -498,7 +492,7 @@ func repoAnswers(ownerType string) map[string]answer {
 	}
 }
 
-func githubDescribe(t *testing.T, answers map[string]answer, app types.App, steps bool) (types.Capabilities, error) {
+func githubDescribe(t *testing.T, answers map[string]answer, app string, steps bool) (types.Capabilities, error) {
 	t.Helper()
 	remote := fakeGitHub(t, answers)
 	p, err := Open(context.Background(), "github")
@@ -513,7 +507,7 @@ func TestDescribeGitHubReadsAPrivateAppsIDFromTheOrganizationsInstallations(t *t
 	answers := repoAnswers("Organization")
 	answers["GET /orgs/acme/installations?per_page=100&page=1"] = answer{200, `{"total_count": 2, "installations": [
 		{"app_id": 15368, "app_slug": "github-actions"}, {"app_id": 2034567, "app_slug": "q"}]}`}
-	got, err := githubDescribe(t, answers, types.App{Slug: "q"}, false)
+	got, err := githubDescribe(t, answers, "q", false)
 	require.NoError(t, err)
 	assert.Equal(t, types.Capabilities{
 		StackMerge: types.StackMergeAtomic, LinearStacks: true, Methods: []types.MergeMethod{types.MethodSquash}, QueueLabel: "merge-queue: ",
@@ -534,26 +528,26 @@ func TestDescribeGitHubRefusesAPrivateAppWhoseIDItCannotRead(t *testing.T) {
 	org["GET /orgs/acme/installations?per_page=100&page=1"] = notFound
 	for name, tc := range map[string]struct {
 		answers map[string]answer
-		want    func(web string) *types.MissingAppError
+		want    func(web string) *types.SetupRefusedError
 	}{
-		"a user's repository": {user, func(web string) *types.MissingAppError {
-			return &types.MissingAppError{
+		"a user's repository": {user, func(web string) *types.SetupRefusedError {
+			return &types.SetupRefusedError{
 				Reason: "github: GitHub shows the App ID of the private app q to no token but its own installation's; it is under About on the app's settings page",
-				URL:    web + "/settings/apps/q", Slug: "q",
+				URL:    web + "/settings/apps/q", App: "q:<id>",
 			}
 		}},
-		"an organization's, to a token that is not an owner's": {org, func(web string) *types.MissingAppError {
-			return &types.MissingAppError{
+		"an organization's, to a token that is not an owner's": {org, func(web string) *types.SetupRefusedError {
+			return &types.SetupRefusedError{
 				Reason: "github: GitHub shows the App ID of the private app q only to its own installation's token and, once it is installed on acme, to an owner of acme; it is under About on the app's settings page",
-				URL:    web + "/organizations/acme/settings/apps/q", Slug: "q",
+				URL:    web + "/organizations/acme/settings/apps/q", App: "q:<id>",
 			}
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := githubDescribe(t, tc.answers, types.App{Slug: "q"}, true)
-			var missing *types.MissingAppError
-			require.ErrorAs(t, err, &missing)
-			assert.Equal(t, tc.want(fakeWeb()), missing)
+			_, err := githubDescribe(t, tc.answers, "q", true)
+			var refused *types.SetupRefusedError
+			require.ErrorAs(t, err, &refused)
+			assert.Equal(t, tc.want(fakeWeb()), refused)
 		})
 	}
 }
@@ -563,23 +557,24 @@ func TestDescribeGitHubRefusesAPrivateAppWhoseIDItCannotRead(t *testing.T) {
 func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 	answers := repoAnswers("User")
 	answers["GET /users/q[bot]"] = notFound
-	_, err := githubDescribe(t, answers, types.App{Slug: "q"}, true)
-	var missing *types.MissingAppError
-	require.ErrorAs(t, err, &missing)
+	_, err := githubDescribe(t, answers, "q", true)
+	var refused *types.SetupRefusedError
+	require.ErrorAs(t, err, &refused)
 	web := fakeWeb()
-	assert.Equal(t, &types.MissingAppError{
+	assert.Equal(t, &types.SetupRefusedError{
 		Reason: "github: no GitHub App is named q, since GitHub has no user q[bot]; an app's slug ends the address of its settings page, and the apps are listed",
-		URL:    web + "/settings/apps",
-	}, missing)
+		URL:    web + "/settings/apps", App: "<slug>",
+	}, refused)
 
-	_, err = githubDescribe(t, repoAnswers("User"), types.App{}, true)
-	require.ErrorAs(t, err, &missing)
+	_, err = githubDescribe(t, repoAnswers("User"), "", true)
+	require.ErrorAs(t, err, &refused)
 	web = fakeWeb()
-	assert.Equal(t, &types.MissingAppError{
+	assert.Equal(t, &types.SetupRefusedError{
 		Reason: "github: the merge queue writes only as its own GitHub App, and none is named; register one",
 		URL: web + "/settings/apps/new?name=acme-magus-queue&url=" + strings.ToLower(url.QueryEscape(web+"/acme/widgets")) +
 			"&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write",
-	}, missing)
+		App: "<slug>",
+	}, refused)
 }
 
 // The id a person gives is the pin's integration when GitHub hides the app, and GitHub's
@@ -587,7 +582,7 @@ func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 	answers := repoAnswers("User")
 	answers["GET /repos/acme/widgets/pulls?state=all&base=main&sort=updated&direction=desc&per_page=20"] = answer{200, `[]`}
-	got, err := githubDescribe(t, answers, types.App{Slug: "q", ID: "2034567"}, true)
+	got, err := githubDescribe(t, answers, "q:2034567", true)
 	require.NoError(t, err)
 	web := fakeWeb()
 	assert.Equal(t, &types.Setup{
@@ -627,13 +622,16 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 
 	readable := repoAnswers("User")
 	readable["GET /apps/q"] = answer{200, `{"slug": "q", "id": 812, "client_id": "Iv23li", "name": "Q queue"}`}
-	for app, want := range map[types.App]string{
-		{Slug: "q", ID: "0812"}: "github: describe: the app's id '0812' is not an App ID, a positive integer with no leading zero",
-		{Slug: "q", ID: "Iv23"}: "github: describe: the app's id 'Iv23' is not an App ID, a positive integer with no leading zero",
-		{Slug: "q", ID: "813"}:  "github: describe: the app q is App ID 812, and the id given is 813",
+	for app, want := range map[string]string{
+		"q:0812": "github: the app 'q:0812' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero",
+		"q:Iv23": "github: the app 'q:Iv23' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero",
+		"q:":     "github: the app 'q:' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero",
+		":812":   "github: the app ':812' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero",
+		"q:813":  "github: describe: the app q is App ID 812, and the id given is 813",
 	} {
 		_, err := githubDescribe(t, readable, app, false)
-		require.ErrorContains(t, err, want, app.ID)
+		require.ErrorContains(t, err, want, app)
+		assert.NotErrorAs(t, err, new(*types.SetupRefusedError), app)
 	}
 }
 
@@ -641,7 +639,7 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 func TestDescribeGitHubReportsAForbiddenAppRead(t *testing.T) {
 	answers := repoAnswers("User")
 	answers["GET /apps/q"] = answer{http.StatusForbidden, `{"message": "Forbidden"}`}
-	_, err := githubDescribe(t, answers, types.App{Slug: "q", ID: "2034567"}, false)
+	_, err := githubDescribe(t, answers, "q:2034567", false)
 	require.ErrorContains(t, err, `github: read the app q: HTTP 403: either it does not exist or the token lacks access to it: {"message": "Forbidden"}`)
-	assert.NotErrorAs(t, err, new(*types.MissingAppError))
+	assert.NotErrorAs(t, err, new(*types.SetupRefusedError))
 }

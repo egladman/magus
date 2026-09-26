@@ -122,14 +122,14 @@ type ListQuery struct {
 	RemoteURL string // the remote's URL, for the provider to name its repository
 
 	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
-	// the base requires and who the write credential posts as. App is the app whose
-	// credential the queue writes with (github: a GitHub App, which it requires with a
-	// StatusContext); the zero App names none. Only its Slug and ID are read, and the ID
-	// only when the provider cannot read the app's own. SetupSteps also asks for the
-	// steps that finish wiring the queue, which cost the provider more reads, some
-	// needing permissions an apply job does not hold.
+	// the base requires and who the write credential posts as. App names the app whose
+	// credential the queue writes with, in the provider's own notation, which the queue
+	// passes on unread (github: a GitHub App's slug, with ":<App ID>" where GitHub hides
+	// the id, which it requires with a StatusContext); empty names none. SetupSteps also asks for the steps that finish
+	// wiring the queue, which cost the provider more reads, some needing permissions an
+	// apply job does not hold.
 	StatusContext string
-	App           App
+	App           string
 	SetupSteps    bool
 }
 
@@ -231,20 +231,17 @@ type App struct {
 	Secret      string `json:"secret,omitempty"`
 }
 
-// MissingAppError is Describe declining to describe a setup until it knows the queue's
-// app: none was named, the one named does not exist, or the provider cannot read its id.
-// A rerun names the app, with its id when Slug is set.
-type MissingAppError struct {
-	// Reason is what is missing, in the provider's words.
+// SetupRefusedError is Describe declining to describe a setup for the [ListQuery.App] it
+// was asked about. Reason says what is missing and URL where the provider shows it; App
+// is what the next Describe's App should be, in the provider's notation and with its
+// placeholders ("<slug>").
+type SetupRefusedError struct {
 	Reason string
-	// URL is where the provider shows it: where an app is registered or listed, or the
-	// named app's own page.
-	URL string
-	// Slug is the app named, when only its id is missing; empty when the app is.
-	Slug string
+	URL    string
+	App    string
 }
 
-func (e *MissingAppError) Error() string { return e.Reason + ": " + e.URL }
+func (e *SetupRefusedError) Error() string { return e.Reason + ": " + e.URL }
 
 // SetupStep is one thing a person does: run Command, or open URL.
 type SetupStep struct {
@@ -278,16 +275,14 @@ func (c Capabilities) Check() error {
 	return nil
 }
 
-// Check reports whether s names the status it describes, who the credential posts as
-// (the integration of its App, when it names one), and steps a person can follow.
+// Check reports whether s names the status it describes, who the credential posts as,
+// and steps a person can follow.
 func (s Setup) Check() error {
 	switch {
 	case s.StatusContext == "":
 		return errors.New("provider describes a setup for no status context")
 	case s.Credential.ID == "":
 		return errors.New("provider describes a setup without the integration its credential posts as")
-	case s.App != nil && s.App.ID != s.Credential.ID:
-		return fmt.Errorf("provider describes app %q as integration %q, and its credential as %q", s.App.Slug, s.App.ID, s.Credential.ID)
 	}
 	for _, rc := range s.RequiredChecks {
 		if rc.Context == "" {
@@ -311,7 +306,7 @@ type MergeOptions struct {
 	Message string // squash body when the author set none
 	// App is the applier's [ListQuery.App], the app the merge is made as; github refuses
 	// to merge without one.
-	App App
+	App string
 	// Through, when set, is the run of stacked changes beneath this one that merge in
 	// the same call ([StackMergeAtomic]), lowest first, each pinned to the head it must
 	// still be at.

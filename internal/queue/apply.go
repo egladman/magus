@@ -48,10 +48,10 @@ type Applier struct {
 	// StatusContext names the commit status an Applier posts; empty means
 	// [DefaultStatusContext].
 	StatusContext string
-	// App is the app the provider's write credential belongs to (github: a GitHub App,
-	// which it requires); the zero App names none. Run refuses to start when the base
-	// requires StatusContext from an integration other than the credential's.
-	App types.App
+	// App names the app the provider's write credential belongs to (github: a GitHub
+	// App's slug, which it requires); empty names none. Run refuses to start when the
+	// base requires StatusContext from an integration other than the credential's.
+	App string
 	// Interval is how long to wait between polls while verdicts are outstanding.
 	Interval time.Duration
 	// DryRun reports what would merge and calls nothing on the provider.

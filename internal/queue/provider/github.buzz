@@ -342,20 +342,17 @@ export fun describe(io: {str: any}) > any !> any {
     final web = "https://" + apiHost(apiBase());
     final owner = repo.split("/")[0];
     final org = serialize\jsonDecode(body).q("owner").q("type").stringValue() == "Organization";
-    final named = serialize\Boxed.init(io["app"]);
-    final slug = named.q("slug").stringValue();
-    final given = named.q("id").stringValue();
+    final named = parseApp("{io["app"] ?? ""}");
+    final slug = named["slug"] ?? "";
+    final given = named["id"] ?? "";
     if (slug == "") {
-        return missingApp("github: the merge queue writes only as its own GitHub App, and none is named; register one",
-            url: registrationURL(web, repo: repo, org: org), slug: "");
-    }
-    if (given != "" and !isAppID(given)) {
-        throw "github: describe: the app's id '{given}' is not an App ID, a positive integer with no leading zero";
+        return refused("github: the merge queue writes only as its own GitHub App, and none is named; register one",
+            url: registrationURL(web, repo: repo, org: org), app: "<slug>");
     }
     final user = get(apiBase() + "/users/" + escape(slug + "[bot]"), hdrs: hdrs);
     if (user["status"] == 404) {
-        return missingApp("github: no GitHub App is named {slug}, since GitHub has no user {slug}[bot]; an app's slug ends the address of its settings page, and the apps are listed",
-            url: appsPage(web, owner: owner, org: org), slug: "");
+        return refused("github: no GitHub App is named {slug}, since GitHub has no user {slug}[bot]; an app's slug ends the address of its settings page, and the apps are listed",
+            url: appsPage(web, owner: owner, org: org), app: "<slug>");
     }
     final bot = botFrom(slug, user: expect(user, status: 200, what: "read the bot of the app {slug}"));
     final app = readApp(slug, given: given, owner: owner, org: org, hdrs: hdrs);
@@ -364,7 +361,7 @@ export fun describe(io: {str: any}) > any !> any {
         if (org) {
             reason = "github: GitHub shows the App ID of the private app {slug} only to its own installation's token and, once it is installed on {owner}, to an owner of {owner}";
         }
-        return missingApp(reason + "; it is under About on the app's settings page", url: appsPage(web, owner: owner, org: org) + "/" + slug, slug: slug);
+        return refused(reason + "; it is under About on the app's settings page", url: appsPage(web, owner: owner, org: org) + "/" + slug, app: slug + ":<id>");
     }
     final steps = "{io["setup_steps"] ?? false}" == "true";
     final branch = readFor(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
@@ -381,10 +378,26 @@ export fun describe(io: {str: any}) > any !> any {
         reports: reports, rulesets: rulesets, app: app!, steps: steps), committer: bot);
 }
 
-// missingApp is describe declining to describe a setup: reason says what is missing, url
-// where GitHub shows it, and slug names the app when only its id is missing.
-fun missingApp(reason: str, url: str, slug: str) > any {
-    return {"missing_app": {"reason": reason, "url": url, "slug": slug}};
+// refused is describe declining to describe a setup: reason says what is missing, url
+// where GitHub shows it, and app is the app to ask again with.
+fun refused(reason: str, url: str, app: str) > any {
+    return {"refused": {"reason": reason, "url": url, "app": app}};
+}
+
+// parseApp reads the queue's app as a person names it: the GitHub App's slug, followed
+// by ":" and its App ID where GitHub hides the app from the token describe reads with.
+// Empty names none.
+fun parseApp(value: str) > {str: str} !> any {
+    final cut = value.indexOf(":");
+    if (cut == null) {
+        return {"slug": value, "id": ""};
+    }
+    final slug = value.sub(0, len: cut ?? 0);
+    final given = value.sub((cut ?? 0) + 1);
+    if (slug == "" or !isAppID(given)) {
+        throw "github: the app '{value}' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero";
+    }
+    return {"slug": slug, "id": given};
 }
 
 // appsPage lists the GitHub Apps owner registered: a user's under their settings, an
@@ -1633,7 +1646,7 @@ fun mergeFailure(res: {str: any}) > any !> any {
 // merged.
 export fun merge_change(io: {str: any}) > any !> any {
     final hdrs = writing("merge_change");
-    final app = serialize\Boxed.init(io["app"]).q("slug").stringValue();
+    final app = parseApp("{io["app"] ?? ""}")["slug"] ?? "";
     if (app == "") {
         throw "github: merge_change merges only as the queue's own GitHub App, and names none";
     }
@@ -2841,6 +2854,21 @@ test "an App ID is a positive integer as GitHub writes one" {
     }
     foreach (s in ["", "0", "0812", "+812", "-812", "812 ", "8.12", "Iv23li", "1e3"]) {
         assert\equal(isAppID(s), want: false, message: s);
+    }
+}
+
+test "the app is a slug, with its App ID after a colon where GitHub hides it" {
+    assert\equal(parseApp(""), want: {"slug": "", "id": ""}, message: "none");
+    assert\equal(parseApp("magus-queue"), want: {"slug": "magus-queue", "id": ""}, message: "a slug");
+    assert\equal(parseApp("magus-queue:2034567"), want: {"slug": "magus-queue", "id": "2034567"}, message: "a slug and its App ID");
+    foreach (value in [":2034567", "magus-queue:", "magus-queue:0812", "magus-queue:Iv23li", "magus-queue:1:2"]) {
+        var reason = "";
+        try {
+            final _ = parseApp(value);
+        } catch (e) {
+            reason = "{e}";
+        }
+        assert\equal(reason, want: "github: the app '{value}' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero", message: value);
     }
 }
 

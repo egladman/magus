@@ -293,31 +293,23 @@ func TestQueueDescribeSaysWhenTheBaseRequiresNoApproval(t *testing.T) {
 }
 
 // setupProvider describes a setup naming the status context and app describe was asked
-// about, so a test reads the query from the answer. It declines one for the app
-// "unknown", and for the app "hidden" unless the id is given, and pins that one to it.
+// about, so a test reads the query from the answer. It declines one for the apps
+// "unknown" and "hidden", asking again with "<slug>" and "hidden:<id>".
 const setupProvider = `
-import "serialize";
-
 export fun describe(io: {str: any}) > any {
     if (io["status_context"] == "") {
         return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2};
     }
-    final slug = serialize\Boxed.init(io["app"]).q("slug").stringValue();
-    final id = serialize\Boxed.init(io["app"]).q("id").stringValue();
-    if (slug == "unknown") {
-        return {"missing_app": {"reason": "no app is named unknown", "url": "https://example.invalid/apps"}};
+    if (io["app"] == "unknown") {
+        return {"refused": {"reason": "no app is named unknown", "url": "https://example.invalid/apps", "app": "<slug>"}};
     }
-    if (slug == "hidden" and id == "") {
-        return {"missing_app": {"reason": "no id for hidden", "url": "https://example.invalid/apps/hidden", "slug": slug}};
-    }
-    if (slug == "hidden") {
-        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2,
-            "setup": {"status_context": io["status_context"], "credential": {"id": id}, "app": {"slug": slug, "id": id}, "steps": [<any>]}};
+    if (io["app"] == "hidden") {
+        return {"refused": {"reason": "no id for hidden", "url": "https://example.invalid/apps/hidden", "app": "hidden:<id>"}};
     }
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "required_approvals": 2, "queue_label": "queue: ",
         "setup": {
             "status_context": io["status_context"],
-            "credential": {"id": "812", "name": slug},
+            "credential": {"id": "812", "name": "{io["app"]}"},
             "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["pull_request"]}],
             "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
             "steps": [
@@ -361,51 +353,46 @@ gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true
 `, string(out))
 }
 
-// A provider that needs the app, or its id, says what and where; describe adds the
-// command that runs it again with the flags it was given.
-func TestQueueDescribeRendersTheRerunAMissingAppNeeds(t *testing.T) {
+// A provider that declines says what is missing and where; describe adds the command
+// that runs it again with the flags it was given and the app the provider asked for.
+func TestQueueDescribeRendersTheRerunARefusalAsksFor(t *testing.T) {
 	withOutput(t, "")
 	f := newSetupFixture(t)
 	root := shellWord(f.root)
 	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden")
-	var missing *types.MissingAppError
-	require.ErrorAs(t, err, &missing)
+	var refused *types.SetupRefusedError
+	require.ErrorAs(t, err, &refused)
 	assert.EqualError(t, err, "magus queue describe: no id for hidden: https://example.invalid/apps/hidden; then run: magus --root "+root+
-		" queue describe --provider local.buzz --base main --app hidden:<id>")
+		" queue describe --provider local.buzz --base main --app 'hidden:<id>'")
 	_, err = f.run(t, "", "describe", "--status-context", "my gate", "--remote", "origin", "--vcs", "git", "--app", "unknown",
 		"--base", "main", "--provider", "local.buzz")
 	assert.EqualError(t, err, "magus queue describe: no app is named unknown: https://example.invalid/apps; then run: magus --root "+root+
-		" queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app <slug>")
+		" queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app '<slug>'")
 }
 
-// The id rides in --app after the slug and reaches the provider in the same record.
-func TestQueueDescribeTakesTheAppsIDInTheAppFlag(t *testing.T) {
+// --app is the provider's to read: the queue hands it over exactly as given.
+func TestQueueDescribePassesTheAppFlagThroughUnread(t *testing.T) {
 	withOutput(t, "")
 	f := newSetupFixture(t)
-	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden:2034567")
+	out, err := f.run(t, "", "describe", "-o", "json", "--provider", "local.buzz", "--base", "main", "--app", ":a b:c:")
 	require.NoError(t, err)
-	assert.Equal(t, `# local.buzz on main: merge methods squash; stacks merge atomic
-# main requires 2 approving reviews at the commit a review of a change's head covers
-# the queue posts "merge-queue" as 2034567
-# main requires no check
-# app hidden is integration 2034567
-# nothing left to set up
-`, string(out))
-}
-
-func TestQueueRefusesAnAppFlagOfAnotherShape(t *testing.T) {
-	withOutput(t, "")
-	f := newQueueFixture(t, "", "")
-	for _, app := range []string{":2034567", "hidden:", ":"} {
-		_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", app)
-		var misuse errUsage
-		require.ErrorAs(t, err, &misuse, app)
-		assert.EqualError(t, err, "magus queue describe: --app "+strconv.Quote(app)+" is not <slug> or <slug>:<id>")
-		_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--app", app, "verdicts")
-		assert.EqualError(t, err, "magus queue apply: --app "+strconv.Quote(app)+" is not <slug> or <slug>:<id>")
+	var doc struct {
+		Setup types.Setup `json:"setup"`
 	}
-	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q", "--app-id", "2034567")
-	assert.ErrorContains(t, err, "flag provided but not defined: -app-id")
+	require.NoError(t, json.Unmarshal(out, &doc))
+	assert.Equal(t, types.Setup{
+		StatusContext: "merge-queue",
+		Credential:    types.Integration{ID: "812", Name: ":a b:c:"},
+		RequiredChecks: []types.RequiredCheck{
+			{Context: "merge-queue", Integration: "15368"},
+			{Context: "ci gate", Events: []string{"pull_request"}},
+		},
+		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
+		Steps: []types.SetupStep{
+			{Title: "Allow auto-merge", Command: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
+			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
+		},
+	}, doc.Setup)
 }
 
 // -o json carries the setup as the capabilities document's structure.

@@ -43,8 +43,8 @@ apply report what would merge and call nothing on the provider.
 
 ### queue describe options
 
-**--app** *slug[:id]*
-: App apply writes with, as \`slug[:id]\`; the id only where the provider cannot read it (github: a GitHub App, required with a --status-context)
+**--app** *app*
+: \`app\` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)
 
 **--base** *branch*
 : \`branch\` the queue merges into
@@ -144,8 +144,8 @@ apply report what would merge and call nothing on the provider.
 
 ### queue apply options
 
-**--app** *slug[:id]*
-: App whose credential the provider writes with, as \`slug[:id]\` (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)
+**--app** *app*
+: \`app\` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)
 
 **--base** *branch*
 : \`branch\` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
@@ -223,7 +223,7 @@ magus queue describe --provider github --base main
 magus queue describe --provider github --base main --app acme-magus-queue
 ```
 
-*The same for an app whose id the provider cannot read*
+*The same for a private app whose App ID GitHub hides*
 
 ```sh
 magus queue describe --provider github --base main --app acme-magus-queue:2034567

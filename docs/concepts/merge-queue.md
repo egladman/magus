@@ -907,17 +907,18 @@ pushes as, which commits every update commit unless `--committer` overrides it.
 `setup` is asked for with a `status_context`: `{status_context, credential: {id, name?},
 required_checks: [{context, integration?, events?}], settings: [{name, value, want}],
 app?, steps: [{title, command? or url?}]}`. `credential` is the integration the write
-credential posts statuses as (the `app` named; GitHub's provider requires one), whose
-`id` is never empty and equals `app.id` when the setup carries an `app`;
+credential posts statuses as (the `app` named; GitHub's provider requires one),
 `required_checks` what the base requires and the integration each is pinned to, and
 `steps` only when `setup_steps` is true, since they cost reads a job's token may not be
 allowed. A provider that returns no `setup` skips apply's credential check. The `app`
-that `describe` and `merge_change` receive is `{slug, id}`, the `--app` a person gave: `id` is
-empty unless they gave one after the slug, and both are empty when no app is named. A
-`describe` that cannot name the credential's integration returns `{missing_app: {reason,
-url, slug?}}` instead of the capabilities: what is missing, where the provider shows it,
-and the app's slug when only its id is missing. `magus queue describe` prints it with the
-command that runs it again, and `apply` stops on it.
+that `describe` and `merge_change` receive is `--app` exactly as a person gave it, in
+the provider's own notation, which the queue never reads (GitHub's: the app's slug,
+with `:<App ID>` where GitHub hides the app). A `describe` that cannot describe a setup
+for that app returns `{refused: {reason, url, app}}` instead of the capabilities: what
+is missing, where the provider shows it, and the `--app` to ask again with,
+placeholders included (`<slug>`, `q:<id>`). All three are required and non-empty.
+`magus queue describe` prints it with the command that runs it again, that `app` in
+place of the `--app` it was given, and `apply` stops on it.
 `list_artifacts`' `run` is `{repo, head_repo, head_branch, event, branch_event,
 definition}`: the repository the run belongs to and the one whose commit it ran, the
 branch it ran on, what started it, whether that event runs the branch's own copy of the
@@ -930,7 +931,7 @@ the queue carries over only across a rebase that changed nothing. `list_green` n
 every open change, whatever it targets, whose head carries the status `context` at
 success. `through` lists the changes beneath a stack's top that merge in the same call,
 lowest first, each with the commit it must still be at. `app` is apply's `--app`, the
-app the merge is made as, in the same `{slug, id}` shape. `merge_change` sets
+app the merge is made as. `merge_change` sets
 `by_provider` when the provider merged the change on its own rather than on this call;
 left out, it reads as the call's merge. `kick_back`'s `report` is Markdown in the
 queue's own words, every file name in it a code span. `claim` is what the verdict said
