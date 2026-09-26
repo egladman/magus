@@ -19,7 +19,7 @@ import (
 // the per-host guide pages under docs/guides/integrations/agents/ rather than guessed.
 //
 // The entries name PATHS and the descriptions name none of the hosts, which is the rule
-// TestNoHostSpecificBehaviorInCode enforces and also the honest division: a reader looking
+// the hostagnostic linter enforces and also the honest division: a reader looking
 // at a verdict about their own config file knows which host it belongs to, and a magus
 // that enumerated host names in prose would need a release per host.
 //
