@@ -731,7 +731,7 @@ func validationNamesGate(validation string) bool {
 // The command is parsed before the ledger is read: every tool call under a bound lease
 // reaches this rule, and most of them are not git.
 func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
-	if actingLease == "" {
+	if actingLease == "" || helpOnlyLine(command, DialectBash) {
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
