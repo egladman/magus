@@ -22,6 +22,10 @@
 //   go-into-checkout (deny): `go -C` into another checkout of magus, bootstrap link aside.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
 //     sources that have since moved, by the stamp go-build links into it.
+//   stale-write (deny): a magus verb that writes state other checkouts or magus versions
+//     read (init, server start, config set, agent install, agent harness apply/install/remove)
+//     run by a ./magus stale-binary judges stale, or, for state outside the checkout, by one
+//     whose stamped commit is not on the base branch.
 //   change-role-spawn-not-isolated (deny, spawn): a code-changing worker sharing a checkout.
 //   changelog-unreleased-edit (deny, write): a hand edit adding to CHANGELOG.md's
 //     [Unreleased] section, once changes/unreleased/ exists.
@@ -53,6 +57,13 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace }, disk: binaries\onDisk());
     if (denial != "") {
         return magus\guard.deny(denial);
+    }
+    final hook = fun () > stale\HookBinary {
+        return stale\hookBinary(req.workspace);
+    };
+    final write = stale\decideStateWrite(programs, bin: hook, onBase: stale\onBase(req.workspace));
+    if (write.decision != "allow") {
+        return write;
     }
     var checkout: cadence\Checkout? = null;
     if (req.checkout != null) {

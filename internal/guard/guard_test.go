@@ -390,6 +390,21 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Contains(t, v.Reason+v.Context, "./magus run go-build .")
 	})
 
+	// The test binary carries no go-build stamp, so the stale-binary rule judges it stale,
+	// and a state-writing verb it would run is denied where a read-only one is advised.
+	covered["stale-write"] = true
+	t.Run("stale-write", func(t *testing.T) {
+		exe, err := os.Executable()
+		require.NoError(t, err)
+		ws := checkout(t, false)
+		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
+		v := judgeIn(t, ws, "./magus init --vcs git")
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Contains(t, v.Reason, "no go-build stamp")
+		assert.Equal(t, "advise", judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
+	})
+
 	source, err := os.ReadFile(filepath.Join(root, "tools", "policy", "guard.buzz"))
 	require.NoError(t, err)
 	listed := policyRule.FindAllStringSubmatch(string(source), -1)
