@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"mvdan.cc/sh/v3/syntax"
@@ -440,7 +441,7 @@ func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
 		if cdAt < 0 {
 			return false
 		}
-		return slices.ContainsFunc(cmds[cdAt+1:], isMagusInvocation)
+		return slices.ContainsFunc(cmds[cdAt+1:], isMagusWork)
 	}
 	return cdCmdRe.MatchString(command) && magusMentionRe.MatchString(command)
 }
@@ -453,6 +454,11 @@ func isCdInvocation(c hint.Invocation) bool {
 // not by suffix, so `./magus` and an absolute path both count while `notmagus` does not.
 func isMagusInvocation(c hint.Invocation) bool {
 	return filepath.Base(c.Name) == "magus"
+}
+
+// isMagusWork reports a magus invocation that lands on a project: anything but a help request.
+func isMagusWork(c hint.Invocation) bool {
+	return isMagusInvocation(c) && !magusHelpRequest(c.Args)
 }
 
 // rawWord returns a word's SOURCE text, quotes stripped.
@@ -482,7 +488,13 @@ func rawWord(command string, w *syntax.Word) string {
 // instance of the same mistake (a sibling checkout of this repository) can only
 // be recognized by reading the filesystem, so it lives in internal/guard/checkout.go and
 // shares magusCdTargets rather than growing a second cd scanner.
+//
+// A line whose every magus call is a help request judges no tree, so it passes.
 func magusInThrowawayCopy(command string, d Dialect) bool {
+	cmds, parsed := ParseCommandsDialect(command, d)
+	if parsed && !slices.ContainsFunc(cmds, isMagusWork) {
+		return false
+	}
 	return slices.ContainsFunc(magusCdTargets(command, d), throwawayDirRe.MatchString)
 }
 
@@ -511,9 +523,10 @@ func mentionsMagusCommand(command string, d Dialect) bool {
 // rules should catch: a structured record with a `-o` shape a text filter has no
 // business reaching for.
 //
-// Two exemptions carry the same reasoning: `magus query output <ref>` (a raw
-// captured log with no schema to project) and `magus refs <pattern> --text` (a
-// raw grep replacement whose whole purpose is being piped or redirected). Every
+// Three exemptions carry the same reasoning: `magus query output <ref>` (a raw
+// captured log with no schema to project), `magus refs <pattern> --text` (a
+// raw grep replacement whose whole purpose is being piped or redirected), and a
+// help request, whose usage text is neither a record nor in any run log. Every
 // OTHER refs invocation is a symbol lookup that renders a structured record
 // `-o` already shapes, so only the --text spelling is let through.
 //
@@ -530,6 +543,9 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 			continue
 		}
 		if magusInvokes(one, "refs") && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+			continue
+		}
+		if magusHelpRequest(c.Args) {
 			continue
 		}
 		return true
@@ -634,13 +650,11 @@ func rawToolDenied(deps Dependencies, c hint.Invocation) bool {
 // the affected set exactly as the rewriting form does, and the exemption those used to
 // have is what let a whole tool family run raw.
 //
-// `--version` still passes. It asks the binary what it is rather than running it over the
-// tree, and a guard funnels a capability rather than removing one.
+// A help or version request passes (helpRequest): it reads the tool's documentation and
+// runs nothing over the tree, and a guard funnels a capability rather than removing one.
 func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
-	for _, a := range c.Args {
-		if a == "--version" || a == "-version" || a == "-V" {
-			return toolMatch{}, false
-		}
+	if helpRequest(deps, c) {
+		return toolMatch{}, false
 	}
 	// Read once: every rendering that reaches the comparison below has already been
 	// checked to name this same program, so the invocation reads the same way for all of
@@ -666,6 +680,119 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 		}
 	}
 	return toolMatch{}, false
+}
+
+// helpRequest reports an invocation whose only effect is printing the tool's usage or
+// version. The rules that route WORK through magus (raw-tool, process-poll, output-pipe,
+// output-redirect, cd, throwaway-copy and the dependency and install advisories) let one
+// through; the rules guarding credentials, destructive operations, human sign-off and
+// other checkouts never consult it.
+//
+// It reads the argv the tool itself would read, and anything it cannot place is work:
+//
+//   - A help or version flag must be the LAST word, so `go test ./... -args --help` and
+//     `go run main.go --help` hand the flag to a program rather than to the tool.
+//   - A help flag may follow a subcommand path only when a spell renders that exact path
+//     (`go clean`, `go mod tidy`, `golangci-lint run`). A path the catalog does not name
+//     cannot be told from an operand: `go run foo --help` runs foo.
+//   - A version flag counts only alone (`go --version`): `go test --version` hands it to
+//     the test binary, which is compiled first.
+//   - `--help` and `--version` hold for any program. `-h`, `-help`, `-V` and `-version`
+//     hold only for one a spell renders, whose grammar magus models: elsewhere `grep -h`
+//     drops file names, `ps -h` drops the header and `sort -V` sorts versions.
+//   - `<tool> help [<sub>...]` holds for a program a spell renders WITH subcommands. A
+//     single-purpose program reads the word as an operand: `gofmt help` formats a file.
+//
+// `man <tool>` and `<tool> version` are not recognized. No routing rule judges `man`,
+// whose own name is the program, and a `version` verb reaches raw-tool only when a spell
+// renders it as an operation, which makes it work.
+func helpRequest(deps Dependencies, c hint.Invocation) bool {
+	if isMagusInvocation(c) {
+		return magusHelpRequest(c.Args)
+	}
+	if len(c.Args) == 0 {
+		return false
+	}
+	path, last := c.Args[:len(c.Args)-1], c.Args[len(c.Args)-1]
+	helpFlag := slices.Contains([]string{"--help", "-h", "-help"}, last)
+	versionFlag := slices.Contains([]string{"--version", "-V", "-version"}, last)
+	if !helpFlag && !versionFlag && !slices.Contains(c.Args, "help") {
+		return false
+	}
+	paths, rendered := renderedSubcommands(deps, c.Name)
+	if helpFlag || versionFlag {
+		if !rendered && last != "--help" && last != "--version" {
+			return false
+		}
+		if len(path) == 0 {
+			return true
+		}
+		have := afterGlobalFlags(c.Name, path)
+		return helpFlag && slices.ContainsFunc(paths, func(p []string) bool { return slices.Equal(p, have) })
+	}
+	have := afterGlobalFlags(c.Name, c.Args)
+	return len(paths) > 0 && len(have) > 0 && have[0] == "help" &&
+		!slices.ContainsFunc(have[1:], func(a string) bool { return !subcommandWord(a) })
+}
+
+// magusHelpRequest reads a magus argv the way cmd/magus does (wantsUsage there): `-h` or
+// `--help` anywhere before `--` is usage, since no subcommand takes either as a
+// positional. The bare word `help` is usage only where magus dispatches it: at the root,
+// right after a top-level command, or right after a group. After a leaf it is data, as in
+// `magus memory get help`.
+func magusHelpRequest(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	level, depth := cli.All, 0
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if depth == 0 && strings.HasPrefix(a, "-") {
+			name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+			takesValue, known := MagusFlagTakesValue(name)
+			if !known {
+				return false
+			}
+			if takesValue && !joined {
+				i++
+			}
+			continue
+		}
+		if a == "help" {
+			return depth <= 1 || len(level) > 0
+		}
+		j := slices.IndexFunc(level, func(cmd cli.Command) bool { return cmd.Name == a })
+		if j < 0 {
+			return false
+		}
+		level, depth = level[j].Children, depth+1
+	}
+	return false
+}
+
+// renderedSubcommands reads the spell catalog for how magus itself runs program: whether
+// any operation renders it, and the subcommand path of each rendering that names one.
+func renderedSubcommands(deps Dependencies, program string) (paths [][]string, rendered bool) {
+	for _, spell := range deps.spells() {
+		for _, operation := range spell.Targets() {
+			for _, charms := range [][]string{nil, {"rw"}} {
+				bin, args, ok, err := spell.RenderCommand(operation, charms)
+				if err != nil || !ok || bin == "" || filepath.Base(bin) != program {
+					continue
+				}
+				rendered = true
+				if p := commandPrefix(bin, args); p != nil {
+					paths = append(paths, p)
+				}
+			}
+		}
+	}
+	return paths, rendered
 }
 
 // installAdvised reports a command that is some spell's declared install run bare, such
@@ -1380,6 +1507,8 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// let a trailing `git commit` downgrade a deny to an advisory. Deny always
 	// outranks advise, whichever rule saw the line first.
 	cmds, parsed := ParseCommandsDialect(command, d)
+	// The rules that route work through magus judge only the commands that do some.
+	work := slices.DeleteFunc(slices.Clone(cmds), func(c hint.Invocation) bool { return helpRequest(deps, c) })
 	// Authoring a note is refused before anything else, because it is the one rule whose
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and
 	// these verbs are commands.
@@ -1403,7 +1532,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	// Beside busy-wait: both invent a waiter for work magus already tracks. This one is
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
-	if parsed && processPollFires(cmds) {
+	if parsed && processPollFires(work) {
 		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}
 	}
 	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
@@ -1484,7 +1613,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		// The WHOLE line is scanned, not just the denied command: `go test ./... &&
 		// npm update` denies on the first half, and the reader was never told the
 		// second half rewrites a lockfile: the deny is the only text they get.
-		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
+		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(work, isDependencyMutation) {
 			reason += "\n" + updateAdvice
 		}
 		return ShellVerdict{
@@ -1505,9 +1634,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
 	}
 	switch {
-	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
+	case parsed && slices.ContainsFunc(work, isDependencyMutation):
 		return ShellVerdict{Context: updateGuardContext}
-	case parsed && slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
+	case parsed && slices.ContainsFunc(work, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
 		return ShellVerdict{Context: installGuardContext}
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}

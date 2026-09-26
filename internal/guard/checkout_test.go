@@ -63,6 +63,8 @@ func TestDenySiblingCheckoutIsDirectionAgnostic(t *testing.T) {
 	t.Chdir(wt)
 
 	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run test ."))
+	// Another checkout is protected rather than routed, so a help request is refused too.
+	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run --help"))
 }
 
 // The boundary that keeps this shippable. A cd into a DIFFERENT repository is
