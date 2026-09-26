@@ -163,7 +163,7 @@ Apply what <source> holds now and stop, rather than following it until it is com
 `provider`: a built\-in name (github) or a .buzz file
 .TP
 \fB\-\-regenerate\fR \fIcommand\fR
-The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it
+The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from

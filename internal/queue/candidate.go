@@ -519,20 +519,6 @@ func commitRegenerated(ctx context.Context, v types.BuildVCS, b built, keep []st
 	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", b.date), Paths: keep})
 }
 
-// generationOf asks the build tool what regenerating outputs runs, against every file c
-// changed since baseCommit.
-func generationOf(ctx context.Context, v types.ReadVCS, f types.BuildFacts, root, baseCommit string, c types.Change, outputs []string) (types.Generation, error) {
-	changed, err := v.RangeFiles(ctx, root, baseCommit, c.Head, nil)
-	if err != nil {
-		return types.Generation{}, err
-	}
-	g, err := f.Generation(ctx, outputs, changed)
-	if err != nil {
-		return types.Generation{}, fmt.Errorf("generation of %s: %w", joinPaths(outputs), err)
-	}
-	return g, nil
-}
-
 // unprovenWhy says why g does not prove a regeneration runs none of a change's code, and
 // the paths that say so, falling back to outputs.
 func unprovenWhy(g types.Generation, outputs []string) (string, []string) {
@@ -624,6 +610,55 @@ func linkIn(root *os.Root, p string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// unexpectedMode returns the first of paths that the checkout at candDir holds as
+// anything but a regular file (git's 100644 or 100755), or executable where the checkout
+// at mergedDir does not hold it executable, or not where it does, and says which. A path
+// it does not hold was removed, which a regeneration may do. A symbolic link at or above
+// a path (120000) checks out as a link and a submodule (160000) as a directory, so
+// neither passes.
+func unexpectedMode(candDir, mergedDir string, paths []string) (path, why string, err error) {
+	cand, err := os.OpenRoot(candDir)
+	if err != nil {
+		return "", "", err
+	}
+	defer cand.Close()
+	merged, err := os.OpenRoot(mergedDir)
+	if err != nil {
+		return "", "", err
+	}
+	defer merged.Close()
+	executable := func(info fs.FileInfo) bool { return info.Mode().Perm()&0o111 != 0 }
+	for _, p := range paths {
+		at, err := linkIn(cand, p)
+		if err != nil {
+			return "", "", err
+		}
+		if at != "" {
+			return p, "a symbolic link", nil
+		}
+		info, err := cand.Lstat(p)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			return "", "", err
+		case !info.Mode().IsRegular():
+			return p, "something other than a regular file", nil
+		}
+		was, err := merged.Lstat(p)
+		wasExecutable := err == nil && was.Mode().IsRegular() && executable(was)
+		switch {
+		case err != nil && !errors.Is(err, fs.ErrNotExist):
+			return "", "", err
+		case executable(info) && !wasExecutable:
+			return p, "an executable file", nil
+		case !executable(info) && wasExecutable:
+			return p, "a file no longer executable", nil
+		}
+	}
+	return "", "", nil
 }
 
 func queueMeta(msg string, date time.Time) magustypes.CommitMeta {

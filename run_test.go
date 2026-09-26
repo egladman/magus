@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,12 +17,14 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -1623,6 +1626,57 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "reason=bootstrap")
 }
 
+// TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a run
+// sizes its claim from the measured peaks of runs shaped like it, and records its own
+// outcome under that same shape for the next run to read.
+func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	const spellName = "zzz-shaped-claim-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("work"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	var logged syncBuffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	args := []string{"-run", "X"}
+	shape := forecast.NewShape([]string{types.CharmReadWrite}, args)
+	seeded := forecast.History{Version: forecast.HistoryVersion, Projects: map[string]map[string]forecast.Stats{
+		".": {spellName + "/work": {RecentOutcomes: slices.Repeat([]forecast.Outcome{{
+			Result: forecast.OutcomePass, MaxRSSBytes: 10 << 20, Charms: shape.Charms, ArgsHash: shape.ArgsHash,
+		}}, 3)}},
+	}}
+	historyPath := filepath.Join(root, "history.json")
+	require.NoError(t, seeded.Save(context.Background(), historyPath))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName), WithTarget("work", workspace.MemoryMB(64)))
+	cfg := config.Defaults()
+	cfg.HistoryPath = historyPath
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "work"}},
+		WithCharms(types.CharmReadWrite), WithExtraArgs(args)))
+	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs\"", "ceil(1.25 x 10MB), under the 64MB declared")
+
+	var got forecast.History
+	require.NoError(t, got.Load(context.Background(), historyPath))
+	outcomes := got.Projects["."][spellName+"/work"].RecentOutcomes
+	require.Len(t, outcomes, 4)
+	assert.Equal(t, shape.Charms, outcomes[3].Charms)
+	assert.Equal(t, shape.ArgsHash, outcomes[3].ArgsHash)
+}
+
 // TestUndeclaredScopeEvent pins the scope event MGS1028 rides to the console: which
 // targets produce one, that a project is reported once however many targets it
 // contributed, and the input/not-input split the notification tier keys on.
@@ -1725,6 +1779,71 @@ func TestApplyRunKeyingCarriesObservations(t *testing.T) {
 	assert.Equal(t, []string{"schema-rev=a1b2c3", "docker:trivy:db 2026-09-10"}, step.Observations)
 	assert.Equal(t, []string{"go:go:1.25"}, step.ToolVersions)
 	assert.Equal(t, []string{"rw"}, step.Charms)
+}
+
+// TestTargetDrivenEnvKeys pins the two ways an op's EnvKeys reach a target's key: composed
+// inside a magusfile body under another target name (TargetSpellOps, same as
+// targetDrivenBins), and a bare op dispatched straight off its own name with no magusfile
+// body to extract from at all: what a plain `magus run go-vet` and the `go::go-vet`
+// spell filter both do.
+func TestTargetDrivenEnvKeys(t *testing.T) {
+	sp := spells.NewSpell("go", spells.WithOps(map[string]spells.Op{
+		"go-vet":   {Command: spells.Command{Bin: "go", Args: []string{"vet"}, EnvKeys: []string{"GOOS", "GOARCH"}}},
+		"go-clean": {Command: spells.Command{Bin: "go", Args: []string{"clean"}}},
+	}))
+	p := &types.Project{
+		Path:           ".",
+		ResolvedSpells: []*spells.Spell{sp},
+		TargetSpellOps: map[string][]types.TargetSpellUse{
+			"lint": {{Spell: "go", Ops: []string{"go-vet"}}},
+		},
+	}
+
+	assert.Equal(t, []string{"GOOS", "GOARCH"}, targetDrivenEnvKeys(p, "lint"),
+		"a magusfile body composing go-vet under another name carries its EnvKeys")
+	assert.Equal(t, []string{"GOOS", "GOARCH"}, targetDrivenEnvKeys(p, "go-vet"),
+		"a bare op dispatched off its own name carries its EnvKeys with no magusfile body to extract from")
+	assert.Empty(t, targetDrivenEnvKeys(p, "go-clean"),
+		"an op that declares no EnvKeys keys on nothing extra")
+	assert.Empty(t, targetDrivenEnvKeys(p, "test"),
+		"a target that names no spell op and matches no op's own name carries nothing")
+}
+
+// TestComputeTargetKeyFoldsOpDeclaredEnvKeys is the regression pin for the GOOS/GOARCH
+// cross-platform cache bug: an op that declares EnvKeys must key differently under a
+// different value of that variable even though nothing else about the run changed and no
+// magusfile body declared ctx.envInputs itself. Before targetDrivenEnvKeys, GOOS never
+// reached the key for a bare op-as-target, so `GOOS=windows magus run go::go-vet` and a
+// plain `magus run go::go-vet` shared one cache entry and a failure from one replayed onto
+// the other.
+func TestComputeTargetKeyFoldsOpDeclaredEnvKeys(t *testing.T) {
+	const spellName = "zzz-platform-spell"
+	s := spells.NewSpell(spellName, spells.WithOps(map[string]spells.Op{
+		"build": {Command: spells.Command{Bin: "true", EnvKeys: []string{"GOOS"}}},
+	}), spells.WithTargets("build"))
+	project.DefaultSpellRegistry().RegisterSpell(s)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	ctx := context.Background()
+
+	t.Setenv("GOOS", "linux")
+	linuxKey, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey (GOOS=linux)")
+
+	t.Setenv("GOOS", "windows")
+	windowsKey, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey (GOOS=windows)")
+
+	assert.NotEqual(t, linuxKey, windowsKey,
+		"an op declaring EnvKeys=[GOOS] must key differently for different GOOS, or a failing cross-platform run replays onto a same-platform one")
 }
 
 // A retired charm name no selected target declares fails the run; any other undeclared

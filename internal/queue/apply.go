@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,9 +18,10 @@ import (
 const DefaultStatusContext = "merge-queue"
 
 // Applier is the write step of a queue run. It trusts nothing validation produced but
-// its decision: it rebuilds each validated candidate itself, from the change's head, the
-// base and the base's own regeneration, and merges only what matches what validation
-// gated. It re-checks, without running any change's code, everything else it can:
+// its decision and bytes it can check: it rebuilds each validated candidate itself, from
+// the change's head, the base and the base's own regeneration or validation's
+// regenerated outputs, and merges only what matches what validation gated. It re-checks,
+// without running any change's code, everything else it can:
 // approval at the head, merge intent, the change's base and merge method, that the head
 // has not moved, that the provider's merge carries exactly the rebuilt tree, and
 // afterwards that the base branch does and has the shape the merge method gives.
@@ -61,11 +63,13 @@ type Applier struct {
 	Committer magustypes.Person
 	// Regenerate is the base's own regeneration. An Applier runs it where validation's
 	// candidate holds regenerated files, and only once the build tool proved it runs
-	// none of the change's code. Nil kicks every such change back to its author. It runs
-	// in the job holding the write credential over a checkout carrying the change's
-	// files, so it must be confined to that checkout and fail rather than run
-	// unconfined: [CommandRegenerate] runs it in the base's sandbox, which `magus queue
-	// apply --sandbox=required` holds to the kernel's confinement.
+	// none of the change's code; where it cannot, the Applier takes validation's
+	// regenerated candidate from the verdict source's bundle once it checks it (see
+	// takeValidated), and kicks the change back only without one. It runs in the job
+	// holding the write credential over a checkout carrying the change's files, so it
+	// must be confined to that checkout and fail rather than run unconfined:
+	// [CommandRegenerate] runs it in the base's sandbox, which `magus queue apply
+	// --sandbox=required` holds to the kernel's confinement.
 	Regenerate types.RegenerateFunc
 	// Source names the validation run the verdicts come from, as the provider names it,
 	// for each kick-back to point at; empty when they come from a directory.
@@ -122,7 +126,8 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		return fmt.Errorf("committer %q <%s> needs a name and an email", a.Committer.Name, a.Committer.Email)
 	}
 	r := &applyRun{Applier: a, plan: plan, committer: a.Committer, merged: map[string]bool{}, got: map[string]types.Verdict{},
-		rebuilt: map[string]string{}, confirmed: map[string]string{}, onBase: map[string]bool{plan.BaseCommit: true}}
+		rebuilt: map[string]string{}, confirmed: map[string]string{}, onBase: map[string]bool{plan.BaseCommit: true},
+		bundles: map[string]string{}, taken: map[string]bool{}}
 	if !a.DryRun {
 		caps, err := a.provider.Describe(ctx, types.ListQuery{Base: a.Base, RemoteURL: a.RemoteURL, StatusContext: a.statusContext(), App: a.App})
 		if err != nil {
@@ -162,6 +167,7 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		for _, v := range batch.Verdicts {
 			r.accept(v)
 		}
+		maps.Copy(r.bundles, batch.Bundles)
 		for _, rej := range batch.Rejected {
 			r.reject(rej)
 		}
@@ -239,6 +245,8 @@ type applyRun struct {
 	confirmed map[string]string // change -> the head the provider reported for it this run
 	onBase    map[string]bool   // base tips found to carry the plan's base commit
 	listing   *types.Changes    // the provider's own listing, read once a stack needs it
+	bundles   map[string]string // change -> the bundle of validation's regenerated candidate
+	taken     map[string]bool   // change -> its candidate is validation's, checked by takeValidated
 }
 
 // accept files a verdict under the plan's own record of its change. A verdict names
@@ -427,6 +435,9 @@ type ready struct {
 	onto     string // what cand was rebuilt onto
 	cand     string // the candidate rebuilt here
 	tree     string // the tree the base carries once it merges
+	// stale names the required checks that failed on an older base: the change gets an
+	// update commit carrying tip, which runs them again, instead of a merge.
+	stale []string
 }
 
 // onto is the commit this run rebuilds v's candidate onto: the plan's base at the
@@ -653,6 +664,10 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 		return nil, r.kick(ctx, c, refusal(&types.RefusedError{Reason: "the repository does not allow the " + string(a.Method) + " merge method",
 			Remedy: "Pick a merge method it allows."}))
 	}
+	stale, settled, err := r.requiredChecks(ctx, c, tip)
+	if settled || err != nil {
+		return nil, err
+	}
 	cand, err := r.rebuild(ctx, v, buildOnto)
 	if err == nil {
 		err = r.proveOwed(ctx, c, a.owed)
@@ -675,17 +690,64 @@ func (r *applyRun) check(ctx context.Context, v types.Verdict, tip, buildOnto, p
 	if err != nil {
 		return nil, fmt.Errorf("predict %s after %s: %w", r.plan.Base, c.Label(), err)
 	}
-	return &ready{v: v, approval: a, tip: tip, onto: buildOnto, cand: cand, tree: tree}, nil
+	return &ready{v: v, approval: a, tip: tip, onto: buildOnto, cand: cand, tree: tree, stale: stale}, nil
+}
+
+// requiredChecks settles what the base's required checks, other than the queue's own
+// status, say of c's head before the queue asks for a merge the provider would refuse.
+// Running checks wait. Red ones kick c back when its head already carries tip, since
+// they ran on the base it would merge onto; otherwise they ran on an older base, and
+// their names come back as stale, for an update commit that runs them again on tip. A
+// head is updated at most once per base commit: once it carries tip, red is its own.
+// settled says c waits or was kicked back.
+func (r *applyRun) requiredChecks(ctx context.Context, c types.Change, tip string) (stale []string, settled bool, err error) {
+	checks, err := r.provider.RequiredChecks(ctx, c, c.Head)
+	if err != nil {
+		return nil, false, fmt.Errorf("required checks of %s: %w", c.Label(), err)
+	}
+	var failing, running []string
+	for _, ch := range checks {
+		switch {
+		case ch.Name == r.statusContext():
+		case ch.State == types.StateFailure:
+			failing = append(failing, ch.Name)
+		case ch.State == types.StatePending:
+			running = append(running, ch.Name)
+		}
+	}
+	switch {
+	case len(failing) > 0:
+		carried, err := r.vcs.IsAncestor(ctx, r.clone.Root, tip, c.Head)
+		if err != nil {
+			return nil, false, err
+		}
+		if carried {
+			return nil, true, r.kick(ctx, c, types.Kick{Code: types.CodeKickRed, Report: redChecksReport(r.plan.Base, c.Head, tip, failing)})
+		}
+		return failing, false, nil
+	case len(running) > 0:
+		return nil, true, r.wait(ctx, c, c.Head, types.CodeWaitChecks, "its required checks "+joinPaths(running)+" are running")
+	}
+	return nil, false, nil
+}
+
+// redChecksReport says which required checks failed on a head that carries the base's
+// tip, so the failure is the change's own.
+func redChecksReport(base, head, tip string, failing []string) string {
+	return "The merge queue cannot merge this change at `" + short(head) + "`: its required checks " + joinPaths(failing) +
+		" failed there, and it already carries `" + base + "` at `" + short(tip) + "`, so they failed on what it would merge onto.\n\n" +
+		"Fix them and push.\n"
 }
 
 // rebuild builds v's candidate again onto onto and returns it once it is the commit
 // validation gated. Where validation's regeneration rewrote files, or the merge settled
 // a conflicted generated file, the rebuild runs the base's own regeneration, after the
-// build tool proved it runs none of the change's code; any other way, those bytes would
-// come from running the change's code in the one job that holds the write credential.
-// What does not match is kicked back, never merged. A source file auto-resolution
-// settled is settled again here, by this job's own computation from the three versions,
-// so the commit matches only if validation settled it the same way.
+// build tool proved it runs none of the change's code; where it cannot prove that, it
+// takes validation's regenerated candidate once takeValidated checks it. Either way no
+// change's code runs in the one job that holds the write credential. What does not match
+// is kicked back, never merged. A source file auto-resolution settled is settled again
+// here, by this job's own computation from the three versions, so the commit matches
+// only if validation settled it the same way.
 func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (string, error) {
 	c := v.Change
 	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}
@@ -711,6 +773,10 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 		return "", &waitError{code: types.CodeWaitRevalidate, reason: "rebuilding its candidate gave " + short(b.Commit) + ", not the validated " + short(v.CandidateCommit) + "; validated again next run"}
 	}
 	g, err := r.generation(ctx, c, regen, onto, b.touched)
+	var unproven *types.RefusedError
+	if bundle, ok := r.bundles[c.ID]; ok && errors.As(err, &unproven) {
+		return r.takeValidated(ctx, v, b, bundle)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -724,6 +790,62 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 			joinPaths(written), Remedy: r.mergeBaseIn()}
 	}
 	return commit, nil
+}
+
+// takeValidated loads the bundle validation left for v's change and returns v's
+// candidate from it once four things hold, each checked by this job alone:
+//   - the candidate is the commit validation gated: v's candidate commit, looked up by
+//     that id, so its tree is the one the gate ran on;
+//   - its only parent is b's commit, this job's own merge of the change's pinned head
+//     onto what it rebuilt it onto, so nothing beneath the regeneration is validation's;
+//   - it differs from that merge only in files the base's workspace declares as outputs;
+//   - each of those it holds is a regular file, executable exactly where the merge's is
+//     (see unexpectedMode).
+//
+// Auto-resolved source files are already in the merge, settled here. Any other bundle is
+// refused: its bytes came from a job that ran the change's code.
+func (r *applyRun) takeValidated(ctx context.Context, v types.Verdict, b built, bundle string) (string, error) {
+	root, want, merged := r.clone.Root, v.CandidateCommit, b.Commit
+	refuse := func(paths []string, why string) (string, error) {
+		return "", &types.RefusedError{Paths: paths, Reason: "validation's regenerated candidate " + why, Remedy: r.mergeBaseIn()}
+	}
+	if err := r.vcs.Unbundle(ctx, root, bundle); err != nil {
+		return refuse(nil, "does not load onto this job's own merge of it: "+types.CodeSpan(err.Error()))
+	}
+	cm, err := r.vcs.FindCommit(ctx, root, want)
+	if err != nil {
+		return refuse(nil, "does not hold "+short(want)+", the commit its gate ran on")
+	}
+	if len(cm.Parents) != 1 || cm.Parents[0] != merged {
+		return refuse(nil, "is not a commit on "+short(merged)+", this job's own merge of it onto what it was built onto")
+	}
+	changed, err := r.vcs.DiffTrees(ctx, root, merged, want)
+	if err != nil {
+		return "", err
+	}
+	if src, err := sources(ctx, r.facts, changed); err != nil || len(src) > 0 {
+		if err != nil {
+			return "", err
+		}
+		return refuse(src, "changes "+joinPaths(src)+", which the base does not declare as any target's output")
+	}
+	// No capability reports a tree entry's mode, so a checkout of the candidate shows
+	// them, beside b's checkout of the merge.
+	cand, err := checkout(ctx, r.vcs, root, r.scratch, "bundle-"+v.Change.ID, want)
+	if err != nil {
+		return "", err
+	}
+	defer r.discard(ctx, cand)
+	path, why, err := unexpectedMode(cand.Dir, b.Dir, changed)
+	if err != nil {
+		return "", err
+	}
+	if path != "" {
+		return refuse([]string{path}, "holds "+types.CodeSpan(path)+" as "+why+", which regenerating a declared output does not write")
+	}
+	r.taken[v.Change.ID] = true
+	r.Events.Emit(Event{Kind: EventNotice, Change: v.Change.ID, Commit: want, Reason: "took validation's regeneration of " + joinPaths(changed) + " after checking it"})
+	return want, nil
 }
 
 // generation proves regenerating outputs, in a tree built on at with added changed on top,
@@ -767,7 +889,8 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 	}
 	why, paths := unprovenWhy(g, outputs)
 	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
-		"), so only its author can regenerate them", Remedy: r.mergeBaseIn() + " Then queue it again: the merge leaves them as they are.", Code: types.CodeKickRegeneration}
+		"), and validation left no regenerated candidate this queue can check, so only its author can regenerate them",
+		Remedy: r.mergeBaseIn() + " Then queue it again: the merge leaves them as they are.", Code: types.CodeKickRegeneration}
 }
 
 // proveOwed proves each merge of the base into c that a review covers only through
@@ -888,6 +1011,9 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 		return false, err
 	case err != nil:
 		return false, fmt.Errorf("push the update commit of %s: %w", c.Label(), err)
+	case len(rd.stale) > 0:
+		return false, r.wait(ctx, c, commit, types.CodeWaitChecks, "its required checks "+joinPaths(rd.stale)+" failed on an older "+r.plan.Base+
+			"; pushed "+short(commit)+", which carries "+short(tip)+", to run them again")
 	}
 	if ok, err := r.stillQueued(ctx, c, commit); !ok || err != nil {
 		return false, err
@@ -1014,8 +1140,8 @@ func (r *applyRun) linearOn(ctx context.Context, tip, after string) (bool, error
 }
 
 // handOver returns the commit to hand the provider so that its merge gives exactly
-// rd.tree: the head when the provider's own merge already does, else an update commit
-// pushed to the change's branch under a lease on the head.
+// rd.tree: the head when the provider's own merge already does and no required check is
+// stale, else an update commit pushed to the change's branch under a lease on the head.
 //
 // The update commit may differ from the provider's own merge only where no reviewer's
 // view changes: in declared outputs, which only the base's own regeneration may have
@@ -1032,7 +1158,10 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(plain.Conflicts) == 0 && plain.Tree == rd.tree {
+	// Only stale checks ask for an update commit where the provider's merge already
+	// gives rd.tree: its content is then exactly that merge.
+	onlyStale := len(plain.Conflicts) == 0 && plain.Tree == rd.tree
+	if onlyStale && len(rd.stale) == 0 {
 		return c.Head, nil
 	}
 	reviewed := plain.Tree
@@ -1073,27 +1202,40 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 		return "", &types.RefusedError{Paths: resolvedPaths(resolved), Reason: "its merge onto `" + r.plan.Base + "` " + resolvedNote(resolved) +
 			", and a rebase replays its commits onto `" + r.plan.Base + "`, where they still conflict", Remedy: "Pick another merge method, or rebase it onto `" + r.plan.Base + "`."}
 	}
-	if len(outputs) > 0 {
+	// A candidate takeValidated took was checked to differ from this job's merge in
+	// declared outputs alone, which its gate's drift check held to their generators.
+	if len(outputs) > 0 && !r.taken[c.ID] {
 		if _, err := r.generation(ctx, c, outputs, rd.onto, nil); err != nil {
 			return "", err
 		}
 	}
+	needs, remedy := "its merge onto `"+r.plan.Base+"` needs an update commit", r.mergeBaseIn()
+	if onlyStale {
+		needs = "its required checks " + joinPaths(rd.stale) + " failed on an older `" + r.plan.Base + "`, and running them again needs an update commit carrying it"
+		remedy = "Merge `" + r.plan.Base + "` in and push, which runs them again."
+	}
 	switch {
 	case c.Branch == "":
-		return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs an update commit, and the queue cannot push to its branch",
-			Remedy: r.mergeBaseIn()}
+		return "", &types.RefusedError{Reason: needs + ", and the queue cannot push to its branch", Remedy: remedy}
 	case len(rd.approval.BranchSharedWith) > 0:
-		return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs an update commit, and its branch is also the head of " +
-			joinIDs(rd.approval.BranchSharedWith) + ", which would gain it too", Remedy: r.mergeBaseIn()}
+		return "", &types.RefusedError{Reason: needs + ", and its branch is also the head of " +
+			joinIDs(rd.approval.BranchSharedWith) + ", which would gain it too", Remedy: remedy}
 	}
 	if r.committer == (magustypes.Person{}) {
 		return "", types.ErrNoCommitter
 	}
 	parents, msg := []string{c.Head, rd.tip}, "merge "+r.plan.Base+" into #"+c.ID+" and regenerate generated files"
+	if onlyStale {
+		msg = "merge " + r.plan.Base + " into #" + c.ID + " to run its required checks again"
+	}
 	if len(resolved) > 0 {
 		msg += "\n\nThe merge queue " + resolvedNote(resolved) + "."
 	}
 	switch {
+	case c.Method == types.MethodRebase && onlyStale:
+		// A commit on the head holding the base would be replayed as the change's own.
+		return "", &types.RefusedError{Reason: needs + ", and a change merged by rebase takes the base only by rebasing its commits, which the queue leaves to its author",
+			Remedy: "Rebase it onto `" + r.plan.Base + "` and push, which runs them again."}
 	case c.Method == types.MethodRebase:
 		// The provider replays the head's commits and then this one, whose tree is the
 		// validated one.
@@ -1283,7 +1425,8 @@ func (r *applyRun) mergeRun(ctx context.Context, run []types.Change) (int, error
 			break
 		}
 	}
-	atomic := len(steps) > 1
+	// A member whose checks run again is updated rather than merged, alone.
+	atomic := len(steps) > 1 && !slices.ContainsFunc(steps, func(st *ready) bool { return len(st.stale) > 0 })
 	if atomic {
 		if atomic, err = r.ownDeltas(ctx, tip, steps); err != nil {
 			return 0, err

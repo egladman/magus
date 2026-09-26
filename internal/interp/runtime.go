@@ -827,6 +827,11 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		exportVals[key] = val
 		dir := src.Dir
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+			// A ctx.needs dependency is dispatched with no arguments, inline or through
+			// the pool; its `args` is the empty list runBuzz gives an entry target, not null.
+			if len(args) == 0 {
+				args = []vm.Value{vm.ListValue([]vm.Value{})}
+			}
 			// Every body gets a dependency-wait accumulator, timeout or not. Scoping it
 			// to the deadline instead leaves an uncapped body writing into its nearest
 			// ceilinged ancestor, whose own ctx.needs span already counts that whole

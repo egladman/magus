@@ -10,9 +10,13 @@
 // auto-merge, and merges with the method chosen there. GitHub offers no auto-merge on a
 // stacked pull request, so a stack is queued by the label "merge-queue: <method>"
 // (squash, merge or rebase, exactly) on its top pull request, applied by someone with
-// write access; that queues every pull request of the stack, bottom first. Kicking a change back disables
-// its auto-merge or removes the label from its stack's top, so queuing it again is how
-// a fixed change re-enters.
+// write access; that queues every pull request of the stack, bottom first. The same
+// label on a pull request outside any stack queues it alone: GitHub's auto-merge follows
+// GitHub's own mergeability, and whether a conflict or a stale generated file stops a
+// merge is the queue's to decide, which it settles in its candidate or kicks back.
+// Nothing here reads `mergeable`. Kicking a change back disables its auto-merge or
+// removes the label from it or its stack's top, so queuing it again is how a fixed
+// change re-enters.
 //
 // # Marks
 //
@@ -780,6 +784,26 @@ fun stackTops(pages: [str], base: str) > [{str: str}] !> any {
     return tops;
 }
 
+// labeledSingles lists the pull requests on base outside any stack that carry a queue
+// label and no auto-merge: {number, label, method}. Whoever applied the label is checked
+// separately, as for a stack top.
+fun labeledSingles(pages: [str], base: str) > [{str: str}] !> any {
+    final singles = mut [<{str: str}>];
+    foreach (page in pages) {
+        foreach (pr in serialize\jsonDecode(page).listValue()) {
+            if (id(pr.q("stack").q("id")) != "" or pr.q("base").q("ref").stringValue() != base
+                or pr.q("auto_merge").q("merge_method").stringValue() != "") {
+                continue;
+            }
+            final label = queueLabel(pr);
+            if (label != "") {
+                singles.append({"number": "{pr.q("number").integerValue()}", "label": label, "method": methodOf(label)});
+            }
+        }
+    }
+    return singles;
+}
+
 // stackTopIn finds, in listing pages, the top pull request of stack sid: {number, label},
 // both "" when the stack has no open top.
 fun stackTopIn(pages: [str], sid: str) > {str: str} !> any {
@@ -799,10 +823,11 @@ fun openPulls(repo: str, hdrs: {str: str}) > [str] !> any {
 }
 
 // changesFrom reads the open pull requests into change records: every non-draft one
-// with auto-merge enabled against base, and every member of a stack in stacks (stack id
-// to method), each naming the member below it as its parent. A fork is listed with fork
-// set and no branch, so the queue refuses it by name instead of skipping it silently.
-fun changesFrom(pages: [str], repo: str, base: str, stacks: {str: str}) > [any] !> any {
+// against base with auto-merge enabled or in labeled (number to method), and every
+// member of a stack in stacks (stack id to method), each naming the member below it as
+// its parent. A fork is listed with fork set and no branch, so the queue refuses it by
+// name instead of skipping it silently.
+fun changesFrom(pages: [str], repo: str, base: str, stacks: {str: str}, labeled: {str: str}) > [any] !> any {
     // stack id + "/" + position -> number, to name each member's parent
     final positions = mut {<str: str>};
     foreach (page in pages) {
@@ -822,6 +847,9 @@ fun changesFrom(pages: [str], repo: str, base: str, stacks: {str: str}) > [any] 
             final number = pr.q("number").integerValue();
             final sid = id(pr.q("stack").q("id"));
             var method = pr.q("auto_merge").q("merge_method").stringValue();
+            if (method == "" and sid == "") {
+                method = labeled["{number}"] ?? "";
+            }
             var target = pr.q("base").q("ref").stringValue();
             var parent = "";
             if (sid != "" and stacks[sid] != null) {
@@ -1084,7 +1112,13 @@ export fun list_changes(io: {str: any}) > any !> any {
             stacks[top["stack"] ?? ""] = top["method"] ?? "";
         }
     }
-    final changes = changesFrom(pulls, repo: repo, base: base, stacks: stacks);
+    final labeled = mut {<str: str>};
+    foreach (single in labeledSingles(pulls, base: base)) {
+        if (labeledByWriter(repo, number: single["number"] ?? "", label: single["label"] ?? "", hdrs: hdrs)) {
+            labeled[single["number"] ?? ""] = single["method"] ?? "";
+        }
+    }
+    final changes = changesFrom(pulls, repo: repo, base: base, stacks: stacks, labeled: labeled);
     return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes),
         "closed": closedFrom(closedPulls(repo, hdrs: hdrs), repo: repo)};
 }
@@ -1187,8 +1221,9 @@ fun approvalFrom(body: str, commit: str, required: int) > {str: any} !> any {
 }
 
 // targetFrom reads where a pull request merges and how: a stack member merges on the
-// stack's base, and a pull request with auto-merge with the method chosen there, else
-// with the one it was queued with.
+// stack's base, and a pull request with auto-merge with the method chosen there, one
+// outside a stack with its own queue label's method, else with the one it was queued
+// with.
 fun targetFrom(body: str, method: str) > {str: str} !> any {
     final pr = serialize\jsonDecode(body);
     var base = pr.q("stack").q("base").q("ref").stringValue();
@@ -1196,6 +1231,10 @@ fun targetFrom(body: str, method: str) > {str: str} !> any {
         base = pr.q("base").q("ref").stringValue();
     }
     var m = pr.q("auto_merge").q("merge_method").stringValue().lower();
+    final label = queueLabel(pr);
+    if (m == "" and label != "" and id(pr.q("stack").q("id")) == "") {
+        m = methodOf(label);
+    }
     if (m == "") {
         m = method;
     }
@@ -1203,7 +1242,8 @@ fun targetFrom(body: str, method: str) > {str: str} !> any {
 }
 
 // intent reports whether the pull request in body still carries merge intent: its own
-// auto-merge, or, for a stack member, a queue label on its stack's open top.
+// auto-merge, a queue label on it outside a stack, or, for a stack member, a queue label
+// on its stack's open top.
 fun intent(body: str, repo: str, hdrs: {str: str}) > bool !> any {
     final pr = serialize\jsonDecode(body);
     if (pr.q("auto_merge").q("merge_method").stringValue() != "") {
@@ -1211,7 +1251,7 @@ fun intent(body: str, repo: str, hdrs: {str: str}) > bool !> any {
     }
     final sid = id(pr.q("stack").q("id"));
     if (sid == "") {
-        return false;
+        return queueLabel(pr) != "";
     }
     return (stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid)["label"] ?? "") != "";
 }
@@ -1258,6 +1298,89 @@ export fun approval_at(io: {str: any}) > any !> any {
         "approved": a["approved"], "head": a["head"], "reason": a["reason"], "approved_commit": a["approved_commit"],
         "base": target["base"], "method": target["method"], "queued": intent(prBody, repo: repo, hdrs: hdrs), "shared_with": shared,
     };
+}
+
+// latestRuns lists the ids of the newest workflow run of each workflow in an
+// actions/runs listing, newest first: a run started again for the same commit replaces
+// the one before it.
+fun latestRuns(body: str) > [str] !> any {
+    final seen = mut {<str: bool>};
+    final ids = mut [<str>];
+    foreach (r in serialize\jsonDecode(body).q("workflow_runs").listValue()) {
+        final workflow = id(r.q("workflow_id"));
+        if (seen[workflow] == null) {
+            seen[workflow] = true;
+            ids.append(id(r.q("id")));
+        }
+    }
+    return ids;
+}
+
+// checkState reads a finished job's conclusion as a required check's state: GitHub
+// counts only success, a skip and neutral as passing.
+fun checkState(status: str, conclusion: str) > str {
+    if (status != "completed") {
+        return "pending";
+    }
+    if (["success", "skipped", "neutral"].indexOf(conclusion) != null) {
+        return "success";
+    }
+    return "failure";
+}
+
+// checksFrom states each required context at one commit: an Actions job of that name
+// from jobs (one jobs listing per run, newest run first), else the commit status of that
+// context from status, else pending, since nothing reported it yet.
+fun checksFrom(required: [{str: str}], jobs: [str], status: str) > [{str: str}] !> any {
+    final states = mut {<str: str>};
+    foreach (page in jobs) {
+        foreach (j in serialize\jsonDecode(page).q("jobs").listValue()) {
+            final name = j.q("name").stringValue();
+            if (states[name] == null) {
+                states[name] = checkState(j.q("status").stringValue(), conclusion: j.q("conclusion").stringValue());
+            }
+        }
+    }
+    foreach (s in serialize\jsonDecode(status).q("statuses").listValue()) {
+        final name = s.q("context").stringValue();
+        if (states[name] == null) {
+            final state = s.q("state").stringValue();
+            states[name] = if (state == "error") "failure" else state;
+        }
+    }
+    final seen = mut {<str: bool>};
+    final checks = mut [<{str: str}>];
+    foreach (r in required) {
+        final name = r["context"] ?? "";
+        if (seen[name] == null) {
+            seen[name] = true;
+            checks.append({"name": name, "state": states[name] ?? "pending"});
+        }
+    }
+    return checks;
+}
+
+// required_checks reads the checks the change's base requires, from its rulesets and its
+// classic protection, and each one's state at the commit. A job's state comes from the
+// commit's workflow runs rather than its check runs, which need a permission (checks)
+// the queue's app does not hold; actions and statuses it does.
+export fun required_checks(io: {str: any}) > any !> any {
+    final hdrs = reading("required_checks");
+    final repo = "{io["repo"] ?? ""}";
+    final base = "{io["base"] ?? ""}";
+    final commit = "{io["commit"] ?? ""}";
+    final prefix = apiBase() + "/repos/" + repo;
+    final rules = expect(get(prefix + "/rules/branches/" + escape(base), hdrs: hdrs), status: 200, what: "read the rules on {base}");
+    final branch = expect(get(prefix + "/branches/" + escape(base), hdrs: hdrs), status: 200, what: "read the protection of {base}");
+    final runs = expect(get(prefix + "/actions/runs?head_sha=" + escape(commit) + "&per_page=100", hdrs: hdrs), status: 200,
+        what: "list the workflow runs on {commit}");
+    final jobs = mut [<str>];
+    foreach (run in latestRuns(runs)) {
+        jobs.append(expect(get(prefix + "/actions/runs/" + run + "/jobs?per_page=100", hdrs: hdrs), status: 200, what: "list the jobs of run {run}"));
+    }
+    final status = expect(get(prefix + "/commits/" + escape(commit) + "/status?per_page=100", hdrs: hdrs), status: 200,
+        what: "read the statuses on {commit}");
+    return {"checks": checksFrom(requiredChecksFrom(rules, branch: branch), jobs: jobs, status: status)};
 }
 
 final GREEN_QUERY = `query($owner: String!, $name: String!, $context: String!, $after: String) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { number headRefOid commits(last: 1) { nodes { commit { oid status { context(name: $context) { state } } } } } } } } }`;
@@ -1551,11 +1674,14 @@ fun shQuote(s: str) > str {
 }
 
 // requeueLine is how the author queues the change again: auto-merge with its merge
-// method, or, when a label queued it, that label on the stack's top pull request. A
-// fork cannot be queued, so it gets none.
+// method, or, when a label queued it, that label on it or on the stack's top pull
+// request. A fork cannot be queued, so it gets none.
 fun requeueLine(number: str, method: str, fork: bool, label: str, top: str) > str {
     if (fork) {
         return "";
+    }
+    if (label != "" and top == number) {
+        return "Queue it again once fixed: `gh pr edit {number} --add-label \"{label}\"`";
     }
     if (label != "") {
         return "Queue the stack again once fixed: `gh pr edit {top} --add-label \"{label}\"`";
@@ -1929,7 +2055,7 @@ test "list keeps auto-merge pull requests against the base and drops drafts and 
         {"number": 10, "draft": false, "auto_merge": {"merge_method": "merge"}, "title": "elsewhere",
          "user": {"login": "eli"}, "base": {"ref": "release"},
          "head": {"sha": "0de", "ref": "rel", "repo": {"full_name": "acme/acme"}}}
-    ]`], repo: "acme/acme", base: "main", stacks: {<str: str>});
+    ]`], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>});
     assert\equal(got.len(), want: 1, message: "only the auto-merge pull request against main is queued");
     final one = serialize\Boxed.init(got[0]);
     assert\equal(one.q("id").stringValue(), want: "7", message: "id is the number as a string");
@@ -1944,10 +2070,46 @@ test "list keeps auto-merge pull requests against the base and drops drafts and 
 test "a fork is listed as one, with no branch to push to" {
     final got = changesFrom([`[{"number": 3, "draft": false, "auto_merge": {"merge_method": "squash"},
         "title": "t", "user": {"login": "x"}, "base": {"ref": "main"},
-        "head": {"sha": "abc", "ref": "feat", "repo": {"full_name": "x/acme"}}}]`], repo: "acme/acme", base: "main", stacks: {<str: str>});
+        "head": {"sha": "abc", "ref": "feat", "repo": {"full_name": "x/acme"}}}]`], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>});
     final one = serialize\Boxed.init(got[0]);
     assert\equal(one.q("branch").stringValue(), want: "", message: "the queue cannot push to a fork");
     assert\equal(one.q("fork").booleanValue(), want: true, message: "so the queue can refuse it by name");
+}
+
+// GitHub will not take auto-merge on a pull request it says conflicts; the label queues
+// it anyway, and the queue settles the conflict or kicks it back.
+final SINGLES = `[
+    {"number": 40, "draft": false, "auto_merge": null, "title": "conflicting", "mergeable": false, "mergeable_state": "dirty",
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: rebase"}],
+     "head": {"sha": "a40", "ref": "c", "repo": {"full_name": "acme/acme"}}},
+    {"number": 41, "draft": false, "auto_merge": {"merge_method": "squash"}, "title": "both",
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: merge"}],
+     "head": {"sha": "a41", "ref": "b", "repo": {"full_name": "acme/acme"}}},
+    {"number": 42, "draft": false, "auto_merge": null, "title": "elsewhere",
+     "base": {"ref": "release"}, "labels": [{"name": "merge-queue: squash"}],
+     "head": {"sha": "a42", "ref": "e", "repo": {"full_name": "acme/acme"}}},
+    {"number": 43, "draft": false, "auto_merge": null, "title": "kicked",
+     "base": {"ref": "main"}, "labels": [{"name": "merge-queue: kicked back"}],
+     "head": {"sha": "a43", "ref": "k", "repo": {"full_name": "acme/acme"}}}
+]`;
+
+test "a queue label on a pull request outside a stack queues it whatever GitHub says of its mergeability" {
+    final singles = labeledSingles([SINGLES], base: "main");
+    assert\equal(singles.len(), want: 1, message: "auto-merge wins over a label, another base is not this queue's, and a mark is no intent");
+    assert\equal(singles[0], want: {"number": "40", "label": "merge-queue: rebase", "method": "rebase"}, message: "the label's method");
+    final got = changesFrom([SINGLES], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {"40": "rebase"});
+    assert\equal(got.len(), want: 2, message: "the labeled one and the auto-merge one");
+    final one = serialize\Boxed.init(got[0]);
+    assert\equal([one.q("id").stringValue(), one.q("method").stringValue(), one.q("parent").stringValue()], want: ["40", "rebase", ""], message: "queued alone with its label's method");
+    assert\equal(serialize\Boxed.init(got[1]).q("method").stringValue(), want: "squash", message: "auto-merge's method");
+    assert\equal(changesFrom([SINGLES], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>}).len(), want: 1,
+        message: "a label nobody with write access applied queues nothing");
+    final target = targetFrom(`{"base": {"ref": "main"}, "auto_merge": null, "labels": [{"name": "merge-queue: merge"}]}`, method: "squash");
+    assert\equal(target["method"], want: "merge", message: "the label as it stands at the re-check");
+    assert\equal(intent(`{"auto_merge": null, "labels": [{"name": "merge-queue: merge"}]}`, repo: "acme/acme", hdrs: {<str: str>}), want: true, message: "the label is its intent");
+    assert\equal(intent(`{"auto_merge": null, "labels": [{"name": "merge-queue: kicked back"}]}`, repo: "acme/acme", hdrs: {<str: str>}), want: false, message: "a mark is not");
+    assert\equal(requeueLine("40", method: "rebase", fork: false, label: "merge-queue: rebase", top: "40"),
+        want: "Queue it again once fixed: `gh pr edit 40 --add-label \"merge-queue: rebase\"`", message: "by its own label");
 }
 
 final STACK = `[
@@ -1971,19 +2133,19 @@ test "a labeled stack top queues the stack, each member naming the one below" {
     assert\equal(tops[0]["method"], want: "squash", message: "the label's method");
     assert\equal(tops[0]["label"], want: "merge-queue: squash", message: "only a method's exact name is intent");
     assert\equal(stackTops([STACK], base: "release").len(), want: 0, message: "a stack on another trunk is not this queue's");
-    final got = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"});
+    final got = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"}, labeled: {<str: str>});
     assert\equal(got.len(), want: 2, message: "both members");
     assert\equal(serialize\Boxed.init(got[0]).q("parent").stringValue(), want: "", message: "the bottom sits on the trunk");
     assert\equal(serialize\Boxed.init(got[1]).q("parent").stringValue(), want: "20", message: "the top names the bottom");
     assert\equal(serialize\Boxed.init(got[1]).q("base").stringValue(), want: "main", message: "a member merges on the stack's base");
-    assert\equal(changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {<str: str>}).len(), want: 0, message: "an unlabeled stack is not queued");
+    assert\equal(changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>}).len(), want: 0, message: "an unlabeled stack is not queued");
     final top = stackTopIn([STACK], sid: "5");
     assert\equal(top["number"], want: "21", message: "a member finds its stack's top");
     assert\equal(top["label"], want: "merge-queue: squash", message: "and the label that queues it");
 }
 
 test "every open pull request the listing leaves out is unqueued" {
-    final queued = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"});
+    final queued = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"}, labeled: {<str: str>});
     final got = unqueuedFrom([STACK], repo: "acme/acme", queued: queued);
     assert\equal(got.len(), want: 1, message: "the draft");
     final one = serialize\Boxed.init(got[0]);
@@ -2021,7 +2183,7 @@ test "the provider never reads its own mark labels as merge intent" {
         assert\equal(METHODS.indexOf(methodOf(label)), want: null, message: "{m}'s label names no method");
     }
     assert\equal(stackTops([MARKED], base: "main").len(), want: 0, message: "a stack top showing a mark is not queued by it");
-    assert\equal(changesFrom([MARKED], repo: "acme/acme", base: "main", stacks: {<str: str>}).len(), want: 0, message: "nothing is queued");
+    assert\equal(changesFrom([MARKED], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>}).len(), want: 0, message: "nothing is queued");
 }
 
 fun opsText(ops: [{str: str}]) > str {
@@ -2767,4 +2929,30 @@ test "without steps, setup is the facts apply checks" {
     assert\equal(setup.q("status_context").stringValue(), want: "merge-queue", message: "the context asked about");
     assert\equal(setup.q("required_checks").listValue()[0].q("integration").stringValue(), want: "812", message: "the pin apply compares");
     assert\equal(setup.q("steps").listValue().len(), want: 0, message: "no steps");
+}
+
+test "a required check's state is the newest run's job of its name, else its commit status, else pending" {
+    final runs = `{"workflow_runs": [{"id": 9, "workflow_id": 1}, {"id": 8, "workflow_id": 1}, {"id": 7, "workflow_id": 2}]}`;
+    assert\equal(latestRuns(runs), want: ["9", "7"], message: "a run started again replaces the one before it");
+    final jobs = [
+        `{"jobs": [{"name": "ci gate", "status": "completed", "conclusion": "failure"}, {"name": "lint", "status": "in_progress", "conclusion": null}]}`,
+        `{"jobs": [{"name": "ci gate", "status": "completed", "conclusion": "success"}, {"name": "docs", "status": "completed", "conclusion": "skipped"},
+            {"name": "e2e", "status": "completed", "conclusion": "cancelled"}]}`,
+    ];
+    final status = `{"statuses": [{"context": "merge-queue", "state": "pending"}, {"context": "deploy", "state": "error"}, {"context": "lint", "state": "success"}]}`;
+    final required = [
+        {"context": "ci gate", "integration": "", "ruleset": "1"}, {"context": "ci gate", "integration": "", "ruleset": "2"},
+        {"context": "lint", "integration": "", "ruleset": ""}, {"context": "docs", "integration": "", "ruleset": ""},
+        {"context": "e2e", "integration": "", "ruleset": ""}, {"context": "deploy", "integration": "", "ruleset": ""},
+        {"context": "merge-queue", "integration": "", "ruleset": ""}, {"context": "absent", "integration": "", "ruleset": ""},
+    ];
+    assert\equal(checksFrom(required, jobs: jobs, status: status), want: [
+        {"name": "ci gate", "state": "failure"},
+        {"name": "lint", "state": "pending"},
+        {"name": "docs", "state": "success"},
+        {"name": "e2e", "state": "failure"},
+        {"name": "deploy", "state": "failure"},
+        {"name": "merge-queue", "state": "pending"},
+        {"name": "absent", "state": "pending"},
+    ], message: "the newest run wins, a job over a status, and a check two rulesets require is one check");
 }
