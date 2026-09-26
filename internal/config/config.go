@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -225,21 +226,17 @@ type SandboxConfig struct {
 	//
 	// MAGUS_SANDBOX is a floor, not an override: a sandboxed run hands its children its
 	// mode there, and a nested workspace's own mode may raise it and never lower it.
-	Mode  types.SandboxMode  `json:"mode" yaml:"mode" cli:"name=sandbox,floor"`
-	Allow []SandboxAllowPath `json:"allow" yaml:"allow"` // extra {path, mode} entries extending the filesystem allowlist
-	Env   SandboxEnv         `json:"env" yaml:"env"`     // env-var passthrough rules
+	Mode types.SandboxMode `json:"mode" yaml:"mode" cli:"name=sandbox,floor"`
+	// Allow and Env are the workspace layer of the sandbox declaration a spell's
+	// mgs_getSandbox and a target's `sandbox` policy also make, in the same shape; the
+	// three merge, and none narrows another.
+	Allow []spells.SandboxAllow `json:"allow" yaml:"allow"` // extra entries extending the filesystem allowlist
+	Env   SandboxEnv            `json:"env" yaml:"env"`     // env-var passthrough rules
 }
 
-// SandboxAllowPath is one extra filesystem allowlist entry. Mode spells its grants: r
-// read, w write, x exec; empty is ro. Exec is never implied, so a toolchain directory
-// that must run needs rx.
-type SandboxAllowPath struct {
-	// Name is a free-form label for the entry. It is ignored by the sandbox; it
-	// exists so `magus config set sandbox.allow.<name>.path=…` can address the
-	// entry by name (the same convention used for other slice-of-struct config).
-	Name string `json:"name,omitempty" yaml:"name,omitempty"`
-	Path string `json:"path" yaml:"path"`
-	Mode string `json:"mode" yaml:"mode" validate:"omitempty,oneof=ro rw rx rwx"`
+// Declaration is the workspace layer as the declaration shape the other layers use.
+func (c SandboxConfig) Declaration() spells.Sandbox {
+	return spells.Sandbox{Allow: c.Allow, Env: spells.SandboxEnv{Passthrough: c.Env.Passthrough}}
 }
 
 // SandboxEnv controls per-child env passthrough when the sandbox is active.

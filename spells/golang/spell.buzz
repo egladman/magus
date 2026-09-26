@@ -79,6 +79,46 @@ export fun mgs_getTools() > {str: Tool} {
     };
 }
 
+// The toolchain's own directories, each where `go env` would put it. GOROOT is read and
+// run both as named and as the root of the go on PATH (<root>/bin/go beside
+// <root>/pkg/tool): a toolchain found only on PATH is where the build execs the compiler
+// from, and requiring pkg/tool tells it from a shim resolving elsewhere. GOCACHE is
+// executable because go run and go tool (Go 1.24+) cache the binaries they build there
+// and exec them from it, so go generate fails without it.
+//
+// Every Go variable passes through, named one by one rather than as GO*, which also
+// matches GOOGLE_APPLICATION_CREDENTIALS; the list is `go help environment`'s. A
+// variable that shapes compilation and does not reach the compiler splits the build
+// cache: mise sets GOEXPERIMENT=jsonv2 in this repo, and a `go test` inheriting it
+// beside a sandboxed one that did not left two fingerprints of one package in one cache,
+// surfacing as a linker "fingerprint mismatch".
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [
+            SandboxAllow{env = "GOROOT", mode = SandboxAccess.rx},
+            SandboxAllow{base = "binRoot", bin = "go", requires = "pkg/tool", mode = SandboxAccess.rx},
+            // GOPATH defaults to ~/go, so both spellings are granted; with GOPATH unset
+            // the first grants nothing.
+            SandboxAllow{base = "$GOPATH", path = "bin", mode = SandboxAccess.rx},
+            SandboxAllow{base = "home", path = "go/bin", mode = SandboxAccess.rx},
+            SandboxAllow{env = "GOMODCACHE", base = "$GOPATH", path = "pkg/mod", mode = SandboxAccess.rw},
+            SandboxAllow{env = "GOMODCACHE", base = "home", path = "go/pkg/mod", mode = SandboxAccess.rw},
+            SandboxAllow{env = "GOCACHE", base = "userCache", path = "go-build", mode = SandboxAccess.rwx},
+            SandboxAllow{env = "GOENV", base = "userConfig", path = "go/env", mode = SandboxAccess.ro},
+            SandboxAllow{env = "GOLANGCI_LINT_CACHE", base = "userCache", path = "golangci-lint", mode = SandboxAccess.rw},
+        ],
+        env = SandboxEnv{passthrough = [
+            "GOROOT", "GOPATH", "GOBIN", "GOCACHE", "GOMODCACHE", "GOENV", "GOFLAGS", "GOEXPERIMENT",
+            "GOOS", "GOARCH", "GOAMD64", "GOARM", "GOARM64", "GO386", "GOPPC64", "GORISCV64", "GOWASM",
+            "GOTOOLCHAIN", "GOPROXY", "GOPRIVATE", "GONOPROXY", "GONOSUMDB", "GOSUMDB", "GOINSECURE", "GOVCS",
+            "GOWORK", "GOTMPDIR", "GODEBUG", "GOFIPS140", "GOCOVERDIR", "GOTELEMETRY", "GOTELEMETRYDIR",
+            "GOMAXPROCS", "GOGC", "GOMEMLIMIT", "GOTRACEBACK",
+            "CGO_ENABLED", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS",
+            "GOLANGCI_LINT_CACHE",
+        ]},
+    };
+}
+
 // Comment syntax covers .go alone: this spell also claims .s, .c, .h and
 // .txtar, none of which speak Go's comment syntax. Directives are the
 // no-space-then-word forms gofmt preserves verbatim; editing one changes what

@@ -47,3 +47,11 @@ fun typos(target: Target) > Command {
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"markdownlint": markdownlint, "prettier": prettier, "dprint": dprint, "typos": typos};
 }
+
+// dprint downloads its formatter plugins into its cache.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [SandboxAllow{env = "DPRINT_CACHE_DIR", base = "userCache", path = "dprint", mode = SandboxAccess.rw}],
+        env = SandboxEnv{passthrough = ["DPRINT_CACHE_DIR"]},
+    };
+}

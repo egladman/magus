@@ -15,10 +15,10 @@ large-monorepo/
                     the enrichment, cut the task branches, npm install
   tasks.sh          cut one task/<id> branch per agent-benchmark task; called by setup.sh
   bench.sh          run the scenarios, emit results/, write BENCHMARKS-large-monorepo.md
-  queue.sh          the merge-queue scenarios (Q1, Q2, Q3), driving the mergequeue CLI
-                    (internal/queue) with magus as its affected hook and gate
+  queue.sh          the merge-queue scenarios (Q1, Q2, Q3), driving `magus queue`
+                    with the fixture's workspace as its affected sets and gate
   spells/nextjs.buzz  Next.js app spell (next-build = next build, caches .next/**)
-  queue-local.buzz  mergequeue provider that approves everything and merges into a
+  queue-local.buzz  queue provider that approves everything and merges into a
                     local branch (queue.sh)
   spells/tslib.buzz   feature-library spell (non-opaque, no-op build); see below
   spells/jsmod.buzz   plain-ESM spell for the platform packages and the bridges

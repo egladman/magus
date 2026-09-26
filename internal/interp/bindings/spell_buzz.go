@@ -127,6 +127,9 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 	if spec.SymbolIndexer != nil {
 		extra = append(extra, spells.WithSymbolIndexer(spec.SymbolIndexer))
 	}
+	if spec.Sandbox != nil {
+		extra = append(extra, spells.WithSandbox(spec.Sandbox))
+	}
 	if spec.Opaque {
 		extra = append(extra, spells.WithOpaque())
 	}

@@ -68,21 +68,21 @@ A **nil policy means the sandbox is off**: every check passes through.
 
 `BuildPolicy` assembles the baseline every sandboxed run starts from. Each bit grants its access alone, in the kernel layer and in magus's own checks alike: a path readable but not executable cannot be run.
 
-| Path                                                                                                                 | read | write                              | exec | Why                                                                                          |
-| -------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------- | ---- | -------------------------------------------------------------------------------------------- |
-| the **workspace root**                                                                                               | yes  | yes                                | yes  | Spells build binaries in-tree and run them. [Control files](#control-files) excepted.        |
-| the workspace **cache directory**                                                                                    | yes  | yes                                | no   | Where magus keeps its outputs and logs.                                                      |
-| a **private temp dir** (`magus-sandbox-<uid>-<hash>` in the host temp dir, mode 0700)                                | yes  | yes                                | yes  | Every child gets it as `TMPDIR`. `go test` links and runs its test binaries there.           |
-| `/usr`, `/bin`, `/sbin`, `/lib*`, `/opt`, `/nix/store`, `/snap`                                                      | yes  | no                                 | yes  | Toolchains and their helpers. The ELF interpreter needs exec too.                            |
-| each absolute **`PATH` entry**, except `$HOME` and its ancestors                                                     | yes  | no                                 | yes  | Whatever the user's shell would run. `~/.local/bin` qualifies; `~` itself never does.        |
-| toolchain installs: `GOROOT` (also the root of the `go` on `PATH`), `$GOPATH/bin`, rustup, cargo's `bin`, mise, asdf | yes  | no                                 | yes  | The compilers those tools exec.                                                              |
-| tool caches: `GOCACHE`, `GOMODCACHE`, cargo's `registry` and `git`, npm, pnpm, yarn, pip, uv, mise, golangci-lint    | yes  | yes                                | no   | Each at the location the tool itself uses: its own variable when set, its default otherwise. |
-| the git directories of a linked worktree                                                                             | yes  | objects and the worktree's own dir | no   | `git status` and `git add` write there. Hooks are not executable.                            |
-| `/etc`, a few `/proc` and `/sys` files runtimes probe                                                                | yes  | no                                 | no   | Name resolution, certificates, CPU and cgroup limits.                                        |
-| `/dev/null`, `/dev/tty`, `/dev/pts`, `/dev/ptmx`, `/dev/fd`                                                          | yes  | yes                                | no   | Output nobody wants, and terminals.                                                          |
-| the **magus binary itself** (resolved)                                                                               | yes  | no                                 | yes  | Recursive `magus` invocations re-exec the same binary.                                       |
+| Path                                                                                  | read | write                              | exec | Why                                                                                   |
+| ------------------------------------------------------------------------------------- | ---- | ---------------------------------- | ---- | ------------------------------------------------------------------------------------- |
+| the **workspace root**                                                                | yes  | yes                                | yes  | Spells build binaries in-tree and run them. [Control files](#control-files) excepted. |
+| the workspace **cache directory**                                                     | yes  | yes                                | no   | Where magus keeps its outputs and logs.                                               |
+| a **private temp dir** (`magus-sandbox-<uid>-<hash>` in the host temp dir, mode 0700) | yes  | yes                                | yes  | Every child gets it as `TMPDIR`. `go test` links and runs its test binaries there.    |
+| `/usr`, `/bin`, `/sbin`, `/lib*`, `/opt`, `/nix/store`, `/snap`                       | yes  | no                                 | yes  | Toolchains and their helpers. The ELF interpreter needs exec too.                     |
+| each absolute **`PATH` entry**, except `$HOME` and its ancestors                      | yes  | no                                 | yes  | Whatever the user's shell would run. `~/.local/bin` qualifies; `~` itself never does. |
+| the git directories of a linked worktree                                              | yes  | objects and the worktree's own dir | no   | `git status` and `git add` write there. Hooks are not executable.                     |
+| `/etc`, a few `/proc` and `/sys` files runtimes probe                                 | yes  | no                                 | no   | Name resolution, certificates, CPU and cgroup limits.                                 |
+| `/dev/null`, `/dev/tty`, `/dev/pts`, `/dev/ptmx`, `/dev/fd`                           | yes  | yes                                | no   | Output nobody wants, and terminals.                                                   |
+| the **magus binary itself** (resolved)                                                | yes  | no                                 | yes  | Recursive `magus` invocations re-exec the same binary.                                |
 
-`$HOME` is never granted as a whole: `~/.ssh`, `~/.aws`, `~/.config`, `~/.npmrc` and `~/.gitconfig` stay out. Credential files that sit beside a tool's cache stay out too, which is why cargo gets its registry and not its home. The shared temp dirs (`/tmp`, `$TMPDIR`, `/var/tmp`) are not granted: they hold ssh-agent, gpg and docker sockets. So magus makes its own temp files for a run (`fs\tempDir`, `fs\tempFile`, the files a remote cache or `pipe\diff` stages for a child) in the private temp dir rather than the shared one, where the run's children could not reach them.
+That is the whole core: the operating system, the workspace, magus's own cache, binary and temp dir, and the git directories. It knows no toolchain. A tool's installs and caches (`GOROOT`, `GOCACHE`, cargo's registry, pnpm's store) are granted by the spell that drives the tool, and a version manager's directories by the workspace; see [Declaring what a tool needs](#declaring-what-a-tool-needs).
+
+`$HOME` is never granted as a whole: `~/.ssh`, `~/.aws`, `~/.config`, `~/.npmrc` and `~/.gitconfig` stay out. Credential files that sit beside a tool's cache stay out too, which is why the rust spell grants cargo's registry and not its home. The shared temp dirs (`/tmp`, `$TMPDIR`, `/var/tmp`) are not granted: they hold ssh-agent, gpg and docker sockets. So magus makes its own temp files for a run (`fs\tempDir`, `fs\tempFile`, the files a remote cache or `pipe\diff` stages for a child) in the private temp dir rather than the shared one, where the run's children could not reach them.
 
 ### How paths are resolved and matched
 
@@ -109,21 +109,81 @@ A name is matched at any depth of the workspace, since mise, direnv and the agen
 
 This is a **binding-layer check only**. Landlock is an allowlist with no deny rule inside a grant, so the kernel layer cannot refuse a write to `.git/hooks/pre-commit` without refusing the rest of the workspace with it. A child process that writes a control file directly is not stopped. The list is also not exhaustive: a `Makefile`, a `package.json` script or a CI workflow runs code later too, and stays writable because writing those is what builds do.
 
-### Extending the allowlist
+### Declaring what a tool needs
 
-A workspace widens its footprint declaratively in `magus.yaml`:
+Everything beyond the core is declared, in one shape, at three layers:
+
+- the **workspace**: `sandbox` in `magus.yaml`, for what no spell owns, such as a version manager;
+- a **spell**: `mgs_getSandbox()`, for the tools the spell drives, so a toolchain's grants live with the spell that knows the toolchain;
+- a **target**: the `sandbox` key of its policy in `magus\project`, for what one target alone needs.
+
+The same declaration at each layer:
 
 ```yaml
+# magus.yaml
 sandbox:
-  mode: best-effort
   allow:
-    - path: ~/.terraform.d/plugins
+    - name: mise-installs
+      env: MISE_DATA_DIR
+      base: xdgData
+      path: mise
       mode: rx
-    - path: $HOME/.cache/bazel
-      mode: rw
+  env:
+    passthrough: [MISE_TRUSTED_CONFIG_PATHS, MISE_SAFE]
 ```
 
-Each entry is expanded (`~` for home, `$VAR` against the current environment), symlink-resolved, and turned into a rule. `mode` spells the grants: `ro` (the default), `rw`, `rx`, or `rwx`. Exec is never implied, so a directory of tools needs `rx`. An entry that cannot be resolved is an **error** ([MGS2004](../reference/codes/sandbox/MGS2004.md)), and so is a mode outside those four: an unset `$VAR` would otherwise expand to an empty string, and `$UNSET/` would grant `/`.
+```buzz
+// a spell
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [SandboxAllow{env = "GOCACHE", base = "userCache", path = "go-build", mode = SandboxAccess.rwx}],
+        env = SandboxEnv{passthrough = ["GOCACHE", "GOFLAGS"]},
+    };
+}
+```
+
+```buzz
+// a target, in magus\project's targets
+"test": {"sandbox": {
+    "allow": [{"env": "FIXTURES_DIR", "base": "xdgData", "path": "fixtures", "mode": "rw"}],
+    "env": {"passthrough": ["FIXTURES_DIR"]},
+}},
+```
+
+An `allow` entry names a location and a `mode`: `ro` (the default), `rw`, `rx` or `rwx`. Exec is never implied, so a directory of tools needs `rx`. The location is the value of `env` when that variable is set, the way the tool itself would read it. Otherwise it is `path`, under `base` when one is given:
+
+| `base`       | resolves to                                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `home`       | the user's home directory                                                                                         |
+| `userCache`  | `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` elsewhere (Go's UserCacheDir)                        |
+| `userConfig` | `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere                             |
+| `xdgCache`   | `$XDG_CACHE_HOME` or `~/.cache`, on every OS                                                                      |
+| `xdgData`    | `$XDG_DATA_HOME` or `~/.local/share`                                                                              |
+| `xdgState`   | `$XDG_STATE_HOME` or `~/.local/state`                                                                             |
+| `$VAR`       | that variable's value (the first entry of a path list); unset, the entry grants nothing                           |
+| `binRoot`    | the install root of `bin` on `PATH`, found through its symlinks; `requires` names a path that must exist under it |
+
+A location read from a variable or a base that is not absolute, or is home or an ancestor of it, grants nothing: `GOCACHE=off` is not a path, and `XDG_CACHE_HOME=$HOME` would otherwise hand over the whole home tree. A base needs a `path` under it, since `~/.cache` is every program's cache and not one tool's.
+
+Without a `base`, `path` is absolute or starts with `~`. `magus.yaml` may also write `$VAR` into it, as in `path: $HOME/.cache/bazel`; an unset variable there is an error, since `$UNSET/` would grant `/`. A spell and a target name variables through `env` and `base` instead, so a variable unset on one host leaves the tool at its default rather than failing every run there.
+
+`env.passthrough` adds variables to the children's environment; see [Environment scrubbing](#environment-scrubbing).
+
+A declaration that cannot be honored is an **error** ([MGS2004](../reference/codes/sandbox/MGS2004.md)), never a warning: an unknown mode, base or key, a path leaving its base, a malformed passthrough pattern. A spell's is refused when the spell loads, a target's when its magusfile loads, and the workspace's when the policy is built.
+
+#### The layers merge; none narrows another
+
+One merge serves every layer: the core, then the workspace, then the project's spells, then the target. Entries union. The same path at two layers gets both modes, so `rx` from one and `rw` from another make `rwx`. Passthrough patterns union. A later layer only adds; the mode and the other `sandbox` settings are the workspace's alone.
+
+#### Which spells a process gets
+
+The spell layer depends on who starts the process:
+
+- **A spell op's child** (`go test` under `go::test`, `pnpm install`) gets the spells its project binds, plus the op's own spell. A project without the go spell never reaches the Go module cache, and an npm postinstall script in a TypeScript project cannot write the Go build cache.
+- **A target's own processes**, a magusfile body's `proc\exec` or a nested `magus`, get every spell the workspace loaded. A body shells out to toolchains its project binds no spell for, and landlock domains stack: a nested magus denied a grant could not pass it on to any target it runs.
+- **A `magus buzz` script** and **a merge queue hook** get every spell the workspace (for the queue, the base) loaded, for the same reason: a hook is usually a nested magus.
+
+The target layer reaches both a target's own processes and its ops' children.
 
 ### A lease narrows it further
 
@@ -135,14 +195,13 @@ The marker that binds a checkout to its lease lives under the user state dir (`$
 
 The child environment is not inherited; it is **rebuilt from an allowlist**. The default keeps only a small, non-secret baseline: `HOME`, `USER`, `PATH`, locale and terminal vars (`LANG`, `LC_*`, `TZ`, `TERM`, and per-platform additions like `SHELL`, `PWD`, `XDG_*`). `TMPDIR` is replaced with the private temp dir. Every other variable is dropped, which is what keeps `AWS_*`, `GITHUB_TOKEN`, `VAULT_*`, `NPM_TOKEN`, `ANTHROPIC_API_KEY`, and their kind out of subprocesses. When variables are dropped, [MGS2003](../reference/codes/sandbox/MGS2003.md) records the count as an informational notice: the build may well have succeeded; the message exists so a behavior change from a missing variable is traceable.
 
-A workspace opts specific variables back in through `sandbox.env.passthrough`:
+A declaration opts specific variables back in through `env.passthrough`, at any of the [three layers](#declaring-what-a-tool-needs). The go spell passes every Go variable, which is why a sandboxed `go test` sees the same `GOFLAGS` and `GOEXPERIMENT` as an unsandboxed one; a workspace adds what no spell owns:
 
 ```yaml
 sandbox:
   env:
     passthrough:
-      - GOPATH
-      - GOCACHE
+      - TF_PLUGIN_CACHE_DIR
       - "MISE_*"
 ```
 
@@ -166,7 +225,7 @@ Reaching the socket is not enough to use it. Every request must carry the socket
 
 The sandbox and the operation model meet here: **a target's declared needs are its footprint, and the footprint is the allowlist.**
 
-A target runs a spell with `cwd = project.Dir` and may only walk **down** from there (see [operations.md](operations.md) and the workspace-scope rule). Its legitimate reach is: the project subtree it owns, the caches and system paths in the default footprint, and whatever the workspace has explicitly widened via `sandbox.allow` / `sandbox.env.passthrough`. Anything a target reaches for beyond that set is, by construction, something it did not declare, which is exactly the signal a denial carries. A denied read is not just "access failed"; it is "this tool tried to touch something outside its declared footprint," and that is the supply-chain tell the model is designed to surface.
+A target runs a spell with `cwd = project.Dir` and may only walk **down** from there (see [operations.md](operations.md) and the workspace-scope rule). Its legitimate reach is: the project subtree it owns, the system paths in the default footprint, and what the workspace, its project's spells and the target itself declare. Anything a target reaches for beyond that set is, by construction, something it did not declare, which is exactly the signal a denial carries. A denied read is not just "access failed"; it is "this tool tried to touch something outside its declared footprint," and that is the supply-chain tell the model is designed to surface.
 
 One boundary sits adjacent to but outside the sandbox policy: **descendant project scope.** A spell dispatched on a parent project must stop at the boundary of any registered descendant project nested inside it. When a write-mode dispatch crosses into a descendant's tree (typically a recursive glob like `prettier --write '**/*.md'` reaching into `api/docs`), the auditor raises [MGS3001](../reference/codes/sandbox/MGS3001.md) and fails the target. The audit happens after the tool writes, so it cannot roll the change back; it prevents the run from succeeding. Landlock cannot enforce this boundary beforehand because both trees are inside the workspace allowlist. That is why MGS3001 lives on the MGS3xxx (audit) rail rather than the MGS2xxx (sandbox) rail.
 
@@ -230,7 +289,7 @@ Every sandbox violation maps to a boundary described above.
 | [MGS2001](../reference/codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                                                       | binding + kernel; denied                        |
 | [MGS2002](../reference/codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist, or to a control file                               | binding + kernel (control files: binding only)  |
 | [MGS2003](../reference/codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                       | pure Go; informational                          |
-| [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                         | policy build; the run stops                     |
+| [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a sandbox declaration (workspace, spell or target) or passthrough entry cannot be honored       | load or policy build; nothing runs              |
 | [MGS2005](../reference/codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable in `best-effort` mode; binding layer only                           | once per top-level invocation; fallback         |
 | [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a mise/asdf shim directory is on PATH but its data var was scrubbed                             | heuristic hint                                  |
 | [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                            | binding + kernel; denied                        |
@@ -245,13 +304,13 @@ Every sandbox violation maps to a boundary described above.
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Policy**             | The immutable per-workspace sandbox record: a filesystem `Ruleset`, an env `Allowlist`, a private temp dir, the mode, and a frozen base-env snapshot. A nil policy means the sandbox is off.                                                                                                 |
 | **Rule**               | One filesystem allowlist entry: a resolved path plus `read` / `write` / `exec` bits. Access is granted to a path at or beneath a rule with the matching bit.                                                                                                                                 |
-| **Footprint**          | The set of paths and env vars a target legitimately touches: its project subtree, the default caches/system paths, and any workspace-declared extras. It is the allowlist.                                                                                                                   |
+| **Footprint**          | The set of paths and env vars a target legitimately touches: its project subtree, the system paths, and what the workspace, its spells and the target declare. It is the allowlist.                                                                                                          |
 | **Control file**       | A file inside the write grant that another tool runs code from later (`.git/hooks`, `magus.yaml`, `.envrc`, `.claude/`, ...). The binding layer refuses writes to it; the kernel layer cannot.                                                                                               |
 | **Launcher**           | magus re-executed as `magus-sandbox-launch` to start one child: it applies the child's landlock ruleset to itself and execs the command. A program embedding magus calls `magus.MaybeLaunchSandbox()` first in `main` so its children can start this way.                                    |
 | **Kernel layer**       | Linux landlock, applied by the launcher to each child before it execs the command, inherited by everything that child starts. Absent on non-Linux and pre-5.13 kernels.                                                                                                                      |
 | **Binding layer**      | The pure-Go checks magus's own `fs`, `archive`, `crypto`, `http` and exec bindings, and Buzz's own `fs`, `io` and `os`, run before an operation. Enforced on every platform; the only layer for in-process Buzz, and the only one at all where the kernel layer is absent.                   |
 | **Env scrubbing**      | Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go, on every platform, but it needs a policy, so it runs only when the sandbox mode is not `off`. With the sandbox off a child inherits the whole parent environment. |
-| **Passthrough**        | The `sandbox.env.passthrough` opt-in that adds exact names or prefix patterns (`NAME_*`) back into the child environment.                                                                                                                                                                    |
+| **Passthrough**        | The `env.passthrough` opt-in, at any declaration layer, that adds exact names or prefix patterns (`NAME_*`) back into the child environment.                                                                                                                                                 |
 | **SandboxUnsupported** | The `ErrUnsupported` fallback: kernel landlock is unavailable, so only the binding layer runs (MGS2005), or, in `required` mode, nothing does (MGS2012).                                                                                                                                     |
 
 ## See also

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +29,7 @@ const helloTimeout = 10 * time.Second
 // service is ready and adds one dependent; Release drops one. The broker calls Release
 // once per Acquire a connection made when that connection closes, however it closed.
 type ServiceHost interface {
-	Acquire(ctx context.Context, key string, svc spells.Service) error
+	Acquire(ctx context.Context, key string, spec ServiceSpec) error
 	Release(key string)
 	// StopAll stops every hosted service, returning how many, and leaves the host usable.
 	StopAll() int
@@ -427,9 +426,9 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		_ = w.write(typeReleaseReply, f.ID, nil)
 
 	case typeServiceAcquire:
-		var req serviceRequest
-		if err := decodeBody(f, &req); err != nil || req.Service == nil || req.Key == "" {
-			fail(CodeMalformed, "broker: a service acquire needs a key and a service")
+		var req serviceAcquireRequest
+		if err := decodeBody(f, &req); err != nil || req.Key == "" || len(req.Service.Command) == 0 {
+			fail(CodeMalformed, "broker: a service acquire needs a key and a command")
 			return
 		}
 		if s.opts.services == nil {
@@ -442,7 +441,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		}
 		// The broker's own context, not the request's: the service outlives the run
 		// that asked for it.
-		if err := s.opts.services.Acquire(s.ctx, req.Key, *req.Service); err != nil {
+		if err := s.opts.services.Acquire(s.ctx, req.Key, req.Service.spec()); err != nil {
 			fail(CodeService, "%v", err)
 			return
 		}
@@ -452,7 +451,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		_ = w.write(typeServiceReply, f.ID, serviceReply{})
 
 	case typeServiceRelease:
-		var req serviceRequest
+		var req serviceReleaseRequest
 		if err := decodeBody(f, &req); err != nil {
 			fail(CodeMalformed, "broker: decode service release: %v", err)
 			return

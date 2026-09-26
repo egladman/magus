@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -584,4 +585,160 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
 	err = m.Run(ctx, targets, magus.WithPreflight("other"))
 	require.ErrorIs(t, err, types.PreflightOutsideClosure)
 	assert.Equal(t, exitUsage, exitCodeOf(err))
+}
+
+// Not parallel: the prescan binds the global flags into globalCfg.
+func TestRunReadsPlan(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "bare flag", args: []string{"--stdin"}, want: true},
+		{name: "single dash, beside a shard", args: []string{"-stdin", "--shard", "1"}, want: true},
+		{name: "after global flags and a target", args: []string{"--dry-run", "ci:gha", "--stdin"}, want: true},
+		{name: "explicit true", args: []string{"build", "--stdin=true"}, want: true},
+		{name: "explicit false", args: []string{"build", "--stdin=false"}},
+		{name: "a value flag's value is not the flag", args: []string{"build", "--preflight", "--stdin"}},
+		{name: "forwarded args are not flags", args: []string{"build", "--", "--stdin"}},
+		{name: "a project named stdin", args: []string{"build", "stdin"}},
+		{name: "absent", args: []string{"build", "a", "--shard", "1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, runReadsPlan(tt.args))
+		})
+	}
+}
+
+// A run reading a plan is never forwarded, since a forward does not carry stdin, and
+// takes no records from its upstream, since stdin is its plan.
+func TestRunReadingAPlanStaysInThisProcess(t *testing.T) {
+	assert.False(t, resolveProfile("run", []string{"--stdin"}).needsForward)
+	assert.True(t, resolveProfile("run", []string{"--stdin"}).spawnsWork)
+	assert.False(t, tradesRecords([]string{"run", "ci:gha", "--stdin"}))
+	assert.True(t, tradesRecords([]string{"run", "ci:gha"}))
+}
+
+func TestDecodeSavedPlan(t *testing.T) {
+	t.Parallel()
+
+	got, err := decodeSavedPlan([]byte(`{"target":"ci","count":2,"max_parallel":2,"future_key":true,
+		"matrix":[{"shard":"1","projects":". docs","label":". docs"},{"shard":"2","projects":"console","label":"console"}],
+		"outputs":[{"name":"count","value":"2"}],"summary":"s"}`))
+	require.NoError(t, err)
+	assert.Equal(t, planOutput{
+		Target:      "ci",
+		Count:       2,
+		MaxParallel: 2,
+		Matrix: []planShard{
+			{Shard: "1", Projects: ". docs", Label: ". docs"},
+			{Shard: "2", Projects: "console", Label: "console"},
+		},
+		Outputs: []planPublish{{Name: "count", Value: "2"}},
+		Summary: "s",
+	}, got)
+
+	refused := []struct {
+		name, input, want string
+	}{
+		{"not json", `nope`, "the plan on stdin is not a shard plan"},
+		{"empty stdin", ``, "the plan on stdin is not a shard plan"},
+		{"no target", `{"count":0,"matrix":[]}`, "names no target"},
+		{"count disagrees", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."}]}`, "states 2 shard(s) but lists 1"},
+		{"shard without id", `{"target":"ci","count":1,"matrix":[{"projects":"."}]}`, "a shard with no id"},
+		{"duplicate id", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."},{"shard":"1","projects":"docs"}]}`, "lists shard 1 twice"},
+		{"no projects", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"  "}]}`, "shard 1 has no projects"},
+	}
+	for _, tt := range refused {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := decodeSavedPlan([]byte(tt.input))
+			require.ErrorIs(t, err, types.SavedPlanRefused)
+			assert.ErrorContains(t, err, tt.want)
+			assert.Equal(t, exitUsage, exitCodeOf(err))
+		})
+	}
+}
+
+func TestSelectPlanShards(t *testing.T) {
+	t.Parallel()
+
+	plan := planOutput{Target: "ci", Count: 2, Matrix: []planShard{
+		{Shard: "1", Projects: ". docs"},
+		{Shard: "2", Projects: "console"},
+	}}
+	tests := []struct {
+		name    string
+		plan    planOutput
+		target  string
+		shard   string
+		nShards int
+		want    []planShard
+		wantErr string
+	}{
+		{name: "every shard", plan: plan, target: "ci", want: plan.Matrix},
+		{name: "one shard", plan: plan, target: "ci", shard: "2", want: []planShard{{Shard: "2", Projects: "console"}}},
+		{name: "agreeing count", plan: plan, target: "ci", shard: "1", nShards: 2, want: []planShard{{Shard: "1", Projects: ". docs"}}},
+		{name: "unknown shard", plan: plan, target: "ci", shard: "3", wantErr: "--shard 3: the plan has no such shard (it has 1, 2)"},
+		{name: "other target", plan: plan, target: "test", wantErr: "the plan is for ci, not test"},
+		{name: "other count", plan: plan, target: "ci", nShards: 3, wantErr: "--n-shards 3, but the plan has 2 shard(s)"},
+		{name: "inherited plan, whole", plan: planOutput{Target: "ci"}, target: "ci", want: nil},
+		{name: "inherited plan, one shard", plan: planOutput{Target: "ci"}, target: "ci", shard: "1", wantErr: "the plan has no shards, so there is nothing to select"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := selectPlanShards(tt.plan, tt.target, tt.shard, tt.nShards)
+			if tt.wantErr != "" {
+				require.ErrorIs(t, err, types.SavedPlanRefused)
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestPlanProjectsKeepPlanOrder(t *testing.T) {
+	t.Parallel()
+
+	got := planProjects([]planShard{{Projects: ". docs"}, {Projects: "console  libs/a"}})
+	assert.Equal(t, []string{".", "docs", "console", "libs/a"}, got)
+}
+
+// ci.yaml publishes the plan with two templates rendered from one saved plan. They are
+// executed here, from the workflow's own text, so a template that stops matching the plan
+// document fails a test rather than a pull request's plan job.
+func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
+	t.Parallel()
+
+	body, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yaml"))
+	require.NoError(t, err)
+	workflow := string(body)
+	assert.NotContains(t, workflow, "ci-shard")
+
+	render := regexp.MustCompile(`magus run --stdin --dry-run -o '([^']*)' < "\$RUNNER_TEMP/plan\.json" >> "\$(GITHUB_OUTPUT|GITHUB_STEP_SUMMARY)"`)
+	found := render.FindAllStringSubmatch(workflow, -1)
+	require.Len(t, found, 2, "ci.yaml's plan step no longer renders the saved plan twice; repoint this test at what does")
+
+	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1,
+		Matrix: []planShard{{Shard: "1", Projects: ". docs", Label: ". docs"}}}
+	out.Outputs, err = planOutputs(out)
+	require.NoError(t, err)
+	out.Summary = planSummaryMarkdown(out)
+
+	want := map[string]string{
+		"GITHUB_OUTPUT": `matrix={"include":[{"shard":"1","projects":". docs","label":". docs"}]}` + "\n" +
+			"count=1\nmax_parallel=1\ninherit=false\n",
+		"GITHUB_STEP_SUMMARY": out.Summary,
+	}
+	for _, m := range found {
+		opts, err := ResolveOutput(m[1])
+		require.NoError(t, err)
+		var b strings.Builder
+		require.NoError(t, writeFormatted(&b, opts, out))
+		assert.Equal(t, want[m[2]], b.String(), "ci.yaml's render into $%s", m[2])
+	}
 }

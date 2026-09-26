@@ -11,7 +11,7 @@ Run a target for selected projects
 
 ## Synopsis
 
-**magus** run \<target\> [flags] [project...]
+**magus** run \<target\> [flags] [project...] | magus run [\<target\>] --stdin [--shard \<id\>] \< plan.json
 
 ## Description
 
@@ -40,6 +40,17 @@ its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.
 
+--stdin runs a saved shard plan instead of a selection: the document magus
+affected \<target\> --plan printed, piped in or redirected from a file (\< plan.json).
+The plan names the target and each shard's projects, so the target positional is
+optional (give it to add charms, as in ci:gha) and project positionals are
+refused. --shard \<id\> runs that one shard; without it every shard runs here. A
+malformed plan, a shard id the plan does not have, a target other than the
+plan's, or an --n-shards other than its count is refused before anything runs
+(MGS3029). Under the global --dry-run nothing runs: the plan is checked and
+printed, and -o json, yaml or template renders the document as read, so a saved
+plan renders more than once without being computed again.
+
 ## Options
 
 **--depth** *int*
@@ -52,7 +63,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Render the dependency graph for the selected scope instead of executing
 
 **--n-shards** *int*
-: Total shard count for this CI matrix run; paired with --shard
+: Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused
 
 **--no-cache**
 : Force a fresh run even on a cache hit; still refreshes the entry
@@ -76,10 +87,13 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
 
 **--shard** *string*
-: This run's shard index within a CI matrix; paired with --n-shards
+: With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing
 
 **--skip** *string*
 : Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/\*); a value matching nothing is an error
+
+**--stdin**
+: Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects
 
 **--step**
 : Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
@@ -125,7 +139,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name.
 
 **2**
-: Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a --preflight target the invoked target never reaches (MGS3021).
+: Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3029).
 
 **3**
 : A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them.
@@ -205,6 +219,24 @@ magus run build api/gateway --graph --upstream
 
 ```sh
 magus run build -o jsonl --tee build.jsonl
+```
+
+*Run every shard of the affected ci plan here*
+
+```sh
+magus affected ci --plan | magus run --stdin
+```
+
+*Run one shard of a saved plan*
+
+```sh
+magus run ci:gha --stdin --shard 2 < plan.json
+```
+
+*Render a saved plan's summary without computing it again*
+
+```sh
+magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json
 ```
 
 ## See Also

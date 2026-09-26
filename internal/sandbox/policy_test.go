@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,7 +55,7 @@ func TestSymlinkEscapeRejected(t *testing.T) {
 }
 
 func TestAllowsEnv(t *testing.T) {
-	p := BuildPolicy(PolicyOptions{Env: env.Allowlist{Names: []string{"GOPATH"}, Prefixes: []string{"NPM_CONFIG_*"}}})
+	p := BuildPolicy(PolicyOptions{Sandbox: spells.Sandbox{Env: spells.SandboxEnv{Passthrough: []string{"GOPATH", "NPM_CONFIG_*"}}}})
 	for name, want := range map[string]bool{
 		"PATH": true, "HOME": true, "GOPATH": true, "NPM_CONFIG_CACHE": true, "MAGUS_RUN_ID": false,
 		"GITHUB_TOKEN": false, "AWS_ACCESS_KEY_ID": false, "NPM_TOKEN": false,

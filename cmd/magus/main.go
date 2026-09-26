@@ -456,6 +456,14 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
+		// The saved plan is on THIS process's stdin, which a forward does not carry. Under
+		// --dry-run it only renders the plan, so it loads nothing.
+		if sub == "run" && runReadsPlan(subArgs) {
+			if globalCfg.DryRun {
+				return dispatchProfile{needsConfig: true}
+			}
+			return dispatchProfile{needsConfig: true, needsWorkspace: true, spawnsWork: true}
+		}
 		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true, spawnsWork: true}
 	case "config":
 		// config history/cache need the workspace; view/set/help do not.

@@ -8,15 +8,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +58,40 @@ func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
 
 	assert.FileExists(t, filepath.Join(dir, "marker.txt"),
 		"an op with no explicit cwd must run in the context cwd, not the process cwd")
+}
+
+// A spell op's child runs under the grants of the spells its project binds: the go
+// spell's op gets the Go environment and an executable GOCACHE, and an op of a project
+// without the go spell gets neither.
+func TestRunCommandScopesAChildToItsProjectsSpells(t *testing.T) {
+	dir := t.TempDir()
+	gocache := filepath.Join(t.TempDir(), "gocache")
+	decls := map[string]spells.Sandbox{}
+	for _, name := range []string{"go", "markdown"} {
+		decls[name] = *spell.Builtins()[name].Sandbox
+	}
+	p := sandbox.BuildPolicy(sandbox.PolicyOptions{
+		Mode: types.SandboxModeBestEffort, Workspace: dir, Home: t.TempDir(), GOOS: runtime.GOOS,
+		Environ: []string{"PATH=" + os.Getenv("PATH"), "GOCACHE=" + gocache, "GOFLAGS=-mod=mod"},
+		Spells:  decls,
+	})
+	childEnv := func(projectSpells []string, opSpell string) string {
+		ctx := std.WithCwd(sandbox.WithStep(sandbox.WithPolicy(t.Context(), p), projectSpells, nil), dir)
+		res, err := runCommand(ctx, spells.Op{Command: spells.Command{Bin: "env"}, Capture: true}, commandOpts{spell: opSpell})
+		require.NoError(t, err)
+		return res.Stdout
+	}
+
+	goChild := childEnv([]string{"go", "markdown"}, "go")
+	assert.Contains(t, goChild, "GOFLAGS=-mod=mod")
+	assert.Contains(t, goChild, "GOCACHE="+gocache)
+	mdChild := childEnv([]string{"markdown"}, "markdown")
+	assert.NotContains(t, mdChild, "GOFLAGS=")
+	assert.NotContains(t, mdChild, "GOCACHE=")
+
+	cached := filepath.Join(gocache, "ab", "tool")
+	assert.NoError(t, p.Scoped([]string{"go"}, nil).CheckExec(t.Context(), cached))
+	assert.ErrorIs(t, p.Scoped([]string{"markdown"}, nil).CheckRead(t.Context(), cached), filesystem.ErrDenied)
 }
 
 // TestRunCommandSupervisesServiceDependency proves runCommand routes a service op to

@@ -10,13 +10,14 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
 // fromConfig is FromConfig for a test that expects it to succeed.
 func fromConfig(t *testing.T, root, cacheDir string, cfg config.SandboxConfig) *Policy {
 	t.Helper()
-	p, err := FromConfig(root, cacheDir, cfg)
+	p, err := FromConfig(root, cacheDir, cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
 	return p
@@ -29,11 +30,42 @@ func TestFromConfigFlowsAllowIntoPolicy(t *testing.T) {
 	extra := filesystem.ResolveRulePath(t.TempDir())
 
 	withAllow := fromConfig(t, root, cacheDir, config.SandboxConfig{
-		Allow: []config.SandboxAllowPath{{Path: extra, Mode: "rw"}},
+		Allow: []spells.SandboxAllow{{Path: extra, Mode: "rw"}},
 	})
 	assert.NoError(t, withAllow.CheckWrite(t.Context(), filepath.Join(extra, "out")))
 	assert.Error(t, withAllow.CheckExec(t.Context(), filepath.Join(extra, "tool")), "rw grants no exec")
 	assert.Error(t, fromConfig(t, root, cacheDir, config.SandboxConfig{}).CheckWrite(t.Context(), filepath.Join(extra, "out")))
+}
+
+// magus.yaml takes the declaration a spell makes: an entry's variable, when set, is the
+// location, and its base and path otherwise. A spell's declarations are merged in.
+func TestFromConfigResolvesTheSpellShape(t *testing.T) {
+	root := t.TempDir()
+	data := filesystem.ResolveRulePath(t.TempDir())
+	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("MAGUS_TEST_MISE_DATA_DIR", "")
+	cfg := config.SandboxConfig{Allow: []spells.SandboxAllow{
+		{Name: "mise", Env: "MAGUS_TEST_MISE_DATA_DIR", Base: "xdgData", Path: "mise", Mode: spells.SandboxAccessRX},
+	}}
+	tool := filepath.Join(data, "mise", "installs", "go", "bin", "go")
+	assert.NoError(t, fromConfig(t, root, "", cfg).CheckExec(t.Context(), tool))
+
+	moved := filesystem.ResolveRulePath(t.TempDir())
+	t.Setenv("MAGUS_TEST_MISE_DATA_DIR", moved)
+	p := fromConfig(t, root, "", cfg)
+	assert.NoError(t, p.CheckExec(t.Context(), filepath.Join(moved, "shims", "go")))
+	assert.Error(t, p.CheckExec(t.Context(), tool), "the variable replaces the default")
+
+	cache := filesystem.ResolveRulePath(t.TempDir())
+	t.Setenv("MAGUS_TEST_TOOL_CACHE", cache)
+	p, err := FromConfig(root, "", config.SandboxConfig{}, map[string]spells.Sandbox{"tool": {
+		Allow: []spells.SandboxAllow{{Env: "MAGUS_TEST_TOOL_CACHE", Base: "userCache", Path: "tool", Mode: spells.SandboxAccessRW}},
+		Env:   spells.SandboxEnv{Passthrough: []string{"MAGUS_TEST_TOOL_CACHE"}},
+	}})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
+	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(cache, "x")))
+	assert.Contains(t, p.BaseEnv, "MAGUS_TEST_TOOL_CACHE="+cache)
 }
 
 // The policy carries the mode that decides an unconfinable child, and the roots its
@@ -55,13 +87,15 @@ func TestFromConfigRefusesABadAllowOrPassthrough(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("MAGUS_TEST_UNSET_VAR", "")
 	for name, cfg := range map[string]config.SandboxConfig{
-		"mode typo":     {Allow: []config.SandboxAllowPath{{Path: "/opt/x", Mode: "RW"}}},
-		"unset var":     {Allow: []config.SandboxAllowPath{{Path: "$MAGUS_TEST_UNSET_VAR/", Mode: "rw"}}},
-		"relative path": {Allow: []config.SandboxAllowPath{{Path: "build", Mode: "ro"}}},
+		"mode typo":     {Allow: []spells.SandboxAllow{{Path: "/opt/x", Mode: "RW"}}},
+		"unset var":     {Allow: []spells.SandboxAllow{{Path: "$MAGUS_TEST_UNSET_VAR/", Mode: "rw"}}},
+		"relative path": {Allow: []spells.SandboxAllow{{Path: "build", Mode: "ro"}}},
 		"short prefix":  {Env: config.SandboxEnv{Passthrough: []string{"GO*"}}},
+		"unknown base":  {Allow: []spells.SandboxAllow{{Base: "tmp", Path: "x", Mode: "rw"}}},
+		"escaping path": {Allow: []spells.SandboxAllow{{Base: "home", Path: "../x", Mode: "rw"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := FromConfig(root, "", cfg)
+			_, err := FromConfig(root, "", cfg, nil)
 			assert.ErrorIs(t, err, types.AllowlistUnresolved)
 		})
 	}
@@ -87,13 +121,13 @@ func TestFromConfigGivesChildrenAPrivateTempDir(t *testing.T) {
 // that it stays out of the workspace.
 func TestFromConfigWithTempDirUsesTheCallersTempDir(t *testing.T) {
 	root, tmp := t.TempDir(), t.TempDir()
-	p, err := FromConfigWithTempDir(root, "", tmp, config.SandboxConfig{})
+	p, err := FromConfigWithTempDir(root, "", tmp, config.SandboxConfig{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, tmp, p.TempDir)
 	assert.Contains(t, p.BaseEnv, "TMPDIR="+tmp)
 	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(tmp, "x")))
 
-	_, err = FromConfigWithTempDir(root, "", filepath.Join(root, "tmp"), config.SandboxConfig{})
+	_, err = FromConfigWithTempDir(root, "", filepath.Join(root, "tmp"), config.SandboxConfig{}, nil)
 	assert.ErrorContains(t, err, "inside the workspace")
 }
 
@@ -105,7 +139,7 @@ func TestFromConfigNeverPutsTheTempDirInsideTheWorkspace(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(root, ".magus", "tmp"))
 	require.NoError(t, os.MkdirAll(os.Getenv("TMPDIR"), 0o700))
 
-	_, err := FromConfig(root, filepath.Join(root, ".magus"), config.SandboxConfig{})
+	_, err := FromConfig(root, filepath.Join(root, ".magus"), config.SandboxConfig{}, nil)
 	assert.ErrorContains(t, err, "inside the workspace")
 }
 

@@ -131,6 +131,57 @@ func TestParseBuzzProjectOpts_TargetTimeoutMalformedErrors(t *testing.T) {
 	}
 }
 
+// A target's sandbox policy takes the declaration magus.yaml and a spell make, written
+// as a map, and becomes the target layer.
+func TestParseBuzzProjectOpts_TargetSandbox(t *testing.T) {
+	entry := vm.NewMap()
+	entry.MapSet("env", vm.StrValue("FIXTURES"))
+	entry.MapSet("base", vm.StrValue("xdgData"))
+	entry.MapSet("path", vm.StrValue("fixtures"))
+	entry.MapSet("mode", vm.StrValue("rw"))
+	envMap := vm.NewMap()
+	envMap.MapSet("passthrough", vm.ListValue([]vm.Value{vm.StrValue("FIXTURES")}))
+	sb := vm.NewMap()
+	sb.MapSet("allow", vm.ListValue([]vm.Value{entry}))
+	sb.MapSet("env", envMap)
+	pol := vm.NewMap()
+	pol.MapSet("sandbox", sb)
+
+	p := applyOpts(t, targetsOpts("test", pol))
+	assert.Equal(t, &spells.Sandbox{
+		Allow: []spells.SandboxAllow{{Env: "FIXTURES", Base: "xdgData", Path: "fixtures", Mode: spells.SandboxAccessRW}},
+		Env:   spells.SandboxEnv{Passthrough: []string{"FIXTURES"}},
+	}, p.TargetPolicies["test"].Sandbox)
+}
+
+// A malformed target declaration is a load error naming the target, and so is an
+// unknown key, which would otherwise leave its entry granting nothing.
+func TestParseBuzzProjectOpts_TargetSandboxMalformedErrors(t *testing.T) {
+	for name, tc := range map[string]struct {
+		key, value string
+		want       string
+	}{
+		"escaping path": {"path", "../x", `must be a relative path that stays under base xdgData`},
+		"unknown key":   {"access", "rw", `unknown key "access"`},
+		"unknown mode":  {"mode", "RW", `unknown mode "RW"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			entry := vm.NewMap()
+			entry.MapSet("base", vm.StrValue("xdgData"))
+			entry.MapSet("path", vm.StrValue("x"))
+			entry.MapSet(tc.key, vm.StrValue(tc.value))
+			sb := vm.NewMap()
+			sb.MapSet("allow", vm.ListValue([]vm.Value{entry}))
+			pol := vm.NewMap()
+			pol.MapSet("sandbox", sb)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
+			require.ErrorIs(t, err, types.AllowlistUnresolved)
+			assert.ErrorContains(t, err, `targets["test"].sandbox`)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 // TestParseBuzzProjectOpts_Sources pins the CLEANED stored form and, with it, the truth
 // the cleaning buys: a magusfile may reach into a sibling tree, and the reach resolves
 // against the declaring project, so "../proto/**/*.proto" from docs/ declares

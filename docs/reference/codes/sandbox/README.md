@@ -30,7 +30,7 @@ or extension reads credentials from disk and exfiltrates them.
 ## What sandbox blocks
 
 - Reads outside the workspace, its private temp dir, the system trees,
-  the `PATH` directories and the known tool caches and installs. This
+  the `PATH` directories and the tool caches and installs the spells declare. This
   denies `~/.aws/credentials`, `~/.vault-token`, `~/.ssh/id_rsa`,
   `~/.npmrc`, `~/.config/op`, `~/.docker/config.json`, `~/.kube/config`,
   and the rest of the usual supply-chain targets.
@@ -151,6 +151,7 @@ Two layers run together:
 - [MGS3026](MGS3026.md): a merge queue hook flag holding shell syntax rather than a command and its arguments.
 - [MGS3027](MGS3027.md): the merge queue refused a validation run the base's own queue workflow did not start.
 - [MGS3028](MGS3028.md): the merge queue's plan disagrees with what apply reads itself.
+- [MGS3029](MGS3029.md): a `run --stdin` that reads a malformed plan, or names a shard, target or count the plan does not have.
 - [MGS3030](MGS3030.md): a magus stage upstream of this run in a pipe exited non-zero.
 - [MGS3031](MGS3031.md): a job forked with a declaration claim no footprint can grade.
 
