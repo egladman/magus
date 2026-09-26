@@ -6,14 +6,17 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // resolveWS is a minimal types.WorkspaceRepository for resolveTargets tests. It
@@ -740,5 +743,100 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 		var b strings.Builder
 		require.NoError(t, writeFormatted(&b, opts, out))
 		assert.Equal(t, want[m[2]], b.String(), "ci.yaml's render into $%s", m[2])
+	}
+}
+
+// The merge queue replays main's signed cache only for a step main's CI keyed the same
+// way, and charms are key lines: a gate running `ci` against shards that ran `ci:gha`
+// missed every entry main stored for an unchanged base. The queue's box moves HOME,
+// TMPDIR and the XDG directories (see boxEnv in internal/queue), none of which may key a
+// step either.
+func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
+	root := filepath.Join("..", "..")
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yaml"))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &workflow))
+	var shard string
+	for _, s := range workflow.Jobs["ci"].Steps {
+		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "run ci") {
+			shard = regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
+		}
+	}
+	require.NotEmpty(t, shard, "ci.yaml's shards run no `run ci` command")
+
+	// candidateMagus puts `go run ./cmd/magus` in front of the literal.
+	raw, err = os.ReadFile(filepath.Join(root, "tools", "gha-queue.buzz"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`final GATE = candidateMagus\("([^"]+)"\);`).FindSubmatch(raw)
+	require.NotNil(t, m, "tools/gha-queue.buzz declares no GATE")
+	gate := string(m[1])
+
+	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
+	require.NoError(t, err)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
+	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
+	ctx := context.Background()
+	w, err := magus.Open(ctx, root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = w.Close() })
+
+	// Flags outside the charm set key nothing, and forwarded args would.
+	charms := func(command string) []string {
+		argv := strings.Fields(command)
+		require.GreaterOrEqual(t, len(argv), 2, command)
+		require.Equal(t, "run", argv[0], command)
+		require.NotContains(t, argv, "--", command)
+		target, err := types.ParseTarget(argv[1])
+		require.NoError(t, err, command)
+		require.Equal(t, types.TargetCI, target.Name, command)
+		return magus.CharmsForCI(withDefaultCharms(target.Charms, cfg.DefaultCharms, slices.Contains(argv, "--no-default-charms")))
+	}
+	shardCharms, gateCharms := charms(shard), charms(gate)
+
+	// test is one of ci's stages there, keyed with the invocation's charms, and keys GOOS.
+	const project = "libs/diagnostics"
+	targets := []string{"ci", "test"}
+	type keyed struct {
+		key   string
+		lines []string
+	}
+	keyAll := func(charms []string) []keyed {
+		var out []keyed
+		for _, target := range targets {
+			key, lines, err := w.ComputeTargetKey(ctx, project, target, charms)
+			require.NoError(t, err)
+			out = append(out, keyed{key, lines})
+		}
+		return out
+	}
+	shardKeys := keyAll(shardCharms)
+
+	home, tmp := t.TempDir(), t.TempDir()
+	for name, value := range map[string]string{
+		"HOME":            home,
+		"XDG_CACHE_HOME":  filepath.Join(home, ".cache"),
+		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"XDG_DATA_HOME":   filepath.Join(home, ".local", "share"),
+		"TMPDIR":          tmp,
+		"GOTOOLCHAIN":     "local",
+	} {
+		t.Setenv(name, value)
+	}
+	gateKeys := keyAll(gateCharms)
+
+	for i, target := range targets {
+		if assert.Equal(t, shardKeys[i].lines, gateKeys[i].lines, "%s:%s keys differently under the queue gate %q than under ci.yaml's %q",
+			project, target, gate, shard) {
+			assert.Equal(t, shardKeys[i].key, gateKeys[i].key)
+		}
 	}
 }

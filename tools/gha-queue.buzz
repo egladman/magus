@@ -103,8 +103,10 @@ export fun candidateMagus(args: str) > str {
 final SANDBOX = "--sandbox=required";
 
 // GATE and REGENERATE are validation's hook lines. Apply shows them on a kick-back from
-// its own flags: a verdict is written by a job that ran the change's code.
-final GATE = candidateMagus("run ci --no-default-charms");
+// its own flags: a verdict is written by a job that ran the change's code. The gate
+// takes ci.yaml's charms, since charms key every step and only a step keyed as main's
+// shards keyed it replays what they stored.
+final GATE = candidateMagus("run ci:gha --no-default-charms");
 final REGENERATE = candidateMagus("run generate:rw");
 
 // validateArgs names no project: the queue appends the change's affected projects to
@@ -381,7 +383,7 @@ test "outputs render a compact matrix and its count" {
 test "validation hooks are lines a person can run once they name the projects, with caches the queue keeps private" {
     assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--sandbox=required", "--stdin", "--only", "482",
         "--verdicts", "/t/queue/verdicts",
-        "--gate", "go run ./cmd/magus run ci --no-default-charms",
+        "--gate", "go run ./cmd/magus run ci:gha --no-default-charms",
         "--regenerate", "go run ./cmd/magus run generate:rw",
         "--remote-cache-read"], message: "argv");
 }
@@ -398,7 +400,7 @@ test "apply follows the validation run as its source, pinned to the base and que
     assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply", "--sandbox=required",
         "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
         "--regenerate", "magus run generate:rw",
-        "--reproduce-gate", "go run ./cmd/magus run ci --no-default-charms", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
+        "--reproduce-gate", "go run ./cmd/magus run ci:gha --no-default-charms", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
         "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>", "--app", "q", "run:o/r/runs/99"], message: "argv");
 }
 
