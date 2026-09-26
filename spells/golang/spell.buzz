@@ -103,6 +103,11 @@ export fun mgs_getSandbox() > Sandbox {
             SandboxAllow{base = "home", path = "go/bin", mode = SandboxAccess.rx},
             SandboxAllow{env = "GOMODCACHE", base = "$GOPATH", path = "pkg/mod", mode = SandboxAccess.rw},
             SandboxAllow{env = "GOMODCACHE", base = "home", path = "go/pkg/mod", mode = SandboxAccess.rw},
+            // The checksum database's signed tree head, which go rewrites whenever it
+            // verifies a module go.sum does not list (golangci-lint custom's go mod tidy).
+            // It sits under GOPATH whatever GOMODCACHE says.
+            SandboxAllow{base = "$GOPATH", path = "pkg/sumdb", mode = SandboxAccess.rw},
+            SandboxAllow{base = "home", path = "go/pkg/sumdb", mode = SandboxAccess.rw},
             SandboxAllow{env = "GOCACHE", base = "userCache", path = "go-build", mode = SandboxAccess.rwx},
             SandboxAllow{env = "GOENV", base = "userConfig", path = "go/env", mode = SandboxAccess.ro},
             SandboxAllow{env = "GOLANGCI_LINT_CACHE", base = "userCache", path = "golangci-lint", mode = SandboxAccess.rw},

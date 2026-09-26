@@ -582,3 +582,26 @@ func TestGoSpellDeclaresTheToolchainsGrants(t *testing.T) {
 		assert.False(t, strings.HasPrefix(kv, "GO"), "%s reaches a project without the go spell", kv)
 	}
 }
+
+// go keeps the checksum database's tree head under the first GOPATH entry, not under
+// GOMODCACHE, and writes it whenever it verifies a module go.sum does not list. So a
+// module cache moved elsewhere still leaves go writing GOPATH/pkg/sumdb, and with
+// GOPATH unset, the default under home.
+func TestGoSpellGrantsTheChecksumDatabaseWhereGoKeepsIt(t *testing.T) {
+	sb := Builtins()["go"].Sandbox
+	require.NotNil(t, sb)
+	gopath, home := t.TempDir(), t.TempDir()
+	for name, c := range map[string]struct {
+		opts   sandbox.PolicyOptions
+		gopath string
+	}{
+		"GOPATH set, GOMODCACHE apart": {sandbox.PolicyOptions{Home: t.TempDir(), Environ: []string{"GOPATH=" + gopath, "GOMODCACHE=" + t.TempDir()}}, gopath},
+		"GOPATH unset":                 {sandbox.PolicyOptions{Home: home}, filepath.Join(home, "go")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c.opts.GOOS, c.opts.Spells = "linux", map[string]spells.Sandbox{"go": *sb}
+			p := sandbox.BuildPolicy(c.opts).Scoped([]string{"go"}, nil)
+			assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(c.gopath, "pkg", "sumdb", "sum.golang.org", "latest")))
+		})
+	}
+}
