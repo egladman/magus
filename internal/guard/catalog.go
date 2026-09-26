@@ -122,6 +122,12 @@ var denyRuleDocs = []RuleDoc{
 			"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
 			"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
 			"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked."},
+	{Name: string(denyRuleInlineAlias), Decision: "deny",
+		Catches: "a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs",
+		Why: "git expands `git -c alias.x='reset --hard' x` into `git reset --hard`, so the word every git rule reads as the subcommand names nothing, and a reset, clean or push would pass unjudged. " +
+			"The guard refuses the line rather than judging it as every destructive verb at once: the arguments those rules read come from the alias body too, and `--config-env` or an inline `include.path`, which loads a file that may define aliases, keeps the body off the line altogether. " +
+			"The other backends are held to the same bar: hg's and sl's `--config alias.x=...`, jj's `--config aliases.x=...`, and the options that load config from a file or a TOML string (`--config-file`, sl's `--configfile`, jj's `--config-toml`). " +
+			"Spell out the command the alias stands for. Any other config setting is untouched, and each tool's global options (`git -C`, `hg -R`, `jj --at-op`, `--no-pager`) are read past the way the tool reads them."},
 	{Name: string(denyRuleMergeSideCheckout), Decision: "deny",
 		Catches: "a checkout of one merge side over a conflicted file, which discards the merge",
 		Why: "It reads like \"undo my edit to this file\" and is not: during a merge the working-tree copy IS the merge, and this replaces it wholesale with one side. " +
@@ -230,11 +236,13 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",
 		Why: "These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. " +
 			"It is the one category where an over-eager refusal is the safe direction, which is why an unparsable line falls back to the pattern rather than passing. " +
-			"Verify in place instead: no magus run needs a clean tree."},
+			"Verify in place instead: no magus run needs a clean tree. " +
+			"git's own help passes, because git documents that it prints usage without running: `git stash --help`, `git reset -h`, `git help stash`. It has to be the whole line, with nothing between the verb and the flag, so `git reset --hard --help`, `git -c ... stash --help`, a `VAR=value` prefix, `sh -c` or a pipe are judged as work."},
 	{Name: string(denyRuleWorktreeRemove), Decision: "deny",
 		Catches: "removing a worktree, which may hold another session's uncommitted work",
 		Why: "A worktree is where another session may be working right now, and its uncommitted changes live nowhere else. " +
-			"Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds."},
+			"Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds. " +
+			"`git worktree remove --help` and `-h`, alone on the line, print usage and pass."},
 }
 
 // advisoryDocs documents every rule that EXPLAINS rather than refuses. Several are

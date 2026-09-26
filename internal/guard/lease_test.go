@@ -351,6 +351,14 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git commit -q -m done",
 		"git -C /tmp/elsewhere commit -m done",
 		"git --work-tree /tmp/elsewhere commit -m done",
+		"git --no-pager commit -m done",
+		"git -P push",
+		"git --git-dir=.git --work-tree=. stash",
+		"git --config-env x=Y reset --hard",
+		"git -c alias.x=commit x -m done",
+		"hg --config alias.p=push p",
+		"jj --config-toml 'x=1' --at-op @ git push",
+		"hg --pag never push",
 		"git push origin main",
 		"hg push",
 		"hg -R ../x push",
@@ -368,6 +376,8 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git merge main",
 		"git cherry-pick abc123",
 		"cd sub && git commit -m done",
+		"git -c core.pager=cat stash --help",
+		"git stash --help | cat",
 	} {
 		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
@@ -383,6 +393,8 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git stash list",
 		"git stash show -p",
 		"git log --oneline -3",
+		"git stash --help",
+		"git commit -h",
 		"./magus run go::go-test . -- -run Guard ./cmd/magus/",
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
@@ -397,6 +409,24 @@ func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
 	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "", "git commit -m done"))
 	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
 	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "harness/absent", "git commit -m done"))
+}
+
+// TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git
+// reads are recognized past git's global options, and that no option turns a write, or a
+// word an inline alias defines, into one.
+func TestUndeclaredLeaseRepairsReadsGitsSubcommand(t *testing.T) {
+	t.Parallel()
+	for command, want := range map[string]bool{
+		"git status":                     true,
+		"git -C ../other status --short": true,
+		"git --no-pager log -3":          true,
+		"git -c color.ui=never diff":     true,
+		"git -C . commit -m x":           false,
+		"git -c alias.st=commit st":      false,
+		"git -c alias.status=x status":   false,
+	} {
+		assert.Equal(t, want, undeclaredLeaseRepairs(command), "%q", command)
+	}
 }
 
 // TestDenyLeaseScopedHarnessSeesPastGlobalFlags pins the two bypasses the harness rule had:

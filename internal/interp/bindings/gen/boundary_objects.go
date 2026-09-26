@@ -1218,6 +1218,21 @@ func ObjectVCSTag(v types.VCSTag) vm.Value {
 	return out
 }
 
+func ObjectYAMLPositions(v types.YAMLPositions) vm.Value {
+	out := vm.NewMap()
+	mappedLines := vm.NewMap()
+	for keyLines, itemLines := range v.Lines {
+		mappedLines.MapSet(keyLines, vm.IntValue(int64(itemLines)))
+	}
+	out.MapSet("lines", mappedLines)
+	mappedColumns := vm.NewMap()
+	for keyColumns, itemColumns := range v.Columns {
+		mappedColumns.MapSet(keyColumns, vm.IntValue(int64(itemColumns)))
+	}
+	out.MapSet("columns", mappedColumns)
+	return out
+}
+
 func ObjectHint(v spells.Hint) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("contains", vm.StrValue(v.Contains))

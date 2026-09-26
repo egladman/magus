@@ -530,9 +530,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 }
 
 // A request for a tool's help reads documentation and changes nothing, so the rules that
-// route work through magus let it through (helpRequest). The rest still refuse it: a help
-// flag appended to a credential verb or a destructive git command is not a way around
-// either rule.
+// route work through magus let it through (helpRequest). The destructive-command rules let
+// through only a line that is one help request for a helpSafePrograms program
+// (helpOnlyLine). The rest still refuse it: a help flag appended to a credential verb is
+// not a way around the rule.
 func TestHelpRequestsPassRoutingRules(t *testing.T) {
 	rawTool := func(argv string) denyRule { return denyRule{Name: denyRuleRawTool, Arg: argv} }
 	tests := []struct {
@@ -580,16 +581,47 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		{command: "ps -h", rule: denyRule{Name: denyRuleProcessPoll}},
 		{command: "magus memory get help | head", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "cd libs && magus run test --help=false", rule: denyRule{Name: denyRuleCd}},
-		// One per protected rule: none of them consults helpRequest.
+		// One per protected rule: none of them consults helpRequest. sed is not in
+		// helpSafePrograms, since BSD sed reads `-i --help` as a backup suffix.
 		{command: "magus config token print --help", rule: denyRule{Name: denyRuleCredentialVerb}},
 		{command: "magus notes capture --help", rule: denyRule{Name: denyRuleNotesAuthor}},
 		{command: "magus session dispose --help", rule: denyRule{Name: denyRuleAgentSignOff}},
 		{command: "sed -i --help", rule: denyRule{Name: denyRuleSedInPlace}},
-		{command: "git reset --hard --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git reset --hard"}},
-		{command: "git add -A --help", rule: denyRule{Name: denyRuleStageAll}},
-		{command: "git worktree remove --help", rule: denyRule{Name: denyRuleWorktreeRemove}},
 		{command: "MAGUS_NO_WAIT=1 go clean --help", rule: denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_NO_WAIT"}},
 		{command: "go clean --help; echo $?", rule: denyRule{Name: denyRuleExitStatusEcho}},
+		// git's help passes the destructive-command rules too (helpOnlyLine), one row per
+		// rule plus the advisories gitGuard would attach to the same verb.
+		{command: "git stash --help"},
+		{command: "git stash -h"},
+		{command: "git help stash"},
+		{command: "git help worktree remove"},
+		{command: "git --help"},
+		{command: "git reset -h"},
+		{command: "git clean -h"},
+		{command: "git stash pop --help"},
+		{command: "git stash drop -h"},
+		{command: "git worktree remove --help"},
+		{command: "git worktree remove -h"},
+		{command: "git add --help"},
+		{command: "git checkout --help"},
+		{command: "git restore -h"},
+		{command: "git push --help"},
+		{command: "git commit -h"},
+		// Anything around git's help, or between the verb and the flag, is work.
+		{command: "git reset --hard --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git reset --hard"}},
+		{command: "git reset --hard -h", rule: denyRule{Name: denyRuleWholeTree, Arg: "git reset --hard"}},
+		{command: "git add -A --help", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add . -h", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git checkout MERGE_HEAD -- x --help", rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git stash -- --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "git worktree remove ../x --help", rule: denyRule{Name: denyRuleWorktreeRemove}},
+		{command: "GIT_EXEC_PATH=/tmp git stash --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "env git stash --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "bash -c 'git stash --help'", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "git stash --help | cat", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "git stash --help && git stash", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "git stash --help > usage.txt", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
+		{command: "git worktree remove --help; true", rule: denyRule{Name: denyRuleWorktreeRemove}},
 	}
 	for _, tt := range tests {
 		v := Evaluate(testDependencies(), tt.command)
@@ -600,6 +632,54 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		} else {
 			assert.NotEmpty(t, v.Deny, "%q must deny", tt.command)
 		}
+	}
+}
+
+// helpOnlyLine is what a destructive-command rule reads, so it is pinned directly: a git
+// global option or an alias reaching the command is work even where no rule denies it.
+func TestHelpOnlyLineReadsOneGitHelpRequest(t *testing.T) {
+	help := []string{
+		"git stash --help",
+		"git worktree remove --help",
+		"git reset -h",
+		"git help stash",
+		"git help",
+		"git --help",
+		"git -h",
+		// Rewritten to `git help x`, which prints an alias's definition.
+		"git x --help",
+	}
+	work := []string{
+		"git -c alias.x='!rm -rf .' x --help",
+		"git -c core.pager=cat stash --help",
+		"git -C . stash --help",
+		"git --exec-path=/tmp stash --help",
+		"GIT_EXEC_PATH=/tmp git stash --help",
+		"GIT_CONFIG_PARAMETERS=x git stash --help",
+		"/usr/bin/git stash --help",
+		// An alias receives `-h` and any deeper path as arguments.
+		"git x -h",
+		"git x a --help",
+		"git stash --help=all",
+		"git stash --help extra",
+		"git help -a",
+		"git help ../x",
+		"git $verb --help",
+		"sh -c 'git stash --help'",
+		"git stash --help | cat",
+		"git stash --help; ls",
+		"git stash --help &",
+		"! git stash --help",
+		"git stash --help 2>&1",
+		"hg revert --help",
+		"jj abandon --help",
+		"sed -i --help",
+	}
+	for _, command := range help {
+		assert.True(t, helpOnlyLine(command, DialectBash), "%q is a help request", command)
+	}
+	for _, command := range work {
+		assert.False(t, helpOnlyLine(command, DialectBash), "%q is work", command)
 	}
 }
 
