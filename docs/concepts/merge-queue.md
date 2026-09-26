@@ -349,6 +349,11 @@ names the backend (`git` unless given); the queue reads neither `MAGUS_VCS_ENABL
 `MAGUS_VCS_NAME`, which configure magus's own use of version control. `magus queue` never
 runs through the server: it acts on the caller's checkout.
 
+`validate` and `apply` build each candidate by merging in a checkout of that one, so it
+must be a full clone. A partial clone (`--filter=blob:none`) is refused: git there asks
+the remote for any object it lacks, and a merge can ask for a blob it just wrote, which
+the remote never had. `plan` builds no candidate and works in either.
+
 `plan` checks each change's approval at the commit a review of its head covers, finds
 which changes are stacked on which, drops what conflicts with main on its own (kicked
 back with the conflicting files and the commits that touched them), and partitions the
