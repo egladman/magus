@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -146,6 +147,19 @@ func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
 	assert.Equal(t, 0, code, "the child reads its own status: %s", out)
 	code, out = confinedHelper(t, p, "read", own.Path)
 	assert.Equal(t, exitDenied, code, "and not the status of the magus that built the policy: %s", out)
+}
+
+// A read grant on all of /proc leaves the environment of a process outside the child's
+// landlock domain closed: the kernel checks ptrace access on it, and landlock refuses
+// that across domains. magusfile.buzz grants its test target /proc on this.
+func TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed(t *testing.T) {
+	requireLandlock(t)
+
+	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), filesystem.Rule{Path: "/proc", Read: true})}}
+	code, out := confinedHelper(t, p, "read", "/proc/self/environ")
+	assert.Equal(t, 0, code, "the child reads its own environment: %s", out)
+	code, out = confinedHelper(t, p, "read", "/proc/"+strconv.Itoa(os.Getpid())+"/environ")
+	assert.Equal(t, exitDenied, code, "and not the unconfined test process's: %s", out)
 }
 
 // A caller's own ExtraFiles, a jobserver pipe say, reach the command after the
