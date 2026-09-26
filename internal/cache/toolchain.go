@@ -525,8 +525,8 @@ func stageToolchainFile(r io.Reader, dst string, f toolchainFile, readOnly bool,
 		return err
 	}
 	h := sha256.New()
-	_, err = io.Copy(io.MultiWriter(out, h), r)
-	if err = errors.Join(err, out.Close()); err != nil {
+	_, copyErr := io.Copy(io.MultiWriter(out, h), r)
+	if err := errors.Join(copyErr, out.Close()); err != nil {
 		return err
 	}
 	if hex.EncodeToString(h.Sum(nil)) != f.SHA256 {

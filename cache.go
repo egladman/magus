@@ -80,7 +80,7 @@ type ToolchainCache struct {
 	// Inactive reports a restore that found the remote backend inactive here.
 	Inactive bool
 	Files    int
-	Bytes   int64
+	Bytes    int64
 	// Skipped is the unused entries a save trimmed, or the files a restore found present.
 	Skipped     int
 	Transferred int64
