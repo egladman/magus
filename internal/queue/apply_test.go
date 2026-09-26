@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,10 +31,18 @@ func validated(c types.Change, onto, after string) types.Verdict {
 // Every mark succeeds unless the test set [doubles.marks] first.
 func applierFor(t *testing.T, d doubles, plan types.Plan, verdicts ...types.Verdict) *Applier {
 	t.Helper()
+	return applierForBatch(t, d, types.VerdictBatch{Verdicts: verdicts, Done: true})
+}
+
+// applierForBatch is applierFor with the one final poll answering batch.
+func applierForBatch(t *testing.T, d doubles, batch types.VerdictBatch) *Applier {
+	t.Helper()
 	d.noCheckouts()
 	d.noneGreen()
 	d.marks(nil)
-	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Verdicts: verdicts, Done: true}, nil).Maybe()
+	// A test about required checks answers them before this: a provider reading none is the default.
+	d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	d.src.EXPECT().Poll(mock.Anything).Return(batch, nil).Maybe()
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 	require.NoError(t, err)
 	a.Base = "main"
@@ -548,8 +557,8 @@ func TestACandidateTheRebuildDoesNotReproduceIsValidatedAgain(t *testing.T) {
 }
 
 // The job holding the write credential never runs a change's code: a merge needing
-// outputs regenerated from code the change touched goes back to its author, and nothing
-// is regenerated.
+// outputs regenerated from code the change touched, with no bundle from validation to
+// check, goes back to its author, and nothing is regenerated.
 func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.T) {
 	d := newDoubles(t)
 	c := change("1", "a")
@@ -566,7 +575,7 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 	d.status(c, c.Head, types.StateFailure, "kicked back")
 	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, mock.MatchedBy(func(k types.Kick) bool {
 		return k.Code == types.CodeKickRegeneration &&
-			strings.Contains(k.Report, "it changes code their regeneration runs (`gen/gen.go`), so only its author can regenerate them") &&
+			strings.Contains(k.Report, "it changes code their regeneration runs (`gen/gen.go`), and validation left no regenerated candidate this queue can check, so only its author can regenerate them") &&
 			strings.Contains(k.Report, "Merge `main` in, regenerate, and push. Then queue it again")
 	})).Run(func(context.Context, types.Change, string, types.Kick) { marks.add("kicked") }).Return(nil).Once()
 	a := applierFor(t, d, planOf([]types.Change{c}), v)
@@ -595,7 +604,7 @@ func TestRegenerationOntoAChangeMergedThisRunProvesWhatLiesBeneath(t *testing.T)
 	}{
 		"code only what it builds on changes": {code: []string{"magusfile.buzz"},
 			wait: "regenerating `gen/x.go` on " + cand1[:12] + " would run `magusfile.buzz`, which it does not change but what it builds on does"},
-		"its own code": {code: []string{"a/y.go", "magusfile.buzz"}, kick: "and magusfile.buzz is a magusfile (`a/y.go`, `magusfile.buzz`), so only its author can regenerate them"},
+		"its own code": {code: []string{"a/y.go", "magusfile.buzz"}, kick: "and magusfile.buzz is a magusfile (`a/y.go`, `magusfile.buzz`), and validation left no regenerated candidate this queue can check, so only its author can regenerate them"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -677,6 +686,315 @@ func TestTheBasesOwnRegenerationRebuildsTheCandidate(t *testing.T) {
 			assert.Equal(t, []string{"gen"}, units)
 		})
 	}
+}
+
+// generatorChange sets up applying's rebuild of a change to its own generator, whose
+// outputs the base's regeneration cannot provably reproduce: the rebuild is merged, and
+// what regenerates gen/x.go runs gen/gen.go, which the change touches. Nothing may
+// regenerate in the job holding the write credential.
+// The merge's checkout holds holding.
+func generatorChange(d doubles, c types.Change, holding map[string]entry) (merged string) {
+	merged = head("rebuilt")
+	touched := []string{"gen/gen.go", "gen/x.go"}
+	d.bases(base)
+	d.rechecks(c, approvedAs(c))
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(checkoutHolding(holding)).Once()
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
+	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil).Once()
+	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, when)}).Return(merged, nil).Once()
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, base, merged).Return(touched, nil).Once()
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).Return(nil)
+	d.facts.EXPECT().Classify(mock.Anything, touched).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
+	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).
+		Return(types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}}, nil)
+	return merged
+}
+
+// entry is one path a test checkout holds: a file of mode, or a symbolic link to link,
+// or a directory, as git checks a submodule out.
+type entry struct {
+	mode fs.FileMode
+	link string
+	dir  bool
+}
+
+// checkoutHolding checks out a directory holding files.
+func checkoutHolding(files map[string]entry) func(context.Context, string, string, string) error {
+	return func(_ context.Context, _, dir, _ string) error {
+		for p, e := range files {
+			abs := filepath.Join(dir, filepath.FromSlash(p))
+			if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+				return err
+			}
+			switch {
+			case e.dir:
+				if err := os.Mkdir(abs, 0o755); err != nil {
+					return err
+				}
+			case e.link != "":
+				if err := os.Symlink(e.link, abs); err != nil {
+					return err
+				}
+			default:
+				if err := os.WriteFile(abs, []byte("generated\n"), 0o600); err != nil {
+					return err
+				}
+				// Chmod, since the umask would narrow WriteFile's mode.
+				if err := os.Chmod(abs, e.mode); err != nil {
+					return err
+				}
+			}
+		}
+		return os.MkdirAll(dir, 0o755)
+	}
+}
+
+// noRegeneration is apply's regeneration, which a test of validation's bundle must
+// never see called.
+func noRegeneration(t *testing.T) types.RegenerateFunc {
+	return func(context.Context, types.Regeneration) error {
+		t.Error("apply ran a regeneration over the change's own generator")
+		return nil
+	}
+}
+
+// Where the base's regeneration cannot reproduce a change's outputs, applying takes
+// validation's regenerated candidate from the bundle beside its verdict, once it checks
+// it is the gated commit, on this job's own merge, differing only in declared outputs.
+// It lands through an update commit holding that tree on the head and the tip, and the
+// change is never marked kicked back.
+func TestValidationsCheckedRegenerationLandsThroughAnUpdateCommit(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "gen")
+	c.Branch = "feature"
+	v := validated(c, base, "")
+	after := oid("after", "1")
+	update := head("update")
+	d.caps()
+	marks := d.marks(nil)
+	merged := generatorChange(d, c, map[string]entry{"gen/x.go": {mode: 0o644}, "gen/run.sh": {mode: 0o755}})
+	d.bases(base, after)
+	d.vcs.EXPECT().Unbundle(mock.Anything, clone.Root, "/v/1/candidate.bundle").Return(nil).Once()
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, v.CandidateCommit).Return(magustypes.Commit{ID: v.CandidateCommit, Parents: []string{merged}}, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, merged, v.CandidateCommit).Return([]string{"gen/gone.go", "gen/run.sh", "gen/x.go"}, nil)
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/gone.go", "gen/run.sh", "gen/x.go"}).
+		Return(map[string]types.Writes{"gen/gone.go": {Output: true}, "gen/run.sh": {Output: true}, "gen/x.go": {Output: true}}, nil)
+	// A regular file, an executable one that was executable, and one the regeneration removed.
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit).
+		RunAndReturn(checkoutHolding(map[string]entry{"gen/x.go": {mode: 0o644}, "gen/run.sh": {mode: 0o755}})).Once()
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
+		Return(magustypes.TreeMergeResult{Tree: "plain", Conflicts: []magustypes.Conflict{{Path: "gen/x.go"}}}, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"gen/x.go"}, nil).Twice()
+	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
+		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files", Author: bot, Committer: bot},
+		Tree:       "validated", Parents: []string{c.Head, base}}).Return(update, nil)
+	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
+	success := d.green(c, update).NotBefore(push)
+	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success).Run(func(mock.Arguments) { marks.add("merged") })
+	a := applierForBatch(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
+	a.Regenerate = noRegeneration(t)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Equal(t, []string{"1 queued", "merged", "1 none"}, marks.entries(), "a change the queue settled is never marked kicked back")
+}
+
+// A bundle is bytes from a job that ran the change's code, so applying refuses one that
+// does not load onto its own merge, does not hold the commit the gate ran on, puts that
+// commit on anything but its own merge of the pinned head, or changes a file the base
+// does not declare as an output. Nothing is pushed or regenerated.
+func TestAValidationBundleApplyingCannotCheckIsRefused(t *testing.T) {
+	for name, tc := range map[string]struct {
+		unbundle error
+		missing  bool
+		parents  []string
+		changed  []string
+		// merged and cand are what the merge's and the candidate's checkouts hold; a nil
+		// cand checks nothing out.
+		merged, cand map[string]entry
+		kick         string
+	}{
+		"it does not load": {unbundle: errors.New("prerequisite commit missing"),
+			kick: "validation's regenerated candidate does not load onto this job's own merge of it"},
+		"another tree than the gate's": {missing: true, kick: "validation's regenerated candidate does not hold "},
+		"tampered parents": {parents: []string{head("elsewhere")},
+			kick: "validation's regenerated candidate is not a commit on " + head("rebuilt")[:12]},
+		"a merge smuggled in as its parents": {parents: []string{head("rebuilt"), head("elsewhere")},
+			kick: "validation's regenerated candidate is not a commit on " + head("rebuilt")[:12]},
+		"a source file among the outputs": {parents: []string{head("rebuilt")}, changed: []string{"a/evil.go", "gen/x.go"},
+			kick: "validation's regenerated candidate changes `a/evil.go`, which the base does not declare as any target's output"},
+		"a symbolic link": {parents: []string{head("rebuilt")}, changed: []string{"gen/x.go"},
+			merged: map[string]entry{"gen/x.go": {mode: 0o644}}, cand: map[string]entry{"gen/x.go": {link: "/home/runner/.ssh/id_rsa"}},
+			kick: "validation's regenerated candidate holds `gen/x.go` as a symbolic link"},
+		"an output under a symbolic link": {parents: []string{head("rebuilt")}, changed: []string{"gen", "gen/x.go"},
+			cand: map[string]entry{"gen": {link: "/etc"}},
+			kick: "validation's regenerated candidate holds `gen` as a symbolic link"},
+		"a submodule": {parents: []string{head("rebuilt")}, changed: []string{"gen/x.go"},
+			cand: map[string]entry{"gen/x.go": {dir: true}},
+			kick: "validation's regenerated candidate holds `gen/x.go` as something other than a regular file"},
+		"a new executable": {parents: []string{head("rebuilt")}, changed: []string{"gen/x.go"},
+			cand: map[string]entry{"gen/x.go": {mode: 0o755}},
+			kick: "validation's regenerated candidate holds `gen/x.go` as an executable file"},
+		"a mode flip to executable": {parents: []string{head("rebuilt")}, changed: []string{"gen/x.go"},
+			merged: map[string]entry{"gen/x.go": {mode: 0o644}}, cand: map[string]entry{"gen/x.go": {mode: 0o755}},
+			kick: "validation's regenerated candidate holds `gen/x.go` as an executable file"},
+		"a mode flip off executable": {parents: []string{head("rebuilt")}, changed: []string{"gen/x.go"},
+			merged: map[string]entry{"gen/x.go": {mode: 0o755}}, cand: map[string]entry{"gen/x.go": {mode: 0o644}},
+			kick: "validation's regenerated candidate holds `gen/x.go` as a file no longer executable"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			c := change("1", "gen")
+			c.Branch = "feature"
+			v := validated(c, base, "")
+			d.caps()
+			merged := generatorChange(d, c, tc.merged)
+			d.vcs.EXPECT().Unbundle(mock.Anything, clone.Root, "/v/1/candidate.bundle").Return(tc.unbundle).Once()
+			switch {
+			case tc.unbundle != nil:
+			case tc.missing:
+				d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, v.CandidateCommit).Return(magustypes.Commit{}, errors.New("not a commit"))
+			default:
+				d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, v.CandidateCommit).Return(magustypes.Commit{ID: v.CandidateCommit, Parents: tc.parents}, nil)
+			}
+			if tc.changed != nil {
+				d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, merged, v.CandidateCommit).Return(tc.changed, nil)
+				d.facts.EXPECT().Classify(mock.Anything, tc.changed).Return(map[string]types.Writes{"gen": {Output: true}, "gen/x.go": {Output: true}}, nil)
+			}
+			if tc.cand != nil {
+				d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit).RunAndReturn(checkoutHolding(tc.cand)).Once()
+			}
+			d.kicks(c, types.CodeKickRefused, tc.kick)
+			a := applierForBatch(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
+			a.Regenerate = noRegeneration(t)
+			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+		})
+	}
+}
+
+// ciGate is a required check of the base besides the queue's own status, which applying
+// sets itself and so never waits on.
+func ciGate(state types.CommitState) []types.Check {
+	return []types.Check{{Name: "ci gate", State: state}, {Name: DefaultStatusContext, State: types.StatePending}}
+}
+
+// A change the provider would refuse for its required checks is never left looking
+// queued with nothing said: running checks wait, and red ones on a head already carrying
+// the base's tip are the change's own, so it is kicked back naming them, before anything
+// is rebuilt.
+func TestRequiredChecksHoldOrKickBeforeAnythingIsRebuilt(t *testing.T) {
+	for name, tc := range map[string]struct {
+		state   types.CommitState
+		carried bool
+		wait    string
+		kick    string
+	}{
+		"running": {state: types.StatePending, wait: "its required checks `ci gate` are running"},
+		"red on a head carrying the tip": {state: types.StateFailure, carried: true,
+			kick: "its required checks `ci gate` failed there, and it already carries `main` at `" + base[:12] + "`"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			c := change("1", "a")
+			v := validated(c, base, "")
+			d.caps()
+			d.bases(base)
+			d.rechecks(c, approvedAs(c))
+			d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, c.Head).Return(ciGate(tc.state), nil).Once()
+			marks := d.marks(nil)
+			if tc.state == types.StateFailure {
+				d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, base, c.Head).Return(tc.carried, nil).Once()
+			}
+			if tc.kick != "" {
+				d.kicks(c, types.CodeKickRed, tc.kick)
+			} else {
+				d.waits(c, c.Head, tc.wait)
+			}
+			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			if tc.kick != "" {
+				assert.Equal(t, []string{"1 queued", "1 kicked_back"}, marks.entries(), "no longer queued")
+			}
+		})
+	}
+}
+
+// Red required checks on a head that does not carry the base's tip ran on an older
+// base. Applying pushes an update commit carrying the tip, which runs them again, and
+// the change waits on it instead of merging; the next run finds the head carrying the
+// tip, so a head is updated at most once per base commit.
+func TestStaleRedChecksGetOneUpdateCommitThatRunsThemAgain(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	c.Branch = "feature"
+	v := validated(c, base, "")
+	update := head("update")
+	d.caps()
+	d.bases(base)
+	d.rechecks(c, approvedAs(c))
+	d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, c.Head).Return(ciGate(types.StateFailure), nil).Once()
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, base, c.Head).Return(false, nil).Once()
+	d.rebuilds(c, base, v.CandidateCommit, "a/x.go")
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "validated", "validated").Return(nil, nil).Twice()
+	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
+		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 to run its required checks again", Author: bot, Committer: bot},
+		Tree:       "validated", Parents: []string{c.Head, base}}).Return(update, nil)
+	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
+	d.status(c, update, types.StatePending, "waiting: its required checks `ci gate` failed on an older main; pushed "+update[:12]+", which carries "+base[:12]).NotBefore(push)
+	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+}
+
+// Where the queue cannot push that update commit (a fork, a branch another change shares,
+// or a rebase, which takes the base only by rewriting the author's commits), the change
+// is kicked back saying so.
+func TestStaleRedChecksTheQueueCannotRunAgainAreKickedBack(t *testing.T) {
+	for name, tc := range map[string]struct {
+		branch string
+		method types.MergeMethod
+		kick   string
+	}{
+		"a fork": {method: types.MethodSquash,
+			kick: "its required checks `ci gate` failed on an older `main`, and running them again needs an update commit carrying it, and the queue cannot push to its branch"},
+		"a rebase": {branch: "feature", method: types.MethodRebase,
+			kick: "and a change merged by rebase takes the base only by rebasing its commits, which the queue leaves to its author"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			c := change("1", "a")
+			c.Branch, c.Method = tc.branch, tc.method
+			v := validated(c, base, "")
+			d.caps(types.MethodSquash, types.MethodRebase)
+			d.bases(base)
+			d.rechecks(c, approvedAs(c))
+			d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, c.Head).Return(ciGate(types.StateFailure), nil).Once()
+			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, base, c.Head).Return(false, nil).Once()
+			d.rebuilds(c, base, v.CandidateCommit, "a/x.go")
+			d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
+			d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
+			d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "validated", "validated").Return(nil, nil).Twice()
+			d.kicks(c, types.CodeKickRefused, tc.kick)
+			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+		})
+	}
+}
+
+// Green required checks, and the queue's own status whatever it reads, merge as before.
+func TestGreenRequiredChecksMerge(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "a")
+	v := validated(c, base, "")
+	d.caps()
+	d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, c.Head).Return(ciGate(types.StateSuccess), nil).Once()
+	success, merge := d.cleanMerge(v, types.MergeResult{})
+	merge.NotBefore(success)
+	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
 }
 
 // Applying re-reads the change before it merges: a head pushed, an intent withdrawn, an

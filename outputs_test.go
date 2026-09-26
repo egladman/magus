@@ -2,11 +2,15 @@ package magus
 
 import (
 	"context"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,10 +59,10 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 	}
 
 	projects := m.All()
-	removed, err := m.CleanOutputs(context.Background(), projects, false)
+	cleaned, err := m.CleanOutputs(context.Background(), projects, false)
 	require.NoError(t, err, "CleanOutputs")
-	require.NotEmpty(t, removed, "CleanOutputs: no files removed")
-	for _, path := range removed {
+	require.NotEmpty(t, cleaned.Removed, "CleanOutputs: no files removed")
+	for _, path := range cleaned.Removed {
 		_, err := os.Stat(path)
 		assert.True(t, os.IsNotExist(err), "file still exists after clean: %s", path)
 	}
@@ -83,9 +87,9 @@ func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(genFile), 0o755))
 	require.NoError(t, os.WriteFile(genFile, []byte("generated"), 0o644))
 
-	removed, err := m.CleanOutputs(context.Background(), m.All(), false)
+	cleaned, err := m.CleanOutputs(context.Background(), m.All(), false)
 	require.NoError(t, err, "CleanOutputs")
-	require.NotEmpty(t, removed, "a per-target magus.outputs file must be cleaned")
+	require.NotEmpty(t, cleaned.Removed, "a per-target magus.outputs file must be cleaned")
 	// Assert on existence, not the exact path: t.TempDir resolves through /private
 	// on macOS, so p.Dir and the test-built path differ by that prefix.
 	_, statErr := os.Stat(genFile)
@@ -103,9 +107,9 @@ func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {
 	require.NoError(t, os.WriteFile(target, []byte("binary"), 0o755))
 
 	projects := m.All()
-	removed, err := m.CleanOutputs(context.Background(), projects, true /* dryRun */)
+	cleaned, err := m.CleanOutputs(context.Background(), projects, true /* dryRun */)
 	require.NoError(t, err, "CleanOutputs (dry-run)")
-	require.NotEmpty(t, removed, "dry-run: expected at least one matched path to be returned")
+	require.NotEmpty(t, cleaned.Removed, "dry-run: expected at least one matched path to be returned")
 	// File must still exist.
 	_, err = os.Stat(target)
 	assert.NoError(t, err, "dry-run: file was deleted")
@@ -116,9 +120,85 @@ func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {
 func TestCleanOutputsNoMatchIsNoop(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", []string{"bin/api"})
 	projects := m.All()
-	removed, err := m.CleanOutputs(context.Background(), projects, false)
+	cleaned, err := m.CleanOutputs(context.Background(), projects, false)
 	require.NoError(t, err, "CleanOutputs (no files)")
-	assert.Empty(t, removed, "expected no removals")
+	assert.Equal(t, CleanedOutputs{}, cleaned, "expected no removals")
+}
+
+// TestCleanCacheKeepsTrackedOutputs is the regression for `magus clean --cache`
+// deleting committed generated files (libs/pricing/MAGUS.md in this repo) and leaving
+// the tree dirty. It drives the same two calls the command makes, in a real git repo.
+// The nested case matters because vcs.Resolve finds no marker in a workspace below the
+// checkout root and falls back to VCSSourceDefault.
+func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	const trackedBody = "committed\n"
+
+	const spellName = "zzz-clean-tracked-outputs-test-spell"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spellName,
+		spells.WithTargets("generate"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			gen := filepath.Join(req.Dir, "gen")
+			if err := os.WriteFile(filepath.Join(gen, "tracked.txt"), []byte(trackedBody), 0o644); err != nil {
+				return nil, err
+			}
+			return nil, os.WriteFile(filepath.Join(gen, "untracked.txt"), []byte("scratch\n"), 0o644)
+		}),
+	))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	for _, tc := range []struct{ name, workspace string }{
+		{"workspace at the checkout root", ""},
+		{"workspace nested in a checkout", "sub/ws"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkout := t.TempDir()
+			root := filepath.Join(checkout, filepath.FromSlash(tc.workspace))
+			gitRun(t, checkout, "init", "-q")
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(checkout, ".gitignore"), []byte(".magus/\n"), 0o644))
+			writeCommit(t, checkout, filepath.Join(tc.workspace, "gen", "tracked.txt"), trackedBody)
+
+			reg := NewWorkspaceRegistry()
+			reg.RegisterProject(".", WithSpell(spellName), WithOutputs("gen/**"))
+			m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg))
+			require.NoError(t, err, "Open")
+			t.Cleanup(func() { _ = m.Close() })
+
+			require.NoError(t, m.Run(t.Context(), []types.Target{{Path: ".", Name: "generate"}}))
+			_, err = m.LastRecordedRun(".", "generate")
+			require.NoError(t, err, "the run must leave cache state for clean to drop")
+
+			cleaned, err := m.CleanOutputs(t.Context(), m.All(), false)
+			require.NoError(t, err, "CleanOutputs")
+			require.NoError(t, m.CleanCache(t.Context(), m.All()...), "CleanCache")
+
+			assert.Equal(t, CleanedOutputs{
+				Removed: []string{filepath.Join(m.Root(), "gen", "untracked.txt")},
+				Tracked: []string{filepath.Join(m.Root(), "gen", "tracked.txt")},
+			}, cleaned)
+
+			got, err := os.ReadFile(filepath.Join(root, "gen", "tracked.txt"))
+			require.NoError(t, err, "a tracked output must survive clean")
+			assert.Equal(t, trackedBody, string(got))
+
+			status, err := exec.Command("git", "-C", checkout, "status", "--porcelain").Output()
+			require.NoError(t, err)
+			assert.Empty(t, string(status), "clean must leave the tree as committed")
+
+			_, err = m.LastRecordedRun(".", "generate")
+			assert.ErrorIs(t, err, fs.ErrNotExist, "clean --cache must drop the manifests")
+			var blobs []string
+			_ = filepath.WalkDir(filepath.Join(m.CacheDir(), "cas"), func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					blobs = append(blobs, path)
+				}
+				return nil
+			})
+			assert.Empty(t, blobs, "clean --cache must collect the blobs its manifests held")
+		})
+	}
 }
 
 // findProducer runs m.FindOutputProducer on a workspace-relative path and returns the
@@ -223,9 +303,9 @@ func TestCleanOutputsCoversCrossProjectOutputs(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(generated, []byte("hello"), 0o644))
 
-	removed, err := m.CleanOutputs(context.Background(), m.All(), false)
+	cleaned, err := m.CleanOutputs(context.Background(), m.All(), false)
 	require.NoError(t, err, "CleanOutputs")
-	require.NotEmpty(t, removed, "a cross-project output must be cleaned")
+	require.NotEmpty(t, cleaned.Removed, "a cross-project output must be cleaned")
 	_, statErr := os.Stat(generated)
 	assert.True(t, os.IsNotExist(statErr), "cross-project output should be deleted")
 }

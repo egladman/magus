@@ -328,7 +328,7 @@ func writeArgsSection(b *strings.Builder, invoker string) {
 	fmt.Fprintf(b, "## Passing arguments to ops\n\n")
 	fmt.Fprintf(b, "Every op is invoked as `%s[\"<op>\"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:\n\n", invoker)
 	b.WriteString(md.Table([]string{"Key", "Type", "Description", "Source"}, nil, [][]string{
-		{md.Code("args"), md.Code("[str]"), fmt.Sprintf("Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.", invoker), src("args")},
+		{md.Code("args"), md.Code("[str]"), fmt.Sprintf("Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. To keep the passthrough too, append the target's own `args` parameter: `{\"args\": [\"-race\", \"./...\"] + args}`.", invoker), src("args")},
 		{md.Code("stdin"), md.Code("str"), "Data written to the command's standard input.", src("stdin")},
 	}))
 	fmt.Fprintln(b)

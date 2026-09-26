@@ -1,8 +1,8 @@
 name: Queue
 
 # The merge queue's validation half, run by `magus queue` (internal/queue). A pull
-# request joins the queue when auto-merge is enabled on it, or, for a stack, when a
-# "merge-queue: <method>" label is on its top. The plan job lists the queue, checks
+# request joins the queue when auto-merge is enabled on it, or when a "merge-queue:
+# <method>" label is on it or on its stack's top. The plan job lists the queue, checks
 # approval at each head and partitions it by the affected sets the magus workspace
 # reports through the Go SDK; each validate job then validates one change on main plus
 # the changes ahead of it in its partition, gated with `magus affected ci` against the
@@ -23,9 +23,8 @@ name: Queue
 on:
   # No branches filter: a stacked pull request targets the branch below it, not main.
   pull_request:
-    # auto_merge_enabled is the entry, and a "merge-queue: <method>" label on a stack's
-    # top; synchronize and a review can make a queued pull request ready without either
-    # again.
+    # auto_merge_enabled is the entry, and a "merge-queue: <method>" label; synchronize
+    # and a review can make a queued pull request ready without either again.
     types: [auto_merge_enabled, labeled, synchronize]
   pull_request_review:
     types: [submitted]
@@ -69,7 +68,10 @@ jobs:
       github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-       contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name))
+       contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name) ||
+       contains(github.event.pull_request.labels.*.name, 'merge-queue: squash') ||
+       contains(github.event.pull_request.labels.*.name, 'merge-queue: rebase') ||
+       contains(github.event.pull_request.labels.*.name, 'merge-queue: merge'))
     runs-on: ubuntu-latest
     timeout-minutes: 1
     permissions: {}
@@ -196,13 +198,19 @@ jobs:
       # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
       # gate replays as green. The remote cache it reads is main's, verified against
       # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every hook.
+      # Candidates are checked out under TMPDIR, outside the workspace mise-action
+      # trusts, so the trust list names both; hooks receive it through magus.yaml's
+      # sandbox passthrough.
       - name: Validate #${{ matrix.change }}
         env:
           CHANGE: ${{ matrix.change }}
           MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}
         run: magus buzz tools/gha-queue.buzz -- validate --change "$CHANGE"
 
-      # The directory's contents become the artifact's root: verdict.json.
+      # The directory's contents become the artifact's root: verdict.json, and
+      # candidate.bundle when the regeneration committed anything.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mergequeue-verdict-${{ matrix.change }}

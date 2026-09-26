@@ -282,9 +282,9 @@ func describeMachineDeclaration(c types.MachineClaim) string {
 	if c.MemoryMB <= 0 {
 		return "it takes " + slots
 	}
-	what := fmt.Sprintf("it declares %s and takes %s", FormatMB(c.MemoryMB), slots)
+	what := fmt.Sprintf("it claims %s (%s) and takes %s", FormatMB(c.MemoryMB), c.Sizing, slots)
 	if c.DeclaredBy != "" && c.DeclaredBy != c.Target {
-		what = fmt.Sprintf("it runs %s, which declares %s, and takes %s", c.DeclaredBy, FormatMB(c.MemoryMB), slots)
+		what = fmt.Sprintf("it runs %s, which claims %s (%s), and takes %s", c.DeclaredBy, FormatMB(c.MemoryMB), c.Sizing, slots)
 	}
 	return what
 }
