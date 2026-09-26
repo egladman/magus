@@ -126,9 +126,6 @@ Read the mergequeue.plan/v1 document from stdin; required
 \fB\-\-target\fR \fItarget\fR (default: ci)
 magus `target` the affected set is computed for; not with \-\-facts
 .TP
-\fB\-\-temp\-root\fR \fIdirectory\fR (default: /tmp)
-`directory` each candidate's hooks get a private temporary directory under, apart from its checkout; keep it short, since a nested magus and a test nest a unix socket beneath it, whose path is capped at 104 bytes
-.TP
 \fB\-\-vcs\fR \fIbackend\fR (default: git)
 Version control `backend` of the checkout at \-\-root
 .TP
@@ -176,9 +173,6 @@ Commit status the queue posts; branch protection requires it
 .TP
 \fB\-\-target\fR \fItarget\fR (default: ci)
 magus `target` the affected set is computed for; not with \-\-facts
-.TP
-\fB\-\-temp\-root\fR \fIdirectory\fR (default: /tmp)
-`directory` each candidate's hooks get a private temporary directory under, apart from its checkout; keep it short, since a nested magus and a test nest a unix socket beneath it, whose path is capped at 104 bytes
 .TP
 \fB\-\-vcs\fR \fIbackend\fR (default: git)
 Version control `backend` of the checkout at \-\-root

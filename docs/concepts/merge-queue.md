@@ -163,12 +163,9 @@ generated file, a candidate tree or a review proof from a verdict.
   base's projects resolved, rooted at the hook's checkout. Every such spell's, not one
   project's: a hook is usually a nested magus, and a grant the hook lacks is one no
   target under it can have.
-  - Each candidate gets three directories of its own, each `0700`: `checkout` and `home`
-    in a box, and `tmp` under `--temp-root` (`/tmp/q<random>` by default). `tmp` sits
-    apart because its path must stay short: a nested magus and a test each nest a
-    directory in it before a unix socket, whose path the kernel caps at 104 bytes on
-    macOS and 108 on linux. A gate or a regeneration runs in `checkout` with its own
-    environment, set after anything it would inherit:
+  - Each candidate is a box of three directories, each `0700`: `checkout`, `home` and
+    `tmp`. A gate or a regeneration runs in `checkout` with its own environment, set
+    after anything it would inherit:
 
     | Variable                    | Value                                            |
     | --------------------------- | ------------------------------------------------ |
@@ -201,7 +198,7 @@ generated file, a candidate tree or a review proof from a verdict.
     repository's object store, which every candidate's checkout shares, is readable and
     never writable, so no object one candidate's hook writes stands in for one a later
     fetch would bring. The queue refuses to run a hook whose policy would still let it
-    write outside its box and its `tmp`, other than its checkout's own git directory, where its index
+    write outside its box, other than its checkout's own git directory, where its index
     lives, and the terminal devices: that is the machine's error, and it stops the run. A box a hook of the
     change left changed, `home` or `tmp` no longer the private directory the queue made
     or a link there leading a grant out of the box, makes that change red.

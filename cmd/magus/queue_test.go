@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -96,10 +95,6 @@ func newQueueFixture(t *testing.T, changes, run string) *queueFixture {
 func (f *queueFixture) run(t *testing.T, stdin string, args ...string) ([]byte, error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	// /tmp, --temp-root's default, is not writable to a sandboxed test.
-	if len(args) > 0 && (args[0] == "validate" || args[0] == "apply") {
-		args = slices.Concat(args[:1], []string{"--temp-root", t.TempDir()}, args[1:])
-	}
 	err := runQueue(t.Context(), f.root, args, strings.NewReader(stdin), &stdout, &stderr)
 	t.Logf("magus queue %s\nstderr:\n%s", strings.Join(args, " "), stderr.String())
 	return stdout.Bytes(), err

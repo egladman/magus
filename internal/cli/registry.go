@@ -1736,14 +1736,6 @@ var queueFacts = []Flag{
 	{Name: "target", Kind: FlagString, Default: "ci", Doc: "magus `target` the affected set is computed for; not with --facts"},
 }
 
-// queueTempRoot is short on every unix host, which TMPDIR is not: a runner's is 23
-// bytes before the queue nests anything, and a socket made under a candidate's
-// temporary directory has to fit in 104.
-const (
-	queueTempRoot    = "/tmp"
-	queueTempRootDoc = "`directory` each candidate's hooks get a private temporary directory under, apart from its checkout; keep it short, since a nested magus and a test nest a unix socket beneath it, whose path is capped at 104 bytes"
-)
-
 var queueCommand = Command{
 	Name:        "queue",
 	Short:       "Merge approved changes through a speculative, partitioned merge queue",
@@ -1833,7 +1825,6 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
-				{Name: "temp-root", Kind: FlagString, Default: queueTempRoot, Doc: queueTempRootDoc},
 				{Name: "remote-cache-read", Kind: FlagBool, Doc: "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key"},
 			}, queueFacts...), queueCheckout...),
 		},
@@ -1853,7 +1844,6 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
-				{Name: "temp-root", Kind: FlagString, Default: queueTempRoot, Doc: queueTempRootDoc},
 			}, queueFacts...), queueCheckout...),
 		},
 	},

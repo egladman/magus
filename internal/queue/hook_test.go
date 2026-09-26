@@ -491,7 +491,7 @@ func TestAHookRunsGitWithItsBoxsHome(t *testing.T) {
 func TestAHookCannotWriteTheSharedObjectStore(t *testing.T) {
 	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
 	drv := gitDriver(t, root)
-	cand, err := checkout(t.Context(), drv, root, scratchIn(t), "candidate-1", commit)
+	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = discard(context.Background(), drv, root, cand) })
 	objects := filepath.Join(root, ".git", "objects")

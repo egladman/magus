@@ -170,10 +170,6 @@ type building struct {
 	files     map[string]string                // written into every checkout, by path
 }
 
-// scratchIn is a Scratch of the test's own: /tmp, --temp-root's default, is not
-// writable to a sandboxed test.
-func scratchIn(t *testing.T) Scratch { return Scratch{Dir: t.TempDir(), TempRoot: t.TempDir()} }
-
 // makeCheckout creates the checkout's directory, as the version control would; the
 // queue writes into it through an os.Root.
 func makeCheckout(_ context.Context, _, dir, _ string) error { return os.MkdirAll(dir, 0o755) }

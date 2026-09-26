@@ -37,7 +37,7 @@ func validating(t *testing.T, d doubles, plan types.Plan) (*Validator, *VerdictD
 	}
 	d.facts.EXPECT().AllUnits(mock.Anything).Return([]string{"/"}, nil).Maybe()
 	dir := &VerdictDir{Path: t.TempDir()}
-	v, err := NewValidator(d.vcs, clone, d.gate, dir, d.facts, scratchIn(t))
+	v, err := NewValidator(d.vcs, clone, d.gate, dir, d.facts, t.TempDir())
 	require.NoError(t, err)
 	return v, dir
 }
@@ -115,27 +115,12 @@ func TestNewValidatorRefusesAMissingPart(t *testing.T) {
 		build func() (*Validator, error)
 		want  string
 	}{
-		"vcs": {func() (*Validator, error) {
-			return NewValidator(nil, clone, d.gate, dir, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
-		}, "validator needs a VCS, a gate, a verdict directory and build facts"},
-		"gate": {func() (*Validator, error) {
-			return NewValidator(d.vcs, clone, nil, dir, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
-		}, "validator needs a VCS, a gate, a verdict directory and build facts"},
-		"dir": {func() (*Validator, error) {
-			return NewValidator(d.vcs, clone, d.gate, nil, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
-		}, "validator needs a VCS, a gate, a verdict directory and build facts"},
-		"facts": {func() (*Validator, error) {
-			return NewValidator(d.vcs, clone, d.gate, dir, nil, Scratch{Dir: "/s", TempRoot: "/t"})
-		}, "validator needs a VCS, a gate, a verdict directory and build facts"},
-		"clone": {func() (*Validator, error) {
-			return NewValidator(d.vcs, Clone{}, d.gate, dir, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
-		}, "clone needs a root and a remote"},
-		"relative": {func() (*Validator, error) {
-			return NewValidator(d.vcs, clone, d.gate, dir, d.facts, Scratch{Dir: "scratch", TempRoot: "/t"})
-		}, `scratch directory "scratch" is not absolute`},
-		"relative temporary root": {func() (*Validator, error) {
-			return NewValidator(d.vcs, clone, d.gate, dir, d.facts, Scratch{Dir: "/s", TempRoot: "t"})
-		}, `temporary root directory "t" is not absolute`},
+		"vcs":      {func() (*Validator, error) { return NewValidator(nil, clone, d.gate, dir, d.facts, "/s") }, "validator needs a VCS, a gate, a verdict directory and build facts"},
+		"gate":     {func() (*Validator, error) { return NewValidator(d.vcs, clone, nil, dir, d.facts, "/s") }, "validator needs a VCS, a gate, a verdict directory and build facts"},
+		"dir":      {func() (*Validator, error) { return NewValidator(d.vcs, clone, d.gate, nil, d.facts, "/s") }, "validator needs a VCS, a gate, a verdict directory and build facts"},
+		"facts":    {func() (*Validator, error) { return NewValidator(d.vcs, clone, d.gate, dir, nil, "/s") }, "validator needs a VCS, a gate, a verdict directory and build facts"},
+		"clone":    {func() (*Validator, error) { return NewValidator(d.vcs, Clone{}, d.gate, dir, d.facts, "/s") }, "clone needs a root and a remote"},
+		"relative": {func() (*Validator, error) { return NewValidator(d.vcs, clone, d.gate, dir, d.facts, "scratch") }, `scratch directory "scratch" is not absolute`},
 	} {
 		_, err := tc.build()
 		require.EqualError(t, err, tc.want, name)
@@ -415,26 +400,23 @@ func TestEveryCandidateGetsABoxOfItsOwn(t *testing.T) {
 	plan := planOf([]types.Change{one, two})
 	v, _ := validating(t, d, plan)
 	var mu sync.Mutex
-	boxes, tmps := map[string]string{}, map[string]string{}
+	boxes := map[string]string{}
 	v.Regenerate = func(_ context.Context, r types.Regeneration) error {
 		box := filepath.Dir(r.Dir)
-		assert.Equal(t, filepath.Join(box, "home"), r.Home, "beside its own checkout")
-		assert.Equal(t, v.scratch.TempRoot, filepath.Dir(r.TempDir), "under the short root")
+		assert.Equal(t, []string{filepath.Join(box, "home"), filepath.Join(box, "tmp")}, []string{r.Home, r.TempDir}, "beside its own checkout")
 		assert.DirExists(t, r.Home)
 		assert.DirExists(t, r.TempDir)
 		mu.Lock()
 		defer mu.Unlock()
-		boxes[r.Change.ID], tmps[r.Change.ID] = box, r.TempDir
+		boxes[r.Change.ID] = box
 		return nil
 	}
 	require.NoError(t, v.Run(t.Context(), plan))
 	require.Len(t, boxes, 2)
 	assert.NotEqual(t, boxes["1"], boxes["2"])
-	assert.NotEqual(t, tmps["1"], tmps["2"])
-	for id, box := range boxes {
-		assert.True(t, strings.HasPrefix(box, v.scratch.Dir), "%s is under the validator's scratch", box)
+	for _, box := range boxes {
+		assert.True(t, strings.HasPrefix(box, v.scratch), "%s is under the validator's scratch", box)
 		assert.NoDirExists(t, box, "removed with its checkout")
-		assert.NoDirExists(t, tmps[id], "removed with its box")
 	}
 }
 

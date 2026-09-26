@@ -168,7 +168,7 @@ type hookCommand struct {
 	// spells it loaded; see [HookEnv].
 	Sandbox config.SandboxConfig
 	Spells  map[string]spells.Sandbox
-	// Home and TempDir are the candidate's (see [types.Candidate]); both empty for a
+	// Home and TempDir are the candidate's box (see [types.Candidate]); both empty for a
 	// facts hook, which runs in the base's own checkout with the queue's own.
 	Home, TempDir string
 	Env           []string // set over what the sandbox passes from the queue's environment
