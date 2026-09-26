@@ -90,7 +90,7 @@ runs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: magus-history-${{ inputs.shard }}
-        path: ${{ env.MAGUS_HISTORY_PATH }}
+        path: ${{ runner.temp }}/magus-history.json
         if-no-files-found: ignore
         retention-days: 7
 
@@ -126,10 +126,9 @@ runs:
         COMMIT: ${{ github.sha }}
       run: |
         shopt -s nullglob
-        # Each artifact holds one file, named as MAGUS_HISTORY_PATH names it.
-        files=("$RUNNER_TEMP"/shard-history/*/*.json)
+        files=("$RUNNER_TEMP"/shard-history/*/magus-history.json)
         if [[ ${#files[@]} -gt 0 ]]; then
-          magus config history import --history "$MAGUS_HISTORY_PATH" "${files[@]}"
+          magus config history import --history "$RUNNER_TEMP/magus-history.json" "${files[@]}"
         else
           echo "no shard histories; nothing to merge"
         fi
@@ -143,12 +142,12 @@ runs:
           *)       echo "ci result '$CI_RESULT' is not an outcome; recording nothing"; exit 0 ;;
         esac
         magus config history passed \
-          --history "$MAGUS_HISTORY_PATH" \
+          --history "$RUNNER_TEMP/magus-history.json" \
           --ref "$REF" --commit "$COMMIT" --status "$STATUS"
 
     - name: Save merged run history
       if: always() && inputs.merge-history == 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ env.MAGUS_HISTORY_PATH }}
+        path: ${{ runner.temp }}/magus-history.json
         key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
