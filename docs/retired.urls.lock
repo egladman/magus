@@ -356,3 +356,7 @@ reference/rules/stale-binary/
 # the graph answers exactly. A rule page is generated per shipped rule, so both retire.
 reference/rules/code-search/
 reference/rules/doc-search/
+
+# MGS5004 was deleted with the server-queued detach, leaving one page tagged detach. A
+# tag page needs two, so the tag retires.
+tags/detach/

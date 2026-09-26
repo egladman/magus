@@ -16,6 +16,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Added
 
+- **`magus affected ci` sizes its gate to the change.** Every changed file gets a tier
+  (trivial, mechanical, scoped, full) with its evidence. Below full the gate runs only
+  the drift check and lint, the targets that declare a changed doc, or `test` with
+  `go-test` narrowed through `go list`. A trivial change exits 0.
+  `--no-redundancy-check` runs the full gate.
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
 - **The agent guard refuses a backtick command substitution.** Inside double quotes a
@@ -35,6 +40,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   unarbitrated and says so once, and `off` never starts or contacts one. Also
   `--broker` and `MAGUS_BROKER`; Go callers pass `magus.WithBroker` or
   `magus.WithBrokerPolicy`.
+- **The broker can run under systemd or launchd.** `magus broker units` prints the units;
+  magus never installs them. Under systemd the broker serves the socket the supervisor
+  hands over and refuses a malformed one or one bound anywhere but `broker.sock`.
+  `magus broker --idle-exit 0` keeps it up for a supervisor.
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
@@ -56,6 +65,13 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
   `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
   overrides it.
+- **`ctx.narrowed()` tells a target body a sized gate narrowed its tests.** A check
+  over the whole suite, such as a coverage floor, can stand down when only the packages
+  a change reaches ran.
+- **`magus run --stdin` runs a saved `affected --plan`; `--shard <id>` runs one shard.**
+  The plan now carries a `target` key. A malformed plan, an unknown shard, another target
+  or a disagreeing `--n-shards` exits 2 (MGS3029). Under `--dry-run` it runs nothing and
+  renders the plan through `-o`. Without `--stdin`, `--shard` stays a label.
 - **The doc-section advisory carries the reader's own query** instead of a `<terms>`
   placeholder.
 - **Each spell's install op is named binary + capability, one per binary.**
@@ -206,7 +222,7 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
   `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
   read access only; apply rebuilds each candidate and merges it with the change's own
-  method. The code is `libs/mergequeue`, its contract and mocks in its `types` package;
+  method. The code is `internal/queue`, its contract and mocks in its `types` package;
   `--facts` serves other build tools.
 - **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
   targets run first across every selected project; a failure stops everything, exits 3
@@ -276,11 +292,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A merge the queue sees removes every `merge-queue:` label, and the next apply run
   clears a closed pull request still carrying one. Label creation GitHub refuses as
   invalid is an error.
-- **`--scratch-env NAME=DIR` on `magus queue validate` and `magus queue apply`** points
-  a variable at a directory inside each candidate's scratch space, so cache isolation
-  lives on the queue's flags rather than on the hook's command line. It may repeat.
 - **A kick-back comment reproduces the failure.** Each kick-back is a new comment with
   the run's link and the command that failed, runnable as written.
+- **A merge-queue provider's `describe` can decline with `{refused: {reason, url, app}}`.**
+  `magus queue describe` prints what is missing and where, then the command to run next
+  with the provider's `app` in place of `--app`. The queue still passes `--app` to the
+  provider unread.
 - **The queue acts on the base's other required checks.** Apply reads them at the head
   (the provider's optional `required_checks`): running ones wait with `WAIT_CHECKS`, red
   ones on a head carrying the base's tip kick back with `KICK_RED`, and red ones from an
@@ -354,6 +371,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   head. An `actors` entry matches one origin field exactly (user, host, agent, credential,
   entry point), never the label. The review-remark telemetry label `human` is now
   `unattributed`.
+- **Breaking for SDK callers: a shared service crosses the broker wire as a
+  `broker.ServiceSpec`.** `Client.AcquireService` and `ServiceHost.Acquire` take one
+  instead of `spells.Service`, so a spell schema change never changes the protocol;
+  `broker.NewServiceSpec` resolves a spell's service to one. A service acquire with no
+  command is refused as `malformed`, and `Client.Shutdown` returns once the broker has
+  hung up.
 - **Breaking: a retired or misspelled `MAGUS_*` variable stops every command.** Setting
   `MAGUS_NO_WAIT`, a `MAGUS_DAEMON_*` name, or a near miss such as `MAGUS_CACHE_DIRR`
   fails with MGS1046 before any work, naming the fix; `magus shell` denies instead.
@@ -371,6 +394,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   the job's Actions token: a run or merge that token makes starts no workflow, so the
   queue validated changes and merged none. Register the app with the link `describe`
   prints.
+- **BREAKING: spells declare what their tools need from the sandbox.** The core grants no
+  toolchain; each spell's `mgs_getSandbox()` does, and a spell op's child gets only its
+  project's spells. Drop Go variables from `sandbox.env.passthrough`: the go spell
+  passes them. Grant mise with a `sandbox.allow` entry. A target's new `sandbox` policy
+  key takes the same shape.
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
   without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
   matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
@@ -467,11 +495,18 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   workspace reloads when a `.buzz` file or `magus.yaml` changes.
 - **A declared `timeout` bounds the target's own time.** A body parks while its
   `ctx.needs` dependencies run and gets a fresh deadline per stretch of its own work.
+- **Breaking: `magus queue validate` reads its plan from stdin with `--stdin`; `--plan
+  <file>` is gone.** Run `magus queue validate --stdin ... < plan.json`, the same input
+  idiom as `affected --stdin` and `run --stdin`. Without `--stdin` validate exits 2.
 - **A deny on a multi-command line says nothing on it ran.**
 - **Every Connect procedure and `/api/` route names its own need.** The daemon refuses to
   start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
   reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
   `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
+- **The redundancy check, CI verdict inheritance and job completion skip only a trivial
+  change.** A comment-only edit, and markdown a package embeds or a gate target reads,
+  no longer skip the gate. A job's completion gate on `ci` passes on a green `ci` gate
+  when the change since it is trivial.
 - **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
   count. magus reads no environment variable to guess it runs in CI, so the same command
   behaves the same everywhere, and `concurrency_profile` stays `balanced`
@@ -598,6 +633,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   setting `MERGEQUEUE_*` variables, so a gate becomes `magus run ci
   --no-default-charms`; `--facts` gets the fact asked for. Shell syntax is refused
   with MGS3026: point the flag at a script.
+- **The queue keeps a change whose generated files its merge leaves alone.** It kicks
+  back with `KICK_REGENERATION` only when the merge needs them regenerated (a conflict,
+  or main changed them) by code the change touches; otherwise the drift gate checks them.
+  A kicked-back change merges main in, regenerates, and is queued again.
 - **The merge queue kicks back stale generated files before its gate runs.** A change
   that edits generator code must commit outputs that are current on top of the base. If
   they are stale, the kick-back names the stale files and says how to fix them. If they are
@@ -644,6 +683,8 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   deletes a file this build cannot read.
 - **Breaking: `--skill-form` takes `both`, `short` or `full`.** Skills stamp
   `skill-variant: short`, and a body brackets short wording with `{{if .Short}}`.
+- **`magus spell lock --update` writes no lock that pins nothing.** With no remote spell
+  declared it removes `magus.lock` instead of writing a header and `version: 1`.
 - **A target's `std\print` is captured with its output.** It is withheld, streamed and
   stored under the target's ref like a subprocess's output, instead of bypassing both.
 - **The trail names the credential, not "operator", and drops `actor`.** Each event records
@@ -671,6 +712,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   was false for every output whose target opts out of the cache, such as a `MAGUS.md`
   rendered from the whole graph. The drift gate already fails on a real hand edit. Delete
   the key from `with:`.
+- **Breaking: the advice action's `fix-generated-drift`, `fix-merge-conflict`,
+  `offer-fix-label` and `fix-label` inputs.** Both fixers pushed to the pull request's
+  branch and neither ever ran: their consent label never matched `gh`'s JSON. The merge
+  queue now settles drift and conflicts at merge time. Delete the keys from `with:`; the
+  action needs only `pull-requests: write`.
 - **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
   `head-repo` inputs.** The action reads the pull request from the triggering event and
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
@@ -679,6 +725,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Breaking: `--wait` on `run` and `affected`, with no replacement.** It waited on a run
   handed to the server, and `--detach` no longer hands a run to anything; to wait for a
   run, leave off `--detach`.
+- **Breaking: the `ci-shard` target.** A workflow publishes the plan itself: save
+  `magus affected ci --plan` to a file, then redirect `magus run --stdin --dry-run -o
+  'template=...' < plan.json` into `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY`. The GitHub
+  Actions guide shows the three lines. A magusfile that copied `ci_shard` keeps working.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
@@ -738,6 +788,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **The server keeps the knowledge graph and symbol indexes current with MCP off.**
   Graph watching and symbol indexing belonged to the MCP listener, so `mcp.enabled:
   false` quietly stopped both; they now run for as long as the server does.
+- **`magus broker units` fits the broker's drain and SIGHUP.** Each unit pins
+  `shutdown_grace` and waits that long plus 60s before SIGKILL, where systemd waited 90s.
+  systemd sends SIGTERM to the broker alone and `reload` sends SIGHUP; the launchd broker
+  logs through `--log` so SIGHUP reopens it. Reinstall printed units.
 - **"Cannot check byte-stability" is recorded.** It fails the gate, and a `-o jsonl` run
   now carries it as `race.determinism_unchecked` with its error.
 - **Clones of an hg, jj or Sapling repository share one state store.** Identity is read
@@ -759,6 +813,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   different build instead of claiming nothing serves the console.
 - **A coverage record is no longer refused after a squash merge.** Its commit is
   provenance only; per-file digests keep it honest.
+- **`affected --plan` advice names `--max-shards`, the plan's own flag, instead of
+  `--ci-max-shards`.** The GitHub Actions guide no longer tells shard jobs to run a
+  nonexistent `affected --shard` with a `matrix.total` the plan never emits; they run
+  `run ci:gha ${{ matrix.projects }}`.
 - **A cache hit no longer restores a nested project's generated files.** An output glob
   such as `**/gen/mocks/*.go` stops at a nested project's directory unless rooted there,
   in the snapshot, replay, drift gate and `--race=replay` alike. MGS3001 now judges a
@@ -771,6 +829,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Generated docs examples read the same wherever they are regenerated.** The
   examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
   state dir it inherits leaks run history into the captured `magus explain` output.
+- **A command magus runs leaves no process behind.** On Linux, macOS and the BSDs,
+  whatever of a target's process group outlives its command is killed when the command
+  exits, before it is reaped, so a background process it started stops there and no
+  longer holds the run open for five seconds on its output.
 - **A failed remote-cache exchange names the step that failed.**
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
@@ -794,6 +856,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `-fuzzcache` always landed alongside `./...`, which go refuses in any order. A new
   `Command.TrailingArgs` slot drops the package pattern the moment any flag is
   forwarded; a bare `go::go-clean` still cleans `./...`.
+- **A sandboxed `go` can write the checksum database's state.** The go spell grants
+  `$GOPATH/pkg/sumdb` (or `~/go/pkg/sumdb`), where go records the tree head it
+  verifies a module against. Without it, `golangci-lint custom`'s `go mod tidy`
+  failed under landlock whenever `GOMODCACHE` pointed elsewhere, as in the merge
+  queue's candidates.
 - **The graph links a target to a workspace spell imported without an alias.**
   `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
   `magus path` and `magus explain` missed every op it runs.
@@ -845,6 +912,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `jj -R` and a leading `cd <dir> &&` are graded by that checkout's revision and gate
   record, not the hook's, and a single refspec grades the revision it names. A directory
   only the shell can resolve keeps the advisory.
+- **The queue merges a gated candidate whose only regeneration was a settled conflict.**
+  When validation's regeneration wrote nothing, apply kicked the change with
+  `KICK_REGENERATION`; it now merges its own rebuild once that rebuild is the commit
+  validation gated, still running none of the change's code.
 - **The merge queue no longer kicks a change back for a red it inherited.** A red
   candidate whose base is red on the same projects waits with `WAIT_BASE_RED`, keeps
   its place and gets no comment. The base is gated once a run, however many changes it
@@ -853,6 +924,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   2000-01-01 date, so a build that reads HEAD's date as "now" dropped every dated post.
   The plan records the newest date among its base and admitted heads, so the same queue
   still builds the same candidates.
+- **`magus queue describe --app` works for a private GitHub App.** It reads the App ID
+  from an organization's installations where an owner's token lists them; elsewhere it
+  names the app's settings page and prints the rerun with `--app <slug>:<id>`. The printed
+  key step reads no stdin and deletes the download even when storing fails.
+- **The merge queue no longer asks the remote for blobs its own merges wrote.** In a
+  partial clone, git fetched them as missing and the remote refused, failing the
+  candidate as a machine error. `queue validate` and `queue apply` now refuse a partial
+  clone, and the queue workflows check out full clones.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.
@@ -880,6 +959,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A bare output ref and `--attempts` broke that tie by a random attempt hash, so they
   could answer with the older run. Each record now stores when it was persisted, and
   that decides the tie.
+- **A sandboxed tool can create its declared cache directory.** The kernel sandbox skipped
+  a granted path that did not exist yet, so buf on a fresh machine was denied its cache. A
+  missing path a spell or `sandbox.allow` declares writable is now created; a missing
+  workspace is still reported.
 - **Sandboxed `go generate` and `go run` work again.** The sandbox grants the Go build cache
   execute as well as read and write: since Go 1.24, `go run` and `go tool` exec the binaries
   they cache there, so every `go run` generator failed with `permission denied`.
@@ -899,6 +982,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   target runs, so it now says the target runs again, and it names the failed attempt
   rather than the step ref, which moved to the new run's result once that run landed.
   The target always re-ran; the exit status was already that run's own.
+- **magus binds and dials a unix socket at any path length on linux.** A path past
+  the 108 bytes `sun_path` holds goes through its directory under `/proc/self/fd`.
+  macOS refuses such a path, naming its length and the limit. The broker and server
+  use this, so a deep `TMPDIR`, such as a merge queue candidate's, no longer breaks
+  them.
 - **An unrecognized boolean in a `MAGUS_*` variable is an error** instead of silently
   keeping the previous value.
 - **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
@@ -916,6 +1004,15 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   signed the manifest alone, so a store could replay a genuine entry with its log and
   descriptor swapped or stripped. Every magus from 0.4.0 signs the domain-separated form;
   an entry signed by 0.3.x is now a miss and rebuilds.
+- **Breaking: every merge-queue hook keeps its caches in its candidate's own home.** A
+  gate or regeneration gets `HOME`, the XDG directories, `TMPDIR` and magus's cache
+  inside the candidate's box, and the queue refuses a hook whose sandbox could write
+  outside it. `--scratch-env` is removed with nothing to replace it; drop the flag.
+- **Breaking: queue hooks run in the base's sandbox.** The gate, the regeneration and a
+  `--facts` command run under the base's `sandbox` policy, at least `best-effort`,
+  rooted at their checkout: landlock confines their files on Linux, and everywhere their
+  environment is the sandbox's. `--sandbox=required` refuses a hook the kernel cannot
+  confine; `tools/gha-queue.buzz` passes it.
 - **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
   built console file, including the demo graph JSON holding the whole knowledge graph and
   its notes. Other files and directory listings now return 404, on loopback and on the LAN
@@ -938,6 +1035,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   another base or remote, a base commit the base lacks, or a stack base that is not
   the reviewed head beneath stops applying (MGS3028): a forged stack base could merge
   a revert of the base. Apply writes the squash message itself.
+- **The merge queue's own git no longer runs what a change's hook configures.** Git in
+  a candidate reads the repository recorded when the checkout was made, with fsmonitor
+  and submodule recursion off; a rewritten `.git` refuses the change. Hooks get the
+  shared object store read-only, and every head is fetched before the first hook.
 - **Queue hooks run on an allowlisted environment.** A hook inherits only the sandbox's
   default names and the base's `sandbox.env.passthrough`, so no token or Actions file
   command reaches it. A unit starting with `-` or holding a line break is refused, and a
