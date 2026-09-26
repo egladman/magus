@@ -9,9 +9,10 @@
 //	magus buzz tools/gha-queue.buzz -- apply --run <id> --base <branch> --app <slug> --committer <who>
 //	                                                            merge what the run uploads onto the base,
 //	                                                            as the queue app
-//	magus buzz tools/gha-queue.buzz -- dispatch --run <id> --base <branch>
+//	magus buzz tools/gha-queue.buzz -- dispatch --run <id> --base <branch> --intent-at <time>
 //	                                                            start a validation run on the base once
-//	                                                            pull-request run <id> saw merge intent
+//	                                                            pull-request run <id> saw merge intent,
+//	                                                            unless an unfinished run covers it
 //	magus buzz tools/gha-queue.buzz -- ci-queued --run <id> --base <branch>
 //	                                                            write whether CI run <id> finished on the
 //	                                                            head of a queued pull request
@@ -33,6 +34,8 @@ import "fs";
 import "os";
 import "proc";
 import "serialize";
+import "std";
+import "time";
 
 import "assert";
 
@@ -201,15 +204,126 @@ fun awaitJob(run: str, job: str) > bool !> any {
 }
 
 fun planned(run: str) > void !> any {
-    fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={awaitJob(run, job: "queue plan")}\n");
+    fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={awaitJob(run, job: PLAN_JOB)}\n");
 }
 
-// dispatch starts a validation run on base once pull-request run run saw merge intent.
-// That run's jobs are the pull request's own file, so its intent job is a hint and never
-// a verdict: the worst a forged one does is start one more run on base, which validates
-// only what the base's own queue.yaml plans.
-fun dispatch(run: str, base: str) > void !> any {
-    if (awaitJob(run, job: "queue intent")) {
+// PLAN_JOB and PLAN_STEP name queue.yaml's plan job and the step in it that reads the
+// queue. A run plans an intent only when that step starts after it.
+final PLAN_JOB = "queue plan";
+final PLAN_STEP = "Plan the queue";
+
+// TIMESTAMP is the layout of every time the GitHub API reports.
+final TIMESTAMP = "2006-01-02T15:04:05Z";
+
+// Validation is an unfinished queue.yaml run on the base. readAt is when its plan step
+// started reading the queue, or null while it has not; planFailed is set once the plan
+// job ended without success, since such a run validates nothing.
+export object Validation {
+    id: str,
+    readAt: str?,
+    planFailed: bool,
+}
+
+// Decision is dispatch's verdict: whether to start a run, and the notice that says why.
+export object Decision {
+    start: bool,
+    notice: str,
+    message: str,
+}
+
+// unfinishedIDs reads `gh api repos/<repo>/actions/workflows/queue.yaml/runs` on the
+// base: the runs a push or a dispatch in this repository started that have not finished.
+// A body without its run list is an error, never an empty queue.
+export fun unfinishedIDs(runs: str, repo: str) > [str] !> any {
+    final list = serialize\jsonDecode(runs).q("workflow_runs").list();
+    if (list == null) {
+        throw "queue: dispatch: the run listing names no workflow_runs: {runs}";
+    }
+    final ids = mut [<str>];
+    foreach (r in list!) {
+        final event = r.q("event").stringValue();
+        if (r.q("status").stringValue() != "completed" and (event == "push" or event == "workflow_dispatch")
+            and r.q("head_repository").q("full_name").stringValue() == repo) {
+            ids.append("{r.q("id").integerValue()}");
+        }
+    }
+    return ids;
+}
+
+// validation reads `gh api repos/<repo>/actions/runs/<id>/jobs` of an unfinished run. A
+// run waiting its turn in the concurrency group lists no jobs, so it has read nothing.
+export fun validation(id: str, jobs: str) > Validation !> any {
+    final list = serialize\jsonDecode(jobs).q("jobs").list();
+    if (list == null) {
+        throw "queue: dispatch: run {id}'s job listing names no jobs: {jobs}";
+    }
+    foreach (j in list!) {
+        if (j.q("name").stringValue() != PLAN_JOB) {
+            continue;
+        }
+        final failed = j.q("status").stringValue() == "completed" and j.q("conclusion").stringValue() != "success";
+        foreach (step in j.q("steps").listValue()) {
+            final started = step.q("started_at").stringValue();
+            if (step.q("name").stringValue() == PLAN_STEP and started != "") {
+                return Validation{ id = id, readAt = started, planFailed = failed };
+            }
+        }
+        return Validation{ id = id, readAt = null, planFailed = failed };
+    }
+    return Validation{ id = id, readAt = null, planFailed = false };
+}
+
+// decide says whether merge intent seen at intentAt needs a run started on the base,
+// given the unfinished ones. A run covers it until its plan reads the queue, or when that
+// read began after it; a read in the same second counts as before. GitHub keeps one run
+// pending behind the running one and cancels the older pending run, and a pending run
+// always covers, so this starts a follow-up only when none is pending and never replaces
+// one.
+export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
+    final at = time\parse(TIMESTAMP, value: intentAt);
+    final before = mut [<str>];
+    foreach (r in runs) {
+        if (r.planFailed) {
+            before.append("{r.id} (its plan failed)");
+        } else if (r.readAt == null) {
+            return Decision{ start = false, notice = "queue-dispatch-pending",
+                message = "run {r.id} has not read the queue yet, so it plans this intent" };
+        } else if (time\parse(TIMESTAMP, value: r.readAt!) > at) {
+            return Decision{ start = false, notice = "queue-dispatch-covered",
+                message = "run {r.id} read the queue at {r.readAt!}, after this intent at {intentAt}" };
+        } else {
+            before.append("{r.id} (read the queue at {r.readAt!})");
+        }
+    }
+    if (before.len() == 0) {
+        return Decision{ start = true, notice = "queue-dispatch-idle",
+            message = "no validation run is running or pending; starting one for this intent at {intentAt}" };
+    }
+    return Decision{ start = true, notice = "queue-dispatch-follow-up",
+        message = "run {before.join(", ")} planned before this intent at {intentAt}; starting one follow-up" };
+}
+
+// dispatch starts a validation run on base once pull-request run run saw merge intent at
+// intentAt, unless an unfinished run covers it. That run's jobs are the pull request's
+// own file, so its intent job is a hint and never a verdict: the worst a forged one does
+// is start one more run on base, which validates only what the base's own queue.yaml
+// plans. Any API error fails the step: skipping on one could strand the intent.
+fun dispatch(run: str, base: str, intentAt: str) > void !> any {
+    if (!awaitJob(run, job: "queue intent")) {
+        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent");
+        return;
+    }
+    final repo = need("GITHUB_REPOSITORY");
+    final began = os\time();
+    final ids = unfinishedIDs(capture("gh", args: ["api", "repos/{repo}/actions/workflows/queue.yaml/runs?branch={base}&exclude_pull_requests=true&per_page=100"]), repo: repo);
+    final runs = mut [<Validation>];
+    foreach (id in ids) {
+        runs.append(validation(id, jobs: capture("gh", args: ["api", "repos/{repo}/actions/runs/{id}/jobs"])));
+    }
+    std\print("queue: dispatch read {ids.len()} unfinished queue.yaml run(s) on {base} from api.github.com in {ids.len() + 1} request(s), {std\toInt(os\time() - began)}ms");
+    final d = decide(runs, intentAt: intentAt);
+    std\print("::notice title={d.notice}::{d.message}");
+    if (d.start) {
         start(base);
     }
 }
@@ -286,7 +400,7 @@ final usage = "usage: magus buzz tools/gha-queue.buzz -- <step> <flags>\n"
     + "  validate --change <id>\n"
     + "  planned --run <id>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
-    + "  dispatch --run <id> --base <branch>\n"
+    + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
     + "  ci-queued --run <id> --base <branch>\n"
     + "  start --base <branch>";
 
@@ -324,8 +438,8 @@ export fun main(args: [str]) > void !> any {
         final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
         apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
     } else if (step == "dispatch") {
-        final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
-        dispatch(o["--run"]!, base: o["--base"]!);
+        final o = options(step, argv: argv, required: ["--run", "--base", "--intent-at"], optional: [<str>]);
+        dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
     } else if (step == "ci-queued") {
         final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
         ciQueued(o["--run"]!, base: o["--base"]!);
@@ -457,6 +571,96 @@ test "each step takes the flags it declares and refuses the rest" {
         }
         assert\equal(refused, want: true, message: argv.join(" "));
     }
+}
+
+fun queueRuns(runs: [{str: any}]) > str {
+    return encode({"total_count": runs.len(), "workflow_runs": runs});
+}
+
+fun queueRun(id: int, status: str, event: str, repo: str) > {str: any} {
+    return {"id": id, "status": status, "event": event, "head_repository": {"full_name": repo}};
+}
+
+// planJobs renders a run's job listing: no plan job when status is "", else the plan job
+// with its plan step, started at readAt unless that is "".
+fun planJobs(status: str, conclusion: str, readAt: str) > str {
+    final jobs = mut [<{str: any}>];
+    if (status != "") {
+        var started: any = null;
+        if (readAt != "") {
+            started = readAt;
+        }
+        jobs.append({"name": "queue plan", "status": status, "conclusion": conclusion, "steps": [
+            {"name": "Set up job", "started_at": "2026-09-26T17:00:00Z"},
+            {"name": "Plan the queue", "started_at": started},
+        ]});
+    }
+    return encode({"total_count": jobs.len(), "jobs": jobs});
+}
+
+test "dispatch weighs only unfinished runs a push or a dispatch in this repository started" {
+    final runs = queueRuns([
+        queueRun(1, status: "in_progress", event: "workflow_dispatch", repo: "o/r"),
+        queueRun(2, status: "pending", event: "push", repo: "o/r"),
+        queueRun(3, status: "completed", event: "workflow_dispatch", repo: "o/r"),
+        queueRun(4, status: "queued", event: "pull_request", repo: "o/r"),
+        queueRun(5, status: "queued", event: "push", repo: "fork/r"),
+    ]);
+    assert\equal(unfinishedIDs(runs, repo: "o/r"), want: ["1", "2"], message: "unfinished base runs");
+}
+
+test "dispatch fails on an API error rather than reading it as no runs" {
+    foreach (body in [`{"message": "Bad credentials", "status": "401"}`, `{"workflow_runs": null}`]) {
+        var failed = false;
+        try {
+            unfinishedIDs(body, repo: "o/r");
+        } catch (e) {
+            failed = true;
+        }
+        assert\equal(failed, want: true, message: "run listing " + body);
+    }
+    var failed = false;
+    try {
+        validation("1", jobs: `{"message": "Not Found"}`);
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "job listing");
+}
+
+test "a run has read the queue once its plan step started" {
+    final pending = validation("1", jobs: planJobs("", conclusion: "", readAt: ""));
+    assert\equal([pending.readAt, pending.planFailed], want: [null, false], message: "waiting in the concurrency group");
+    final setup = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: ""));
+    assert\equal([setup.readAt, setup.planFailed], want: [null, false], message: "plan job still setting up");
+    final read = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T17:02:00Z"));
+    assert\equal([read.readAt, read.planFailed], want: ["2026-09-26T17:02:00Z", false], message: "plan step started");
+    final failed = validation("1", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T17:02:00Z"));
+    assert\equal(failed.planFailed, want: true, message: "plan failed");
+}
+
+test "dispatch starts a run only when no unfinished run plans the intent" {
+    final intent = "2026-09-26T17:10:00Z";
+    final early = Validation{ id = "7", readAt = "2026-09-26T17:02:00Z", planFailed = false };
+    final pending = Validation{ id = "8", readAt = null, planFailed = false };
+    final verdict = fun (runs: [Validation]) > [any] {
+        final d = decide(runs, intentAt: intent);
+        return [d.start, d.notice];
+    };
+    assert\equal(verdict([<Validation>]), want: [true, "queue-dispatch-idle"], message: "no run");
+    assert\equal(verdict([pending]), want: [false, "queue-dispatch-pending"], message: "a pending run plans it");
+    assert\equal(verdict([early]), want: [true, "queue-dispatch-follow-up"], message: "the running run planned before it");
+    assert\equal(verdict([pending, early]), want: [false, "queue-dispatch-pending"], message: "running and pending, newest first");
+    assert\equal(verdict([early, pending]), want: [false, "queue-dispatch-pending"], message: "running and pending, oldest first");
+    assert\equal(verdict([Validation{ id = "7", readAt = "2026-09-26T17:10:01Z", planFailed = false }]),
+        want: [false, "queue-dispatch-covered"], message: "the running run read the queue after it");
+    assert\equal(verdict([Validation{ id = "7", readAt = intent, planFailed = false }]),
+        want: [true, "queue-dispatch-follow-up"], message: "a read in the same second may have missed it");
+    assert\equal(verdict([Validation{ id = "7", readAt = "2026-09-26T17:12:00Z", planFailed = true }]),
+        want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
+    assert\equal(decide([early], intentAt: intent).message,
+        want: "run 7 (read the queue at 2026-09-26T17:02:00Z) planned before this intent at 2026-09-26T17:10:00Z; starting one follow-up",
+        message: "the notice names the run and both times");
 }
 
 test "plan args carry the depth and leave the affected sets to the workspace" {
