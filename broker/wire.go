@@ -2,7 +2,6 @@ package broker
 
 import (
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -85,11 +84,23 @@ type releaseRequest struct {
 	ClaimID string `json:"claim_id"`
 }
 
-// serviceRequest acquires or releases one reference to a shared service. Service is
-// read on acquire only.
-type serviceRequest struct {
-	Key     string          `json:"key"`
-	Service *spells.Service `json:"service,omitempty"`
+// serviceAcquireRequest acquires one reference to a shared service.
+type serviceAcquireRequest struct {
+	Key     string      `json:"key"`
+	Service serviceWire `json:"service"`
+}
+
+// serviceWire is a ServiceSpec on the wire.
+type serviceWire struct {
+	Command   []string `json:"command"`
+	Readiness []string `json:"readiness,omitempty"`
+	Stop      []string `json:"stop,omitempty"`
+	IdleMS    int64    `json:"idle_ms,omitzero"`
+}
+
+// serviceReleaseRequest drops one reference a service acquire took.
+type serviceReleaseRequest struct {
+	Key string `json:"key"`
 }
 
 // serviceReply answers a service request. Stopped is set by a stop-all.

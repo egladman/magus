@@ -64,7 +64,7 @@ stderr 'no broker is running'
 stderr 'no broker is running'
 
 exec magus broker -h
-stderr 'usage: magus broker \[status\|stop\] \[flags\]'
+stderr 'usage: magus broker \[status\|stop\|units\] \[flags\]'
 stderr 'unix socket only'
 
 ! exec magus broker bogus

@@ -122,6 +122,7 @@ flag agent/global
 flag agent/prune
 flag agent/skill-form
 flag agent/tar
+flag broker/idle-exit
 flag buzz/C
 flag buzz/check
 flag buzz/coverprofile
