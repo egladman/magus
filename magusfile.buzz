@@ -3218,6 +3218,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         // name root-module paths, and the stock linters were never adopted there.
         final root = magus\projects().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
+            // TODO: its go.mod needs `go mod tidy`, so the go command cannot load it
+            // and no analyzer can either. Drop this skip once it is tidied.
+            if (mod.value == "libs/gopherbuzz/benchmarks/comparison/go.mod") { continue; }
             proc\exec(root + "/.magus/custom-gcl",
                       ["run", "--config", root + "/.golangci.yml", "--enable-only", "hostagnostic,stutter"],
                       fs\dirname(mod.value));

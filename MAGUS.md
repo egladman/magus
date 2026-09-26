@@ -59,7 +59,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                                         |
 | function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `main`                                                                                               |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
-| rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
+| rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                      |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
 
