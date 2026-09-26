@@ -97,6 +97,39 @@ func TestCheckWriteRefusesControlFiles(t *testing.T) {
 	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")))
 }
 
+// The object store stays readable and loses its write grant, and the worktree's own git
+// directory keeps its own; the result is never rebuilt with the grant back.
+func TestWithReadOnlyObjectsTakesOnlyTheStoresWrite(t *testing.T) {
+	ws, common := t.TempDir(), t.TempDir()
+	gitDir := filepath.Join(common, "worktrees", "wt")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(common, "objects", "ab"), 0o755))
+	p, err := BuildPolicy(PolicyOptions{Workspace: ws, GitDir: gitDir, GitCommonDir: common,
+		Sandbox: spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(common, "objects", "ab"), Mode: spells.SandboxAccessRW}}}}).WithReadOnlyObjects()
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")), filesystem.ErrDenied)
+	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "info", "alternates")), filesystem.ErrDenied)
+	assert.NoError(t, p.CheckRead(ctx, filepath.Join(common, "objects", "ab", "cd")))
+	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")))
+	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, "src.go")))
+	assert.Same(t, p, p.Scoped(nil, nil))
+}
+
+// A grant holding the store cannot be narrowed by a rule beneath it, so it is an error;
+// a policy with no git directory has no store to narrow.
+func TestWithReadOnlyObjectsRefusesAWriteGrantAboveTheStore(t *testing.T) {
+	ws, common := t.TempDir(), t.TempDir()
+	_, err := BuildPolicy(PolicyOptions{Workspace: ws, GitDir: common, GitCommonDir: common}).WithReadOnlyObjects()
+	require.ErrorContains(t, err, "holds the git object store")
+
+	p := BuildPolicy(PolicyOptions{Workspace: ws})
+	got, err := p.WithReadOnlyObjects()
+	require.NoError(t, err)
+	assert.Same(t, p, got)
+}
+
 // noopMetrics satisfies MetricsRecorder without doing work. The benchmark stamps one
 // because recordCheck returns early without a recorder, and a real run always has one.
 type noopMetrics struct{}

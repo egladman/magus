@@ -246,6 +246,36 @@ func TestAHookIsConfinedToItsCheckoutWhereTheKernelCan(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(outside, "escaped"))
 }
 
+// A hook in a candidate's checkout reads the object store every candidate shares and
+// writes none of it; its checkout's own git directory, where the index lives, stays its
+// to write. Where the kernel has landlock, a write into the store fails.
+func TestAHookCannotWriteTheSharedObjectStore(t *testing.T) {
+	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	drv := gitDriver(t, root)
+	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = discard(context.Background(), drv, root, cand) })
+	objects := filepath.Join(root, ".git", "objects")
+	own := filepath.Join(root, ".git", "worktrees", "checkout")
+	require.DirExists(t, own)
+
+	p, err := hookCommand{Dir: cand.Dir, Scratch: cand.Scratch}.policy()
+	require.NoError(t, err)
+	assert.ErrorIs(t, p.CheckWrite(t.Context(), filepath.Join(objects, "ab", "cd")), filesystem.ErrDenied)
+	assert.NoError(t, p.CheckRead(t.Context(), filepath.Join(objects, "ab", "cd")))
+	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(own, "index")))
+
+	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
+		t.Skip("no landlock on this host: best-effort confines the environment only")
+	}
+	res, err := CommandGate(script(fmt.Sprintf(`touch %q && touch %q`, filepath.Join(own, "probe"), filepath.Join(objects, "planted"))), HookEnv{}, nil).
+		Validate(t.Context(), cand, hookUnits)
+	require.NoError(t, err)
+	assert.False(t, res.Green)
+	assert.FileExists(t, filepath.Join(own, "probe"))
+	assert.NoFileExists(t, filepath.Join(objects, "planted"))
+}
+
 // Every kind of hook takes the same HookEnv: a passthrough name and a fixed assignment
 // reach a gate, a regeneration and a facts hook alike, over the queue's own value.
 func TestEveryHookTakesItsHookEnv(t *testing.T) {

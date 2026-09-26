@@ -84,8 +84,12 @@ func (v *Validator) Run(ctx context.Context, plan types.Plan) error {
 		}
 	}()
 	if v.Only != "" {
+		if gi, pos, ok := find(plan, v.Only); ok {
+			r.fetch(ctx, plan.Partitions[gi][:pos+1])
+		}
 		return r.only(ctx)
 	}
+	r.fetch(ctx, slices.Concat(plan.Partitions...))
 	var wg sync.WaitGroup
 	errs := make([]error, len(plan.Partitions))
 	for gi, g := range plan.Partitions {
@@ -103,6 +107,18 @@ type validation struct {
 
 	mu    sync.Mutex
 	bases map[string]*baseGate // by onto and units
+
+	fetched map[string]error // each change's head fetch, by change id; read-only once filled
+}
+
+// fetch makes every head of cs present before any hook runs: git fetches no object the
+// store already holds, so a fetch after a hook wrote the store would take the hook's
+// object for the head. Each change's failure waits for its candidate to report it.
+func (r *validation) fetch(ctx context.Context, cs []types.Change) {
+	r.fetched = make(map[string]error, len(cs))
+	for _, c := range cs {
+		r.fetched[c.ID] = fetchHead(ctx, r.vcs, r.clone, c)
+	}
 }
 
 // baseGate is the gate on the commit red candidates were built onto, run once for every
@@ -375,7 +391,10 @@ func (r *validation) only(ctx context.Context) error {
 // What auto-resolution settled is recorded on f, for its verdict to name.
 func (r *validation) candidate(ctx context.Context, f *flight) (types.Candidate, error) {
 	c := f.change
-	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
+	if err, ok := r.fetched[c.ID]; !ok || err != nil {
+		if !ok {
+			err = errors.New("its head was not fetched before the hooks ran")
+		}
 		return types.Candidate{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
 	s := candidateSpec{clone: r.clone, facts: r.facts, onto: f.onto, change: c, scratch: r.scratch, date: r.plan.CommitDate}

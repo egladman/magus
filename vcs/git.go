@@ -662,6 +662,12 @@ func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]s
 	// --untracked-files=normal: status.showUntrackedFiles would otherwise hide new files
 	// (no) or list every file inside a new directory (all).
 	args := []string{"status", "--porcelain", "--untracked-files=normal"}
+	if _, made := madeCheckout(dir); made {
+		// Reading a submodule's own changes runs git in it, under a config the checkout's
+		// code may have written. =dirty still lists a submodule whose commit moved. Only
+		// the flag holds: a .gitmodules `ignore` outranks the diff.ignoreSubmodules config.
+		args = append(args, "--ignore-submodules=dirty")
+	}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -2112,6 +2118,18 @@ var gitIsolationPins = []string{
 	"-c", "core.hooksPath=" + os.DevNull,
 }
 
+// gitCheckoutPins turn off, on every call in a checkout CreateCheckout made, the config
+// that makes status, add or commit run a program (git-config(1)): core.fsmonitor names a
+// hook git runs to list changed files, and submodule.recurse makes a merge or checkout
+// run git inside each submodule, whose own config the checkout's code wrote. The -c
+// values reach every git process the call starts through GIT_CONFIG_PARAMETERS. Filter,
+// diff and merge drivers need no pin: git reads their commands only from config, and the
+// pinned GIT_DIR and GIT_COMMON_DIR keep that config the repository's own.
+var gitCheckoutPins = []string{
+	"-c", "core.fsmonitor=false",
+	"-c", "submodule.recurse=false",
+}
+
 // gitWaitDelay bounds how long Wait blocks on a child of git (ssh, a credential helper)
 // still holding its pipes after git exits or ctx ends. Network deadlines are the caller's.
 const gitWaitDelay = 10 * time.Second
@@ -2125,10 +2143,19 @@ const gitWaitDelay = 10 * time.Second
 // from stdin, so an auth-required remote would hang a build forever on a prompt nobody
 // sees. GIT_NO_REPLACE_OBJECTS=1 because a refs/replace/ ref would otherwise substitute
 // one commit or tree for another under every read and merge.
+//
+// In a checkout CreateCheckout made, the call is isolated whatever o says, carries
+// gitCheckoutPins, and reads the repository through the paths recorded at creation. When
+// a file naming them has changed, running the command returns *types.CheckoutTamperedError
+// and starts no git.
 func gitExec(ctx context.Context, dir string, o gitOpts, args ...string) *exec.Cmd {
+	co, made := madeCheckout(dir)
 	argv := slices.Clone(gitParsePins)
-	if o.Isolated {
+	if o.Isolated || made {
 		argv = append(argv, gitIsolationPins...)
+	}
+	if made {
+		argv = append(argv, gitCheckoutPins...)
 	}
 	cmd := exec.CommandContext(ctx, "git", append(argv, args...)...)
 	cmd.Dir = dir
@@ -2137,6 +2164,12 @@ func gitExec(ctx context.Context, dir string, o gitOpts, args ...string) *exec.C
 		cmd.Env = append(cmd.Env, "GIT_LITERAL_PATHSPECS=1")
 	}
 	cmd.Env = append(cmd.Env, o.Env...)
+	if made {
+		cmd.Env = append(cmd.Env, "GIT_DIR="+co.gitDir, "GIT_COMMON_DIR="+co.commonDir, "GIT_WORK_TREE="+co.dir)
+		if err := co.check(); err != nil {
+			cmd.Err = err
+		}
+	}
 	if o.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(o.Stdin)
 	}
@@ -2824,8 +2857,98 @@ func realPath(p string) string {
 	return filepath.Join(realPath(parent), filepath.Base(p))
 }
 
+// gitCheckout is what CreateCheckout recorded of a linked worktree it added, before
+// anything ran in it: the directories git reads it through, and each file that names them
+// as it stood.
+type gitCheckout struct {
+	dir, gitDir, commonDir string
+	files                  []recordedFile
+}
+
+// recordedFile is a file's content, or its absence (exists false).
+type recordedFile struct {
+	path    string
+	content []byte
+	exists  bool
+}
+
+// gitCheckoutsMade maps each checkout CreateCheckout made in this process, by its path as
+// given and resolved, to its record, until RemoveCheckout removes it.
+var gitCheckoutsMade struct {
+	sync.Mutex
+	byDir map[string]*gitCheckout
+}
+
+func madeCheckout(dir string) (*gitCheckout, bool) {
+	if dir == "" {
+		return nil, false
+	}
+	gitCheckoutsMade.Lock()
+	defer gitCheckoutsMade.Unlock()
+	co, ok := gitCheckoutsMade.byDir[filepath.Clean(dir)]
+	return co, ok
+}
+
+// check returns a *types.CheckoutTamperedError naming the first recorded file that
+// changed. A file that is no longer a regular one has changed, and is never read: a FIFO
+// would block the read.
+func (c *gitCheckout) check() error {
+	for _, f := range c.files {
+		info, err := os.Lstat(f.path)
+		switch {
+		case errors.Is(err, fs.ErrNotExist) && !f.exists:
+			continue
+		case err == nil && f.exists && info.Mode().IsRegular():
+			if got, err := os.ReadFile(f.path); err == nil && bytes.Equal(got, f.content) {
+				continue
+			}
+		}
+		return &types.CheckoutTamperedError{Checkout: c.dir, File: f.path}
+	}
+	return nil
+}
+
+// recordCheckout records the linked worktree git just added at dir. Its git directory
+// must be an entry of the common directory's worktrees, which no code run in the checkout
+// can add to. config.worktree is recorded because git reads it when the repository
+// enables extensions.worktreeConfig.
+func recordCheckout(ctx context.Context, root, dir string) (*gitCheckout, error) {
+	common, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse --git-common-dir: %w", err)
+	}
+	dotgit := filepath.Join(dir, ".git")
+	content, err := os.ReadFile(dotgit)
+	if err != nil {
+		return nil, err
+	}
+	gitDir, ok := strings.CutPrefix(strings.TrimSpace(string(content)), "gitdir: ")
+	if !ok {
+		return nil, fmt.Errorf("vcs: %s does not name a git directory", dotgit)
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(dir, gitDir)
+	}
+	if filepath.Dir(realPath(gitDir)) != realPath(filepath.Join(common, "worktrees")) {
+		return nil, fmt.Errorf("vcs: %s names %s, which is not a worktree of %s", dotgit, gitDir, common)
+	}
+	co := &gitCheckout{dir: filepath.Clean(dir), gitDir: filepath.Clean(gitDir), commonDir: common}
+	for _, p := range []string{dotgit, filepath.Join(gitDir, "commondir"), filepath.Join(gitDir, "gitdir"), filepath.Join(gitDir, "config.worktree")} {
+		b, err := os.ReadFile(p)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			co.files = append(co.files, recordedFile{path: p})
+		case err != nil:
+			return nil, err
+		default:
+			co.files = append(co.files, recordedFile{path: p, content: b, exists: true})
+		}
+	}
+	return co, nil
+}
+
 // CreateCheckout implements types.CheckoutProvisioner with a detached linked worktree,
-// locked with checkoutLockReason.
+// locked with checkoutLockReason, and records it for gitExec.
 func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
 	if err := checkRequiredRev(rev); err != nil {
 		return err
@@ -2856,18 +2979,42 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 		"--lock", "--reason", checkoutLockReason, "--", dir, rev); err != nil {
 		return fmt.Errorf("git worktree add %s: %w", dir, err)
 	}
+	co, err := recordCheckout(ctx, root, dir)
+	if err != nil {
+		_, rmErr := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "remove", "--force", "--force", "--", dir)
+		return errors.Join(fmt.Errorf("record checkout %s: %w", dir, err), rmErr)
+	}
+	gitCheckoutsMade.Lock()
+	defer gitCheckoutsMade.Unlock()
+	if gitCheckoutsMade.byDir == nil {
+		gitCheckoutsMade.byDir = map[string]*gitCheckout{}
+	}
+	gitCheckoutsMade.byDir[co.dir] = co
+	gitCheckoutsMade.byDir[realPath(co.dir)] = co
 	return nil
 }
 
-// RemoveCheckout implements types.CheckoutProvisioner. The doubled --force removes a
-// locked worktree, one with changes in it, and the registration of one whose directory is
-// gone.
+// RemoveCheckout implements types.CheckoutProvisioner. A checkout made in this process
+// is removed by deleting its directory and its git directory, which reads none of the
+// files code run in it could have rewritten. Any other goes through `git worktree
+// remove`, whose doubled --force removes a locked worktree, one with changes in it, and
+// the registration of one whose directory is gone.
 func (v gitVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
+	if co, ok := madeCheckout(dir); ok {
+		gitCheckoutsMade.Lock()
+		for k, c := range gitCheckoutsMade.byDir {
+			if c == co {
+				delete(gitCheckoutsMade.byDir, k)
+			}
+		}
+		gitCheckoutsMade.Unlock()
+		return errors.Join(os.RemoveAll(co.dir), os.RemoveAll(co.gitDir))
+	}
 	owned, err := gitCheckouts(ctx, root)
 	if err != nil {
 		return err
