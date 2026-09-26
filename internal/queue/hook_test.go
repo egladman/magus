@@ -218,6 +218,17 @@ func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 	assert.Equal(t, "required\n", string(seen))
 }
 
+// A hook's scratch directory holds the tool caches its scratch variables point at, and
+// go run executes the binaries it caches there.
+func TestAHookMayExecuteWhatItBuildsInItsScratchDirectory(t *testing.T) {
+	scratch := t.TempDir()
+	p, err := hookCommand{Dir: t.TempDir(), Scratch: scratch}.policy()
+	require.NoError(t, err)
+	cached := filepath.Join(scratch, "go-build", "29", "29d7-d", "magus-utils")
+	assert.NoError(t, p.CheckExec(t.Context(), cached))
+	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(scratch, "cache", "buf", "x")))
+}
+
 // Where the kernel has landlock, a hook writes in its checkout and its scratch
 // directory and nowhere else, and a process it starts is held to the same.
 func TestAHookIsConfinedToItsCheckoutWhereTheKernelCan(t *testing.T) {
