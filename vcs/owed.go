@@ -21,8 +21,8 @@ import (
 //
 // The driver cannot regenerate itself. git invokes it once per conflicted file while the
 // merge is still writing the tree, so a generator started there reads a half-merged
-// checkout. It records what it kept instead, and a job submitted by the post-merge,
-// post-rewrite and post-commit hooks runs the record once the operation has finished.
+// checkout. It records what it kept instead, and the settle hooks (SettleHooks) run the
+// record once the tree is whole, alongside whatever else the operation changed.
 type OwedRegeneration struct {
 	// Project is the project PATH ("." for the root), the form `magus run` accepts.
 	Project string `json:"project"`
@@ -150,32 +150,6 @@ func DropOwedRegenerations(ctx context.Context, root string, settled []OwedRegen
 		}
 		return writeOwed(p.record, kept)
 	})
-}
-
-// gitOperationState are the per-worktree files git keeps while a merge, rebase,
-// cherry-pick or revert is unfinished.
-var gitOperationState = []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"}
-
-// OperationUnderway reports whether root's git worktree is mid merge, rebase,
-// cherry-pick or revert; false outside a git repository.
-//
-// A regeneration must wait for it. post-rewrite fires before git removes rebase-merge
-// and applies an autostash, and post-commit fires after every pick of a rebase, so a job
-// those hooks submit can start while the operation still owns the tree.
-func OperationUnderway(ctx context.Context, root string) (bool, error) {
-	p, ok, err := owedPathsOf(ctx, root)
-	if err != nil || !ok {
-		return false, err
-	}
-	gitDir := filepath.Dir(p.record)
-	for _, name := range gitOperationState {
-		if _, err := os.Stat(filepath.Join(gitDir, name)); err == nil {
-			return true, nil
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return false, fmt.Errorf("vcs: stat %s: %w", name, err)
-		}
-	}
-	return false, nil
 }
 
 func readOwed(path string) ([]OwedRegeneration, error) {

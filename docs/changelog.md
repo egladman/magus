@@ -246,11 +246,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **MCP and the Connect APIs on `server.sock`, no token needed.** A same-user peer holds
   the `socket-peer` credential, `mcp=write` and `console=write`, each path held to its
   loopback need. Every MCP tool call, on any transport, checks `mcp=write` again (MGS9015).
-- **A merge's kept generated files regenerate after it finishes.** The merge driver records
-  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
-  a `regenerate-owed` job that runs each once, deepest project first, and stages the
-  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
-  record (`owed-regeneration`).
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
   change's head is stacked on it: it merges after it, its own delta measured from that
   head, and waits without blame when the one beneath is kicked back. On GitHub a
@@ -353,6 +348,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `RangeCommits` on `RangeReporter`. git implements every one; none runs a hook or signs.
 - **A write that opens an unrelated unit of work draws an advisory** pointing at the
   magus-multi-agent skill.
+- **`yaml\positions` and a typed `Finding`.** `yaml\positions(source)` returns the line and
+  column of every value, keyed by JSON pointer, so a Buzz check over `yaml\parse` output
+  can point at a line. `import "magus/lint"` brings `Finding`, the record a Buzz lint
+  rule returns.
 
 ### Changed
 
@@ -524,6 +523,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
 - **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
   --watch`.
+- **The guard lets git's own help through its destructive-command rules.**
+  `git stash --help`, `git worktree remove -h` and `git help stash` print usage
+  and pass. The request has to be the whole line with no global option, prefix,
+  pipe or flag before the help flag; anything else is judged as work.
 - **The guard hook asks version control only about the files its policy load read.** An
   allowed shell command no longer waits on a whole-tree status or on resolving the
   repository root. `magus.ApprovedSpawnRuleAt`, `ApprovedCommandRuleAt` and
@@ -581,8 +584,8 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   command and help through, so an agent can recover.
 - **Repository file conventions run as `lint-files`.** The checks on lockfiles, workflows,
   magusfiles, hook configs, skill declarations and the landing rotator moved out of a Go
-  test into `cmd/magus-filelint`, which the root `lint` target runs. Each finding names
-  the file, the line, and the fix.
+  test into Buzz rules under `tools/lint/`, which the root `lint` target runs. Each
+  finding names the file, the line, and the fix.
 - **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
   `--log-format`. It withheld per-target results with no stream to carry them; `-o jsonl`
   is the one way to select it.
@@ -616,6 +619,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   are `/proc/v1/` paths on it, and a client meeting a server started by an older magus
   gets MGS3025 naming the restart. On Linux and macOS it admits only processes running
   as the server's user (MGS9022 otherwise).
+- **A merge regenerates what it changed, in the merge.** The merge driver's registration
+  writes settle hooks running `magus vcs resolve --hook` on the whole tree: projects
+  whose sources or outputs the operation changed regenerate and are staged, a clean
+  merge's commit is left to `git commit`, and a failed regeneration stops the commit.
+  `regenerate-owed` is gone.
 - **The merge queue needs no bypass actor.** Apply posts `success` right before a merge,
   once main is still at the predicted tip, and GitHub's auto-merge merges; apply merges
   itself after a minute. A success it cannot follow through goes back to `pending`.
@@ -880,6 +888,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Guard advisories no longer fire on paths outside the workspace.** A command whose every
   path lies outside the root, or a write into a scratch directory, is advised nothing, and
   scripted-rewrite no longer refuses a script whose every named path is outside it.
+- **Global options no longer hide a VCS command from the guard.** `git -C . reset --hard`,
+  `hg -R . purge` and `jj --at-op @ abandon` reach the rule their subcommand triggers.
+  An inline alias such as `git -c alias.x=...` is refused under the new `inline-alias`
+  rule.
 - **The guard lets a tool's help through.** `go clean --help`, `gofmt -h` and
   `magus run --help | grep charm` pass the rules that route work through magus. A help
   flag handed to a program, as in `go run main.go --help`, is still work, and the
@@ -945,6 +957,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   from an organization's installations where an owner's token lists them; elsewhere it
   names the app's settings page and prints the rerun with `--app <slug>:<id>`. The printed
   key step reads no stdin and deletes the download even when storing fails.
+- **The merge queue starts a validation run only when no unfinished one covers the
+  change.** On merge intent, and when CI finishes on a queued head, it skips if a run on
+  main is pending or planned later, so triggers no longer cancel each other's pending
+  runs. Each decision is a named notice.
 - **The merge queue's gate replays main's cache.** It ran `ci` while main's shards
   stored entries under `ci:gha`, and charms key every step, so an unchanged base
   missed every entry. The gate now runs `ci:gha`, and a test holds its keys equal to
@@ -997,12 +1013,20 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   Windows sign-in line is PowerShell's `Start-Process`.
 - **A shared step no longer inherits one caller's timeout.** It runs under the
   invocation's cancellation. MGS3012 lists what was still admitted.
+- **A worker in its own worktree is graded under its job.** A spawn titled
+  `<parent>/<role> <job>` now binds the child's agent id beside the job store, so its
+  hooks resolve the lease from any checkout, and its first call records that checkout's
+  base. A title's `<job>` also matches `<parent>/<job>`.
 - **A step waiting on an upstream target no longer masks a stall.** Only a moving step
   beats the heartbeat; MGS3013 and MGS3012 still catch a wedge.
 - **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
   command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
   an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
   the long forms its matcher already covered.
+- **`config cache` verbs reach a spell-backed remote tier.** `export` and `import
+  --toolchain go --remote`, `prune --remote`, and `query output` publishing and remote
+  lookup now carry the workspace's secret resolver, so a backend spell that reads its
+  token through `magus\secret` no longer fails with "no secret resolver on this run".
 - **The unchanged-inputs hint no longer reads as a verdict.** It prints before the
   target runs, so it now says the target runs again, and it names the failed attempt
   rather than the step ref, which moved to the new run's result once that run landed.

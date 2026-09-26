@@ -952,6 +952,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 // serial.
 func resetStartupSingletons() {
 	magusOnce = sync.Once{}
+	magusLoaded.Store(false)
 	magusValue = nil
 	magusErr = nil
 	magusRootOverride = ""

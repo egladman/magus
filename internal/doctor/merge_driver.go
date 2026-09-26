@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -114,10 +113,43 @@ func driverExecutable(registered string) string {
 	return exe
 }
 
+// checkSettleHooks reports a registered git merge driver whose settle hooks are not all
+// installed. The driver keeps one side of a generated file on the promise that the hooks
+// regenerate it once the merge has the whole tree; without them every merge that touches
+// a generator's input commits stale output. A workspace load refreshes the driver's
+// registration and deliberately not the hooks, so this is where the gap shows.
+func (r *runner) checkSettleHooks() types.Check {
+	const name = "settle-hooks"
+	ctx := r.runCtx()
+	res, err := vcs.Resolve(ctx, r.ws.Root(), "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil || res.Name != "git" {
+		return types.Check{Name: name, Status: types.CheckOK, Message: "only git has settle hooks; the merge driver logs the regeneration to run"}
+	}
+	if r.registeredMergeDriver() == "" {
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no merge driver is registered, so no hook is owed"}
+	}
+	missing, err := vcs.SettleHooksMissing(ctx, r.ws.Root())
+	if err != nil {
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
+	}
+	if len(missing) == 0 {
+		return types.Check{Name: name, Status: types.CheckOK, Message: "every settle hook carries its magus-regenerate section"}
+	}
+	return types.Check{
+		Name:    name,
+		Status:  types.CheckFail,
+		Message: fmt.Sprintf("the merge driver is registered but %d settle hook(s) are not, so a merge that changes generator inputs commits stale output", len(missing)),
+		Details: []string{
+			"missing: " + strings.Join(missing, ", "),
+			"install them with `" + hint.Init.With("--vcs", "git") + "`",
+		},
+	}
+}
+
 // checkOwedRegeneration reports regenerations the merge driver recorded that no run has
 // settled yet. Each names generated files still holding one side of a merge, so a
-// commit made now carries stale output. The record outlives a failed job or a clone
-// with no server to run it, and this is where that becomes visible.
+// commit made now carries stale output. The record outlives a settle hook that failed
+// or was bypassed with --no-verify, and this is where that becomes visible.
 func (r *runner) checkOwedRegeneration() types.Check {
 	const name = "owed-regeneration"
 	ctx := r.runCtx()
@@ -131,11 +163,14 @@ func (r *runner) checkOwedRegeneration() types.Check {
 	path, _ := vcs.OwedRegenerationPath(ctx, r.ws.Root())
 	details := make([]string, 0, len(owed)+2)
 	for _, o := range owed {
-		details = append(details, fmt.Sprintf("%s (%d kept file(s): %s)",
-			hint.Run.With(o.Target+":rw", o.Project), len(o.Paths), strings.Join(o.Paths, ", ")))
+		detail := hint.Run.With(o.Target+":rw", o.Project)
+		if len(o.Paths) > 0 {
+			detail += fmt.Sprintf(" (%d kept file(s): %s)", len(o.Paths), strings.Join(o.Paths, ", "))
+		}
+		details = append(details, detail)
 	}
 	details = append(details,
-		"settle them with `"+hint.JobRun.With(job.NameRegenerateOwed)+"`, or `magus server "+job.NameRegenerateOwed+"` when no server is running",
+		"settle them with `"+hint.VCSResolve.String()+"`, which runs them, stages the result and clears the record",
 		"record: "+path)
 	return types.Check{
 		Name:    name,

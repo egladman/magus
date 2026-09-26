@@ -37,7 +37,8 @@ func (jjName) name() string      { return "jj" }
 //     bookmark, the reader's own included, would report as another line of work.
 //   - jj, Bisector: jj has no bisect command.
 //   - hg and sl, RegenHookInstaller and BranchChangeReporter: not built yet, though their
-//     hooks and revsets could answer.
+//     hooks and revsets could answer. Until then the merge driver logs the regeneration
+//     to run before committing, and `magus vcs resolve` runs it.
 //   - hg, sl and jj, the capabilities that combine revisions without a checkout: git's
 //     alone so far, though hg and Sapling have bundles, shares and commit, and jj has
 //     workspaces.

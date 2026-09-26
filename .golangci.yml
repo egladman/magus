@@ -209,10 +209,9 @@ linters:
         settings:
           module: github.com/egladman/magus
           # Generated output, fixtures, and the embedded skill bodies, which are
-          # documentation checked elsewhere. magus-filelint checks this repository's own
-          # hook configs, so it names their host paths by design.
+          # documentation checked elsewhere.
           skip-dirs: [.git, .magus, .claude, .agents, .opencode, node_modules, gen, testdata,
-                      docs, blog, skills, releases, manpage, schema, magus-filelint]
+                      docs, blog, skills, releases, manpage, schema]
 
       hostvocab:
         type: module

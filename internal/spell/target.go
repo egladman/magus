@@ -162,6 +162,17 @@ var SymbolIndexerSource string
 //go:embed gen/types/project.buzz
 var ProjectSource string
 
+// LintModulePath is the import path of the lint value-types module: the Finding a Buzz
+// lint rule returns. Like magus/spell it is source only, so importing it makes Finding
+// constructible, which a type declared on the magus namespace is not.
+const LintModulePath = "magus/lint"
+
+// LintModuleSource is the magus/lint bundle.
+//
+//go:generate go run ../../cmd/magus-utils types -type Finding -out gen/types/finding.buzz
+//go:embed gen/types/finding.buzz
+var LintModuleSource string
+
 // CharmModulePath is the import path of the pure-Buzz charm module.
 const CharmModulePath = "magus/charm"
 

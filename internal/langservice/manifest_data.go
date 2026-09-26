@@ -480,6 +480,7 @@ var modules = []Module{
 		Doc:  "YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).",
 		Methods: []Method{
 			{Name: "parse", Doc: "Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.", Sig: "yaml\\parse(source) -> any"},
+			{Name: "positions", Doc: "Report where each value of a YAML document starts, as {lines, columns}: 1-based, each keyed by the value's JSON pointer (\"\" for the root, /jobs/build/steps/0 for a list item, ~0 and ~1 escaping ~ and / in a key). A mapping entry is keyed at its value, so /jobs/build is where that job's body starts. An alias is keyed where it appears and not followed. What parse returns carries no positions; this is how a check over it points at a line. Errors on invalid input.", Sig: "yaml\\positions(source) -> YamlPositions"},
 			{Name: "stringify", Doc: "Encode a value to a YAML string; errors on unencodable input.", Sig: "yaml\\stringify(value) -> string"},
 		},
 	},

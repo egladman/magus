@@ -1,0 +1,39 @@
+// The change-role-spawn-not-isolated rule, the spawn rule the root magusfile registers.
+namespace agentpolicy\spawn;
+
+import "std";
+import "magus";
+import "./tools/policy/helpers" as helpers;
+
+final isolationDenial = "A worker that changes code gets its own checkout: spawn it with "
+    + "`isolation: \"worktree\"`, and have it detach onto its branch (`git switch --detach <branch>`) "
+    + "as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
+    + "orchestrator's tree, and no isolated writer's did. Thinking roles (plan, review, research, "
+    + "scout, integrate) may share it.";
+
+// The roles a spawn title names for work that changes the tree: the conventional commit types.
+final changeRoles = ["feat", "fix", "refactor", "perf", "docs", "test", "chore"];
+
+// decideSpawn denies a new code-changing worker that would share the spawning checkout. A
+// continue starts nothing, and a title in no known form names no role, so both pass.
+export fun decideSpawn(kind: str, title: str, isolated: bool) > GuardVerdict {
+    if (kind == "spawn" and !isolated and changeRoles.indexOf(helpers\titleRole(title)) != null) {
+        return magus\guard.deny(isolationDenial);
+    }
+    return magus\guard.allow();
+}
+
+test "a code-changing spawn without its own checkout is denied" {
+    foreach (title in ["orchestrator/feat guard-command", "v050-prep/fix naming-advisory", "orchestrator/docs changelog-fragments"]) {
+        final v = decideSpawn("spawn", title: title, isolated: false);
+        std\assert(v.decision == "deny", message: title);
+        std\assert(v.reason.indexOf("isolation: \"worktree\"") != null, message: "names the fix");
+    }
+}
+
+test "a thinking role, an isolated worker, a continue and an untitled spawn pass" {
+    std\assert(decideSpawn("spawn", title: "v050-prep/review naming-advisory", isolated: false).decision == "allow", message: "a review");
+    std\assert(decideSpawn("spawn", title: "orchestrator/feat guard-command", isolated: true).decision == "allow", message: "isolated");
+    std\assert(decideSpawn("continue", title: "", isolated: false).decision == "allow", message: "a continue");
+    std\assert(decideSpawn("spawn", title: "audit the store", isolated: false).decision == "allow", message: "no title grammar");
+}

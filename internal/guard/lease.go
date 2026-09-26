@@ -390,8 +390,8 @@ func repairInvocation(c hint.Invocation) bool {
 		return len(words) > 0 && undeclaredLeaseVerbs[words[0]]
 	}
 	if c.Name == "git" {
-		words := magusSubcommandWords(c.Args)
-		return len(words) > 0 && gitReadVerbs[words[0]]
+		g := parseGit(c.Args)
+		return g.alias == "" && gitReadVerbs[g.sub]
 	}
 	return undeclaredLeaseReaders[path.Base(c.Name)]
 }
@@ -731,7 +731,7 @@ func validationNamesGate(validation string) bool {
 // The command is parsed before the ledger is read: every tool call under a bound lease
 // reaches this rule, and most of them are not git.
 func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
-	if actingLease == "" {
+	if actingLease == "" || helpOnlyLine(command, DialectBash) {
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
@@ -755,16 +755,6 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	return ""
 }
 
-// vcsGlobalValueFlags are, per backend, the global options that take their value as the
-// NEXT word, so reading past them reaches the subcommand of a relocated call. A flag
-// spelled with `=` carries its own value and is skipped as one word.
-var vcsGlobalValueFlags = map[string][]string{
-	"git": {"-C", "-c", "--work-tree", "--git-dir", "--namespace"},
-	"hg":  {"-R", "--repository", "--repo", "--cwd", "--config"},
-	"sl":  {"-R", "--repository", "--repo", "--cwd", "--config"},
-	"jj":  {"-R", "--repository", "--at-operation", "--at-op", "--config", "--config-toml", "--config-file", "--color"},
-}
-
 // isPush reports whether a parsed command publishes: git push, hg push, sl push (with or
 // without --to) or jj git push, relocated or not.
 func isPush(c hint.Invocation) bool {
@@ -773,18 +763,12 @@ func isPush(c hint.Invocation) bool {
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.
 func vcsSubcommand(c hint.Invocation) (sub string, rest []string) {
-	valued := vcsGlobalValueFlags[c.Name]
-	for i := 0; i < len(c.Args); i++ {
-		a := c.Args[i]
-		if strings.HasPrefix(a, "-") {
-			if slices.Contains(valued, a) {
-				i++
-			}
-			continue
-		}
-		return a, c.Args[i+1:]
+	if c.Name == "git" {
+		g := parseGit(c.Args)
+		return g.sub, g.rest
 	}
-	return "", nil
+	v := parseVCS(c.Name, c.Args)
+	return v.sub, v.rest
 }
 
 // vcsMutation names the version-control operation a parsed command performs when it is one
@@ -801,6 +785,12 @@ func vcsSubcommand(c hint.Invocation) (sub string, rest []string) {
 // it, so they pass; every other stash form is a mutation.
 func vcsMutation(c hint.Invocation) string {
 	sub, rest := vcsSubcommand(c)
+	// The word an inline alias defines can run any verb, push included.
+	if _, other := vcsGlobals[c.Name]; other {
+		if v := parseVCS(c.Name, c.Args); v.alias != "" {
+			return c.Name + " " + aliasFlag(v.alias)
+		}
+	}
 	switch c.Name {
 	case "hg", "sl":
 		if sub == "push" {
@@ -815,6 +805,10 @@ func vcsMutation(c hint.Invocation) string {
 		}
 		return ""
 	case "git":
+		// The word an inline alias defines can run any of the verbs below.
+		if g := parseGit(c.Args); g.alias != "" {
+			return "git -c " + g.alias
+		}
 	default:
 		return ""
 	}

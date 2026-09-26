@@ -224,6 +224,7 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 //     surface because a plain script needs none of these until it imports a spell
 //     module.
 //   - magus/charm: the pure-Buzz patch constructors.
+//   - magus/lint: the Finding a Buzz lint rule returns.
 //   - magus: the generated declarations for the magus namespace itself, plus the
 //     mirrors the generator cannot reach (magusUndeclaredTypeSource above). The
 //     namespace VALUE is a native module registered elsewhere (registerAllBuzz,
@@ -235,6 +236,7 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 func RegisterSpellSourceModules(sess *buzz.Session) {
 	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
+	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
 	// The same generated source every other module gets (object mirrors plus an extern
 	// per method), which is what types magus\\affectedImpact and friends at a call site
 	// instead of leaving them Unknown.

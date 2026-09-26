@@ -77,6 +77,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "SemverVersion", Type: reflect.TypeFor[types.SemverVersion](), RuntimeObject: true},
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},
 	{Name: "URL", Type: reflect.TypeFor[types.URL](), RuntimeObject: true},
+	{Name: "YamlPositions", Type: reflect.TypeFor[types.YAMLPositions](), RuntimeObject: true},
 	{Name: "FlagParse", Type: reflect.TypeFor[types.FlagParse](), RuntimeObject: true},
 	{Name: "PipeRecord", Type: reflect.TypeFor[types.PipeRecord](), RuntimeObject: true},
 	{Name: "Artifact", Type: reflect.TypeFor[types.TargetArtifact](), RuntimeObject: true},
@@ -184,6 +185,9 @@ var boundaryTypes = []boundaryType{
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
 	{Name: "Declaration", Type: reflect.TypeFor[types.Declaration]()},
+	// A lint rule WRITES Finding and the magus/lint source module carries its mirror, so
+	// no Go-to-Buzz encoder is needed.
+	{Name: "Finding", Type: reflect.TypeFor[types.Finding]()},
 	{Name: "FileChange", Type: reflect.TypeFor[types.FileChange](), RuntimeObject: true},
 	{Name: "RegionChange", Type: reflect.TypeFor[types.RegionChange](), RuntimeObject: true},
 	{Name: "JobOverlapFootprint", Type: reflect.TypeFor[types.JobOverlapFootprint](), RuntimeObject: true},
