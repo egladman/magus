@@ -41,6 +41,7 @@ func removeCheckoutsUnder(ctx context.Context, v types.BuildVCS, root, dir strin
 		if rel, err := filepath.Rel(under, d); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
 		}
+		_ = makeWritable(d) // see discard
 		errs = append(errs, v.RemoveCheckout(ctx, root, d))
 	}
 	return errors.Join(errs...)

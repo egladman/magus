@@ -399,6 +399,8 @@ const (
 	FlagQueueApplyApp = "app"
 	// queue apply: --base
 	FlagQueueApplyBase = "base"
+	// queue apply: --cache-env
+	FlagQueueApplyCacheEnv = "cache-env"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -417,8 +419,6 @@ const (
 	FlagQueueApplyReproduceGate = "reproduce-gate"
 	// queue apply: --reproduce-regenerate
 	FlagQueueApplyReproduceRegenerate = "reproduce-regenerate"
-	// queue apply: --scratch-env
-	FlagQueueApplyScratchEnv = "scratch-env"
 	// queue apply: --status-context
 	FlagQueueApplyStatusContext = "status-context"
 	// queue apply: --target
@@ -465,6 +465,8 @@ const (
 	FlagQueuePlanTarget = "target"
 	// queue plan: --vcs
 	FlagQueuePlanVCS = "vcs"
+	// queue validate: --cache-env
+	FlagQueueValidateCacheEnv = "cache-env"
 	// queue validate: --facts
 	FlagQueueValidateFacts = "facts"
 	// queue validate: --gate
@@ -481,8 +483,6 @@ const (
 	FlagQueueValidateRemote = "remote"
 	// queue validate: --remote-cache-read
 	FlagQueueValidateRemoteCacheRead = "remote-cache-read"
-	// queue validate: --scratch-env
-	FlagQueueValidateScratchEnv = "scratch-env"
 	// queue validate: --target
 	FlagQueueValidateTarget = "target"
 	// queue validate: --vcs
@@ -1354,7 +1354,7 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 
 // QueueValidateFlags are the flags declared for `magus queue validate`.
 //
-// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// It does NOT carry --cache-env: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type QueueValidateFlags struct {
 	Plan            string // --plan
@@ -1389,7 +1389,7 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 
 // QueueApplyFlags are the flags declared for `magus queue apply`.
 //
-// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// It does NOT carry --cache-env: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type QueueApplyFlags struct {
 	Provider            string        // --provider

@@ -276,8 +276,9 @@ type built struct {
 
 // buildMerge checks out onto in a directory of its own, merges the change, settles
 // conflicts in generated files by taking the change's side and those auto-resolution
-// settles in source files, and commits. Any other source conflict is a *conflictError.
-// On any error nothing is left behind.
+// settles in source files, and commits. Any other source conflict is a *conflictError,
+// and a merge holding [CacheDir] a *types.RefusedError. On any error nothing is left
+// behind.
 func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built, err error) {
 	c, root := s.change, s.clone.Root
 	from := s.onto
@@ -318,6 +319,9 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 	if err != nil {
 		return built{}, err
 	}
+	if err := cacheCommitted(cand.Dir); err != nil {
+		return built{}, err
+	}
 	if cand.Commit, err = v.Commit(ctx, cand.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #"+c.ID, s.date)}); err != nil {
 		return built{}, err
 	}
@@ -330,15 +334,16 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 }
 
 // checkout checks commit out in a directory of its own under scratch, named from name,
-// beside a scratch directory private to it, so no hook run in another checkout can have
-// planted anything where one run here will look. On error nothing is left behind.
+// beside a temporary directory private to it, so no hook run in another checkout can
+// have planted anything where one run here will look. A commit holding [CacheDir] is a
+// *types.RefusedError (see cacheCommitted). On error nothing is left behind.
 func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit string) (types.Candidate, error) {
 	box, err := os.MkdirTemp(scratch, name+"-")
 	if err != nil {
 		return types.Candidate{}, err
 	}
-	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
-	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
+	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Temp: filepath.Join(box, "tmp")}
+	if err := os.Mkdir(cand.Temp, 0o700); err != nil {
 		_ = os.RemoveAll(box)
 		return types.Candidate{}, err
 	}
@@ -346,19 +351,78 @@ func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit
 		_ = os.RemoveAll(box)
 		return types.Candidate{}, err
 	}
+	if err := cacheCommitted(cand.Dir); err != nil {
+		_ = discard(ctx, v, root, cand)
+		return types.Candidate{}, err
+	}
 	return cand, nil
 }
 
-// discard removes a candidate's checkout and its private directory.
+// cacheCommitted refuses a checkout that holds [CacheDir] before any hook ran in it,
+// which only its commit can have put there. The hooks keep their caches in it, magus
+// its own, and a cache the change committed would be replayed as the candidate's: a
+// gate's cached green, or a build the base's regeneration then runs.
+func cacheCommitted(dir string) error {
+	_, err := os.Lstat(filepath.Join(dir, CacheDir))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return err
+	}
+	return &types.RefusedError{Paths: []string{CacheDir}, Reason: "`" + CacheDir + "` is committed, and the queue keeps each candidate's caches there",
+		Remedy: "Remove `" + CacheDir + "` from the branch; it holds a workspace's caches and belongs in `.gitignore`."}
+}
+
+// discard removes a candidate's checkout and its temporary directory.
 func discard(ctx context.Context, v types.BuildVCS, root string, cand types.Candidate) error {
 	if cand.Dir == "" {
 		return nil
 	}
+	box := filepath.Dir(cand.Dir)
+	// Before the VCS removes the checkout, which fails on a directory it cannot write.
+	// An error here resurfaces as the removal's.
+	_ = makeWritable(box)
 	err := v.RemoveCheckout(context.WithoutCancel(ctx), root, cand.Dir)
-	if rmErr := os.RemoveAll(filepath.Dir(cand.Dir)); err == nil {
+	if rmErr := os.RemoveAll(box); err == nil {
 		err = rmErr
 	}
 	return err
+}
+
+// RemoveTree removes dir and everything under it, as [os.RemoveAll] does, after making
+// every directory under it writable: a hook's tools can leave a tree it cannot remove
+// otherwise, as Go leaves its module cache read-only.
+func RemoveTree(dir string) error {
+	_ = makeWritable(dir)
+	return os.RemoveAll(dir)
+}
+
+// makeWritable gives its owner read, write and search on every directory under dir.
+// It works through an [os.Root] on dir, so no symbolic link a hook left there turns a
+// change of mode onto anything outside it. A missing dir is nothing to do.
+func makeWritable(dir string) error {
+	root, err := os.OpenRoot(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if mode := info.Mode().Perm(); mode&0o700 != 0o700 {
+			return root.Chmod(p, mode|0o700)
+		}
+		return nil
+	})
 }
 
 // mergeIn merges the change into dir, whose checkout is of ours, settles the generated
@@ -485,7 +549,7 @@ func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b 
 		return nil, &types.RefusedError{Paths: linked, Reason: "regenerating " + strings.Join(regen, ", ") + " would write in a checkout where it holds " +
 			strings.Join(linked, ", ") + " as a symbolic link", Remedy: "Regenerate the generated files yourself and push them, or commit those paths as regular files."}
 	}
-	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Change: s.change, Paths: regen, Units: units}); err != nil {
+	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Temp: b.Temp, Change: s.change, Paths: regen, Units: units}); err != nil {
 		return nil, err
 	}
 	written, err := v.DirtyFiles(ctx, b.Dir, nil)

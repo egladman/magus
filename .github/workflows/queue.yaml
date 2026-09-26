@@ -194,9 +194,10 @@ jobs:
 
       # Pull request refs are fetched over the checkout's remote, which carries no
       # credential; the repository is public, so the read needs none.
-      # Every hook keeps its caches in its own candidate's scratch directory
-      # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
-      # gate replays as green. The remote cache it reads is main's, verified against
+      # Every hook keeps its caches in its own candidate checkout's .magus
+      # (tools/gha-queue.buzz), and the queue refuses a change that commits one, so no
+      # change, this one or one beneath it, can plant a cache entry its gate replays as
+      # green. The remote cache it reads is main's, verified against
       # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which the queue pins for every hook.
       # Candidates are checked out under TMPDIR, outside the workspace mise-action
       # trusts, so the trust list names both; hooks receive it through magus.yaml's

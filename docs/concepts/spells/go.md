@@ -71,7 +71,9 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
 
 ## go-fmt
 
-**Command:** `gofmt -l .`
+The runner lists the files, pruning what source discovery prunes. `gofmt -l .` walks every directory, dot directories included: a module cache in the workspace's .magus, where a merge queue candidate keeps one, is thousands of files that are not the workspace's, and rw would rewrite them. gen/ trees are pruned too: a generated file is its generator's to format.
+
+**Command:** `gofmt -l`
 
 ### rw
 

@@ -355,7 +355,7 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 }
 
 // No hook run on one candidate can plant anything where another's will look.
-func TestEveryCandidateGetsAPrivateScratchDirectory(t *testing.T) {
+func TestEveryCandidateGetsAPrivateTempDirectory(t *testing.T) {
 	d := newDoubles(t)
 	one, two := change("1", "a"), change("2", "a")
 	d.builds(building{touched: []string{"gen/x.go"}})
@@ -365,19 +365,19 @@ func TestEveryCandidateGetsAPrivateScratchDirectory(t *testing.T) {
 	plan := planOf([]types.Change{one, two})
 	v, _ := validating(t, d, plan)
 	var mu sync.Mutex
-	scratches := map[string]string{}
+	temps := map[string]string{}
 	v.Regenerate = func(_ context.Context, r types.Regeneration) error {
-		assert.DirExists(t, r.Scratch)
-		assert.Equal(t, filepath.Dir(r.Dir), filepath.Dir(r.Scratch), "beside its own checkout")
+		assert.DirExists(t, r.Temp)
+		assert.Equal(t, filepath.Dir(r.Dir), filepath.Dir(r.Temp), "beside its own checkout")
 		mu.Lock()
 		defer mu.Unlock()
-		scratches[r.Change.ID] = r.Scratch
+		temps[r.Change.ID] = r.Temp
 		return nil
 	}
 	require.NoError(t, v.Run(t.Context(), plan))
-	require.Len(t, scratches, 2)
-	assert.NotEqual(t, scratches["1"], scratches["2"])
-	for _, s := range scratches {
+	require.Len(t, temps, 2)
+	assert.NotEqual(t, temps["1"], temps["2"])
+	for _, s := range temps {
 		assert.True(t, strings.HasPrefix(s, v.scratch), "%s is under the validator's scratch", s)
 		assert.NoDirExists(t, s, "removed with its checkout")
 	}

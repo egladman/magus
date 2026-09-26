@@ -458,16 +458,16 @@ func queueScratch(prefix string) (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	return dir, func() { _ = os.RemoveAll(dir) }, nil
+	return dir, func() { _ = queue.RemoveTree(dir) }, nil
 }
 
 // queueValidate takes no --provider: it runs the changes' code, so it never talks to
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
-	var vars queueScratchVars
+	var vars queueCacheVars
 	f, _, fs, err := queueParse(e, "validate", "magus queue validate --plan <file> --gate <command> --verdicts <dir> [flags]", args,
 		func(fs *flag.FlagSet) *gen.QueueValidateFlags {
-			fs.Var(&vars, gen.FlagQueueValidateScratchEnv, "`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable")
+			fs.Var(&vars, gen.FlagQueueValidateCacheEnv, "`NAME=DIR` sets NAME to DIR inside the candidate checkout's .magus for every hook, so the cache it names is the candidate's own; repeatable")
 			return gen.BindQueueValidate(fs)
 		})
 	if err != nil {
@@ -492,7 +492,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	log := queue.NewHookLog(e.stderr)
 	// The sandbox is the base's, like the trust set: a candidate's magus.yaml widens
 	// neither.
-	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Scratch: vars}
+	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Caches: vars}
 	if f.RemoteCacheRead {
 		var proxy *queue.CacheReadProxy
 		if proxy, hookEnv.Fixed, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
@@ -568,10 +568,10 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 	), nil
 }
 
-// queueScratchVars is --scratch-env, which may repeat.
-type queueScratchVars []queue.ScratchVar
+// queueCacheVars is --cache-env, which may repeat.
+type queueCacheVars []queue.CacheVar
 
-func (s *queueScratchVars) String() string {
+func (s *queueCacheVars) String() string {
 	if s == nil {
 		return ""
 	}
@@ -582,8 +582,8 @@ func (s *queueScratchVars) String() string {
 	return strings.Join(specs, ",")
 }
 
-func (s *queueScratchVars) Set(spec string) error {
-	v, err := queue.ParseScratchVar(spec)
+func (s *queueCacheVars) Set(spec string) error {
+	v, err := queue.ParseCacheVar(spec)
 	if err != nil {
 		return err
 	}
@@ -598,10 +598,10 @@ type queuePlanSource interface {
 }
 
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
-	var vars queueScratchVars
+	var vars queueCacheVars
 	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args,
 		func(fs *flag.FlagSet) *gen.QueueApplyFlags {
-			fs.Var(&vars, gen.FlagQueueApplyScratchEnv, "`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable")
+			fs.Var(&vars, gen.FlagQueueApplyCacheEnv, "`NAME=DIR` sets NAME to DIR inside the rebuild checkout's .magus for the regeneration, so the cache it names is that rebuild's own; repeatable")
 			return gen.BindQueueApply(fs)
 		}, "source")
 	if err != nil {
@@ -711,7 +711,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
-		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Scratch: vars}, queue.NewHookLog(e.stderr))
+		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Caches: vars}, queue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
 }

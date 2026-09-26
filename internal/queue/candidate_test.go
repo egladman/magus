@@ -81,7 +81,91 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, head("cand"), b.Commit)
 	assert.Equal(t, []string{"lib/x.txt"}, b.touched)
-	assert.DirExists(t, b.Scratch, "a private directory for the hooks run on it")
+	assert.DirExists(t, b.Temp, "a private temporary directory for the hooks run on it")
+}
+
+// A change committing the cache directory would have its hooks replay a cache it wrote,
+// a gate's cached green included, so its candidate is refused before any hook runs.
+func TestBuildMergeRefusesAChangeCommittingTheCacheDir(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1")
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).
+		RunAndReturn(func(_ context.Context, dir, _ string, _ magustypes.Person) error {
+			planted := filepath.Join(dir, CacheDir, "manifests")
+			require.NoError(t, os.MkdirAll(planted, 0o755))
+			return os.WriteFile(filepath.Join(planted, "ci"), []byte("green"), 0o644)
+		})
+	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
+	var removed string
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
+		RunAndReturn(func(_ context.Context, _, dir string) error { removed = dir; return nil })
+	scratch := t.TempDir()
+
+	_, err := buildMerge(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c, scratch: scratch, date: when})
+	var refused *types.RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, []string{CacheDir}, refused.Paths)
+	assert.NotEmpty(t, removed)
+	assert.NoDirExists(t, filepath.Dir(removed), "nothing is left behind")
+}
+
+// So is a checkout of a commit that already holds it, before any hook runs there.
+func TestCheckoutRefusesACommitHoldingTheCacheDir(t *testing.T) {
+	d := newDoubles(t)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).
+		RunAndReturn(func(ctx context.Context, root, dir, rev string) error {
+			require.NoError(t, makeCheckout(ctx, root, dir, rev))
+			return os.Symlink("elsewhere", filepath.Join(dir, CacheDir))
+		})
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).Return(nil)
+	scratch := t.TempDir()
+
+	_, err := checkout(t.Context(), d.vcs, clone.Root, scratch, "base", base)
+	var refused *types.RefusedError
+	require.ErrorAs(t, err, &refused)
+	left, err := os.ReadDir(scratch)
+	require.NoError(t, err)
+	assert.Empty(t, left)
+}
+
+// Go leaves its module cache read-only, and a hook points GOMODCACHE into the checkout,
+// so discarding the candidate makes its tree writable before the version control, which
+// cannot remove a directory it cannot write, removes the checkout.
+func TestDiscardRemovesACandidateHoldingAReadOnlyModuleCache(t *testing.T) {
+	d := newDoubles(t)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
+		RunAndReturn(func(_ context.Context, _, dir string) error { return os.RemoveAll(dir) })
+	cand, err := checkout(t.Context(), d.vcs, clone.Root, t.TempDir(), "candidate-1", base)
+	require.NoError(t, err)
+	mod := filepath.Join(cand.Dir, CacheDir, "go-mod", "example.com", "m@v1.0.0")
+	require.NoError(t, os.MkdirAll(mod, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(mod, "m.go"), []byte("package m\n"), 0o444))
+	for _, dir := range []string{mod, filepath.Dir(mod)} {
+		require.NoError(t, os.Chmod(dir, 0o555))
+	}
+
+	require.NoError(t, discard(t.Context(), d.vcs, clone.Root, cand))
+	assert.NoDirExists(t, filepath.Dir(cand.Dir))
+}
+
+// RemoveTree removes what os.RemoveAll cannot, and never changes a mode through a link.
+func TestRemoveTreeRemovesAReadOnlyTreeAndFollowsNoLink(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	locked := filepath.Join(dir, "a", "b")
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "f"), nil, 0o444))
+	require.NoError(t, os.Symlink(outside, filepath.Join(locked, "out")))
+	require.NoError(t, os.Chmod(outside, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(outside, 0o700) })
+	require.NoError(t, os.Chmod(locked, 0o555))
+
+	require.NoError(t, RemoveTree(dir))
+	assert.NoDirExists(t, dir)
+	info, err := os.Stat(outside)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o500), info.Mode().Perm(), "the link's target keeps its mode")
 }
 
 func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) {
@@ -341,9 +425,9 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("the base's rewrite\n"), 0o600))
-			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}, changed: []string{"a.go", "gen/a.go"}, date: when}
+			b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: dir, Temp: "/tmp/cand"}, touched: []string{"a.go", "gen/a.go"}, changed: []string{"a.go", "gen/a.go"}, date: when}
 			regenerate := func(_ context.Context, r types.Regeneration) error {
-				assert.Equal(t, types.Regeneration{Dir: dir, Scratch: "/scratch", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
+				assert.Equal(t, types.Regeneration{Dir: dir, Temp: "/tmp/cand", Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
 				return nil
 			}
 			d := newDoubles(t)

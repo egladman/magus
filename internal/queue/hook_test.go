@@ -161,8 +161,8 @@ func seenEnv(t *testing.T, dir string) map[string]string {
 
 // A hook runs the changes' code, so its environment is the sandbox's, built from the
 // base's config: the names a sandboxed child gets and the base's passthrough, TMPDIR in
-// the candidate's scratch directory and the mode, raised to best-effort, for a magus the
-// hook runs. A credential, a GitHub Actions file command and anything else unnamed
+// the candidate's temporary directory and the mode, raised to best-effort, for a magus
+// the hook runs. A credential, a GitHub Actions file command and anything else unnamed
 // never reach it.
 func TestAHooksEnvironmentIsTheSandboxes(t *testing.T) {
 	for _, name := range []string{"MISE_GITHUB_TOKEN", "FOO_SECRET", "RANDOM_VAR", "MERGEQUEUE_TOKEN", "GITHUB_ENV"} {
@@ -170,13 +170,13 @@ func TestAHooksEnvironmentIsTheSandboxes(t *testing.T) {
 	}
 	t.Setenv("PASSED", "p")
 	t.Setenv("GLOB_X", "g")
-	dir, scratch := t.TempDir(), t.TempDir()
+	dir, temp := t.TempDir(), t.TempDir()
 	env := HookEnv{
 		Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"PASSED", "GLOB_*"}}},
-		Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}},
+		Caches:  []CacheVar{{Name: "GOCACHE", Dir: "go-build"}},
 		Fixed:   []string{"SET=s"},
 	}
-	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
+	_, err := CommandGate(script(`env -0 > seen`), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Temp: temp}, hookUnits)
 	require.NoError(t, err)
 	seen := seenEnv(t, dir)
 
@@ -184,8 +184,8 @@ func TestAHooksEnvironmentIsTheSandboxes(t *testing.T) {
 		assert.NotContains(t, seen, name, "%s reaches the hook", name)
 	}
 	assert.Equal(t, os.Getenv("PATH"), seen["PATH"])
-	assert.Equal(t, filepath.Join(scratch, "go-build"), seen["GOCACHE"])
-	assert.Equal(t, filepath.Join(scratch, "tmp"), seen["TMPDIR"])
+	assert.Equal(t, filepath.Join(dir, CacheDir, "go-build"), seen["GOCACHE"])
+	assert.Equal(t, temp, seen["TMPDIR"])
 	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[procrun.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
@@ -218,31 +218,50 @@ func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 	assert.Equal(t, "required\n", string(seen))
 }
 
-// A hook's scratch directory holds the tool caches its scratch variables point at, and
-// go run executes the binaries it caches there.
-func TestAHookMayExecuteWhatItBuildsInItsScratchDirectory(t *testing.T) {
-	scratch := t.TempDir()
-	p, err := hookCommand{Dir: t.TempDir(), Scratch: scratch}.policy()
+// A hook's caches are in its checkout's cache directory, which the workspace grant
+// covers: it writes them and runs what go run caches in GOCACHE with no grant of their
+// own. Beside the checkout only its temporary directory is granted.
+func TestAHookMayWriteAndExecuteItsCaches(t *testing.T) {
+	dir, temp := t.TempDir(), t.TempDir()
+	p, err := hookCommand{Dir: dir, Temp: temp}.policy()
 	require.NoError(t, err)
-	cached := filepath.Join(scratch, "go-build", "29", "29d7-d", "magus-utils")
-	assert.NoError(t, p.CheckExec(t.Context(), cached))
-	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(scratch, "cache", "buf", "x")))
+	assert.NoError(t, p.CheckExec(t.Context(), filepath.Join(dir, CacheDir, "go-build", "29", "29d7-d", "magus-utils")))
+	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(dir, CacheDir, "go-mod", "cache", "x")))
+	assert.NoError(t, p.CheckExec(t.Context(), filepath.Join(temp, "go-build1", "b001", "exe", "main")))
+	assert.ErrorIs(t, p.CheckWrite(t.Context(), filepath.Join(filepath.Dir(temp), "beside")), filesystem.ErrDenied)
 }
 
-// Where the kernel has landlock, a hook writes in its checkout and its scratch
-// directory and nowhere else, and a process it starts is held to the same.
+// Under the sandbox, a hook builds a tool into a cache the queue pointed at and runs it
+// from there.
+func TestAHookRunsWhatItBuildsInItsCaches(t *testing.T) {
+	dir := t.TempDir()
+	env := HookEnv{Caches: []CacheVar{{Name: "GOCACHE", Dir: "go-build"}}}
+	body := `printf '#!/bin/sh\necho ran\n' > "$GOCACHE/tool" && chmod +x "$GOCACHE/tool" && "$GOCACHE/tool" > seen`
+	res, err := CommandGate(script(body), env, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Temp: t.TempDir()}, hookUnits)
+	require.NoError(t, err)
+	assert.True(t, res.Green, res.Summary)
+	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+	require.NoError(t, err)
+	assert.Equal(t, "ran\n", string(seen))
+}
+
+// Where the kernel has landlock, a hook writes in its checkout, its cache directory
+// included, and its temporary directory and nowhere else, and a process it starts is
+// held to the same.
 func TestAHookIsConfinedToItsCheckoutWhereTheKernelCan(t *testing.T) {
 	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
 		t.Skip("no landlock on this host: best-effort confines the environment only")
 	}
-	dir, scratch, outside := t.TempDir(), t.TempDir(), t.TempDir()
-	body := `touch in "$1/scratch-file" && sh -c 'touch "$1/escaped"' child "$2"`
-	res, err := CommandGate(Command{"sh", "-c", body, "hook", scratch, outside}, HookEnv{}, nil).
-		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, nil)
+	dir, temp, outside := t.TempDir(), t.TempDir(), t.TempDir()
+	body := `touch in "$GOCACHE/cached" "$1/temp-file" && sh -c 'touch "$1/escaped"' child "$2"`
+	env := HookEnv{Caches: []CacheVar{{Name: "GOCACHE", Dir: "go-build"}}}
+	res, err := CommandGate(Command{"sh", "-c", body, "hook", temp, outside}, env, nil).
+		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Temp: temp}, nil)
 	require.NoError(t, err)
 	assert.False(t, res.Green, "the write outside the grant fails")
 	assert.FileExists(t, filepath.Join(dir, "in"))
-	assert.FileExists(t, filepath.Join(scratch, "scratch-file"))
+	assert.FileExists(t, filepath.Join(dir, CacheDir, "go-build", "cached"))
+	assert.FileExists(t, filepath.Join(temp, "temp-file"))
 	assert.NoFileExists(t, filepath.Join(outside, "escaped"))
 }
 
@@ -256,10 +275,10 @@ func TestEveryHookTakesItsHookEnv(t *testing.T) {
 	ctx := context.Background()
 
 	gated := t.TempDir()
-	_, err := CommandGate(record, env, nil).Validate(ctx, types.Candidate{Commit: "s", Dir: gated, Scratch: t.TempDir()}, hookUnits)
+	_, err := CommandGate(record, env, nil).Validate(ctx, types.Candidate{Commit: "s", Dir: gated, Temp: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	regenerated := t.TempDir()
-	require.NoError(t, CommandRegenerate(record, env, nil)(ctx, types.Regeneration{Dir: regenerated, Scratch: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+	require.NoError(t, CommandRegenerate(record, env, nil)(ctx, types.Regeneration{Dir: regenerated, Temp: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
 	asked := t.TempDir()
 	_, err = CommandFacts(record, asked, env, nil).AllUnits(ctx)
 	require.NoError(t, err)
@@ -283,7 +302,7 @@ func TestAHookGetsEverySpellTheBaseLoaded(t *testing.T) {
 		Env:   spells.SandboxEnv{Passthrough: []string{"MAGUS_TEST_SPELL_CACHE"}},
 	}}}
 	res, err := CommandGate(script(`echo "$MAGUS_TEST_SPELL_CACHE" > seen && touch "$MAGUS_TEST_SPELL_CACHE/written"`), env, nil).
-		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: t.TempDir()}, hookUnits)
+		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Temp: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
@@ -380,39 +399,51 @@ func TestARegenerationGetsItsUnitsAsArgumentsAndIsRefusedWhenItFails(t *testing.
 	assert.Contains(t, refused.Reason, "was killed")
 }
 
-func TestScratchVarsPointIntoEachHooksOwnScratchDirectory(t *testing.T) {
-	vars := HookEnv{Scratch: []ScratchVar{{Name: "GOCACHE", Dir: "go-build"}, {Name: "XDG_CACHE_HOME", Dir: "cache/xdg"}}}
-	dir, scratch := t.TempDir(), t.TempDir()
+func TestCacheVarsPointIntoEachCheckoutsOwnCacheDir(t *testing.T) {
+	vars := HookEnv{Caches: []CacheVar{{Name: "GOCACHE", Dir: "go-build"}, {Name: "XDG_CACHE_HOME", Dir: "cache/xdg"}}}
+	dir := t.TempDir()
 	res, err := CommandGate(script(`echo "$GOCACHE $XDG_CACHE_HOME" > seen; test -d "$XDG_CACHE_HOME"`), vars, nil).
-		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: scratch}, hookUnits)
+		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Temp: t.TempDir()}, hookUnits)
 	require.NoError(t, err)
 	assert.True(t, res.Green, "the queue creates each directory")
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(scratch, "go-build")+" "+filepath.Join(scratch, "cache/xdg")+"\n", string(seen))
+	assert.Equal(t, filepath.Join(dir, CacheDir, "go-build")+" "+filepath.Join(dir, CacheDir, "cache/xdg")+"\n", string(seen))
 
-	regenDir, regenScratch := t.TempDir(), t.TempDir()
+	regenDir := t.TempDir()
 	require.NoError(t, CommandRegenerate(script(`echo "$GOCACHE" > seen`), vars, nil)(context.Background(),
-		types.Regeneration{Dir: regenDir, Scratch: regenScratch, Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+		types.Regeneration{Dir: regenDir, Temp: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
 	seen, err = os.ReadFile(filepath.Join(regenDir, "seen"))
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(regenScratch, "go-build")+"\n", string(seen))
+	assert.Equal(t, filepath.Join(regenDir, CacheDir, "go-build")+"\n", string(seen))
 }
 
-func TestParseScratchVarRefusesWhatWouldLeaveTheScratchDirectory(t *testing.T) {
-	got, err := ParseScratchVar("MAGUS_CACHE_DIR=magus/./c")
+// A link a hook left in its cache directory never points the queue's own writes outside
+// the checkout.
+func TestACacheVarNeverCreatesThroughALinkOutOfTheCheckout(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, CacheDir), 0o700))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, CacheDir, "go-build")))
+	vars := HookEnv{Caches: []CacheVar{{Name: "GOCACHE", Dir: "go-build/x"}}}
+	_, err := CommandGate(Command{"true"}, vars, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Temp: t.TempDir()}, hookUnits)
+	require.Error(t, err)
+	assert.NoDirExists(t, filepath.Join(outside, "x"))
+}
+
+func TestParseCacheVarRefusesWhatWouldLeaveTheCacheDir(t *testing.T) {
+	got, err := ParseCacheVar("GOMODCACHE=go/./mod")
 	require.NoError(t, err)
-	assert.Equal(t, ScratchVar{Name: "MAGUS_CACHE_DIR", Dir: "magus/c"}, got)
+	assert.Equal(t, CacheVar{Name: "GOMODCACHE", Dir: "go/mod"}, got)
 	for spec, want := range map[string]string{
 		"GOCACHE":                "is not NAME=DIR",
 		"GOCACHE=":               "is not NAME=DIR",
 		"1X=d":                   "is not NAME=DIR",
 		"A-B=d":                  "is not NAME=DIR",
-		"GOCACHE=../out":         "../out leaves the scratch directory",
-		"GOCACHE=/tmp/go":        "/tmp/go leaves the scratch directory",
-		"GOCACHE=a/../../escape": "a/../../escape leaves the scratch directory",
+		"GOCACHE=../out":         "../out leaves .magus",
+		"GOCACHE=/tmp/go":        "/tmp/go leaves .magus",
+		"GOCACHE=a/../../escape": "a/../../escape leaves .magus",
 	} {
-		_, err := ParseScratchVar(spec)
+		_, err := ParseCacheVar(spec)
 		require.ErrorContains(t, err, want, spec)
 	}
 }

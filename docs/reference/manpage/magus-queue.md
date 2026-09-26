@@ -106,6 +106,9 @@ apply report what would merge and call nothing on the provider.
 
 ### queue validate options
 
+**--cache-env** *NAME=DIR*
+: \`NAME=DIR\` sets NAME to DIR inside the candidate checkout's .magus for every hook, so the cache it names is the candidate's own; repeatable
+
 **--facts** *command*
 : \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
@@ -130,9 +133,6 @@ apply report what would merge and call nothing on the provider.
 **--remote-cache-read**
 : Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
 
-**--scratch-env** *NAME=DIR*
-: \`NAME=DIR\` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
-
 **--target** *target* (default: ci)
 : magus \`target\` the affected set is computed for; not with --facts
 
@@ -149,6 +149,9 @@ apply report what would merge and call nothing on the provider.
 
 **--base** *branch*
 : \`branch\` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
+
+**--cache-env** *NAME=DIR*
+: \`NAME=DIR\` sets NAME to DIR inside the rebuild checkout's .magus for the regeneration, so the cache it names is that rebuild's own; repeatable
 
 **--committer** *string*
 : "Name \<email\>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
@@ -176,9 +179,6 @@ apply report what would merge and call nothing on the provider.
 
 **--reproduce-regenerate** *command*
 : The \`command\` validate's --regenerate is given, shown beside --reproduce-gate
-
-**--scratch-env** *NAME=DIR*
-: \`NAME=DIR\` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable
 
 **--status-context** *string* (default: merge-queue)
 : Commit status the queue posts; branch protection requires it

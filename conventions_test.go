@@ -91,7 +91,7 @@ func TestNoRescanningStringLoops(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case "node_modules", "worktrees", "gen", ".git":
+			case "node_modules", "worktrees", "gen", ".git", ".magus":
 				return filepath.SkipDir
 			}
 			return nil
@@ -215,7 +215,7 @@ func TestLockfilesAreSorted(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", ".claude", "node_modules", "gen":
+			case ".git", ".magus", ".claude", "node_modules", "gen":
 				return filepath.SkipDir
 			}
 			return nil
@@ -3134,7 +3134,7 @@ func TestGoFileNamesDoNotMashWordsTogether(t *testing.T) {
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if name == ".git" || name == "node_modules" || name == ".claude" || name == "gen" || name == "testdata" {
+			if name == ".git" || name == ".magus" || name == "node_modules" || name == ".claude" || name == "gen" || name == "testdata" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -3638,7 +3638,7 @@ func buildSymbolIndex(t *testing.T) (symbolIndex, []string) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case "node_modules", "worktrees", "gen", ".git", "vendor", "testdata", "dist":
+			case "node_modules", "worktrees", "gen", ".git", ".magus", "vendor", "testdata", "dist":
 				return filepath.SkipDir
 			}
 			return nil

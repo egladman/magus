@@ -202,9 +202,14 @@ fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clea
 fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }
 fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"], hints = GO_MOD_HINTS}; }
 
+// The runner lists the files, pruning what source discovery prunes. `gofmt -l .` walks
+// every directory, dot directories included: a module cache in the workspace's .magus,
+// where a merge queue candidate keeps one, is thousands of files that are not the
+// workspace's, and rw would rewrite them. gen/ trees are pruned too: a generated file
+// is its generator's to format.
 fun goFmt(target: Target) > Command {
-    final args = ["-l", "."];
-    return Command{bin = "gofmt", args = args, charms = {
+    final args = ["-l"];
+    return Command{bin = "gofmt", args = args, sources = ["**/*.go"], charms = {
         "rw": set(args, "-l", "-w"),
     }};
 }

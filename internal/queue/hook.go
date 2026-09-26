@@ -166,13 +166,13 @@ type hookCommand struct {
 	// spells it loaded; see [HookEnv].
 	Sandbox config.SandboxConfig
 	Spells  map[string]spells.Sandbox
-	// Scratch is the candidate's scratch directory, writable and holding TMPDIR; empty
-	// for a facts hook, which runs in the base's own checkout.
-	Scratch string
-	Env     []string // set over what the sandbox passes from the queue's environment
-	Stdin   string
-	Stdout  io.Writer // nil discards
-	Stderr  io.Writer // nil discards
+	// Temp is the candidate's temporary directory, outside its checkout, and the hook's
+	// TMPDIR; empty for a facts hook, which runs in the base's own checkout.
+	Temp   string
+	Env    []string // set over what the sandbox passes from the queue's environment
+	Stdin  string
+	Stdout io.Writer // nil discards
+	Stderr io.Writer // nil discards
 	// Capture also returns stdout in the result, redacted.
 	Capture bool
 }
@@ -216,25 +216,24 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 }
 
 // policy is the base's sandbox for a hook in c.Dir: its mode raised to at least
-// best-effort, since a hook runs a change's code whatever the base asks, with c.Scratch
-// read, write and exec and TMPDIR inside it. Exec because the scratch variables put tool
-// caches there, and go run executes the binaries it caches in GOCACHE; the nested magus
-// a hook runs stacks its own sandbox on this one, so a right withheld here is withheld
-// from every child whatever that inner policy grants.
+// best-effort, since a hook runs a change's code whatever the base asks, with c.Temp as
+// TMPDIR. The hook's caches need no grant of their own: they are in the checkout's
+// [CacheDir], which the workspace grant covers, exec included, so go run can execute
+// the binaries it caches in GOCACHE. The nested magus a hook runs stacks its own sandbox
+// on this one, so a right withheld here is withheld from every child whatever that inner
+// policy grants.
 func (c hookCommand) policy() (*sandbox.Policy, error) {
 	cfg := c.Sandbox
 	if cfg.Mode.WeakerThan(magustypes.SandboxModeBestEffort) {
 		cfg.Mode = magustypes.SandboxModeBestEffort
 	}
-	if c.Scratch == "" {
+	if c.Temp == "" {
 		return sandbox.FromConfig(c.Dir, "", cfg, c.Spells)
 	}
-	tmp := filepath.Join(c.Scratch, "tmp")
-	if err := os.MkdirAll(tmp, 0o700); err != nil {
+	if err := os.MkdirAll(c.Temp, 0o700); err != nil {
 		return nil, err
 	}
-	cfg.Allow = append(slices.Clone(cfg.Allow), spells.SandboxAllow{Path: c.Scratch, Mode: spells.SandboxAccessRWX})
-	return sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg, c.Spells)
+	return sandbox.FromConfigWithTempDir(c.Dir, "", c.Temp, cfg, c.Spells)
 }
 
 // pathLines is paths one per line, as a hook reads them on stdin. Git allows a line
@@ -296,27 +295,33 @@ func runHook(ctx context.Context, c hookCommand) (procrun.ExecResult, error) {
 	}
 }
 
-// ScratchVar is an environment variable the queue points into each hook's scratch
-// directory, a directory private to the checkout the hook runs in: Name is set to Dir
-// inside it. It keeps the caches of the tools a hook runs private to one candidate
-// without the hook's command line saying so, which leaves that line one a person can
-// run outside the queue as it stands.
-type ScratchVar struct {
+// CacheDir is the directory at a checkout's root that holds the caches of the hooks
+// run in it: the workspace's own cache directory, where magus keeps its cache by
+// default.
+const CacheDir = ".magus"
+
+// CacheVar is an environment variable the queue points into the [CacheDir] of the
+// checkout each hook runs in: Name is set to Dir inside it. It keeps the caches of the
+// tools a hook runs private to one candidate without the hook's command line saying so,
+// which leaves that line one a person can run outside the queue as it stands. Nothing a
+// change commits can seed such a cache: a candidate whose commit holds CacheDir is
+// refused before any hook runs in it.
+type CacheVar struct {
 	Name string
-	Dir  string // relative, inside the scratch directory
+	Dir  string // relative, inside CacheDir
 }
 
-// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name, and DIR a relative
-// path that stays inside the scratch directory.
-func ParseScratchVar(spec string) (ScratchVar, error) {
+// ParseCacheVar reads "NAME=DIR". NAME is a shell variable name, and DIR a relative
+// path that stays inside [CacheDir].
+func ParseCacheVar(spec string) (CacheVar, error) {
 	name, dir, ok := strings.Cut(spec, "=")
 	switch {
 	case !ok || !isEnvName(name) || dir == "":
-		return ScratchVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
+		return CacheVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
 	case !filepath.IsLocal(dir):
-		return ScratchVar{}, fmt.Errorf("%q: %s leaves the scratch directory", spec, dir)
+		return CacheVar{}, fmt.Errorf("%q: %s leaves %s", spec, dir, CacheDir)
 	}
-	return ScratchVar{Name: name, Dir: filepath.Clean(dir)}, nil
+	return CacheVar{Name: name, Dir: filepath.Clean(dir)}, nil
 }
 
 func isEnvName(s string) bool {
@@ -345,22 +350,31 @@ type HookEnv struct {
 	// project's toolchain, and landlock domains stack: a grant the hook lacks is one no
 	// process under it can have.
 	Spells map[string]spells.Sandbox
-	// Scratch are pointed into each candidate's scratch directory.
-	Scratch []ScratchVar
+	// Caches are pointed into each candidate's [CacheDir].
+	Caches []CacheVar
 	// Fixed are NAME=VALUE assignments every hook takes as given, such as a
 	// [CacheReadProxy]'s stand-ins.
 	Fixed []string
 }
 
-// of creates each scratch variable under scratch and returns every assignment.
-func (e HookEnv) of(scratch string) ([]string, error) {
-	env := make([]string, 0, len(e.Scratch)+len(e.Fixed))
-	for _, v := range e.Scratch {
-		dir := filepath.Join(scratch, v.Dir)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+// of creates each cache variable's directory in the [CacheDir] of the checkout at dir
+// and returns every assignment. It creates them through an [os.Root] on the checkout,
+// so a link an earlier hook left there cannot point the queue's own writes outside it.
+func (e HookEnv) of(dir string) ([]string, error) {
+	env := make([]string, 0, len(e.Caches)+len(e.Fixed))
+	if len(e.Caches) > 0 {
+		root, err := os.OpenRoot(dir)
+		if err != nil {
 			return nil, err
 		}
-		env = append(env, v.Name+"="+dir)
+		defer root.Close()
+		for _, v := range e.Caches {
+			rel := filepath.Join(CacheDir, v.Dir)
+			if err := root.MkdirAll(rel, 0o700); err != nil {
+				return nil, err
+			}
+			env = append(env, v.Name+"="+filepath.Join(dir, rel))
+		}
 	}
 	return append(env, e.Fixed...), nil
 }
@@ -381,7 +395,7 @@ type commandGate struct {
 }
 
 func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
-	env, err := g.env.of(cand.Scratch)
+	env, err := g.env.of(cand.Dir)
 	if err != nil {
 		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
@@ -391,7 +405,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	}
 	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	_, err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Sandbox: g.env.Sandbox, Spells: g.env.Spells, Scratch: cand.Scratch, Env: env, Stdout: out, Stderr: out})
+	_, err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Sandbox: g.env.Sandbox, Spells: g.env.Spells, Temp: cand.Temp, Env: env, Stdout: out, Stderr: out})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
@@ -409,7 +423,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 // holding a line break, which the hook is never run for.
 func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
-		env, err := hookEnv.of(r.Scratch)
+		env, err := hookEnv.of(r.Dir)
 		if err != nil {
 			return fmt.Errorf("regenerate %s: %w", r.Change.Label(), err)
 		}
@@ -425,7 +439,7 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 			Dir:     r.Dir,
 			Sandbox: hookEnv.Sandbox,
 			Spells:  hookEnv.Spells,
-			Scratch: r.Scratch,
+			Temp:    r.Temp,
 			Env:     env,
 			Stdin:   stdin,
 			Stdout:  out,
@@ -465,8 +479,8 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 // outputs leaves it unclassified, which is source.
 //
 // A failing command is an error, auto_resolve aside, since the hook reads only the base,
-// never the change's code. Its environment is a gate's under env, less env.Scratch: facts
-// run in dir, which has no scratch directory.
+// never the change's code. Its environment is a gate's under env, less env.Caches: facts
+// run in dir, the base's own checkout, whose caches are its own.
 func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) types.BuildFacts {
 	return commandFacts{cmd: cmd, dir: dir, env: env, log: log}
 }

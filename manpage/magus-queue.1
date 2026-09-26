@@ -99,6 +99,9 @@ Version control `backend` of the checkout at \-\-root
 .SS queue validate options
 .RS
 .TP
+\fB\-\-cache\-env\fR \fINAME=DIR\fR
+`NAME=DIR` sets NAME to DIR inside the candidate checkout's .magus for every hook, so the cache it names is the candidate's own; repeatable
+.TP
 \fB\-\-facts\fR \fIcommand\fR
 `command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
 .TP
@@ -123,9 +126,6 @@ Name of the configured `remote` changes and the base are fetched from
 \fB\-\-remote\-cache\-read\fR
 Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand\-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
 .TP
-\fB\-\-scratch\-env\fR \fINAME=DIR\fR
-`NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
-.TP
 \fB\-\-target\fR \fItarget\fR (default: ci)
 magus `target` the affected set is computed for; not with \-\-facts
 .TP
@@ -143,6 +143,9 @@ Version control `backend` of the checkout at \-\-root
 .TP
 \fB\-\-base\fR \fIbranch\fR
 `branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
+.TP
+\fB\-\-cache\-env\fR \fINAME=DIR\fR
+`NAME=DIR` sets NAME to DIR inside the rebuild checkout's .magus for the regeneration, so the cache it names is that rebuild's own; repeatable
 .TP
 \fB\-\-committer\fR \fIstring\fR
 "Name <email>" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops
@@ -170,9 +173,6 @@ The `command` validate's \-\-gate is given, shown on each kick\-back validation 
 .TP
 \fB\-\-reproduce\-regenerate\fR \fIcommand\fR
 The `command` validate's \-\-regenerate is given, shown beside \-\-reproduce\-gate
-.TP
-\fB\-\-scratch\-env\fR \fINAME=DIR\fR
-`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable
 .TP
 \fB\-\-status\-context\fR \fIstring\fR (default: merge\-queue)
 Commit status the queue posts; branch protection requires it

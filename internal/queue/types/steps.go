@@ -49,9 +49,10 @@ type Candidate struct {
 	// commit as it stands, such as the one a red candidate was built onto.
 	Change string
 	Dir    string
-	// Scratch is a directory private to this candidate, for the caches and temporary
+	// Temp is a directory private to this candidate, outside Dir, for the temporary
 	// files of the hooks run on it: nothing another candidate's hooks wrote is in it.
-	Scratch string
+	// Their caches are in Dir's own cache directory.
+	Temp string
 }
 
 // GateResult is one gate run's outcome.
@@ -123,10 +124,10 @@ type Generation struct {
 
 // Regeneration is one run of a regeneration hook.
 type Regeneration struct {
-	Dir     string // the checkout to regenerate in
-	Scratch string // a directory private to that checkout
-	Change  Change
-	Paths   []string // the generated files to rewrite
+	Dir    string // the checkout to regenerate in
+	Temp   string // a temporary directory private to that checkout, outside it
+	Change Change
+	Paths  []string // the generated files to rewrite
 	// Units are what the build tool regenerates Paths by, handed to the hook as its
 	// arguments: the change's in validation, and in apply only units proven to run none
 	// of the change's code.
