@@ -1,11 +1,13 @@
 name: CI
 
-# Validates a change. Nothing here publishes an artifact or pushes. The top-level default
+# Validates a change. Nothing here ships or pushes: its artifacts are the magus the plan
+# builds for the jobs after it, and a red shard's logs. The top-level default
 # is contents: read; the advisor holds pull-requests: write for its comment.
 #
-# Cache rule: a job holding a secret, a write token or id-token restores no Actions cache.
-# main's cache scope is writable by any main-scoped run, the merge queue's validation
-# included, and that runs pull-request code.
+# Cache rule: a job holding a secret, a write token or id-token restores no UNVERIFIED
+# cache. main's cache scope is writable by any main-scoped run, the merge queue's
+# validation included, and that runs pull-request code. What such a job does restore is
+# signed by main's key and checked against the trust set before a byte of it is used.
 #
 # Four workflows, one trigger each, and the name says which: ci.yaml validates (pull
 # request), cd.yaml ships what a merge produces (main push), release.yaml cuts a release
@@ -110,11 +112,38 @@ jobs:
       inherit:       ${{ steps.plan.outputs.inherit }}
       # Doctor's verdict, carried to the gate rather than failing this job. See the step.
       doctor:        ${{ steps.doctor.outcome }}
+      # The magus every later job runs, and the digest each verifies it against. A job
+      # output, never a file in the artifact: the artifact is what is being checked.
+      magus_artifact: ${{ steps.magus.outputs.artifact }}
+      magus_sha256:   ${{ steps.magus.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
+
+      # Builds the magus this very commit defines, from the checkout above, so a
+      # change that magusfile.buzz needs is exercised by the run that introduces
+      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
+      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
+      # is rejected by the action's reachable-from-main gate every single time.
+      #
+      # Built once per run and published for every later job, which verifies it. First,
+      # ahead of mise-action: the binary reaches the shards, which hold the cache signing
+      # key on main, and the advisor, which holds pull-requests: write, so it is built
+      # before this job restores any cache. The history restore inside the action runs
+      # after the upload.
+      #
+      # The history is what last-passed reads on main. It is unsigned, so a main-scoped
+      # run can plant one; the worst it buys is a main run that gates less. This job holds
+      # no secret and no write token.
+      - id: magus
+        uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+          publish-artifact: magus-${{ github.run_attempt }}
+          restore-history: 'true'
 
       # install stays ON (the default). With install: false the action adds the shims
       # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
@@ -130,23 +159,8 @@ jobs:
           env: false
           cache: ${{ github.event_name == 'pull_request' }}
 
-      # Builds the magus this very commit defines, from the checkout above, so a
-      # change that magusfile.buzz needs is exercised by the run that introduces
-      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
-      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
-      # is rejected by the action's reachable-from-main gate every single time.
-      #
-      # The history is what last-passed reads on main. It is unsigned, so a main-scoped
-      # run can plant one; the worst it buys is a main run that gates less. This job holds
-      # no secret and no write token.
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          source-path: .
-          restore-history: 'true'
-
       # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      # PREPENDS to PATH. Re-adding mise's puts the pinned toolchain in front.
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
@@ -271,21 +285,15 @@ jobs:
           env: false
           cache: ${{ github.event_name == 'pull_request' }}
 
-      # Builds the magus this very commit defines, from the checkout above, so a
-      # change that magusfile.buzz needs is exercised by the run that introduces
-      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
-      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
-      # is rejected by the action's reachable-from-main gate every single time.
+      # The magus the plan job built from this commit, verified against the digest the
+      # plan recorded and the commit this job checked out.
       - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: source
-          source-path: .
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
           restore-history: ${{ github.event_name == 'pull_request' }}
-
-      # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # spells/github/actions reads these for the remote cache. The runner injects them
       # into an action's process but not into a `run:` step, and not into a composite's
@@ -462,13 +470,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Go alone: nothing else in mise.toml is on this job's path.
+      # Go alone: nothing else in mise.toml is on this job's path. No cache: this
+      # install's key exists in no scope main writes, so each pull request saved a copy
+      # of its own that only its reruns could read.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           install_args: go
           env: false
-          cache: ${{ github.event_name == 'pull_request' }}
+          cache: false
 
       - name: Test the kernel sandbox with landlock required
         env:
@@ -520,13 +530,10 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: source
-          source-path: .
-
-      # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
 
       # Symbols, for BOTH sides. Without an index of this tree every file reads as surface
       # unknown and the api-surface advisor says nothing at all, which is what it has been
@@ -636,8 +643,10 @@ jobs:
       # merge-history folds this run into the restored history. Holds only contents: read.
       - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: source
-          source-path: .
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
           restore-history: 'true'
 
       # Outcome first: it describes the run that just finished, and the history merge

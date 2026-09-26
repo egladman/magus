@@ -354,6 +354,36 @@ the workflow says, unless you turn on [insecure mode](#insecure-mode-no-signing)
     <https://tanstack.com/blog/npm-supply-chain-compromise-postmortem>. `bundle-size.yml`
     saved the poisoned entry on 2026-05-11 and `release.yml` restored it the same day.
 
+## Toolchain bundles: warming the compiler's own cache
+
+A remote entry is per project, so any edit to a large project misses the whole of it,
+and the rebuild starts from a cold compiler. A toolchain bundle carries the compiler's
+own caches alongside the entries, so that miss recompiles only what changed. For Go
+that is `GOCACHE` and `GOMODCACHE`, as `go env` reports them at the workspace root.
+
+```bash
+# the trusted run, after its build: sign and store today's bundle
+magus config cache export --toolchain go --remote --used-within 12h
+# any run, before its build: restore the newest bundle that verifies
+magus config cache import --toolchain go --remote
+```
+
+A bundle is signed and verified exactly like an entry, with the same key and trust
+set, and it rides the remote tier under a namespace no project can occupy. It is keyed
+by the Go version, `GOOS`/`GOARCH`, `GOEXPERIMENT`, `GOFLAGS` and `CGO_ENABLED`, a
+digest of every `go.sum`, and the UTC day. A restore takes the newest verified bundle of
+the last week for this module set, else for this toolchain alone, since an older
+module set still saves the compiles its modules share. A bundle that fails
+verification is refused and named, and the search moves on; nothing unverified is ever
+restored. Restored files land only where they are missing, dated a day back so that Go
+re-dates each entry a build uses, and `--used-within` then saves only those. Module
+zips stay out: a build reads the extracted tree.
+
+The day's first bundle stands: the store cannot be overwritten, so a save that finds
+today's key reports it and builds nothing. `export --toolchain go --to <file>` and
+`import --toolchain go <file>` do the same through a file, verifying against
+`cache.remote.trusted_keys`.
+
 ## Observability
 
 When [telemetry](../telemetry.md) is enabled, magus instruments every remote

@@ -46,30 +46,31 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                    |
 | ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
-| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `buzz-test`                                                                            |
+| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `lint-files`                                                                           |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `typescript`                                                                                              |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                             |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     |                                                                                                                             |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1002`                                                                                             |
-| doc        |     700+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                             |
+| doc        |     800+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                              |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                                         |
 | function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `main`                                                                                               |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
-| rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
+| rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                      |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      54 | `magus query project=.`                               | `buzz-test`, `test`, `generate`                          |
+| .                               |      55 | `magus query project=.`                               | `lint-files`, `buzz-test`, `test`                        |
 | console                         |       8 | `magus query project=console`                         | `install`, `build`, `ci`                                 |
 | docs                            |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
 | libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
+| libs/conventions                |       7 | `magus query project=libs/conventions`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
 | libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
@@ -114,6 +115,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `coverage-render`        | Renders the three language coverage badges into the assembled site, gen/site/assets/.                                                                                                                                                                                                                                                                                                          |
 | `build`                  | Compiles one artifact: the host binary, or the container image under the `container` charm.                                                                                                                                                                                                                                                                                                    |
 | `lint-build`             | Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.                                                                                                                                                                                                                                                                                                                  |
+| `lint-files`             | Holds the repository's non-Go files to the conventions no off-the-shelf linter checks: lockfile order, workflow trust, magusfile footprints, hook wiring, the installed-skill declarations and the landing page's headline rotator.                                                                                                                                                            |
 | `lint`                   | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint.                                                                                                                                                                                                                                                                                     |
 | `format`                 | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown.                                                                                                                                                                                                                                                                                                                           |
 | `ci`                     | Runs the CI gates through their declared dependencies.                                                                                                                                                                                                                                                                                                                                         |
@@ -195,6 +197,18 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `format`         |                                                                                                                                                              |
 | `lint`           | go-vet only, as in libs/testlayout.                                                                                                                          |
 | `build`          |                                                                                                                                                              |
+| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
+| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
+| `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                        |
+
+## Project: libs/conventions
+
+| Target           | What it does                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                     |
+| `format`         |                                                                                                                                                              |
+| `lint`           | go-vet only, as in libs/coldread: this module is what the custom golangci-lint binary is built FROM.                                                         |
+| `build`          | Compiles every analyzer package; ./...                                                                                                                       |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
 | `index-generate` | Renders MAGUS.md, this project's target catalog, from this magusfile.                                                                                        |
