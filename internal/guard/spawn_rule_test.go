@@ -634,8 +634,8 @@ func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 }
 
 // A spawn titled `<parent>/<role> <job>` naming a live job attributes the child to it:
-// the child's later calls are graded under that lease, and a child sharing this checkout
-// has this checkout's base recorded for a job that never reported one.
+// the child's later calls are graded under that lease, and the child's first call records
+// its checkout's base for a job that never reported one.
 func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 	const base = "4f1c2e9+0d3b7a51"
 	type outcome struct {
@@ -648,6 +648,7 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 	running := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	reported := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}, ReportedBase: "77aa01c", Registered: 1}
 	finished := types.Job{ID: "guard-facts", State: types.StatePass, WritePaths: []string{"internal/guard/**"}}
+	nested := types.Job{ID: "orchestrator/facts", Parent: "orchestrator", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	// Positional: the spawn title, its isolation, an explicit --lease, the stored row, and
 	// what the child's write then meets.
 	cases := []struct {
@@ -656,19 +657,20 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 		want                          outcome
 	}{
 		{"a live job, shared checkout", title, "", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}},
-		{"an isolated child reports its own base", title, "worktree", "", running, outcome{Lease: "guard-facts", Denied: true}},
+		{"an isolated child's base is recorded all the same", title, "worktree", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}},
+		{"a job forked beneath the title's parent", "orchestrator/integrator facts", "", "", nested, outcome{Lease: "orchestrator/facts", ReportedBase: base, Registered: true}},
 		{"a base already reported is kept", title, "", "", reported, outcome{Lease: "guard-facts", ReportedBase: "77aa01c", Registered: true}},
 		{"a finished job attributes nothing", title, "", "", finished, outcome{}},
 		{"a title in another form attributes nothing", "orchestrator/brisk-heron/implement adr 0002", "", "", running, outcome{}},
 		{"a title naming no role attributes nothing", "orchestrator guard-facts", "", "", running, outcome{}},
-		{"an explicit lease outranks the attribution", title, "", "other", running, outcome{Lease: "other", Denied: true, ReportedBase: base, Registered: true}},
+		{"an explicit lease outranks the attribution", title, "", "other", running, outcome{Lease: "other", Denied: true}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, root := fleetFixture(t, tc.row)
 			at := hookLocation(ctx, Dependencies{})
 			deps := Dependencies{CheckoutBase: func(_ context.Context, got string) string {
-				assert.Equal(t, root, got, "the base is read from the spawning checkout")
+				assert.Equal(t, root, got, "the base is read from the checkout the child runs in")
 				return base
 			}}
 			target := filepath.Join(root, "internal", "guard", "guard.go")
@@ -703,6 +705,57 @@ func TestAttributionDoesNotReachTheParent(t *testing.T) {
 	assert.Empty(t, v.Lease)
 }
 
+// A worker spawned the documented way, a background Agent call titled for a live job, into
+// its own worktree: its hooks run with a cache dir the spawner never wrote to, and its
+// calls are still graded under the job, with its base recorded from its own checkout and
+// the lease on every trail event.
+func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
+	const base = "9c0ffee+1a2b3c4d"
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	spawnerCtx, spawnerRoot := fleetFixture(t, row)
+	workerRoot, workerCache := t.TempDir(), t.TempDir()
+	// A linked worktree of the spawner's repository, which is what shares the job store.
+	require.NoError(t, os.WriteFile(filepath.Join(workerRoot, ".git"),
+		[]byte("gitdir: "+filepath.Join(spawnerRoot, ".git", "worktrees", "worker")+"\n"), 0o644))
+	workerCtx := WithLocation(t.Context(), workerCache, workerRoot, workerRoot)
+	deps := Dependencies{CheckoutBase: func(_ context.Context, got string) string {
+		assert.Equal(t, workerRoot, got, "the base is the worker's checkout")
+		return base
+	}}
+
+	Judge(spawnerCtx, deps, Request{Input: finishedSpawn(t, "orchestrator/fix guard-facts", "guard-facts", "opus", "worktree", "a1b2c3"), Host: "claude-code"})
+
+	edit := func(rel string) Verdict {
+		target := filepath.Join(workerRoot, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+		require.NoError(t, os.WriteFile(target, []byte("package x\n"), 0o644))
+		input := map[string]any{"file_path": target, "old_string": "package x", "new_string": "package y"}
+		return Judge(workerCtx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+			"session_id": "8f2c6a1e", "agent_id": "a1b2c3", "agent_type": "general-purpose", "cwd": workerRoot,
+			"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": input,
+		})})
+	}
+	type graded struct {
+		Decision string
+		Lease    string
+		From     types.LeaseSource
+	}
+	inside, outside := edit("internal/guard/guard.go"), edit("internal/job/store.go")
+	assert.Equal(t, graded{"pass", "guard-facts", types.LeaseSourceAgent}, graded{inside.Decision, inside.Lease, inside.LeaseFrom})
+	assert.Equal(t, graded{"deny", "guard-facts", types.LeaseSourceAgent}, graded{outside.Decision, outside.Lease, outside.LeaseFrom})
+
+	rows, err := job.NewStore(job.Location{CacheDir: workerCache, Root: workerRoot}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, base, rows[0].ReportedBase)
+
+	events := trailEvents(t, workerCache, trail.KindAgentCommand)
+	require.Len(t, events, 2)
+	for _, e := range events {
+		assert.Equal(t, graded{Lease: "guard-facts", From: types.LeaseSourceAgent}, graded{Lease: e.Lease, From: e.LeaseFrom})
+	}
+}
+
 // The command and path glue forward one field of the event, not the envelope, so the
 // subagent id arrives as --agent beside the extracted command. It must attribute exactly as
 // the envelope's agent_id does, or every subagent shell call is graded as its parent's.
@@ -727,7 +780,7 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	running := func(id, parent string) types.Job {
 		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	}
-	ctx, _ := fleetFixture(t, running("worker-job", ""), running("victim-job", ""), running("sub-job", "worker-job"), running("grandchild-job", "sub-job"))
+	ctx, root := fleetFixture(t, running("worker-job", ""), running("victim-job", ""), running("sub-job", "worker-job"), running("grandchild-job", "sub-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "worker-session"}.Bind("worker-job"))
 	facts := hint.NewGate(cacheDir, hookAttribution{Host: "claude-code", Session: "worker-session"}.factsKey())
@@ -744,7 +797,8 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	spawn("worker/forger victim-job", "forged")
 	rec, ok := readSpawnedAgent(facts, "forged")
 	require.True(t, ok)
-	assert.Empty(t, rec.Job, "a leased spawner cannot hand out a job outside its own tree")
+	assert.Empty(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).AgentJob(job.Subagent{Host: "claude-code", Session: "worker-session", ID: "forged"}),
+		"a leased spawner cannot hand out a job outside its own tree")
 	assert.Equal(t, "victim-job", rec.UntrustedJob, "the claim is kept for a reader")
 	assert.Equal(t, "worker-job", graded("forged").Lease, "the forged child is graded under the spawner's own binding")
 

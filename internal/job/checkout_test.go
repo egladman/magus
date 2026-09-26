@@ -357,6 +357,40 @@ func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	assert.Equal(t, types.LeaseSourceMarker, from)
 }
 
+// A subagent's binding is the repository's, not a checkout's: a worktree of the same
+// repository reads it, and it answers only for the exact host, session and agent id.
+func TestAgentBindingIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	main, worktree := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"),
+		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n"), 0o644))
+	spawner := NewStore(Location{CacheDir: filepath.Join(main, ".magus"), Root: main})
+	worker := NewStore(Location{CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
+	child := Subagent{Host: "claude-code", Session: "s1", ID: "a1b2c3"}
+
+	require.NoError(t, spawner.BindAgent(child, "wave/worker"))
+	assert.Error(t, spawner.BindAgent(child, "not a lease"), "an id ValidJobID rejects is refused")
+
+	got := map[string]string{}
+	for name, a := range map[string]Subagent{
+		"the child":            child,
+		"another agent":        {Host: "claude-code", Session: "s1", ID: "d4e5f6"},
+		"another session":      {Host: "claude-code", Session: "s2", ID: "a1b2c3"},
+		"another host":         {Host: "codex", Session: "s1", ID: "a1b2c3"},
+		"the parent, no agent": {Host: "claude-code", Session: "s1"},
+	} {
+		got[name] = worker.AgentJob(a)
+	}
+	assert.Equal(t, map[string]string{
+		"the child": "wave/worker", "another agent": "", "another session": "", "another host": "", "the parent, no agent": "",
+	}, got)
+	for _, dir := range []string{main, worktree} {
+		_, err := os.Stat(filepath.Join(dir, ".magus"))
+		assert.True(t, os.IsNotExist(err), "nothing is written into %s's cache dir", dir)
+	}
+}
+
 // TestLeaseQueryRefusesAMarkerItCannotRead pins that an unreadable binding is an error
 // whatever else answers: reading it as none would hand the call to the claim, which is the
 // one source a worker can rewrite.

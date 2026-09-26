@@ -273,11 +273,11 @@ spawn, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md)
 rule sees both. The `PostToolUse` entry judges nothing: the finished call's
 `tool_response.agentId` is the id the host gave the child, and recording it
 against the spawn's `description` is what lets that child's own spawns name
-their parent (`agent_id` on its later hook events). That response field is
-unverified against a live session, and a release that drops it leaves every
-parent empty rather than guessed. The same record keeps the model the spawn
+their parent (`agent_id` on its later hook events). A live background spawn
+carries that response field; a release that drops it leaves every parent empty
+rather than guessed. The same record keeps the model the spawn
 named, and, when the spawn's `description` reads `<parent>/<role> <job>` for a
-live job, the job its later calls are graded under.
+live job, the job its later calls are graded under, in its own worktree too.
 
 The `SubagentStop` entry judges nothing either. Its payload names the finished
 subagent's `agent_id` and `agent_transcript_path`; magus reads the last usage

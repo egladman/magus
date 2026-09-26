@@ -66,8 +66,8 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// which is what lets that child's own later calls name their parent and their job.
 	if env.AfterCall {
 		if env.SpawnedAgent != "" {
-			spawner, _, err := actingLeaseFor(who, at, facts, req.Lease)
-			recordSpawnedAgent(ctx, deps, at, facts, env, spawner, err)
+			spawner, _, err := actingLeaseFor(who, at, req.Lease)
+			recordSpawnedAgent(ctx, at, facts, who, env, spawner, err)
 		}
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	}
@@ -161,7 +161,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
-	lease, _, _ := actingLeaseFor(who, at, facts, explicitLease)
+	lease, _, _ := actingLeaseFor(who, at, explicitLease)
 	req.Role, req.Lease = actingRole(ctx, at, lease)
 	return req
 }
@@ -231,9 +231,6 @@ type spawnedAgent struct {
 	Name        string `json:"name,omitempty"`
 	// Model is the model the spawn named, "" when it named none.
 	Model string `json:"model,omitempty"`
-	// Job is the live job the spawn's title named, "" when it named none or when the
-	// spawner could not hand it out.
-	Job string `json:"job,omitempty"`
 	// UntrustedJob is a live job the title named that the spawner could not hand out: the
 	// spawner acted under a lease, and the job is neither that lease nor forked beneath
 	// it. Kept so a reader can see the claim; it attributes nothing.
@@ -247,11 +244,9 @@ type spawnedAgent struct {
 // id, maps its name to that id, and starts its idle clock.
 //
 // A title of the form `<parent>/<role> <job>` naming a live job attributes the child to
-// that job, and every later call carrying its id is graded under that job's lease. When
-// the job never reported a base and the child shares this checkout, this checkout's base
-// is recorded for it as `magus job exec` would, so its first write is not refused for a
-// missing exec. An isolated child's checkout is one magus cannot see from here, so its
-// base is left for the child to report.
+// that job through [job.Store.BindAgent], and every later call carrying its id is graded
+// under that job's lease from whichever checkout it runs in. The job's base is recorded
+// by the child's first call, in the checkout it landed in (see registerAgentBase).
 //
 // The title is the spawner's claim, and any process can pipe a spawn envelope into
 // `magus shell`, so it attributes only what the spawner could hand out: an unleased
@@ -262,7 +257,7 @@ type spawnedAgent struct {
 //
 // Best effort like every marker: a record that cannot be written leaves the child's calls
 // with an empty parent and no job, the answer a host with no subagent identity gets.
-func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, facts hint.Gate, env hookRequest, spawner string, spawnerErr error) {
+func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who hookAttribution, env hookRequest, spawner string, spawnerErr error) {
 	facts.Touch(agentSeenKind(env.SpawnedAgent))
 	if env.Spawn.Name != "" {
 		writeAgentMarker(facts, agentAliasKind(env.Spawn.Name), []byte(env.SpawnedAgent))
@@ -283,12 +278,8 @@ func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, fac
 			writeSpawnedAgent(facts, env.SpawnedAgent, rec)
 			return
 		}
-		rec.Job = row.ID
-		if row.Registered == 0 && !env.Spawn.Isolated {
-			if base := deps.checkoutBase(ctx, at.workspace); base != "" {
-				_, _ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, row.ID, base)
-			}
-		}
+		_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).
+			BindAgent(job.Subagent{Host: who.Host, Session: who.Session, ID: env.SpawnedAgent}, row.ID)
 	}
 	writeSpawnedAgent(facts, env.SpawnedAgent, rec)
 }
@@ -313,8 +304,10 @@ func mayHandOut(rows []types.Job, spawner, job string) bool {
 	return false
 }
 
-// spawnTitleJob is the live job a spawn title names in the `<parent>/<role> <job>` form.
-// A title in any other form, or naming a job the store does not hold live, names none.
+// spawnTitleJob is the live job a spawn title names in the `<parent>/<role> <job>` form:
+// the row `<job>`, else the row `<parent>/<job>`, since a job forked beneath its parent
+// carries the parent in its id. A title in any other form, or naming a job the store does
+// not hold live, names none.
 func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, bool) {
 	fields := strings.Fields(title)
 	if len(fields) != 2 || at.cacheDir == "" {
@@ -328,33 +321,74 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 	if err != nil {
 		return types.Job{}, false
 	}
-	for _, row := range rows {
-		if row.ID == fields[1] && row.State.Live() {
-			return row, true
+	for _, id := range []string{fields[1], fields[0][:slash] + "/" + fields[1]} {
+		for _, row := range rows {
+			if row.ID == id && row.State.Live() {
+				return row, true
+			}
 		}
 	}
 	return types.Job{}, false
 }
 
-// actingLeaseFor is the lease a call acts under, resolved by job.LeaseQuery with the
-// answers only the guard holds: the calling subagent's spawn record and the session.
+// agentJobFor is the job the calling subagent was spawned for, "" for a root session, a
+// host that names no subagent, and a subagent no spawn attributed.
+func agentJobFor(who hookAttribution, at location) string {
+	if who.Agent == "" || at.workspace == "" {
+		return ""
+	}
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).
+		AgentJob(job.Subagent{Host: who.Host, Session: who.Session, ID: who.Agent})
+}
+
+// actingLeaseFor is the lease a call acts under. See [resolveLease].
+func actingLeaseFor(who hookAttribution, at location, explicit string) (string, types.LeaseSource, error) {
+	return resolveLease(who, at, explicit, agentJobFor(who, at))
+}
+
+// resolveLease resolves by job.LeaseQuery with the answers only the guard holds: the
+// calling subagent's job and the session.
 //
 // The subagent's job outranks the session's marker because a host that reports subagents
 // hands them their parent's session id, so the marker cannot tell them apart and the
 // agent id can. The marker is keyed on the session, so several sessions sharing one
 // checkout each resolve their own; a host that reports none reads the checkout-wide one.
-func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit string) (string, types.LeaseSource, error) {
-	q := job.LeaseQuery{
+func resolveLease(who hookAttribution, at location, explicit, agentJob string) (string, types.LeaseSource, error) {
+	return job.LeaseQuery{
 		Checkout: job.Checkout{CacheDir: at.cacheDir, Session: who.Session},
 		Flag:     explicit,
+		AgentJob: agentJob,
 		Claim:    trail.LeaseFromEnv(),
+	}.Resolve()
+}
+
+// registerAgentBase records the base of the checkout a subagent's call runs in for the
+// job it was spawned for, as `magus job exec` would, when that job has reported none.
+// Reports whether it wrote, so the caller re-reads the rows it graded against.
+//
+// Done by the child's own call, not at spawn: the host picks the child's checkout, and
+// only the child's hooks run in it. Without it an attributed worker's first write is
+// refused for a missing exec the worker was never going to run.
+func registerAgentBase(ctx context.Context, deps Dependencies, at location, agentJob string) bool {
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return false
 	}
-	if who.Agent != "" {
-		if rec, ok := readSpawnedAgent(facts, who.Agent); ok {
-			q.AgentJob = rec.Job
+	for _, row := range rows {
+		if row.ID != agentJob {
+			continue
 		}
+		if !row.State.Live() || row.Registered != 0 {
+			return false
+		}
+		base := deps.checkoutBase(ctx, at.workspace)
+		if base == "" {
+			return false
+		}
+		_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base)
+		return err == nil
 	}
-	return q.Resolve()
+	return false
 }
 
 // denyUnresolvedLease is the verdict for a call whose lease could not be resolved: a
