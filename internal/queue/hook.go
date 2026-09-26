@@ -357,11 +357,27 @@ type HookEnv struct {
 	Fixed []string
 }
 
-// of creates each cache variable's directory in the [CacheDir] of the checkout at dir
-// and returns every assignment. It creates them through an [os.Root] on the checkout,
-// so a link an earlier hook left there cannot point the queue's own writes outside it.
+// candidatePins are what a magus a hook runs locates its cache and job store by, each
+// pinned inside the checkout's [CacheDir] under the name it takes there. A magus passes
+// its own values of these to every sandboxed child it runs (see procrun's
+// nestedMagusVars), so a queue started with them set would otherwise hand every
+// candidate one cache, where one change's hook plants what another's gate replays.
+var candidatePins = []CacheVar{
+	{Name: "MAGUS_CACHE_DIR", Dir: "."},
+	{Name: "XDG_STATE_HOME", Dir: "xdg-state"},
+}
+
+// of returns every assignment a hook in the checkout at dir takes: [candidatePins],
+// MAGUS_CACHE_WRITE_ENABLED at its default whatever the queue was started with, each
+// cache variable, then e.Fixed. It creates each cache variable's directory in the
+// checkout's [CacheDir] through an [os.Root] on the checkout, so a link an earlier hook
+// left there cannot point the queue's own writes outside it.
 func (e HookEnv) of(dir string) ([]string, error) {
-	env := make([]string, 0, len(e.Caches)+len(e.Fixed))
+	env := make([]string, 0, len(candidatePins)+1+len(e.Caches)+len(e.Fixed))
+	for _, v := range candidatePins {
+		env = append(env, v.Name+"="+filepath.Join(dir, CacheDir, v.Dir))
+	}
+	env = append(env, "MAGUS_CACHE_WRITE_ENABLED=true")
 	if len(e.Caches) > 0 {
 		root, err := os.OpenRoot(dir)
 		if err != nil {

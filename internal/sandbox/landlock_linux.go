@@ -5,6 +5,7 @@ package sandbox
 import (
 	"errors"
 	"fmt"
+	"os"
 	"syscall"
 	"unsafe"
 
@@ -149,9 +150,19 @@ func buildRuleset(rules []filesystem.Rule, abi int, scopes uint64) (int, error) 
 // addPathRules attaches each of rules to the ruleset. A missing path is not an error:
 // a Rust toolchain allowlist may name $CARGO_HOME on a host that only builds Go, and an
 // unlisted path is denied either way.
+//
+// A missing writable path is created first, as a directory: landlock attaches a rule
+// only to a path that exists, so a cache a tool has not made yet (buf's under a fresh
+// XDG_CACHE_HOME) would otherwise be denied to the very tool that would create it.
 func addPathRules(rulesetFD int, rules []filesystem.Rule, handledFS uint64) error {
 	for _, r := range rules {
-		if err := addPathRule(rulesetFD, r, handledFS); err != nil && !errors.Is(err, syscall.ENOENT) {
+		err := addPathRule(rulesetFD, r, handledFS)
+		if errors.Is(err, syscall.ENOENT) && r.Write {
+			if mkErr := os.MkdirAll(r.Path, 0o700); mkErr == nil {
+				err = addPathRule(rulesetFD, r, handledFS)
+			}
+		}
+		if err != nil && !errors.Is(err, syscall.ENOENT) {
 			return fmt.Errorf("sandbox: landlock_add_rule %s: %w", r.Path, err)
 		}
 	}

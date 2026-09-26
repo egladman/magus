@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,25 @@ func TestRulesetAcceptsAWritableDevice(t *testing.T) {
 	fd, err := buildRuleset([]filesystem.Rule{{Path: "/dev/null", Read: true, Write: true}}, abi, 0)
 	require.NoError(t, err)
 	require.NoError(t, unix.Close(fd))
+}
+
+// TestRulesetCreatesAMissingWritableDir pins the cache a tool has not made yet: its
+// writable rule creates the directory so the rule can attach, and a missing read-only
+// path is left alone.
+func TestRulesetCreatesAMissingWritableDir(t *testing.T) {
+	requireLandlock(t)
+	abi, err := ABI()
+	require.NoError(t, err)
+	root := t.TempDir()
+	cache, absent := filepath.Join(root, "cache", "buf"), filepath.Join(root, "absent")
+	fd, err := buildRuleset([]filesystem.Rule{
+		{Path: cache, Read: true, Write: true},
+		{Path: absent, Read: true},
+	}, abi, 0)
+	require.NoError(t, err)
+	require.NoError(t, unix.Close(fd))
+	assert.DirExists(t, cache)
+	assert.NoDirExists(t, absent)
 }
 
 // TestAccessForPathTypeCanEmptyTheMask covers the case addPathRule then skips: a rule

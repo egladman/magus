@@ -418,6 +418,33 @@ func TestCacheVarsPointIntoEachCheckoutsOwnCacheDir(t *testing.T) {
 	assert.Equal(t, filepath.Join(regenDir, CacheDir, "go-build")+"\n", string(seen))
 }
 
+// A queue started with a cache dir, a job store or cache writes of its own set hands
+// none of them to a hook: each candidate's magus locates both inside its own checkout,
+// so no two candidates share a cache.
+func TestAQueuesOwnCacheLocationNeverReachesAHook(t *testing.T) {
+	shared := t.TempDir()
+	t.Setenv("MAGUS_CACHE_DIR", filepath.Join(shared, "cache"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(shared, "state"))
+	t.Setenv("MAGUS_CACHE_WRITE_ENABLED", "false")
+	record := script(`echo "$MAGUS_CACHE_DIR $XDG_STATE_HOME $MAGUS_CACHE_WRITE_ENABLED" > seen`)
+	want := func(dir string) string {
+		return filepath.Join(dir, CacheDir) + " " + filepath.Join(dir, CacheDir, "xdg-state") + " true\n"
+	}
+
+	gated := t.TempDir()
+	_, err := CommandGate(record, HookEnv{}, nil).Validate(context.Background(), types.Candidate{Commit: "s", Dir: gated, Temp: t.TempDir()}, hookUnits)
+	require.NoError(t, err)
+	regenerated := t.TempDir()
+	require.NoError(t, CommandRegenerate(record, HookEnv{}, nil)(context.Background(),
+		types.Regeneration{Dir: regenerated, Temp: t.TempDir(), Change: hookChange, Paths: []string{"x"}, Units: hookUnits}))
+
+	for _, dir := range []string{gated, regenerated} {
+		seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+		require.NoError(t, err)
+		assert.Equal(t, want(dir), string(seen), dir)
+	}
+}
+
 // A link a hook left in its cache directory never points the queue's own writes outside
 // the checkout.
 func TestACacheVarNeverCreatesThroughALinkOutOfTheCheckout(t *testing.T) {

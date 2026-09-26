@@ -171,7 +171,11 @@ generated file, a candidate tree or a review proof from a verdict.
     ([MGS2010](../reference/codes/sandbox/MGS2010.md) refuses a weaker `--sandbox`).
     `MERGEQUEUE_TOKEN`, `GITHUB_TOKEN`, the Actions runtime token and every other
     variable nothing names never reach it. A credential the passthrough names reaches
-    every hook: that is the workspace's choice.
+    every hook: that is the workspace's choice. The queue's own `MAGUS_CACHE_DIR`,
+    `XDG_STATE_HOME` and `MAGUS_CACHE_WRITE_ENABLED` never do: a gate or regeneration
+    gets `MAGUS_CACHE_DIR` set to its checkout's `.magus`, `XDG_STATE_HOME` inside it,
+    and cache writes at their default, so no queue environment makes candidates share a
+    cache.
   - Everywhere, the hook's program must be one the policy lets run
     ([MGS2007](../reference/codes/sandbox/MGS2007.md)): on `PATH`, in the system and
     toolchain trees, in the checkout, or under a `sandbox.allow` entry.
@@ -314,16 +318,16 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 | `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1` document with `-o json` | read                         |
 | `ls`       | the provider                                   | a `mergequeue.changes/v1` document                                     | read                         |
 | `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                                            | read                         |
-| `validate` | the plan                                       | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
+| `validate` | the plan (stdin, with `--stdin`)               | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
 | `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                            | write; runs no change's code |
 
 ```sh
 magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
-magus queue validate --plan plan.json --verdicts verdicts \
+magus queue validate --stdin --verdicts verdicts \
   --gate 'magus run ci --no-default-charms' \
   --regenerate 'magus run generate:rw' \
-  --cache-env GOCACHE=go-build --cache-env GOMODCACHE=go-mod
+  --cache-env GOCACHE=go-build --cache-env GOMODCACHE=go-mod < plan.json
 magus queue apply --provider github --base main \
   --regenerate 'magus --sandbox=best-effort run generate:rw' \
   --reproduce-gate 'magus run ci --no-default-charms' \

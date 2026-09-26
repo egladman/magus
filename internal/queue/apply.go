@@ -65,7 +65,8 @@ type Applier struct {
 	// candidate holds regenerated files, and only once the build tool proved it runs
 	// none of the change's code; where it cannot, the Applier takes validation's
 	// regenerated candidate from the verdict source's bundle once it checks it (see
-	// takeValidated), and kicks the change back only without one. It runs in the job
+	// takeValidated). Without one, it merges its own rebuild if that is the commit
+	// validation gated, and otherwise kicks the change back. It runs in the job
 	// holding the write credential over a checkout carrying the change's files, so it
 	// must be confined to that checkout and fail rather than run unconfined:
 	// [CommandRegenerate] runs it in the base's sandbox, which `magus queue apply
@@ -243,7 +244,7 @@ type applyRun struct {
 	onBase    map[string]bool   // base tips found to carry the plan's base commit
 	listing   *types.Changes    // the provider's own listing, read once a stack needs it
 	bundles   map[string]string // change -> the bundle of validation's regenerated candidate
-	taken     map[string]bool   // change -> its candidate is validation's, checked by takeValidated
+	taken     map[string]bool   // change -> its outputs are what validation's gate ran on: a checked bundle, or its own merge
 }
 
 // accept files a verdict under the plan's own record of its change. A verdict names
@@ -740,7 +741,8 @@ func redChecksReport(base, head, tip string, failing []string) string {
 // validation gated. Where validation's regeneration rewrote files, or the merge settled
 // a conflicted generated file, the rebuild runs the base's own regeneration, after the
 // build tool proved it runs none of the change's code; where it cannot prove that, it
-// takes validation's regenerated candidate once takeValidated checks it. Either way no
+// takes validation's regenerated candidate once takeValidated checks it, or, with no
+// bundle, its own merge when that is the commit validation gated. Either way no
 // change's code runs in the one job that holds the write credential. What does not match
 // is kicked back, never merged. A source file auto-resolution settled is settled again
 // here, by this job's own computation from the three versions, so the commit matches
@@ -771,8 +773,18 @@ func (r *applyRun) rebuild(ctx context.Context, v types.Verdict, onto string) (s
 	}
 	g, err := r.generation(ctx, c, regen, onto, b.touched)
 	var unproven *types.RefusedError
-	if bundle, ok := r.bundles[c.ID]; ok && errors.As(err, &unproven) {
-		return r.takeValidated(ctx, v, b, bundle)
+	if errors.As(err, &unproven) {
+		if bundle, ok := r.bundles[c.ID]; ok {
+			return r.takeValidated(ctx, v, b, bundle)
+		}
+		// Validation ships no bundle when its regeneration wrote nothing: the merge it
+		// settled is then the commit its gate ran on, which this job just built itself.
+		if b.Commit == v.CandidateCommit {
+			r.taken[c.ID] = true
+			r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Commit: b.Commit, Reason: "took its own merge, the commit validation gated, which settles " +
+				joinPaths(b.settled) + " as the change has them"})
+			return b.Commit, nil
+		}
 	}
 	if err != nil {
 		return "", err
@@ -1199,8 +1211,8 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 		return "", &types.RefusedError{Paths: resolvedPaths(resolved), Reason: "its merge onto `" + r.plan.Base + "` " + resolvedNote(resolved) +
 			", and a rebase replays its commits onto `" + r.plan.Base + "`, where they still conflict", Remedy: "Pick another merge method, or rebase it onto `" + r.plan.Base + "`."}
 	}
-	// A candidate takeValidated took was checked to differ from this job's merge in
-	// declared outputs alone, which its gate's drift check held to their generators.
+	// A taken candidate differs from this job's merge in declared outputs alone, if at
+	// all, and its gate's drift check held those to their generators.
 	if len(outputs) > 0 && !r.taken[c.ID] {
 		if _, err := r.generation(ctx, c, outputs, rd.onto, nil); err != nil {
 			return "", err

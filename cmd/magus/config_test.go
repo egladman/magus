@@ -142,6 +142,7 @@ func TestSelfDescribedExitStatusSurvives(t *testing.T) {
 var runOnlyFlags = map[string]string{
 	"shard":               "CI matrix sharding targets an explicit project set; affected's scope is already minimal",
 	"n-shards":            "pairs with --shard",
+	"stdin":               "reads a saved shard plan; affected's --stdin reads changed paths, so the two share the input idiom and not a meaning",
 	"no-volatility-retry": "consumed by `magus ci bisect` which dispatches through run, not affected",
 	"skip":                "subtracts from a selection the caller named; affected's set is derived from the diff, and dropping a project the diff put there un-gates exactly what affected exists to gate",
 }

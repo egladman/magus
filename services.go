@@ -72,7 +72,7 @@ func (m *Magus) newServiceSession(_ context.Context) *service.Session {
 		return service.NewSession(reg, nil, nil)
 	}
 	acquire := func(ctx context.Context, key string, svc spells.Service) error {
-		return b.AcquireService(ctx, key, svc)
+		return b.AcquireService(ctx, key, broker.NewServiceSpec(svc))
 	}
 	release := func(relCtx context.Context, key string) {
 		// relCtx is ReleaseAll's teardown ctx, detached from the run's and bounded, so a
