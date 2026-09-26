@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -276,64 +277,143 @@ var unknownFieldIssue = regexp.MustCompile(`^line (\d+): field (.+) not found in
 // told apart from a same-named key nested deeper.
 var configTypeName = reflect.TypeOf(Config{}).String()
 
-// unknownKeyError re-renders yaml.v3's rejection as magus's own message: the file
-// and line, the key, and the nearest known key at that level. It returns nil when
-// err is not a rejection this can restate, leaving the caller's wrap in place.
+// UnknownKeysError is MGS1040 as data: every key a magus.yaml carries that this magus
+// does not know, with every line it appears on. The loader returns it as the cause of a
+// [types.DiagnosticError], so errors.As reaches it for a caller that renders structured
+// output, and the diagnostic's message is [UnknownKeysError.Error].
+type UnknownKeysError struct {
+	// File is the magus.yaml path, relative to the workspace root while inside one.
+	File string `json:"file"`
+	// Keys holds one entry per key and level, in order of first appearance.
+	Keys []UnknownKey `json:"keys"`
+	// Build carries the version gap. Its Running is "" as the loader returns it, since
+	// the loader is never told the binary's version; [WithRunningVersion] fills it in.
+	Build ward.StaleBuild `json:"build"`
+}
+
+// UnknownKey is one unknown key and every line it appears on. At most one of
+// Suggestion and RenamedTo is set; with neither, the key reads as one this build predates.
+type UnknownKey struct {
+	Key        string `json:"key"`
+	Lines      []int  `json:"lines"`
+	Suggestion string `json:"suggestion,omitempty"`
+	RenamedTo  string `json:"renamed_to,omitempty"`
+}
+
+// Error renders the keys as a list, one line per key with all of its lines, and states
+// the version gap once when any key has neither a suggestion nor a rename. Nothing is
+// truncated: the list is as long as Keys.
+func (e *UnknownKeysError) Error() string {
+	var b strings.Builder
+	if len(e.Keys) == 1 {
+		fmt.Fprintf(&b, "%s has a key this magus does not know:", e.File)
+	} else {
+		fmt.Fprintf(&b, "%s has keys this magus does not know:", e.File)
+	}
+	width := 0
+	for _, k := range e.Keys {
+		width = max(width, len(k.Key))
+	}
+	stale := false
+	for _, k := range e.Keys {
+		nums := make([]string, len(k.Lines))
+		for i, n := range k.Lines {
+			nums[i] = strconv.Itoa(n)
+		}
+		where := "line " + nums[0]
+		if len(nums) > 1 {
+			where = "lines " + strings.Join(nums, ", ")
+		}
+		switch {
+		case k.RenamedTo != "":
+			where += fmt.Sprintf("; renamed to %q", k.RenamedTo)
+		case k.Suggestion != "":
+			where += fmt.Sprintf("; did you mean %q?", k.Suggestion)
+		default:
+			stale = true
+		}
+		fmt.Fprintf(&b, "\n  - %-*s  (%s)", width, k.Key, where)
+	}
+	if stale {
+		b.WriteString("\n\n")
+		b.WriteString(e.Build.Advice())
+	}
+	return b.String()
+}
+
+// diagnostic wraps e as MGS1040, the form the loader returns.
+func (e *UnknownKeysError) diagnostic() *types.DiagnosticError {
+	return types.WrapDiagnostic(types.UnknownConfigKey, e, "%s", e.Error())
+}
+
+// WithRunningVersion returns err with an MGS1040 at its top re-rendered to name running
+// as the binary's version, and any other err unchanged. The config loader runs before
+// the version reaches it, so a caller that holds the version applies it here.
+func WithRunningVersion(err error, running string) error {
+	var ue *UnknownKeysError
+	if !errors.Is(err, types.UnknownConfigKey) || !errors.As(err, &ue) {
+		return err
+	}
+	stamped := *ue
+	stamped.Build.Running = running
+	return stamped.diagnostic()
+}
+
+// unknownKeyError re-renders yaml.v3's rejection as an [UnknownKeysError] wrapped as
+// MGS1040. It returns nil when err is not a rejection this can restate, leaving the
+// caller's wrap in place.
 //
 // The Go type name yaml.v3 reports is a fact about magus's source, not about the
 // file the reader wrote, so it never reaches the message. A TypeError carrying
 // anything else (a type mismatch, say) is left alone whole rather than rewritten
 // in part: that detail has no place in this shape, and half a message is worse
 // than yaml's.
-// staleBinaryNote says out loud what an unknown key only implies: this build may predate
-// the key rather than the key being wrong.
 //
-// The two readings have opposite fixes, and the message used to leave the reader to guess
-// which one they were looking at. `unknown key "sessions"` is exactly what a magus older
-// than the workspace prints, and nothing in those words says so; a reader who has not met
-// this before reasonably concludes their magus.yaml is at fault and starts editing it.
-//
-// Only where no near key was suggested. A near miss is a typo, and telling someone their
-// binary might be old when they wrote "vcs" for "vsc" is noise.
-//
-// The sentence itself is ward's, shared with the magusfile path that reaches the same
-// conclusion from different evidence. The floor is re-read leniently from the same bytes,
-// because the strict decode that produced this error never completed and there is no
-// Config to ask; the running version is not known this early, which ward allows for.
-func staleBinaryNote(data []byte) string {
-	var head struct {
-		RequiredVersion string `yaml:"required_version"`
-	}
-	// Unknown keys are ignored here ON PURPOSE: this decode exists to read one field out
-	// of a document the strict decode already rejected.
-	_ = yaml.Unmarshal(data, &head)
-	return "; this magus does not know that key. " + ward.StaleBinaryAdvice("", head.RequiredVersion) +
-		". If the key is genuinely misspelled, this note does not apply"
-}
-
+// A key with no near match reads as one this build predates, which is exactly what a
+// magus older than the workspace prints; a near miss is a typo, and telling someone
+// their binary might be old when they wrote "vcs" for "vsc" is noise. Keys are grouped
+// by name and level, so the version gap is stated once however often a key repeats.
 func unknownKeyError(path string, data []byte, err error) error {
 	var terr *yaml.TypeError
 	if !errors.As(err, &terr) || len(terr.Errors) == 0 {
 		return nil
 	}
-	lines := make([]string, 0, len(terr.Errors))
+	root := findWorkspaceRoot()
+	ue := &UnknownKeysError{File: relToRoot(root, path)}
+	at := map[[2]string]int{}
 	for _, issue := range terr.Errors {
 		m := unknownFieldIssue.FindStringSubmatch(issue)
 		if m == nil {
 			return nil
 		}
-		line, key, goType := m[1], m[2], m[3]
-		msg := fmt.Sprintf("%s:%s: unknown key %q", workspaceRelPath(path), line, key)
-		if renamed, ok := retiredKeys[key]; ok && goType == configTypeName {
-			msg += fmt.Sprintf("; it was renamed to %q", renamed)
-		} else if sug := hint.Nearest(key, knownKeysIn(goType)); sug != "" {
-			msg += fmt.Sprintf("; did you mean %q?", sug)
-		} else {
-			msg += staleBinaryNote(data)
+		line, _ := strconv.Atoi(m[1])
+		key, goType := m[2], m[3]
+		if i, ok := at[[2]string{key, goType}]; ok {
+			ue.Keys[i].Lines = append(ue.Keys[i].Lines, line)
+			continue
 		}
-		lines = append(lines, msg)
+		k := UnknownKey{Key: key, Lines: []int{line}}
+		if renamed, ok := retiredKeys[key]; ok && goType == configTypeName {
+			k.RenamedTo = renamed
+		} else {
+			k.Suggestion = hint.Nearest(key, knownKeysIn(goType))
+		}
+		at[[2]string{key, goType}] = len(ue.Keys)
+		ue.Keys = append(ue.Keys, k)
 	}
-	return types.DiagnosticErrorf(types.UnknownConfigKey, "%s", strings.Join(lines, "\n"))
+	// The strict decode that produced this error never completed, so the floor is
+	// re-read leniently from the same bytes; unknown keys are ignored here on purpose.
+	var head struct {
+		RequiredVersion string `yaml:"required_version"`
+	}
+	_ = yaml.Unmarshal(data, &head)
+	ue.Build.Floor = head.RequiredVersion
+	if root != "" {
+		if fi, err := os.Stat(filepath.Join(root, "cmd", "magus")); err == nil && fi.IsDir() {
+			ue.Build.SourceTree = true
+		}
+	}
+	return ue.diagnostic()
 }
 
 // knownKeysIn returns the document keys accepted by the struct type yaml.v3 named
@@ -373,10 +453,9 @@ func knownKeysIn(goType string) []string {
 	return walk(reflect.TypeOf(Config{}))
 }
 
-// workspaceRelPath renders path the way the reader would type it: relative to the
-// workspace root while it is inside one, absolute otherwise.
-func workspaceRelPath(path string) string {
-	root := findWorkspaceRoot()
+// relToRoot renders path the way the reader would type it: relative to the workspace
+// root while it is inside one, absolute otherwise.
+func relToRoot(root, path string) string {
 	if root == "" {
 		return path
 	}
