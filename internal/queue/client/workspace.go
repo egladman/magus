@@ -79,15 +79,24 @@ func OpenWorkspace(ctx context.Context, root, target string, opts ...WorkspaceOp
 	return &Workspace{m: m, target: target, regenerates: regenerates}, nil
 }
 
-// SpellSandboxes is the sandbox declaration of every spell a project of the workspace
-// resolved, keyed by spell name: the toolchains the workspace builds with, and no
-// spell it merely has registered.
-func (w *Workspace) SpellSandboxes() map[string]spells.Sandbox {
+// Sandboxes is every sandbox declaration a run of the workspace can grant under: each
+// spell a project resolved, keyed by spell name, and no spell it merely has
+// registered; and each target's own, keyed project:target. A target's grant is what
+// that target alone needs, such as the root test target's read of /proc.
+func (w *Workspace) Sandboxes() map[string]spells.Sandbox {
 	var resolved []*spells.Spell
 	for _, p := range w.m.All() {
 		resolved = append(resolved, p.ResolvedSpells...)
 	}
-	return spells.Sandboxes(resolved)
+	out := spells.Sandboxes(resolved)
+	for _, p := range w.m.All() {
+		for name, pol := range p.TargetPolicies {
+			if pol.Sandbox != nil {
+				out[regenerationKey(p.Path, name)] = *pol.Sandbox
+			}
+		}
+	}
+	return out
 }
 
 // regenerationKey names a target of project; an empty target names the project, whose

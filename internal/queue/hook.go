@@ -453,9 +453,10 @@ type HookEnv struct {
 	// held to the policy's files. A credential the passthrough names reaches every hook,
 	// which is the workspace's choice.
 	Sandbox config.SandboxConfig
-	// Spells is the sandbox declaration of every spell the base's projects resolved (see
-	// spells.Sandboxes). A hook is usually a nested magus, whose own children need any
-	// project's toolchain, and landlock domains stack: a grant the hook lacks is one no
+	// Spells is the sandbox declaration of every spell the base's projects resolved and
+	// of every target that declares its own (see client.Workspace.Sandboxes). A hook is
+	// usually a nested magus, whose own children need any project's toolchain and any
+	// target's grant, and landlock domains stack: a grant the hook lacks is one no
 	// process under it can have.
 	Spells map[string]spells.Sandbox
 	// Fixed are NAME=VALUE assignments every hook takes as given, such as a

@@ -246,7 +246,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("open the magus workspace at %s (pass --facts for another build tool): %w", e.dir, err)
 	}
-	grants := ws.SpellSandboxes()
+	grants := ws.Sandboxes()
 	return ws, grants, ws.Close, nil
 }
 
