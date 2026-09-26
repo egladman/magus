@@ -88,7 +88,6 @@ const (
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
-	denyRuleCaptureFilter     denyRuleName = "capture-filter"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
 	denyRuleRawTool           denyRuleName = "raw-tool"
@@ -102,7 +101,6 @@ const (
 	denyRuleInlineAlias       denyRuleName = "inline-alias"
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
-	denyRuleCd                denyRuleName = "cd"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
@@ -200,7 +198,7 @@ var textFilters = map[string]bool{
 }
 
 // magusPipedToFilter reports a magus command whose output is being trimmed by a
-// shell text filter. Denied rather than advised: as an advisory it fired
+// shell text filter. Denied rather than advised, but for a graph read: as an advisory it fired
 // repeatedly and was read straight past, the same trained-reflex result the
 // raw-tool advisory produced.
 //
@@ -213,13 +211,17 @@ var textFilters = map[string]bool{
 // verb lets the message name the command in front of them; the filter says what they were
 // actually trying to do, which is what decides the answer. `| head` wants less output and
 // `| grep` wants fewer rows, and those are different levers.
-func magusPipedToFilter(command string, d Dialect) (verb, filter string, ok bool) {
+//
+// A read-only graph verb (graphReadVerbs) is reported apart, as read, for an advisory:
+// its pipe loses no failure, and refusing it sent the reader to a text search instead.
+// read is set only when no other pipe on the line matched.
+func magusPipedToFilter(command string, d Dialect) (denied, read pipedMagus) {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return "", "", false
+		return pipedMagus{}, pipedMagus{}
 	}
 	syntax.Walk(f, func(n syntax.Node) bool {
-		if ok {
+		if denied.ok {
 			return false
 		}
 		pipe, isPipe := n.(*syntax.BinaryCmd)
@@ -234,10 +236,44 @@ func magusPipedToFilter(command string, d Dialect) (verb, filter string, ok bool
 		if !isFilter {
 			return true
 		}
-		verb, filter, ok = magusVerb(left), name, true
-		return false
+		match := pipedMagus{verb: magusVerb(left), filter: name, ok: true}
+		if !graphReadOnly(left) {
+			denied = match
+		} else if !read.ok {
+			read = match
+		}
+		return true
 	})
-	return verb, filter, ok
+	if denied.ok {
+		return denied, pipedMagus{}
+	}
+	return pipedMagus{}, read
+}
+
+// pipedMagus is one magus invocation piped into a text filter.
+type pipedMagus struct {
+	verb, filter string
+	ok           bool
+}
+
+// graphReadVerbs are the verbs that read the knowledge graph and change nothing. Measured
+// 2026-09-26: 819 output-pipe denies landed on these, and the refused agent went back to
+// `grep -rn`, which answers with less than the piped graph read it was denied.
+var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": true, "describe": true}
+
+// graphReadOnly reports a pipeline stage whose every magus invocation is a graph read.
+func graphReadOnly(cmds []hint.Invocation) bool {
+	saw := false
+	for _, c := range cmds {
+		if !isMagusInvocation(c) {
+			continue
+		}
+		if !graphReadVerbs[magusSubcommand(c.Args)] {
+			return false
+		}
+		saw = true
+	}
+	return saw
 }
 
 // firstTextFilter names the filter the output was piped into.
@@ -272,12 +308,18 @@ func magusVerb(cmds []hint.Invocation) string {
 	return ""
 }
 
-// magusRedirected reports a magus command whose stdout or stderr is being sent
-// to a file, to /dev/null, or folded together with 2>&1.
+// magusRedirected reports a magus command whose output ends up in a file, or whose
+// stdout, or a run's stderr, ends up in /dev/null.
 //
 // Denied for the pipe rule's reason. `--silent > /dev/null 2>&1` is the worst
 // case: silent mode stays quiet UNTIL something fails, then prints the likely
 // diagnostics and the full-log path, and the redirect discards exactly that.
+//
+// It judges where each stream ENDS, not whether a redirect appears. `2>&1` alone
+// moves stderr onto a console stdout, where both still reach the reader, and a
+// `2>/dev/null` on a verb that does no run work drops at most an error line the
+// exit status also reports. A run's failure block (cause, output ref, reproduce
+// line) is written to stderr, so discarding a run's stderr is refused.
 //
 // `magus query output <ref>` is exempt, as with the pipe rule. Note --tee is NOT
 // the escape hatch a reader might assume (it mirrors STRUCTURED output only),
@@ -299,13 +341,9 @@ func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
 		if !isStmt || len(stmt.Redirs) == 0 || !trimmableMagus(stmtCommands(stmt, d)) {
 			return true
 		}
-		for _, r := range stmt.Redirs {
-			// Output redirects only. A HEREDOC or an input redirect feeds magus
-			// rather than hiding what it said, so neither is this rule's business.
-			if !writesToFile(r.Op) {
-				continue
-			}
-			verb, dest, ok = magusVerb(stmtCommands(stmt, d)), redirectTarget(r), true
+		cmds := stmtCommands(stmt, d)
+		if r := discardingRedirect(stmt.Redirs, magusDoesRunWork(cmds)); r != nil {
+			verb, dest, ok = magusVerb(cmds), redirectTarget(r), true
 			return false
 		}
 		return true
@@ -313,27 +351,152 @@ func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
 	return verb, dest, ok
 }
 
+// streamEnd is where one output stream lands once every redirect has applied.
+type streamEnd struct {
+	sink sinkKind
+	// by is the redirect that sent the stream there, for the message to quote.
+	by *syntax.Redirect
+}
+
+type sinkKind int
+
+const (
+	sinkConsole sinkKind = iota
+	sinkNull
+	sinkFile
+)
+
+// discardingRedirect replays a statement's redirects over stdout and stderr and returns
+// the one that loses output: either stream landing in a file, stdout landing in
+// /dev/null, or stderr landing there on a command doing run work. nil when both streams
+// still reach the console, which is what `2>&1` alone, `1>&2` and `2>/dev/null` on a
+// read verb leave.
+func discardingRedirect(redirs []*syntax.Redirect, runWork bool) *syntax.Redirect {
+	fds := map[string]streamEnd{"1": {}, "2": {}}
+	for _, r := range redirs {
+		if !writesToFile(r.Op) {
+			continue
+		}
+		target := redirectWord(r)
+		switch r.Op {
+		case syntax.RdrAll, syntax.AppAll, syntax.RdrAllClob, syntax.AppAllClob:
+			end := streamEnd{sink: sinkFor(target), by: r}
+			fds["1"], fds["2"] = end, end
+			continue
+		case syntax.DplOut:
+			// `>&2` duplicates a descriptor; `>&file` is bash's spelling of `&>file`.
+			if src, isFd := fds[target]; isFd {
+				fds[redirectFd(r)] = src
+				continue
+			}
+			if target == "-" {
+				fds[redirectFd(r)] = streamEnd{sink: sinkNull, by: r}
+				continue
+			}
+			if r.N == nil {
+				end := streamEnd{sink: sinkFor(target), by: r}
+				fds["1"], fds["2"] = end, end
+				continue
+			}
+		}
+		fds[redirectFd(r)] = streamEnd{sink: sinkFor(target), by: r}
+	}
+	for _, fd := range []string{"1", "2"} {
+		if fds[fd].sink == sinkFile {
+			return fds[fd].by
+		}
+	}
+	if fds["1"].sink == sinkNull {
+		return fds["1"].by
+	}
+	if runWork && fds["2"].sink == sinkNull {
+		return fds["2"].by
+	}
+	return nil
+}
+
+// redirectFd is the descriptor a redirect writes: its explicit number, else stdout.
+func redirectFd(r *syntax.Redirect) string {
+	if r.N != nil {
+		return r.N.Value
+	}
+	return "1"
+}
+
+// redirectWord is a redirect's literal target, or "" when it is computed.
+func redirectWord(r *syntax.Redirect) string {
+	if r.Word == nil {
+		return ""
+	}
+	return r.Word.Lit()
+}
+
+// sinkFor classifies a redirect target. A computed target is a file: it names somewhere
+// that is not the console, and the guard cannot see where.
+func sinkFor(target string) sinkKind {
+	switch target {
+	case "/dev/null":
+		return sinkNull
+	case "/dev/stdout", "/dev/stderr", "/dev/tty":
+		return sinkConsole
+	}
+	return sinkFile
+}
+
+// magusDoesRunWork reports a magus invocation whose verb runs targets, the verbs whose
+// failure block is written to stderr.
+func magusDoesRunWork(cmds []hint.Invocation) bool {
+	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		return isMagusInvocation(c) && isRunVerb(magusSubcommand(c.Args))
+	})
+}
+
+// isRunVerb names the verbs that run targets and mint a log per run.
+func isRunVerb(verb string) bool {
+	return verb == "run" || verb == "affected" || verb == "x"
+}
+
+// magusSubcommand is the first word of a magus argv that is not a global flag or its
+// value, or "" when a flag it cannot place comes first.
+func magusSubcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") {
+			return a
+		}
+		name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		takesValue, known := MagusFlagTakesValue(name)
+		if !known {
+			return ""
+		}
+		if takesValue && !joined {
+			i++
+		}
+	}
+	return ""
+}
+
 // redirectTarget names where the output was being sent, for the message to quote. The
 // word is the reader's own, so an unprintable or computed target degrades to the operator
 // rather than to a guess.
 func redirectTarget(r *syntax.Redirect) string {
+	op := r.Op.String()
+	if r.N != nil {
+		op = r.N.Value + op
+	}
 	if r.Word == nil {
-		return r.Op.String()
+		return op
 	}
-	lit := r.Word.Lit()
-	if lit == "" {
-		return r.Op.String()
-	}
-	return r.Op.String() + lit
+	return op + r.Word.Lit()
 }
 
 // capturePathRe matches the files that hold magus console output verbatim:
-// the host's task capture for a backgrounded command (`<id>.output`, whatever
-// directory the host keeps it in) and a persisted run log.
+// the host's task capture for a backgrounded command (`tasks/<id>.output`) and a
+// persisted run log.
 //
 // It is the same shape the busy-wait rule is pinned against, which polls a
 // capture by grepping it.
-var capturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
+var capturePathRe = regexp.MustCompile(`(?:^|/)(?:tasks/[^/.]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
 
 // captureFilterFires reports a text filter aimed at one of those files.
 //
@@ -341,6 +504,10 @@ var capturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-
 // reaches it: the filter drops the output ref and the inspect line that sit two
 // lines under the `cause:` an agent greps for. Measured twice in one session,
 // with nothing on the line the pipe rule could recognize as magus.
+//
+// It advises rather than refuses: measured 2026-09-26, about three in four denies
+// were a search the reader needed, and the refused agent read the whole file
+// instead, which is the context cost the rule meant to spare.
 //
 // `cat <capture>` alone is not a filter and stays allowed, which is why the
 // pipeline arm asks what the SOURCE of the pipe named rather than only what each
@@ -369,11 +536,54 @@ func captureFilterFires(cmds []hint.Invocation, command string, d Dialect) bool 
 	return found
 }
 
-// namesCapture reports whether a command was pointed at a capture. Every
-// argument is checked rather than the operands alone, because each filter spells
-// its value-taking flags differently and no flag value looks like this path.
+// namesCapture reports whether a command reads a capture: a file operand, never the
+// pattern or script a filter takes first. `grep 'global\.output' cmd/` searches for
+// text shaped like a capture's name and reads no capture.
 func namesCapture(c hint.Invocation) bool {
-	return slices.ContainsFunc(c.Args, capturePathRe.MatchString)
+	return slices.ContainsFunc(fileOperands(c), capturePathRe.MatchString)
+}
+
+// fileOperands are the positionals a filter reads as files, by the tool's grammar in
+// stdinReaders: flag values are skipped, and so is the leading program (grep's
+// pattern, awk's and sed's script) unless a flag supplied it. A tool the table does
+// not model yields every positional.
+func fileOperands(c hint.Invocation) []string {
+	r, modeled := stdinReaders[filepath.Base(c.Name)]
+	var out []string
+	programFromFlag, done := false, false
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		switch {
+		case done || a == "-" || !strings.HasPrefix(a, "-"):
+			out = append(out, a)
+			continue
+		case a == "--":
+			done = true
+			continue
+		case !modeled:
+			continue
+		}
+		name, _, joined := strings.Cut(a, "=")
+		kind := r.kind(name)
+		takesNext := !joined && (strings.HasPrefix(a, "--") || len(a) == 2)
+		switch kind {
+		case flagValue:
+			if takesNext {
+				i++
+			}
+		case flagProgram:
+			programFromFlag = true
+			if takesNext {
+				i++
+			}
+		case flagPair:
+			i += 2
+		}
+	}
+	if modeled && !programFromFlag && r.program > 0 {
+		out = out[min(r.program, len(out)):]
+	}
+	return out
 }
 
 // backtickSubstFires reports a backtick command substitution anywhere on the line. Only the
@@ -429,27 +639,6 @@ func magusCdTargets(command string, d Dialect) []string {
 		return true
 	})
 	return out
-}
-
-// shellUsesCd reports whether the line runs the cd builtin ahead of a magus command, the
-// shape the catalog names: magus is CWD-relative, so a cd there is how the right command
-// lands on the wrong project. Parsed commands are preferred so `bash -c 'cd ...'` and a
-// subshell `(cd ... && ...)` are seen the same way; the regex is only the
-// unparseable-line fallback.
-//
-// A cd with no magus command AFTER it passes, alone on its line or ahead of ordinary
-// work (`cd dir && go test`, `cd dir; ls`): it relocates nothing this rule is about, and
-// on a host whose shell persists across calls a bare cd is how a session moves into its
-// own checkout.
-func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
-	if parsed {
-		cdAt := slices.IndexFunc(cmds, isCdInvocation)
-		if cdAt < 0 {
-			return false
-		}
-		return slices.ContainsFunc(cmds[cdAt+1:], isMagusWork)
-	}
-	return cdCmdRe.MatchString(command) && magusMentionRe.MatchString(command)
 }
 
 func isCdInvocation(c hint.Invocation) bool {
@@ -651,15 +840,15 @@ func rawToolDenied(deps Dependencies, c hint.Invocation) bool {
 //
 // A rendering that carries a SUBCOMMAND is matched on it, which is what keeps `go env`
 // available in a workspace whose spells render `go test`. A rendering that carries none is
-// a single-purpose program, and then every spelling of it is the covered one: a read-only
-// form (`gofmt -l`, `govulncheck ./...`, `shellcheck`) bypasses the cache, the sandbox and
-// the affected set exactly as the rewriting form does, and the exemption those used to
-// have is what let a whole tool family run raw.
+// a single-purpose program, and then every spelling of it is the covered one: a check
+// (`govulncheck ./...`, `shellcheck`) bypasses the cache, the sandbox and the affected set
+// exactly as the rewriting form does. gofmt's listing and diff (gofmtReadOnly) are the one
+// exemption: they read files and print, where the others run an analysis.
 //
 // A help or version request passes (helpRequest): it reads the tool's documentation and
 // runs nothing over the tree, and a guard funnels a capability rather than removing one.
 func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
-	if helpRequest(deps, c) {
+	if helpRequest(deps, c) || gofmtReadOnly(c) {
 		return toolMatch{}, false
 	}
 	// Read once: every rendering that reaches the comparison below has already been
@@ -688,9 +877,35 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	return toolMatch{}, false
 }
 
+// gofmtReadOnly reports a gofmt that lists (-l) or diffs (-d) and does not write (-w). It
+// changes nothing on disk, so it leaves no drift for the owning target to report, and a
+// refusal sends the reader through a target whose check form prints the same list.
+// gofmt parses its flags with Go's flag package: no clusters, `-w=false` writes nothing.
+func gofmtReadOnly(c hint.Invocation) bool {
+	if filepath.Base(c.Name) != "gofmt" {
+		return false
+	}
+	lists := false
+	for _, a := range c.Args {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		switch name {
+		case "w":
+			if !hasValue || (value != "false" && value != "0") {
+				return false
+			}
+		case "l", "d":
+			lists = lists || !hasValue || (value != "false" && value != "0")
+		}
+	}
+	return lists
+}
+
 // helpRequest reports an invocation whose only effect is printing the tool's usage or
 // version. The rules that route WORK through magus (raw-tool, process-poll, output-pipe,
-// output-redirect, cd, throwaway-copy and the dependency and install advisories) let one
+// output-redirect, throwaway-copy and the dependency and install advisories) let one
 // through; the rules guarding credentials, destructive operations, human sign-off and
 // other checkouts never consult it.
 //
@@ -1061,14 +1276,6 @@ var (
 	// which is not this rule's business. `git restore` targets worktree files by
 	// definition, so its bare form counts.
 	scopedRevertRe = regexp.MustCompile(`\b` + gitOpts + `checkout\b[^&|;]*\s--\s|\b` + gitOpts + `restore\b`)
-	// Unparseable-line fallback for shellUsesCd. Anchored at a command position
-	// so a `cd` inside a commit message or a quoted string does not trip it.
-	cdCmdRe = regexp.MustCompile(cmdPos + `cd\b`)
-	// The other half of that fallback: shellUsesCd also requires a magus command
-	// somewhere on the line, and without a parse tree "somewhere" is all an unparseable
-	// line can promise. A path segment ending in "magus" counts, the way isMagusInvocation
-	// counts `./magus`.
-	magusMentionRe = regexp.MustCompile(cmdPos + `(?:\S*/)?magus\b`)
 
 	// notesWriteRe matches an invocation that would AUTHOR a note. It is the
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
@@ -1166,15 +1373,6 @@ var (
 	// into the output.
 	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
 		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
-	// DENY, not advise. Advise was tuned out: agents kept prefixing `cd <dir> &&`
-	// on every shell call, which relocates later commands on the line and re-fires
-	// shell chpwd hooks (mise among them) that can fail with an empty command.
-	// Magus takes the project as an argument; a host that needs a one-shot
-	// directory change has a working_directory / cwd field that does not rewrite
-	// the command line. A DIFFERENT workspace is `--root <path>`, not a cd.
-	denyCd = "Do not `cd`. The project is an argument, written bare: `" + hint.Run.With("<target>", "libs/foo") + "`. A different workspace is `--root <path>`; `" + hint.Where.With("<name>") + "` resolves a fuzzy name.\n" +
-		"Your shell tool has a working_directory (or cwd) field: set that. A `cd` prefix relocates every later command on the line."
-
 	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
 	// answer a reader can misread as "absent" and fall back to grep on, so whichever
 	// advisory sent them to refs owes them this sentence.
@@ -1237,11 +1435,12 @@ var (
 	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age).\n" +
 		"`pgrep`, `pidof` and `ps` invent an unbounded poll that answers what the lock message already said."
 
-	// LEADS with the replacement, like the pipe and redirect messages it extends,
+	// LEADS with the better route, like the pipe and redirect messages it extends,
 	// and spells out the block because the reader cannot lose what they can see.
-	denyCaptureFilter = "Read that file whole (`cat`, or your editor tool), or give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
+	captureFilterAdvice = "magus workspace: this filters a run capture. Next time give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
-		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
+		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION."
+	captureFilterBrief = "magus workspace: a filter over a run capture drops the `output:` ref under `cause:`; `-o jsonl --tee <file>` gives the run a contract."
 
 	denyBacktickSubstitution = "Write a command substitution as `$(...)`, and put a literal backtick in single quotes, as in grep -n '```' README.md.\n" +
 		"Inside double quotes a backtick RUNS a command: it pairs with the next backtick anywhere on the line, and everything between them, file operands and pipes included, becomes that command."
@@ -1308,6 +1507,13 @@ func pipeDeny(verb, filter string) string {
 	}
 }
 
+// graphPipeAdvice is pipeDeny's answer, offered rather than imposed.
+func graphPipeAdvice(verb, filter string) string {
+	return "magus workspace: " + pipeDeny(verb, filter)
+}
+
+const graphPipeBrief = "magus workspace: a graph read projects its own record: `-o name`, `-o json`, `-o template='{{.field}}'`."
+
 // redirectDeny answers what the redirect was for, about the command that was run.
 //
 // There is no legitimate shape of this against magus, which is what makes one tailored
@@ -1329,11 +1535,8 @@ func redirectDeny(verb, dest string) string {
 // tell which stage was left without input.
 func filterWithoutInputDeny(tool string) string {
 	lead := "Give `" + tool + "` its input: name a file, pipe into it, or redirect one with `<`."
-	switch {
-	case stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand:
+	if stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand {
 		lead = "`" + tool + "` reads only stdin, and its operands are never input: pipe into it or redirect a file with `<`."
-	case tool == "grep" || tool == "egrep" || tool == "fgrep":
-		lead += " A recursive grep names its path too (`" + tool + " -r <pattern> .`): macOS's BSD grep reads stdin without one."
 	}
 	return lead + "\n" +
 		"As written it reads the shell's own stdin, which nothing on this line feeds: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
@@ -1348,7 +1551,7 @@ func filterWithoutInputDeny(tool string) string {
 // and it is worth more care here because the suggestion LOOKS specific.
 func mintedLogNote(verb string) string {
 	head, _, _ := strings.Cut(verb, " ")
-	if head != "run" && head != "affected" && head != "x" {
+	if !isRunVerb(head) {
 		return ""
 	}
 	return "\nThe run already wrote its full log: `" + hint.QueryOutput.With("<ref>") + "` reads it back, and a failure prints the .magus/logs/ path itself."
@@ -1560,8 +1763,9 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 	builtin := evaluateRules(deps, command, d)
 	// A built-in advisory is about this workspace, so a line that only touches paths
 	// outside it has nothing to be advised about. Denies are exempt: each one decides for
-	// itself whether a path outside the tree changes its answer.
-	if builtin.Deny == "" && builtin.Context != "" && deps.scope.lineOutside(command, d) {
+	// itself whether a path outside the tree changes its answer. So is capture-filter: a
+	// host keeps its task captures outside the tree, and what they hold is a run of it.
+	if builtin.Deny == "" && builtin.Context != "" && builtin.Kind != advisoryCaptureFilter && deps.scope.lineOutside(command, d) {
 		builtin = ShellVerdict{}
 	}
 	v := strengthenWithWorkspace(builtin, matchWorkspaceShell(deps.ShellRules, command, d))
@@ -1591,8 +1795,8 @@ func nothingRanNote(command string, d Dialect) string {
 
 func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
-	// because they are about its SHAPE (a pipe, a redirect, a cd before a magus
-	// call) rather than which program runs.
+	// because they are about its SHAPE (a pipe, a redirect, a magus call in a
+	// throwaway copy) rather than which program runs.
 	//
 	// A matched git rule that only ADVISES is held, not returned: returning here
 	// let a trailing `git commit` downgrade a deny to an advisory. Deny always
@@ -1636,11 +1840,12 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Deny: filterWithoutInputDeny(tool), Rule: denyRule{Name: denyRuleFilterWithoutInput, Arg: tool}}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
-	// a task capture, this one refuses trimming it once it arrives. It has to sit above
-	// the search advisories, which would otherwise answer for the grep and say nothing
-	// about what it was cutting away.
+	// a task capture, this one advises against trimming it once it arrives. It is held
+	// until every deny has had its turn, then answers above the search advisories, which
+	// would otherwise speak for the grep and say nothing about what it was cutting away.
+	var captureAdvice ShellVerdict
 	if parsed && captureFilterFires(cmds, command, d) {
-		return ShellVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
+		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
 	if scriptedRewriteFires(command, d, deps.scope) {
 		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
@@ -1688,15 +1893,11 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(deps, command)
-	pipedVerb, pipedFilter, pipedToFilter := magusPipedToFilter(command, d)
+	piped, pipedRead := magusPipedToFilter(command, d)
 	redirVerb, redirDest, redirected := magusRedirected(command, d)
 	switch {
-	// Throwaway before the general cd deny: the same line matches both, and the
-	// throwaway reason is the one that says why THAT relocation is wrong.
 	case magusInThrowawayCopy(command, d):
 		return ShellVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
-	case shellUsesCd(cmds, parsed, command):
-		return ShellVerdict{Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}
 	case rawToolDeny:
 		match, _ := rawToolMatch(deps, rawToolCmd)
 		reason := runGuardAdvice(match)
@@ -1715,8 +1916,8 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			Deny: explainDeny(command, rawToolCmd, reason),
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
-	case pipedToFilter:
-		return ShellVerdict{Deny: pipeDeny(pipedVerb, pipedFilter), Rule: denyRule{Name: denyRuleOutputPipe}}
+	case piped.ok:
+		return ShellVerdict{Deny: pipeDeny(piped.verb, piped.filter), Rule: denyRule{Name: denyRuleOutputPipe}}
 	case redirected:
 		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
 	}
@@ -1727,6 +1928,12 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// tool is the correction worth reading first.
 	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
 		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+	}
+	if captureAdvice.Context != "" {
+		return captureAdvice
+	}
+	if pipedRead.ok {
+		return ShellVerdict{Context: graphPipeAdvice(pipedRead.verb, pipedRead.filter), Kind: advisoryGraphPipe, Brief: graphPipeBrief}
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):

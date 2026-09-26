@@ -67,6 +67,31 @@ type stdinReader struct {
 	assignments bool
 	// Whether a literal program reads input at all; nil means it always does.
 	readsInput func(program string) bool
+	// Flags that make a call with no input operand search the working directory rather
+	// than read stdin, space-separated like flags. GNU grep and macOS's BSD grep 2.6 both
+	// search `.` for `grep -r pat`; ugrep, like ripgrep, reads stdin only when it is a
+	// pipe or a file, which a hook cannot see.
+	recursive string
+}
+
+// recurses reports whether an option word turns on a recursive search, alone or packed
+// into a short cluster ahead of any flag that takes the rest of the cluster as its value.
+func (r stdinReader) recurses(word string) bool {
+	spellings := strings.Fields(r.recursive)
+	if strings.HasPrefix(word, "--") {
+		name, _, _ := strings.Cut(word, "=")
+		return slices.Contains(spellings, name)
+	}
+	for j := 1; j < len(word); j++ {
+		flag := "-" + word[j:j+1]
+		if slices.Contains(spellings, flag) {
+			return true
+		}
+		if k := r.kind(flag); k == flagValue || k == flagProgram {
+			return false
+		}
+	}
+	return false
 }
 
 func (r stdinReader) kind(flag string) flagKind {
@@ -80,6 +105,7 @@ func (r stdinReader) kind(flag string) flagKind {
 
 var grepReader = stdinReader{
 	program: 1, numeric: true,
+	recursive: "-r -R --recursive --dereference-recursive",
 	flags: map[flagKind]string{
 		flagBool: "-a -b -c -E -F -G -H -h -I -i -L -l -n -o -P -q -R -r -s -T -U -v -w -x -y -Z -z " +
 			"--basic-regexp --binary --byte-offset --count --dereference-recursive --extended-regexp " +
@@ -385,7 +411,7 @@ var awkAssignmentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 // surroundings, reads stdin: every word classified and no operand naming its input.
 func (r stdinReader) readsStdin(words []*syntax.Word) bool {
 	var operands []operand
-	programFromFlag, optionsDone := false, false
+	programFromFlag, optionsDone, recursive := false, false, false
 	for i := 0; i < len(words); i++ {
 		w := words[i]
 		text, static := staticWord(w)
@@ -418,6 +444,7 @@ func (r stdinReader) readsStdin(words []*syntax.Word) bool {
 		}
 		i += consumed
 		programFromFlag = programFromFlag || program
+		recursive = recursive || r.recurses(text)
 	}
 
 	program := r.program
@@ -443,7 +470,7 @@ func (r stdinReader) readsStdin(words []*syntax.Word) bool {
 		inputs = inputs[:r.maxInputs]
 	}
 	if len(inputs) == 0 {
-		return r.operands == operandsAreInput
+		return r.operands == operandsAreInput && !recursive
 	}
 	return slices.ContainsFunc(inputs, func(o operand) bool { return o.static && o.text == "-" })
 }
