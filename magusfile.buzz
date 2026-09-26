@@ -1323,10 +1323,10 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Enumerated, not computed: the static read collects string LITERALS only, and a
 // pattern built at run time - from a loop, or even from string interpolation - is
 // invisible to it, flagged as a computed footprint argument rather than silently
-// accepted. So the name list is written out per destination, and
-// TestSkillsGenerateDeclaresEveryShippedSkill keeps it in step with
-// internal/agent/skills: adding a skill without touching this fails there rather than
-// shipping an installed file magus calls hand-editable.
+// accepted. So the name list is written out per destination, and lint-files
+// (cmd/magus-filelint) keeps it in step with internal/agent/skills: adding a skill
+// without touching this fails there rather than shipping an installed file magus
+// calls hand-editable.
 //
 // One pattern per skill per destination, rather than one brace alternation per
 // destination, because these globs do not stay inside magus: EnsureMergeDriver
@@ -3149,6 +3149,33 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 
+// Holds the repository's non-Go files to the conventions no off-the-shelf linter
+// checks: lockfile order, workflow trust, magusfile footprints, hook wiring, the
+// installed-skill declarations and the landing page's headline rotator. The rules
+// and their exemptions live in cmd/magus-filelint.
+//
+// The footprint is exactly what the rules read, plus the Go packages the tool
+// compiles from this tree; cmd/magus-filelint's tests hold the second half to
+// `go list -deps`. Child-project files are named by path, because a tree glob here
+// stops at a child project's directory.
+export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(format);
+    ctx.readsFiles("cmd/magus-filelint/*.go", "internal/describe/*.go",
+                   "internal/parsecache/*.go", "internal/json/*.go", "types/*.go",
+                   "types/enum/*.go", "spells/*.go", "libs/diagnostics/*.go",
+                   "libs/gopherbuzz/*.go", "libs/gopherbuzz/ast/*.go",
+                   "libs/gopherbuzz/token/*.go", "libs/gopherbuzz/types/*.go",
+                   "libs/gopherbuzz/vm/*.go", "go.mod", "go.sum");
+    ctx.readsFiles("**/*.lock", "docs/**/*.lock", "console/**/*.lock", "libs/**/*.lock",
+                   "**/magusfile.buzz", "docs/**/magusfile.buzz", "console/magusfile.buzz",
+                   "libs/**/magusfile.buzz", "proto/magusfile.buzz",
+                   ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
+                   "internal/agent/skills/*/SKILL.md", ".claude/settings.json",
+                   "docs/guides/integrations/agents/codex-hooks.json",
+                   "docs/site/landing.buzz", "docs/src/styles/site.css");
+    proc\exec("go", ["run", "./cmd/magus-filelint"]);
+}
+
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
 // shellcheck, and actionlint. STATIC ANALYSIS only - govulncheck lives in `security`
 // with the other scanners, because a scanner's answer changes when its advisory
@@ -3172,7 +3199,7 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, lint_build);
+    ctx.needs(format, lint_build, lint_files);
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
     // an in-repo linter. That op existed to get the linter version into the cache
     // key; readsFiles does it by content instead. Its .custom-gcl.yml pins the
