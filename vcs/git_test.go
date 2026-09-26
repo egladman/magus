@@ -3,6 +3,7 @@ package vcs
 import (
 	"archive/tar"
 	"bytes"
+	"compress/zlib"
 	"context"
 	"errors"
 	"fmt"
@@ -2952,6 +2953,232 @@ func TestCreateCheckoutResolvesSymlinksBeforeRefusingAPathInside(t *testing.T) {
 
 	err := gitVCS{}.CreateCheckout(t.Context(), dir, filepath.Join(link, "inside"), "HEAD")
 	require.ErrorContains(t, err, "lies inside")
+}
+
+// markerScript writes an executable that creates marker, the proof a command ran, and
+// fails.
+func markerScript(t *testing.T, marker string) string {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "run.sh")
+	require.NoError(t, os.WriteFile(script, fmt.Appendf(nil, "#!/bin/sh\ntouch %q\nexit 1\n", marker), 0o755))
+	return script
+}
+
+// statusRuns runs a plain `git status` in dir, as anything discovering the repository
+// from dir would, and reports whether it ran what marker proves.
+func statusRuns(t *testing.T, dir, marker string) bool {
+	t.Helper()
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir, cmd.Env = dir, gitEnv()
+	_ = cmd.Run()
+	_, err := os.Stat(marker)
+	_ = os.Remove(marker)
+	return err == nil
+}
+
+// hostileGitDir is what code run in a checkout of root can build and point the checkout's
+// .git at: a copy of root's repository whose config runs script as core.fsmonitor.
+func hostileGitDir(t *testing.T, root, script string) string {
+	t.Helper()
+	evil := filepath.Join(t.TempDir(), "evil.git")
+	require.NoError(t, os.CopyFS(evil, os.DirFS(filepath.Join(root, ".git"))))
+	gitRun(t, evil, "config", "core.fsmonitor", script)
+	return evil
+}
+
+// A checkout's .git is the checkout's own to rewrite, and a git that discovers its
+// repository through it runs whatever that repository's config names. Git in a checkout
+// CreateCheckout made reads the paths recorded at creation, so a rewrite landing after
+// the check still runs nothing.
+func TestGitInACheckoutReadsTheRepositoryItWasMadeIn(t *testing.T) {
+	isolateGitConfig(t)
+	root := t.TempDir()
+	gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+	co := filepath.Join(t.TempDir(), "co")
+	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+	marker := filepath.Join(t.TempDir(), "ran")
+	evil := hostileGitDir(t, root, markerScript(t, marker))
+	require.NoError(t, os.WriteFile(filepath.Join(co, "a.txt"), []byte("changed\n"), 0o644))
+
+	cmd := gitExec(t.Context(), co, gitOpts{}, "status", "--porcelain")
+	require.NoError(t, os.WriteFile(filepath.Join(co, ".git"), []byte("gitdir: "+evil+"\n"), 0o644))
+	require.True(t, statusRuns(t, co, marker), "the fixture runs its monitor under a discovering git")
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, " M a.txt\n", string(out))
+	assert.NoFileExists(t, marker)
+}
+
+// Any change to a file naming the checkout's repository fails every later call on the
+// checkout with a *types.CheckoutTamperedError naming it, before git starts.
+func TestGitInACheckoutWhoseRepositoryFilesChangedIsRefused(t *testing.T) {
+	isolateGitConfig(t)
+	root := t.TempDir()
+	gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+	marker := filepath.Join(t.TempDir(), "ran")
+	script := markerScript(t, marker)
+	for name, tamper := range map[string]func(co, gitDir string) string{
+		"the gitfile names another repository": func(co, _ string) string {
+			dotgit := filepath.Join(co, ".git")
+			require.NoError(t, os.WriteFile(dotgit, []byte("gitdir: "+hostileGitDir(t, root, script)+"\n"), 0o644))
+			return dotgit
+		},
+		"the gitfile is a repository of its own": func(co, _ string) string {
+			dotgit := filepath.Join(co, ".git")
+			require.NoError(t, os.Remove(dotgit))
+			require.NoError(t, os.Rename(hostileGitDir(t, root, script), dotgit))
+			return dotgit
+		},
+		"commondir names another repository": func(_, gitDir string) string {
+			commondir := filepath.Join(gitDir, "commondir")
+			require.NoError(t, os.WriteFile(commondir, []byte(hostileGitDir(t, root, script)+"\n"), 0o644))
+			return commondir
+		},
+		"the worktree gains a config of its own": func(_, gitDir string) string {
+			own := filepath.Join(gitDir, "config.worktree")
+			require.NoError(t, os.WriteFile(own, fmt.Appendf(nil, "[core]\n\tfsmonitor = %s\n", script), 0o644))
+			return own
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			co := filepath.Join(t.TempDir(), "co")
+			require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+			made, ok := madeCheckout(co)
+			require.True(t, ok)
+			file := tamper(co, made.gitDir)
+
+			_, err := gitVCS{}.DirtyFiles(t.Context(), co, nil)
+			var tampered *types.CheckoutTamperedError
+			require.ErrorAs(t, err, &tampered)
+			assert.Equal(t, types.CheckoutTamperedError{Checkout: co, File: file}, *tampered)
+			_, err = gitVCS{}.Commit(t.Context(), co, types.CheckoutCommit{CommitMeta: types.CommitMeta{Message: "m", Author: queueIdentity, Committer: queueIdentity}})
+			require.ErrorAs(t, err, &tampered)
+			assert.NoFileExists(t, marker)
+			require.NoError(t, gitVCS{}.RemoveCheckout(t.Context(), root, co))
+		})
+	}
+}
+
+// Git reads a submodule's changes by running git in it, which reads the submodule's own
+// config, and the checkout's code can populate one wherever the tree holds a gitlink. A
+// status in a checkout CreateCheckout made never looks inside, even when .gitmodules
+// asks it to, and still lists a submodule whose commit moved.
+func TestStatusInACheckoutRunsNothingASubmoduleConfigures(t *testing.T) {
+	isolateGitConfig(t)
+	sub := t.TempDir()
+	gitInitRepo(t, sub, map[string]string{"s.txt": "s\n"})
+	root := t.TempDir()
+	gitInitRepo(t, root, map[string]string{".gitmodules": "[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n\tignore = none\n"})
+	gitRun(t, root, "update-index", "--add", "--cacheinfo", "160000,"+gitTestOutput(t, sub, "rev-parse", "HEAD")+",sub")
+	gitRun(t, root, "commit", "-q", "-m", "sub")
+	co := filepath.Join(t.TempDir(), "co")
+	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+
+	populated := filepath.Join(co, "sub")
+	require.NoError(t, os.Remove(populated))
+	gitRun(t, co, "clone", "-q", sub, "sub")
+	gitConfigureFixture(t, populated)
+	writeRepoFile(t, populated, "s.txt", "moved\n")
+	gitRun(t, populated, "commit", "-q", "-am", "moved")
+	marker := filepath.Join(t.TempDir(), "ran")
+	gitRun(t, populated, "config", "filter.x.clean", markerScript(t, marker))
+	writeRepoFile(t, populated, ".gitattributes", "* filter=x\n")
+	writeRepoFile(t, populated, "s.txt", "dirty\n")
+	require.True(t, statusRuns(t, co, marker), "the fixture runs its filter under a plain status")
+
+	got, err := gitVCS{}.DirtyFiles(t.Context(), co, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sub"}, got)
+	assert.NoFileExists(t, marker)
+}
+
+// RemoveCheckout deletes what CreateCheckout made and reads nothing the checkout's code
+// could rewrite: a registration pointed at another directory leaves that directory be.
+func TestRemoveCheckoutIgnoresARewrittenRegistration(t *testing.T) {
+	isolateGitConfig(t)
+	root := t.TempDir()
+	gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+	co := filepath.Join(t.TempDir(), "co")
+	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+	made, ok := madeCheckout(co)
+	require.True(t, ok)
+	victim := t.TempDir()
+	writeRepoFile(t, victim, "keep.txt", "keep\n")
+	require.NoError(t, os.WriteFile(filepath.Join(made.gitDir, "gitdir"), []byte(filepath.Join(victim, ".git")+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(co, ".git"), []byte("gitdir: "+victim+"\n"), 0o644))
+
+	require.NoError(t, gitVCS{}.RemoveCheckout(t.Context(), root, co))
+	assert.NoDirExists(t, co)
+	assert.NoDirExists(t, made.gitDir)
+	assert.FileExists(t, filepath.Join(victim, "keep.txt"))
+	listed, err := gitVCS{}.Checkouts(t.Context(), root)
+	require.NoError(t, err)
+	assert.Empty(t, listed)
+	_, ok = madeCheckout(co)
+	assert.False(t, ok, "the record goes with the checkout")
+}
+
+// plantObject writes a loose object of kind holding content under id in the repository
+// at repo, whatever content hashes to.
+func plantObject(t *testing.T, repo, id, kind, content string) {
+	t.Helper()
+	var obj bytes.Buffer
+	zw := zlib.NewWriter(&obj)
+	_, err := fmt.Fprintf(zw, "%s %d\x00%s", kind, len(content), content)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	loose := filepath.Join(repo, ".git", "objects", id[:2], id[2:])
+	require.NoError(t, os.MkdirAll(filepath.Dir(loose), 0o755))
+	require.NoError(t, os.WriteFile(loose, obj.Bytes(), 0o444))
+}
+
+// What an object planted in a shared store does to a later reader. Git checks a commit's
+// hash when it parses one, so a planted commit fails the fetch. A blob it never checks:
+// a small fetch unpacks loose objects and skips each one the store holds, and a commit
+// writes none it holds, so a blob planted under an id a later head or merge holds is read
+// in its place. That is why a hook gets the object store read-only.
+func TestAnObjectPlantedInTheStore(t *testing.T) {
+	g := gitVCS{}
+	t.Run("under a commit a fetch brings fails the fetch", func(t *testing.T) {
+		f := newRemoteFixture(t)
+		baseTree, err := g.TreeID(t.Context(), f.clone, "HEAD")
+		require.NoError(t, err)
+		head := f.advance(t, "feature", "new.txt")
+		plantObject(t, f.clone, head, "commit", fmt.Sprintf("tree %s\nauthor a <a@a> 0 +0000\ncommitter a <a@a> 0 +0000\n\nforged\n", baseTree))
+
+		require.ErrorContains(t, g.FetchCommit(t.Context(), f.clone, "origin", head), "hash mismatch")
+		_, err = g.FetchRef(t.Context(), f.clone, "origin", "refs/heads/feature")
+		require.ErrorContains(t, err, "hash mismatch")
+	})
+	t.Run("under a blob a fetch brings is read in its place", func(t *testing.T) {
+		f := newRemoteFixture(t)
+		head := f.advance(t, "feature", "new.txt")
+		blob := gitTestOutput(t, f.remote, "rev-parse", head+":new.txt")
+		plantObject(t, f.clone, blob, "blob", "forged\n")
+
+		require.NoError(t, g.FetchCommit(t.Context(), f.clone, "origin", head))
+		got, err := g.ReadFileAt(t.Context(), f.clone, head, "new.txt")
+		require.NoError(t, err)
+		assert.Equal(t, "forged\n", got)
+	})
+	t.Run("under a blob a later commit writes is read in its place", func(t *testing.T) {
+		isolateGitConfig(t)
+		root := t.TempDir()
+		gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+		cmd := exec.Command("git", "hash-object", "--stdin")
+		cmd.Dir, cmd.Env, cmd.Stdin = root, gitEnv(), strings.NewReader("merged\n")
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		plantObject(t, root, strings.TrimSpace(string(out)), "blob", "forged\n")
+
+		writeRepoFile(t, root, "a.txt", "merged\n")
+		id, err := g.Commit(t.Context(), root, types.CheckoutCommit{CommitMeta: types.CommitMeta{Message: "m", Author: queueIdentity, Committer: queueIdentity}, Paths: []string{"a.txt"}})
+		require.NoError(t, err)
+		got, err := g.ReadFileAt(t.Context(), root, id, "a.txt")
+		require.NoError(t, err)
+		assert.Equal(t, "forged\n", got)
+	})
 }
 
 // StartMerge in a linked checkout, where .git is a file: the conflict must still read as
