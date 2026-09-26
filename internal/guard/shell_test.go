@@ -1508,6 +1508,45 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 	}
 }
 
+// TestScriptedRewritePassesAnAppend: an append adds to the end of a file and cannot mangle
+// a line already there, so a heredoc appended with cat or tee, and a program whose every
+// file write is an append, pass; a write that can change an existing line still denies.
+func TestScriptedRewritePassesAnAppend(t *testing.T) {
+	t.Parallel()
+	const rewriteText = "s = open(p).read().replace('a', 'b')\nopen(p, 'w').write(s)\n"
+	for _, tc := range []struct {
+		command string
+		denied  bool
+	}{
+		// A heredoc into cat or tee is text, whatever program it documents.
+		{command: "cat >> notes.md <<'EOF'\n" + rewriteText + "EOF"},
+		{command: "tee -a notes.md <<'EOF'\n" + rewriteText + "EOF"},
+		{command: "cat >> types/buzz_object.go <<'EOF'\ntype Skill struct{}\nEOF"},
+		// An unquoted delimiter with a stray `$(` does not parse; the body is still text.
+		{command: "cat >> notes.md <<EOF\nrun python3 with re.sub( then .write( and $(\nEOF"},
+		// A program whose every file write appends.
+		{command: "python3 - <<'PY'\nopen('CHANGELOG.md', 'a').write(s.replace('x', 'y'))\nPY"},
+		{command: "python3 - <<'PY'\nwith open(p, mode='a+') as f:\n    f.write(re.sub('x', 'y', s))\nPY"},
+		{command: `python3 -c "open('log.txt','ab').write(s.replace(b'x', b'y'))"`},
+		// A program writing its result to stdout, appended by the shell.
+		{command: "python3 - >> out.txt <<'PY'\nimport sys\nsys.stdout.write(open('f.go').read().replace('a', 'b'))\nPY"},
+
+		{command: "python3 - <<'PY'\n" + rewriteText + "PY", denied: true},
+		{command: "python3 - <<'PY'\nf = open(p, 'r+')\nf.write(f.read().replace('a', 'b'))\nPY", denied: true},
+		{command: "python3 - <<'PY'\nopen('log.txt', 'a').write(x)\nopen('f.go', 'w').write(s.replace('a', 'b'))\nPY", denied: true},
+		{command: "python3 - >> out.txt <<'PY'\n" + rewriteText + "PY", denied: true},
+		// An unparsable line still denies a rewrite typed on it.
+		{command: `python3 -c "s=s.replace('a','b'); open(p,'w').write(s)" 'unterminated`, denied: true},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		if tc.denied {
+			assert.Equal(t, denyRuleScriptedRewrite, v.Rule.Name, tc.command)
+			continue
+		}
+		assert.NotEqual(t, denyRuleScriptedRewrite, v.Rule.Name, tc.command)
+	}
+}
+
 // TestScriptedRewriteLeavesPathsOutsideTheWorkspace keeps the refusal's own promise that a
 // scratch path is untouched: a script whose every named path lies outside the workspace is
 // not this rule's business, and one that names a path inside still is.

@@ -167,7 +167,8 @@ var denyRuleDocs = []RuleDoc{
 			"The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. " +
 			"Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for \"no matches\" is how a rename misses half its sites. " +
 			"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. " +
-			"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched."},
+			"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched. " +
+			"An APPEND passes, since it adds to the end and cannot mangle a line already there: a heredoc appended with `cat >> f <<EOF` or `tee -a`, whatever program its text documents, and a program whose every file write opens in append mode (`open(p, 'a')`, perl's `'>>'`) or goes to its own stdout."},
 	{Name: string(denyRuleSedInPlace), Decision: "deny",
 		Catches: "`sed -i`, whose two spellings destroy each other's work across platforms",
 		Why: "`sed -i` is not portable and the two spellings destroy each other's work. " +
