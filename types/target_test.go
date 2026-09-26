@@ -194,6 +194,52 @@ func TestChainMemoryMBPeaksOverOneCall(t *testing.T) {
 	assert.Equal(t, "test", by, "the largest contributor to the peak call")
 }
 
+// TestSizedChainMemoryFoldsSizedFigures: each declaration is sized before it folds, so
+// the sums and the peak are taken over what the members will claim, and the sizing
+// reported is the largest contributor's.
+func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path: ".",
+		TargetChains: map[string][]ChainStep{
+			"ci": Needs("lint", "test").Needs("bench"),
+		},
+		TargetPolicies: map[string]Target{
+			"lint":  {MemoryMB: 1000},
+			"test":  {MemoryMB: 10000},
+			"bench": {MemoryMB: 4000},
+		},
+	}
+	var sized []string
+	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing) {
+		sized = append(sized, target)
+		if target == "test" {
+			return 2000, MemorySizing{Samples: 7}
+		}
+		return declaredMB, MemorySizing{}
+	}
+
+	got := SizedChainMemory(p, "ci", nil, size)
+	assert.Equal(t, ChainMemory{MB: 4000, DeclaredBy: "bench"}, got,
+		"lint+test sized to 3000 now loses to bench, which it beat as declared")
+	assert.ElementsMatch(t, []string{"lint", "test", "bench"}, sized, "ci declares nothing, so it is never sized")
+
+	p.TargetPolicies["bench"] = Target{MemoryMB: 1500}
+	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "test", Sizing: MemorySizing{Samples: 7}},
+		SizedChainMemory(p, "ci", nil, size))
+
+	mb, by := ChainMemoryMB(p, "ci", nil)
+	assert.Equal(t, 11000, mb, "ChainMemoryMB folds the declarations as written")
+	assert.Equal(t, "test", by)
+}
+
+func TestMemorySizingString(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "declared", MemorySizing{}.String())
+	assert.Equal(t, "measured over 54 runs", MemorySizing{Samples: 54}.String())
+	assert.Equal(t, "measured over 9 runs of any shape", MemorySizing{Samples: 9, AnyShape: true}.String())
+}
+
 // TestChainBuilderReadsLikeTheBody: Needs(a, b).Needs(c) is `ctx.needs(a, b); ctx.needs(c)`,
 // with a cross-project step spelled the way ChainStep.Ref prints one.
 func TestChainBuilderReadsLikeTheBody(t *testing.T) {

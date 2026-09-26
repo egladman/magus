@@ -507,6 +507,16 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 		secrets = nil
 	}
 	c.Secrets = secrets
+	envKeys, err := o.Strs("envKeys")
+	if err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand envKeys: %w", where, err)
+	}
+	for _, envName := range envKeys {
+		if !validEnvName(envName) {
+			return spells.Command{}, fmt.Errorf("%scommand envKeys: %q is not an environment variable name (want letters, digits and underscores, not starting with a digit)", where, envName)
+		}
+	}
+	c.EnvKeys = envKeys
 	// Failure advice, in declaration order; that order IS the precedence, so it must
 	// survive decode unsorted. A half-written rule is rejected rather than dropped: a
 	// rule with no `contains` matches every string and would advise on every failure of

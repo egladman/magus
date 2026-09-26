@@ -559,6 +559,15 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
 	// Names, not values: hashStep reads each variable's process value at hash time.
 	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
+	// An op's own EnvKeys travel with it regardless of whether target's body declared
+	// ctx.envInputs: the op knows its result depends on the variable (GOOS, say), the
+	// author composing it may not. Folded against the accumulated set so a name already
+	// present via ctx.envInputs, or shared by two composed ops, is not hashed twice.
+	for _, k := range targetDrivenEnvKeys(p, target) {
+		if !slices.Contains(step.EnvAllow, k) {
+			step.EnvAllow = append(step.EnvAllow, k)
+		}
+	}
 	// ctx.observes: an external fact the answer depends on, keyed so the target stays
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
@@ -602,7 +611,6 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		}
 	}
 	step.DependsOn = p.DependsOn
-	pol := p.TargetPolicies[target]
 	// A service op is a long-running process: it must never be cached, or a re-run
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
@@ -616,8 +624,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// own declaration while the claim used the chain's would let several composed steps
 	// take one slot each and a full claim each, so a single invocation queued behind
 	// memory its own siblings held.
-	step.MemoryMB, step.MemoryDeclaredBy = m.chainMemoryMB(p, target)
-	step.Slots = slotsForPolicy(pol.Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
+	//
+	// The declarations as written. A run re-sizes them from its measured peaks once it
+	// knows its own shape (executeStages).
+	m.claimMemory(&step, p, target, nil)
 	// A step that only runs installs dispatches each spell's install, and each keys
 	// itself (installStep). Keyed here on the project baseline, a hit would skip the stamp
 	// check that notices a deleted tree.
@@ -1312,6 +1322,46 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 	return driven
 }
 
+// targetDrivenEnvKeys is the deduped union of EnvKeys over every op target reaches,
+// the same TargetSpellOps walk targetDrivenBins uses for a magusfile body that
+// composes the op under some other target name (lint calling go["go-vet"]). It also
+// matches target directly against every resolved spell's own op names, because a bare
+// op runs with no magusfile body at all to extract from: `magus run go-vet` and the
+// `go::go-vet` spell filter both dispatch straight to the op, magusfile export or not
+// (an export shadows the RUN, per magusfileOverride, but the filter bypasses that
+// shadow, so the direct match is kept unconditional rather than trying to mirror the
+// shadow rule here too: the cost of matching it is at most one unneeded env line).
+// Same under-reporting caveat as observationsForTarget: an op reached only through a
+// helper the walk cannot follow is invisible, leaving the target keyed as it was
+// before.
+func targetDrivenEnvKeys(p *types.Project, target string) []string {
+	var keys []string
+	add := func(op spells.Op) {
+		for _, k := range op.EnvKeys {
+			if !slices.Contains(keys, k) {
+				keys = append(keys, k)
+			}
+		}
+	}
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			continue
+		}
+		for _, opName := range use.Ops {
+			if op, ok := p.ResolvedSpells[i].Op(opName); ok {
+				add(op)
+			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok {
+			add(op)
+		}
+	}
+	return keys
+}
+
 // observationsForTarget narrows a project's probed observations to the ones target
 // actually depends on: an observation counts only when the target's body invokes an op
 // whose command drives that binary. Statically extracted (TargetSpellOps), so it
@@ -1360,12 +1410,12 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
 	out := opts.out(m)
-	// Ahead of the dry-run branch, not after it: a dry run evaluates the same
-	// target bodies under a tracing context, so without the forwarded args here
-	// it printed the op's own command and silently omitted them, under-reporting
-	// the very command it exists to show.
-	if len(opts.ExtraArgs) > 0 {
-		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
+	// `--` args reach only the named stages' handlers, never this ctx: the preflight
+	// pass, the skip_cache gates run ahead of a replay, and the derived-order settle
+	// all dispatch other targets from it, and an op there with no explicit args would
+	// append the forwarded ones (`go mod edit -json -run X`).
+	namedCtx := func(ctx context.Context) context.Context {
+		return project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
 
 	// Every dispatch funnels through here, which is why the return sink is installed
@@ -1431,7 +1481,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		dryStart := time.Now()
 		out.emit(ctx, report.RunDry{})
 		planned := 0
-		for _, st := range append(slices.Clone(opts.preflight), stages...) {
+		for i, st := range append(slices.Clone(opts.preflight), stages...) {
+			stageCtx := recCtx
+			// The forwarded args are shown on the named target's command, where a
+			// real run appends them, and nowhere else.
+			if i >= len(opts.preflight) {
+				stageCtx = namedCtx(recCtx)
+			}
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
@@ -1443,7 +1499,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				})
 				// Fresh memo per target so a shared dependency (e.g. format -> generate)
 				// records once, matching the real run's pool dedup.
-				stepCtx := buzz.WithTargetMemo(recCtx, buzz.NewTargetMemo())
+				stepCtx := buzz.WithTargetMemo(stageCtx, buzz.NewTargetMemo())
 				if err := st.handler(stepCtx, p); err != nil {
 					slog.WarnContext(ctx, "dry-run: target evaluation stopped early",
 						slog.String("project", label), slog.String("target", st.target), slog.String("error", err.Error()))
@@ -1602,10 +1658,21 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
+	// Joined here rather than beside the volatility runtime below: every step's claim is
+	// sized from it, and the probes above already overlapped most of the decode.
+	sizeMemory := memorySizer(m.peakIndex(history), forecast.NewShape(charmKey, opts.ExtraArgs))
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
 	keyedStep := func(p *types.Project, target string) cache.Step {
 		step := m.buildStep(p, target)
+		if sizeMemory != nil {
+			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
+				step.MemorySizing = sizing
+				slog.DebugContext(ctx, "magus: memory claim sized from measured peaks",
+					slog.String("project", p.Path), slog.String("target", target),
+					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))
+			}
+		}
 		var toolVersions []string
 		if keysTools(p, target) {
 			toolVersions = prober.probeVersions(ctx, []*types.Project{p}, nil, nil)[p.Path]
@@ -1842,6 +1909,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// within one target's inline dispatch run shared deps exactly once. A
 			// target the preflight pass already passed starts out done.
 			ctx = buzz.WithTargetMemo(ctx, interp.NewTargetMemoDone(preflightDoneFrom(ctx).targets(s.ProjectPath)...))
+			// The step's own args, which are nil for a preflight step: only a named
+			// target's step carries the forwarded ones, and they key it too.
+			ctx = project.WithExtraArgs(ctx, s.ExtraArgs)
 
 			p := projects[s.ProjectPath]
 			handler := handlers[s.Target]
@@ -1937,7 +2007,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.RaceReplay && runErr == nil {
 		// Every stage replays; a caller who asked for the check wants the whole list.
 		for _, st := range stages {
-			if err := runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, out); err != nil && runErr == nil {
+			if err := runReplay(namedCtx(ctx), m.ws, st.projects, st.target, byPath, st.handler, out); err != nil && runErr == nil {
 				runErr = err
 			}
 		}
@@ -2235,6 +2305,20 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 	}
 }
 
+// peakIndex waits for the history and snapshots its measured peaks. nil, when history
+// is disabled or unreadable, leaves every claim at its declaration.
+func (m *Magus) peakIndex(history func() (*forecast.History, error)) *forecast.PeakIndex {
+	if history == nil {
+		return nil
+	}
+	h, err := history()
+	if err != nil {
+		return nil
+	}
+	x := h.PeakIndex()
+	return &x
+}
+
 // buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when
 // history cannot be loaded.
 func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool, history func() (*forecast.History, error)) *volatility.Runtime {
@@ -2343,6 +2427,8 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// must stay zero in the record so a reader can tell it apart from a
 	// measured-and-tiny one.
 	peakRSS := types.PeakRSS(ctx)
+	// The same shape executeStages sizes claims by, read from the same run options.
+	shape := forecast.NewShape(types.CharmsFromContext(ctx), project.ExtraArgs(ctx))
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
 		Result:         result,
 		AffectedByDiff: affected,
@@ -2350,6 +2436,8 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		At:             time.Now(),
 		Attempts:       attempts,
 		MaxRSSBytes:    peakRSS,
+		Charms:         shape.Charms,
+		ArgsHash:       shape.ArgsHash,
 	})
 
 	if decision.Retry {

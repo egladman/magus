@@ -1261,6 +1261,11 @@ func ObjectCommand(v spells.Command) vm.Value {
 		mappedSecrets.MapSet(keySecrets, vm.StrValue(itemSecrets))
 	}
 	out.MapSet("secrets", mappedSecrets)
+	itemsEnvKeys := make([]vm.Value, len(v.EnvKeys))
+	for indexEnvKeys := range v.EnvKeys {
+		itemsEnvKeys[indexEnvKeys] = vm.StrValue(v.EnvKeys[indexEnvKeys])
+	}
+	out.MapSet("envKeys", vm.ListValue(itemsEnvKeys))
 	itemsHints := make([]vm.Value, len(v.Hints))
 	for indexHints := range v.Hints {
 		itemsHints[indexHints] = ObjectHint(v.Hints[indexHints])

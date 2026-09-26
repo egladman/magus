@@ -138,15 +138,8 @@ type admitting struct {
 	outputs   map[string]types.Writes
 	affected  []string
 	factsErr  error
-	// changed are the files the change touches, "a/x.go" when empty; generated are how
-	// the build tool writes them, and generation its account of regenerating those it
-	// declares as outputs.
-	changed    []string
-	generated  map[string]types.Writes
-	generation types.Generation
-	// diverged are the paths the merge onto the base holds differently from the head,
-	// asked for only when generation proves nothing; nil asks nothing.
-	diverged []string
+	// changed are the files the change touches, "a/x.go" when empty.
+	changed []string
 }
 
 func (d doubles) admit(c types.Change, a admitting) {
@@ -184,19 +177,6 @@ func (d doubles) admit(c types.Change, a admitting) {
 		if a.factsErr != nil {
 			return
 		}
-	}
-	d.facts.EXPECT().Classify(mock.Anything, changed).Return(a.generated, nil)
-	var outputs []string
-	for _, p := range changed {
-		if a.generated[p].Output {
-			outputs = append(outputs, p)
-		}
-	}
-	if len(outputs) > 0 {
-		d.facts.EXPECT().Generation(mock.Anything, outputs, changed).Return(a.generation, nil)
-	}
-	if a.diverged != nil {
-		d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "t", c.Head).Return(a.diverged, nil)
 	}
 }
 
@@ -238,33 +218,12 @@ func TestPlanAdmission(t *testing.T) {
 			wantSet: []string{"a"}},
 		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
 		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},
-		"generated files the base moved, regenerated from the change's own code, keep it out of the queue": {c: change("1", "a"), admit: &admitting{
-			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
-			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
-			diverged:   []string{"docs/y.md", "gen/x.go"},
-		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
-		"so do generated files that conflict": {c: change("1", "a"), admit: &admitting{
+		// Regeneration settles in the candidate, where the step that runs it decides
+		// whether it may: planning asks the build tool nothing about generators.
+		"a generator change whose outputs conflict is admitted unproven": {c: change("1", "a"), admit: &admitting{
 			conflicts: []magustypes.Conflict{{Path: "gen/x.go"}}, outputs: map[string]types.Writes{"gen/x.go": {Output: true}},
-			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
-			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
-			diverged:   []string{},
-		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
-		// The queue regenerates nothing for it, and the gate's drift check proves the
-		// change's own regenerated files match.
-		"generated files the merge leaves as the change has them are not": {c: change("1", "a"), admit: &admitting{
-			changed: []string{"gen/gen.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
-			generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
-			diverged:   []string{"docs/y.md"},
+			changed: []string{"gen/gen.go", "gen/x.go"},
 		}, wantSet: []string{"a"}},
-		"generated files the base's regeneration provably makes are not": {c: change("1", "a"), admit: &admitting{
-			changed: []string{"a/x.go", "gen/x.go"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
-			generation: types.Generation{Units: []string{"gen"}},
-		}, wantSet: []string{"a"}},
-		"generated files no regeneration can be bounded for keep it out of the queue": {c: change("1", "a"), admit: &admitting{
-			changed: []string{"gen/x.go", "magusfile.buzz"}, generated: map[string]types.Writes{"gen/x.go": {Output: true}},
-			generation: types.Generation{Units: []string{"gen"}, Unbounded: "magusfile.buzz edits the declarations"},
-			diverged:   []string{"gen/x.go"},
-		}, want: types.DecisionKick, wantCode: types.CodeKickRegeneration},
 		// Every hook takes the units as arguments after its own, with no "--" between.
 		"a project a hook would read as an option is kicked back": {c: unknown, admit: &admitting{affected: []string{"a", "--gate=sh"}},
 			want: types.DecisionKick, wantCode: types.CodeKickRefused},
@@ -302,11 +261,6 @@ func TestPlanAdmission(t *testing.T) {
 				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.", v.Reason)
 				assert.Empty(t, v.Gate, "planning runs no hook")
 			}
-			if v.Code == types.CodeKickRegeneration {
-				assert.Equal(t, []string{"gen/x.go"}, v.Paths)
-				assert.Equal(t, "The merge queue cannot merge this change: it changes what regenerates `gen/x.go`, so the queue cannot prove regenerating them runs none of its code.\n\n"+
-					"Merge `main` in, regenerate them, push, and queue it again.\n", v.Report)
-			}
 		})
 	}
 }
@@ -336,7 +290,6 @@ func TestPlanPeelsAMergeOfTheBaseOffTheChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, child.Head, base).Return(false, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, child.Head).Return(types.Approval{Approved: true, Head: child.Head, Base: "main", Method: types.MethodSquash, Queued: true}, nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, child.Head, []string(nil)).Return([]string{"b/y.go"}, nil)
-	d.facts.EXPECT().Classify(mock.Anything, []string{"b/y.go"}).Return(nil, nil)
 	// The parent's merge of the base adds nothing, so its review covers its top, where
 	// nobody approved it.
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, parent.Head, base).Return(false, nil)
@@ -412,7 +365,6 @@ func TestPlanHoldsAChangeBuiltOnAForkBeneathAMergeOfTheBase(t *testing.T) {
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, c.Head, base).Return(false, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil)
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
-	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(nil, nil)
 
 	plan, err := planner(t, d).Run(t.Context(), changes(fork, c))
 	require.NoError(t, err)

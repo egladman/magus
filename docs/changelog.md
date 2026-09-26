@@ -201,7 +201,7 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
   `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
   read access only; apply rebuilds each candidate and merges it with the change's own
-  method. The code is `libs/mergequeue`, its contract and mocks in its `types` package;
+  method. The code is `internal/queue`, its contract and mocks in its `types` package;
   `--facts` serves other build tools.
 - **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
   targets run first across every selected project; a failure stops everything, exits 3
@@ -276,6 +276,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   lives on the queue's flags rather than on the hook's command line. It may repeat.
 - **A kick-back comment reproduces the failure.** Each kick-back is a new comment with
   the run's link and the command that failed, runnable as written.
+- **The queue acts on the base's other required checks.** Apply reads them at the head
+  (the provider's optional `required_checks`): running ones wait with `WAIT_CHECKS`, red
+  ones on a head carrying the base's tip kick back with `KICK_RED`, and red ones from an
+  older base get one update commit merging the base in, which runs them again.
+- **A `merge-queue: <method>` label queues any pull request.** On a pull request outside
+  a stack, applied by someone with write access, it is merge intent like auto-merge,
+  which GitHub will not enable on a pull request it says conflicts. The queue then
+  resolves the conflict or kicks it back naming the files.
 - **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
   affected listings and failing results carry up to three `{id, command, argv, why}`
   entries, filtered by the acting lease's role and journaled per session.
@@ -421,6 +429,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
   target now passes `--concurrency-profile aggressive` on the command line, the same
   flag any other caller would use - not an environment variable read by magus itself.
+- **A step claims the memory it has been measured to use.** Machine admission claims the
+  smaller of a target's `memory_mb` and 1.25 times its highest measured peak over at least
+  three successful runs, so a declaration sized for the worst case no longer refuses peers
+  that would fit. `magus status` and MGS3009 say whether a figure is declared or measured.
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
   path.
@@ -573,10 +585,18 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   setting `MERGEQUEUE_*` variables, so a gate becomes `magus run ci
   --no-default-charms`; `--facts` gets the fact asked for. Shell syntax is refused
   with MGS3026: point the flag at a script.
+- **The queue keeps a change whose generated files its merge leaves alone.** It kicks
+  back with `KICK_REGENERATION` only when the merge needs them regenerated (a conflict,
+  or main changed them) by code the change touches; otherwise the drift gate checks them.
+  A kicked-back change merges main in, regenerates, and is queued again.
 - **The merge queue kicks back stale generated files before its gate runs.** A change
   that edits generator code must commit outputs that are current on top of the base. If
   they are stale, the kick-back names the stale files and says how to fix them. If they are
   current, the change merges.
+- **The queue lands a change whose generated files drifted.** Planning no longer kicks
+  back with `KICK_REGENERATION`; validation regenerates the candidate, gates it, and
+  uploads it as `candidate.bundle`. Apply runs none of the change's code: it takes that
+  commit only once it checks its parent and that it changes declared outputs alone.
 - **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
   `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
   package leaves the command alone.
@@ -642,6 +662,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   was false for every output whose target opts out of the cache, such as a `MAGUS.md`
   rendered from the whole graph. The drift gate already fails on a real hand edit. Delete
   the key from `with:`.
+- **Breaking: the advice action's `fix-generated-drift`, `fix-merge-conflict`,
+  `offer-fix-label` and `fix-label` inputs.** Both fixers pushed to the pull request's
+  branch and neither ever ran: their consent label never matched `gh`'s JSON. The merge
+  queue now settles drift and conflicts at merge time. Delete the keys from `with:`; the
+  action needs only `pull-requests: write`.
 - **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
   `head-repo` inputs.** The action reads the pull request from the triggering event and
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
@@ -676,6 +701,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Fixed
 
+- **Breaking for SDK callers: `magus clean` keeps outputs the VCS tracks.** It
+  deleted committed generated files, with or without `--cache`, and left the tree
+  dirty. `CleanOutputs` returns `CleanedOutputs`, listing removed and kept paths.
 - **A broken working tree no longer switches off the approved spawn rule.** The committed
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a
@@ -736,6 +764,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Generated docs examples read the same wherever they are regenerated.** The
   examples generator runs magus in `testkit.Environ`, so no `MAGUS_*` variable, cache or
   state dir it inherits leaks run history into the captured `magus explain` output.
+- **A command magus runs leaves no process behind.** On Linux, macOS and the BSDs,
+  whatever of a target's process group outlives its command is killed when the command
+  exits, before it is reaped, so a background process it started stops there and no
+  longer holds the run open for five seconds on its output.
 - **A failed remote-cache exchange names the step that failed.**
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
@@ -798,6 +830,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
   A conflicted merge there read as one that never started, and a file named `*.txt`
   staged every `.txt` file. A merge already underway is now refused.
+- **Go ops key their cache on the platform they build for.** The go spell's build, vet,
+  test and lint ops fold `GOOS`, `GOARCH`, `GOARM` and `GOAMD64` into their cache keys,
+  so a run for another platform no longer replays the host's result.
 - **The `output-pipe`/`output-redirect` exemption for `magus query output` and
   `magus refs --text` now sees past a global flag.** It anchored on the first argument
   after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
@@ -827,6 +862,13 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   tools no selected target drives. Cache keys are unchanged.
 - **`--root` from another directory no longer loads that directory's modules.** A
   magusfile's imports resolve against its project, then the workspace root.
+- **`magus run test . -- -run X` runs only the selected tests.** The workspace's `test`
+  target passed explicit arguments to `go test`, which replaced the forwarded ones, so every
+  narrowed run executed the whole suite. It now appends its forwarded args and skips the
+  coverage floor when narrowed; the spell docs show the `+ args` idiom.
+- **Args after `--` reach only the target you name.** A cached replay's gates, `--preflight`
+  steps and the settle step no longer receive them, so `magus run test . -- -run X` stops
+  failing in its generate step with `flag provided but not defined: -run`.
 - **A run the machine's build budget refuses says so.** It exited 75 with nothing after
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and
@@ -835,6 +877,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A bare output ref and `--attempts` broke that tie by a random attempt hash, so they
   could answer with the older run. Each record now stores when it was persisted, and
   that decides the tie.
+- **Sandboxed `go generate` and `go run` work again.** The sandbox grants the Go build cache
+  execute as well as read and write: since Go 1.24, `go run` and `go tool` exec the binaries
+  they cache there, so every `go run` generator failed with `permission denied`.
 - **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
   wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
   its message and Help link. Health reports down when every workspace failed, and the
@@ -868,6 +913,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   signed the manifest alone, so a store could replay a genuine entry with its log and
   descriptor swapped or stripped. Every magus from 0.4.0 signs the domain-separated form;
   an entry signed by 0.3.x is now a miss and rebuilds.
+- **Breaking: queue hooks run in the base's sandbox.** The gate, the regeneration and a
+  `--facts` command run under the base's `sandbox` policy, at least `best-effort`,
+  rooted at their checkout: landlock confines their files on Linux, and everywhere their
+  environment is the sandbox's. `--sandbox=required` refuses a hook the kernel cannot
+  confine; `tools/gha-queue.buzz` passes it.
 - **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
   built console file, including the demo graph JSON holding the whole knowledge graph and
   its notes. Other files and directory listings now return 404, on loopback and on the LAN

@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -382,53 +383,65 @@ func TestEveryCandidateGetsAPrivateScratchDirectory(t *testing.T) {
 	}
 }
 
-// Validation commits a regeneration only where an Applier can reproduce it with the
-// base's own. A change to generator code merges when its committed outputs are already
-// what its regeneration makes on top of the base, and is refused before its gate when
-// they are not.
-func TestValidationRegeneratesOnlyWhatApplyingCanReproduce(t *testing.T) {
+// Validation regenerates a candidate's stale outputs whatever code the regeneration
+// runs, the change's own generator included, and gates what that commits. What it
+// committed travels beside the verdict as a bundle on the merge beneath it, for an
+// Applier that cannot reproduce it to check instead.
+func TestValidationRegeneratesStaleOutputsAndGatesTheResult(t *testing.T) {
 	touched := []string{"gen/gen.go", "gen/x.go"}
+	regenerated := head("regenerated")
 	for name, tc := range map[string]struct {
-		written    []string
-		generation types.Generation
-		want       types.Decision
-		wantReason string
+		written []string
 	}{
-		"a generator change whose outputs are fresh": {want: types.DecisionMerge},
-		"a generator change whose outputs are stale": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}},
-			want:       types.DecisionKick,
-			wantReason: "building its candidate failed: `gen/x.go` are stale on top of " + base[:12] + ", and it changes code their regeneration runs (`gen/gen.go`), so the queue cannot regenerate them for it"},
-		"a change the regeneration runs none of": {written: []string{"gen/x.go"}, generation: types.Generation{Units: []string{"gen"}}, want: types.DecisionMerge},
+		"a generator change whose outputs are fresh": {},
+		"a generator change whose outputs are stale": {written: []string{"gen/x.go"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
 			c := change("1", "gen")
+			merged := candidateOf(base, c.Head)
+			want := merged
+			if len(tc.written) > 0 {
+				want = regenerated
+				d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", when), Paths: tc.written}).
+					Return(regenerated, nil).Once()
+				d.facts.EXPECT().Classify(mock.Anything, tc.written).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+				d.vcs.EXPECT().Bundle(mock.Anything, clone.Root, mock.Anything, magustypes.BundleRange{Base: merged, Head: regenerated}).
+					RunAndReturn(func(_ context.Context, _, file string, _ magustypes.BundleRange) error {
+						return os.WriteFile(file, []byte("the bundle"), 0o644)
+					}).Once()
+			}
 			d.builds(building{touched: touched})
 			d.facts.EXPECT().Classify(mock.Anything, touched).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
 			d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(tc.written, nil)
-			if len(tc.written) > 0 {
-				d.facts.EXPECT().Classify(mock.Anything, tc.written).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
-				d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
-				d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).Return(tc.generation, nil)
-			}
 			g := d.gates(allGreen)
 			plan := planOf([]types.Change{c})
 			v, dir := validating(t, d, plan)
-			v.Regenerate = func(context.Context, types.Regeneration) error { return nil }
+			var got types.Regeneration
+			v.Regenerate = func(_ context.Context, r types.Regeneration) error {
+				got = r
+				return nil
+			}
 			require.NoError(t, v.Run(t.Context(), plan))
 
-			got := recorded(t, dir)["1"]
-			assert.Equal(t, tc.want, got.Decision)
-			if tc.want == types.DecisionKick {
-				assert.Equal(t, types.CodeKickRefused, got.Code)
-				assert.Equal(t, tc.wantReason, got.Reason)
-				assert.Equal(t, []string{"gen/x.go"}, got.Paths)
-				assert.Contains(t, got.Report, "Merge `main` in, regenerate, commit what it writes, push, and queue it again.")
-				assert.Zero(t, g.count("1"), "no gate runs on a tree that could never merge")
+			batch, err := dir.Poll(t.Context())
+			require.NoError(t, err)
+			require.Len(t, batch.Verdicts, 1)
+			verdict := batch.Verdicts[0]
+			assert.Equal(t, types.DecisionMerge, verdict.Decision)
+			assert.Equal(t, want, verdict.CandidateCommit, "the gate ran on what the regeneration committed")
+			assert.Equal(t, 1, g.count("1"))
+			assert.Equal(t, []string{"gen/x.go"}, got.Paths)
+			assert.Equal(t, []string{"gen"}, got.Units, "the change's own affected set")
+			if len(tc.written) == 0 {
+				assert.Empty(t, batch.Bundles, "nothing regenerated, nothing to carry")
 				return
 			}
-			assert.Equal(t, candidateOf(base, c.Head), got.CandidateCommit)
-			assert.Equal(t, 1, g.count("1"))
+			bundle := filepath.Join(dir.Path, "1", CandidateBundle)
+			assert.Equal(t, map[string]string{"1": bundle}, batch.Bundles)
+			content, err := os.ReadFile(bundle)
+			require.NoError(t, err)
+			assert.Equal(t, "the bundle", string(content))
 		})
 	}
 }

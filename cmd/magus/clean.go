@@ -13,8 +13,8 @@ import (
 
 // cleanCmd implements `magus clean [flags] [project...]`.
 // It removes files matching each selected project's declared Outputs globs
-// (the regenerable build artifacts). With --cache it also invalidates the
-// cached build entries for those projects.
+// (the regenerable build artifacts), keeping any the VCS tracks. With --cache
+// it also invalidates the cached build entries for those projects.
 //
 // Pass --dry-run (the global flag) to preview without deleting.
 func cleanCmd(ctx context.Context, root string, args []string) error {
@@ -31,7 +31,9 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "- the same files the cache snapshots and replays on cache hits. Whether")
 			fmt.Fprintln(os.Stderr, "each one is regenerable is the declaration's claim, not something clean")
 			fmt.Fprintln(os.Stderr, "verifies: a file magus only modifies belongs in ctx.modifiesExistingFiles, which clean")
-			fmt.Fprintln(os.Stderr, "never removes. Pass --dry-run (global flag) to preview before trusting one.")
+			fmt.Fprintln(os.Stderr, "never removes. Nor does it remove an output the VCS tracks: that file is")
+			fmt.Fprintln(os.Stderr, "committed, and deleting it would dirty the tree.")
+			fmt.Fprintln(os.Stderr, "Pass --dry-run (global flag) to preview before trusting one.")
 			fmt.Fprintln(os.Stderr, "Use --cache to also drop the magus cache entries, forcing a full rebuild.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -59,17 +61,25 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 	projects := m.ResolveProjects(targets)
 
 	dryRun := globalCfg.DryRun
-	removed, err := m.CleanOutputs(ctx, projects, dryRun)
+	cleaned, err := m.CleanOutputs(ctx, projects, dryRun)
 	if err != nil {
 		return fmt.Errorf("clean: %w", err)
 	}
 
-	for _, path := range removed {
+	for _, path := range cleaned.Removed {
 		if dryRun {
 			fmt.Printf("[dry-run] would remove %s\n", path)
 		} else {
 			fmt.Printf("removed %s\n", path)
 		}
+	}
+	if dryRun {
+		for _, path := range cleaned.Tracked {
+			fmt.Printf("[dry-run] would keep %s (tracked)\n", path)
+		}
+	}
+	if len(cleaned.Tracked) > 0 {
+		slog.InfoContext(ctx, "clean: kept outputs the VCS tracks", slog.Int("files", len(cleaned.Tracked)))
 	}
 
 	if cf.Cache && !dryRun {

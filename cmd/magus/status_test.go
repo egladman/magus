@@ -346,6 +346,15 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	assert.Contains(t, lines[4], "service   -      postgres-15  running  deps 2  ports 5432")
 }
 
+// A claim says where its figure came from, since a measured one sits below what the
+// magusfile declares and a reader comparing the two would otherwise see a mismatch.
+func TestHolderMemTextNamesTheSizing(t *testing.T) {
+	assert.Equal(t, "mem 5.7 GiB measured over 54 runs",
+		holderMemText(types.MachineClaimant{MemoryMB: 5879, Sizing: types.MemorySizing{Samples: 54}}))
+	assert.Equal(t, "mem 10.0 GiB", holderMemText(types.MachineClaimant{MemoryMB: 10 << 10}), "a declaration reads bare")
+	assert.Empty(t, holderMemText(types.MachineClaimant{Slots: 2}), "a slots-only claim has no memory to explain")
+}
+
 // An idle broker still prints its capacity: "nothing is held" is the answer to the
 // question people open status to ask, and a silent section reads as a missing feature.
 func TestBrokerRowsIdle(t *testing.T) {
