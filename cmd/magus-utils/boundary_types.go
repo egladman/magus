@@ -77,6 +77,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "SemverVersion", Type: reflect.TypeFor[types.SemverVersion](), RuntimeObject: true},
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},
 	{Name: "URL", Type: reflect.TypeFor[types.URL](), RuntimeObject: true},
+	{Name: "YamlPositions", Type: reflect.TypeFor[types.YAMLPositions](), RuntimeObject: true},
 	{Name: "FlagParse", Type: reflect.TypeFor[types.FlagParse](), RuntimeObject: true},
 	{Name: "PipeRecord", Type: reflect.TypeFor[types.PipeRecord](), RuntimeObject: true},
 	{Name: "Artifact", Type: reflect.TypeFor[types.TargetArtifact](), RuntimeObject: true},

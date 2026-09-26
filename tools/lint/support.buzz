@@ -8,6 +8,7 @@ import "fs";
 import "magus";
 import "serialize";
 import "strings";
+import "encoding/yaml";
 import "magus/lint";
 
 import "assert";
@@ -95,6 +96,34 @@ export fun skipsCache() > {str: bool} !> any {
     return skipCacheMemo!;
 }
 
+// scalar is a YAML scalar as its text, the way a workflow's runner reads it: `cache: false`
+// is "false" whether YAML typed it a bool or a string. Anything else is "".
+export fun scalar(b: serialize\Boxed) > str {
+    final s = b.string();
+    if (s != null) {
+        return s!;
+    }
+    final flag = b.boolean();
+    if (flag != null) {
+        return if (flag!) "true" else "false";
+    }
+    final n = b.integer();
+    if (n != null) {
+        return "{n!}";
+    }
+    return "";
+}
+
+// has reports whether mapping b carries key, even with a null value.
+export fun has(b: serialize\Boxed, key: str) > bool {
+    return b.mapValue()[key] != null;
+}
+
+// pointer escapes a mapping key into one segment of a yaml\positions key.
+export fun pointer(key: str) > str {
+    return key.replace("~", with: "~0").replace("/", with: "~1");
+}
+
 // magusfileOf is the workspace path of the magusfile declaring project.
 export fun magusfileOf(project: str) > str {
     if (project == ".") {
@@ -147,6 +176,17 @@ test "lineAt and lineOf count from 1 and anchor a leading newline" {
     assert\equal(lineAt(src, off: 2), want: 2, message: "after a newline");
     assert\equal(lineOf(src, needle: "\n  c:"), want: 3, message: "anchored needle");
     assert\equal(lineOf(src, needle: "zz"), want: 0, message: "absent");
+}
+
+test "scalar reads a YAML scalar as its text" {
+    final doc = serialize\Boxed.init(yaml\parse("a: false\nb: x\nc: 3\nd: [1]\n"));
+    assert\equal(scalar(doc.q(["a"])), want: "false", message: "bool");
+    assert\equal(scalar(doc.q(["b"])), want: "x", message: "string");
+    assert\equal(scalar(doc.q(["c"])), want: "3", message: "int");
+    assert\equal(scalar(doc.q(["d"])), want: "", message: "list");
+    assert\equal(has(doc, key: "a"), want: true, message: "present");
+    assert\equal(has(doc, key: "z"), want: false, message: "absent");
+    assert\equal(pointer("a/b~c"), want: "a~1b~0c", message: "escaped");
 }
 
 test "fixture round-trips through read" {

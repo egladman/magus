@@ -1,0 +1,246 @@
+// setup-magus-mints-the-queue-app-token-only-as-an-output: setup-magus mints the merge
+// queue's app token, and the rules around it are ones no run exercises until a
+// repository adds the app. A key is never an action input (the calling step puts it in
+// env, where it is masked and scoped to that step), half an app fails the job before
+// anything installs, the minting action is pinned by commit, and the token leaves only
+// as an output, never through $GITHUB_ENV, since this action also runs in jobs that
+// execute pull-request code.
+//
+// The calling side is held too: queue-apply releases the key to main's runs alone, and
+// every write the queue makes is the app's, since a run or a merge the job's own token
+// makes starts no workflow.
+namespace queuetoken;
+
+import "assert";
+import "encoding/yaml";
+import "fs";
+import "serialize";
+import "std";
+import "magus/lint";
+import "tools/lint/support" as support;
+
+export final ACTION = ".github/actions/setup-magus/action.yml";
+export final QUEUE_APPLY = ".github/workflows/queue-apply.yaml";
+final appTokenAction = "actions/create-github-app-token@";
+final halfApp = "(inputs.queue-app-client-id == '') != (env.MAGUS_QUEUE_APP_PRIVATE_KEY == '')";
+final key = "$\{\{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}";
+final clientID = "$\{\{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}";
+final envFix = "Set `environment: magus-queue`: the key is released to main's runs alone.";
+
+final credential = std\pattern(`(?i)key|token|secret|password`);
+final pinned = std\pattern(`@[0-9a-f]\{40\}$`);
+
+// MINT is what the action's minting step must say: the token is this repository's alone,
+// with exactly the permissions the queue uses. Apply follows the validation run and
+// dispatches nothing; the dispatch job mints its own actions: write token.
+final MINT = {
+    "if": "inputs.queue-app-client-id != ''",
+    "private-key": "$\{\{ env.MAGUS_QUEUE_APP_PRIVATE_KEY }}",
+    "repositories": "$\{\{ github.event.repository.name }}",
+    "permission-contents": "write",
+    "permission-pull-requests": "write",
+    "permission-statuses": "write",
+    "permission-actions": "read",
+    "permission-workflows": "write",
+};
+
+export fun reads() > [str] {
+    return [ACTION, QUEUE_APPLY];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final action = support\named(files, p: ACTION);
+    if (action == null) {
+        return [support\missing(ACTION)];
+    }
+    final found = mut [<Finding>];
+    foreach (f in actionFindings(support\read(action!))) {
+        found.append(f);
+    }
+    final apply = support\named(files, p: QUEUE_APPLY);
+    if (apply == null) {
+        found.append(support\missing(QUEUE_APPLY));
+        return found;
+    }
+    foreach (f in applyFindings(support\read(apply!))) {
+        found.append(f);
+    }
+    return found;
+}
+
+fun at(path: str, line: int, message: str, fix: str) > Finding {
+    return Finding{ path = path, line = line, message = message, fix = fix };
+}
+
+// actionFindings grades setup-magus's action.yml.
+export fun actionFindings(raw: str) > [Finding] !> any {
+    final doc = serialize\Boxed.init(yaml\parse(raw));
+    final lines = yaml\positions(raw).lines;
+    final found = mut [<Finding>];
+
+    final inputs = doc.q(["inputs"]).mapValue();
+    foreach (name in support\sorted(inputs.keys())) {
+        if (credential.match(name) != null) {
+            found.append(at(ACTION, line: lines["/inputs/" + support\pointer(name)] ?? 0, message: "input " + name + " carries a credential",
+                fix: "A credential reaches setup-magus through the calling step's env, never an input."));
+        }
+    }
+    if (inputs["queue-app-client-id"] == null) {
+        found.append(at(ACTION, line: 0, message: "declares no queue-app-client-id input", fix: "The queue app's client id is an input."));
+    } else if (support\scalar(doc.q(["inputs", "queue-app-client-id", "default"])) != "") {
+        found.append(at(ACTION, line: lines["/inputs/queue-app-client-id/default"] ?? 0, message: "queue-app-client-id has a default",
+            fix: "No app unless the caller names one: drop the default."));
+    }
+
+    final steps = doc.q(["runs", "steps"]).listValue();
+    if (steps.len() == 0) {
+        found.append(at(ACTION, line: 0, message: "runs no steps", fix: ""));
+        return found;
+    }
+    if (support\scalar(steps[0].q(["if"])) != halfApp or support\scalar(steps[0].q(["run"])).indexOf("exit 1") == null) {
+        found.append(at(ACTION, line: lines["/runs/steps/0"] ?? 0, message: "the first step does not refuse half an app",
+            fix: "Half an app is refused first, before anything installs: the first step runs `exit 1` if: " + halfApp));
+    }
+
+    var mint = -1;
+    foreach (i in 0..steps.len()) {
+        final run = support\scalar(steps[i].q(["run"]));
+        if (support\scalar(steps[i].q(["uses"])).startsWith(appTokenAction)) {
+            mint = i;
+        }
+        if (run.indexOf("GITHUB_ENV") != null and run.indexOf("queue") != null) {
+            found.append(at(ACTION, line: lines["/runs/steps/{i}"] ?? 0,
+                message: "step \"{support\scalar(steps[i].q(["name"]))}\" writes the queue app's credential to $GITHUB_ENV",
+                fix: "The token leaves only as an action output; this action runs in jobs that execute pull-request code."));
+        }
+    }
+    if (mint < 0) {
+        found.append(at(ACTION, line: 0, message: "setup-magus does not mint the queue app's token", fix: "Mint it with " + appTokenAction + "<commit>."));
+    } else {
+        final step = steps[mint];
+        final line = lines["/runs/steps/{mint}"] ?? 0;
+        final uses = support\scalar(step.q(["uses"]));
+        if (pinned.match(uses) == null) {
+            found.append(at(ACTION, line: line, message: uses + " is not pinned by full commit", fix: "Pin the minting action to a 40-hex commit."));
+        }
+        foreach (name in support\sorted(MINT.keys())) {
+            final got = if (name == "if") support\scalar(step.q(["if"])) else support\scalar(step.q(["with", name]));
+            if (got != MINT[name]!) {
+                found.append(at(ACTION, line: line, message: "the minting step's {name} is \"{got}\"",
+                    fix: "Set it to \"{MINT[name]!}\": the token is this repository's alone, with exactly the permissions the queue uses."));
+            }
+        }
+    }
+    foreach (output in ["queue-token", "queue-committer", "queue-app-slug"]) {
+        if (!support\has(doc.q(["outputs"]), key: output)) {
+            found.append(at(ACTION, line: 0, message: "declares no " + output + " output", fix: "The queue app's token and identity leave as outputs."));
+        }
+    }
+    return found;
+}
+
+// applyFindings grades queue-apply.yaml, the workflow that holds the app's key.
+export fun applyFindings(raw: str) > [Finding] !> any {
+    final doc = serialize\Boxed.init(yaml\parse(raw));
+    final lines = yaml\positions(raw).lines;
+    final found = mut [<Finding>];
+
+    final apply = doc.q(["jobs", "apply"]);
+    final applyLine = lines["/jobs/apply"] ?? 0;
+    if (support\scalar(apply.q(["environment"])) != "magus-queue") {
+        found.append(at(QUEUE_APPLY, line: applyLine, message: "job apply runs outside the magus-queue environment", fix: envFix));
+    }
+    final applySteps = apply.q(["steps"]).listValue();
+    var setup = -1;
+    foreach (i in 0..applySteps.len()) {
+        if (support\scalar(applySteps[i].q(["uses"])) == "./.github/actions/setup-magus") {
+            setup = i;
+        }
+    }
+    if (setup < 0) {
+        found.append(at(QUEUE_APPLY, line: applyLine, message: "job apply does not run setup-magus", fix: "apply gets the queue app's token from setup-magus."));
+    } else {
+        final step = applySteps[setup];
+        final line = lines["/jobs/apply/steps/{setup}"] ?? 0;
+        if (support\scalar(step.q(["env", "MAGUS_QUEUE_APP_PRIVATE_KEY"])) != key) {
+            found.append(at(QUEUE_APPLY, line: line, message: "setup-magus's env.MAGUS_QUEUE_APP_PRIVATE_KEY is not " + key, fix: "Pass the key through the step's env."));
+        }
+        if (support\scalar(step.q(["with", "queue-app-client-id"])) != clientID) {
+            found.append(at(QUEUE_APPLY, line: line, message: "setup-magus's queue-app-client-id is not " + clientID, fix: "Pass the client id as the input."));
+        }
+    }
+    foreach (banned, fix in {
+        "github.token": "A workflow names the token as secrets.GITHUB_TOKEN.",
+        "GH_TOKEN": "gh reads GITHUB_TOKEN.",
+        "|| secrets.GITHUB_TOKEN": "The queue writes only as its app: a run or a merge the job's own token makes starts no workflow.",
+    }) {
+        if (raw.indexOf(banned) != null) {
+            found.append(at(QUEUE_APPLY, line: support\lineOf(raw, needle: banned), message: "names " + banned, fix: fix));
+        }
+    }
+
+    // A run the Actions token dispatches fires no workflow_run, so no apply would follow
+    // it: dispatch holds the app's token, minted for dispatching alone.
+    final dispatch = doc.q(["jobs", "dispatch"]);
+    final dispatchLine = lines["/jobs/dispatch"] ?? 0;
+    if (support\scalar(dispatch.q(["environment"])) != "magus-queue") {
+        found.append(at(QUEUE_APPLY, line: dispatchLine, message: "job dispatch runs outside the magus-queue environment", fix: envFix));
+    }
+    final dispatchSteps = dispatch.q(["steps"]).listValue();
+    var mint = -1;
+    foreach (i in 0..dispatchSteps.len()) {
+        if (support\scalar(dispatchSteps[i].q(["uses"])).startsWith(appTokenAction)) {
+            mint = i;
+        }
+    }
+    if (mint < 0) {
+        found.append(at(QUEUE_APPLY, line: dispatchLine, message: "job dispatch does not mint the queue app's token",
+            fix: "A run the Actions token dispatches fires no workflow_run; mint the app's token with " + appTokenAction + "<commit>."));
+        return found;
+    }
+    final step = dispatchSteps[mint];
+    final line = lines["/jobs/dispatch/steps/{mint}"] ?? 0;
+    foreach (name, want in {"client-id": clientID, "permission-actions": "write", "private-key": key}) {
+        final got = support\scalar(step.q(["with", name]));
+        if (got != want) {
+            found.append(at(QUEUE_APPLY, line: line, message: "dispatch's minting step has {name} \"{got}\"", fix: "Set it to \"{want}\"."));
+        }
+    }
+    if (support\has(step.q(["with"]), key: "permission-contents")) {
+        found.append(at(QUEUE_APPLY, line: line, message: "dispatch's minting step asks for permission-contents", fix: "Dispatching needs actions alone; drop it."));
+    }
+    return found;
+}
+
+// seeded is the shipped file at p with old replaced, failing when old is absent so a
+// seeded violation cannot silently seed nothing.
+fun seeded(p: str, old: str, replacement: str) > str !> any {
+    final body = fs\readFile(p);
+    assert\isTrue(body.indexOf(old) != null, message: "seed anchor missing from " + p);
+    return body.replace(old, with: replacement);
+}
+
+test "the shipped action and queue-apply pass" {
+    assert\equal(support\messages(actionFindings(fs\readFile(ACTION))), want: [<str>], message: "action");
+    assert\equal(support\messages(applyFindings(fs\readFile(QUEUE_APPLY))), want: [<str>], message: "queue-apply");
+}
+
+test "a seeded violation in the action is reported" {
+    foreach (old, seed in {
+        "\ninputs:\n": ["\ninputs:\n  app-private-key:\n    description: x\n", "input app-private-key carries a credential"],
+        "    default: ''\n\noutputs:": ["    default: abc\n\noutputs:", "queue-app-client-id has a default"],
+        "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1": ["actions/create-github-app-token@v3", "actions/create-github-app-token@v3 is not pinned by full commit"],
+        "\n  steps:\n": ["\n  steps:\n    - name: leak\n      shell: bash\n      run: echo \"queue=x\" >> \"$GITHUB_ENV\"\n", "step \"leak\" writes the queue app's credential to $GITHUB_ENV"],
+    }) {
+        assert\contains(support\messages(actionFindings(seeded(ACTION, old: old, replacement: seed[0]))), item: seed[1], message: seed[1]);
+    }
+}
+
+test "a seeded violation in queue-apply is reported" {
+    foreach (old, seed in {
+        "    environment: magus-queue\n": ["\n", "job dispatch runs outside the magus-queue environment"],
+        "\nenv:\n": ["\nenv:\n  GH_TOKEN: x\n", "names GH_TOKEN"],
+    }) {
+        assert\contains(support\messages(applyFindings(seeded(QUEUE_APPLY, old: old, replacement: seed[0]))), item: seed[1], message: seed[1]);
+    }
+}

@@ -24,6 +24,14 @@ func RegisterYaml(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return AnyVal(ret0), nil
 	}))
+	m.MapSet("positions", vm.DirectValue("yaml.positions", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		source := Str(bzArgs, 0)
+		ret0, err := yaml.Positions(ctx, source)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return ObjectYAMLPositions(ret0), nil
+	}))
 	m.MapSet("stringify", vm.DirectValue("yaml.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		value := Any(bzArgs, 0)
 		ret0, err := yaml.YAMLStringify(ctx, value)

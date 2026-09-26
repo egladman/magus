@@ -128,4 +128,5 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
 	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest)) }},
+	{Name: "YamlPositions", Zero: types.YAMLPositions{}, Encode: func(v any) vm.Value { return ObjectYAMLPositions(v.(types.YAMLPositions)) }},
 }

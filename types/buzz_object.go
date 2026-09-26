@@ -136,6 +136,16 @@ type URL struct {
 	Fragment string
 }
 
+// YAMLPositions mirrors yaml.positions's {lines, columns} object: where each value of a
+// YAML document starts, 1-based, keyed by the value's JSON pointer ("" for the root,
+// "/jobs/build/steps/0" for a list item, with ~0 and ~1 escaping ~ and / in a key).
+// Two maps of ints rather than one map of objects: the binding generator encodes a
+// struct or a list of structs as a return, not a map of them.
+type YAMLPositions struct {
+	Lines   map[string]int
+	Columns map[string]int
+}
+
 // PipeRecord mirrors one record a magus stage writes to the next in a pipe: the -o jsonl
 // record, with the fields a script filters on lifted out of its body. A field the record
 // does not carry is empty; Body is the whole record, for everything else.

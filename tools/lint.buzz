@@ -22,8 +22,11 @@ import "tools/lint/generate-drift-throw-names-the-engine-drift-code" as generate
 import "tools/lint/landing-rotator-slots-match-headline-count" as landing;
 import "tools/lint/lockfiles-are-sorted" as lockfiles;
 import "tools/lint/package-install-targets-never-replay" as installs;
+import "tools/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
 import "tools/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
+import "tools/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
 import "tools/lint/skills-generate-declares-every-shipped-skill" as skills;
+import "tools/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "tools/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
 
 export object Rule {
@@ -36,6 +39,9 @@ export object Rule {
 export fun rules() > [Rule] {
     return [
         Rule{ name = "lockfiles-are-sorted", reads = lockfiles\reads(), check = lockfiles\check },
+        Rule{ name = "trusted-jobs-restore-no-actions-cache", reads = trustedcache\reads(), check = trustedcache\check },
+        Rule{ name = "setup-magus-mints-the-queue-app-token-only-as-an-output", reads = queuetoken\reads(), check = queuetoken\check },
+        Rule{ name = "published-magus-is-built-first-and-verified-by-digest", reads = publishedmagus\reads(), check = publishedmagus\check },
         Rule{ name = "package-install-targets-never-replay", reads = installs\reads(), check = installs\check },
         Rule{ name = "whole-tree-targets-key-on-the-go-tree", reads = wholetree\reads(), check = wholetree\check },
         Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
