@@ -60,6 +60,7 @@ import "project/libs/gopherbuzz";
 // the two lint-library modules' profiles beside it.
 import "project/libs/diagnostics";
 import "project/libs/coldread";
+import "project/libs/conventions";
 import "project/libs/testlayout";
 
 // Cross-shard remote cache via GitHub Actions Cache. The spell reads the service
@@ -189,12 +190,12 @@ magus\project({
         "opencode.json",
         // The one hook config the glob above cannot reach, because Claude Code
         // keeps its hooks in settings.json rather than a file named for them.
-        // conventions_test.go grades this exact path against the vendored schema
-        // and asserts it invokes the shipped template rather than inlining a
-        // copy, so an edit here can turn the root tests red.
+        // internal/agent's tests grade this exact path against the vendored schema
+        // and conventions_test.go asserts it invokes the shipped template rather
+        // than inlining a copy, so an edit here can turn either red.
         ".claude/settings.json",
         "spells/harness/**/*.buzz",
-        // The vendored agent-host schemas conventions_test.go grades the hook configs
+        // The vendored agent-host schemas internal/agent's tests grade the hook configs
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
         // refresh would otherwise not invalidate the tests that read them.
         "testdata/hosts/**/*.json",
@@ -1332,10 +1333,10 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Enumerated, not computed: the static read collects string LITERALS only, and a
 // pattern built at run time - from a loop, or even from string interpolation - is
 // invisible to it, flagged as a computed footprint argument rather than silently
-// accepted. So the name list is written out per destination, and
-// TestSkillsGenerateDeclaresEveryShippedSkill keeps it in step with
-// internal/agent/skills: adding a skill without touching this fails there rather than
-// shipping an installed file magus calls hand-editable.
+// accepted. So the name list is written out per destination, and lint-files
+// (cmd/magus-filelint) keeps it in step with internal/agent/skills: adding a skill
+// without touching this fails there rather than shipping an installed file magus
+// calls hand-editable.
 //
 // One pattern per skill per destination, rather than one brace alternation per
 // destination, because these globs do not stay inside magus: EnsureMergeDriver
@@ -2774,8 +2775,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // queue app's credential rules and the no-cache rule for trusted jobs are asserted
     // against them. The installer is committed under docs/gen but is a script, not a page.
     ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
-    // The hook templates a reader installs and the site stylesheet: conventions_test reads
-    // them as code (coverage lines, wiring, the landing palette), never as prose.
+    // The hook templates a reader installs and the site stylesheet: conventions_test and
+    // internal/agent's tests read them as code (coverage lines, wiring, the landing palette), never as prose.
     ctx.readsFiles("docs/guides/integrations/agents/*.sh", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
@@ -2923,7 +2924,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // write Go files. Left unordered, a reader waiting for those writers while holding
     // its slot stalled a gate for fifteen minutes with nothing running (2026-09-10).
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
-        testlayout\test, buzz_test);
+        conventions\test, testlayout\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -2943,7 +2944,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/coldread/coverage.out", "libs/testlayout/coverage.out"]));
+         "libs/coldread/coverage.out", "libs/conventions/coverage.out",
+         "libs/testlayout/coverage.out"]));
     final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -3147,7 +3149,9 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/coldread/go.mod", "libs/coldread/go.sum",
-                   "libs/coldread/**/*.go");
+                   "libs/coldread/**/*.go",
+                   "libs/conventions/go.mod", "libs/conventions/go.sum",
+                   "libs/conventions/**/*.go");
     // Remove the old binary first, so the link lands on a FRESH inode. `golangci-lint
     // custom` otherwise rewrites .magus/custom-gcl in place, and macOS keeps a code
     // signature keyed on that inode: the new bytes no longer match it, so the kernel
@@ -3156,6 +3160,33 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     // machine with 13GB free, and `codesign --force --sign -` on the same file fixed it.
     fs\remove(".magus/custom-gcl");
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
+}
+
+// Holds the repository's non-Go files to the conventions no off-the-shelf linter
+// checks: lockfile order, workflow trust, magusfile footprints, hook wiring, the
+// installed-skill declarations and the landing page's headline rotator. The rules
+// and their exemptions live in cmd/magus-filelint.
+//
+// The footprint is exactly what the rules read, plus the Go packages the tool
+// compiles from this tree; cmd/magus-filelint's tests hold the second half to
+// `go list -deps`. Child-project files are named by path, because a tree glob here
+// stops at a child project's directory.
+export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(format);
+    ctx.readsFiles("cmd/magus-filelint/*.go", "internal/describe/*.go",
+                   "internal/parsecache/*.go", "internal/json/*.go", "types/*.go",
+                   "types/enum/*.go", "spells/*.go", "libs/diagnostics/*.go",
+                   "libs/gopherbuzz/*.go", "libs/gopherbuzz/ast/*.go",
+                   "libs/gopherbuzz/token/*.go", "libs/gopherbuzz/types/*.go",
+                   "libs/gopherbuzz/vm/*.go", "go.mod", "go.sum");
+    ctx.readsFiles("**/*.lock", "docs/**/*.lock", "console/**/*.lock", "libs/**/*.lock",
+                   "**/magusfile.buzz", "docs/**/magusfile.buzz", "console/magusfile.buzz",
+                   "libs/**/magusfile.buzz", "proto/magusfile.buzz",
+                   ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
+                   "internal/agent/skills/*/SKILL.md", ".claude/settings.json",
+                   "docs/guides/integrations/agents/codex-hooks.json",
+                   "docs/site/landing.buzz", "docs/src/styles/site.css");
+    proc\exec("go", ["run", "./cmd/magus-filelint"]);
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
@@ -3181,18 +3212,19 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, lint_build);
+    ctx.needs(format, lint_build, lint_files);
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
     // an in-repo linter. That op existed to get the linter version into the cache
     // key; readsFiles does it by content instead. Its .custom-gcl.yml pins the
     // golangci-lint release and the in-repo linter globs cover the rules, while
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
-    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go",
-                   "libs/coldread/**/*.go",
-                   // A project, so the tree globs below stop at its directory, but also a
-                   // package of this module that golangci-lint and go vet both compile.
-                   "libs/pricing/**/*.go", "libs/pricing/pricing.json");
+    // libs/ holds the linters' own modules, the other modules the conventions run
+    // below lints, and libs/pricing: a project, so the tree globs below stop at its
+    // directory, but also a package of this module that golangci-lint and go vet compile.
+    ctx.readsFiles("libs/testlayout/.custom-gcl.yml",
+                   "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
+                   "libs/pricing/pricing.json");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this
@@ -3217,6 +3249,18 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     final lintCache = magus\projects().workspace + "/.magus/golangci-lint";
     os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
         proc\exec(".magus/custom-gcl", ["run"]);
+        // golangci-lint stops at a go.mod, so the other modules get their own run,
+        // on this config, of the two conventions that hold tree-wide. The others
+        // name root-module paths, and the stock linters were never adopted there.
+        final root = magus\projects().workspace;
+        foreach (mod in fs\glob("libs/**/go.mod")) {
+            // TODO: its go.mod needs `go mod tidy`, so the go command cannot load it
+            // and no analyzer can either. Drop this skip once it is tidied.
+            if (mod.value == "libs/gopherbuzz/benchmarks/comparison/go.mod") { continue; }
+            proc\exec(root + "/.magus/custom-gcl",
+                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "hostagnostic,stutter"],
+                      fs\dirname(mod.value));
+        }
     });
     go["go-vet"](ctx);
     // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo

@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 )
 
@@ -129,10 +132,16 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	ef := gen.BindConfigCacheExport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache export [--to <file>]")
+		fmt.Fprintln(os.Stderr, "       magus config cache export --toolchain go [--to <file> | --remote] [--used-within <duration>]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Write the entire build cache to a gzip-compressed tar archive, for")
 		fmt.Fprintln(os.Stderr, "persisting across CI runs via artifact upload/download. Writes to stdout")
 		fmt.Fprintln(os.Stderr, "when --to is omitted.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "With --toolchain, export the toolchain's own caches instead (for go, GOCACHE")
+		fmt.Fprintln(os.Stderr, "and GOMODCACHE as `go env` reports them), signed with MAGUS_CACHE_SIGNING_KEY,")
+		fmt.Fprintln(os.Stderr, "so a magus miss elsewhere recompiles only what changed. --remote stores the")
+		fmt.Fprintln(os.Stderr, "bundle in the remote tier under today's key; the day's first bundle stands.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -140,10 +149,20 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if ef.Toolchain == "" && ef.Remote {
+		return usagef("magus config cache export: --remote needs --toolchain; build entries reach the remote tier on their own")
+	}
+	if ef.Toolchain != "" && ef.Remote && ef.To != "" {
+		return usagef("magus config cache export: --remote and --to are exclusive")
+	}
 
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
+	}
+
+	if ef.Toolchain != "" {
+		return configCacheExportToolchain(ctx, m, ef)
 	}
 
 	if ef.To == "" {
@@ -171,20 +190,60 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 func configCacheImport(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache import", flag.ContinueOnError)
 	bindDisplayFlags(fs)
+	imf := gen.BindConfigCacheImport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache import [<file>]")
+		fmt.Fprintln(os.Stderr, "       magus config cache import --toolchain go [<file> | --remote]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Restore the build cache from a gzip-compressed tar archive produced by")
 		fmt.Fprintln(os.Stderr, "`magus config cache export`. Existing entries are overwritten. Reads")
 		fmt.Fprintln(os.Stderr, "stdin when no file is given.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "With --toolchain, restore a toolchain bundle into this machine's own caches,")
+		fmt.Fprintln(os.Stderr, "only once its signature verifies against cache.remote.trusted_keys. --remote")
+		fmt.Fprintln(os.Stderr, "takes the newest verified bundle of the last week: one for this module set,")
+		fmt.Fprintln(os.Stderr, "else one for this toolchain. A bundle that fails verification is refused and")
+		fmt.Fprintln(os.Stderr, "named; finding none leaves builds cold and exits 0.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if imf.Toolchain == "" && imf.Remote {
+		return usagef("magus config cache import: --remote needs --toolchain; build entries are read from the remote tier on their own")
+	}
+	if imf.Remote && len(fs.Args()) > 0 {
+		return usagef("magus config cache import: --remote reads no file")
 	}
 
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
+	}
+
+	if imf.Toolchain != "" && imf.Remote {
+		// Each refusal is already logged as cache.toolchain.refused.
+		res, err := m.RestoreToolchainCache(ctx, imf.Toolchain)
+		if err != nil {
+			return fmt.Errorf("config cache import: %w", err)
+		}
+		if res.Inactive {
+			fmt.Fprintln(os.Stderr, "magus config cache import: the remote backend is not active here; builds start cold")
+			return nil
+		}
+		if res.Key == "" {
+			fmt.Fprintf(os.Stderr, "magus config cache import: no verified %s toolchain bundle in the remote tier for the last week (%d refused); builds start cold\n", res.Tool, len(res.Refused))
+			return nil
+		}
+		match := "this module set"
+		if !res.Exact {
+			match = "another module set, same toolchain"
+		}
+		fmt.Fprintf(os.Stderr, "magus config cache import: restored %s (%s): %d files, %s, %s downloaded, %d already present; %s\n",
+			res.Key, match, res.Files, fmtBytes(res.Bytes), fmtBytes(res.Transferred), res.Skipped, strings.Join(res.Dirs, " "))
+		return nil
 	}
 
 	r := io.Reader(os.Stdin)
@@ -197,10 +256,55 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		r = f
 	}
 
+	if imf.Toolchain != "" {
+		res, err := m.ImportToolchainCache(ctx, imf.Toolchain, r)
+		if err != nil {
+			return fmt.Errorf("config cache import: refused the %s toolchain bundle: %w", imf.Toolchain, err)
+		}
+		fmt.Fprintf(os.Stderr, "magus config cache import: restored %d files, %s, %d already present; %s\n",
+			res.Files, fmtBytes(res.Bytes), res.Skipped, strings.Join(res.Dirs, " "))
+		return nil
+	}
+
 	if err := m.ImportCache(ctx, r); err != nil {
 		return fmt.Errorf("config cache import: %w", err)
 	}
 	fmt.Fprintln(os.Stderr, "magus config cache import: restored cache")
+	return nil
+}
+
+func configCacheExportToolchain(ctx context.Context, m *magus.Magus, ef *gen.ConfigCacheExportFlags) error {
+	if ef.Remote {
+		res, err := m.SaveToolchainCache(ctx, ef.Toolchain, ef.UsedWithin)
+		if err != nil {
+			return fmt.Errorf("config cache export: %w", err)
+		}
+		if res.Present {
+			fmt.Fprintf(os.Stderr, "magus config cache export: %s is already stored; nothing to do\n", res.Key)
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "magus config cache export: stored %s: %d files, %s, %s uploaded, %d unused entries trimmed; %s\n",
+			res.Key, res.Files, fmtBytes(res.Bytes), fmtBytes(res.Transferred), res.Skipped, strings.Join(res.Dirs, " "))
+		return nil
+	}
+	w := io.Writer(os.Stdout)
+	var f *os.File
+	if ef.To != "" {
+		var err error
+		if f, err = os.Create(ef.To); err != nil {
+			return fmt.Errorf("config cache export: %w", err)
+		}
+		w = f
+	}
+	res, err := m.ExportToolchainCache(ctx, ef.Toolchain, w, ef.UsedWithin)
+	if f != nil {
+		err = errors.Join(err, f.Close())
+	}
+	if err != nil {
+		return fmt.Errorf("config cache export: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "magus config cache export: wrote %d files, %s, %d unused entries trimmed; %s\n",
+		res.Files, fmtBytes(res.Bytes), res.Skipped, strings.Join(res.Dirs, " "))
 	return nil
 }
 

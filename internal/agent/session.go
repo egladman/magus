@@ -1,8 +1,8 @@
 package agent
 
 // The session-load contract: the vocabulary a per-host extraction adapter emits
-// and `magus session load` reads, in the one package that both the CLI and the
-// repo-root parity tests can import.
+// and `magus session load` reads, in the one package that the CLI imports and
+// the parity tests beside it read.
 //
 // Same reasoning as the guard contract beside it. package main cannot be
 // imported, so a check living outside it would restate the vocabulary, and a

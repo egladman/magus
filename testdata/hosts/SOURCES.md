@@ -43,7 +43,7 @@ string, with `additionalProperties: false` at both levels. Its hook STDOUT is Ty
 Codex is the best covered of the four. SchemaStore carries `.codex/hooks.json`, and OpenAI itself generates a schema per
 hook event, input and output, under `codex-rs/hooks/schema/generated` in the `openai/codex` repository. The one gap is
 that the hooks schema's `hooks` object takes `additionalProperties`, so an event name it does not know still validates.
-`conventions_test.go` closes that itself, by requiring every event name magus ships to be one the schema names.
+`internal/agent/harness_test.go` closes that itself, by requiring every event name magus ships to be one the schema names.
 
 Cursor publishes a schema for `.cursor/environment.json` (`https://cursor.com/schemas/environment.schema.json`, draft
 2019-09) and none for `.cursor/hooks.json`. `https://cursor.com/schemas/hooks.schema.json` answers with the docs SPA,

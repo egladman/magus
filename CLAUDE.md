@@ -8,69 +8,36 @@ builds itself with magus.
 Start with `MAGUS.md`, the generated routing index. `magus ls` and `magus ls
 targets <project>` list what exists.
 
-This file carries only what nothing else can tell you. A rule the guard, a
-conventions test, or a diagnostic already enforces is NOT restated here: the
-first denial teaches it, and prose that repeats a deny is prose nobody reads.
+This file carries only what no guard rule, conventions test, doctor check or
+diagnostic tells you. When a tool starts saying something, delete it here.
 
-## Which magus binary
+## Binary and gate
 
-`./magus`, built by `magus run go-build .`. `tools/policy/guard.buzz` says when it
-is stale (its go-build stamp no longer matches the sources), unstamped, or another
-checkout's, and names the escape when it cannot load the tree. Keep it; do not
-rebuild per command.
-
-Not enforced:
-
-- A read-only gate run leaves no `./magus` (`go-build` declares no outputs).
-  Without one the hook falls back to the PATH release, which is below
-  `required_version` and lacks the bootstrap exemption. Rebuild after gating.
-- A copy or symlink of another checkout's binary is not caught; running one by
-  its path is.
-- A rebuild that demands a hook flag the wired config does not pass (09-24:
-  `--agent-name`) denies every tool call of every session whose hook runs that
-  `./magus`. Rename it (`mv magus magus.new`) and run it by that name until the
-  hook config is reapplied.
-
-## The gate
-
-`magus affected ci --no-default-charms`. `magus.yaml` sets `default_charms: [rw]`,
-so a plain `affected ci` lets `generate` auto-write locally and hide uncommitted
-drift; stripping the charm makes it the pure drift gate CI runs.
-
-CADENCE: once per branch, when the substantive change is complete, before the
-first push. After a green gate, a small delta needs only the regeneration it
-touches (`magus run generate:rw <projects>`, one invocation for many projects);
-push and let the PR's CI be the gate, since it runs the identical command on the
-identical tree. Re-gate locally only when the delta is engine code or crosses
-projects. Regeneration stays local and mandatory: a born-red PR wastes a full CI
-round, while a red PR from a risk you knowingly deferred is the system working.
+- Use `./magus`, built by `magus run go-build .`. A fresh worktree has none, and
+  until it does the hooks run whatever `magus` is on PATH, which may not load this
+  tree; `tools/policy/guard.buzz` does not run at all then. Build before relying
+  on the guard.
+- Never keep running a renamed `./magus`. The hooks find the binary by that name,
+  so a rename hands every session in the checkout to the PATH binary, and the guard
+  recognizes magus by basename, so the renamed one escapes every magus rule.
+  Moving it aside is only a step in relinking.
+- The gate is `magus affected ci`. It fails on stale generated output rather than
+  rewriting it, so run `magus affected generate:rw` first.
 
 ## Rules
 
-- Regenerate in the SAME commit as the source change that invalidated the output.
-- Generated output lives in a `gen/` dir and carries no suffix, so the directory
-  is the signal. No exceptions: Go forces methods into their receiver's package, so
-  a method set is written by hand, never generated (see `types/enums.go`).
+- New generated output goes in a `gen/` dir with no suffix. The existing
+  exceptions (`MAGUS.md`, docs reference pages, installed skills) are declared
+  outputs; `magus describe file <path>` is the authority, not the directory. A
+  method set is written by hand (see `types/enums.go`).
 - Language-level changes in `libs/gopherbuzz/` must match upstream Buzz behavior.
-- Buzz is tested with in-file `test "..." {}` blocks via `magus buzz -t <file>`,
-  adding `--embedded` for files written for the magusfile engine (parsing is
-  upstream-strict by default, so most Buzz here needs it).
-- Git is the orchestrator's job: do VCS ops yourself and never delegate git to a
-  subagent. Run mutating subagents isolated or serialized.
-- Every spawn NAMES its model. Inheriting the parent's on purpose is fine;
-  inheriting because nobody said is not. There is no ordering rule to fall back
-  on, since same-strength offload is legitimate, so ASK when it is unclear. A
-  subagent needs a `./magus` built from ITS OWN worktree before it can validate.
-- Code that exists ONLY to keep older data, artifacts, or callers working carries
-  a `compat(until: <condition>):` comment naming what it supports, the condition
-  that retires it, and how you would OBSERVE that dropping it is safe. A date is
-  not a condition; "no store still serves ed25519 envelopes" is. Secondary sites
-  say `compat: see <the primary site>`. Use Go's `// Deprecated:` instead for an
-  exported API callers should stop using. Do not mark code that merely LOOKS like
-  a shim.
-- `TODO`, `FIXME`, and `BUG` comments are WELCOME and stay. Never add `godox` or
-  any linter that reports them: a gate red because a note exists does not do the
-  work. Standing decision, not an oversight.
+- Code that exists ONLY to keep older data, artifacts or callers working carries
+  `compat(until: <condition>):`, naming what it supports and how you would OBSERVE
+  that dropping it is safe. A date is not a condition; "no store still serves
+  ed25519 envelopes" is. Secondary sites say `compat: see <primary site>`. An
+  exported API callers should leave gets `// Deprecated:` instead.
+- `TODO`, `FIXME` and `BUG` comments stay. Never add `godox` or any linter that
+  reports them.
 - Before "fixing" behavior that looks wrong, look for the test that pins it.
 - Docs site follows classless Pico: semantic HTML, minimal custom classes, no
   inline styles.
@@ -78,51 +45,35 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 ## Layout
 
 - `magus.go` + root `*.go`: public API and composition root (`Open`, `Inspect`)
-- `types/`: pure domain types; near-leaf. Of magus it imports `spells`,
-  `libs/diagnostics` (deliberate and one-way, see `spells/doc.go`), `internal/json`
-  and its own leaf `types/enum`, and it reaches no filesystem, process or network.
-  `TestTypesStaysPureDomain` enforces that, so this line is a signpost rather
-  than the rule. A type a magusfile or script reads lives HERE, not behind an
-  alias in the package that computes it.
-- `internal/`: the engine (cache, interp, depgraph, spell, proc, sandbox, guard)
+- `types/`: pure domain types, near-leaf. A type a magusfile or script reads
+  lives here, not behind an alias in the package that computes it.
+- `internal/`: the engine (cache, interp, graph, spell, proc, sandbox, guard)
 - `cmd/magus`: the CLI; `cmd/magus-*`: codegen and docs tools
-- `std/`: the Buzz host modules a magusfile calls, registered into
-  `std/module.go`. There is no `host/` tree any more, so a reference to
-  `host/gen/` predates that.
-- `libs/`: code that versions independently. `libs/gopherbuzz` and
-  `libs/diagnostics` carry their own `go.mod`; `libs/textsearch` does not.
+- `std/`: the Buzz host modules a magusfile calls, registered in `std/module.go`
+- `libs/`: code that versions independently, most with its own `go.mod`
 - `spells/`: built-in spell sources (`.buzz`), compiled into the binary
-- `docs/`: markdown sources; `docs/render.buzz` renders the static site into
-  `docs/gen/` (generated, NOT committed; cd.yaml renders it at deploy time)
+- `docs/`: markdown sources; `docs/render.buzz` renders the site into `docs/gen/`
+  (not committed; cd.yaml renders it at deploy time)
 - `console/`: the native console PWA (standalone pnpm project); read
-  `console/README.md` first (CSS naming, PF conventions)
+  `console/README.md` first
+- `tools/policy/guard.buzz`: this repo's own guard rules
 
 ## Local gotchas
 
 - Trust the tree once, not per worktree: `mise settings add trusted_config_paths
   ~/Repos/magus`. Untrusted mise config surfaces as `govulncheck exited 1` and
   names neither mise nor trust, so read the run log before believing a finding.
-- `magus run lint .` is GREEN and `magus affected ci` has no known
-  local-environment failure. Treat a gate failure as yours, not as noise.
 - Forwarded args are APPENDED to the op's defaults, so a package path after `--`
   does NOT scope a run. `-- -run 'TestName'` does narrow. magus flags go BEFORE `--`.
 - The daemon (MCP, warm graph, symbol indexing) has no hot reload: after a
-  rebuild, `./magus server stop` then `start`. Do not wire a watch-rebuild loop.
-- Leftover `.claude/worktrees/` copies duplicate spell sources and trip MGS1002
-  at the repo root; remove dead worktrees first.
+  rebuild, `./magus server stop` then `start`. Two builds at one commit share a
+  version string, so `magus status` shows no skew for a mid-work rebuild.
 - Verifying the console: the service worker precaches and serves stale bundles.
   Serve `console/gen` on a fresh port, or unregister the SW and clear caches.
 
 ## Agent surface
 
-- `.claude/skills/magus-*` are INSTALLED copies (stamped, checked by `magus
-  doctor`'s `agent-skills`); edit the sources in `internal/agent/skills/` and
-  re-run `magus agent install .claude/skills --force`. `magus-skill-authoring`,
-  `magus-local-development` and `land-pull-requests` are hand-authored and
-  tracked (pinned by `conventions_test.go`'s `handAuthoredSkills`); edit those
-  in place, and read magus-skill-authoring before touching the agent surface.
 - Record decisions worth keeping, with the why, via `magus_memory`.
-- If a convention matters, give it an enforcement point. Measured 2026-08-24: the
-  only skills that loaded on their own were the two a hook demanded, and a rule
-  that lives only in prose has roughly even odds. `internal/guard/dir.go` is the
-  worked example.
+- If a convention matters, give it an enforcement point; `internal/guard/dir.go`
+  is the worked example. Measured 2026-08-24: a rule that lives only in prose has
+  roughly even odds.

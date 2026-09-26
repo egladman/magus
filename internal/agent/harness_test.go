@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -827,5 +829,311 @@ func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
 		d := base
 		d.Prompts = []HarnessPrompt{prompt}
 		assert.Error(t, validateHarnessDescriptor(d), name)
+	}
+}
+
+// Conformance gates for the agent-host integration files, against the hosts' OWN
+// schemas where a host publishes one.
+//
+// The hook gates in guard_test.go assert that these files exist, are
+// embedded in their page, and declare a stance for every decision. None of them
+// asks the question a user cares about first: would the host actually LOAD this?
+// The agents magusfile named that gap in its own words: "the event SHAPES in the
+// fixtures are recorded from each host's documentation, so a host silently renaming
+// a field is still invisible here". This is what closes it. A schema is the one
+// artifact that catches a rename, because it was written by the host.
+//
+// Two directions are graded. The CONFIG direction takes every hooks config magus
+// ships or embeds and validates it against the host's config schema. The OUTPUT
+// direction, in guard_test.go, takes the JSON the shipped sh templates print, rendered
+// from the template bodies in those files so it is the real bytes and not a copy, and
+// validates it against the host's hook-stdout schema.
+//
+// Nothing here reaches the network. testdata/hosts holds vendored copies and
+// records the provenance of each; tools/host-schemas.buzz is what refreshes them.
+
+const hostSchemaDir = repoRoot + "/testdata/hosts"
+
+// hostConfigSchema names the schema every hooks config a host reads is graded against.
+// A host absent from this map is a host whose config nothing checks, which is the
+// state this file exists to end.
+var hostConfigSchema = map[string]string{
+	"claude-code": "claude-code/settings.schema.json",
+	"codex":       "codex/hooks.schema.json",
+	"cursor":      "cursor/hooks.schema.json",
+}
+
+// hostConfigFile names the config files magus SHIPS for a host, as opposed to the
+// blocks its pages embed. Cursor has none: its page tells a reader to write the file.
+var hostConfigFile = map[string][]string{
+	"claude-code": {dogfoodedHookConfig},
+	"codex":       {filepath.Join(hookTemplateDir, "codex-hooks.json")},
+	"cursor":      {repoRoot + "/.cursor/hooks.json"},
+}
+
+// upstreamConfigDir holds configs the HOST's own people wrote, vendored from
+// github.com/cursor/plugins (the advisor, ralph-loop and continual-learning plugins).
+//
+// Every other input to these schemas is something magus produced, and a schema graded
+// only against its author's own output cannot fail: wrong in the same direction as the
+// thing it grades, it passes forever. These are the independent half. They exercise
+// fields magus never writes -- `loop_limit`, including its null form -- and they are the
+// only evidence here that the schema matches what Cursor actually loads rather than what
+// magus happens to emit.
+//
+// Refresh them when Cursor's plugin repository moves; a rejection here is a finding about
+// OUR schema, never about their config.
+const upstreamConfigDir = hostSchemaDir + "/cursor/upstream-configs"
+
+// hostGuidePage names the page whose embedded JSON configures each host.
+var hostGuidePage = map[string]string{
+	"claude-code": "claude-code.md",
+	"codex":       "codex.md",
+	"cursor":      "cursor.md",
+}
+
+// jsonCodeBlock matches a fenced json block on a guide page.
+var jsonCodeBlock = regexp.MustCompile("(?ms)^```json\r?\n(.*?)^```")
+
+// loadHostSchema reads a vendored schema and prepares it for validation.
+func loadHostSchema(t *testing.T, rel string) *jsonschema.Resolved {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(hostSchemaDir, rel))
+	require.NoError(t, err, "read the vendored schema %s", rel)
+	var schema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
+	// nil loader on purpose: a schema that grew a remote $ref would fail here rather
+	// than turn every run of this test into an HTTP request.
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err, "%s must resolve with no loader; a remote $ref would make this test fetch", rel)
+	return resolved
+}
+
+// decodeJSON unmarshals into the shape jsonschema-go validates.
+func decodeJSON(t *testing.T, label, body string) any {
+	t.Helper()
+	var doc any
+	require.NoError(t, json.Unmarshal([]byte(body), &doc), "%s must be valid JSON", label)
+	return doc
+}
+
+// hooksConfigBlocks returns the fenced json blocks on a page that configure hooks. A
+// page may carry JSON for something else (an MCP registration, say), so the selector is
+// the presence of a top-level "hooks" key rather than the fence.
+func hooksConfigBlocks(t *testing.T, page string) []string {
+	t.Helper()
+	body, err := os.ReadFile(page)
+	require.NoError(t, err, "read %s", page)
+	var configs []string
+	for _, match := range jsonCodeBlock.FindAllStringSubmatch(string(body), -1) {
+		doc, ok := decodeJSON(t, page, match[1]).(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, isConfig := doc["hooks"]; isConfig {
+			configs = append(configs, match[1])
+		}
+	}
+	return configs
+}
+
+// TestShippedHookConfigsValidateAgainstTheirHostSchema grades every hooks config magus
+// ships or publishes against the schema its host reads.
+//
+// The page blocks are covered alongside the files because they are what most readers
+// install: a reader copies the block, not the repository's own settings.
+func TestShippedHookConfigsValidateAgainstTheirHostSchema(t *testing.T) {
+	for host, schemaFile := range hostConfigSchema {
+		t.Run(host, func(t *testing.T) {
+			schema := loadHostSchema(t, schemaFile)
+
+			var graded int
+			for _, file := range hostConfigFile[host] {
+				body, err := os.ReadFile(file)
+				require.NoError(t, err, "read %s", file)
+				assert.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
+					"%s is not a config %s would load, per %s", file, host, schemaFile)
+				graded++
+			}
+
+			page := filepath.Join(hookTemplateDir, hostGuidePage[host])
+			for i, block := range hooksConfigBlocks(t, page) {
+				assert.NoError(t, schema.Validate(decodeJSON(t, page, block)),
+					"%s json block %d is not a config %s would load, per %s", page, i, host, schemaFile)
+				graded++
+			}
+
+			assert.Positive(t, graded,
+				"nothing was graded for %s: either its page stopped embedding a hooks config or the\n"+
+					"fence stopped saying json, and either way this gate went quiet rather than red", host)
+		})
+	}
+}
+
+// TestCursorSchemaAcceptsCursorsOwnConfigs grades our Cursor schema against configs
+// Cursor's own people wrote, which is the only input here magus did not produce.
+//
+// The sibling test above proves the schema accepts what magus writes. That is compatible
+// with the schema being wrong, because magus writes a narrow subset: a rejection of a real
+// config is invisible to it. This is the half that catches a schema too strict to load
+// what the host actually loads -- the direction a hand transcription fails in, since a
+// reader transcribing a validator records the branches they happened to read.
+func TestCursorSchemaAcceptsCursorsOwnConfigs(t *testing.T) {
+	schema := loadHostSchema(t, hostConfigSchema["cursor"])
+
+	entries, err := os.ReadDir(upstreamConfigDir)
+	require.NoError(t, err, "read %s", upstreamConfigDir)
+	require.NotEmpty(t, entries,
+		"no upstream configs vendored: this gate went quiet rather than red, which is the\n"+
+			"failure it exists to prevent")
+
+	for _, entry := range entries {
+		file := filepath.Join(upstreamConfigDir, entry.Name())
+		body, err := os.ReadFile(file)
+		require.NoError(t, err, "read %s", file)
+		assert.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
+			"%s is a config Cursor ships and our schema rejects it, so the schema is wrong", file)
+	}
+}
+
+// TestClaudeCodeAndCursorSchemasRejectAnUnknownHookEvent proves the config schemas bite.
+//
+// A gate that only ever sees valid input cannot tell a strict schema from an empty one,
+// and an empty one is exactly what a mis-parsed schema degrades into.
+func TestClaudeCodeAndCursorSchemasRejectAnUnknownHookEvent(t *testing.T) {
+	cases := map[string]string{
+		"claude-code": `{"hooks":{"PreToolUseTypo":[{"hooks":[{"type":"command","command":"true"}]}]}}`,
+		"cursor":      `{"version":1,"hooks":{"beforeShellExecutionTypo":[{"command":"true"}]}}`,
+	}
+	for host, body := range cases {
+		t.Run(host, func(t *testing.T) {
+			schema := loadHostSchema(t, hostConfigSchema[host])
+			assert.Error(t, schema.Validate(decodeJSON(t, host, body)),
+				"%s's schema accepted an event name that host has never heard of, so it would\n"+
+					"accept a typo in a shipped config too", host)
+		})
+	}
+}
+
+// TestCodexHookEventsAreNamedByItsSchema closes the one hole in Codex's published schema.
+//
+// Its `hooks` object takes additionalProperties, so `PreToolUseTypo` validates and the
+// hook simply never fires, which is the silent failure this whole file exists to
+// catch. The schema still NAMES every event Codex supports, so the check magus makes is
+// every event it ships is one of those.
+func TestCodexHookEventsAreNamedByItsSchema(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(hostSchemaDir, hostConfigSchema["codex"]))
+	require.NoError(t, err)
+
+	var schema struct {
+		Properties struct {
+			Hooks struct {
+				Properties map[string]any `json:"properties"`
+			} `json:"hooks"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &schema))
+	known := schema.Properties.Hooks.Properties
+	require.NotEmpty(t, known, "the codex schema must name the events it supports")
+	require.NotContains(t, known, "PreToolUseTypo",
+		"the event list read out of the schema is the wrong one if a made-up name is in it")
+
+	for _, file := range hostConfigFile["codex"] {
+		body, err := os.ReadFile(file)
+		require.NoError(t, err, "read %s", file)
+		var config struct {
+			Hooks map[string]any `json:"hooks"`
+		}
+		require.NoError(t, json.Unmarshal(body, &config))
+		require.NotEmpty(t, config.Hooks, "%s registers no hooks", file)
+		for event := range config.Hooks {
+			assert.Contains(t, known, event,
+				"%s registers %q, which the Codex hooks schema does not name. Codex accepts an\n"+
+					"unknown event without complaint and then never fires it, so this is the only\n"+
+					"place a rename or a typo can surface.", file, event)
+		}
+	}
+}
+
+// harnessSpellName reads the one identity a harness spell declares, its mgs_getName().
+func harnessSpellName(t *testing.T, id string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(repoRoot, "spells", "harness", id, "spell.buzz"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`export fun mgs_getName\(\) > str \{ return "([^"]+)"; \}`).FindSubmatch(body)
+	require.NotNil(t, m, "spells/harness/%s declares no mgs_getName", id)
+	return string(m[1])
+}
+
+// namedGlue matches a hook command that reaches glue which reads its host from the argv.
+// rehydrate reads none, and is left out on purpose.
+var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.(sh|buzz)|cursor-hook\.sh`)
+
+// hookCommands collects every "command" string in a host's hook config.
+func hookCommands(t *testing.T, path string) []string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var doc any
+	require.NoError(t, json.Unmarshal(body, &doc), "parse %s", path)
+	var out []string
+	var walk func(any)
+	walk = func(node any) {
+		switch v := node.(type) {
+		case map[string]any:
+			if cmd, ok := v["command"].(string); ok {
+				out = append(out, cmd)
+			}
+			for _, child := range v {
+				walk(child)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child)
+			}
+		}
+	}
+	walk(doc)
+	return out
+}
+
+// TestShippedHostConfigsNameTheirHost pins the host name onto every glue command a shipped
+// config carries, as the harness spell's own mgs_getName() renders it. The glue reads the
+// host from that argument and nowhere else, and refuses a call without it (MGS3024), so a
+// config that lost it would refuse every call; one naming another host would answer in
+// that host's dialect. docs/doctrine.md, "Told, never guessed".
+func TestShippedHostConfigsNameTheirHost(t *testing.T) {
+	for _, tc := range []struct{ id, config string }{
+		{"claude-code", filepath.Join(repoRoot, ".claude", "settings.json")},
+		{"codex", filepath.Join(repoRoot, ".codex", "hooks.json")},
+		{"codex", filepath.Join(hookTemplateDir, "codex-hooks.json")},
+		{"cursor", filepath.Join(repoRoot, ".cursor", "hooks.json")},
+	} {
+		want := "--agent-name " + harnessSpellName(t, tc.id)
+		var glue int
+		for _, cmd := range hookCommands(t, tc.config) {
+			if !namedGlue.MatchString(cmd) {
+				continue
+			}
+			glue++
+			assert.Contains(t, cmd, want, "%s: a glue command must name its host", tc.config)
+			assert.Equal(t, 1, strings.Count(cmd, "--agent-name"), "%s: one host per command: %s", tc.config, cmd)
+			assert.NotContains(t, cmd, "AGENT_NAME=", "%s: the host rides on argv, never in the environment", tc.config)
+		}
+		assert.NotZero(t, glue, "%s wires no glue this test recognizes; the matcher stopped matching", tc.config)
+	}
+}
+
+// TestOpenCodePluginNamesTheSpellsHost ties the one host name magus writes by hand, the
+// OpenCode plugin's, to the harness spell that declares it. The plugin is TypeScript that
+// magus does not render, so this is what keeps the two from drifting apart.
+func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
+	name := harnessSpellName(t, "opencode")
+	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
+	require.NoError(t, err)
+	named := regexp.MustCompile(`"--agent-name",\s*"([^"]*)"`).FindAllStringSubmatch(string(body), -1)
+	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
+	for _, m := range named {
+		assert.Equal(t, name, m[1], "opencode-plugin.ts names a host its harness spell does not declare")
 	}
 }

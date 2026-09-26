@@ -125,19 +125,28 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 
 ## Installing magus
 
-`setup-magus` takes five inputs. `queue-app-client-id` belongs to the
+`setup-magus` takes nine inputs. `queue-app-client-id` belongs to the
 [merge queue](#merge-queue), `restore-history` is covered under
 [Run history](#run-history), and the interesting one is `installation-strategy`:
 
-| strategy    | what it installs                                   |
-| ----------- | -------------------------------------------------- |
-| `automatic` | a verified release, falling back to a source build |
-| `prebuilt`  | the release named by `git-ref`, checksum-verified  |
-| `source`    | the magus that `source-path` defines               |
+| strategy    | what it installs                                           |
+| ----------- | ---------------------------------------------------------- |
+| `automatic` | a verified release, falling back to a source build         |
+| `prebuilt`  | the release named by `git-ref`, checksum-verified          |
+| `source`    | the magus that `source-path` defines                       |
+| `artifact`  | a binary an earlier job of this run built, digest-verified |
 
 Reach for `source` when the workspace under test needs a magus that has not been released
 yet - a magusfile using a feature from this commit. Reach for `prebuilt` with an explicit
 `git-ref` everywhere else: it is faster, and it pins what ran.
+
+A run with several jobs needs only one source build. The first job builds with
+`publish-artifact: <name>` and passes the action's `artifact` and `sha256` outputs on as
+job outputs; each later job installs with `installation-strategy: artifact`, naming
+`artifact`, `artifact-sha256` from those outputs, and `artifact-commit: ${{ github.sha }}`.
+A binary whose digest or stamped commit differs fails the job, with no fallback build.
+Publish from a job that restores no cache before the build and holds at least the trust of
+every job that installs it.
 
 If a source build is in play, note the PATH order: it provisions its own Go and prepends
 it, so a job that pinned a toolchain has to put its own back in front afterwards.
