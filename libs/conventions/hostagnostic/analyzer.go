@@ -22,7 +22,7 @@ import (
 // hostNames are the hosts matched by bare word. Cursor is absent: the word is a
 // terminal position and a pagination token far more often than the host, so
 // cursorHostUse carries it instead.
-var hostNames = regexp.MustCompile(`(?i)\b(claude|opencode|codex|aider|windsurf)\b`)
+var hostNames = regexp.MustCompile(`(?i)\b(claude|opencode|codex|aider|windsurf)\b`) //nolint:hostagnostic // the rule's own host list
 
 // cursorHostUse matches the shapes "cursor" takes when it means the host: the
 // proper noun in parentheses, a phrase naming the host's machinery, and a
@@ -32,7 +32,7 @@ var cursorHostUse = regexp.MustCompile(`\(Cursor\)|(?i:\bcursor (hooks?|ide|edit
 
 // hostPathUse allows a host name that names something on disk: a path, or a
 // bare quoted filename stem such as the "claude" classifying CLAUDE.md.
-var hostPathUse = regexp.MustCompile(`(?i)([./~][a-z0-9_.-]*\b(claude|opencode|codex|aider|windsurf)\b[a-z0-9_.-]*)|("(claude|opencode|codex|aider|windsurf)")`)
+var hostPathUse = regexp.MustCompile(`(?i)([./~][a-z0-9_.-]*\b(claude|opencode|codex|aider|windsurf)\b[a-z0-9_.-]*)|("(claude|opencode|codex|aider|windsurf)")`) //nolint:hostagnostic // the rule's own host list
 
 const message = "names an agent host outside a filesystem path: magus may name a host only in a path " +
 	"such as .claude/skills; move setup instructions, help text or a per-host branch into docs the reader owns"
@@ -40,7 +40,7 @@ const message = "names an agent host outside a filesystem path: magus may name a
 // Options configures the analyzer returned by [New].
 type Options struct {
 	// Module is the import path [SkipDirs] is relative to. A package outside it
-	// is not scanned.
+	// is matched on its own import path.
 	Module string `json:"module"`
 
 	// SkipDirs names directories, by any segment of the module-relative path,
@@ -79,7 +79,12 @@ func run(pass *analysis.Pass, opts Options) error {
 			continue
 		}
 		rel, ok := source.Rel(pass, opts.Module, f)
-		if !ok || skipped(rel, opts.SkipDirs) {
+		if !ok {
+			// A module of its own name, such as a benchmark harness, is still in the
+			// tree; its import path stands in for the relative path.
+			rel, _ = source.Rel(pass, "", f)
+		}
+		if skipped(rel, opts.SkipDirs) {
 			continue
 		}
 		name := source.Name(pass, f)

@@ -44,6 +44,11 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if len(opts.Words) == 0 {
 		return nil, errors.New("hostvocab: words is empty, so nothing would be reported")
 	}
+	if err := source.InModule("hostvocab", opts.Module, func(root string) error {
+		return opts.Files.Check("hostvocab", "files", root)
+	}); err != nil {
+		return nil, err
+	}
 	return &analysis.Analyzer{
 		Name: "hostvocab",
 		Doc:  "report a host's tool name spelled as a string literal in guard code",

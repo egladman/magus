@@ -26,6 +26,10 @@ const renamed = "no `case %s:` arm found in %s: the format constant was renamed;
 
 // Options configures the analyzer returned by [New].
 type Options struct {
+	// Module, when set, is the module holding [Options.Package], which must then
+	// exist on disk.
+	Module string `json:"module"`
+
 	// Package is the import path held to the rule.
 	Package string `json:"package"`
 
@@ -40,6 +44,11 @@ type Options struct {
 func New(opts Options) (*analysis.Analyzer, error) {
 	if opts.Package == "" || opts.Case == "" || len(opts.Emitters) == 0 {
 		return nil, errors.New("nameoutput: package, case and emitters are all required")
+	}
+	if err := source.InModule("nameoutput", opts.Module, func(root string) error {
+		return source.CheckPackage("nameoutput", "package", root, opts.Module, opts.Package)
+	}); err != nil {
+		return nil, err
 	}
 	return &analysis.Analyzer{
 		Name: "nameoutput",

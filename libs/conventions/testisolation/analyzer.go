@@ -30,6 +30,10 @@ const message = "this test binary links %s but no TestMain in its directory call
 
 // Options configures the analyzer returned by [New].
 type Options struct {
+	// Module, when set, is the module holding [Options.Package], which must then
+	// exist on disk.
+	Module string `json:"module"`
+
 	// Package is the import path whose reach demands isolation.
 	Package string `json:"package"`
 
@@ -53,6 +57,11 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		if pkg, fn, ok := strings.Cut(c, "."); !ok || pkg == "" || fn == "" {
 			return nil, errors.New("testisolation: call " + c + " is not pkg.Func")
 		}
+	}
+	if err := source.InModule("testisolation", opts.Module, func(root string) error {
+		return source.CheckPackage("testisolation", "package", root, opts.Module, opts.Package)
+	}); err != nil {
+		return nil, err
 	}
 	return &analysis.Analyzer{
 		Name:      "testisolation",

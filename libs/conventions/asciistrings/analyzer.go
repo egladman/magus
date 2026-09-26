@@ -48,6 +48,11 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if err := opts.Files.Validate("asciistrings"); err != nil {
 		return nil, err
 	}
+	if err := source.InModule("asciistrings", opts.Module, func(root string) error {
+		return opts.Files.Check("asciistrings", "files", root)
+	}); err != nil {
+		return nil, err
+	}
 	return &analysis.Analyzer{
 		Name: "asciistrings",
 		Doc:  "report typographic glyphs in user-facing string literals",

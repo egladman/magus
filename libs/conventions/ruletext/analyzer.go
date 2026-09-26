@@ -41,6 +41,11 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if opts.Prefix == "" {
 		return nil, errors.New("ruletext: prefix is empty")
 	}
+	if err := source.InModule("ruletext", opts.Module, func(root string) error {
+		return opts.Files.Check("ruletext", "files", root)
+	}); err != nil {
+		return nil, err
+	}
 	return &analysis.Analyzer{
 		Name: "ruletext",
 		Doc:  "report guard rule text outside the guard package",

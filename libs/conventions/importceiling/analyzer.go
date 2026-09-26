@@ -32,6 +32,10 @@ type Rule struct {
 
 // Options configures the analyzer returned by [New].
 type Options struct {
+	// Module, when set, is the module holding every rule's package, which must
+	// then exist on disk.
+	Module string `json:"module"`
+
 	Rules []Rule `json:"rules"`
 }
 
@@ -42,6 +46,16 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		if r.Package == "" || r.Prefix == "" {
 			return nil, errors.New("importceiling: every rule needs a package and a prefix")
 		}
+	}
+	if err := source.InModule("importceiling", opts.Module, func(root string) error {
+		for _, r := range opts.Rules {
+			if err := source.CheckPackage("importceiling", "rules.package", root, opts.Module, r.Package); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return &analysis.Analyzer{
 		Name: "importceiling",

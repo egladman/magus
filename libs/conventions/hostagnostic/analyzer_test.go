@@ -9,8 +9,11 @@ import (
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
+// TestAnalyzer names a module the testdata is not in, as a nested module with
+// its own name is in the tree: its packages are still scanned and still skipped
+// by directory.
 func TestAnalyzer(t *testing.T) {
-	analyzer, err := New(Options{SkipDirs: []string{"gen"}})
+	analyzer, err := New(Options{Module: "example.com/m", SkipDirs: []string{"gen"}})
 	if err != nil {
 		t.Fatal(err)
 	}

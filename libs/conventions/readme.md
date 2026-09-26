@@ -21,14 +21,21 @@ so the analyzers carry the mechanism and the config carries the policy.
 
 ## Scope
 
-golangci-lint here lints the root module, so these rules no longer reach the other
-modules under `libs/` that the old tree walks covered. Rules over source text
-(`hostagnostic`, `hostvocab`, `ruletext`, `asciistrings`, `importceiling`,
-`nameoutput`) also read the files a package's build constraints exclude on this
-platform, so a darwin run still checks the `_linux.go` files the walks did.
+golangci-lint stops at a `go.mod`, so the root `lint` target runs it once more in
+each module under `libs/`, on the same config, with only `hostagnostic` and
+`stutter` enabled: the two rules the old tree walks held everywhere. The rest name
+root-module paths. Rules over source text also read the files a package's build
+constraints exclude on this platform, so a darwin run still checks the
+`_linux.go` files the walks did.
 
-`testisolation` carries reach as a package fact along imports, which is why it is
-the one analyzer that needs type information.
+A setting that names a path (`files`, `package`) is checked against the tree
+when the plugin loads, from the directory whose `go.mod` declares `module`. A
+pattern matching no file, or a package with no Go files, is a load error naming
+the setting: a scope that matches nothing would otherwise report nothing.
+
+`testisolation` carries reach as a package fact along imports, which needs type
+information; the rest load types only because golangci-lint leaves the package
+unset without them.
 
 ## Not here
 

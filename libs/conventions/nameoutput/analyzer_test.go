@@ -1,7 +1,10 @@
 package nameoutput
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/egladman/magus/libs/conventions/internal/sourcetest"
 
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -28,6 +31,20 @@ func TestAnalyzerRenamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	analysistest.Run(t, analysistest.TestData(), analyzer, "renamed")
+}
+
+// TestNewRejectsMovedPackage fails at load when the package it guards moved.
+func TestNewRejectsMovedPackage(t *testing.T) {
+	sourcetest.Module(t, "example.com/m", "cmd/magus/main.go")
+	opts := options("example.com/m/cmd/magus")
+	opts.Module = "example.com/m"
+	if _, err := New(opts); err != nil {
+		t.Fatal(err)
+	}
+	opts.Package = "example.com/m/cmd/mgs"
+	if _, err := New(opts); err == nil || !strings.Contains(err.Error(), `nameoutput: package "example.com/m/cmd/mgs" has no Go files`) {
+		t.Fatalf("want an error naming the moved package, got %v", err)
+	}
 }
 
 func TestNewRejectsMissingField(t *testing.T) {
