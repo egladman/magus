@@ -1,0 +1,70 @@
+// The changelog-unreleased-edit rule, the write rule the root magusfile registers.
+namespace agentpolicy\unreleased;
+
+import "std";
+import "magus";
+
+final changelogDenial = "This checkout collects changelog entries as fragments, so CHANGELOG.md's "
+    + "[Unreleased] section is assembled, not edited: add your entry as "
+    + "`changes/unreleased/<branch>.md`, in the same shape (a `### Added` or `### Fixed` heading and "
+    + "a bullet). A fix to a released version's section is untouched by this rule.";
+
+// decideChangelog denies a CHANGELOG.md write that adds a line to [Unreleased] while the
+// checkout collects fragments. A write whose text the host did not describe is unknown,
+// not empty, and passes.
+export fun decideChangelog(fragments: bool, current: str, content: str, oldText: str, newText: str) > GuardVerdict {
+    if (!fragments) {
+        return magus\guard.allow();
+    }
+    var after = content;
+    if (after == "") {
+        if (oldText == "") {
+            return magus\guard.allow();
+        }
+        final at = current.indexOf(oldText);
+        if (at == null) {
+            return magus\guard.allow();
+        }
+        after = current.sub(0, len: at!) + newText + current.sub(at! + oldText.len());
+    }
+    final before = unreleasedLines(current);
+    foreach (line in unreleasedLines(after)) {
+        if (before.indexOf(line) == null) {
+            return magus\guard.deny(changelogDenial);
+        }
+    }
+    return magus\guard.allow();
+}
+
+// unreleasedLines are the non-blank lines of text's `## [Unreleased]` section.
+fun unreleasedLines(text: str) > [str] {
+    final lines = mut [<str>];
+    var inside = false;
+    foreach (line in text.split("\n")) {
+        if (line.startsWith("## ")) {
+            inside = line.startsWith("## [Unreleased]");
+        } else if (inside and line.trim() != "") {
+            lines.append(line);
+        }
+    }
+    return lines;
+}
+
+// A CHANGELOG.md as it stands on main: an [Unreleased] section above a released one.
+final changelog = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **An entry.** Text.\n\n## [v0.4.3] - 2026-09-06\n\n### Fixed\n\n- **A fix.** Text.\n";
+
+test "adding to [Unreleased] by hand is denied once fragments exist" {
+    final edit = decideChangelog(true, current: changelog, content: "", oldText: "- **An entry.** Text.\n", newText: "- **An entry.** Text.\n- **Mine.** More.\n");
+    std\assert(edit.decision == "deny", message: "an edit");
+    std\assert(edit.reason.indexOf("changes/unreleased/") != null, message: "names the fragment path");
+    final write = decideChangelog(true, current: changelog, content: changelog.replace("### Added\n", "### Added\n\n- **Mine.**\n"), oldText: "", newText: "");
+    std\assert(write.decision == "deny", message: "a whole-file write");
+}
+
+test "a released section's fix, a checkout without fragments and an unknown edit pass" {
+    std\assert(decideChangelog(true, current: changelog, content: "", oldText: "- **A fix.** Text.", newText: "- **A fix.** Text, corrected.").decision == "allow", message: "a past release");
+    std\assert(decideChangelog(false, current: changelog, content: "", oldText: "- **An entry.** Text.\n", newText: "- **Mine.**\n").decision == "allow", message: "no fragments yet");
+    std\assert(decideChangelog(true, current: changelog, content: "", oldText: "", newText: "").decision == "allow", message: "a shape magus does not read");
+    final cut = changelog.replace("## [Unreleased]\n\n### Added\n\n- **An entry.** Text.\n\n", "## [Unreleased]\n\n## [v0.5.0] - 2026-09-24\n\n### Added\n\n- **An entry.** Text.\n\n");
+    std\assert(decideChangelog(true, current: changelog, content: cut, oldText: "", newText: "").decision == "allow", message: "a release cut moves lines out");
+}

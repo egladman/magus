@@ -1,0 +1,138 @@
+// The argv parsing the policy's rules share, and the fixtures their tests build requests
+// with. Only functions and objects cross from here: an exported final read by a second
+// importer of this file fails to compile.
+namespace agentpolicy\helpers;
+
+import "fs";
+
+// Program is one program a command runs, copied out of the request because a Buzz test
+// cannot build the host's CommandInvocation.
+export object Program {
+    name: str,
+    args: [str],
+    repeats: bool,
+    // path is the file the line names the program by, "" when found on PATH or unknown.
+    path: str = "",
+}
+
+// The magus flags that take the next word as their value.
+final magusValueFlags = [
+    "-o", "--output", "--tee", "-j", "--concurrency", "--concurrency-profile", "--root",
+    "--skip", "--timeout", "--target-timeout", "--stall-timeout", "--shard", "--n-shards",
+    "--log-level", "--log-format", "--cache-dir", "--max-failures", "--race", "--depth",
+];
+
+// magusOperands are a magus command line's operands: `affected ci` from
+// `magus -j 4 affected ci`.
+export fun magusOperands(args: [str]) > [str] {
+    return operandsOf(args, valueFlags: magusValueFlags);
+}
+
+// operandsOf are args with every flag, and the value of each flag in valueFlags, left out.
+export fun operandsOf(args: [str], valueFlags: [str]) > [str] {
+    final ops = mut [<str>];
+    var skip = false;
+    foreach (arg in args) {
+        if (skip) {
+            skip = false;
+        } else if (arg.startsWith("-")) {
+            skip = arg.indexOf("=") == null and valueFlags.indexOf(arg) != null;
+        } else {
+            ops.append(arg);
+        }
+    }
+    return ops;
+}
+
+export fun hasFlag(args: [str], long: str) > bool {
+    foreach (arg in args) {
+        if (arg == long or arg.startsWith(long + "=")) { return true; }
+    }
+    return false;
+}
+
+// flagValue is the value given to a flag spelled long or short ("" when it has no short
+// form), or null when the flag is absent.
+export fun flagValue(args: [str], long: str, short: str) > str? {
+    foreach (i, arg in args) {
+        if ((arg == long or (short != "" and arg == short)) and i + 1 < args.len()) {
+            return args[i + 1];
+        }
+        if (arg.startsWith(long + "=")) {
+            return arg.sub(long.len() + 1);
+        }
+    }
+    return null;
+}
+
+// GoCall is a go command's -C directory, "" for none, and its argv from the subcommand on
+// with -C removed. go accepts -C first, before the subcommand or right after it.
+export object GoCall {
+    chdir: str,
+    args: [str],
+}
+
+export fun goCall(args: [str]) > GoCall {
+    var chdir = "";
+    var rest = args;
+    if (rest.len() > 1 and rest[0] == "-C") {
+        chdir = rest[1];
+        rest = rest.sub(2);
+    } else if (rest.len() > 0 and rest[0].startsWith("-C=")) {
+        chdir = rest[0].sub(3);
+        rest = rest.sub(1);
+    }
+    if (chdir == "" and rest.len() > 2 and rest[1] == "-C") {
+        chdir = rest[2];
+        rest = [rest[0]] + rest.sub(3);
+    } else if (chdir == "" and rest.len() > 1 and rest[1].startsWith("-C=")) {
+        chdir = rest[1].sub(3);
+        rest = [rest[0]] + rest.sub(2);
+    }
+    return GoCall{ chdir = chdir, args = rest };
+}
+
+// titleRole is the role a `<parent>/<role> <job>` title names, "" for any other form.
+export fun titleRole(title: str) > str {
+    final words = title.split(" ");
+    if (words.len() != 2) {
+        return "";
+    }
+    final head = words[0].split("/");
+    if (head.len() < 2) {
+        return "";
+    }
+    return head[head.len() - 1];
+}
+
+// request is the programs a command runs, each spelled as its argv. A leading "loop:" marks
+// the program as repeated by a polling loop, and a program word holding a slash is its path.
+export fun request(argvs: [[str]]) > [Program] {
+    final programs = mut [<Program>];
+    foreach (argv in argvs) {
+        var words = argv;
+        var repeats = false;
+        if (words[0] == "loop:") {
+            repeats = true;
+            words = words.sub(1);
+        }
+        var name = words[0];
+        var file = "";
+        if (name.indexOf("/") != null) {
+            file = name;
+            name = fs\basename(name);
+        }
+        programs.append(Program{ name = name, args = words.sub(1), repeats = repeats, path = file });
+    }
+    return programs;
+}
+
+// counter is a fresh once-per-session gate.
+export fun counter() > fun (key: str) > bool {
+    final seen = mut {<str: bool>};
+    return fun (key: str) > bool {
+        if (seen[key] ?? false) { return false; }
+        seen[key] = true;
+        return true;
+    };
+}

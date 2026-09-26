@@ -1,0 +1,242 @@
+// The stale-binary rule, and the build stamp go-build links into ./magus for it.
+namespace agentpolicy\stale;
+
+import "std";
+import "magus";
+import "fs";
+import "path";
+import "crypto";
+import "./tools/policy/helpers" as helpers;
+import "./tools/policy/binaries" as binaries;
+
+// The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
+// the skills it serves, and the host declarations and spell bytecode it embeds, which are
+// what a magusfile loads against. go-build links a digest of each into the binary.
+final stampGlobs = [
+    "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
+    "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
+    "internal/spell/gen/decls/*.buzz", "internal/spell/gen/*.bo",
+];
+
+// stampFiles are the stamped files under root, root-relative, tests left out: a test is
+// not linked into the binary. fs\glob answers relative to the working directory, so both
+// sides are made absolute before one is cut from the other.
+fun stampFiles(root: str) > [str] !> any {
+    final base = path\abs(root);
+    final files = mut [<str>];
+    foreach (pattern in stampGlobs) {
+        foreach (found in fs\glob("{base}/{pattern}")) {
+            final rel = path\abs(found.value).sub(base.len() + 1);
+            if (!rel.endsWith("_test.go")) {
+                files.append(rel);
+            }
+        }
+    }
+    return files;
+}
+
+fun digestOf(file: str) > str !> any {
+    return crypto\sha256File(file).sub(0, len: 12);
+}
+
+// buildStamp is what go-build links into ./magus: `<path>=<digest>` for every stamped file
+// under root, comma-separated.
+export fun buildStamp(root: str) > str !> any {
+    final entries = mut [<str>];
+    foreach (rel in stampFiles(root)) {
+        final digest = digestOf("{root}/{rel}");
+        entries.append("{rel}={digest}");
+    }
+    return entries.join(",");
+}
+
+// movedSince lists the stamped files under root whose content is not what stamp recorded:
+// changed, added, or removed. A file no newer than builtAt, the binary's mtime, is the one
+// the build read, so only newer files are hashed.
+export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
+    final recorded = mut {<str: str>};
+    final order = mut [<str>];
+    foreach (entry in stamp.split(",")) {
+        final at = entry.indexOf("=");
+        if (at != null) {
+            final rel = entry.sub(0, len: at!);
+            recorded[rel] = entry.sub(at! + 1);
+            order.append(rel);
+        }
+    }
+    final moved = mut [<str>];
+    final present = mut {<str: bool>};
+    foreach (rel in stampFiles(root)) {
+        present[rel] = true;
+        final was = recorded[rel];
+        if (was == null) {
+            moved.append(rel);
+        } else if (fs\stat("{root}/{rel}").mtime > builtAt and digestOf("{root}/{rel}") != was!) {
+            moved.append(rel);
+        }
+    }
+    foreach (rel in order) {
+        if (!(present[rel] ?? false)) {
+            moved.append(rel);
+        }
+    }
+    return moved;
+}
+
+// HookBinary is what the stale-binary rule knows about the magus answering the hook:
+// whether it is this workspace's own ./magus, whether go-build stamped it, and which
+// stamped sources moved since.
+export object HookBinary {
+    ours: bool,
+    stamped: bool,
+    moved: [str],
+}
+
+// hookBinary reads HookBinary off the filesystem. A binary that is not this workspace's
+// own ./magus (one on PATH, another checkout's) has no sources here to be stale against.
+export fun hookBinary(workspace: str) > HookBinary {
+    final none = HookBinary{ ours = false, stamped = false, moved = [<str>] };
+    if (workspace == "") { return none; }
+    final bin = magus\guard.binary();
+    final own = "{workspace}/magus";
+    final sameFile = binaries\onDisk().sameFile;
+    if (bin.path == "" or (bin.path != own and !sameFile(own, bin.path))) { return none; }
+    if (bin.stamp == "") {
+        return HookBinary{ ours = true, stamped = false, moved = [<str>] };
+    }
+    final built = fs\stat(bin.path) catch null;
+    if (built == null) { return none; }
+    final moved = movedSince(workspace, stamp: bin.stamp, builtAt: built!.mtime) catch [<str>];
+    return HookBinary{ ours = true, stamped = true, moved = moved };
+}
+
+final unstampedAdvice = "./magus carries no go-build stamp: it was linked by a bare `go build` "
+    + "(the bootstrap) or before stamps existed, so its embedded spell bytecode and host "
+    + "declarations are whatever the link found, and nothing can say which sources its verdicts "
+    + "come from. Stamp it: `./magus run go-build .`.";
+
+// decideStale advises once per moved set that the ./magus answering this hook was built
+// from other sources than the checkout holds now: proven by content, not by mtimes. It
+// never denies: running a stale binary is how it gets rebuilt.
+export fun decideStale(bin: HookBinary, once: fun (key: str) > bool) > GuardVerdict {
+    if (!bin.ours) {
+        return magus\guard.allow();
+    }
+    if (!bin.stamped) {
+        if (once("stale-binary:unstamped")) { return magus\guard.advise(unstampedAdvice); }
+        return magus\guard.allow();
+    }
+    if (bin.moved.len() == 0 or !once("stale-binary:" + bin.moved.join(","))) {
+        return magus\guard.allow();
+    }
+    var named = bin.moved;
+    var more = "";
+    if (named.len() > 5) {
+        more = " and {named.len() - 5} more";
+        named = named.sub(0, len: 5);
+    }
+    final text = "./magus was built before {bin.moved.len()} of its sources moved: {named.join(", ")}{more}. "
+        + "This verdict, and the workspace it loads, come from the PREVIOUS sources. "
+        + "Rebuild: `./magus run go-build .`.";
+    var declsMoved = false;
+    foreach (rel in bin.moved) {
+        if (rel.startsWith("internal/spell/gen/decls/")) { declsMoved = true; }
+    }
+    if (!declsMoved) {
+        return magus\guard.advise(text);
+    }
+    return magus\guard.advise(text + " " + deadlockEscape);
+}
+
+// deadlockEscape is the way out for a binary that cannot load the tree and so cannot
+// rebuild itself.
+final deadlockEscape = "The host declarations moved, so the next load may fail with MGS1021, and a "
+    + "binary that cannot load the tree cannot rebuild itself. The escape, one command at a time: "
+    + "`mv magus magus.old`, `go build -o magus ./cmd/magus` (if that fails with `undefined:` in a "
+    + "gen/ package, the merge kept one side's generated code: restore those gen/ directories from "
+    + "the side that produced them, or three-way merge them with `git merge-file`, then link again), "
+    + "then `./magus run go-build .`.";
+
+// rebuilds: the line is itself the rebuild, which a staleness advisory would only delay.
+export fun rebuilds(programs: [helpers\Program]) > bool {
+    foreach (p in programs) {
+        if (p.name == "magus") {
+            final ops = helpers\magusOperands(p.args);
+            if (ops.len() > 1 and ops[0] == "run") {
+                final target = ops[1].split(":")[0];
+                if (target == "go-build" or target == "spells-generate" or target == "generate") {
+                    return true;
+                }
+            }
+        }
+        if (p.name == "go" and helpers\goCall(p.args).args.len() > 0 and helpers\goCall(p.args).args[0] == "build") {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun stale(moved: [str]) > HookBinary {
+    return HookBinary{ ours = true, stamped = true, moved = moved };
+}
+
+test "a ./magus whose sources moved is advised once per moved set, naming them" {
+    final once = helpers\counter();
+    final v = decideStale(stale(["internal/guard/shell.go"]), once: once);
+    std\assert(v.decision == "advise", message: "moved");
+    std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names the file");
+    std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
+    std\assert(v.reason.indexOf("magus.old") == null, message: "no deadlock talk for a Go source");
+    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == "allow", message: "once per set");
+    std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == "advise", message: "a new set speaks again");
+
+    final decls = decideStale(stale(["internal/spell/gen/decls/magus.buzz"]), once: helpers\counter());
+    std\assert(decls.reason.indexOf("mv magus magus.old") != null, message: "host declarations name the escape");
+    std\assert(decls.reason.indexOf("git merge-file") != null, message: "and the gen/ repair");
+
+    final many = decideStale(stale(["a", "b", "c", "d", "e", "f", "g"]), once: helpers\counter());
+    std\assert(many.reason.indexOf("and 2 more") != null, message: "caps the list");
+}
+
+test "an unstamped ./magus is advised once; another binary and an unmoved one stay silent" {
+    final once = helpers\counter();
+    final unstamped = HookBinary{ ours = true, stamped = false, moved = [<str>] };
+    std\assert(decideStale(unstamped, once: once).decision == "advise", message: "unstamped");
+    std\assert(decideStale(unstamped, once: once).decision == "allow", message: "once");
+    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: helpers\counter()).decision == "allow", message: "not ours");
+    std\assert(decideStale(stale([<str>]), once: helpers\counter()).decision == "allow", message: "nothing moved");
+}
+
+test "the rebuild itself is not held up by the staleness it cures" {
+    foreach (argv in [
+        ["./magus", "run", "go-build", ".", "-s"],
+        ["./magus", "run", "spells-generate:rw", "."],
+        ["go", "build", "-o", "magus", "./cmd/magus"],
+    ]) {
+        std\assert(rebuilds(helpers\request([argv])), message: argv.join(" "));
+    }
+    std\assert(!rebuilds(helpers\request([["./magus", "run", "lint", "."]])), message: "any other run");
+}
+
+test "the stamp records every stamped source, and movedSince names what changed" {
+    final root = fs\tempDir("stamp") catch "";
+    std\assert(root != "", message: "a temp dir");
+    fs\mkdirAll("{root}/internal/guard") catch void;
+    fs\mkdirAll("{root}/internal/spell/gen/decls") catch void;
+    fs\writeFile("{root}/internal/guard/shell.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/guard/shell_test.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 1;\n") catch void;
+
+    final stamp = buildStamp(root) catch "";
+    std\assert(stamp.indexOf("internal/guard/shell.go=") != null, message: "a rule source");
+    std\assert(stamp.indexOf("internal/spell/gen/decls/magus.buzz=") != null, message: "a host declaration");
+    std\assert(stamp.indexOf("shell_test.go") == null, message: "a test is not linked in");
+    std\assert((movedSince(root, stamp: stamp, builtAt: 0.0) catch ["error"]).len() == 0, message: "nothing moved");
+
+    fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 2;\n") catch void;
+    fs\writeFile("{root}/internal/guard/policy.go", content: "package guard\n") catch void;
+    fs\remove("{root}/internal/guard/shell.go") catch void;
+    final moved = movedSince(root, stamp: stamp, builtAt: 0.0) catch [<str>];
+    std\assert(moved.join(",") == "internal/guard/policy.go,internal/spell/gen/decls/magus.buzz,internal/guard/shell.go", message: moved.join(","));
+    fs\removeAll(root) catch void;
+}
