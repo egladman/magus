@@ -259,7 +259,9 @@ generated file, a candidate tree or a review proof from a verdict.
   `GetCacheEntryDownloadURL`, the lookup whose answer is a pre-signed blob URL the hook
   downloads with no credential, and refuses every other method, so no write reaches the
   cache service through it. Hooks get the base's trusted keys, verification on and
-  remote writes off, so an entry replays only when main's key signed it. This removes
+  remote writes off, so an entry replays only when main's key signed it. Charms are
+  part of every cache key, so a gate replays main's entries only when it runs under the
+  charms main's CI stored them with (`ci:gha` against shards running `ci:gha`). This removes
   the token from a hook's environment and nothing more: the real one is in the
   environment of the validate process that started the hook, and where the kernel does
   not confine the hook, one that goes looking can read it there as it can from the

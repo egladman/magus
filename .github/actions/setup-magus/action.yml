@@ -1,8 +1,8 @@
 name: Setup magus
 description: >
   Install the magus binary into the runner tool cache ($RUNNER_TOOL_CACHE) and
-  add it to PATH. Magus is installed either from a signed GitHub Release or by
-  building from source.
+  add it to PATH. Magus is installed from a signed GitHub Release, by building
+  from source, or from a binary an earlier job of the same run built and published.
 
 inputs:
   installation-strategy:
@@ -19,7 +19,10 @@ inputs:
       main (see the "Verify source commit is reachable from main" step below),
       so automatic can still fail if git-ref is a real but unmerged tag. Only
       source-path skips that gate.
-      One of: automatic, prebuilt, source.
+      artifact installs the binary an earlier job of this run published with
+      publish-artifact, named by artifact, and verifies it against
+      artifact-sha256 and artifact-commit before anything runs it.
+      One of: automatic, prebuilt, source, artifact.
     required: false
     default: automatic
 
@@ -50,6 +53,39 @@ inputs:
       ephemeral refs/pull/N/merge commit, a DESCENDANT of main, so the gate
       below rejects it every time.
       Callers installing magus as a dependency should leave this unset.
+    required: false
+    default: ''
+
+  publish-artifact:
+    description: >
+      With a source build, uploads the built binary as a workflow artifact of this
+      name before any later step of the job runs, and reports its digest as the
+      sha256 output. Later jobs of the same run install it with installation-strategy:
+      artifact. Publish only from a job that restored no Actions cache before this
+      action and whose trust is at least that of every consumer: the binary carries
+      this job's trust into theirs.
+    required: false
+    default: ''
+
+  artifact:
+    description: >
+      The workflow artifact to install, published earlier in this run by
+      publish-artifact. Requires installation-strategy: artifact.
+    required: false
+    default: ''
+
+  artifact-sha256:
+    description: >
+      The sha256 the artifact's binary must have: the publishing job's sha256 output,
+      carried as a job output. Never read it from the artifact itself, which is the
+      thing being checked. A mismatch fails the job; nothing falls back to a build.
+    required: false
+    default: ''
+
+  artifact-commit:
+    description: >
+      The commit the artifact's binary must report as its own (`magus version`),
+      normally the commit the calling job checked out. Any other stamp fails the job.
     required: false
     default: ''
 
@@ -99,6 +135,16 @@ outputs:
       The commit the installed binary was built from, as it reports itself. Pins what
       actually ran when `version` is a tag shared by rebuilds, or a describe string.
     value: ${{ steps.installed.outputs.commit }}
+  sha256:
+    description: >
+      The installed binary's sha256, taken the moment it was built or verified. Empty
+      for a prebuilt release.
+    value: ${{ steps.build.outputs.sha256 || steps.artifact-verify.outputs.sha256 }}
+  artifact:
+    description: >
+      The artifact name publish-artifact uploaded, for a later job's artifact input.
+      Empty when nothing was published, so a consumer fails rather than guessing a name.
+    value: ${{ steps.publish.outcome == 'success' && inputs.publish-artifact || '' }}
   # Outputs, never $GITHUB_ENV: this action also runs in jobs that execute pull-request
   # code, and an output reaches only the steps that name it.
   queue-token:
@@ -141,8 +187,31 @@ runs:
         echo "::error::magus: source-path is set but installation-strategy is '${STRATEGY}'; source-path builds the tree already on disk, so it only applies with installation-strategy: source" >&2
         exit 1
 
+    - name: Reject inconsistent artifact inputs
+      shell: bash
+      env:
+        STRATEGY: ${{ inputs.installation-strategy }}
+        PUBLISH: ${{ inputs.publish-artifact }}
+        ARTIFACT: ${{ inputs.artifact }}
+        WANT_SHA256: ${{ inputs.artifact-sha256 }}
+        WANT_COMMIT: ${{ inputs.artifact-commit }}
+      run: |
+        if [ "${STRATEGY}" = "artifact" ]; then
+          if [ -z "${ARTIFACT}" ] || [ -z "${WANT_SHA256}" ] || [ -z "${WANT_COMMIT}" ]; then
+            echo "::error::magus: installation-strategy artifact needs artifact, artifact-sha256 and artifact-commit; an unverified binary is never installed" >&2
+            exit 1
+          fi
+        elif [ -n "${ARTIFACT}${WANT_SHA256}${WANT_COMMIT}" ]; then
+          echo "::error::magus: artifact, artifact-sha256 and artifact-commit apply only with installation-strategy: artifact, and it is '${STRATEGY}'" >&2
+          exit 1
+        fi
+        if [ -n "${PUBLISH}" ] && [ "${STRATEGY}" != "source" ]; then
+          echo "::error::magus: publish-artifact needs installation-strategy: source, and it is '${STRATEGY}'" >&2
+          exit 1
+        fi
+
     - name: Sparse checkout install script
-      if: inputs.installation-strategy != 'source'
+      if: inputs.installation-strategy != 'source' && inputs.installation-strategy != 'artifact'
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: egladman/magus
@@ -152,7 +221,7 @@ runs:
 
     - name: Install magus from release
       id: prebuilt
-      if: inputs.installation-strategy != 'source'
+      if: inputs.installation-strategy != 'source' && inputs.installation-strategy != 'artifact'
       # Only automatic may fall through to a source build; under prebuilt this
       # step's failure must fail the job (enforced below), not be swallowed.
       continue-on-error: ${{ inputs.installation-strategy == 'automatic' }}
@@ -190,7 +259,7 @@ runs:
       id: strategy
       shell: bash
       env:
-        RESOLVED: ${{ steps.prebuilt.outcome == 'success' && 'prebuilt' || 'source' }}
+        RESOLVED: ${{ inputs.installation-strategy == 'artifact' && 'artifact' || (steps.prebuilt.outcome == 'success' && 'prebuilt' || 'source') }}
       run: echo "resolved=${RESOLVED}" >> "$GITHUB_OUTPUT"
 
     - name: Fail if prebuilt required but unavailable
@@ -300,6 +369,7 @@ runs:
         exit 1
 
     - name: Build magus from source
+      id: build
       if: steps.strategy.outputs.resolved == 'source'
       shell: bash
       working-directory: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}
@@ -331,6 +401,73 @@ runs:
           -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${BUILD_DATE}" \
           -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
         echo "magus: built ${SOURCE_DESC} from source as ${VERSION} (${COMMIT}), CGO_ENABLED=0 bootstrap" >&2
+        # In this step, before any later one can touch the file: a consumer trusts this
+        # digest, not whatever the job goes on to upload.
+        if command -v sha256sum >/dev/null; then
+          SHA256="$(sha256sum "$RUNNER_TOOL_CACHE/magus/bin/magus" | cut -d' ' -f1)"
+        else
+          SHA256="$(shasum -a 256 "$RUNNER_TOOL_CACHE/magus/bin/magus" | cut -d' ' -f1)"
+        fi
+        echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+        echo "magus: sha256 ${SHA256}" >&2
+
+    # Ahead of the history restore below: a cache entry is a tar the restore extracts,
+    # and nothing it writes may reach a binary other jobs run.
+    - name: Publish the built binary
+      id: publish
+      if: inputs.publish-artifact != '' && steps.strategy.outputs.resolved == 'source'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.publish-artifact }}
+        path: ${{ runner.tool_cache }}/magus/bin/magus
+        if-no-files-found: error
+        # Rerunning failed jobs reuses this artifact; past this a consumer fails on it missing.
+        retention-days: 3
+
+    - name: Download the published binary
+      if: steps.strategy.outputs.resolved == 'artifact'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ runner.temp }}/setup-magus-artifact
+
+    # The digest is taken of the installed copy, so the file hashed is the file run. The
+    # commit check executes the binary, so it waits for the digest to match.
+    - name: Verify the published binary
+      id: artifact-verify
+      if: steps.strategy.outputs.resolved == 'artifact'
+      shell: bash
+      env:
+        ARTIFACT: ${{ inputs.artifact }}
+        WANT_SHA256: ${{ inputs.artifact-sha256 }}
+        WANT_COMMIT: ${{ inputs.artifact-commit }}
+      run: |
+        set -euo pipefail
+        BIN="$RUNNER_TOOL_CACHE/magus/bin/magus"
+        mkdir -p "$(dirname "$BIN")"
+        cp "$RUNNER_TEMP/setup-magus-artifact/magus" "$BIN"
+        rm -rf "$RUNNER_TEMP/setup-magus-artifact"
+        if command -v sha256sum >/dev/null; then
+          GOT="$(sha256sum "$BIN" | cut -d' ' -f1)"
+        else
+          GOT="$(shasum -a 256 "$BIN" | cut -d' ' -f1)"
+        fi
+        if [ "${GOT}" != "${WANT_SHA256}" ]; then
+          rm -f "$BIN"
+          echo "::error::magus: artifact '${ARTIFACT}' has sha256 ${GOT}, but its publisher recorded ${WANT_SHA256}; refusing to run it" >&2
+          exit 1
+        fi
+        # An artifact does not keep the executable bit.
+        chmod 0755 "$BIN"
+        COMMIT="$("$BIN" version -o 'template={{.commit}}')"
+        # The build stamps `git rev-parse --short`, a prefix of the full commit.
+        if [ "${#COMMIT}" -lt 7 ] || [ "${WANT_COMMIT#"${COMMIT}"}" = "${WANT_COMMIT}" ]; then
+          rm -f "$BIN"
+          echo "::error::magus: artifact '${ARTIFACT}' reports commit '${COMMIT}', not ${WANT_COMMIT}; refusing to run it" >&2
+          exit 1
+        fi
+        echo "sha256=${GOT}" >> "$GITHUB_OUTPUT"
+        echo "magus: artifact '${ARTIFACT}' verified, sha256 ${GOT}, commit ${COMMIT}" >&2
 
     # A leftover magus checkout under the caller's workspace is a second
     # magusfile.buzz/spells tree; if the caller is magus's own repo, its next
@@ -393,6 +530,8 @@ runs:
       run: |
         if [ "${INSTALL_SOURCE}" = "prebuilt" ]; then
           echo "magus: installed prebuilt release, git-ref ${GIT_REF} (signature verified)"
+        elif [ "${INSTALL_SOURCE}" = "artifact" ]; then
+          echo "magus: installed this run's published binary (sha256 and commit verified)"
         elif [ -n "${SOURCE_PATH}" ]; then
           echo "magus: built from source, source-path ${SOURCE_PATH} (the caller's own checkout)"
         else

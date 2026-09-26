@@ -53,8 +53,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     |                                                                                                                             |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1002`                                                                                             |
-| doc        |     700+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                             |
+| doc        |     800+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                              |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                                         |
 | function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `main`                                                                                               |

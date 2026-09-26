@@ -251,12 +251,7 @@ var alwaysUntrustedFlows = map[string]string{
 // cacheRestoreExemptions are trusted jobs allowed to restore, keyed
 // <workflow file>/<job>, each with its reason. An exemption that no longer
 // matches a restoring trusted job is itself a finding.
-//
-// TODO: queue-apply.yaml belongs to another change; delete this entry once its
-// mise-action carries cache: false.
-var cacheRestoreExemptions = map[string]string{
-	"queue-apply.yaml/apply": "jdx/mise-action restores main's scope beside the queue's write token",
-}
+var cacheRestoreExemptions = map[string]string{}
 
 // trustedJobsRestoreNoActionsCache: a job holding a secret, a write token or
 // id-token restores no Actions cache. main's cache scope is writable by any

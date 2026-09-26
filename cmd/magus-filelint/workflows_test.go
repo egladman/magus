@@ -1,11 +1,16 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
@@ -92,5 +97,91 @@ func TestTrustedJobsRestoreNoActionsCacheHoldsExemptionsToTheirJob(t *testing.T)
 
 func TestTrustedJobsRestoreNoActionsCachePassesTheTree(t *testing.T) {
 	fsys := repoFS(t, ".github/workflows/queue-apply.yaml")
-	assert.Empty(t, trustedJobsRestoreNoActionsCache(fsys), "the queue-apply exemption still matches its job")
+	assert.Empty(t, trustedJobsRestoreNoActionsCache(fsys), "the queue-apply job restores no Actions cache")
+}
+
+// ci.yaml builds magus once and later jobs install that binary. The upload must
+// precede any cache extraction that could overwrite it, and every consumer must
+// verify the digest its publisher recorded.
+func TestPublishedMagusIsBuiltFirstAndVerifiedByDigest(t *testing.T) {
+	type step struct {
+		ID   string            `yaml:"id"`
+		Uses string            `yaml:"uses"`
+		Run  string            `yaml:"run"`
+		With map[string]string `yaml:"with"`
+	}
+	var action struct {
+		Runs struct {
+			Steps []step `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	raw, err := os.ReadFile(filepath.Join(repoRoot, setupMagusAction))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &action))
+	publish, restore := -1, -1
+	for i, s := range action.Runs.Steps {
+		if s.ID == "publish" {
+			publish = i
+		}
+		if strings.HasPrefix(s.Uses, "actions/cache/restore@") {
+			restore = i
+		}
+	}
+	require.NotEqual(t, -1, publish, "setup-magus publishes the binary it built")
+	require.NotEqual(t, -1, restore, "setup-magus restores the run history")
+	assert.Less(t, publish, restore, "the binary is uploaded before a cache entry is extracted")
+
+	outputRe := regexp.MustCompile(`^\$\{\{ needs\.([\w-]+)\.outputs\.([\w-]+) \}\}$`)
+	paths, err := filepath.Glob(filepath.Join(repoRoot, ".github", "workflows", "*.yaml"))
+	require.NoError(t, err)
+	published := 0
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var wf struct {
+			Jobs map[string]struct {
+				Needs   yaml.Node         `yaml:"needs"`
+				Outputs map[string]string `yaml:"outputs"`
+				Steps   []step            `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal(raw, &wf), path)
+		file := filepath.Base(path)
+		for name, job := range wf.Jobs {
+			for i, s := range job.Steps {
+				if s.Uses != "./.github/actions/setup-magus" {
+					continue
+				}
+				if s.With["publish-artifact"] != "" {
+					published++
+					for _, prior := range job.Steps[:i] {
+						assert.True(t, strings.HasPrefix(prior.Uses, "actions/checkout@"),
+							"%s/%s: %q runs before the magus it publishes is built", file, name, prior.Uses+prior.Run)
+					}
+				}
+				if s.With["installation-strategy"] != "artifact" {
+					continue
+				}
+				m := outputRe.FindStringSubmatch(s.With["artifact-sha256"])
+				require.NotNil(t, m, "%s/%s: artifact-sha256 is a job output of the publisher", file, name)
+				var needs []string
+				if job.Needs.Kind == yaml.ScalarNode {
+					needs = []string{job.Needs.Value}
+				} else {
+					require.NoError(t, job.Needs.Decode(&needs))
+				}
+				assert.Contains(t, needs, m[1], "%s/%s", file, name)
+				var producer string
+				for _, p := range wf.Jobs[m[1]].Steps {
+					if p.Uses == "./.github/actions/setup-magus" && p.With["publish-artifact"] != "" {
+						producer = p.ID
+					}
+				}
+				require.NotEmpty(t, producer, "%s/%s: %s publishes magus from a step with an id", file, name, m[1])
+				assert.Equal(t, "${{ steps."+producer+".outputs.sha256 }}", wf.Jobs[m[1]].Outputs[m[2]], "%s/%s", file, name)
+				assert.Equal(t, "${{ github.sha }}", s.With["artifact-commit"], "%s/%s", file, name)
+			}
+		}
+	}
+	assert.Positive(t, published, "ci.yaml builds magus once and shares it")
 }

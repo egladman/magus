@@ -44,6 +44,8 @@ func TestTokenStateCommandsAreDenied(t *testing.T) {
 		`jq . "$(ls ~/.local/state/magus/tokens.d/*.json)"`,
 		"grep -r mgs_ ~/.local/state/magus/tokens.d",
 		"cat ~/.local/state/magus/mcp_token && (", // unparsable: matched as text
+		// A help flag does not exempt a line naming the token state.
+		"cat ~/.local/state/magus/mcp_token --help",
 	} {
 		assert.NotEmpty(t, denyTokenStateCommand(at, cmd, DialectBash), "should be denied: %s", cmd)
 	}
