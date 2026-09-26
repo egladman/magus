@@ -36,13 +36,13 @@ type textEdit struct {
 }
 
 // gradeWorkspaceWrite asks the workspace's magus\guard.write rule about a write the
-// built-in rules let through, strengthen only, the way gradeWorkspaceCommand asks about a
+// built-in rules did not deny, strengthen only, the way gradeWorkspaceCommand asks about a
 // command.
 func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict, path string, fields writeFields, lease string, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
 	if deps.WriteRule == nil && deps.ApprovedWriteRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
-	if verdict.Decision != "pass" && verdict.Decision != "advise" {
+	if verdict.Decision == "deny" {
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())

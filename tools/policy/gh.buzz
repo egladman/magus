@@ -283,6 +283,45 @@ test "an admin merge is denied, naming the queue's entry" {
     }
 }
 
+// chain is the programs of a line that commits, pushes and opens a pull request before
+// merging, the shape that once landed an admin merge.
+fun chain(merge: [str]) > [helpers\Program] {
+    return helpers\request([
+        ["git", "-C", "/w", "add", "--", "a.go"],
+        ["git", "-C", "/w", "commit", "-q", "-m", "trim a fragment"],
+        ["git", "-C", "/w", "push", "-q", "-u", "origin", "topic"],
+        ["gh", "pr", "create", "--base", "main", "--head", "topic", "--title", "t", "--body", "b"],
+        merge,
+        ["gh", "pr", "view", "topic", "--json", "state,mergeCommit", "-q", ".state"],
+    ]);
+}
+
+test "an admin merge anywhere on a line is denied" {
+    final v = decideGitHub(chain(["gh", "pr", "merge", "topic", "--squash", "--admin"]), once: helpers\counter());
+    std\assert(v.decision == "deny", message: "the chained line that merged past the queue");
+    std\assert(v.reason.indexOf("--auto --squash") != null, message: "names the entry");
+    foreach (target in ["417", "topic", "https://github.com/egladman/magus/pull/417"]) {
+        final merge = ["gh", "pr", "merge", target, "--admin"];
+        foreach (programs in [
+            helpers\request([merge, ["gh", "pr", "view", target]]),
+            helpers\request([["gh", "pr", "view", target, "--json", "mergeable"], merge]),
+            helpers\request([["git", "status"], merge, ["echo", "merged"]]),
+            chain(merge),
+        ]) {
+            std\assert(decideGitHub(programs, once: helpers\counter()).decision == "deny", message: target);
+        }
+    }
+}
+
+test "a queued merge on the same line stays silent" {
+    foreach (merge in [
+        ["gh", "pr", "merge", "topic", "--auto", "--squash"],
+        ["gh", "pr", "merge", "417", "--auto", "--rebase"],
+    ]) {
+        std\assert(decideGitHub(chain(merge), once: helpers\counter()).decision == "allow", message: merge.join(" "));
+    }
+}
+
 test "a pull request's state read again and again is denied, naming the monitor" {
     foreach (argvs in [
         [["loop:", "gh", "pr", "view", "300", "--json", "state,autoMergeRequest"], ["loop:", "sleep", "60"]],
