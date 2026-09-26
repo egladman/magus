@@ -133,6 +133,9 @@ apply report what would merge and call nothing on the provider.
 **--target** *target* (default: ci)
 : magus \`target\` the affected set is computed for; not with --facts
 
+**--temp-root** *directory* (default: /tmp)
+: \`directory\` each candidate's hooks get a private temporary directory under, apart from its checkout; keep it short, since a nested magus and a test nest a unix socket beneath it, whose path is capped at 104 bytes
+
 **--vcs** *backend* (default: git)
 : Version control \`backend\` of the checkout at --root
 
@@ -179,6 +182,9 @@ apply report what would merge and call nothing on the provider.
 
 **--target** *target* (default: ci)
 : magus \`target\` the affected set is computed for; not with --facts
+
+**--temp-root** *directory* (default: /tmp)
+: \`directory\` each candidate's hooks get a private temporary directory under, apart from its checkout; keep it short, since a nested magus and a test nest a unix socket beneath it, whose path is capped at 104 bytes
 
 **--vcs** *backend* (default: git)
 : Version control \`backend\` of the checkout at --root

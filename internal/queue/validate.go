@@ -43,21 +43,20 @@ type Validator struct {
 	gate    types.Gate
 	dir     *VerdictDir
 	facts   types.BuildFacts
-	scratch string
+	scratch Scratch
 }
 
 // NewValidator builds candidates in cl with v under scratch, gates them with gate, and
 // records each verdict in dir the moment it is decided, so an Applier can start on it
-// while later candidates still run. scratch must be absolute and outside cl.Root, where
-// a checkout would be discovered as a second copy of the repository.
-func NewValidator(v types.BuildVCS, cl Clone, gate types.Gate, dir *VerdictDir, f types.BuildFacts, scratch string) (*Validator, error) {
+// while later candidates still run.
+func NewValidator(v types.BuildVCS, cl Clone, gate types.Gate, dir *VerdictDir, f types.BuildFacts, scratch Scratch) (*Validator, error) {
 	switch {
 	case v == nil || gate == nil || dir == nil || f == nil:
 		return nil, errors.New("validator needs a VCS, a gate, a verdict directory and build facts")
 	case cl.check() != nil:
 		return nil, cl.check()
-	case !filepath.IsAbs(scratch):
-		return nil, fmt.Errorf("scratch directory %q is not absolute", scratch)
+	case scratch.check() != nil:
+		return nil, scratch.check()
 	}
 	return &Validator{vcs: v, clone: cl, gate: gate, dir: dir, facts: f, scratch: scratch}, nil
 }
@@ -79,8 +78,8 @@ func (v *Validator) Run(ctx context.Context, plan types.Plan) error {
 	r := &validation{Validator: v, plan: plan, slots: make(chan struct{}, n), bases: map[string]*baseGate{},
 		allUnits: sync.OnceValues(func() ([]string, error) { return v.facts.AllUnits(ctx) })}
 	defer func() {
-		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), v.vcs, v.clone.Root, v.scratch); err != nil {
-			v.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + v.scratch + ": " + err.Error()})
+		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), v.vcs, v.clone.Root, v.scratch.Dir); err != nil {
+			v.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + v.scratch.Dir + ": " + err.Error()})
 		}
 	}()
 	if v.Only != "" {
@@ -547,7 +546,7 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 // bundle writes f's regenerated candidate, on the merge beneath it, to a file under
 // the scratch directory, which the returned func removes.
 func (r *validation) bundle(ctx context.Context, f *flight) (string, func(), error) {
-	dir, err := os.MkdirTemp(r.scratch, "bundle-")
+	dir, err := os.MkdirTemp(r.scratch.Dir, "bundle-")
 	if err != nil {
 		return "", nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -87,19 +86,19 @@ type Applier struct {
 	provider types.Provider
 	src      types.VerdictSource
 	facts    types.BuildFacts
-	scratch  string
+	scratch  Scratch
 }
 
 // NewApplier merges the verdicts src supplies through p, in cl with v, rebuilding each
-// candidate under scratch. scratch must be absolute and outside cl.Root.
-func NewApplier(v types.PushVCS, cl Clone, p types.Provider, src types.VerdictSource, f types.BuildFacts, scratch string) (*Applier, error) {
+// candidate under scratch.
+func NewApplier(v types.PushVCS, cl Clone, p types.Provider, src types.VerdictSource, f types.BuildFacts, scratch Scratch) (*Applier, error) {
 	switch {
 	case v == nil || p == nil || src == nil || f == nil:
 		return nil, errors.New("applier needs a VCS, a provider, a verdict source and build facts")
 	case cl.check() != nil:
 		return nil, cl.check()
-	case !filepath.IsAbs(scratch):
-		return nil, fmt.Errorf("scratch directory %q is not absolute", scratch)
+	case scratch.check() != nil:
+		return nil, scratch.check()
 	}
 	return &Applier{vcs: v, clone: cl, provider: p, src: src, facts: f, scratch: scratch}, nil
 }
@@ -150,8 +149,8 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 		r.markStart(ctx)
 	}
 	defer func() {
-		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), a.vcs, a.clone.Root, a.scratch); err != nil {
-			a.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + a.scratch + ": " + err.Error()})
+		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), a.vcs, a.clone.Root, a.scratch.Dir); err != nil {
+			a.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + a.scratch.Dir + ": " + err.Error()})
 		}
 	}()
 	for _, v := range plan.Verdicts {

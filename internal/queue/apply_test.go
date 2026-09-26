@@ -43,7 +43,7 @@ func applierForBatch(t *testing.T, d doubles, batch types.VerdictBatch) *Applier
 	// A test about required checks answers them before this: a provider reading none is the default.
 	d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	d.src.EXPECT().Poll(mock.Anything).Return(batch, nil).Maybe()
-	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, scratchIn(t))
 	require.NoError(t, err)
 	a.Base = "main"
 	return a
@@ -160,12 +160,27 @@ func TestNewApplierRefusesAMissingPart(t *testing.T) {
 		build func() (*Applier, error)
 		want  string
 	}{
-		"vcs":      {func() (*Applier, error) { return NewApplier(nil, clone, d.provider, d.src, d.facts, "/s") }, "applier needs a VCS, a provider, a verdict source and build facts"},
-		"provider": {func() (*Applier, error) { return NewApplier(d.vcs, clone, nil, d.src, d.facts, "/s") }, "applier needs a VCS, a provider, a verdict source and build facts"},
-		"source":   {func() (*Applier, error) { return NewApplier(d.vcs, clone, d.provider, nil, d.facts, "/s") }, "applier needs a VCS, a provider, a verdict source and build facts"},
-		"facts":    {func() (*Applier, error) { return NewApplier(d.vcs, clone, d.provider, d.src, nil, "/s") }, "applier needs a VCS, a provider, a verdict source and build facts"},
-		"clone":    {func() (*Applier, error) { return NewApplier(d.vcs, Clone{}, d.provider, d.src, d.facts, "/s") }, "clone needs a root and a remote"},
-		"relative": {func() (*Applier, error) { return NewApplier(d.vcs, clone, d.provider, d.src, d.facts, "s") }, `scratch directory "s" is not absolute`},
+		"vcs": {func() (*Applier, error) {
+			return NewApplier(nil, clone, d.provider, d.src, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
+		}, "applier needs a VCS, a provider, a verdict source and build facts"},
+		"provider": {func() (*Applier, error) {
+			return NewApplier(d.vcs, clone, nil, d.src, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
+		}, "applier needs a VCS, a provider, a verdict source and build facts"},
+		"source": {func() (*Applier, error) {
+			return NewApplier(d.vcs, clone, d.provider, nil, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
+		}, "applier needs a VCS, a provider, a verdict source and build facts"},
+		"facts": {func() (*Applier, error) {
+			return NewApplier(d.vcs, clone, d.provider, d.src, nil, Scratch{Dir: "/s", TempRoot: "/t"})
+		}, "applier needs a VCS, a provider, a verdict source and build facts"},
+		"clone": {func() (*Applier, error) {
+			return NewApplier(d.vcs, Clone{}, d.provider, d.src, d.facts, Scratch{Dir: "/s", TempRoot: "/t"})
+		}, "clone needs a root and a remote"},
+		"relative": {func() (*Applier, error) {
+			return NewApplier(d.vcs, clone, d.provider, d.src, d.facts, Scratch{Dir: "s", TempRoot: "/t"})
+		}, `scratch directory "s" is not absolute`},
+		"relative temporary root": {func() (*Applier, error) {
+			return NewApplier(d.vcs, clone, d.provider, d.src, d.facts, Scratch{Dir: "/s", TempRoot: "t"})
+		}, `temporary root directory "t" is not absolute`},
 	} {
 		_, err := tc.build()
 		require.EqualError(t, err, tc.want, name)
@@ -402,7 +417,7 @@ func jsonString(t *testing.T, s string) string {
 func TestAResolutionTheTreeDoesNotHoldIsNotSettled(t *testing.T) {
 	d := newDoubles(t)
 	c := change("1", "a")
-	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, scratchIn(t))
 	require.NoError(t, err)
 	r := &applyRun{Applier: a}
 	conflicts := []magustypes.Conflict{{Path: "CHANGELOG.md", Kind: magustypes.ConflictKindContent}}
@@ -1162,7 +1177,7 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	d.marks(nil)
 	d.src.EXPECT().Poll(mock.Anything).Return(types.VerdictBatch{Rejected: []types.RejectedVerdict{{Change: "1", Reason: "not a zip"}, {Change: "8", Reason: "x"}}, Done: true}, nil)
 	d.waits(one, one.Head, "its verdict could not be read: not a zip")
-	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, scratchIn(t))
 	require.NoError(t, err)
 	a.Base = "main"
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
@@ -1836,7 +1851,7 @@ func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 				RequiredChecks: []types.RequiredCheck{{Context: "ci gate"}, {Context: DefaultStatusContext, Integration: tc.pinned}}}
 			d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main", StatusContext: DefaultStatusContext, App: tc.app}).
 				Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: []types.MergeMethod{types.MethodSquash}, Setup: setup}, nil)
-			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, scratchIn(t))
 			require.NoError(t, err)
 			a.Base, a.App = "main", tc.app
 			err = a.Run(t.Context(), planOf([]types.Change{change("1", "a")}))
@@ -1888,14 +1903,14 @@ func TestApplyRefusesAPlanForAnotherBaseOrRemote(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
-			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, scratchIn(t))
 			require.NoError(t, err)
 			a.Base, a.RemoteURL = tc.base, tc.remote
 			requireUnverified(t, a.Run(t.Context(), planOf([]types.Change{c})), tc.want)
 		})
 	}
 	d := newDoubles(t)
-	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, scratchIn(t))
 	require.NoError(t, err)
 	require.EqualError(t, a.Run(t.Context(), planOf([]types.Change{c})), "applier needs the base branch it merges into")
 }

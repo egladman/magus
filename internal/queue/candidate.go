@@ -258,7 +258,7 @@ type candidateSpec struct {
 	facts   types.BuildFacts
 	onto    string
 	change  types.Change
-	scratch string    // the directory each candidate gets a private one under
+	scratch Scratch   // where each candidate gets private directories
 	date    time.Time // the plan's CommitDate
 }
 
@@ -329,24 +329,52 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 	return built{Candidate: cand, touched: all, settled: settled, resolved: resolved, date: s.date, changed: all}, nil
 }
 
-// checkout checks commit out in a box of its own under scratch, named from name: the
-// checkout, and beside it the home and temporary directory of the hooks run on it, each
-// 0700, so no hook run in another box can have planted anything where one run here will
-// look. On error nothing is left behind.
-func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit string) (types.Candidate, error) {
-	box, err := os.MkdirTemp(scratch, name+"-")
+// Scratch is where the queue builds candidates. Both directories must be absolute and
+// outside the clone, where a checkout would be discovered as a second copy of the
+// repository.
+type Scratch struct {
+	// Dir holds each candidate's box: its checkout and its hooks' home.
+	Dir string
+	// TempRoot holds each candidate's hooks' temporary directory, apart from the box
+	// because its path must stay short: a nested magus makes its sandbox's temporary
+	// directory in it, a test makes a socket directory in that, and a unix socket's
+	// path is capped at 104 bytes on macOS and 108 on linux.
+	TempRoot string
+}
+
+func (s Scratch) check() error {
+	for _, d := range []struct{ what, dir string }{{"scratch", s.Dir}, {"temporary root", s.TempRoot}} {
+		if !filepath.IsAbs(d.dir) {
+			return fmt.Errorf("%s directory %q is not absolute", d.what, d.dir)
+		}
+	}
+	return nil
+}
+
+// checkout checks commit out in a box of its own under s.Dir, named from name: the
+// checkout, and beside it the home of the hooks run on it, with their temporary
+// directory under s.TempRoot, each 0700, so no hook run for another candidate can have
+// planted anything where one run here will look. On error nothing is left behind.
+func checkout(ctx context.Context, v types.BuildVCS, root string, s Scratch, name, commit string) (types.Candidate, error) {
+	box, err := os.MkdirTemp(s.Dir, name+"-")
 	if err != nil {
 		return types.Candidate{}, err
 	}
-	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: filepath.Join(box, "tmp")}
-	for _, dir := range []string{cand.Home, cand.TempDir} {
-		if err := os.Mkdir(dir, 0o700); err != nil {
-			_ = os.RemoveAll(box)
-			return types.Candidate{}, err
-		}
+	// "q" and MkdirTemp's suffix of at most ten digits: see Scratch.TempRoot.
+	tmp, err := os.MkdirTemp(s.TempRoot, "q")
+	if err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: tmp}
+	if err := os.Mkdir(cand.Home, 0o700); err != nil {
+		_ = os.RemoveAll(box)
+		_ = os.RemoveAll(tmp)
+		return types.Candidate{}, err
 	}
 	if err := v.CreateCheckout(ctx, root, cand.Dir, commit); err != nil {
 		_ = os.RemoveAll(box)
+		_ = os.RemoveAll(tmp)
 		return types.Candidate{}, err
 	}
 	if err := os.Chmod(cand.Dir, 0o700); err != nil {
@@ -356,7 +384,8 @@ func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit
 	return cand, nil
 }
 
-// discard removes a candidate's checkout and its box.
+// discard removes a candidate's checkout, its box and its temporary directory. It
+// ignores ctx's cancellation, so a cancelled run leaves none of them behind.
 func discard(ctx context.Context, v types.BuildVCS, root string, cand types.Candidate) error {
 	if cand.Dir == "" {
 		return nil
@@ -364,11 +393,9 @@ func discard(ctx context.Context, v types.BuildVCS, root string, cand types.Cand
 	box := filepath.Dir(cand.Dir)
 	// First, since the VCS cannot remove a checkout a hook left unwritable either.
 	makeWritable(box)
+	makeWritable(cand.TempDir)
 	err := v.RemoveCheckout(context.WithoutCancel(ctx), root, cand.Dir)
-	if rmErr := os.RemoveAll(box); err == nil {
-		err = rmErr
-	}
-	return err
+	return errors.Join(err, os.RemoveAll(box), os.RemoveAll(cand.TempDir))
 }
 
 // makeWritable gives its owner read, write and search on dir and every directory under

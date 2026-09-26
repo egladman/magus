@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,8 +16,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -80,12 +84,14 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #2", when)}).Return(head("cand"), nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, onto, head("cand")).Return([]string{"lib/x.txt"}, nil)
 
-	b, err := buildMerge(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: onto, change: c, scratch: t.TempDir(), date: when})
+	s := scratchIn(t)
+	b, err := buildMerge(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: onto, change: c, scratch: s, date: when})
 	require.NoError(t, err)
 	assert.Equal(t, head("cand"), b.Commit)
 	assert.Equal(t, []string{"lib/x.txt"}, b.touched)
 	box := filepath.Dir(b.Dir)
-	assert.Equal(t, types.Candidate{Commit: head("cand"), Change: "2", Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: filepath.Join(box, "tmp")}, b.Candidate)
+	assert.Equal(t, s.TempRoot, filepath.Dir(b.TempDir))
+	assert.Equal(t, types.Candidate{Commit: head("cand"), Change: "2", Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: b.TempDir}, b.Candidate)
 	for _, dir := range []string{box, b.Dir, b.Home, b.TempDir} {
 		info, err := os.Stat(dir)
 		require.NoError(t, err)
@@ -101,7 +107,7 @@ func TestDiscardRemovesABoxAHookLeftUnwritable(t *testing.T) {
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
 	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
 		RunAndReturn(func(_ context.Context, _, dir string) error { return os.RemoveAll(dir) })
-	cand, err := checkout(t.Context(), d.vcs, clone.Root, t.TempDir(), "candidate-1", base)
+	cand, err := checkout(t.Context(), d.vcs, clone.Root, scratchIn(t), "candidate-1", base)
 	require.NoError(t, err)
 	mod := filepath.Join(cand.Home, "go", "pkg", "mod", "example.com", "m@v1.0.0")
 	require.NoError(t, os.MkdirAll(mod, 0o755))
@@ -116,6 +122,70 @@ func TestDiscardRemovesABoxAHookLeftUnwritable(t *testing.T) {
 
 	require.NoError(t, discard(t.Context(), d.vcs, clone.Root, cand))
 	assert.NoDirExists(t, filepath.Dir(cand.Dir))
+	assert.NoDirExists(t, cand.TempDir)
+}
+
+// The deepest socket a gate makes is a test's: the gate's magus makes its sandbox's
+// temporary directory in the candidate's, testkit.Isolate a root in that, and magus its
+// socket under the root's XDG_RUNTIME_DIR. That path must stay under the 104 bytes
+// TestIsolateLeavesRoomForASocket allows when the root is --temp-root's default, /tmp,
+// with every random suffix and the uid at their longest, ten digits each.
+func TestACandidatesTempDirLeavesRoomForASocket(t *testing.T) {
+	d := newDoubles(t)
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).Return(nil)
+	s := scratchIn(t)
+	cand, err := checkout(t.Context(), d.vcs, clone.Root, s, "candidate-999999", base)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = discard(context.Background(), d.vcs, clone.Root, cand) })
+
+	t.Setenv("TMPDIR", cand.TempDir)
+	p, err := sandbox.FromConfig(cand.Dir, "", config.SandboxConfig{}, nil)
+	require.NoError(t, err)
+	t.Setenv("TMPDIR", p.TempDir)
+	root := testkit.Isolate(t)
+	sock := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "magus", "magus-99999-0123abcd.sock")
+
+	pad := func(digits string) int { return 10 - len(digits) }
+	worst := len(sock) - len(s.TempRoot) + len("/tmp") +
+		pad(strings.TrimPrefix(filepath.Base(cand.TempDir), "q")) +
+		pad(strconv.Itoa(os.Getuid())) +
+		pad(strings.TrimPrefix(filepath.Base(root), "tk"))
+	assert.Less(t, worst, 104, "%s, rooted at /tmp and padded to the longest suffixes", sock)
+}
+
+// A candidate's temporary directory lives apart from its box, so whatever ends the
+// candidate removes both: a checkout that fails, and a discard after the run was
+// cancelled as after it finished.
+func TestACandidatesTempDirGoesWithItsBox(t *testing.T) {
+	d := newDoubles(t)
+	failed := errors.New("no such commit")
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, "missing").Return(failed)
+	s := scratchIn(t)
+	_, err := checkout(t.Context(), d.vcs, clone.Root, s, "candidate-1", "missing")
+	require.ErrorIs(t, err, failed)
+	for _, dir := range []string{s.Dir, s.TempRoot} {
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "a failed checkout leaves nothing in %s", dir)
+	}
+
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout)
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
+		RunAndReturn(func(_ context.Context, _, dir string) error { return os.RemoveAll(dir) })
+	for name, ctx := range map[string]func() context.Context{
+		"finished":  t.Context,
+		"cancelled": func() context.Context { ctx, cancel := context.WithCancel(t.Context()); cancel(); return ctx },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cand, err := checkout(t.Context(), d.vcs, clone.Root, s, "candidate-1", base)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(cand.TempDir, "left"), nil, 0o600))
+			require.NoError(t, discard(ctx(), d.vcs, clone.Root, cand))
+			assert.NoDirExists(t, filepath.Dir(cand.Dir))
+			assert.NoDirExists(t, cand.TempDir)
+		})
+	}
 }
 
 // makeWritable goes on past what it cannot read, and never changes a mode through a
@@ -602,7 +672,7 @@ func gitDriver(t *testing.T, root string) types.BuildVCS {
 func TestARegenerationThatRewritesTheGitfileIsRefused(t *testing.T) {
 	root, commit := gitRepo(t, map[string]string{"gen/a.go": "stale\n"})
 	drv := gitDriver(t, root)
-	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
+	cand, err := checkout(t.Context(), drv, root, scratchIn(t), "candidate-1", commit)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = discard(context.Background(), drv, root, cand) })
 	marker := filepath.Join(t.TempDir(), "ran")

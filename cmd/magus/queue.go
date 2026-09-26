@@ -532,7 +532,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 		return err
 	}
 	defer cleanup()
-	v, err := queue.NewValidator(drv, cl, queue.CommandGate(gate, hookEnv, log), dir, bf, scratch)
+	v, err := queue.NewValidator(drv, cl, queue.CommandGate(gate, hookEnv, log), dir, bf, queue.Scratch{Dir: scratch, TempRoot: f.TempRoot})
 	if err != nil {
 		return err
 	}
@@ -678,7 +678,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer cleanup()
-	a, err := queue.NewApplier(drv, cl, p, from, bf, scratch)
+	a, err := queue.NewApplier(drv, cl, p, from, bf, queue.Scratch{Dir: scratch, TempRoot: f.TempRoot})
 	if err != nil {
 		return err
 	}

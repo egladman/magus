@@ -49,9 +49,10 @@ type Candidate struct {
 	// commit as it stands, such as the one a red candidate was built onto.
 	Change string
 	Dir    string
-	// Home and TempDir are private to this candidate, beside Dir in a box of its own:
-	// the HOME, which holds every cache, and the TMPDIR of the hooks run on it. Nothing
-	// another candidate's hooks wrote is in either.
+	// Home and TempDir are private to this candidate: the HOME of the hooks run on it,
+	// beside Dir in a box of its own, which holds every cache, and their TMPDIR, under a
+	// short root of the queue's so a socket made beneath it fits the kernel's cap.
+	// Nothing another candidate's hooks wrote is in either.
 	Home    string
 	TempDir string
 }
