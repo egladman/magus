@@ -171,10 +171,13 @@ type hookCommand struct {
 	// Home and TempDir are the candidate's box (see [types.Candidate]); both empty for a
 	// facts hook, which runs in the base's own checkout with the queue's own.
 	Home, TempDir string
-	Env           []string // set over what the sandbox passes from the queue's environment
-	Stdin         string
-	Stdout        io.Writer // nil discards
-	Stderr        io.Writer // nil discards
+	// Cache is a directory outside the box its magus keeps its local cache tier in, the
+	// one write the box grants outside itself; empty keeps that tier in the box.
+	Cache  string
+	Env    []string // set over what the sandbox passes from the queue's environment
+	Stdin  string
+	Stdout io.Writer // nil discards
+	Stderr io.Writer // nil discards
 	// Capture also returns stdout in the result, redacted.
 	Capture bool
 }
@@ -223,9 +226,9 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 // grant a declaration makes writable resolves in the box, with c.Home read, write and
 // exec: go run executes what it caches in GOCACHE. The toolchains the runner installed
 // are read and run where they are, and the object store every candidate's checkout
-// shares is read and never written. The nested magus a hook runs stacks its own sandbox
-// on this one, so a right withheld here is withheld from every child whatever that
-// inner policy grants.
+// shares is read and never written. c.Cache, when set, is read and written where it is.
+// The nested magus a hook runs stacks its own sandbox on this one, so a right withheld
+// here is withheld from every child whatever that inner policy grants.
 //
 // A write the base's config grants outside the box is an error, the machine's: another
 // candidate's hook could plant there what this one's gate replays. A box whose home or
@@ -242,10 +245,13 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 	}
 	for _, dir := range []string{c.Home, c.TempDir} {
 		if err := privateDir(dir); err != nil {
-			return nil, changeFailure{"found its box changed: " + err.Error()}
+			return nil, changeFailure{why: "found its box changed: " + err.Error()}
 		}
 	}
 	cfg.Allow = append(slices.Clone(cfg.Allow), spells.SandboxAllow{Path: c.Home, Mode: spells.SandboxAccessRWX})
+	if c.Cache != "" {
+		cfg.Allow = append(cfg.Allow, spells.SandboxAllow{Path: c.Cache, Mode: spells.SandboxAccessRW})
+	}
 	p, err := sandbox.FromConfigBoxed(c.Dir, cfg, c.Spells, sandbox.Box{Environ: c.environ(), TempDir: c.TempDir})
 	if err != nil {
 		return nil, err
@@ -256,7 +262,7 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 		return nil, err
 	}
 	var placed, linked []string
-	for _, w := range p.WritesOutside(c.Dir, c.Home, c.TempDir) {
+	for _, w := range p.WritesOutside(c.Dir, c.Home, c.TempDir, c.Cache) {
 		if w.Linked {
 			linked = append(linked, w.Path)
 		} else {
@@ -267,7 +273,7 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 	case len(placed) > 0:
 		return nil, fmt.Errorf("the sandbox grants a hook write on %s, outside its candidate's box, where another candidate's hook can plant what this one's gate trusts; drop the grant from the base's sandbox config or spells", joinPaths(placed))
 	case len(linked) > 0:
-		return nil, changeFailure{"found a link in its box leading a grant out of it, to " + joinPaths(linked)}
+		return nil, changeFailure{why: "found a link in its box leading a grant out of it, to " + joinPaths(linked)}
 	}
 	return p, nil
 }
@@ -335,20 +341,24 @@ func boxedLocations(cfg config.SandboxConfig, grants map[string]spells.Sandbox) 
 
 // boxEnv is what every hook in the box at home and tmp is given over anything it would
 // inherit. HOME and the XDG base directories are in the box, so every cache a tool keeps
-// by default lands there, magus's own among them with writes on. The toolchains the
-// runner installed are used in place: mise finds its installs, config and trust where
-// the queue's own mise does, and GOTOOLCHAIN=local runs the Go the runner installed
-// rather than one a change's go.mod has go download into the box.
-func boxEnv(home, tmp string) []string {
-	cache := filepath.Join(home, ".cache")
+// by default lands there, magus's own among them with writes on, unless cache names
+// where magus keeps it. The toolchains the runner installed are used in place: mise
+// finds its installs, config and trust where the queue's own mise does, and
+// GOTOOLCHAIN=local runs the Go the runner installed rather than one a change's go.mod
+// has go download into the box.
+func boxEnv(home, tmp, cache string) []string {
+	xdgCache := filepath.Join(home, ".cache")
+	if cache == "" {
+		cache = filepath.Join(xdgCache, "magus")
+	}
 	env := []string{
 		"HOME=" + home,
-		"XDG_CACHE_HOME=" + cache,
+		"XDG_CACHE_HOME=" + xdgCache,
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 		"XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"),
 		"XDG_STATE_HOME=" + filepath.Join(home, ".local", "state"),
 		"TMPDIR=" + tmp,
-		"MAGUS_CACHE_DIR=" + filepath.Join(cache, "magus"),
+		"MAGUS_CACHE_DIR=" + cache,
 		"MAGUS_CACHE_WRITE_ENABLED=true",
 		"GOTOOLCHAIN=local",
 	}
@@ -399,10 +409,27 @@ func pathLines(paths []string) (lines string, refused []string) {
 	return strings.Join(kept, "\n") + "\n", refused
 }
 
-// changeFailure is a hook failing on the change: what it says is about the change.
-type changeFailure struct{ why string }
+// changeFailure is a hook failing on the change: what it says is about the change. code
+// is the status the hook exited with, 0 when it exited with none.
+type changeFailure struct {
+	why  string
+	code int
+}
 
 func (f changeFailure) Error() string { return f.why }
+
+// HookFailed reports whether err is a hook failing on the checkout's code, which a gate
+// records as red, what it did, and the status it exited with, 1 when it exited with none.
+func HookFailed(err error) (why string, code int, ok bool) {
+	var f changeFailure
+	if !errors.As(err, &f) {
+		return "", 0, false
+	}
+	if f.code == 0 {
+		return f.why, 1, true
+	}
+	return f.why, f.code, true
+}
 
 // runHook runs c, running it again after ExitTempFail. It returns a changeFailure for
 // anything the hook's process tree did, and any other error only when the hook could
@@ -429,11 +456,11 @@ func runHook(ctx context.Context, c hookCommand) (procrun.ExecResult, error) {
 		code := exit.ExitCode()
 		switch {
 		case code < 0:
-			return res, changeFailure{"was killed (" + exit.String() + ")"}
+			return res, changeFailure{why: "was killed (" + exit.String() + ")"}
 		case code != ExitTempFail:
-			return res, changeFailure{fmt.Sprintf("exited %d", code)}
+			return res, changeFailure{fmt.Sprintf("exited %d", code), code}
 		case attempt == attempts:
-			return res, changeFailure{fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts)}
+			return res, changeFailure{fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code}
 		}
 		select {
 		case <-ctx.Done():
@@ -460,8 +487,12 @@ type HookEnv struct {
 	// process under it can have.
 	Spells map[string]spells.Sandbox
 	// Fixed are NAME=VALUE assignments every hook takes as given, such as a
-	// [CacheReadProxy]'s stand-ins.
+	// [CacheReadProxy]'s stand-ins or what [HookEnv.Pass] passes.
 	Fixed []string
+	// Cache is where a boxed hook's magus keeps its local cache tier, outside the box,
+	// for a caller that carries that tier from one run to the next; empty keeps it in the
+	// box, as the queue does, so no candidate replays what another's hook wrote.
+	Cache string
 }
 
 // of is every assignment a gate or a regeneration in the box at home and tmp takes:
@@ -470,7 +501,68 @@ func (e HookEnv) of(home, tmp string) ([]string, error) {
 	if home == "" || tmp == "" {
 		return nil, errors.New("the candidate has no box to run its hooks in")
 	}
-	return slices.Concat(e.Fixed, boxEnv(home, tmp)), nil
+	return slices.Concat(e.Fixed, boxEnv(home, tmp, e.Cache)), nil
+}
+
+// Pass returns e with every variable in names that this process's environment sets
+// added to Fixed, at its value here, for a caller whose hooks read what no sandbox passthrough may
+// carry to every child: a credential or a setting only the hook's own magus reads. A
+// name the box sets, one locating a cache the box withholds, or the sandbox mode, is
+// refused, so nothing passed moves the box.
+func (e HookEnv) Pass(names []string) (HookEnv, error) {
+	boxed := boxedLocations(e.Sandbox, e.Spells)
+	set := map[string]bool{procrun.SandboxEnvVar: true}
+	for _, kv := range boxEnv("/", "/", "") {
+		name, _, _ := strings.Cut(kv, "=")
+		set[name] = true
+	}
+	fixed := slices.Clone(e.Fixed)
+	for _, name := range names {
+		switch {
+		case name == "" || strings.ContainsAny(name, "=\x00"):
+			return e, fmt.Errorf("%q is not a variable name", name)
+		case set[name] || boxed(name):
+			return e, fmt.Errorf("%s locates the box or its mode, which every gate is given as the queue gives it", name)
+		}
+		if v, ok := os.LookupEnv(name); ok {
+			fixed = append(fixed, name+"="+v)
+		}
+	}
+	e.Fixed = fixed
+	return e, nil
+}
+
+// gate runs cmd with args appended in cand's checkout and box under e, its output to
+// stdout and stderr: the one way a candidate is gated, whoever gates it. A
+// changeFailure is the checkout's red; any other error is the machine's.
+func (e HookEnv) gate(ctx context.Context, cmd Command, args []string, cand types.Candidate, stdout, stderr io.Writer) error {
+	env, err := e.of(cand.Home, cand.TempDir)
+	if err != nil {
+		return err
+	}
+	_, err = runHook(ctx, hookCommand{Command: cmd, Args: args, Dir: cand.Dir, Sandbox: e.Sandbox, Spells: e.Spells,
+		Home: cand.Home, TempDir: cand.TempDir, Cache: e.Cache, Env: env, Stdout: stdout, Stderr: stderr})
+	return err
+}
+
+// GateCommit checks commit out of the repository at root into a box under scratch, as
+// validation checks out every candidate, runs cmd in it under env as validation runs its
+// gate, and removes the box. [HookFailed] reports the error of a red gate; any other
+// error is the machine's.
+func GateCommit(ctx context.Context, v types.BuildVCS, root, scratch, commit string, cmd Command, env HookEnv, stdout, stderr io.Writer) (err error) {
+	if len(cmd) == 0 {
+		return errors.New("empty gate command")
+	}
+	cand, err := checkout(ctx, v, root, scratch, "gate", commit)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if rmErr := discard(ctx, v, root, cand); err == nil {
+			err = rmErr
+		}
+	}()
+	return env.gate(ctx, cmd, nil, cand, stdout, stderr)
 }
 
 // CommandGate is a [types.Gate] running cmd in a checkout with the units appended as
@@ -489,18 +581,13 @@ type commandGate struct {
 }
 
 func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
-	env, err := g.env.of(cand.Home, cand.TempDir)
-	if err != nil {
-		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
-	}
 	of := "base"
 	if cand.Change != "" {
 		of = "#" + cand.Change
 	}
 	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	_, err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Sandbox: g.env.Sandbox, Spells: g.env.Spells,
-		Home: cand.Home, TempDir: cand.TempDir, Env: env, Stdout: out, Stderr: out})
+	err := g.env.gate(ctx, g.cmd, units, cand, out, out)
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
@@ -536,6 +623,7 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 			Spells:  hookEnv.Spells,
 			Home:    r.Home,
 			TempDir: r.TempDir,
+			Cache:   hookEnv.Cache,
 			Env:     env,
 			Stdin:   stdin,
 			Stdout:  out,

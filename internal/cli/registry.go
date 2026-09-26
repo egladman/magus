@@ -1766,7 +1766,7 @@ and every relative path resolves against it. The provider is a built-in name
 (github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
 on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.`,
-	Usage: "magus queue <describe|ls|plan|validate|apply> [flags]",
+	Usage: "magus queue <describe|ls|plan|validate|gate|apply> [flags]",
 	Children: []Command{
 		{
 			Name:  "describe",
@@ -1829,6 +1829,31 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			}, queueFacts...), queueCheckout...),
 		},
 		{
+			Name:  "gate",
+			Short: "Run a command in a checkout of HEAD boxed and sandboxed exactly as validate runs --gate in a candidate",
+			Long: `Check the commit HEAD names out into a box of its own under TMPDIR, with a
+private home and temporary directory, and run <command> there under the sandbox
+validate gives its --gate: the same box, the same environment and the same grants,
+built by the same code. Uncommitted changes are not in the checkout. It exits with
+the command's status.
+
+This is how a CI job gates a change in the environment the merge queue will gate
+it in, so a change green in CI is not red in the queue for where it ran. The
+global --sandbox is the mode, raised to best-effort as validate raises it.
+
+--cache keeps the local cache tier of the command's magus in a directory outside
+the box that the caller carries between runs, the one write the box grants outside
+itself. --env passes the named variables of this environment to the command's own
+magus, over the sandbox's scrub, and no further: its children get the scrubbed
+environment. Neither may move the box: a variable the box sets, or one naming a
+cache it withholds, is refused.`,
+			Usage: "magus queue gate [flags] -- <command> [args...]",
+			Flags: append([]Flag{
+				{Name: "cache", Kind: FlagString, Doc: "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does"},
+				{Name: "env", Kind: FlagString, Doc: "Comma-separated `names` of variables passed from this environment to the command's own magus"},
+			}, queueCheckout...),
+		},
+		{
 			Name:  "apply",
 			Short: "Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)",
 			Usage: "magus queue apply --provider <provider> --base <branch> [flags] <source>",
@@ -1854,6 +1879,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --stdin --verdicts verdicts --gate 'magus run ci' < plan.json"},
+		{"Gate HEAD in the box validate gives a candidate", "magus queue gate --sandbox=required -- magus run ci"},
 		{"Merge the green ones as they arrive", "magus queue apply --provider github --base main verdicts"},
 		{"Merge from a validation run's artifacts", "magus queue apply --provider github --base main --workflow .github/workflows/queue.yaml run:acme/widgets/runs/7"},
 		{"Plan with a provider of your own", "magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json"},

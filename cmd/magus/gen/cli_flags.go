@@ -439,6 +439,14 @@ const (
 	FlagQueueDescribeStatusContext = "status-context"
 	// queue describe: --vcs
 	FlagQueueDescribeVCS = "vcs"
+	// queue gate: --cache
+	FlagQueueGateCache = "cache"
+	// queue gate: --env
+	FlagQueueGateEnv = "env"
+	// queue gate: --remote
+	FlagQueueGateRemote = "remote"
+	// queue gate: --vcs
+	FlagQueueGateVCS = "vcs"
 	// queue ls: --base
 	FlagQueueLsBase = "base"
 	// queue ls: --provider
@@ -1377,6 +1385,24 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueValidateVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueGateFlags are the flags declared for `magus queue gate`.
+type QueueGateFlags struct {
+	Cache  string // --cache
+	Env    string // --env
+	Remote string // --remote
+	VCS    string // --vcs
+}
+
+// BindQueueGate registers `magus queue gate`'s flags on fs and returns the destination.
+func BindQueueGate(fs *flag.FlagSet) *QueueGateFlags {
+	var f QueueGateFlags
+	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does")
+	fs.StringVar(&f.Env, FlagQueueGateEnv, "", "Comma-separated `names` of variables passed from this environment to the command's own magus")
+	fs.StringVar(&f.Remote, FlagQueueGateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueGateVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
 }
 

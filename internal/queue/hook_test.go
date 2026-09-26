@@ -282,7 +282,7 @@ func TestBoxEnvFindsTheRunnersMiseByItsDefaults(t *testing.T) {
 		"GOTOOLCHAIN=local",
 		"MISE_DATA_DIR=/runner/data/mise",
 		"MISE_CONFIG_DIR=/runner/home/.config/mise",
-	}, boxEnv("/box/home", "/box/tmp"))
+	}, boxEnv("/box/home", "/box/tmp", ""))
 }
 
 // A base that requires the kernel sandbox keeps that mode for its hooks: where the
@@ -308,7 +308,7 @@ func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 // box's policy read-only, and adds no other rule.
 func TestABoxedHooksPolicyCarriesATargetsGrantAndNothingMore(t *testing.T) {
 	home, tmp := newBox(t)
-	without := hookCommand{Dir: t.TempDir(), Home: home, TempDir: tmp, Env: boxEnv(home, tmp)}
+	without := hookCommand{Dir: t.TempDir(), Home: home, TempDir: tmp, Env: boxEnv(home, tmp, "")}
 	with := without
 	with.Spells = map[string]spells.Sandbox{".:test": {Allow: []spells.SandboxAllow{{Path: "/proc", Mode: spells.SandboxAccessRO}}}}
 	before, err := without.policy()
@@ -349,7 +349,7 @@ func TestABoxedHooksPolicyGrantsItsBoxAndNotTheRunnersCaches(t *testing.T) {
 	t.Setenv("GOMODCACHE", filepath.Join(runner, "gomod"))
 	t.Setenv("MAGUS_TEST_GOROOT", goroot)
 	home, tmp := newBox(t)
-	c := hookCommand{Dir: t.TempDir(), Spells: goDecl(goroot), Home: home, TempDir: tmp, Env: boxEnv(home, tmp)}
+	c := hookCommand{Dir: t.TempDir(), Spells: goDecl(goroot), Home: home, TempDir: tmp, Env: boxEnv(home, tmp, "")}
 	p, err := c.policy()
 	require.NoError(t, err)
 
@@ -554,7 +554,7 @@ func TestAHookCannotWriteTheSharedObjectStore(t *testing.T) {
 	own := filepath.Join(root, ".git", "worktrees", "checkout")
 	require.DirExists(t, own)
 
-	p, err := hookCommand{Dir: cand.Dir, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir)}.policy()
+	p, err := hookCommand{Dir: cand.Dir, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir, "")}.policy()
 	require.NoError(t, err)
 	assert.ErrorIs(t, p.CheckWrite(t.Context(), filepath.Join(objects, "ab", "cd")), filesystem.ErrDenied)
 	assert.NoError(t, p.CheckRead(t.Context(), filepath.Join(objects, "ab", "cd")))
@@ -620,7 +620,7 @@ func TestAHookGetsEverySpellTheBaseLoaded(t *testing.T) {
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
 	assert.Equal(t, tool+"\n", string(seen))
-	gate, err := hookCommand{Dir: dir, Spells: env.Spells, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir)}.policy()
+	gate, err := hookCommand{Dir: dir, Spells: env.Spells, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir, "")}.policy()
 	require.NoError(t, err)
 	assert.NoError(t, gate.CheckExec(context.Background(), filepath.Join(tool, "bin", "tool")))
 	assert.ErrorIs(t, gate.CheckWrite(context.Background(), filepath.Join(cache, "x")), filesystem.ErrDenied, "the runner's cache is not the box's")
@@ -855,5 +855,97 @@ func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
 		asked, err := os.ReadFile(filepath.Join(dir, "asked"))
 		require.NoError(t, err)
 		assert.Equal(t, "gen/ok\n", string(asked))
+	}
+}
+
+// boxedRun is what a probe printed from a box, one line each, with the box's own
+// directory written <box> so that two boxes compare.
+func boxedRun(t *testing.T, out string) []string {
+	t.Helper()
+	var home string
+	for line := range strings.SplitSeq(out, "\n") {
+		if v, ok := strings.CutPrefix(line, "HOME="); ok {
+			home = v
+		}
+	}
+	require.NotEmpty(t, home, "the probe printed no HOME: %s", out)
+	return strings.Split(strings.TrimSpace(strings.ReplaceAll(out, filepath.Dir(home), "<box>")), "\n")
+}
+
+// CI gates a change with GateCommit and the queue with a CommandGate: a gate on the same
+// commit under the same HookEnv starts in the same checkout layout, with the same
+// environment, whichever of them runs it.
+func TestGateCommitGatesInTheBoxAndEnvironmentValidationGivesACandidate(t *testing.T) {
+	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	drv := gitDriver(t, root)
+	t.Setenv("PASSED", "p")
+	t.Setenv("MISE_DATA_DIR", "/runner/mise")
+	env := HookEnv{Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"PASSED"}}}, Fixed: []string{"SET=s"}}
+	probe := script(`pwd; cat a.txt; env | grep -v -e '^_=' -e '^SHLVL=' | sort`)
+
+	var direct bytes.Buffer
+	scratch := t.TempDir()
+	require.NoError(t, GateCommit(t.Context(), drv, root, scratch, commit, probe, env, &direct, &direct))
+	left, err := os.ReadDir(scratch)
+	require.NoError(t, err)
+	assert.Empty(t, left, "GateCommit removes its box")
+
+	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = discard(context.Background(), drv, root, cand) })
+	var log bytes.Buffer
+	res, err := CommandGate(probe, env, NewHookLog(&log)).Validate(t.Context(), cand, nil)
+	require.NoError(t, err)
+	require.True(t, res.Green, res.Summary)
+	queued := strings.ReplaceAll(log.String(), "["+short(commit)+" base] ", "")
+
+	got := boxedRun(t, direct.String())
+	assert.Equal(t, boxedRun(t, queued), got)
+	// pwd names the box through its links (/private/var on macOS), HOME as it was made.
+	assert.True(t, strings.HasSuffix(got[0], "<box>/checkout"), "%s is not a checkout in the box", got[0])
+	assert.Equal(t, "a", got[1], "a checkout of the commit")
+	for _, want := range []string{"HOME=<box>/home", "TMPDIR=<box>/tmp", "MAGUS_CACHE_DIR=<box>/home/.cache/magus", "GOTOOLCHAIN=local", "PASSED=p", "SET=s"} {
+		assert.Contains(t, got, want)
+	}
+}
+
+// A caller carrying its cache tier between runs gets it written where it keeps it, and
+// GateCommit reports a red gate as HookFailed with the status the command exited with.
+func TestGateCommitKeepsTheCallersCacheAndReportsTheExitStatus(t *testing.T) {
+	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	drv := gitDriver(t, root)
+	cache := t.TempDir()
+	env := HookEnv{Cache: cache}
+	require.NoError(t, GateCommit(t.Context(), drv, root, t.TempDir(), commit,
+		Command{"sh", "-c", `test "$MAGUS_CACHE_DIR" = "$1" && echo kept > "$MAGUS_CACHE_DIR/entry"`, "hook", cache}, env, nil, nil))
+	kept, err := os.ReadFile(filepath.Join(cache, "entry"))
+	require.NoError(t, err)
+	assert.Equal(t, "kept\n", string(kept))
+
+	err = GateCommit(t.Context(), drv, root, t.TempDir(), commit, script(`exit 3`), env, nil, nil)
+	why, code, ok := HookFailed(err)
+	require.True(t, ok, "%v", err)
+	assert.Equal(t, "exited 3", why)
+	assert.Equal(t, 3, code)
+	_, _, ok = HookFailed(errors.New("the machine"))
+	assert.False(t, ok)
+}
+
+// Pass carries what a caller names to the gate's own magus, and nothing that would move
+// the box: a variable the box sets, one locating a cache it withholds, or the mode.
+func TestPassCarriesNamedVariablesAndRefusesWhatWouldMoveTheBox(t *testing.T) {
+	t.Setenv("CI_PROVIDER", "github-actions")
+	t.Setenv("MAGUS_CACHE_SIGNING_KEY", "")
+	t.Setenv("TOOL_CACHE", "/runner/tool")
+	env := HookEnv{Fixed: []string{"SET=s"}, Spells: map[string]spells.Sandbox{"tool": {Allow: []spells.SandboxAllow{{Env: "TOOL_CACHE", Mode: spells.SandboxAccessRW}}}}}
+	got, err := env.Pass([]string{"CI_PROVIDER", "MAGUS_CACHE_SIGNING_KEY", "NEVER_SET_ANYWHERE"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"SET=s", "CI_PROVIDER=github-actions", "MAGUS_CACHE_SIGNING_KEY="}, got.Fixed)
+	assert.Equal(t, []string{"SET=s"}, env.Fixed, "env itself is unchanged")
+
+	for _, name := range []string{"HOME", "TMPDIR", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR", "MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED",
+		"GOTOOLCHAIN", "GOCACHE", "GOPATH", "MISE_DATA_DIR", "TOOL_CACHE", procrun.SandboxEnvVar, "", "A=B"} {
+		_, err := env.Pass([]string{name})
+		assert.Error(t, err, "%q", name)
 	}
 }
