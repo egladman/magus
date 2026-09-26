@@ -95,6 +95,7 @@ concepts/charms/
 concepts/ci-providers/
 concepts/ci/
 concepts/ci/providers/
+concepts/ci/risk/
 concepts/compatibility/
 concepts/concurrency/
 concepts/dependencies/
@@ -158,6 +159,7 @@ development/evals/
 development/gopherbuzz/
 development/libs-coldread/
 development/libs-commentdash/
+development/libs-conventions/
 development/libs-diag/
 development/libs-diagnostics/
 development/libs-diagram/
@@ -514,6 +516,7 @@ reference/codes/sandbox/MGS3025/
 reference/codes/sandbox/MGS3026/
 reference/codes/sandbox/MGS3027/
 reference/codes/sandbox/MGS3028/
+reference/codes/sandbox/MGS3029/
 reference/codes/sandbox/MGS3030/
 reference/codes/sandbox/MGS3031/
 reference/codes/services/
@@ -596,8 +599,10 @@ reference/rules/filter-without-input/
 reference/rules/focus/
 reference/rules/gate-repeat/
 reference/rules/generated-write/
+reference/rules/graph-pipe/
 reference/rules/graph-stale/
 reference/rules/hook-wiring/
+reference/rules/inline-alias/
 reference/rules/installed-skill/
 reference/rules/interpreter-rewrite/
 reference/rules/lease-invalid/
@@ -791,6 +796,7 @@ tags/errors/
 tags/eslint/
 tags/events/
 tags/exec/
+tags/exit-2/
 tags/exit-75/
 tags/explain/
 tags/extension/
@@ -943,6 +949,7 @@ tags/readiness/
 tags/reads-files/
 tags/recursion/
 tags/redaction/
+tags/redundancy/
 tags/reference/
 tags/registry/
 tags/release/

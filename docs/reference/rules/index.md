@@ -26,6 +26,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
 | [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
 | [filter-without-input](filter-without-input.md)   | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                        |
+| [inline-alias](inline-alias.md)                   | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                |
 | [interpreter-rewrite](interpreter-rewrite.md)     | an inline interpreter rewriting a file this tree already carries                                  |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                     |
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                          |

@@ -1334,9 +1334,9 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // pattern built at run time - from a loop, or even from string interpolation - is
 // invisible to it, flagged as a computed footprint argument rather than silently
 // accepted. So the name list is written out per destination, and lint-files
-// (cmd/magus-filelint) keeps it in step with internal/agent/skills: adding a skill
-// without touching this fails there rather than shipping an installed file magus
-// calls hand-editable.
+// (tools/lint/skills-generate-declares-every-shipped-skill.buzz) keeps it in step with
+// internal/agent/skills: adding a skill without touching this fails there rather than
+// shipping an installed file magus calls hand-editable.
 //
 // One pattern per skill per destination, rather than one brace alternation per
 // destination, because these globs do not stay inside magus: EnsureMergeDriver
@@ -2997,7 +2997,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz");
+        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz",
+        "tools/lint/*.buzz");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
@@ -3038,8 +3039,9 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
-    // registry.buzz and gha-queue.buzz are invoked bare by workflows, so they are the ones
-    // that have to survive strict; advisories, drift and toolchain-policy are magusfile imports and
+    // registry.buzz and gha-queue.buzz are invoked bare by workflows, and lint.buzz by
+    // lint-files, so they are the ones that have to survive strict (lint.buzz imports every
+    // tools/lint rule, so its run is theirs); advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
     // red for a defect that does not exist. (toolchain.buzz has no importer and no
@@ -3048,7 +3050,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         cover_for(mod.value, ["--embedded"], {});
     }
     foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz") {
+        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz" or mod.value == "tools/lint.buzz") {
             cover_for(mod.value, [], {});
         } else {
             cover_for(mod.value, ["--embedded"], {});
@@ -3164,29 +3166,35 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 
 // Holds the repository's non-Go files to the conventions no off-the-shelf linter
 // checks: lockfile order, workflow trust, magusfile footprints, hook wiring, the
-// installed-skill declarations and the landing page's headline rotator. The rules
-// and their exemptions live in cmd/magus-filelint.
+// installed-skill declarations and the landing page's headline rotator. Each rule and
+// its exemptions live in tools/lint/<rule>.buzz, and tools/lint.buzz runs them.
 //
-// The footprint is exactly what the rules read, plus the Go packages the tool
-// compiles from this tree; cmd/magus-filelint's tests hold the second half to
-// `go list -deps`. Child-project files are named by path, because a tree glob here
-// stops at a child project's directory.
+// The footprint is exactly what the rules read plus the linter's own source, and
+// tools/lint.buzz reports any drift between the two. Nested-project files are named by
+// path, because a tree glob here stops at a nested project's directory; the magusfile
+// rules read every project's magusfile through magus\targets().
 export fun lint_files(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
-    ctx.readsFiles("cmd/magus-filelint/*.go", "internal/describe/*.go",
-                   "internal/parsecache/*.go", "internal/json/*.go", "types/*.go",
-                   "types/enum/*.go", "spells/*.go", "libs/diagnostics/*.go",
-                   "libs/gopherbuzz/*.go", "libs/gopherbuzz/ast/*.go",
-                   "libs/gopherbuzz/token/*.go", "libs/gopherbuzz/types/*.go",
-                   "libs/gopherbuzz/vm/*.go", "go.mod", "go.sum");
-    ctx.readsFiles("**/*.lock", "docs/**/*.lock", "console/**/*.lock", "libs/**/*.lock",
-                   "**/magusfile.buzz", "docs/**/magusfile.buzz", "console/magusfile.buzz",
-                   "libs/**/magusfile.buzz", "proto/magusfile.buzz",
+    ctx.readsFiles("tools/lint.buzz", "tools/lint/*.buzz",
+                   "**/*.lock", "docs/**/*.lock", "proto/buf.lock",
+                   "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
+                   "docs/guides/integrations/agents/magusfile.buzz",
+                   "libs/coldread/magusfile.buzz", "libs/conventions/magusfile.buzz",
+                   "libs/diagnostics/magusfile.buzz", "libs/diagram/magusfile.buzz",
+                   "libs/gopherbuzz/magusfile.buzz", "libs/pricing/magusfile.buzz",
+                   "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
+                   "proto/magusfile.buzz",
+                   ".golangci.yml", ".mockery.yaml", ".markdownlintignore", "dprint-base.json",
+                   "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static",
+                   "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
+                   ".claude/skills/magus-skill-authoring/SKILL.md",
+                   ".claude/skills/magus-local-development/SKILL.md",
+                   ".claude/skills/land-pull-requests/SKILL.md",
+                   "types/diagnostic.go",
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
-                   "internal/agent/skills/*/SKILL.md", ".claude/settings.json",
-                   "docs/guides/integrations/agents/codex-hooks.json",
+                   ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",
                    "docs/site/landing.buzz", "docs/src/styles/site.css");
-    proc\exec("go", ["run", "./cmd/magus-filelint"]);
+    magus\cmd("buzz", args: ["tools/lint.buzz"]);
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint,

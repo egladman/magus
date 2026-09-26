@@ -11,7 +11,7 @@ Merge approved changes through a speculative, partitioned merge queue
 
 ## Synopsis
 
-**magus** queue \<describe|ls|plan|validate|apply\> [flags]
+**magus** queue \<describe|ls|plan|validate|gate|apply\> [flags]
 
 ## Description
 
@@ -139,6 +139,20 @@ apply report what would merge and call nothing on the provider.
 **--verdicts** *directory*
 : \`directory\` the plan and the verdicts are written to, one entry per change; apply reads it as its \<source\>
 
+### queue gate options
+
+**--cache** *directory*
+: \`directory\` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does
+
+**--env** *names*
+: Comma-separated \`names\` of variables passed from this environment to the command's own magus
+
+**--remote** *remote* (default: origin)
+: Name of the configured \`remote\` changes and the base are fetched from
+
+**--vcs** *backend* (default: git)
+: Version control \`backend\` of the checkout at --root
+
 ### queue apply options
 
 **--app** *app*
@@ -200,6 +214,9 @@ apply report what would merge and call nothing on the provider.
 **validate**
 : Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)
 
+**gate**
+: Run a command in a checkout of HEAD boxed and sandboxed exactly as validate runs --gate in a candidate
+
 **apply**
 : Rebuild and merge the green verdicts \<source\> holds as they arrive (holds the write credential; runs no change's code)
 
@@ -239,6 +256,12 @@ magus queue plan --provider github --out plan.json < changes.json
 
 ```sh
 magus queue validate --stdin --verdicts verdicts --gate 'magus run ci' < plan.json
+```
+
+*Gate HEAD in the box validate gives a candidate*
+
+```sh
+magus queue gate --sandbox=required -- magus run ci
 ```
 
 *Merge the green ones as they arrive*

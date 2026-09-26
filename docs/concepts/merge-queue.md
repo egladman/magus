@@ -593,6 +593,16 @@ is a checkout of its own (a git worktree) in a box with a home and a temporary d
 of its own, where every cache its hooks keep lands ([the trust model](#trust-model)
 lists the environment).
 
+`magus queue gate -- <command>` runs a command in that same box, built by the same code:
+a checkout of the commit `HEAD` names, the base's sandbox over it, the global
+`--sandbox` as the mode. A CI job gating through it gates in the environment the queue
+will, so a change green there is not red in the queue for where it ran; this
+repository's `ci.yaml` shards do. Two flags serve such a job and never move the box.
+`--cache <dir>` keeps the command's local cache tier in a directory the job carries
+between runs, the one write the box grants outside itself. `--env <names>` passes the
+named variables to the command's own magus (a CI provider, a remote cache's
+credentials), which its children never see; a variable the box sets is refused.
+
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
 the generated paths on stdin; without a hook, a file either side deleted stays deleted.
 The regeneration's writes to outputs and to files `generate`'s targets update in place

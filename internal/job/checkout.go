@@ -1,6 +1,7 @@
 package job
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -308,6 +309,73 @@ func BoundLeases(cacheDir string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// Subagent is one subagent as its host names it on every hook call it makes: the host,
+// the session it shares with its parent, and the id the host gave it.
+type Subagent struct {
+	Host    string
+	Session string
+	ID      string
+}
+
+// agentMarkerDir holds the subagent bindings, beside the jobs file.
+const agentMarkerDir = "agents"
+
+// agentMarker names the file a's binding lives in, "" when the store has no directory or
+// a names no subagent. Hashed for the reason [Checkout.marker] hashes a session.
+func (s *Store) agentMarker(a Subagent) string {
+	if s.err != nil || s.path == "" || a.ID == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(a.Host + "\x00" + a.Session + "\x00" + a.ID))
+	return filepath.Join(filepath.Dir(s.path), agentMarkerDir, hex.EncodeToString(sum[:12]))
+}
+
+// BindAgent records that subagent a was spawned for job id, so every hook call carrying
+// a's id resolves to that lease from whichever checkout it runs in.
+//
+// It lives in the repository's state directory rather than any checkout's cache dir. A
+// worker in its own worktree has a cache dir of its own, so a record the spawner filed in
+// its cache dir was one the worker's hook never found; and the sandbox grants a run its
+// cache dir, so a record there was one a confined run could rewrite.
+//
+// Whether the spawner may hand id out is the caller's judgment; this only records it.
+func (s *Store) BindAgent(a Subagent, id string) error {
+	if !types.ValidJobID(id) {
+		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only)", id)
+	}
+	path := s.agentMarker(a)
+	if path == "" {
+		return fmt.Errorf("job: bind agent: %w", cmp.Or(s.err, errors.New("no state dir or no agent id to key the binding by")))
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("job: bind agent: %w", err)
+	}
+	// Through a rename: the subagent's own hooks may be reading it already.
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
+	if err != nil {
+		return fmt.Errorf("job: bind agent: %w", err)
+	}
+	_, werr := tmp.WriteString(id + "\n")
+	cerr := tmp.Close()
+	if err := cmp.Or(werr, cerr, os.Rename(tmp.Name(), path)); err != nil {
+		_ = os.Remove(tmp.Name())
+		return fmt.Errorf("job: bind agent: %w", err)
+	}
+	return nil
+}
+
+// AgentJob is the job subagent a was spawned for, "" when none was recorded.
+//
+// A binding that does not read is none, unlike a checkout's marker: nothing but the
+// spawn record writes it, so there is no repair to point at, and reading it as none
+// grades the call exactly as it was graded before the binding existed.
+//
+// TODO: bindings are never swept; one small file per attributed spawn.
+func (s *Store) AgentJob(a Subagent) string {
+	id, _ := readMarker(s.agentMarker(a))
+	return id
 }
 
 // ActingLease resolves the lease for a caller that reports no session and no subagent:

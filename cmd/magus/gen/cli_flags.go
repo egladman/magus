@@ -449,6 +449,14 @@ const (
 	FlagQueueDescribeStatusContext = "status-context"
 	// queue describe: --vcs
 	FlagQueueDescribeVCS = "vcs"
+	// queue gate: --cache
+	FlagQueueGateCache = "cache"
+	// queue gate: --env
+	FlagQueueGateEnv = "env"
+	// queue gate: --remote
+	FlagQueueGateRemote = "remote"
+	// queue gate: --vcs
+	FlagQueueGateVCS = "vcs"
 	// queue ls: --base
 	FlagQueueLsBase = "base"
 	// queue ls: --provider
@@ -655,6 +663,8 @@ const (
 	FlagVCSCheckpointPreserve = "preserve"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
+	// vcs resolve: --hook
+	FlagVCSResolveHook = "hook"
 	// version: --client
 	FlagVersionClient = "client"
 	// watch: --backend
@@ -1269,12 +1279,14 @@ func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
 // VCSResolveFlags are the flags declared for `magus vcs resolve`.
 type VCSResolveFlags struct {
 	Against string // --against
+	Hook    string // --hook
 }
 
 // BindVCSResolve registers `magus vcs resolve`'s flags on fs and returns the destination.
 func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	var f VCSResolveFlags
 	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
+	fs.StringVar(&f.Hook, FlagVCSResolveHook, "", "Run as the git `hook` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand")
 	return &f
 }
 
@@ -1387,6 +1399,24 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueValidateVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// QueueGateFlags are the flags declared for `magus queue gate`.
+type QueueGateFlags struct {
+	Cache  string // --cache
+	Env    string // --env
+	Remote string // --remote
+	VCS    string // --vcs
+}
+
+// BindQueueGate registers `magus queue gate`'s flags on fs and returns the destination.
+func BindQueueGate(fs *flag.FlagSet) *QueueGateFlags {
+	var f QueueGateFlags
+	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does")
+	fs.StringVar(&f.Env, FlagQueueGateEnv, "", "Comma-separated `names` of variables passed from this environment to the command's own magus")
+	fs.StringVar(&f.Remote, FlagQueueGateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
+	fs.StringVar(&f.VCS, FlagQueueGateVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
 }
 

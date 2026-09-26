@@ -88,6 +88,10 @@ type Session struct {
 	// loadedPaths tracks absolute paths already loaded to prevent re-execution
 	// and break import cycles.
 	loadedPaths map[string]bool
+	// importCache holds what each loaded module bound, keyed like loadedPaths and
+	// shared with it across sub-sessions. loadedPaths only says a module ran; a
+	// session importing it after another session did binds it from here.
+	importCache map[string]*cachedImport
 	// nativeModules maps an import path (e.g. "magus/extra") to a host-built
 	// module value. An `import "<path>"` binds it under the path's basename
 	// (or alias) without touching the filesystem; see loadFileImports. The host
@@ -277,6 +281,7 @@ func newSession(ctx context.Context) *Session {
 		exportedNames:      make(map[string]bool),
 		rootExportedNames:  make(map[string]bool),
 		loadedPaths:        make(map[string]bool),
+		importCache:        make(map[string]*cachedImport),
 		declaredNamespaces: make(map[string]string),
 	}
 	// resume/resolve are session-bound so they can swap curVM to the fiber's VM
@@ -893,10 +898,11 @@ func (s *Session) Warnings() []Diagnostic {
 // It is NOT side-effect-free. Resolving the program's imports executes each imported
 // module's top-level code and reads its file from disk, so the checker can see the
 // globals and types they define (there is no check-only import pass). It also mutates
-// session state (loadedPaths, env, importedTypes). Call it on a fresh or throwaway
-// session (the embedded playground path (dry.Diagnostics) makes a new one per call),
-// never on a live session you still intend to Exec, or a later real import will be
-// skipped as already-loaded.
+// session state (loadedPaths, importCache, env, importedTypes). Call it on a fresh or
+// throwaway session (the embedded playground path (dry.Diagnostics) makes a new one per
+// call), never on a live session you still intend to Exec: a later real import binds
+// the module from what this call cached without running it again, so its top level runs
+// here, against whatever the file said at the time.
 func (s *Session) Diagnostics(code string) []Diagnostic {
 	// Diagnostics takes no per-call ctx (see the doc comment above); it runs
 	// against the session's own lifetime like the rest of the no-ctx surface.
@@ -1161,14 +1167,21 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	if src, ok := s.moduleDecls[resolvePath]; ok {
 		key := "source:" + resolvePath
 		if s.loadedPaths[key] {
+			if cached := s.importCache[key]; cached != nil {
+				return ImportBound, s.bindCachedFlat(boundName, imp.Path, cached, false)
+			}
 			return ImportBound, nil
 		}
 		s.loadedPaths[key] = true
 		s.collectImportedModule(boundName, src)
 		exports, err := s.execImport(ctx, src)
 		if err != nil {
+			// Forget the attempt, so a later import in a long-lived session retries it
+			// rather than finding it loaded with nothing to bind.
+			delete(s.loadedPaths, key)
 			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
+		s.importCache[key] = s.cacheBindings(src, exports)
 		s.bindNamespaceObject(boundName, exports)
 		if ns := s.declaredNamespace(src); ns != nil {
 			if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
@@ -1201,9 +1214,27 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: resolve path: %v", imp.Path, err)
 	}
 	if s.loadedPaths[abs] {
+		// No cache entry means abs is still loading: this import closes a cycle, and
+		// binding nothing is what breaks it.
+		cached := s.importCache[abs]
+		switch {
+		case cached == nil:
+		case imp.Alias != "" && imp.Alias != "_":
+			s.bindCachedAlias(imp.Alias, cached)
+		default:
+			return ImportBound, s.bindCachedFlat(boundName, imp.Path, cached, true)
+		}
 		return ImportBound, nil
 	}
 	s.loadedPaths[abs] = true
+	// A load that fails before its bindings are cached is forgotten, so a later import in
+	// a long-lived session retries it; that is what keeps "no cache entry" meaning "still
+	// loading" above.
+	defer func() {
+		if s.importCache[abs] == nil {
+			delete(s.loadedPaths, abs)
+		}
+	}()
 
 	data, err := s.readImportSource(path)
 	if err != nil {
@@ -1230,6 +1261,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		if err := s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
 			return ImportFile, err
 		}
+		if m, ok := s.env.Get(imp.Alias); ok {
+			s.importCache[abs] = &cachedImport{src: string(data), names: m.MapKeys(), values: m}
+		}
 		return ImportFile, nil
 	}
 	// Flat import: merge file's globals directly into this env, and
@@ -1240,6 +1274,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
+	s.importCache[abs] = s.cacheBindings(string(data), exports)
 	// Also bind a namespace object under the basename so upstream-Buzz
 	// qualified access (`regex\reCompile`) resolves the same export the
 	// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
@@ -1417,6 +1452,71 @@ func (s *Session) bindNamespaceObject(name string, exports []string) {
 	s.env.Define(name, m)
 }
 
+// cachedImport is what one evaluation of a module bound: its source, which each later
+// importer's checker collects for itself, and its exported values by name.
+type cachedImport struct {
+	src    string
+	names  []string
+	values vmpackage.Value // map of name to value
+}
+
+// cacheBindings records the values names are bound to now, just after a flat import
+// executed src.
+func (s *Session) cacheBindings(src string, names []string) *cachedImport {
+	m := vmpackage.NewMap()
+	for _, n := range names {
+		if v, ok := s.env.Get(n); ok {
+			m.MapSet(n, v)
+		}
+	}
+	return &cachedImport{src: src, names: m.MapKeys(), values: m}
+}
+
+// bindCachedFlat binds a module another session already evaluated the way a flat
+// import binds it: its exports unqualified (an existing binding wins), a namespace
+// object under boundName, and the namespace path it declares. relative adds the
+// importer-relative namespace spellings, which only a file import gets.
+func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, relative bool) error {
+	s.collectImportedModule(boundName, c.src)
+	for _, n := range c.names {
+		if _, bound := s.env.Get(n); bound {
+			continue
+		}
+		if v, ok := c.values.MapGet(n); ok {
+			s.env.Define(n, v)
+		}
+	}
+	s.bindNamespaceObject(boundName, c.names)
+	ns := s.declaredNamespace(c.src)
+	if ns == nil {
+		return nil
+	}
+	if err := s.bindNamespacePath(ns, c.names, importPath); err != nil {
+		return err
+	}
+	if relative {
+		s.bindNamespaceRelative(ns, c.names)
+	}
+	return nil
+}
+
+// bindCachedAlias binds a file another session already evaluated the way an aliased
+// import binds it: its values as a map under alias, and its object types under their
+// bare names (see loadImportAsAlias for why).
+func (s *Session) bindCachedAlias(alias string, c *cachedImport) {
+	s.collectImportedModule(alias, c.src)
+	for _, n := range c.names {
+		v, _ := c.values.MapGet(n)
+		if !v.IsObjectDef() {
+			continue
+		}
+		if _, exists := s.env.Get(n); !exists {
+			s.env.Define(n, v)
+		}
+	}
+	s.env.Define(alias, c.values)
+}
+
 // rememberModuleType records one exported type declaration under its module's bound
 // name, for the namespace object the checker builds.
 func (s *Session) rememberModuleType(boundName string, d ast.Node) {
@@ -1585,6 +1685,7 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.searchPaths = s.searchPaths
 	sub.SetIncludeDirs(s.includeDirs)
 	sub.loadedPaths = s.loadedPaths
+	sub.importCache = s.importCache
 	sub.nativeModules = s.nativeModules
 	sub.moduleDecls = s.moduleDecls
 	sub.moduleResolver = s.moduleResolver
@@ -1608,6 +1709,7 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.importedTypes = slices.Clone(s.importedTypes)
 	sub.importedModuleFuncs = maps.Clone(s.importedModuleFuncs)
 	sub.importedModuleTypes = maps.Clone(s.importedModuleTypes)
+	sub.importedModuleVars = maps.Clone(s.importedModuleVars)
 
 	// Copy parent's current globals into the sub-session so the imported file
 	// can reference host APIs (magus, print, etc.).

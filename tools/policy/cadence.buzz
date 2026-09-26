@@ -1,0 +1,156 @@
+// The rules for when a line may gate or push: worker-runs-gate and detached-push-unqualified.
+namespace agentpolicy\cadence;
+
+import "std";
+import "magus";
+import "./tools/policy/helpers" as helpers;
+
+final gateDenial ="The gate runs once per branch, by the orchestrator or by a worker spawned as "
+    + "`<parent>/integrate <job>`, never by a worker mid-change. Finish with the narrow validation "
+    + "your brief names and report; the gate runs once your branch is integrated. "
+    + "`magus affected ci --plan` stays open to you: it runs nothing.";
+
+// Caller is who runs a command: role is root or worker (a lease binds it), and title is
+// the description it was itself spawned with, empty for a person or the orchestrator.
+export object Caller {
+    role: str,
+    title: str,
+}
+
+// Checkout is the git state a push leaves from, handed over only for a line that pushes.
+export object Checkout {
+    detached: bool,
+    remoteBranches: [str],
+}
+
+// decideCadence denies the gate run by a caller that may not gate, then a detached push git
+// would refuse. checkout is null for a line that does not push.
+export fun decideCadence(programs: [helpers\Program], caller: Caller, checkout: Checkout?) > GuardVerdict {
+    if (runsGate(programs) and !mayGate(caller)) {
+        return magus\guard.deny(gateDenial);
+    }
+    if (checkout != null) {
+        final denial = unqualifiedPush(programs, checkout: checkout!);
+        if (denial != "") {
+            return magus\guard.deny(denial);
+        }
+    }
+    return magus\guard.allow();
+}
+
+// mayGate: a person or the orchestrator (no lease, no spawn title), or an integrate worker.
+fun mayGate(caller: Caller) > bool {
+    if (caller.role != "worker" and caller.title == "") {
+        return true;
+    }
+    return helpers\titleRole(caller.title) == "integrate";
+}
+
+// runsGate: `magus affected ci` or `magus run ci`, with or without a charm, and not the
+// --plan form, which runs nothing.
+fun runsGate(programs: [helpers\Program]) > bool {
+    foreach (p in programs) {
+        if (p.name == "magus") {
+            final ops = helpers\magusOperands(p.args);
+            if (ops.len() > 1 and (ops[0] == "affected" or ops[0] == "run")
+                and (ops[1] == "ci" or ops[1].startsWith("ci:"))
+                and !helpers\hasFlag(p.args, long: "--plan")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The git push flags that take the next word as their value.
+final pushValueFlags = ["-C", "-o", "--push-option", "--repo", "--receive-pack", "--exec"];
+
+// unqualifiedPush names what is wrong with a `git push <remote> HEAD:<name>` from a detached
+// HEAD whose <name> the checkout has no remote-tracking branch for, "" when nothing is. Git
+// refuses that push: with no branch behind HEAD it cannot tell a branch from a tag.
+fun unqualifiedPush(programs: [helpers\Program], checkout: Checkout) > str {
+    if (!checkout.detached) {
+        return "";
+    }
+    foreach (p in programs) {
+        if (p.name == "git") {
+            final ops = helpers\operandsOf(p.args, valueFlags: pushValueFlags);
+            if (ops.len() > 2 and ops[0] == "push") {
+                final remote = ops[1];
+                foreach (spec in ops.sub(2)) {
+                    var ref = spec;
+                    if (ref.startsWith("+")) { ref = ref.sub(1); }
+                    if (ref.startsWith("HEAD:")) {
+                        final name = ref.sub(5);
+                        if (!name.startsWith("refs/") and checkout.remoteBranches.indexOf("{remote}/{name}") == null) {
+                            return "HEAD is detached and {remote} has no branch `{name}` this checkout knows of, so git "
+                                + "cannot tell a branch from a tag and refuses the push; a `;` or a background run hides "
+                                + "that. Name the branch in full: `git push {remote} HEAD:refs/heads/{name}`.";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return "";
+}
+
+// person is an unattributed caller: no lease binds it and no spawn titled it.
+fun person() > Caller {
+    return Caller{ role = "root", title = "" };
+}
+
+test "a worker whose role is not integrate may not run the gate" {
+    final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
+    foreach (caller in [
+        Caller{ role = "worker", title = "orchestrator/feat guard-command" },
+        Caller{ role = "root", title = "v050-prep/fix naming-advisory" },
+        Caller{ role = "worker", title = "" },
+    ]) {
+        final v = decideCadence(gate, caller: caller, checkout: null);
+        std\assert(v.decision == "deny", message: "{caller.role} {caller.title}");
+        std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
+    }
+    final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
+    foreach (argv in [
+        ["magus", "run", "ci", "."],
+        ["magus", "affected", "ci:rw"],
+        ["magus", "-j", "4", "affected", "ci"],
+    ]) {
+        std\assert(decideCadence(helpers\request([argv]), caller: worker, checkout: null).decision == "deny", message: argv.join(" "));
+    }
+}
+
+test "the orchestrator, a person, an integrate worker and the plan form may gate" {
+    final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
+    std\assert(decideCadence(gate, caller: person(), checkout: null).decision == "allow", message: "an unattributed caller");
+    final integrator = Caller{ role = "worker", title = "orchestrator/integrate local-command-policy" };
+    std\assert(decideCadence(gate, caller: integrator, checkout: null).decision == "allow", message: "an integrate worker");
+    final worker = Caller{ role = "worker", title = "orchestrator/feat guard-command" };
+    final plan = helpers\request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
+    std\assert(decideCadence(plan, caller: worker, checkout: null).decision == "allow", message: "the plan runs nothing");
+    final narrow = helpers\request([["magus", "run", "go::go-test", ".", "--", "-run", "Guard"]]);
+    std\assert(decideCadence(narrow, caller: worker, checkout: null).decision == "allow", message: "narrow validation");
+}
+
+test "a detached push to a branch the remote lacks is denied, naming the full ref" {
+    final detached = Checkout{ detached = true, remoteBranches = ["origin/main", "origin/naming-advisory"] };
+    final v = decideCadence(helpers\request([["git", "push", "origin", "HEAD:local-command-policy"]]), caller: person(), checkout: detached);
+    std\assert(v.decision == "deny", message: "an unknown branch");
+    std\assert(v.reason.indexOf("git push origin HEAD:refs/heads/local-command-policy") != null, message: "names the fix");
+    final forced = decideCadence(helpers\request([["git", "-C", "../wt", "push", "-u", "origin", "+HEAD:topic"]]), caller: person(), checkout: detached);
+    std\assert(forced.decision == "deny", message: "a forced push, a -C and a flag");
+}
+
+test "a push the remote can place stays silent" {
+    final detached = Checkout{ detached = true, remoteBranches = ["origin/main", "origin/naming-advisory"] };
+    foreach (argv in [
+        ["git", "push", "-q", "origin", "HEAD:naming-advisory"],
+        ["git", "push", "origin", "HEAD:refs/heads/x"],
+        ["git", "push", "origin", "main"],
+    ]) {
+        std\assert(decideCadence(helpers\request([argv]), caller: person(), checkout: detached).decision == "allow", message: argv.join(" "));
+    }
+    final onBranch = Checkout{ detached = false, remoteBranches = [<str>] };
+    std\assert(decideCadence(helpers\request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch).decision == "allow", message: "HEAD names a branch");
+}

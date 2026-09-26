@@ -6,5 +6,11 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object YamlPositions {
+    lines: {str: int} = {},
+    columns: {str: int} = {},
+}
+
 export extern fun parse(source: str) > any !> any;
+export extern fun positions(source: str) > YamlPositions !> any;
 export extern fun stringify(value: any) > str !> any;

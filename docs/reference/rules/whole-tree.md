@@ -14,7 +14,7 @@ A whole-tree VCS reset, checkout, restore or clean, which cannot be undone.
 
 ## Why
 
-These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. It is the one category where an over-eager refusal is the safe direction, which is why an unparsable line falls back to the pattern rather than passing. Verify in place instead: no magus run needs a clean tree.
+These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. It is the one category where an over-eager refusal is the safe direction, which is why an unparsable line falls back to the pattern rather than passing. Verify in place instead: no magus run needs a clean tree. git's own help passes, because git documents that it prints usage without running: `git stash --help`, `git reset -h`, `git help stash`. It has to be the whole line, with nothing between the verb and the flag, so `git reset --hard --help`, `git -c ... stash --help`, a `VAR=value` prefix, `sh -c` or a pipe are judged as work.
 
 ## Seeing it
 

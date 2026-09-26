@@ -77,21 +77,18 @@ func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, boo
 }
 
 // asSearch reads `git grep` as the recursive grep it is, so its patterns and paths are
-// judged by the same parser. Every other command is returned unchanged.
+// judged by the same parser. Every other command is returned unchanged, and so is a `git
+// grep` relocated by -C, --git-dir or --work-tree, which searches a tree this workspace's
+// graph does not describe, or one carrying -c, which can change the pattern dialect.
 func asSearch(c hint.Invocation) hint.Invocation {
 	if path.Base(c.Name) != "git" {
 		return c
 	}
-	for i, a := range c.Args {
-		if strings.HasPrefix(a, "-") {
-			continue
-		}
-		if a != "grep" {
-			return c
-		}
-		return hint.Invocation{Name: "grep", Args: append([]string{"-r"}, c.Args[i+1:]...)}
+	g := parseGit(c.Args)
+	if g.sub != "grep" || len(g.dirs) > 0 || g.opaque || g.configured {
+		return c
 	}
-	return c
+	return hint.Invocation{Name: "grep", Args: append([]string{"-r"}, g.rest...)}
 }
 
 // provableRoutes answers every alternative of c's patterns with a graph command, or

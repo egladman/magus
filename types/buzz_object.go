@@ -136,6 +136,16 @@ type URL struct {
 	Fragment string
 }
 
+// YAMLPositions mirrors yaml.positions's {lines, columns} object: where each value of a
+// YAML document starts, 1-based, keyed by the value's JSON pointer ("" for the root,
+// "/jobs/build/steps/0" for a list item, with ~0 and ~1 escaping ~ and / in a key).
+// Two maps of ints rather than one map of objects: the binding generator encodes a
+// struct or a list of structs as a return, not a map of them.
+type YAMLPositions struct {
+	Lines   map[string]int
+	Columns map[string]int
+}
+
 // PipeRecord mirrors one record a magus stage writes to the next in a pipe: the -o jsonl
 // record, with the fields a script filters on lifted out of its body. A field the record
 // does not carry is empty; Body is the whole record, for everything else.
@@ -153,6 +163,22 @@ type PipeRecord struct {
 	Projects []string
 	// Body is the record as its JSON line, without the newline.
 	Body string
+}
+
+// Finding is one violation a lint rule written in Buzz reports: where it is, which
+// rule found it, what is wrong and what to do. A script WRITES it, so it ships as the
+// magus/lint source module (`import "magus/lint";`) rather than with a host method.
+//
+// Line and Col are 1-based; 0 means the rule has no single position to point at, such
+// as a file that is missing. URL is the page documenting the rule, empty when none does.
+type Finding struct {
+	Path    string
+	Line    int
+	Col     int
+	Rule    string
+	Message string
+	Fix     string
+	URL     string `buzz:"url"`
 }
 
 // TargetArtifact is one file a target actually produced: a declared output glob expanded
