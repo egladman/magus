@@ -48,7 +48,7 @@ type PolicyOptions struct {
 // declaration layer merged by mergeLayers. It reads nothing from the host beyond
 // resolving each rule path through its symlinks, which a rule needs to compare equal
 // to a checked path, and the binaries a binRoot base names. A path that does not exist
-// is kept: it matches nothing, and the kernel layer skips it.
+// is kept: the kernel layer creates a writable one as a directory and skips the rest.
 //
 // The core is the operating system and magus's own: o's paths, read+exec on the system
 // trees (/usr, /bin, /sbin, /lib*, /opt, /nix/store, /snap) and on each absolute PATH
