@@ -50,9 +50,13 @@ config mcp.enabled
 config mcp.insecure_bind
 config report.filter
 config required_version
+config sandbox.allow.<name>.base
+config sandbox.allow.<name>.bin
+config sandbox.allow.<name>.env
 config sandbox.allow.<name>.mode
 config sandbox.allow.<name>.name
 config sandbox.allow.<name>.path
+config sandbox.allow.<name>.requires
 config sandbox.env.passthrough
 config sandbox.mode
 config secret.interactive_timeout
@@ -118,6 +122,7 @@ flag agent/global
 flag agent/prune
 flag agent/skill-form
 flag agent/tar
+flag broker/idle-exit
 flag buzz/C
 flag buzz/check
 flag buzz/coverprofile
@@ -187,6 +192,7 @@ flag run/preflight
 flag run/race
 flag run/shard
 flag run/skip
+flag run/stdin
 flag run/step
 flag run/timeout
 flag run/upstream

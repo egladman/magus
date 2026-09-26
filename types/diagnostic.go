@@ -465,6 +465,12 @@ const (
 	// base that is not the reviewed head of the change beneath. Apply stops before it
 	// merges anything that rests on it.
 	QueuePlanUnverified DiagnosticCode = "MGS3028"
+	// SavedPlanRefused is a `magus run --stdin` plan that cannot be run as asked: the
+	// document is not a shard plan, or the invocation names a shard, target or shard
+	// count the plan does not have. Refused before anything runs, because running part of
+	// a plan, or a plan for another target, gates less than the caller asked for and
+	// still exits 0.
+	SavedPlanRefused DiagnosticCode = "MGS3029"
 	// PipeUpstreamFailed is a magus stage upstream of a run in a shell pipe that exited
 	// non-zero. A run that sees it before taking its locks starts nothing; the last stage
 	// of a pipeline that succeeded exits with it, so the pipeline fails without pipefail.
@@ -642,7 +648,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, HookHostUnnamed,
 	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
-	PipeUpstreamFailed, WritePathClaimUngradable,
+	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

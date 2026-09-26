@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -22,8 +22,8 @@ type serviceHost struct{ reg *service.Registry }
 
 func (h serviceHost) Snapshot() []types.StatusService { return serviceStatuses(h.reg) }
 
-func (h serviceHost) Acquire(ctx context.Context, key string, svc spells.Service) error {
-	_, err := h.reg.Acquire(ctx, key, svc)
+func (h serviceHost) Acquire(ctx context.Context, key string, spec broker.ServiceSpec) error {
+	_, err := h.reg.Acquire(ctx, key, spec.Service())
 	return err
 }
 

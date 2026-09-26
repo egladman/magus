@@ -1281,6 +1281,39 @@ func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
 	return out
 }
 
+func ObjectSandboxAllow(v spells.SandboxAllow) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("env", vm.StrValue(v.Env))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("bin", vm.StrValue(v.Bin))
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("requires", vm.StrValue(v.Requires))
+	out.MapSet("mode", vm.StrValue(string(v.Mode)))
+	return out
+}
+
+func ObjectSandboxEnv(v spells.SandboxEnv) vm.Value {
+	out := vm.NewMap()
+	itemsPassthrough := make([]vm.Value, len(v.Passthrough))
+	for indexPassthrough := range v.Passthrough {
+		itemsPassthrough[indexPassthrough] = vm.StrValue(v.Passthrough[indexPassthrough])
+	}
+	out.MapSet("passthrough", vm.ListValue(itemsPassthrough))
+	return out
+}
+
+func ObjectSandbox(v spells.Sandbox) vm.Value {
+	out := vm.NewMap()
+	itemsAllow := make([]vm.Value, len(v.Allow))
+	for indexAllow := range v.Allow {
+		itemsAllow[indexAllow] = ObjectSandboxAllow(v.Allow[indexAllow])
+	}
+	out.MapSet("allow", vm.ListValue(itemsAllow))
+	out.MapSet("env", ObjectSandboxEnv(v.Env))
+	return out
+}
+
 func ObjectCommitAuthor(v types.CommitAuthor) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))

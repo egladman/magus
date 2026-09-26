@@ -1639,7 +1639,7 @@ fun reproduction(number: str, run: {str: str}, repoArg: str, base: str, gate: st
         "",
         "```sh",
         "gh run download {run["id"] ?? ""} -R {repoArg} -n mergequeue-plan -D {dir}",
-        "magus queue validate --only {number} --plan {dir}/plan.json --verdicts {dir}/verdicts \\",
+        "magus queue validate --only {number} --stdin --verdicts {dir}/verdicts < {dir}/plan.json \\",
     ];
     if (regenerate == "") {
         lines.append("  --gate {shQuote(gate)}");
@@ -2461,7 +2461,7 @@ test "a red gate's kick-back links the run, reproduces it locally and lists the 
         "",
         "```sh",
         "gh run download 123 -R egladman/magus -n mergequeue-plan -D mq-300",
-        "magus queue validate --only 300 --plan mq-300/plan.json --verdicts mq-300/verdicts \\",
+        "magus queue validate --only 300 --stdin --verdicts mq-300/verdicts < mq-300/plan.json \\",
         `  --gate 'magus run ci --no-default-charms' \`,
         `  --regenerate 'magus run generate:rw'`,
         "```",
@@ -2566,7 +2566,7 @@ test "a hook line's single quotes survive sh quoting" {
     assert\equal(shQuote("echo 'hi' there"), want: `'echo '\''hi'\'' there'`, message: "each quote closes, escapes and reopens");
     assert\equal(shQuote(`magus run x "$HOME"`), want: `'magus run x "$HOME"'`, message: "the variable stays literal");
     final lines = reproduction("5", run: {"repo": "o/r", "id": "2"}, repoArg: "o/r", base: "main", gate: "test 'x' = x", regenerate: "");
-    assert\equal(lines[4], want: "magus queue validate --only 5 --plan mq-5/plan.json --verdicts mq-5/verdicts \\", message: "continued");
+    assert\equal(lines[4], want: "magus queue validate --only 5 --stdin --verdicts mq-5/verdicts < mq-5/plan.json \\", message: "continued");
     assert\equal(lines[5], want: `  --gate 'test '\''x'\'' = x'`, message: "no regeneration: the gate line ends the command");
 }
 

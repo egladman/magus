@@ -11,6 +11,8 @@ import (
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,7 +46,9 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
-	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox)
+	// Every spell the workspace loaded, so a script, a magusfile body and a nested magus
+	// get every toolchain's grants; runTarget narrows a spell op's child to its project's.
+	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox, spells.Sandboxes(project.DefaultSpellRegistry().All()))
 	if err != nil {
 		return ctx, err
 	}

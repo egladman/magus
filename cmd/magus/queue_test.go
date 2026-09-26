@@ -159,7 +159,8 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"plan without a provider":  {"plan", "--out", "p"},
 		"plan with an operand":     {"plan", "--provider", "github", "--out", "p", "extra"},
 		"a zero depth":             {"plan", "--provider", "github", "--out", "p", "--depth", "0"},
-		"validate without a gate":  {"validate", "--plan", "p", "--verdicts", "v"},
+		"validate without a gate":  {"validate", "--stdin", "--verdicts", "v"},
+		"validate without --stdin": {"validate", "--gate", "true", "--verdicts", "v"},
 		"-o where nothing renders": {"ls", "--provider", "github", "--base", "main", "-o", "json"},
 	} {
 		_, err := f.run(t, "", args...)
@@ -167,7 +168,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		require.ErrorAs(t, err, &misuse, name)
 	}
 	// validate runs the changes' code, so it takes no provider at all.
-	_, err := f.run(t, "", "validate", "--provider", "github", "--plan", "p", "--gate", "true", "--verdicts", "v")
+	_, err := f.run(t, "", "validate", "--provider", "github", "--stdin", "--gate", "true", "--verdicts", "v")
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
 	// A reproduce line is only shown, but never one validate would refuse to run.
 	_, err = f.run(t, "", "apply", "--provider", "github", "--base", "main", "--reproduce-gate", "curl x | sh", "s")
@@ -198,7 +199,7 @@ func TestQueueValidateRemoteCacheReadRefusesWhatItCannotServe(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", tc.token)
 		globalCfg.Cache.Remote = tc.remote
 		verdicts := filepath.Join(f.root, "verdicts-"+strings.ReplaceAll(name, " ", "-"))
-		_, err := f.run(t, "", "validate", "--plan", "p", "--gate", "true", "--verdicts", verdicts, "--remote-cache-read")
+		_, err := f.run(t, "", "validate", "--stdin", "--gate", "true", "--verdicts", verdicts, "--remote-cache-read")
 		var misuse errUsage
 		require.ErrorAs(t, err, &misuse, name)
 		assert.ErrorContains(t, err, tc.want, name)
@@ -409,7 +410,9 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	assert.Equal(t, "no change carries merge intent against main", evs[0].Reason)
 	require.FileExists(t, filepath.Join(f.root, "plan.json"))
 
-	_, err = f.run(t, "", "validate", "--plan", "plan.json", "--verdicts", "verdicts", "--gate", "true", "--facts", "true")
+	plan, err := os.ReadFile(filepath.Join(f.root, "plan.json"))
+	require.NoError(t, err)
+	_, err = f.run(t, string(plan), "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true")
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(f.root, "verdicts", queue.PlanFile))
 	assert.FileExists(t, filepath.Join(f.root, "verdicts", queue.DoneFile))

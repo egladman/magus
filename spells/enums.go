@@ -35,3 +35,9 @@ var externals = enum.Set[External]{"reads-external", "mutates-external"}
 func (v External) Values() []string { return externals.Strings() }
 func (v External) Valid() bool      { return externals.Valid(v) }
 func (v External) String() string   { return enum.String(v) }
+
+var sandboxAccesses = enum.Set[SandboxAccess]{"ro", "rx", "rw", "rwx"}
+
+func (v SandboxAccess) Values() []string { return sandboxAccesses.Strings() }
+func (v SandboxAccess) Valid() bool      { return sandboxAccesses.Valid(v) }
+func (v SandboxAccess) String() string   { return enum.String(v) }

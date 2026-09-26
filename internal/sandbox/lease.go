@@ -63,22 +63,39 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 		return policy
 	}
 
-	var granted []string
+	b := &leaseBoundary{id: row.ID, from: from, root: filesystem.ResolveRulePath(loc.Root), cacheDir: loc.CacheDir}
 	if !row.ReadOnly {
-		granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
+		b.granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
 	}
-	rootAbs := filesystem.ResolveRulePath(loc.Root)
-	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(granted)+2)
+	slog.InfoContext(ctx, "magus: narrowed the sandbox write grant to a lease boundary",
+		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(b.granted))
+	return b.apply(policy)
+}
+
+// leaseBoundary is a lease's write boundary as NarrowToLease derived it from the job
+// store, kept on the narrowed policy so a ForSpells policy is narrowed the same way
+// without reading the store again.
+type leaseBoundary struct {
+	id       string
+	from     types.LeaseSource
+	root     string   // the checkout, resolved
+	cacheDir string   // the workspace cache, granted back
+	granted  []string // the lease's write grants, resolved
+}
+
+// apply returns policy with its write grants on the checkout replaced by b's.
+func (b *leaseBoundary) apply(policy *Policy) *Policy {
+	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(b.granted)+2)
 	for _, r := range policy.FS.Rules {
-		if filesystem.Under(r.Path, rootAbs) || filesystem.Under(rootAbs, r.Path) {
+		if filesystem.Under(r.Path, b.root) || filesystem.Under(b.root, r.Path) {
 			r.Write = false
 		}
 		rules = append(rules, r)
 	}
-	for _, p := range granted {
+	for _, p := range b.granted {
 		rules = append(rules, filesystem.Rule{Path: p, Read: true, Write: true})
 	}
-	for _, p := range []string{loc.CacheDir, policy.TempDir} {
+	for _, p := range []string{b.cacheDir, policy.TempDir} {
 		if p == "" {
 			continue
 		}
@@ -87,10 +104,11 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 
 	narrowed := *policy
 	narrowed.FS = filesystem.Ruleset{Rules: rules}
-	narrowed.Lease = row.ID
-	narrowed.LeaseFrom = from
-	slog.InfoContext(ctx, "magus: narrowed the sandbox write grant to a lease boundary",
-		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(granted))
+	narrowed.Lease = b.id
+	narrowed.LeaseFrom = b.from
+	narrowed.lease = b
+	// The unnarrowed policy's memo holds unnarrowed policies.
+	narrowed.scoped = newScopedPolicies()
 	return &narrowed
 }
 

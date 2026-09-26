@@ -508,33 +508,41 @@ title rule only to commits made directly on `main`. `magus run git-hooks-remove 
 takes them out again. To add a hook, see
 [Your own hooks, in Buzz](https://eli.gladman.cc/magus/guides/integrations/git/#your-own-hooks-in-buzz).
 
-## Workflow targets, not inline shell
+## Workflow targets, not inline logic
 
 The GitHub Actions workflow files are intentionally thin. Every meaningful
-CI operation lives in a target in `magusfile.buzz`, not in a workflow YAML
-step. The workflow just orchestrates: it sets up the toolchain, calls the
-target, and uploads artifacts. Host-specific knowledge (GitHub Actions
-concepts like `$GITHUB_OUTPUT`, the `gha` charm) lives at one boundary,
-and every other piece of the pipeline stays portable.
+CI operation lives in a target in `magusfile.buzz` or in magus itself, not
+in a workflow YAML step. The workflow orchestrates: it sets up the
+toolchain, calls magus, carries magus's output to where the host wants it,
+and uploads artifacts.
 
 Concretely:
 
-- **The workflow YAML** names jobs and steps, sets env vars that host the
-  host-specific plumbing, and uploads artifacts. It never contains logic
-  that could live in a target.
-- **The magusfile targets** hold the actual work: which projects to fan out
-  over, what to render, how to interpret drift, what to write to a sink
-  the workflow supplies via env.
+- **The workflow YAML** names jobs and steps, sets env vars, uploads
+  artifacts, and holds thin provider glue: a few lines that redirect what
+  magus printed into a file the host reads, such as `>> "$GITHUB_OUTPUT"`
+  or `>> "$GITHUB_STEP_SUMMARY"`. Glue moves bytes. It never decides
+  anything: no conditionals, loops, parsing (`jq`, `sed`, `awk`) or string
+  building. If a step needs one of those, the work belongs in magus or a
+  target, and magus should print the finished bytes.
+- **magus and the magusfile targets** hold the actual work: which projects
+  to fan out over, what to render, how to interpret drift. What a host
+  consumes is rendered by magus in a provider-neutral shape, with `-o`
+  choosing the encoding, `-o template=...` included.
 - **A target that wants host-specific behavior** declares it via a charm
-  (`gha`, `cd`, `rw`) and only reaches for a host-specific env var
-  (`ci_shard` reads `$GITHUB_OUTPUT`) once that charm is set - without
-  the charm it prints a preview instead. The workflow sets the env to
-  whatever the host provides.
+  (`gha`, `cd`, `rw`) rather than by sniffing the environment it runs in.
 
-This way a future port to a different CI system only needs a thin
-workflow file plus the same magusfile. The targets and charms are
-portable; a target that must read a host-native env var confines that
-knowledge behind its charm check.
+Why glue in the workflow rather than a target: the file names
+(`$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY`) belong to the host, and a
+redirect is the host's own interface for them. A target that wrote those
+files had to read stdin, detect whether it was on a terminal, skip the
+cache, and turn a charm into a write switch, and it made the plan job's
+two magus invocations contend for one project lock. The CI plan step
+(`.github/workflows/ci.yaml`) is the worked example: it computes the plan
+once with `magus affected ci --plan`, renders it twice with `magus run
+--stdin --dry-run -o 'template=...' < plan.json`, and redirects each render.
+magus never learns either file's name, so a port to another CI system
+rewrites the redirects and nothing else.
 
 ## Workspace references: the bare path
 

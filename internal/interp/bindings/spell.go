@@ -73,6 +73,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		if spec.SymbolIndexer != nil {
 			opts = append(opts, spells.WithSymbolIndexer(spec.SymbolIndexer))
 		}
+		if spec.Sandbox != nil {
+			opts = append(opts, spells.WithSandbox(spec.Sandbox))
+		}
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
 })
@@ -403,6 +406,7 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 		dir = filepath.Join(base, dir)
 	}
 	opts.cwd = dir
+	opts.spell = op.Install.Spell
 	stop := dir
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		stop = ws.Root()
@@ -447,7 +451,7 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	if err := checkReady(ctx, tools, op, req.Dir); err != nil {
 		return nil, err
 	}
-	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
+	opts := commandOpts{spell: spec.Name, op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
 	if op.Kind == spells.OpKindInstall {
 		return nil, runInstall(ctx, op, opts)
 	}
@@ -679,6 +683,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	if m.Comments != nil {
 		opts = append(opts, spells.WithComments(m.Comments))
+	}
+	if m.Sandbox != nil {
+		opts = append(opts, spells.WithSandbox(m.Sandbox))
 	}
 	opts = append(opts, spells.WithOps(m.Ops), spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
 	return opts

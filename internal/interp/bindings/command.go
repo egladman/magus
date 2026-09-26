@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spell"
@@ -40,6 +41,7 @@ import (
 //     run.SelfVars. Deliberately separate from env, which can carry a resolved Secret,
 //     and a Secret must never be reachable through Args.
 type commandOpts struct {
+	spell      string // the spell declaring the op, whose sandbox grants its child gets; "" for none
 	op         string // the op name, for error attribution; "" only on paths with no name to give
 	cwd        string
 	args       []string
@@ -103,9 +105,15 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// variable magus itself set ($MAGUS et al). Resolving a bare $NAME token here,
 	// against exactly what the runner controls for this invocation, replaces that
 	// shell with no shell at all.
-	bin, args, err := resolveRunnerRefs(opts.op, tgt.Bin, args, runnerRefs(ctx, opts))
+	refs := runnerRefs(ctx, opts)
+	bin, args, err := resolveRunnerRefs(opts.op, tgt.Bin, args, refs)
 	if err != nil {
 		return run.ExecResult{}, err
+	}
+	// A nested magus keeps the workspace's grants: landlock domains stack, so whatever
+	// this child is denied, every target the nested run starts is denied too.
+	if bin != refs["MAGUS"] && filepath.Base(bin) != "magus" {
+		ctx = sandbox.ScopeToSpell(ctx, opts.spell)
 	}
 	// Secrets resolve HERE, in the one function every command spawn funnels through,
 	// so `magus run publish` (dispatchOp) and a magusfile body's `npm.publish(ctx)`

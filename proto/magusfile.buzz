@@ -11,6 +11,7 @@
 
 import "magus";
 import "magus/spell/buf";
+import "magus/spell/go";
 // Handles for the two projects buf.gen.yaml writes the TS client into, so generate can name
 // their trees as its own outputs (see below).
 import "project/../docs";
@@ -21,7 +22,9 @@ import "fs";
 import "vcs";
 
 magus\project({
-    "spells": [buf],
+    // go because buf.gen.yaml runs protoc-gen-go and protoc-gen-connect-go through `go
+    // tool`: codegen depends on the Go toolchain, and runs under its sandbox grants.
+    "spells": [buf, go],
     "outputs": ["gen/**"],
     // generate declares NO skip_cache, which is where it deliberately parts from root
     // generate and libs/textsearch test. Those gates fork local tools; this one calls a

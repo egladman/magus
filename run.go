@@ -29,6 +29,7 @@ import (
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
@@ -2349,6 +2350,14 @@ func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool, history 
 
 // runTarget executes name on every spell in p and rejects writes into descendant projects.
 func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) error {
+	// A spell op's child gets the grants of the spells p binds, so a project without
+	// the go spell never reaches the Go caches; see sandbox.WithStep for why the
+	// target's own processes keep every spell's.
+	scope := make([]string, len(p.ResolvedSpells))
+	for i, s := range p.ResolvedSpells {
+		scope[i] = s.Name()
+	}
+	ctx = sandbox.WithStep(ctx, scope, p.TargetPolicies[name].Sandbox)
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
 	// A magusfile target whose body is provably only these calls runs them directly:
 	// evaluating the file and its imports to make them costs more than a warm install

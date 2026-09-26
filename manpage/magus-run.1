@@ -3,7 +3,7 @@
 magus\-run \- Run a target for selected projects
 .SH SYNOPSIS
 .B magus
-.RI "run <target> [flags] [project...]"
+.RI "run <target> [flags] [project...] | magus run [<target>] \-\-stdin [\-\-shard <id>] < plan.json"
 .SH DESCRIPTION
 Run a named target for the selected projects. With no project
 arguments, selects the project containing the current directory, or all projects
@@ -29,6 +29,17 @@ The target ci is an ordinary magusfile\-defined target \- magus does not hardcod
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read\-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.
+.PP
+\-\-stdin runs a saved shard plan instead of a selection: the document magus
+affected <target> \-\-plan printed, piped in or redirected from a file (< plan.json).
+The plan names the target and each shard's projects, so the target positional is
+optional (give it to add charms, as in ci:gha) and project positionals are
+refused. \-\-shard <id> runs that one shard; without it every shard runs here. A
+malformed plan, a shard id the plan does not have, a target other than the
+plan's, or an \-\-n\-shards other than its count is refused before anything runs
+(MGS3029). Under the global \-\-dry\-run nothing runs: the plan is checked and
+printed, and \-o json, yaml or template renders the document as read, so a saved
+plan renders more than once without being computed again.
 .SH OPTIONS
 .RS
 .TP
@@ -42,7 +53,7 @@ Hand the run to the server and return immediately; follow it with magus status \
 Render the dependency graph for the selected scope instead of executing
 .TP
 \fB\-\-n\-shards\fR \fIint\fR
-Total shard count for this CI matrix run; paired with \-\-shard
+Without \-\-stdin: the shard count the \-\-shard label belongs to. With it the count is the saved plan's, and a different value is refused
 .TP
 \fB\-\-no\-cache\fR
 Force a fresh run even on a cache hit; still refreshes the entry
@@ -66,10 +77,13 @@ Comma\-separated targets to run first across every selected project; each must b
 Race\-condition diagnostics (watch|replay, comma\-combinable); omit to disable. watch: attribution\-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re\-runs cacheable output\-declaring projects sequentially to content\-hash outputs for non\-determinism (MGS4003); roughly doubles wall\-clock.
 .TP
 \fB\-\-shard\fR \fIstring\fR
-This run's shard index within a CI matrix; paired with \-\-n\-shards
+With \-\-stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with \-\-n\-shards; it selects nothing
 .TP
 \fB\-\-skip\fR \fIstring\fR
 Exclude projects from the selection; repeatable or comma\-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error
+.TP
+\fB\-\-stdin\fR
+Run the shards of a saved shard plan, the document affected \-\-plan prints, read from stdin; the plan names the target and the projects
 .TP
 \fB\-\-step\fR
 Pause before each subprocess for interactive stepping (needs a TTY; implies \-\-concurrency=1)
@@ -120,7 +134,7 @@ Every selected project's target succeeded, whether it ran or replayed from cache
 At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name.
 .TP
 \fB2\fR
-Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a \-\-preflight target the invoked target never reaches (MGS3021).
+Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a \-\-preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3029).
 .TP
 \fB3\fR
 A \-\-preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them.
@@ -199,6 +213,24 @@ magus run build api/gateway --graph --upstream
 .PP
 .EX
 magus run build -o jsonl --tee build.jsonl
+.EE
+.PP
+\fIRun every shard of the affected ci plan here\fR
+.PP
+.EX
+magus affected ci --plan | magus run --stdin
+.EE
+.PP
+\fIRun one shard of a saved plan\fR
+.PP
+.EX
+magus run ci:gha --stdin --shard 2 < plan.json
+.EE
+.PP
+\fIRender a saved plan's summary without computing it again\fR
+.PP
+.EX
+magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json
 .EE
 .PP
 .SH SEE ALSO

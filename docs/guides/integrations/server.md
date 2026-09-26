@@ -94,6 +94,36 @@ run does about it:
 | `required`              | starts one; if none answers, refuses the step ([MGS3022](../../reference/codes/sandbox/MGS3022.md), exit 69) |
 | `off`                   | never starts or asks one; services run in the run's own process                                              |
 
+### Supervising the broker
+
+A run starting the broker is enough on its own. To have a supervisor own it instead,
+print the units and install them yourself; magus never writes them:
+
+```sh
+magus broker units systemd   # magus-broker.socket and magus-broker.service
+magus broker units launchd   # ~/Library/LaunchAgents/magus.broker.plist
+magus broker units -o json   # the same, as {supervisor, path, content} records
+```
+
+With no supervisor named it prints launchd's on macOS and systemd's elsewhere. Each file
+is printed under a `# <path>` header naming where that supervisor reads it, and the
+command to load them follows on stderr.
+
+Under systemd the socket unit owns `broker.sock` and starts the broker on the first
+connection, which is socket activation: no spawn race and no orphan. The broker takes the
+socket over through `LISTEN_PID` and `LISTEN_FDS`, still exits when idle, and systemd
+starts it again on the next connection. A handed-over socket is checked strictly: a
+malformed variable, more than one socket, anything but a listening unix stream socket,
+or a socket bound anywhere but `broker.sock` stops the broker with an error rather than
+binding a socket of its own. `magus broker stop` waits for the broker to hang up, not for
+the socket to go, since systemd keeps it.
+
+launchd hands a socket over only through `launch_activate_socket`, a C call magus does
+not make. The launchd agent therefore starts the broker at login with `--idle-exit 0` and
+keeps it alive, and the broker binds `broker.sock` itself. The agent pins `TMPDIR` and
+`XDG_RUNTIME_DIR` to the values `magus broker units` saw, because the socket's path is
+derived from them and launchd starts agents with an environment of its own.
+
 ## The server
 
 The server is what a person asks for. It serves MCP and the console, the APIs behind
@@ -299,7 +329,8 @@ network, not the public internet - see [MCP security](mcp.md#security-keep-this-
 ## Keeping the server running
 
 The server is a local process, and the MCP endpoint is only up while it runs. Pick one way
-to keep it alive. The broker needs none of this: a run starts it.
+to keep it alive. The broker needs none of this, since a run starts it; to supervise it
+anyway, see [Supervising the broker](#supervising-the-broker).
 
 **A shell profile (simplest, good while iterating on magus itself).** Ensure a server is up
 whenever you open a shell by adding this to `~/.zprofile`, `~/.bashrc`, or equivalent:
