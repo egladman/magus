@@ -58,6 +58,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [focus](focus.md)                       | a read or write outside the paths the running job declared                              |
 | [gate-repeat](gate-repeat.md)           | the gate run again soon after it passed, repeating work already done                    |
 | [generated-write](generated-write.md)   | a hand edit to a declared output, which the next run overwrites                         |
+| [graph-pipe](graph-pipe.md)             | a read-only graph verb piped into a text filter, when magus projects the record itself  |
 | [graph-stale](graph-stale.md)           | a graph read while the index is older than the sources it describes                     |
 | [hook-wiring](hook-wiring.md)           | a write to the host wiring that decides whether these rules run at all                  |
 | [installed-skill](installed-skill.md)   | a write to an installed skill copy, which re-installing discards                        |

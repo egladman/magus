@@ -339,14 +339,14 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// field, so it is the projection flags that are named.
 		{command: "magus affected ci 2>&1 | tail -30", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "/tmp/magus run test | head -5", rule: denyRule{Name: denyRuleOutputPipe}},
-		{command: "MAGUS_X=1 magus query foo | grep bar", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "MAGUS_X=1 magus ls | grep bar", rule: denyRule{Name: denyRuleOutputPipe}},
 		// A MAGUS_* name this magus does not read is a setting that never took effect.
 		{command: "MAGUS_NO_WAIT=1 ./magus run test .", rule: denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_NO_WAIT"}},
 		{command: "MAGUS_CACHE_DIR=/tmp/c ./magus run test ."},
 		// Every spelling of an exit-status echo that ends the line.
 		{command: `./check.sh; rc=$?; echo "rc=$rc"`, rule: denyRule{Name: denyRuleExitStatusEcho}},
 		{command: `./check.sh; rc=$?; echo "rc=$rc"; exit $rc`},
-		{command: "magus describe targets | wc -l", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus ls targets . | wc -l", rule: denyRule{Name: denyRuleOutputPipe}},
 		{command: "magus run test -s | grep -i fail | head -3", rule: denyRule{Name: denyRuleOutputPipe}},
 		// Running magus from a COPY of the workspace in temp/scratchpad. Denied: the
 		// verdict describes a tree nobody will ship. Taken from a real observed
@@ -417,7 +417,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// record `-o` shapes, so the deny still fires without --text.
 		{command: "magus refs TODO --text | grep -n fixme"},
 		{command: "magus refs TODO --text > /tmp/hits.txt"},
-		{command: "magus refs Open | grep -n Open", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus refs Open | grep -n Open", context: "magus answers this without the pipe"},
 		// An input redirect FEEDS magus rather than hiding what it said.
 		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
@@ -1104,7 +1104,7 @@ func TestDenyOutranksHeldAdvisory(t *testing.T) {
 // distinct messages, because the right replacement differs by shape: a filter
 // wanted one value, a redirect wanted a copy of the whole thing.
 func TestOutputGuardNamesTheReplacement(t *testing.T) {
-	piped := Evaluate(testDependencies(), "magus describe targets | grep build").Deny
+	piped := Evaluate(testDependencies(), "magus ls targets . | grep build").Deny
 	require.NotEmpty(t, piped)
 	assert.Contains(t, piped, "-o name")
 	assert.Contains(t, piped, "-o template=")
@@ -1189,8 +1189,57 @@ func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
 		"a raw text search exists to be piped")
 	assert.Empty(t, Evaluate(testDependencies(), "magus refs TODO --text > /tmp/hits.txt").Deny,
 		"and to be redirected")
-	assert.NotEmpty(t, Evaluate(testDependencies(), "magus refs Open | grep -n Open").Deny,
-		"a symbol lookup still renders a structured record -o shapes; only --text is exempt")
+	assert.Equal(t, advisoryGraphPipe, Evaluate(testDependencies(), "magus refs Open | grep -n Open").Kind,
+		"a symbol lookup still renders a structured record -o shapes; only --text is silent")
+}
+
+// TestOutputPipeAdvisesOnGraphReads: a read-only graph verb piped into a filter loses no
+// failure, so it advises; a verb that runs work, or any other verb, still denies. Measured
+// 2026-09-26: 819 denies on graph reads, after which the agent went back to `grep -rn`.
+func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		want    string // "deny", "advise" or "" for silence
+	}{
+		{"magus refs Open | grep -n Open", "advise"},
+		{"./magus query kind=target | head -20", "advise"},
+		{"magus explain target:.:ci | grep needs", "advise"},
+		{"magus describe targets | wc -l", "advise"},
+		{"magus -o json describe spells | grep go", "advise"},
+		{"magus --root /tmp/ws refs Foo | sort", "advise"},
+
+		// Work verbs, and every verb that is not a graph read, stay refused.
+		{"magus run lint . | tail -30", "deny"},
+		{"magus affected ci 2>&1 | tail -30", "deny"},
+		{"magus x out1a2b | grep cause", "deny"},
+		{"magus ls | grep lint", "deny"},
+		{"magus status | head", "deny"},
+		// A graph read beside a run on the same line does not soften the run's pipe.
+		{"magus refs Foo | head; magus run test . | tail", "deny"},
+		{"magus run test . | tail; magus refs Foo | head", "deny"},
+		// An unplaceable flag leaves the verb unknown, and an unknown verb is refused.
+		{"magus --frobnicate refs Foo | head", "deny"},
+
+		// Help output has no record to project, and the raw log and a text search are exempt.
+		{"magus refs --help | grep occurrences", ""},
+		{"magus run -h | head", ""},
+		{"magus query output out1a2b | grep cause", ""},
+		{"magus refs TODO --text | grep fixme", ""},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		switch tc.want {
+		case "deny":
+			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
+		case "advise":
+			assert.Empty(t, v.Deny, tc.command)
+			assert.Equal(t, advisoryGraphPipe, v.Kind, tc.command)
+			assert.Contains(t, v.Context, "magus answers this without the pipe", tc.command)
+			assert.Equal(t, graphPipeBrief, v.Brief, tc.command)
+		default:
+			assert.Empty(t, v.Deny, tc.command)
+			assert.NotEqual(t, advisoryGraphPipe, v.Kind, tc.command)
+		}
+	}
 }
 
 // TestGuardExemptsQueryOutputBehindGlobalFlags pins the fix for the exemption

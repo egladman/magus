@@ -133,7 +133,8 @@ var denyRuleDocs = []RuleDoc{
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
 		Catches: "magus output piped into a filter, when magus projects the record itself",
 		Why: "magus projects its own record, so the filter is answering a question the command takes a flag for: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field, `-s` to silence progress. " +
-			"The half a reader cannot discover by trying again is the exit status: a pipe takes it from the LAST stage, so a failing magus reads as exit 0 and nothing says so."},
+			"The half a reader cannot discover by trying again is the exit status: a pipe takes it from the LAST stage, so a failing magus reads as exit 0 and nothing says so. " +
+			"It denies on `run`, `affected`, `x` and every verb that is not a graph read. A read-only graph verb (`refs`, `query`, `explain`, `describe`) gets the same answer as the graph-pipe advisory, and a help request (`--help`, `-h`) passes: neither loses a failure."},
 	{Name: string(denyRuleOutputRedirect), Decision: "deny",
 		Catches: "magus output sent to a file or discarded, which the run log already holds",
 		Why: "Silencing and keeping are the only two intents and magus has a lever for each: `--silent` says nothing until something fails, and `-o json --tee <file>` keeps the STRUCTURED output rather than console text, which is not a format anything should parse. " +
@@ -248,6 +249,10 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryFocus), Decision: "advise", Catches: "a read or write outside the paths the running job declared"},
 	{Name: string(advisoryGateRepeat), Decision: "advise", Catches: "the gate run again soon after it passed, repeating work already done"},
 	{Name: string(advisoryGeneratedWrite), Decision: "advise", Catches: "a hand edit to a declared output, which the next run overwrites"},
+	{Name: string(advisoryGraphPipe), Decision: "advise",
+		Catches: "a read-only graph verb piped into a text filter, when magus projects the record itself",
+		Why: "The same answer output-pipe gives, offered rather than imposed: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
+			"It advises on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure. Measured 2026-09-26: 819 output-pipe denies landed on these verbs, and the refused agent went back to `grep -rn`, which answers with less than the graph read it was denied."},
 	{Name: string(advisoryGraphStale), Decision: "advise", Catches: "a graph read while the index is older than the sources it describes"},
 	{Name: string(advisoryHookWiring), Decision: "advise", Catches: "a write to the host wiring that decides whether these rules run at all"},
 	{Name: string(advisoryInstalledSkill), Decision: "advise", Catches: "a write to an installed skill copy, which re-installing discards"},
@@ -324,6 +329,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
 	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
+	advisoryGraphPipe,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the

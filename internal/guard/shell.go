@@ -192,7 +192,7 @@ var textFilters = map[string]bool{
 }
 
 // magusPipedToFilter reports a magus command whose output is being trimmed by a
-// shell text filter. Denied rather than advised: as an advisory it fired
+// shell text filter. Denied rather than advised, but for a graph read: as an advisory it fired
 // repeatedly and was read straight past, the same trained-reflex result the
 // raw-tool advisory produced.
 //
@@ -205,13 +205,17 @@ var textFilters = map[string]bool{
 // verb lets the message name the command in front of them; the filter says what they were
 // actually trying to do, which is what decides the answer. `| head` wants less output and
 // `| grep` wants fewer rows, and those are different levers.
-func magusPipedToFilter(command string, d Dialect) (verb, filter string, ok bool) {
+//
+// A read-only graph verb (graphReadVerbs) is reported apart, as read, for an advisory:
+// its pipe loses no failure, and refusing it sent the reader to a text search instead.
+// read is set only when no other pipe on the line matched.
+func magusPipedToFilter(command string, d Dialect) (denied, read pipedMagus) {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return "", "", false
+		return pipedMagus{}, pipedMagus{}
 	}
 	syntax.Walk(f, func(n syntax.Node) bool {
-		if ok {
+		if denied.ok {
 			return false
 		}
 		pipe, isPipe := n.(*syntax.BinaryCmd)
@@ -226,10 +230,44 @@ func magusPipedToFilter(command string, d Dialect) (verb, filter string, ok bool
 		if !isFilter {
 			return true
 		}
-		verb, filter, ok = magusVerb(left), name, true
-		return false
+		match := pipedMagus{verb: magusVerb(left), filter: name, ok: true}
+		if !graphReadOnly(left) {
+			denied = match
+		} else if !read.ok {
+			read = match
+		}
+		return true
 	})
-	return verb, filter, ok
+	if denied.ok {
+		return denied, pipedMagus{}
+	}
+	return pipedMagus{}, read
+}
+
+// pipedMagus is one magus invocation piped into a text filter.
+type pipedMagus struct {
+	verb, filter string
+	ok           bool
+}
+
+// graphReadVerbs are the verbs that read the knowledge graph and change nothing. Measured
+// 2026-09-26: 819 output-pipe denies landed on these, and the refused agent went back to
+// `grep -rn`, which answers with less than the piped graph read it was denied.
+var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": true, "describe": true}
+
+// graphReadOnly reports a pipeline stage whose every magus invocation is a graph read.
+func graphReadOnly(cmds []hint.Invocation) bool {
+	saw := false
+	for _, c := range cmds {
+		if !isMagusInvocation(c) {
+			continue
+		}
+		if !graphReadVerbs[magusSubcommand(c.Args)] {
+			return false
+		}
+		saw = true
+	}
+	return saw
 }
 
 // firstTextFilter names the filter the output was piped into.
@@ -1351,6 +1389,13 @@ func pipeDeny(verb, filter string) string {
 	}
 }
 
+// graphPipeAdvice is pipeDeny's answer, offered rather than imposed.
+func graphPipeAdvice(verb, filter string) string {
+	return "magus workspace: " + pipeDeny(verb, filter)
+}
+
+const graphPipeBrief = "magus workspace: a graph read projects its own record: `-o name`, `-o json`, `-o template='{{.field}}'`."
+
 // redirectDeny answers what the redirect was for, about the command that was run.
 //
 // There is no legitimate shape of this against magus, which is what makes one tailored
@@ -1726,7 +1771,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(deps, command)
-	pipedVerb, pipedFilter, pipedToFilter := magusPipedToFilter(command, d)
+	piped, pipedRead := magusPipedToFilter(command, d)
 	redirVerb, redirDest, redirected := magusRedirected(command, d)
 	switch {
 	case magusInThrowawayCopy(command, d):
@@ -1749,8 +1794,8 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			Deny: explainDeny(command, rawToolCmd, reason),
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
-	case pipedToFilter:
-		return ShellVerdict{Deny: pipeDeny(pipedVerb, pipedFilter), Rule: denyRule{Name: denyRuleOutputPipe}}
+	case piped.ok:
+		return ShellVerdict{Deny: pipeDeny(piped.verb, piped.filter), Rule: denyRule{Name: denyRuleOutputPipe}}
 	case redirected:
 		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
 	}
@@ -1764,6 +1809,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	if captureAdvice.Context != "" {
 		return captureAdvice
+	}
+	if pipedRead.ok {
+		return ShellVerdict{Context: graphPipeAdvice(pipedRead.verb, pipedRead.filter), Kind: advisoryGraphPipe, Brief: graphPipeBrief}
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):
