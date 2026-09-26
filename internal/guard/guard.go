@@ -359,7 +359,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
 	facts := hint.NewGate(location.cacheDir, who.factsKey())
-	actingLease, leaseFrom, leaseErr := actingLeaseFor(who, location, facts, req.Lease)
+	agentJob := agentJobFor(who, location)
+	actingLease, leaseFrom, leaseErr := resolveLease(who, location, req.Lease, agentJob)
+	if leaseErr == nil && agentJob != "" && actingLease == agentJob && registerAgentBase(ctx, deps, location, agentJob) {
+		ctx = withJobStoreRows(ctx, location)
+	}
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
