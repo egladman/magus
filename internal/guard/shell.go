@@ -1372,11 +1372,8 @@ func redirectDeny(verb, dest string) string {
 // tell which stage was left without input.
 func filterWithoutInputDeny(tool string) string {
 	lead := "Give `" + tool + "` its input: name a file, pipe into it, or redirect one with `<`."
-	switch {
-	case stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand:
+	if stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand {
 		lead = "`" + tool + "` reads only stdin, and its operands are never input: pipe into it or redirect a file with `<`."
-	case tool == "grep" || tool == "egrep" || tool == "fgrep":
-		lead += " A recursive grep names its path too (`" + tool + " -r <pattern> .`): macOS's BSD grep reads stdin without one."
 	}
 	return lead + "\n" +
 		"As written it reads the shell's own stdin, which nothing on this line feeds: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."

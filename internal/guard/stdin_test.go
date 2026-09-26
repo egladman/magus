@@ -17,8 +17,10 @@ func TestGuardDeniesAFilterWithoutInput(t *testing.T) {
 		{"grep -A3 -m 1 x", "grep"},
 		{"grep --max-count=3 --color=always x", "grep"},
 		{"grep -3 x", "grep"},
-		// BSD grep, the one macOS ships, reads stdin for a recursive search with no path.
-		{"grep -rn TODO", "grep"},
+		// An -r handed to the pattern by -e, or a cluster whose -r is a flag's value, is
+		// not a recursive search.
+		{"grep -e -r", "grep"},
+		{"grep -m1r x", "grep"},
 		{"egrep 'a|b'", "egrep"},
 		{"fgrep x", "fgrep"},
 		{"/usr/bin/grep foo", "grep"},
@@ -86,6 +88,17 @@ func TestGuardAllowsAFedFilter(t *testing.T) {
 		"grep -e a -e b file",
 		"grep -A 3 x file",
 		"grep -rn TODO .",
+		// A recursive grep with no path searches the working directory: GNU grep, macOS's
+		// BSD grep 2.6 and the host's ugrep all do, measured 2026-09-26. These were all
+		// five filter-without-input denies in the precision measurement.
+		"grep -rn TODO",
+		`grep -rn "MGS4006" --include="*.go" --include="*.buzz" -l | head -30`,
+		`grep -rn '"MAGUS_CACHE_DIR"' --include=*.go | grep -v _test | head`,
+		"grep -R x",
+		"grep -nr x",
+		"grep --recursive x",
+		"grep --dereference-recursive x",
+		"egrep -r 'a|b'",
 		"grep -- foo -file",
 		"sed -n 1p file",
 		"jq . f.json",
@@ -149,14 +162,12 @@ func TestGuardAllowsAFedFilter(t *testing.T) {
 func TestFilterWithoutInputDenyNamesTheFix(t *testing.T) {
 	grep := filterWithoutInputDeny("grep")
 	assert.Contains(t, grep, "name a file, pipe into it, or redirect one with `<`")
-	assert.Contains(t, grep, "BSD grep", "a recursive grep needs its path, and the reason is macOS")
 	assert.Contains(t, grep, "hangs")
 
 	tr := filterWithoutInputDeny("tr")
 	assert.Contains(t, tr, "its operands are never input", "tr takes no file at all")
 	assert.NotContains(t, tr, "name a file")
 
-	assert.NotContains(t, filterWithoutInputDeny("sort"), "BSD grep")
 	assert.LessOrEqual(t, strings.Count(grep, "\n"), 2, "a deny is three lines at most")
 }
 
