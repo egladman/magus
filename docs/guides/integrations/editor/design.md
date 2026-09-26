@@ -322,8 +322,8 @@ is an optimization, not a second implementation.
 ### How the invariant is enforced
 
 A rule that lives only in prose is a rule with roughly even odds (CLAUDE.md says
-so, and measured it). It needs a test in the shape of
-`TestNoHostSpecificBehaviorInCode`: a gate that fails when a command's failure
+so, and measured it). It needs a check in the shape of the `hostagnostic`
+linter: a gate that fails when a command's failure
 path reports a capability as unavailable because no daemon is running, rather
 than degrading or starting one.
 

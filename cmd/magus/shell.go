@@ -115,8 +115,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// LOOKS: no rule judges a read, so running the write rules over one would only
 	// ever manufacture a false advisory about editing a file the agent opened
 	// read-only. Which of a host's tools merely look is the wrapper's knowledge,
-	// never magus's: see the tool-label constants and
-	// TestNoHostSpecificBehaviorInCode.
+	// never magus's: see the tool-label constants and the hostagnostic linter.
 	//
 	// The attribution flags name WHO produced the observation, and the guard's
 	// verdict never reads what they say. The host name is an opaque label rather
