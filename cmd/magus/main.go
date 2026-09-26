@@ -656,7 +656,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// Printed rather than logged: the unknown-key error names a file, a line and a
 		// suggestion per line, and slog's text handler escapes every quote and newline
 		// in it back into one unreadable run.
-		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		fmt.Fprintf(os.Stderr, "magus: %v\n", config.WithRunningVersion(err, version))
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
