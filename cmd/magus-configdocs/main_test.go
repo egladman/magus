@@ -1,21 +1,22 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/egladman/magus/schema"
 )
 
-// TestConfigDocsUpToDate verifies the checked-in docs/reference/config.md is exactly what
-// magus-configdocs would emit today, so the config reference cannot drift from
-// schema.Fields (itself generated from internal/config/config.go).
-func TestConfigDocsUpToDate(t *testing.T) {
-	got, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "config.md"))
-	if !assert.NoError(t, err, "read docs/reference/config.md") {
-		return
+// TestRenderNamesEveryField: the reference is the inventory of schema.Fields, so each
+// key and its environment variable reach the page. Whether the committed page is this
+// render is docs generate's drift gate.
+func TestRenderNamesEveryField(t *testing.T) {
+	page := render()
+	for _, f := range schema.Fields {
+		assert.Contains(t, page, "`"+f.YamlPath+"`")
+		if f.EnvVar != "" {
+			assert.Contains(t, page, "`"+f.EnvVar+"`")
+		}
 	}
-	assert.Equal(t, render(), string(got),
-		"docs/reference/config.md is out of date; re-run:\n  go run ./cmd/magus-configdocs -out ./docs/reference/config.md")
 }

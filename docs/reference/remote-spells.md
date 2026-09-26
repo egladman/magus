@@ -50,7 +50,8 @@ when `magus.yaml` loads.
 
 **2. Lock.** `magus.lock`, beside `magus.yaml`, pins the manifest digest each declared
 tag named when it was last resolved. Only magus writes it, as YAML with sorted keys, and
-it is committed:
+it is committed. A workspace that declares no remote spell has no lock: an update that
+would pin nothing removes the file instead of writing one.
 
 ```yaml
 # Written by `magus spell lock`. Do not edit: change a tag in magus.yaml and run the update charm.

@@ -269,7 +269,7 @@ plan renders more than once without being computed again.`,
 		{Name: "shard", Kind: FlagString, Doc: "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing"},
 		{Name: "n-shards", Kind: FlagInt, Doc: "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
-		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
+		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
 	},
 	Targets: commonTargets,
@@ -398,6 +398,15 @@ JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
 plan of proposed paths before editing. --bisect drives VCS bisect using run
 history to find the commit that introduced a regression.
 
+magus affected ci sizes its gate to the change. Each changed path gets a risk
+tier (trivial, mechanical, scoped, full) and the change takes the highest. Below
+full, the gate runs only what the tier needs (the drift check and lint, the
+targets that declare a changed doc, or the project's test with go-test narrowed
+to the packages that can observe the change) and prints every path
+with its tier to stderr; a trivial change runs nothing and exits 0. With --plan,
+a trivial change emits an empty matrix beside a risk block.
+--no-redundancy-check runs the full gate.
+
 --preflight works as it does for magus run: the named targets run first across
 the affected set, a failure stops everything with exit 3 (MGS3020), and a name
 outside the invoked target's ctx.needs closure is refused (MGS3021). With --plan
@@ -413,7 +422,7 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact"}, Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
-		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
+		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
 		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the server and return immediately; follow it with magus status --watch"},
 		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
@@ -1749,8 +1758,10 @@ commands that finish the wiring; magus never runs them, a person does.
 
 --app names the app whose credential apply will write with (github: a GitHub
 App's slug), and the steps become that app's: install it, store its credential,
-and pin the status to its id. Every read goes to the provider over the network,
-with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
+and pin the status to its id. The provider reads --app, never the queue. When it
+needs more, describe says what, where the provider shows it, and the command to
+run next. Every read goes to the provider over the network, with the credential
+the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 
 -o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
 			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
@@ -1758,7 +1769,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
 				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
-				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App, required with a --status-context)"},
+				{Name: "app", Kind: FlagString, Doc: "`app` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)"},
 			}, queueCheckout...),
 		},
 		{
@@ -1808,7 +1819,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
-				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
+				{Name: "app", Kind: FlagString, Doc: "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
@@ -1818,6 +1829,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 	Examples: []Example{
 		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
 		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
+		{"The same for a private app whose App ID GitHub hides", "magus queue describe --provider github --base main --app acme-magus-queue:2034567"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --stdin --verdicts verdicts --gate 'magus run ci' < plan.json"},

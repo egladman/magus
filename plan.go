@@ -156,6 +156,22 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 
 // unboundedBy says why the closure computed from res is not a proof, or "" when it is.
 func (m *Magus) unboundedBy(res *types.AffectedResult) string {
+	change, unclaimed := m.unboundedPaths(res)
+	if change != "" {
+		return change
+	}
+	for _, p := range res.Changed {
+		if why, ok := unclaimed[p]; ok {
+			return why
+		}
+	}
+	return ""
+}
+
+// unboundedPaths splits unboundedBy by reach. change is why the whole change can move
+// the graph (an edge input, an opaque provider); unclaimed names each path no project
+// claims, which reaches nothing the closure can name but moves no edge either.
+func (m *Magus) unboundedPaths(res *types.AffectedResult) (change string, unclaimed map[string]string) {
 	claimed := make(map[string]bool, len(res.Changed))
 	for _, files := range res.FilesBySeed {
 		for _, f := range files {
@@ -164,10 +180,22 @@ func (m *Magus) unboundedBy(res *types.AffectedResult) string {
 	}
 	if len(res.Changed) > 0 {
 		if name := m.opaqueProvider(); name != "" {
-			return "workspace provider " + name + " declares no inputs, so any file may decide the project graph"
+			return "workspace provider " + name + " declares no inputs, so any file may decide the project graph", nil
 		}
 	}
-	return unboundedBy(res.Changed, claimed, m.edgeInputs())
+	edge := m.edgeInputs()
+	for _, p := range res.Changed {
+		if edge(p) {
+			return unboundedBy([]string{p}, claimed, edge), nil
+		}
+	}
+	unclaimed = map[string]string{}
+	for _, p := range res.Changed {
+		if !claimed[p] {
+			unclaimed[p] = unboundedBy([]string{p}, claimed, edge)
+		}
+	}
+	return "", unclaimed
 }
 
 // opaqueProvider names a wired workspace provider that declares no input globs, or "".

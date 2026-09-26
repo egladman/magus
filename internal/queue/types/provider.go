@@ -123,10 +123,11 @@ type ListQuery struct {
 
 	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
 	// the base requires and who the write credential posts as. App names the app whose
-	// credential the queue writes with (github: a GitHub App's slug, which it requires
-	// with a StatusContext); empty names none. SetupSteps also asks for the steps that
-	// finish wiring the queue, which cost the provider more reads, some needing
-	// permissions an apply job does not hold.
+	// credential the queue writes with, in the provider's own notation, which the queue
+	// passes on unread (github: a GitHub App's slug, with ":<App ID>" where GitHub hides
+	// the id, which it requires with a StatusContext); empty names none. SetupSteps also asks for the steps that finish
+	// wiring the queue, which cost the provider more reads, some needing permissions an
+	// apply job does not hold.
 	StatusContext string
 	App           string
 	SetupSteps    bool
@@ -229,6 +230,18 @@ type App struct {
 	Variable    string `json:"variable,omitempty"`
 	Secret      string `json:"secret,omitempty"`
 }
+
+// SetupRefusedError is Describe declining to describe a setup for the [ListQuery.App] it
+// was asked about. Reason says what is missing and URL where the provider shows it; App
+// is what the next Describe's App should be, in the provider's notation and with its
+// placeholders ("<slug>").
+type SetupRefusedError struct {
+	Reason string
+	URL    string
+	App    string
+}
+
+func (e *SetupRefusedError) Error() string { return e.Reason + ": " + e.URL }
 
 // SetupStep is one thing a person does: run Command, or open URL.
 type SetupStep struct {

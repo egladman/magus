@@ -54,7 +54,7 @@ final METHODS = ["squash", "merge", "rebase"];
 // change touching one never goes to a mechanical model.
 final SENSITIVE = ["internal/queue/", "internal/guard/", ".github/", "internal/auth/", "internal/sandbox/",
     "internal/secret/", "internal/handler/token/", "internal/selfupdate/", "spells/cosign/",
-    "spells/onepassword/", "spells/system-keychain/", "guard_policy.go", "guard_rules.go",
+    "spells/onepassword/", "spells/system-keychain/", "guard.go",
     "tools/gha-queue.buzz", "tools/policy/"];
 
 object Check {

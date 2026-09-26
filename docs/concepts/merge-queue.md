@@ -195,9 +195,11 @@ generated file, a candidate tree or a review proof from a verdict.
     (`home/Library/Caches/go-build` on macOS), and the hook may read, write and run
     anything in `home` and `tmp`. A read-only or read+exec grant, a toolchain's install,
     resolves against the runner's own environment and home and is never writable. The
-    queue refuses to run a hook whose policy would still let it write outside its box,
-    other than its checkout's own git directory and object store and the terminal
-    devices: that is the machine's error, and it stops the run. A box a hook of the
+    repository's object store, which every candidate's checkout shares, is readable and
+    never writable, so no object one candidate's hook writes stands in for one a later
+    fetch would bring. The queue refuses to run a hook whose policy would still let it
+    write outside its box, other than its checkout's own git directory, where its index
+    lives, and the terminal devices: that is the machine's error, and it stops the run. A box a hook of the
     change left changed, `home` or `tmp` no longer the private directory the queue made
     or a link there leading a grant out of the box, makes that change red.
   - Everywhere, the environment is an allowlist. A hook gets only the names magus's
@@ -228,9 +230,8 @@ generated file, a candidate tree or a review proof from a verdict.
     hook runs under the environment allowlist and the program check alone: `magus queue
     validate` runs on a laptop, and confines nothing on its filesystem there.
 
-  What the sandbox does not confine: the network; the repository's object store, which
-  every candidate's checkout shares and may write; the filesystem wherever the kernel
-  cannot confine; and a process that leaves
+  What the sandbox does not confine: the network; the filesystem wherever the kernel
+  cannot confine, the shared object store included; and a process that leaves
   the hook's process group, which lives until the CI job ends. The queue itself writes
   into a candidate only through its root, and never regenerates in a checkout where the
   change holds a symbolic link at or above a path it changes or regeneration writes. The
@@ -381,6 +382,11 @@ remote configured in the checkout (`origin` unless given); a URL is refused. `--
 names the backend (`git` unless given); the queue reads neither `MAGUS_VCS_ENABLED` nor
 `MAGUS_VCS_NAME`, which configure magus's own use of version control. `magus queue` never
 runs through the server: it acts on the caller's checkout.
+
+`validate` and `apply` build each candidate by merging in a checkout of that one, so it
+must be a full clone. A partial clone (`--filter=blob:none`) is refused: git there asks
+the remote for any object it lacks, and a merge can ask for a blob it just wrote, which
+the remote never had. `plan` builds no candidate and works in either.
 
 `plan` checks each change's approval at the commit a review of its head covers, finds
 which changes are stacked on which, drops what conflicts with main on its own (kicked
@@ -613,10 +619,10 @@ whole file conflicted, as does a side that only deleted lines, a file main's his
 does not share with the change, or a symlink. Lines keep their own endings, so a CRLF
 file stays CRLF and a missing final newline stays missing.
 
-Low risk is the one change classifier magus has, the one the ci gate's redundancy check
-([MGS3010](../reference/codes/sandbox/MGS3010.md)) uses, applied to the edit from the
-merge base to the merge: generated, prose (`gate_low_risk`, markdown by default) or
-comment-only. Code settles only where its project opts it in with `merge_low_risk`,
+Low risk is a class from the one change classifier magus has, the one
+[gate sizing](ci/risk.md) tiers from, applied to the edit from the merge base to the
+merge: generated, prose (`gate_low_risk`, markdown by default) or comment-only. A merge
+reads the class alone, not the tier. Code settles only where its project opts it in with `merge_low_risk`,
 project-relative globs beside `gate_low_risk`:
 
 ```buzz
@@ -845,31 +851,52 @@ changes a setting itself. It reads over the network with your token, so pass one
 GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main --app <slug>
 ```
 
-Without `--app` it stops with an error carrying the app's registration link, since a
-setup without the app is not one the queue can run on. `-o json` prints the same as the
-`setup` of a `mergequeue.capabilities/v1` document: the status the queue posts and who
-its credential posts it as, every check the base requires and the integration each is
-pinned to, the repository settings the queue needs, the app, and the steps.
+Without `--app` it stops with an error carrying the app's registration link and the
+command to run next, since a setup without the app is not one the queue can run on.
+`-o json` prints the same as the `setup` of a `mergequeue.capabilities/v1` document: the
+status the queue posts and who its credential posts it as, every check the base requires
+and the integration each is pinned to, the repository settings the queue needs, the app,
+and the steps.
+
+The app has two identifiers, both under About on its settings page
+(`https://github.com/settings/apps/<slug>`, or
+`https://github.com/organizations/<org>/settings/apps/<slug>` for an organization's app).
+Neither is secret, and they do not swap: the client id (it starts with `Iv`) is what
+`setup-magus` mints the token with, and the App ID (a number) is the only value a
+ruleset's `integration_id` accepts. GitHub answers `GET /apps/<slug>` for a private app
+with 404 to every token but the app's own installation's, the owner's `gh auth token`
+included, so `describe` reads the App ID another way where GitHub offers one: on an
+organization's repository, once the app is installed there, it finds the app among the
+[organization's installations](https://docs.github.com/en/rest/orgs/orgs#list-app-installations-for-an-organization),
+which only an owner's token may list. Where it cannot (a user's repository, or a token
+that is not an owner's), it stops, naming the settings page, and prints the same command
+with `--app <slug>:<id>`: give it the App ID after the slug. An id that is not a positive
+integer without a leading zero, or that disagrees with the app GitHub shows, is an error,
+and so is a slug GitHub has no `<slug>[bot]` user for, which names no app at all.
 
 1. Commit `.github/workflows/queue.yaml` and `.github/workflows/queue-apply.yaml` (this
    repository's are the reference).
 2. Run `describe` without `--app`, open the registration link it prints, and click
    "Create GitHub App". It is pre-filled: private, no webhook, and contents, pull
    requests, commit statuses, actions and workflows write.
-3. Run `describe` again with `--app <slug>`, and run the commands it prints in order:
-   allow auto-merge, install the app on this repository alone, create the `magus-queue`
-   environment with its secrets released to the default branch only, set the
-   `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's client id, generate a private key on
-   the app's page, store it as the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, and
-   delete the download. On a phone, the first is Settings > General > Pull Requests >
-   "Allow auto-merge", and the key goes into Settings > Environments > magus-queue > Add
-   secret.
+3. Run `describe` again with `--app <slug>` (or `--app <slug>:<id>` when it asks), and
+   run the commands it prints in order: allow auto-merge, install the app on this
+   repository alone, create the `magus-queue` environment with its secrets released to
+   the default branch only, set the `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's
+   client id (when GitHub hides it, `gh` asks for it), generate a private key on the
+   app's page, and store it as the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret.
+   That last command deletes every key of the app it finds in `~/Downloads` even when
+   storing fails, and with none there it stores nothing, so running it again is safe.
+   On a phone, the first is Settings > General > Pull Requests > "Allow auto-merge", the
+   client id goes into Settings > Secrets and variables > Actions > Variables, and the
+   key into Settings > Environments > magus-queue > Add secret.
 4. Apply the ruleset change it prints last, which requires `merge-queue` from the app's
    id with "Require branches to be up to date before merging" off: a ruleset of its own
    when nothing requires it yet, a `gh api` rewrite of that ruleset, or a link for any
-   other. Your other rulesets stay as they are. The pin is what makes the status
-   unforgeable: anyone with write access can post a status from GitHub Actions, and only
-   the app posts as the app.
+   other. Your other rulesets stay as they are. GitHub refuses the pin with 422 "Invalid
+   integration ids" until the app is installed, which step 3 did first. The pin is what
+   makes the status unforgeable: anyone with write access can post a status from GitHub
+   Actions, and only the app posts as the app.
 
 Require `merge-queue` only once the queue is on the default branch. Before that, nothing
 posts it, and every merge waits on it.
@@ -925,7 +952,15 @@ app?, steps: [{title, command? or url?}]}`. `credential` is the integration the 
 credential posts statuses as (the `app` named; GitHub's provider requires one),
 `required_checks` what the base requires and the integration each is pinned to, and
 `steps` only when `setup_steps` is true, since they cost reads a job's token may not be
-allowed. A provider that returns no `setup` skips apply's credential check.
+allowed. A provider that returns no `setup` skips apply's credential check. The `app`
+that `describe` and `merge_change` receive is `--app` exactly as a person gave it, in
+the provider's own notation, which the queue never reads (GitHub's: the app's slug,
+with `:<App ID>` where GitHub hides the app). A `describe` that cannot describe a setup
+for that app returns `{refused: {reason, url, app}}` instead of the capabilities: what
+is missing, where the provider shows it, and the `--app` to ask again with,
+placeholders included (`<slug>`, `q:<id>`). All three are required and non-empty.
+`magus queue describe` prints it with the command that runs it again, that `app` in
+place of the `--app` it was given, and `apply` stops on it.
 `list_artifacts`' `run` is `{repo, head_repo, head_branch, event, branch_event,
 definition}`: the repository the run belongs to and the one whose commit it ran, the
 branch it ran on, what started it, whether that event runs the branch's own copy of the

@@ -3,7 +3,9 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/merge3"
 	"github.com/egladman/magus/internal/queue/types"
 	magustypes "github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // A change stacked on one that merged as a squash deletes a line the one beneath added.
@@ -558,4 +561,70 @@ func TestFetchHeadFallsBackToTheCommitWhenTheRefMoved(t *testing.T) {
 	d.vcs.EXPECT().FetchRef(mock.Anything, clone.Root, clone.Remote, c.Ref).Return(head("newer"), nil)
 	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(errors.New("not found"))
 	require.EqualError(t, fetchHead(t.Context(), d.vcs, clone, c), "not found")
+}
+
+// gitRepo commits files into a new git repository and returns it and the commit.
+func gitRepo(t *testing.T, files map[string]string) (string, string) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	root := t.TempDir()
+	for path, content := range files {
+		abs := filepath.Join(root, filepath.FromSlash(path))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
+	}
+	git := func(args ...string) string {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q")
+	git("add", "-A")
+	git("commit", "-q", "-m", "base")
+	return root, git("rev-parse", "HEAD")
+}
+
+// gitDriver is the git backend the queue runs on, for root.
+func gitDriver(t *testing.T, root string) types.BuildVCS {
+	t.Helper()
+	enabled := true
+	res, err := vcs.Resolve(t.Context(), root, "", magustypes.VCSOptions{Enabled: &enabled, Name: "git"})
+	require.NoError(t, err)
+	return res.VCS
+}
+
+// A regeneration runs the change's code in the candidate's checkout, which can point the
+// checkout's .git at a repository whose config runs a program under any git that
+// discovers it. The queue's own git never does: the change is refused, and nothing ran.
+func TestARegenerationThatRewritesTheGitfileIsRefused(t *testing.T) {
+	root, commit := gitRepo(t, map[string]string{"gen/a.go": "stale\n"})
+	drv := gitDriver(t, root)
+	cand, err := checkout(t.Context(), drv, root, t.TempDir(), "candidate-1", commit)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = discard(context.Background(), drv, root, cand) })
+	marker := filepath.Join(t.TempDir(), "ran")
+	hook := CommandRegenerate(script(fmt.Sprintf(`set -e
+cp -R %q "$TMPDIR/evil"
+printf '#!/bin/sh\ntouch %%s\n' %q > "$TMPDIR/run.sh"
+chmod +x "$TMPDIR/run.sh"
+git config -f "$TMPDIR/evil/config" core.fsmonitor "$TMPDIR/run.sh"
+echo "gitdir: $TMPDIR/evil" > .git
+echo fresh > gen/a.go`, filepath.Join(root, ".git"), marker)), HookEnv{}, nil)
+	b := built{Candidate: cand, touched: []string{"gen/a.go"}, changed: []string{"gen/a.go"}, date: when}
+	d := newDoubles(t)
+	d.facts.EXPECT().Classify(mock.Anything, b.touched).Return(map[string]types.Writes{"gen/a.go": {Output: true}}, nil)
+
+	_, err = regenerateIn(t.Context(), drv, candidateSpec{clone: Clone{Root: root, Remote: "origin"}, facts: d.facts, onto: commit, change: change("1")}, b, hook, []string{"gen"})
+	var refused *types.RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, "the regeneration changed the candidate's `.git`, which tells git where its repository is", refused.Reason)
+	assert.NoFileExists(t, marker)
+
+	status := exec.Command("git", "status")
+	status.Dir = cand.Dir
+	_ = status.Run()
+	assert.FileExists(t, marker, "the hook left a working exploit for any git that discovers the repository")
 }

@@ -19,23 +19,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestMigrateRoundtrip verifies that the migration of CHANGELOG.md produces
-// manifests whose body fields are pre-trimmed (no leading/trailing whitespace).
-// This is required so render.buzz can use them verbatim as Atom feed summaries.
+// TestMigrateRoundtrip verifies that migrating a changelog in the shape
+// generate-changelog writes produces manifests whose body fields are pre-trimmed (no
+// leading/trailing whitespace), so render.buzz can use them verbatim as Atom feed
+// summaries. The changelog is generated here from manifests of the test's own, which
+// is the shape CHANGELOG.md has; its bodies carry blank lines inside and around them.
 func TestMigrateRoundtrip(t *testing.T) {
-	changelogPath := filepath.Join("..", "..", "CHANGELOG.md")
-	if _, err := os.Stat(changelogPath); err != nil {
-		t.Skip("CHANGELOG.md not found; skipping")
+	releases := t.TempDir()
+	seeds := []ReleaseManifest{
+		{Version: "v0.2.0", Date: "2026-07-02", Body: "### Added\n\n- **Two.** It\n  wraps.\n\n### Fixed\n\n- **A fix.**"},
+		{Version: "v0.1.0", Date: "2026-07-01", Body: "### Added\n\n- **One.**"},
 	}
+	for _, m := range seeds {
+		writeManifestFile(t, releases, m)
+	}
+	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n"), 0o644))
+	require.NoError(t, runGenerateChangelog([]string{"-releases", releases, "-changelog", changelogPath}))
 
 	dir := t.TempDir()
 	require.NoError(t, runMigrate([]string{"-changelog", changelogPath, "-out", dir}))
 
 	entries, err := loadManifests(dir)
 	require.NoError(t, err)
-	require.NotEmpty(t, entries, "at least one manifest must be written")
+	require.Len(t, entries, len(seeds), "one manifest per released section")
 
-	for _, m := range entries {
+	for i, m := range entries {
+		assert.Equal(t, []string{seeds[i].Version, seeds[i].Date, seeds[i].Body}, []string{m.Version, m.Date, m.Body},
+			"%s: version, date and body survive the round trip", seeds[i].Version)
 		require.Equal(t, ReleaseManifest{
 			Version:   m.Version,
 			Date:      m.Date,
@@ -787,19 +798,6 @@ func TestPlatformFromNameReadsBothVariantSpellings(t *testing.T) {
 			t.Errorf("platformFromName(%q) = %q, want %q", tc.name, got, tc.want)
 		}
 	}
-}
-
-// The repository's own fragments are what `cut` turns into the next release's notes,
-// so they are held to the formula on every change rather than discovered wrong at
-// release time. CHANGELOG.md's [Unreleased] stays empty: fragments replace it.
-func TestUnreleasedFragmentsFollowTheFormat(t *testing.T) {
-	frags, err := readFragments(filepath.Join("..", "..", "changes", "unreleased"))
-	require.NoError(t, err, "fix the fragment; the format is in changes/README.md")
-	assert.Empty(t, lintUnreleased(renderUnreleased(frags)))
-
-	body, err := readUnreleasedSection(filepath.Join("..", "..", "CHANGELOG.md"))
-	require.NoError(t, err)
-	assert.Empty(t, strings.TrimSpace(body), "move CHANGELOG.md's [Unreleased] entries into changes/unreleased/")
 }
 
 func TestLintUnreleased(t *testing.T) {

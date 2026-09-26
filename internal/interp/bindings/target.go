@@ -768,7 +768,7 @@ const ctxMarker = "__magus_context"
 // MEMBERS, not decls: `uses` runs a body rather than declaring anything, and it is
 // refused here for the same reason the declarations are. An Exec carries execution
 // overrides, so a region scoped to one would hold a resource for a run it does not own.
-var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "observes", "hasCharm", "uses"}
+var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "observes", "hasCharm", "narrowed", "uses"}
 
 // TargetContextKeys returns the member names bound on the magus\Context a target
 // receives, and ExecRefusedKeys those a magus\Exec refuses. Same role as
@@ -799,6 +799,7 @@ func ExecRefusedKeys() []string { return slices.Clone(execRefusedMembers) }
 //   - envInputs / observes extend that footprint past the tree: an env var whose
 //     process value keys the step, and a fact outside the tree entirely.
 //   - has_charm(name) returns the live charm state.
+//   - narrowed() reports a sized gate running this target with an op narrowed.
 //
 // The value is stateless, so the session stashes one instance and reuses it for every
 // target.
@@ -903,6 +904,13 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 	c.MapSet("observes", directVal(obs, "ctx.observes", footprintDecl))
 	c.MapSet("hasCharm", directVal(obs, "ctx.hasCharm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
+	}))
+	// ctx.narrowed(): true while a sized gate runs this target with an op narrowed (Go
+	// tests to the packages a change reaches), so a check over the whole suite, such as
+	// a coverage floor, can stand down rather than judge a part as the whole. A method
+	// like hasCharm, since this value is shared by every target and holds no run state.
+	c.MapSet("narrowed", directVal(obs, "ctx.narrowed", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.BoolValue(project.Narrowed(ctx)), nil
 	}))
 	return c
 }

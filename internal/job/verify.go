@@ -74,6 +74,31 @@ type Observed struct {
 	Regions       []types.RegionChange
 	RegionsKnown  bool
 	RegionsReason string
+	// GreenGate is the newest green ci gate recorded for this checkout's branch, with
+	// the tier of the change since it. The zero value means none was found or assessed.
+	GreenGate GreenGate
+}
+
+// GreenGate is a passing ci gate and what changed since it.
+type GreenGate struct {
+	// Commit is the revision the gate ran at; empty means there is no gate.
+	Commit string
+	// Projects are the projects the gate covered.
+	Projects []string
+	// Tier is the tier of the change from Commit to the tree now.
+	Tier types.RiskTier
+}
+
+// covers reports whether the gate vouches for a check that runs ci: the gate covered
+// the check's project, and the change since it tiers trivial, so no step of ci can
+// observe it. The gate may predate the job; the tier, not the timestamp, is what rules
+// out a stale verdict.
+func (g GreenGate) covers(c types.LeaseCheck) bool {
+	project := path.Clean(c.Project)
+	if c.Project == "" {
+		project = "."
+	}
+	return g.Commit != "" && c.Target == types.TargetCI && g.Tier == types.RiskTrivial && slices.Contains(g.Projects, project)
 }
 
 // SymbolFact is what the graph knows about one symbol a gate named.
@@ -377,6 +402,10 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 		return verifySubjectGate(gate, seen)
 	}
 	status := types.GateStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
+	if seen.GreenGate.covers(gate.Check) {
+		status.Verified = true
+		return status
+	}
 	if status.OutputRef == "" {
 		status.Violations = append(status.Violations, "carries no output_ref, so there is no run to reopen")
 		return status

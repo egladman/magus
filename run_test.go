@@ -105,11 +105,12 @@ func TestTargetHandler_NormalizesVariantSpellings(t *testing.T) {
 	assert.NotNil(t, h)
 }
 
-func TestRaceForcesNoCache(t *testing.T) {
-	assert.False(t, raceForcesNoCache(run{}), "neither Race nor RaceReplay set")
-	assert.True(t, raceForcesNoCache(run{Race: true}), "Race alone")
-	assert.True(t, raceForcesNoCache(run{RaceReplay: true}), "RaceReplay alone")
-	assert.True(t, raceForcesNoCache(run{Race: true, RaceReplay: true}), "both set")
+func TestForcesNoCache(t *testing.T) {
+	assert.False(t, forcesNoCache(run{}), "neither Race nor RaceReplay set")
+	assert.True(t, forcesNoCache(run{Race: true}), "Race alone")
+	assert.True(t, forcesNoCache(run{RaceReplay: true}), "RaceReplay alone")
+	assert.True(t, forcesNoCache(run{Race: true, RaceReplay: true}), "both set")
+	assert.True(t, forcesNoCache(run{narrowing: &project.OpNarrowing{Op: "go-test"}}), "a narrowed op")
 }
 
 // TestRun_RaceReexecutesCachedTarget guards the A2 fix end to end: a target

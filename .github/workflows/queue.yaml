@@ -142,11 +142,13 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
+      # A full clone: the queue builds each candidate by merging in a checkout of this
+      # one, and refuses a partial clone, where git can ask the remote for a blob the
+      # merge just wrote.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
 
       # No save: validation runs queued pull requests' code. No restore either: an entry

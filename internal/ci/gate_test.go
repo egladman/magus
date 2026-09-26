@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,20 +127,32 @@ func TestInheritOffWhenAnOptionWasDropped(t *testing.T) {
 	}), "a binary that did not understand the whole magusfile must not inherit a verdict")
 }
 
-// newInheritProbe builds a probe whose provider, history and delta are all stubbed, so
-// the decision is exercised with no repository and no CI provider. The classifier
-// carries no blob readers, which is the strict setting: a code language cannot read as
-// comment-only by accident.
-func newInheritProbe(green string, found bool, history []types.Commit, changed []string) InheritProbe {
+// newInheritProbe builds a probe whose provider, history and assessment are all stubbed,
+// so the decision is exercised with no repository and no CI provider.
+func newInheritProbe(green string, found bool, history []types.Commit, rep types.RiskReport) InheritProbe {
 	return InheritProbe{
 		LastGreenRun: func(context.Context) (string, string, bool) {
 			return "https://example/run/7", green, found
 		},
-		History:    func(context.Context) ([]types.Commit, error) { return history, nil },
-		Changed:    func(context.Context, string) ([]string, error) { return changed, nil },
-		Classifier: risk.Classifier{Prose: risk.ProseScopes(nil)},
+		History: func(context.Context) ([]types.Commit, error) { return history, nil },
+		Assess:  func(context.Context, string) (types.RiskReport, error) { return rep, nil },
 	}
 }
+
+var (
+	proseReport = types.RiskReport{Tier: types.RiskTrivial, Evidence: []types.RiskEvidence{
+		{Path: "docs/x.md", Class: "prose", Tier: types.RiskTrivial, Why: `matches "**/*.md" (built-in default); nothing in ci's chain reads it`},
+	}}
+	codeReport = types.RiskReport{Tier: types.RiskScoped, Evidence: []types.RiskEvidence{
+		{Path: "docs/x.md", Class: "prose", Tier: types.RiskTrivial, Why: "prose"},
+		{Path: "internal/y.go", Class: "code", Tier: types.RiskScoped, Why: "Go package y"},
+	}}
+	// embedReport is the regression the tier exists for: markdown a package compiles in
+	// is prose by class, and inheriting over it skipped the tests that read it.
+	embedReport = types.RiskReport{Tier: types.RiskScoped, Evidence: []types.RiskEvidence{
+		{Path: "internal/agent/skills/run/SKILL.md", Class: "prose", Tier: types.RiskScoped, Why: "embedded by Go package skills (go:embed)"},
+	}}
+)
 
 var inheritHistory = []types.Commit{
 	{ID: "pr-merge", Parents: []string{"main1", "c2"}},
@@ -154,27 +165,29 @@ var inheritHistory = []types.Commit{
 // inherited verdict is only defensible if a reader can reconstruct it; a
 // change that thins the report has to fail here.
 func TestInheritProbeFires(t *testing.T) {
-	p := newInheritProbe("green0123456789", true, inheritHistory, []string{"docs/x.md"})
+	var assessedAt string
+	p := newInheritProbe("green0123456789", true, inheritHistory, proseReport)
+	p.Assess = func(_ context.Context, green string) (types.RiskReport, error) {
+		assessedAt = green
+		return proseReport, nil
+	}
 	got, ok := p.Evaluate(context.Background())
 	require.True(t, ok)
-	assert.Equal(t, "https://example/run/7", got.Run)
-	assert.Equal(t, "green0123456789", got.Commit)
-	assert.Equal(t, []risk.Classified{
-		{Path: "docs/x.md", Class: risk.ClassProse, Why: `matches "**/*.md" (built-in default)`},
-	}, got.Delta.Paths)
+	assert.Equal(t, InheritFinding{Run: "https://example/run/7", Commit: "green0123456789", Report: proseReport}, got)
+	assert.Equal(t, "green0123456789", assessedAt, "the change is measured from the green commit")
 
 	assert.Equal(t, "verdict inherited from run https://example/run/7 (commit green012): "+
-		"every path changed since that green run classifies low-risk\n"+
-		`docs/x.md: prose (matches "**/*.md" (built-in default))`, got.AnnotationText())
+		"the change since that green run tiers trivial\n"+
+		`docs/x.md: trivial (prose: matches "**/*.md" (built-in default); nothing in ci's chain reads it)`, got.AnnotationText())
 
 	assert.Equal(t, "### Inherited verdict\n\n"+
-		"The shard fan-out was short-circuited: every path changed since this branch's "+
-		"last green CI run classifies low-risk, so that run's verdict stands.\n\n"+
+		"The shard fan-out was short-circuited: the change since this branch's "+
+		"last green CI run tiers trivial, so that run's verdict stands.\n\n"+
 		"Inherited run: https://example/run/7 at commit `green012`.\n\n"+
-		"| Changed path | Class | Classified by |\n| --- | --- | --- |\n"+
-		"| `docs/x.md` | prose | matches \"**/*.md\" (built-in default) |\n\n"+
+		"| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n"+
+		"| `docs/x.md` | trivial | prose | matches \"**/*.md\" (built-in default); nothing in ci's chain reads it |\n\n"+
 		"To dispute a row, its last column names the declaration or mechanism that "+
-		"classified it; to turn inheritance off, declare `gate_inherit = false` in "+
+		"decided it; to turn inheritance off, declare `gate_inherit = false` in "+
 		"magus.project.\n", got.SummaryMarkdown())
 }
 
@@ -188,13 +201,15 @@ func TestInheritProbeDeclines(t *testing.T) {
 		{ID: "green0123456789", Parents: []string{"c0"}},
 	}
 	cases := map[string]InheritProbe{
-		"no green run":       newInheritProbe("green0123456789", false, inheritHistory, []string{"docs/x.md"}),
-		"green run unnamed":  newInheritProbe("", true, inheritHistory, []string{"docs/x.md"}),
-		"code in the delta":  newInheritProbe("green0123456789", true, inheritHistory, []string{"docs/x.md", "internal/y.go"}),
-		"merge in the range": newInheritProbe("green0123456789", true, pushedMerge, []string{"docs/x.md"}),
-		"green out of reach": newInheritProbe("unreachable", true, inheritHistory, []string{"docs/x.md"}),
-		"disabled":           {Disabled: true},
-		"no provider wired":  {},
+		"no green run":          newInheritProbe("green0123456789", false, inheritHistory, proseReport),
+		"green run unnamed":     newInheritProbe("", true, inheritHistory, proseReport),
+		"code in the delta":     newInheritProbe("green0123456789", true, inheritHistory, codeReport),
+		"embedded markdown":     newInheritProbe("green0123456789", true, inheritHistory, embedReport),
+		"a comment-only change": newInheritProbe("green0123456789", true, inheritHistory, types.RiskReport{Tier: types.RiskMechanical}),
+		"merge in the range":    newInheritProbe("green0123456789", true, pushedMerge, proseReport),
+		"green out of reach":    newInheritProbe("unreachable", true, inheritHistory, proseReport),
+		"disabled":              {Disabled: true},
+		"no provider wired":     {},
 	}
 	for name, p := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -209,13 +224,13 @@ func TestInheritProbeDeclines(t *testing.T) {
 // proceeds exactly as it would have without this feature.
 func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 	boom := errors.New("no such revision")
-	p := newInheritProbe("green0123456789", true, inheritHistory, []string{"docs/x.md"})
+	p := newInheritProbe("green0123456789", true, inheritHistory, proseReport)
 	p.History = func(context.Context) ([]types.Commit, error) { return nil, boom }
 	_, ok := p.Evaluate(context.Background())
 	assert.False(t, ok, "an unreadable history declines")
 
-	p = newInheritProbe("green0123456789", true, inheritHistory, nil)
-	p.Changed = func(context.Context, string) ([]string, error) { return nil, boom }
+	p = newInheritProbe("green0123456789", true, inheritHistory, proseReport)
+	p.Assess = func(context.Context, string) (types.RiskReport, error) { return proseReport, boom }
 	_, ok = p.Evaluate(context.Background())
 	assert.False(t, ok, "an unreadable diff declines")
 }
@@ -223,7 +238,7 @@ func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 // An empty delta is the boundary case: nothing changed since green, so the
 // verdict inherits and both reports say so rather than printing an empty table.
 func TestInheritProbeEmptyDelta(t *testing.T) {
-	p := newInheritProbe("green0123456789", true, inheritHistory, nil)
+	p := newInheritProbe("green0123456789", true, inheritHistory, types.RiskReport{Tier: types.RiskTrivial})
 	got, ok := p.Evaluate(context.Background())
 	require.True(t, ok)
 	assert.Contains(t, got.AnnotationText(), "\nno paths changed since that run")

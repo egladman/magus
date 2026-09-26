@@ -222,7 +222,8 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 // candidate's box runs under [sandbox.FromConfigBoxed] with its environment, so every
 // grant a declaration makes writable resolves in the box, with c.Home read, write and
 // exec: go run executes what it caches in GOCACHE. The toolchains the runner installed
-// are read and run where they are. The nested magus a hook runs stacks its own sandbox
+// are read and run where they are, and the object store every candidate's checkout
+// shares is read and never written. The nested magus a hook runs stacks its own sandbox
 // on this one, so a right withheld here is withheld from every child whatever that
 // inner policy grants.
 //
@@ -247,6 +248,11 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 	cfg.Allow = append(slices.Clone(cfg.Allow), spells.SandboxAllow{Path: c.Home, Mode: spells.SandboxAccessRWX})
 	p, err := sandbox.FromConfigBoxed(c.Dir, cfg, c.Spells, sandbox.Box{Environ: c.environ(), TempDir: c.TempDir})
 	if err != nil {
+		return nil, err
+	}
+	// Every candidate shares the store, and git fetches no object it already holds: one
+	// planted by an earlier candidate's hook would stand in for a later one's head.
+	if p, err = p.WithReadOnlyObjects(); err != nil {
 		return nil, err
 	}
 	var placed, linked []string

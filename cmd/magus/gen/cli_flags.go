@@ -773,7 +773,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
-	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
+	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagRunPreflight, "", "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)")
 	return &f
 }
@@ -831,7 +831,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	fs.BoolVar(&f.NoCache, FlagAffectedNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass")
-	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
+	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagAffectedPreflight, "", "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green")
 	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagAffectedWait, false, "With --detach, block until the run finishes and exit with its status")
@@ -1302,7 +1302,7 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
 	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
-	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App, required with a --status-context)")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`app` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a --status-context)")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
@@ -1415,7 +1415,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
-	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it")
 	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
 	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")

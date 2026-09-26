@@ -157,6 +157,41 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 	assert.Equal(t, []string{"a"}, g.unitsOf("3@"+c3), "a gate runs its change's affected set")
 }
 
+// Every head is in the store before the first hook runs: git fetches no object the store
+// already holds, so a head fetched after one candidate's hook wrote there could be the
+// hook's object.
+func TestEveryHeadIsFetchedBeforeAnyHookRuns(t *testing.T) {
+	d := newDoubles(t)
+	changes := []types.Change{change("1", "gen"), change("2", "gen"), change("3", "gen")}
+	var events trail
+	for _, c := range changes {
+		d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).RunAndReturn(func(context.Context, string, string, string) error {
+			events.add("fetch " + c.ID)
+			return nil
+		}).Once()
+	}
+	touched := []string{"gen/x.go"}
+	d.builds(building{touched: touched})
+	d.facts.EXPECT().Classify(mock.Anything, touched).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+	d.vcs.EXPECT().DirtyFiles(mock.Anything, mock.Anything, []string(nil)).Return(nil, nil)
+	d.gate.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, cand types.Candidate, _ []string) (types.GateResult, error) {
+			events.add("gate " + cand.Change)
+			return types.GateResult{Green: true}, nil
+		})
+	plan := planOf(changes)
+	v, _ := validating(t, d, plan)
+	v.Regenerate = func(_ context.Context, r types.Regeneration) error {
+		events.add("regenerate " + r.Change.ID)
+		return nil
+	}
+	require.NoError(t, v.Run(t.Context(), plan))
+
+	got := events.entries()
+	require.Len(t, got, 9)
+	assert.Equal(t, []string{"fetch 1", "fetch 2", "fetch 3"}, got[:3])
+}
+
 // A candidate auto-resolution settled is gated like any other, and its verdict names
 // what was settled: the reason of a merge, and a line of a kick-back's report.
 func TestAVerdictNamesWhatAutoResolutionSettled(t *testing.T) {

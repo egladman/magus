@@ -502,9 +502,24 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 	}
 	keep, err := regenerateWrites(ctx, v, s, b, regenerate, regen, units)
 	if err != nil || len(keep) == 0 {
-		return b.Commit, err
+		return b.Commit, tamperedRefusal(err)
 	}
-	return commitRegenerated(ctx, v, b, keep)
+	commit, err := commitRegenerated(ctx, v, b, keep)
+	return commit, tamperedRefusal(err)
+}
+
+// tamperedRefusal is err as the change's refusal when the regeneration, which ran the
+// change's code, rewrote a file naming the checkout's repository, and err otherwise.
+func tamperedRefusal(err error) error {
+	var t *magustypes.CheckoutTamperedError
+	if !errors.As(err, &t) {
+		return err
+	}
+	file := types.CodeSpan(".git")
+	if filepath.Dir(t.File) != t.Checkout {
+		file = types.CodeSpan(filepath.Base(t.File)) + " in its git directory"
+	}
+	return &types.RefusedError{Reason: "the regeneration changed the candidate's " + file + ", which tells git where its repository is"}
 }
 
 // regenerateWrites runs regenerate on regen in b's checkout and returns the declared files

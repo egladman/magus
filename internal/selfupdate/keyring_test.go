@@ -3,7 +3,6 @@ package selfupdate
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -26,16 +25,13 @@ func repoRoot(t *testing.T) string {
 // TestReleaseTrustAnchorMatchesInstallerAndCI keeps the ring's copies in step.
 //
 // The installer and the setup action must accept EVERY key a binary accepts, or a
-// rotation strands one path while the other works. The verify guide publishes the
-// ACTIVE key alone: it tells a reader which key signed the release in front of them,
-// and listing keys that have signed nothing would be noise a human has to resolve.
+// rotation strands one path while the other works. That the verify guide publishes the
+// active key is checked with the page, in the docs project's conventions target.
 func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
 	root := repoRoot(t)
 	installer, err := os.ReadFile(filepath.Join(root, "docs", "gen", "install"))
 	require.NoError(t, err)
 	action, err := os.ReadFile(filepath.Join(root, ".github", "actions", "setup-magus", "action.yml"))
-	require.NoError(t, err)
-	guide, err := os.ReadFile(filepath.Join(root, "docs", "setup", "verify.md"))
 	require.NoError(t, err)
 
 	for _, key := range ReleaseKeys.Verifiers() {
@@ -56,11 +52,6 @@ func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
 		assert.NotContains(t, string(installer), keyHex, "installer still carries revoked key %s", key.ID)
 		assert.NotContains(t, string(action), keyHex, "setup action still carries revoked key %s", key.ID)
 	}
-
-	active, err := ReleaseKeys.Active()
-	require.NoError(t, err)
-	assert.Contains(t, string(guide), base64.StdEncoding.EncodeToString(active.Pub),
-		"verify guide must publish the active release key %s", active.ID)
 }
 
 // TestKeyIDIsDerivedNotDeclared pins the fingerprint of the key shipping today. It is

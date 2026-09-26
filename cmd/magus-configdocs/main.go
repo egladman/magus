@@ -4,9 +4,9 @@
 //
 //	go run ./cmd/magus-configdocs -out ./docs/config.md
 //
-// docs/config.md is committed; TestConfigDocsUpToDate keeps it in lockstep with
-// schema.Fields (which is itself generated from internal/config/config.go). The
-// site renders the committed file at /config/.
+// docs/config.md is committed; docs' generate target rewrites it and its drift gate
+// keeps it in lockstep with schema.Fields (which is itself generated from
+// internal/config/config.go). The site renders the committed file at /config/.
 package main
 
 import (

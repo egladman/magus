@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -25,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -1047,7 +1049,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	}
 	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
 		return storedAttempt(ctx, flagRoot, ref)
-	}, job.CheckpointObserver(root, jobSymbolReader(root)))
+	}, jobObserver(root))
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -1728,6 +1730,67 @@ func jobSymbolReader(root string) job.SymbolReader {
 	}
 }
 
+// jobObserver is the checkpoint observer plus, for a job with a check gate on ci, the
+// newest green ci gate on this checkout's branch and the tier of the change since it.
+func jobObserver(root string) job.Observer {
+	checkpoint := job.CheckpointObserver(root, jobSymbolReader(root))
+	return func(ctx context.Context, row types.Job) (job.Observed, error) {
+		seen, err := checkpoint(ctx, row)
+		if err != nil || root == "" || !gatesOnCI(row) {
+			return seen, err
+		}
+		seen.GreenGate = latestGreenGate(ctx, root)
+		return seen, nil
+	}
+}
+
+func gatesOnCI(row types.Job) bool {
+	return slices.ContainsFunc(row.EffectiveCompletionGates(), func(g types.CompletionGate) bool {
+		return g.Kind == types.GateKindCheck && g.Check.Target == types.TargetCI
+	})
+}
+
+// latestGreenGate is the newest green ci gate on root's branch and the tier of the change
+// since it. It is zero when there is none, a merge lies between it and HEAD, or the
+// change cannot be assessed, the same conditions the redundancy check declines on.
+func latestGreenGate(ctx context.Context, root string) job.GreenGate {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return job.GreenGate{}
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
+		return job.GreenGate{}
+	}
+	meta, err := res.VCS.Metadata(ctx, m.Root())
+	if err != nil || meta.Ref == "" {
+		return job.GreenGate{}
+	}
+	dir, err := sessions.Dir(m.Root())
+	if err != nil {
+		return job.GreenGate{}
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return job.GreenGate{}
+	}
+	rec, ok := sessions.LatestGate(fold, meta.Ref, types.TargetCI)
+	if !ok || rec.Outcome != sessions.OutcomePass || rec.Commit == "" {
+		return job.GreenGate{}
+	}
+	if meta.ID != rec.Commit {
+		history, err := res.VCS.History(ctx, m.Root(), gateMergeScanLimit)
+		if err != nil || !internalci.MergeFreeRange(history, rec.Commit) {
+			return job.GreenGate{}
+		}
+	}
+	rep, err := m.AssessChange(ctx, types.TargetCI, magus.AssessOptions{Base: rec.Commit})
+	if err != nil {
+		return job.GreenGate{}
+	}
+	return job.GreenGate{Commit: rec.Commit, Projects: rec.Projects, Tier: rep.Tier}
+}
+
 // jobGates is `magus describe job <job> --gates`: each completion gate graded against the
 // evidence magus holds right now.
 //
@@ -1744,7 +1807,7 @@ func jobGates(ctx context.Context, root string, pos []string) error {
 	if err != nil {
 		return err
 	}
-	status, err := job.GradeGates(ctx, store, pos[0], job.CheckpointObserver(root, jobSymbolReader(root)))
+	status, err := job.GradeGates(ctx, store, pos[0], jobObserver(root))
 	if err != nil {
 		return usagef("magus describe job --gates: %s", err)
 	}

@@ -1,0 +1,432 @@
+// lib/crosscheck.buzz holds the docs checks whose other half lives outside the page: a guide
+// against the templates it embeds and the coverage they declare, the verify guide against
+// the release keyring, and every page against what it must never carry. Pure: each takes
+// text and returns findings; engine/gates.buzz reads the files.
+namespace crosscheck;
+
+import "std";
+import "assert";
+import "serialize";
+import "encoding/hex";
+import "lib/conventions" as _;   // ConventionFinding
+
+// TEMPLATE_PAGES names the page under docs/guides/integrations/agents that embeds each
+// shipped hook template verbatim, so a reader browsing the site sees exactly what they
+// would download. Its keys are the shipped set: conventions_test.go holds them equal to
+// hookTemplates, which is what makes a new template owe a page here.
+export final TEMPLATE_PAGES = {
+    "magus-command.sh": "guard-templates.md",
+    "magus-path.sh": "guard-templates.md",
+    "magus-observe.sh": "guard-templates.md",
+    "magus-checkpoint.sh": "guard-templates.md",
+    "magus-rehydrate.sh": "guard-templates.md",
+    "magus-command.buzz": "guard-templates.md",
+    "magus-path.buzz": "guard-templates.md",
+    "magus-observe.buzz": "guard-templates.md",
+    "magus-checkpoint.buzz": "guard-templates.md",
+    "magus-rehydrate.buzz": "guard-templates.md",
+    "codex-hooks.json": "codex.md",
+    "cursor-hook.sh": "cursor.md",
+    "opencode-plugin.ts": "opencode.md",
+    "magus-session-load-claude-code.sh": "session-load.md",
+    "magus-session-load-codex.sh": "session-load.md",
+    "magus-session-load-opencode.sh": "session-load.md",
+};
+
+// ENVIRONMENT_DETECTION_VARS are the variables that say WHERE magus runs. A page that
+// reads one teaches the reader to sniff it (docs/doctrine.md, "Told, never guessed").
+// conventions_test.go holds this list equal to environmentDetectionVars, which governs
+// the code.
+export final ENVIRONMENT_DETECTION_VARS = [
+    "CI", "GITHUB_ACTIONS", "GITHUB_WORKFLOW_REF", "RUNNER_ENVIRONMENT", "RUNNER_OS",
+    "GITLAB_CI", "BUILDKITE", "CIRCLECI", "TRAVIS", "JENKINS_URL", "JENKINS_HOME",
+    "TEAMCITY_VERSION", "TF_BUILD", "BITBUCKET_BUILD_NUMBER", "CODEBUILD_BUILD_ID", "DRONE",
+    "APPVEYOR", "KUBERNETES_SERVICE_HOST", "container",
+    "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CURSOR_TRACE_ID", "CODEX_SANDBOX",
+];
+
+final GUARD_COVERAGE_MARKER = "magus-guard-coverage:";
+final SESSION_COVERAGE_MARKER = "magus-session-coverage:";
+
+// A `token=` long enough to be a real bearer. Documented placeholders
+// (`#token=<bearer>`) stay legal.
+final bearerPattern = std\pattern("token=[A-Za-z0-9_-]\{20,\}");
+
+// A call whose callee spells env or lookup (os.Getenv, os\env, a local envOr), and a
+// process.env member, each naming a listed variable.
+final envNames = ENVIRONMENT_DETECTION_VARS.join("|");
+final envCallPattern = std\pattern("(?i:env|lookup)[\\w\\\\]*\\s*\\(\\s*\"(" + envNames + ")\"\\s*[,)]");
+final envProcessPattern = std\pattern("process\\.env(?:\\.|\\[\\s*[\"'])(" + envNames + ")\\b");
+
+// Resolving magus as `./magus` finds it only when the hook runs in the workspace root.
+final rootOnlyMagusLookup = std\pattern("-x\\s+\\.?/?\\./magus\\b|-x\\s+\"\\./magus\"");
+
+// bearerFindings flags a live-looking bearer token. A doc site is public, and a page
+// generated from real output once committed the token of whoever regenerated it.
+export fun bearerFindings(file: str, md: str) > [ConventionFinding] {
+    final found: mut [ConventionFinding] = mut [<ConventionFinding>];
+    var n = 0;
+    foreach (line in md.split("\n")) {
+        n = n + 1;
+        final m = bearerPattern.match(line);
+        if (m == null) { continue; }
+        found.append(ConventionFinding{ file = file, line = n, rule = "bearer-token",
+            message = "carries what looks like a live bearer token (" + m![0] + "); regenerate the page, rotate the token, and write `token=<bearer>` when documenting the scheme" });
+    }
+    return found;
+}
+
+// environmentFindings flags a page example that reads an environment-detection variable.
+export fun environmentFindings(file: str, md: str) > [ConventionFinding] {
+    final found: mut [ConventionFinding] = mut [<ConventionFinding>];
+    var n = 0;
+    foreach (line in md.split("\n")) {
+        n = n + 1;
+        foreach (p in [envCallPattern, envProcessPattern]) {
+            foreach (m in p.matchAll(line) ?? [<[str]>]) {
+                found.append(ConventionFinding{ file = file, line = n, rule = "environment-detection",
+                    message = "reads " + m[1] + " to learn where it runs; take a flag, a charm or a magus.yaml key instead (docs/doctrine.md, \"Told, never guessed\")" });
+            }
+        }
+    }
+    return found;
+}
+
+// magusLookupFindings flags a copy-paste hook command that resolves magus as `./magus`.
+// Such a hook exits 0 and its events just stop arriving once it runs anywhere but the
+// root; the shipped templates walk up to the magusfile instead.
+export fun magusLookupFindings(file: str, md: str) > [ConventionFinding] {
+    final found: mut [ConventionFinding] = mut [<ConventionFinding>];
+    var n = 0;
+    foreach (line in md.split("\n")) {
+        n = n + 1;
+        if (rootOnlyMagusLookup.match(line) != null) {
+            found.append(ConventionFinding{ file = file, line = n, rule = "root-only-magus",
+                message = "resolves magus as ./magus; walk up to the magusfile the way the shipped templates do" });
+        }
+    }
+    return found;
+}
+
+// trimTrailingNewlines drops the final newlines, so a template's closing newline need not
+// survive inside a fenced block.
+fun trimTrailingNewlines(s: str) > str {
+    var end = s.len();
+    while (end > 0 and s.byte(end - 1) == 10) { end = end - 1; }
+    return s.sub(0, len: end);
+}
+
+// embedFindings reports a template its page does not carry verbatim, comments included.
+export fun embedFindings(template: str, body: str, page: str, doc: str) > [str] {
+    if (doc.indexOf(trimTrailingNewlines(body)) != null) { return [<str>]; }
+    return ["{page}: does not carry {template} verbatim; a reader must see exactly what they would download"];
+}
+
+// coverageDecls returns the key=value fields of every line carrying marker.
+export fun coverageDecls(body: str, marker: str) > [{str: str}] {
+    final decls: mut [{str: str}] = mut [<{str: str}>];
+    foreach (line in body.split("\n")) {
+        final at = line.indexOf(marker);
+        if (at == null) { continue; }
+        final fields = mut {<str: str>};
+        foreach (kv in line.sub(at! + marker.len()).split("")) {
+            final eq = kv.indexOf("=");
+            if (eq == null) { continue; }
+            fields[kv.sub(0, len: eq!)] = kv.sub(eq! + 1);
+        }
+        decls.append(fields);
+    }
+    return decls;
+}
+
+// normalizeHost folds the declarations' label (claude-code) and the guide's product
+// name (Claude Code) to one key.
+export fun normalizeHost(s: str) > str {
+    return s.trim().lower().replace(" ", "").replace("-", "").replace("`", "");
+}
+
+fun splitTableRow(line: str) > [str] {
+    var inner = line.trim();
+    if (inner.startsWith("|")) { inner = inner.sub(1); }
+    if (inner.endsWith("|")) { inner = inner.sub(0, len: inner.len() - 1); }
+    final cells: mut [str] = mut [<str>];
+    foreach (c in inner.split("|")) { cells.append(c.trim()); }
+    return cells;
+}
+
+// guardColumn keys a parity-table header by its distinguishing words, so rewording a
+// header does not silently drop a check.
+fun guardColumn(cell: str) > str {
+    if (cell.indexOf("command rules") != null) { return "command rules"; }
+    if (cell.indexOf("declared-output") != null) { return "declared-output rule"; }
+    if (cell.indexOf("MCP call") != null) { return "mcp rules"; }
+    if (cell.indexOf("deny") != null) { return "deny"; }
+    if (cell.indexOf("advise") != null) { return "advise"; }
+    return cell;
+}
+
+// sessionColumn folds a header to the contract's dimension name ("hook output" is
+// hook-output).
+fun sessionColumn(cell: str) > str {
+    return cell.lower().replace(" ", "-").replace("`", "");
+}
+
+// tableRows reads the first table after heading as normalized host -> column -> cell.
+export fun tableRows(doc: str, heading: str, guardHeaders: bool) > {str: {str: str}} {
+    final rows = mut {<str: {str: str}>};
+    final at = doc.indexOf(heading);
+    if (at == null) { return rows; }
+    final header: mut [str] = mut [<str>];
+    foreach (raw in doc.sub(at!).split("\n")) {
+        final line = raw.trim();
+        if (!line.startsWith("|")) {
+            if (header.len() > 0) { break; }
+            continue;
+        }
+        final cells = splitTableRow(line);
+        if (header.len() == 0) {
+            foreach (c in cells) {
+                if (guardHeaders) { header.append(guardColumn(c)); } else { header.append(sessionColumn(c)); }
+            }
+            continue;
+        }
+        if (cells[0].startsWith("---")) { continue; }
+        final row = mut {<str: str>};
+        var i = 1;
+        while (i < cells.len() and i < header.len()) {
+            row[header[i]] = cells[i];
+            i = i + 1;
+        }
+        rows[normalizeHost(cells[0])] = row;
+    }
+    return rows;
+}
+
+fun saysYes(cell: str) > bool { return cell.lower().startsWith("yes"); }
+
+// guardParityFindings holds the guide's "Parity across hosts" table to the coverage the
+// templates declare. The table is what a reader chooses a host by, so a wrong cell is a
+// promise magus does not keep. Whether each declaration is complete against the guard
+// contract is conventions_test.go's question; this one only compares.
+export fun guardParityFindings(templates: {str: str}, guide: str, guideFile: str) > [str] {
+    final found: mut [str] = mut [<str>];
+    final cov = mut {<str: {str: str}>};
+    final hosts = mut {<str: bool>};
+    foreach (_, body in templates) {
+        foreach (d in coverageDecls(body, marker: GUARD_COVERAGE_MARKER)) {
+            foreach (host in (d["host"] ?? "").split(",")) {
+                if (host == "") { continue; }
+                hosts[host] = true;
+                cov[host + "/" + (d["surface"] ?? "")] = d;
+            }
+        }
+    }
+    if (hosts.size() == 0) { return ["no {GUARD_COVERAGE_MARKER} declaration in any hook template"]; }
+    final rows = tableRows(guide, heading: "Parity across hosts", guardHeaders: true);
+    if (rows.size() == 0) { return ["{guideFile}: no rows parsed out of the 'Parity across hosts' table"]; }
+
+    foreach (host, _ in hosts) {
+        final row = rows[normalizeHost(host)];
+        if (row == null) {
+            found.append("{guideFile}: host {host} is declared by a template but has no row in the parity table");
+            continue;
+        }
+        final command = cov[host + "/command"];
+        final checks = mut {<str: bool>};
+        checks["command rules"] = command != null;
+        checks["declared-output rule"] = cov[host + "/path"] != null;
+        if (command != null) {
+            checks["deny"] = command!["deny"] == "model";
+            checks["advise"] = command!["advise"] == "model";
+        }
+        foreach (column, want in checks) {
+            final cell = row![column];
+            if (cell == null) {
+                found.append("{guideFile}: the parity table has no {column} column");
+            } else if (saysYes(cell!) != want) {
+                found.append("{guideFile}: parity row {host}, column {column} reads \"{cell!}\", which disagrees with the templates' declarations");
+            }
+        }
+        final mcp = cov[host + "/mcp"];
+        if (mcp != null) {
+            final cell = row!["mcp rules"];
+            final deny = mcp!["deny"] ?? "";
+            final advise = mcp!["advise"] ?? "";
+            final delivers = deny != "none" or advise != "none";
+            if (cell == null) {
+                found.append("{guideFile}: the parity table has no MCP call rules column");
+            } else if (delivers == cell!.lower().startsWith("not wired")) {
+                found.append("{guideFile}: parity row {host}, MCP call rules reads \"{cell!}\", which disagrees with the mcp stances declared (deny={deny} advise={advise})");
+            }
+        }
+    }
+    foreach (row, _ in rows) {
+        var declared = false;
+        foreach (host, _ in hosts) {
+            if (normalizeHost(host) == row) { declared = true; }
+        }
+        if (!declared) {
+            found.append("{guideFile}: the parity table promises host {row}, which no template declares coverage for");
+        }
+    }
+    return found;
+}
+
+// sessionParityFindings holds the "Session load across hosts" table to the adapters'
+// declarations. A cell claiming a dimension the adapter cannot supply turns
+// "unobservable" into a silent zero in every report read against it.
+export fun sessionParityFindings(adapters: {str: str}, guide: str, guideFile: str) > [str] {
+    final found: mut [str] = mut [<str>];
+    final cov = mut {<str: {str: str}>};
+    foreach (_, body in adapters) {
+        foreach (d in coverageDecls(body, marker: SESSION_COVERAGE_MARKER)) {
+            final host = d["host"] ?? "";
+            if (host != "") { cov[host] = d; }
+        }
+    }
+    if (cov.size() == 0) { return ["no {SESSION_COVERAGE_MARKER} declaration in any session adapter"]; }
+    final rows = tableRows(guide, heading: "Session load across hosts", guardHeaders: false);
+    if (rows.size() == 0) { return ["{guideFile}: no rows parsed out of the 'Session load across hosts' table"]; }
+
+    foreach (host, decl in cov) {
+        final row = rows[normalizeHost(host)];
+        if (row == null) {
+            found.append("{guideFile}: host {host} is declared by an adapter but has no row in the session parity table");
+            continue;
+        }
+        foreach (dimension, stance in decl) {
+            if (dimension == "schema" or dimension == "host") { continue; }
+            final cell = row![dimension];
+            if (cell == null) {
+                found.append("{guideFile}: the session parity table has no {dimension} column");
+                continue;
+            }
+            var got = "none";
+            if (saysYes(cell!)) { got = "yes"; }
+            if (got != stance) {
+                found.append("{guideFile}: session row {host}, column {dimension} reads \"{cell!}\", which disagrees with the adapter's {dimension}={stance}");
+            }
+        }
+    }
+    foreach (row, _ in rows) {
+        var declared = false;
+        foreach (host, _ in cov) {
+            if (normalizeHost(host) == row) { declared = true; }
+        }
+        if (!declared) {
+            found.append("{guideFile}: the session parity table promises host {row}, which no adapter declares coverage for");
+        }
+    }
+    return found;
+}
+
+// hostWiringFindings asks a host page to name every event its shipped hook config wires
+// and every glue template the config runs. A reader wires what the page says, so an event
+// the page never names guards this repository and nobody who copied from it.
+export fun hostWiringFindings(config: str, configFile: str, page: str, doc: str) > [str] !> any {
+    final found: mut [str] = mut [<str>];
+    final hooks = serialize\jsonDecode(config).q("hooks").mapValue();
+    if (hooks.size() == 0) { return ["{configFile}: wires no events at all"]; }
+    final stems = mut {<str: bool>};
+    foreach (event, entries in hooks) {
+        if (doc.indexOf(event) == null) {
+            found.append("{page}: never names {event}, which {configFile} wires; a reader copying from the page gets a quieter integration");
+        }
+        foreach (entry in entries.listValue()) {
+            foreach (h in entry.q("hooks").listValue()) {
+                final command = h.q("command").stringValue();
+                foreach (name, _ in TEMPLATE_PAGES) {
+                    if (command.indexOf(name) == null) { continue; }
+                    if (name.endsWith(".sh")) { stems[name.sub(0, len: name.len() - 3)] = true; }
+                    if (name.endsWith(".buzz")) { stems[name.sub(0, len: name.len() - 5)] = true; }
+                }
+            }
+        }
+    }
+    foreach (stem, _ in stems) {
+        if (doc.indexOf(stem) == null) {
+            found.append("{page}: never names {stem}, which {configFile} runs");
+        }
+    }
+    return found;
+}
+
+// rehydrateWiringFindings asks the host page to name the event the rehydrate hook runs
+// on. A reader who cannot see WHEN it runs wires it to session start, the one moment it
+// has nothing to say.
+export fun rehydrateWiringFindings(page: str, doc: str) > [str] {
+    final found: mut [str] = mut [<str>];
+    foreach (want in ["magus-rehydrate", "SessionStart", "compact"]) {
+        if (doc.indexOf(want) == null) {
+            found.append("{page}: never names {want}; the page must wire magus-rehydrate to the post-compaction event by name");
+        }
+    }
+    return found;
+}
+
+// releaseKeyFindings asks the verify guide to publish the ACTIVE release key, base64 as
+// a reader pastes it. Keys that have signed nothing would be noise to resolve.
+export fun releaseKeyFindings(keyring: str, guideFile: str, guide: str) > [str] !> any {
+    final active: mut [str] = mut [<str>];
+    foreach (k in serialize\jsonDecode(keyring).q("keys").listValue()) {
+        if (k.q("state").stringValue() == "active") { active.append(k.q("key").stringValue()); }
+    }
+    if (active.len() != 1) {
+        return ["internal/selfupdate/release-keys.json holds {active.len()} active keys; want exactly one"];
+    }
+    final published = hex\decode(active[0]).encodeBase64();
+    if (guide.indexOf(published) == null) {
+        return ["{guideFile}: does not publish the active release key {published}"];
+    }
+    return [<str>];
+}
+
+test "bearerFindings flags a real token and leaves the placeholder alone" {
+    final f = bearerFindings("p.md", "ok `#token=<bearer>`\nhttp://x/#token=abcdefghijklmnopqrstuvwxyz0123\n");
+    assert\equal(f.len(), 1, "one finding");
+    assert\equal(f[0].line, 2, "the token's line");
+}
+
+test "environmentFindings flags a read of a detection variable, not a mention" {
+    final f = environmentFindings("p.md", "set `CI=true` in the workflow\nif os.Getenv(\"CI\") != \"\" \{\nprocess.env." + "GITHUB_ACTIONS\n");
+    assert\equal(f.len(), 2, "the call and the process.env read");
+    assert\equal(f[0].line, 2, "the Getenv line");
+    assert\equal(f[1].line, 3, "the process.env line");
+}
+
+test "magusLookupFindings flags ./magus and passes the walk-up" {
+    assert\equal(magusLookupFindings("p.md", "[ -x ./magus ] && ./magus hook\n").len(), 1, "root-only lookup");
+    assert\equal(magusLookupFindings("p.md", "[ -x \"$d/magus\" ] && \"$d/magus\" hook\n").len(), 0, "walk-up lookup");
+}
+
+test "embedFindings wants the body verbatim, trailing newline aside" {
+    assert\equal(embedFindings("t.sh", body: "echo hi\n", page: "p.md", doc: "```sh\necho hi\n```").len(), 0, "embedded");
+    assert\equal(embedFindings("t.sh", body: "echo bye\n", page: "p.md", doc: "```sh\necho hi\n```").len(), 1, "drifted");
+}
+
+test "guardParityFindings compares cells to declarations both ways" {
+    final templates = {"t.sh": "# magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=none\n"};
+    final guide = "## Parity across hosts\n\n| | command rules | declared-output rule | deny | advise |\n| --- | --- | --- | --- | --- |\n| Claude Code | yes | no | yes | no |\n| Codex | yes | no | yes | yes |\n| Cursor | no | no | no | no |\n";
+    final f = guardParityFindings(templates, guide: guide, guideFile: "g.md");
+    assert\equal(f.len(), 2, "codex advise disagrees, cursor is undeclared");
+}
+
+test "sessionParityFindings compares cells to declarations" {
+    final adapters = {"a.sh": "# magus-session-coverage: schema=1 host=codex commands=yes hook-output=none\n"};
+    final ok = "## Session load across hosts\n\n| host | commands | hook output |\n| --- | --- | --- |\n| Codex | yes | none |\n";
+    assert\equal(sessionParityFindings(adapters, guide: ok, guideFile: "s.md").len(), 0, "agrees");
+    final bad = "## Session load across hosts\n\n| host | commands | hook output |\n| --- | --- | --- |\n| Codex | yes | yes |\n";
+    assert\equal(sessionParityFindings(adapters, guide: bad, guideFile: "s.md").len(), 1, "hook output disagrees");
+}
+
+test "hostWiringFindings wants each wired event and template named" {
+    final config = `{"hooks": {"Stop": [{"hooks": [{"command": "sh magus-checkpoint.sh"}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "sh magus-command.sh"}]}]}}`;
+    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command; Stop runs magus-checkpoint").len(), 0, "all named");
+    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command").len(), 2, "Stop and its template unnamed");
+}
+
+test "releaseKeyFindings wants the active key in base64" {
+    final ring = `{"keys": [{"state": "active", "key": "ffbb"}]}`;
+    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "key: /7s=").len(), 0, "published");
+    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "no key").len(), 1, "missing");
+}
