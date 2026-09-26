@@ -14,6 +14,18 @@ export fun mgs_getTools() > {str: Tool} {
     return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}}};
 }
 
+// pip's and uv's caches, and the interpreters uv installs and runs.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [
+            SandboxAllow{env = "PIP_CACHE_DIR", base = "userCache", path = "pip", mode = SandboxAccess.rw},
+            SandboxAllow{env = "UV_CACHE_DIR", base = "xdgCache", path = "uv", mode = SandboxAccess.rw},
+            SandboxAllow{base = "xdgData", path = "uv", mode = SandboxAccess.rx},
+        ],
+        env = SandboxEnv{passthrough = ["PIP_CACHE_DIR", "UV_CACHE_DIR"]},
+    };
+}
+
 // The name is canonical and lowercase so it matches the language attr on the
 // files and symbols SCIP ingests, letting `magus query language:python` reach
 // this adapter alongside the code it builds. Triple-quoted docstrings are

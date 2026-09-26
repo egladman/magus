@@ -32,6 +32,7 @@ import (
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -161,8 +162,10 @@ type hookCommand struct {
 	Command Command
 	Args    []string
 	Dir     string
-	// Sandbox is the base's config the hook runs under; see [HookEnv].
+	// Sandbox is the base's config the hook runs under, and Spells the grants of the
+	// spells it loaded; see [HookEnv].
 	Sandbox config.SandboxConfig
+	Spells  map[string]spells.Sandbox
 	// Scratch is the candidate's scratch directory, writable and holding TMPDIR; empty
 	// for a facts hook, which runs in the base's own checkout.
 	Scratch string
@@ -221,14 +224,14 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 		cfg.Mode = magustypes.SandboxModeBestEffort
 	}
 	if c.Scratch == "" {
-		return sandbox.FromConfig(c.Dir, "", cfg)
+		return sandbox.FromConfig(c.Dir, "", cfg, c.Spells)
 	}
 	tmp := filepath.Join(c.Scratch, "tmp")
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		return nil, err
 	}
-	cfg.Allow = append(slices.Clone(cfg.Allow), config.SandboxAllowPath{Path: c.Scratch, Mode: "rw"})
-	return sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg)
+	cfg.Allow = append(slices.Clone(cfg.Allow), spells.SandboxAllow{Path: c.Scratch, Mode: spells.SandboxAccessRW})
+	return sandbox.FromConfigWithTempDir(c.Dir, "", tmp, cfg, c.Spells)
 }
 
 // pathLines is paths one per line, as a hook reads them on stdin. Git allows a line
@@ -334,6 +337,11 @@ type HookEnv struct {
 	// has landlock its whole process tree is held to the policy's files. A credential
 	// the passthrough names reaches every hook, which is the workspace's choice.
 	Sandbox config.SandboxConfig
+	// Spells is the sandbox declaration of every spell the base loaded (see
+	// spells.Sandboxes). A hook is usually a nested magus, whose own children need any
+	// project's toolchain, and landlock domains stack: a grant the hook lacks is one no
+	// process under it can have.
+	Spells map[string]spells.Sandbox
 	// Scratch are pointed into each candidate's scratch directory.
 	Scratch []ScratchVar
 	// Fixed are NAME=VALUE assignments every hook takes as given, such as a
@@ -380,7 +388,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	}
 	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
 	defer out.Close()
-	_, err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Sandbox: g.env.Sandbox, Scratch: cand.Scratch, Env: env, Stdout: out, Stderr: out})
+	_, err = runHook(ctx, hookCommand{Command: g.cmd, Args: units, Dir: cand.Dir, Sandbox: g.env.Sandbox, Spells: g.env.Spells, Scratch: cand.Scratch, Env: env, Stdout: out, Stderr: out})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
@@ -413,6 +421,7 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 			Args:    r.Units,
 			Dir:     r.Dir,
 			Sandbox: hookEnv.Sandbox,
+			Spells:  hookEnv.Spells,
 			Scratch: r.Scratch,
 			Env:     env,
 			Stdin:   stdin,
@@ -474,6 +483,7 @@ func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answe
 		Args:    []string{query},
 		Dir:     f.dir,
 		Sandbox: f.env.Sandbox,
+		Spells:  f.env.Spells,
 		Env:     f.env.Fixed,
 		Stdin:   stdin,
 		Stderr:  stderr,

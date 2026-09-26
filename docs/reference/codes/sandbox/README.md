@@ -30,7 +30,7 @@ or extension reads credentials from disk and exfiltrates them.
 ## What sandbox blocks
 
 - Reads outside the workspace, its private temp dir, the system trees,
-  the `PATH` directories and the known tool caches and installs. This
+  the `PATH` directories and the tool caches and installs the spells declare. This
   denies `~/.aws/credentials`, `~/.vault-token`, `~/.ssh/id_rsa`,
   `~/.npmrc`, `~/.config/op`, `~/.docker/config.json`, `~/.kube/config`,
   and the rest of the usual supply-chain targets.

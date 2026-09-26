@@ -159,8 +159,10 @@ generated file, a candidate tree or a review proof from a verdict.
 - **A hook runs in the base's sandbox.** Every hook (the gate, the regeneration, a
   `--facts` command) runs under the policy magus builds from the base's `sandbox` config,
   never a candidate's: its mode raised to at least `best-effort`, its `sandbox.allow`
-  entries and its `sandbox.env.passthrough`, rooted at the hook's checkout, with the
-  candidate's scratch directory writable and `TMPDIR` inside it.
+  entries and its `sandbox.env.passthrough`, and the declarations of every spell the
+  base loaded, rooted at the hook's checkout, with the candidate's scratch directory
+  writable and `TMPDIR` inside it. Every spell's, not one project's: a hook is usually a
+  nested magus, and a grant the hook lacks is one no target under it can have.
   - Everywhere, the environment is an allowlist. A hook gets only the names magus's
     sandbox gives a sandboxed child (`PATH`, `HOME`, `USER`, the locale, `TERM`, and on
     Linux the XDG directories) and the base's passthrough, then the queue's
@@ -175,8 +177,8 @@ generated file, a candidate tree or a review proof from a verdict.
     toolchain trees, in the checkout, or under a `sandbox.allow` entry.
   - Where the kernel has landlock (Linux), it holds the hook and every process the hook
     starts to the policy: read, write and run in the checkout, write in the scratch
-    directory and in the tool caches the policy names (`GOCACHE`, `GOMODCACHE`, npm, pip
-    and the like), read and run on the system and toolchain trees. Nothing else is
+    directory and in the tool caches the spells declare (`GOCACHE`, `GOMODCACHE`, npm,
+    pip, buf and the like), read and run on the system and toolchain trees. Nothing else is
     reachable: not another candidate's checkout, not a credential under the home
     directory, not `/proc/<pid>/environ` of the queue or the runner, not a GitHub
     Actions file command. Landlock also sets no-new-privileges, so `sudo` cannot lift a

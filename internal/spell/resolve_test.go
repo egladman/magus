@@ -2,8 +2,11 @@ package spell
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -486,4 +489,96 @@ export fun mgs_listManifests() > [str] { return ["package.json"]; }
 	_, err := resolve(t, src)
 	require.Error(t, err, "a [str] where [Manifest] belongs must fail at load, not decode to nothing")
 	assert.Contains(t, err.Error(), "must be Manifest")
+}
+
+// mgs_getSandbox decodes into the declaration magus.yaml's sandbox makes.
+func TestResolve_SandboxDecodes(t *testing.T) {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "sandboxed"; }
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [
+            SandboxAllow{env = "TOOL_CACHE", base = "userCache", path = "tool", mode = SandboxAccess.rw},
+            SandboxAllow{base = "binRoot", bin = "tool", requires = "lib", mode = SandboxAccess.rx},
+        ],
+        env = SandboxEnv{passthrough = ["TOOL_CACHE", "TOOL_*"]},
+    };
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	want := &spells.Sandbox{
+		Allow: []spells.SandboxAllow{
+			{Env: "TOOL_CACHE", Base: "userCache", Path: "tool", Mode: spells.SandboxAccessRW},
+			{Base: "binRoot", Bin: "tool", Requires: "lib", Mode: spells.SandboxAccessRX},
+		},
+		Env: spells.SandboxEnv{Passthrough: []string{"TOOL_CACHE", "TOOL_*"}},
+	}
+	assert.Equal(t, want, spec.Sandbox)
+}
+
+// A declaration no host could honor is refused when the spell loads, naming the spell,
+// never skipped with a warning.
+func TestResolve_SandboxRefusesAMalformedDeclaration(t *testing.T) {
+	for name, entry := range map[string]string{
+		"escaping path":     `SandboxAllow{base = "userCache", path = "../elsewhere", mode = SandboxAccess.rw}`,
+		"absolute sub-path": `SandboxAllow{base = "xdgData", path = "/etc", mode = SandboxAccess.ro}`,
+		"empty env name":    `SandboxAllow{env = "", mode = SandboxAccess.rw}`,
+		"unknown base":      `SandboxAllow{base = "cache", path = "tool", mode = SandboxAccess.rw}`,
+		"a variable path":   `SandboxAllow{path = "$HOME/.tool", mode = SandboxAccess.rw}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := `
+import "magus/spell";
+export fun mgs_getName() > str { return "bad-sandbox"; }
+export fun mgs_getSandbox() > Sandbox { return Sandbox{allow = [` + entry + `]}; }
+`
+			_, err := resolve(t, src)
+			require.ErrorIs(t, err, types.AllowlistUnresolved)
+			assert.Contains(t, err.Error(), `spell "bad-sandbox"`)
+		})
+	}
+}
+
+// A passthrough pattern env.Parse refuses is refused at load too.
+func TestResolve_SandboxRefusesAPassthroughThatDoesNotParse(t *testing.T) {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "bad-passthrough"; }
+export fun mgs_getSandbox() > Sandbox { return Sandbox{env = SandboxEnv{passthrough = ["GO*"]}}; }
+`
+	_, err := resolve(t, src)
+	require.ErrorIs(t, err, types.AllowlistUnresolved)
+	assert.Contains(t, err.Error(), `"GO*"`)
+}
+
+// The go spell carries the Go toolchain's grants: GOCACHE executable, since go run and
+// go tool exec the binaries they cache there, and every Go variable passed through.
+// A scope without it gets neither.
+func TestGoSpellDeclaresTheToolchainsGrants(t *testing.T) {
+	gocache := filepath.Join(t.TempDir(), "gocache")
+	decls := map[string]spells.Sandbox{}
+	for _, name := range []string{"go", "markdown"} {
+		sb := Builtins()[name].Sandbox
+		require.NotNil(t, sb, name)
+		decls[name] = *sb
+	}
+	p := sandbox.BuildPolicy(sandbox.PolicyOptions{
+		Home: t.TempDir(), GOOS: "linux",
+		Environ: []string{"GOCACHE=" + gocache, "GOFLAGS=-mod=mod", "GOEXPERIMENT=jsonv2", "CGO_ENABLED=0"},
+		Spells:  decls,
+	})
+	cached := filepath.Join(gocache, "ab", "tool")
+
+	withGo := p.Scoped([]string{"go"}, nil)
+	assert.NoError(t, withGo.CheckExec(t.Context(), cached))
+	assert.NoError(t, withGo.CheckWrite(t.Context(), cached))
+	assert.Subset(t, withGo.BaseEnv, []string{"GOCACHE=" + gocache, "GOFLAGS=-mod=mod", "GOEXPERIMENT=jsonv2", "CGO_ENABLED=0"})
+
+	without := p.Scoped([]string{"markdown"}, nil)
+	assert.Error(t, without.CheckRead(t.Context(), cached))
+	for _, kv := range without.BaseEnv {
+		assert.False(t, strings.HasPrefix(kv, "GO"), "%s reaches a project without the go spell", kv)
+	}
 }

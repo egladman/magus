@@ -50,9 +50,13 @@ config mcp.enabled
 config mcp.insecure_bind
 config report.filter
 config required_version
+config sandbox.allow.<name>.base
+config sandbox.allow.<name>.bin
+config sandbox.allow.<name>.env
 config sandbox.allow.<name>.mode
 config sandbox.allow.<name>.name
 config sandbox.allow.<name>.path
+config sandbox.allow.<name>.requires
 config sandbox.env.passthrough
 config sandbox.mode
 config secret.interactive_timeout

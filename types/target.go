@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/spells"
 )
 
 // ContextParamAnnotation is the exact parameter type annotation that marks a target: an
@@ -179,6 +181,11 @@ type Target struct {
 	// scheduled target's ceiling already bounds every target it composes, and a chain
 	// member's own ceiling fires inside that as the tighter bound.
 	Timeout string `json:"timeout,omitempty" buzz:"timeout"`
+	// Sandbox is the target layer of the sandbox declaration: what this target's
+	// processes may use beyond the workspace's and its spells' grants, merged over them
+	// and never narrowing them. nil declares nothing. Kept out of the Buzz mirror: a
+	// magusfile writes it as a map in magus.project's targets, not on a Target value.
+	Sandbox *spells.Sandbox `json:"sandbox,omitempty" buzz:"-"`
 	// Drift is what happens when this target's declared outputs move under a read-only
 	// run. Empty is the DEFAULT, which gates any target that declares outputs; see
 	// DriftPolicy for why that is on rather than off.

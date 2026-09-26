@@ -254,6 +254,17 @@ func DecodeCommandValue(v vm.Value) (spells.Command, error) {
 	return decodeCommand("", "", buzzSpellObj{v: v})
 }
 
+// DecodeSandboxValue decodes a target's `sandbox` policy value with the reader a
+// spell's mgs_getSandbox goes through, so the two layers accept exactly the same
+// declarations. v must be a map or an object instance.
+func DecodeSandboxValue(v vm.Value) (spells.Sandbox, error) {
+	mv, ok := v.MapView()
+	if !ok {
+		return spells.Sandbox{}, fmt.Errorf("sandbox must be a map, got a %s", v.Kind())
+	}
+	return decodeSandboxRecord(buzzSpellObj{v: mv})
+}
+
 // buzzSpellObj adapts a Buzz data map (a resolved definition or a bound handle)
 // to obj. All fields are plain data (needs/provides/ops were already resolved by
 // Resolve or marshaled into the handle), so there is no function-calling here.

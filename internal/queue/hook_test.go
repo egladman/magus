@@ -20,6 +20,8 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -256,6 +258,35 @@ func TestEveryHookTakesItsHookEnv(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "p f\n", string(seen), dir)
 	}
+}
+
+// A hook is usually a nested magus, and landlock domains stack, so the hook gets the
+// declarations of every spell the base loaded: a spell's variable reaches it and a
+// spell's cache is writable from it.
+func TestAHookGetsEverySpellTheBaseLoaded(t *testing.T) {
+	cache := filesystem.ResolveRulePath(t.TempDir())
+	t.Setenv("MAGUS_TEST_SPELL_CACHE", cache)
+	dir := t.TempDir()
+	env := HookEnv{Spells: map[string]spells.Sandbox{"tool": {
+		Allow: []spells.SandboxAllow{{Env: "MAGUS_TEST_SPELL_CACHE", Base: "userCache", Path: "tool", Mode: spells.SandboxAccessRW}},
+		Env:   spells.SandboxEnv{Passthrough: []string{"MAGUS_TEST_SPELL_CACHE"}},
+	}}}
+	res, err := CommandGate(script(`echo "$MAGUS_TEST_SPELL_CACHE" > seen && touch "$MAGUS_TEST_SPELL_CACHE/written"`), env, nil).
+		Validate(context.Background(), types.Candidate{Commit: "s", Dir: dir, Scratch: t.TempDir()}, hookUnits)
+	require.NoError(t, err)
+	assert.True(t, res.Green)
+	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
+	require.NoError(t, err)
+	assert.Equal(t, cache+"\n", string(seen))
+	assert.FileExists(t, filepath.Join(cache, "written"))
+
+	p, err := hookCommand{Dir: dir, Spells: env.Spells}.policy()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
+	assert.NoError(t, p.CheckWrite(context.Background(), filepath.Join(cache, "x")))
+	withoutSpells, err := hookCommand{Dir: dir}.policy()
+	require.NoError(t, err)
+	assert.ErrorIs(t, withoutSpells.CheckWrite(context.Background(), filepath.Join(cache, "x")), filesystem.ErrDenied)
 }
 
 func TestAPassthroughThatIsNoGlobIsAnError(t *testing.T) {
