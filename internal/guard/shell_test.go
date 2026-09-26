@@ -529,6 +529,80 @@ func TestEvaluateBashGuard(t *testing.T) {
 	}
 }
 
+// A request for a tool's help reads documentation and changes nothing, so the rules that
+// route work through magus let it through (helpRequest). The rest still refuse it: a help
+// flag appended to a credential verb or a destructive git command is not a way around
+// either rule.
+func TestHelpRequestsPassRoutingRules(t *testing.T) {
+	rawTool := func(argv string) denyRule { return denyRule{Name: denyRuleRawTool, Arg: argv} }
+	tests := []struct {
+		command string
+		rule    denyRule // zero: must pass silently
+	}{
+		// The tool's own flag, or its subcommand's, for a path a spell renders.
+		{command: "go clean --help"},
+		{command: "go clean -h"},
+		{command: "go test -help"},
+		{command: "go --help"},
+		{command: "go -C libs/gopherbuzz clean --help"},
+		{command: "golangci-lint run --help"},
+		{command: "gofmt -h"},
+		{command: "govulncheck -V"},
+		{command: "gofmt --version"},
+		{command: "go help clean"},
+		{command: "cargo help build"},
+		{command: "bash -c 'go vet --help'"},
+		// A help flag a program is handed as an ARGUMENT is not help: it runs.
+		{command: "go test ./... -args --help", rule: rawTool("go test ./... -args --help")},
+		{command: "go run main.go --help", rule: rawTool("go run main.go --help")},
+		{command: "go run ./cmd/x --help", rule: rawTool("go run ./cmd/x --help")},
+		{command: "sh -c 'go test ./...' --help", rule: rawTool("go test ./...")},
+		{command: "magus buzz script.buzz -- --help | head", rule: denyRule{Name: denyRuleOutputPipe}},
+		// Unsure is work: a flag or operand between the subcommand and the help flag, a
+		// version flag after a subcommand (go test hands it to the compiled test binary),
+		// and `help` given to a program with no subcommands, which reads it as a file.
+		{command: "go test -run X -h", rule: rawTool("go test -run X -h")},
+		{command: "gofmt -l --help", rule: rawTool("gofmt -l --help")},
+		{command: "go test ./... --version", rule: rawTool("go test ./... --version")},
+		{command: "gofmt help", rule: rawTool("gofmt help")},
+		// One per exempted rule. The silent advisory rows are the dependency and install
+		// advisories, which `go mod tidy` and `npm ci` draw on their own.
+		{command: "pgrep --help"},
+		{command: "ps --help"},
+		{command: "magus run --help | grep charm"},
+		{command: "magus help run | head"},
+		{command: "magus describe --help > /tmp/usage.txt"},
+		{command: "cd libs && magus run --help"},
+		{command: "cd /tmp/copy && magus run --help"},
+		{command: "go mod tidy --help"},
+		{command: "npm ci --help"},
+		// Those rules still judge work, and a flag only some tools read as help.
+		{command: "ps -h", rule: denyRule{Name: denyRuleProcessPoll}},
+		{command: "magus memory get help | head", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "cd libs && magus run test --help=false", rule: denyRule{Name: denyRuleCd}},
+		// One per protected rule: none of them consults helpRequest.
+		{command: "magus config token print --help", rule: denyRule{Name: denyRuleCredentialVerb}},
+		{command: "magus notes capture --help", rule: denyRule{Name: denyRuleNotesAuthor}},
+		{command: "magus session dispose --help", rule: denyRule{Name: denyRuleAgentSignOff}},
+		{command: "sed -i --help", rule: denyRule{Name: denyRuleSedInPlace}},
+		{command: "git reset --hard --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git reset --hard"}},
+		{command: "git add -A --help", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git worktree remove --help", rule: denyRule{Name: denyRuleWorktreeRemove}},
+		{command: "MAGUS_NO_WAIT=1 go clean --help", rule: denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_NO_WAIT"}},
+		{command: "go clean --help; echo $?", rule: denyRule{Name: denyRuleExitStatusEcho}},
+	}
+	for _, tt := range tests {
+		v := Evaluate(testDependencies(), tt.command)
+		assert.Equal(t, tt.rule, v.Rule, "%q", tt.command)
+		if (tt.rule == denyRule{}) {
+			assert.Empty(t, v.Deny, "%q must not deny", tt.command)
+			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
+		} else {
+			assert.NotEmpty(t, v.Deny, "%q must deny", tt.command)
+		}
+	}
+}
+
 // TestDenyReasonsStayShort gives shell.go's three-line budget an enforcement point.
 //
 // A refusal is read under interruption by someone who wanted to run something else, so
