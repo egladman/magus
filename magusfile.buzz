@@ -2776,7 +2776,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "console/src/console/graph/main.ts", "console/src/console/graph/shapes.ts");
     ctx.needs(format, buzz_test);
     // Explicit args replace go-test's `./...` default, so the whole-tree scope this
-    // suite exists for has to be stated alongside the flags.
+    // suite exists for has to be stated alongside the flags. They also replace the
+    // `magus run test . -- -run TestX` passthrough, which is why `args` is appended.
     //
     // Two runs, because cmd/magus is raced at a price nothing else here pays.
     // MEASURED on this tree: the whole suite is 311s with -race and 119s without, and
@@ -2789,9 +2790,12 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // goroutines. The engine's real concurrency keeps -race below, in the packages that
     // own it: internal/cache, internal/proc/run and the root package.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + COVERAGE_PROFILE] + raced_packages()});
+        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + COVERAGE_PROFILE] + raced_packages() + args});
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, CMD_MAGUS_PKG]});
+        {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, CMD_MAGUS_PKG] + args});
+    // A narrowed run covers the tests it selected, not the tree, so its profiles say
+    // nothing the badge or the floor could use.
+    if (args.len() > 0) { return; }
     // One profile again, or the badge and the floor below would measure the raced half
     // of the tree and call it the tree.
     fs\writeFile(COVERAGE_PROFILE,

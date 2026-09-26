@@ -1550,8 +1550,10 @@ arguments the cwd project (or the whole workspace, from the root) is selected.
 These are the same files the cache snapshots and replays on a hit. Whether
 each one is regenerable is the declaration's claim, not something clean
 verifies - so a file magus only modifies rather than produces belongs in
-ctx.modifiesExistingFiles, which clean never removes. Preview with the global
---dry-run flag before trusting a declaration you have not read.
+ctx.modifiesExistingFiles, which clean never removes. Nor does it remove an
+output the VCS tracks: that file is committed, and deleting it would dirty
+the tree. Preview with the global --dry-run flag before trusting a
+declaration you have not read.
 
 --cache additionally invalidates the magus cache entries for those projects,
 which is what forces a genuinely full rebuild: removing the files alone
@@ -1789,7 +1791,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
 				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
-				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it"},
+				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
 				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to DIR in the rebuild's scratch directory for the regeneration, so the cache it names is that rebuild's own; repeatable"},

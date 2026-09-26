@@ -52,7 +52,7 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 		},
 		reflect.TypeOf(Outcome{}): {
 			"result": true, "affected": true, "duration_ms": true, "at": true,
-			"attempts": true, "max_rss_bytes": true,
+			"attempts": true, "max_rss_bytes": true, "charms": true, "args_hash": true,
 		},
 	}
 	for typ, keys := range allowed {
@@ -96,7 +96,8 @@ func TestHistorySchemaLock(t *testing.T) {
 					VolatileCount: 2,
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
-						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2},
+						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2,
+							MaxRSSBytes: 1 << 30, Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
 					},
 				},
 			},
@@ -115,7 +116,7 @@ func TestHistorySchemaLock(t *testing.T) {
 
 	// Approved top-level keys. Extend only with fields that contain
 	// integer timings, project paths, or subdir tag names — never
-	// source code, hashes, secrets, author identity, or error messages.
+	// source code, content hashes, secrets, author identity, or error messages.
 	allowed := map[string]bool{
 		"version":               true, // schema version int
 		"updated_at":            true, // ISO timestamp of last ingest
@@ -169,6 +170,13 @@ func TestHistorySchemaLock(t *testing.T) {
 		// adds no key at all to a history written where the platform cannot
 		// report it.
 		"max_rss_bytes": true,
+		// []string: the run's active charms. Names a workspace declares, the same
+		// safety profile as the target names this history is already keyed by.
+		"charms": true,
+		// string: 32 bits of a hash of the forwarded args, the one hash this history
+		// carries. Truncated so an argument carrying a secret cannot be recovered
+		// from it; see ArgsHash.
+		"args_hash": true,
 	}
 	type outcomeMap map[string]json.RawMessage
 	for path, targets := range projects {
@@ -958,4 +966,73 @@ func TestFoldTargetHistoriesCombinesEverySpellServingATarget(t *testing.T) {
 
 	_, ok = h.FoldTargetHistories("p", "nope")
 	assert.False(t, ok)
+}
+
+// TestNewShape pins what separates two shapes: charm order and spelling never do,
+// forwarded-arg order and word boundaries always do, since the op's grammar is opaque.
+func TestNewShape(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, NewShape([]string{"rw", "no-cache"}, nil), NewShape([]string{"noCache", "rw", "rw"}, nil))
+	assert.Equal(t, NewShape(nil, nil), NewShape([]string{}, []string{}))
+	assert.Nil(t, NewShape(nil, nil).Charms, "no charms records no key at all")
+	assert.Len(t, NewShape(nil, nil).ArgsHash, 8, "never empty, which is what marks a pre-v6 outcome")
+
+	runX := ArgsHash([]string{"-run", "X", "-count", "1"})
+	assert.Equal(t, runX, ArgsHash([]string{"-run", "X", "-count", "1"}), "stable")
+	assert.NotEqual(t, runX, ArgsHash([]string{"-count", "1", "-run", "X"}), "order matters")
+	assert.NotEqual(t, ArgsHash([]string{"a b"}), ArgsHash([]string{"a", "b"}))
+	assert.NotEqual(t, ArgsHash(nil), ArgsHash([]string{""}))
+}
+
+// TestPeakIndex pins which runs a claim may be sized from: successful ones that
+// measured a peak, split by shape, with every spell serving the target folded in.
+func TestPeakIndex(t *testing.T) {
+	t.Parallel()
+
+	const mb = int64(1) << 20
+	full := NewShape(nil, nil)
+	narrow := NewShape(nil, []string{"-run", "TestOne"})
+	o := func(r OutcomeResult, peakMB int64, s Shape) Outcome {
+		return Outcome{Result: r, MaxRSSBytes: peakMB * mb, Charms: s.Charms, ArgsHash: s.ArgsHash}
+	}
+	h := History{Projects: map[string]map[string]Stats{".": {
+		"magusfile/test": {RecentOutcomes: []Outcome{
+			o(OutcomePass, 4000, full),
+			o(OutcomeVolatile, 4500, full),
+			o(OutcomeFail, 9000, full), // an early death or a leak; not a peak to size from
+			o(OutcomePass, 0, full),    // unmeasured
+			o(OutcomePass, 300, narrow),
+			{Result: OutcomePass, MaxRSSBytes: 5000 * mb}, // before v6: no shape
+		}},
+		"go/test": {RecentOutcomes: []Outcome{o(OutcomePass, 2000, full), o(OutcomePass, 2100, narrow)}},
+	}}}
+	x := h.PeakIndex()
+
+	same, all := x.Peak(".", "test", full)
+	assert.Equal(t, MeasuredPeak{MaxBytes: 4500 * mb, Runs: 1}, same,
+		"the larger spell's peak, over the least-observed spell's run count")
+	assert.Equal(t, MeasuredPeak{MaxBytes: 5000 * mb, Runs: 2}, all, "every shape, the unshaped run included")
+
+	same, _ = x.Peak(".", "test", narrow)
+	assert.Equal(t, MeasuredPeak{MaxBytes: 2100 * mb, Runs: 1}, same)
+
+	same, all = x.Peak(".", "magusfile/test", full)
+	assert.Equal(t, MeasuredPeak{MaxBytes: 4500 * mb, Runs: 2}, same, "an exact key answers alone")
+	assert.Equal(t, MeasuredPeak{MaxBytes: 5000 * mb, Runs: 4}, all)
+
+	same, all = x.Peak(".", "test", Shape{})
+	assert.Zero(t, same, "the zero Shape matches nothing, not the unshaped runs")
+	assert.Equal(t, 2, all.Runs)
+
+	same, all = x.Peak(".", "lint", full)
+	assert.Zero(t, same)
+	assert.Zero(t, all)
+
+	// A snapshot: recording into the History afterwards does not reach it.
+	st := h.Projects["."]["go/test"]
+	st.RecentOutcomes = append(st.RecentOutcomes, o(OutcomePass, 8000, full))
+	h.Projects["."]["go/test"] = st
+	_, all = x.Peak(".", "test", full)
+	assert.Equal(t, 5000*mb, all.MaxBytes)
 }

@@ -548,7 +548,7 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
-	assert.Contains(t, err.Error(), "runs test, which declares 62.5 GiB",
+	assert.Contains(t, err.Error(), "runs test, which claims 62.5 GiB (declared)",
 		"a composed target is held over a number a target in its chain wrote")
 	assert.Contains(t, err.Error(), "Waiting would not help")
 }
@@ -559,6 +559,13 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 // see, and a refusal that does not say so reads as arithmetic magus got wrong. It names no
 // fixed percentage: which reservation applied is not something this budget records, and a
 // number right for one profile is a lie for the other.
+func TestMachineDeclarationNamesAMeasuredFigure(t *testing.T) {
+	c := types.MachineClaim{Target: "test", MemoryMB: 5880, Slots: 1,
+		Sizing: types.MemorySizing{Samples: 53, AnyShape: true}}
+	assert.Equal(t, "it claims 5.7 GiB (measured over 53 runs of any shape) and takes 1 slot",
+		describeMachineDeclaration(c))
+}
+
 func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
 	b, _ := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
@@ -568,7 +575,7 @@ func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "3.9 GiB", "the budget it did not fit in")
-	assert.Contains(t, err.Error(), "declares 25.4 GiB", "and the declaration held against it")
+	assert.Contains(t, err.Error(), "claims 25.4 GiB (declared)", "and the declaration held against it")
 	assert.Contains(t, err.Error(), "not the whole machine",
 		"a budget smaller than the machine reads as a miscount unless the gap is explained")
 	assert.Contains(t, err.Error(), "MGS1030",

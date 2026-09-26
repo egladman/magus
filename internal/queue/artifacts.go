@@ -25,7 +25,8 @@ const (
 )
 
 // Bounds on what an [ArtifactFollower] downloads and unpacks. A verdict artifact holds
-// one small JSON document, so anything near these is not one.
+// one small JSON document and at most a bundle of one commit's regenerated files, so
+// anything near these is not one.
 const (
 	maxArtifactBytes = 32 << 20
 	maxUnpackedBytes = 64 << 20
