@@ -44,8 +44,9 @@ var goDirs = []string{"GOCACHE", "GOENV", "GOMODCACHE", "GOPATH"}
 
 // redirects maps each variable Environ points into root to its directory there.
 //
-// A unix socket path is capped near 104 bytes on macOS, and magus's longest one is
-// 32 bytes below XDG_RUNTIME_DIR, so a root must be short: Main and Isolate make it
+// A unix socket path is capped near 104 bytes on macOS, where magus cannot reach past
+// the cap as it does on linux, and magus's longest one is 32 bytes below
+// XDG_RUNTIME_DIR, so a root must be short: Main and Isolate make it
 // with os.MkdirTemp("", "tk") rather than t.TempDir, whose path carries the test's
 // name. TMPDIR is absent for the same reason: nesting it under root would push a
 // socket a test makes with os.MkdirTemp past the cap. XDG_RUNTIME_DIR covers the one

@@ -240,7 +240,6 @@ magus\project({
         // other change leaves the key unmoved and a hit reverts the committed file.
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
-        "test": {"timeout": "15m"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
         // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
@@ -284,7 +283,17 @@ magus\project({
         // that is the number an author can actually know; magus converts it to slots
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
-        "test": {"memory_mb": 10240},
+        //
+        // /proc is read because internal/sys/pipepeer's tests prove a pipe's peers from
+        // their own children's /proc entries, which landlock grants only as the whole
+        // tree. The per-process files that hold secrets (environ, fd, mem) stay closed
+        // to every process outside the test's own landlock domain: the kernel checks
+        // ptrace access on them, and landlock refuses that across domains.
+        "test": {
+            "timeout": "15m",
+            "memory_mb": 10240,
+            "sandbox": {"allow": [{"path": "/proc", "mode": "ro"}]},
+        },
         // It reads the console's coverage figure and writes into gen/site, neither of
         // which it can declare: the console depends on this project, and deploy-generate
         // rebuilds gen/site from empty.

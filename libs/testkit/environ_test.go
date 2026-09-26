@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -85,12 +86,17 @@ func TestEnvironPinsTheBrokerAndServerOff(t *testing.T) {
 	assert.NotContains(t, got, "MAGUS_PROC_SOCKET")
 }
 
-// TestIsolateLeavesRoomForASocket: magus's longest socket name adds 32 bytes below
-// XDG_RUNTIME_DIR, and macOS caps a unix socket path near 104.
+// TestIsolateLeavesRoomForASocket: magus's longest socket name, under the
+// XDG_RUNTIME_DIR Isolate sets, binds. On linux endpoint reaches a path of any length;
+// on darwin it must fit sun_path, so the root must be short there. Run inside the
+// merge queue's gate, this is the deepest layout a candidate's tests get.
 func TestIsolateLeavesRoomForASocket(t *testing.T) {
 	Isolate(t)
 	sock := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "magus", "magus-99999-0123abcd.sock")
-	assert.Less(t, len(sock), 104, sock)
+	require.NoError(t, os.MkdirAll(filepath.Dir(sock), 0o700))
+	ln, err := endpoint.Endpoint{Scheme: "unix", Addr: sock}.Listen()
+	require.NoError(t, err)
+	require.NoError(t, ln.Close())
 }
 
 func TestEnvironKeepAddsToTheAllowlist(t *testing.T) {

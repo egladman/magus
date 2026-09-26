@@ -459,7 +459,7 @@ func writeToken(sock, token string) error {
 func isSocketLive(ctx context.Context, addr string) bool {
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", addr)
+	conn, err := endpoint.Endpoint{Scheme: "unix", Addr: addr}.Dial(ctx)
 	if err != nil {
 		return false
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -302,6 +303,31 @@ func TestARequiredBaseSandboxIsTheHooksToo(t *testing.T) {
 	assert.Equal(t, "required\n", string(seen))
 }
 
+// A target's own grant bounds the hook as a spell's does, since the gate's magus stacks
+// that target's sandbox on the hook's: the root test target's read of /proc reaches the
+// box's policy read-only, and adds no other rule.
+func TestABoxedHooksPolicyCarriesATargetsGrantAndNothingMore(t *testing.T) {
+	home, tmp := newBox(t)
+	without := hookCommand{Dir: t.TempDir(), Home: home, TempDir: tmp, Env: boxEnv(home, tmp)}
+	with := without
+	with.Spells = map[string]spells.Sandbox{".:test": {Allow: []spells.SandboxAllow{{Path: "/proc", Mode: spells.SandboxAccessRO}}}}
+	before, err := without.policy()
+	require.NoError(t, err)
+	after, err := with.policy()
+	require.NoError(t, err)
+
+	ctx, status := t.Context(), "/proc/1/status"
+	assert.ErrorIs(t, before.CheckRead(ctx, status), filesystem.ErrDenied)
+	assert.NoError(t, after.CheckRead(ctx, status))
+	assert.ErrorIs(t, after.CheckWrite(ctx, status), filesystem.ErrDenied)
+	assert.ErrorIs(t, after.CheckExec(ctx, status), filesystem.ErrDenied)
+	added := slices.DeleteFunc(slices.Clone(after.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(before.FS.Rules, r) })
+	dropped := slices.DeleteFunc(slices.Clone(before.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(after.FS.Rules, r) })
+	assert.Equal(t, []filesystem.Rule{{Path: "/proc", Read: true}}, added)
+	assert.Empty(t, dropped)
+	assert.Empty(t, after.WritesOutside(with.Dir, home, tmp))
+}
+
 // goDecl stands in for the go spell's declaration: its toolchain read and run where the
 // runner installed it, its caches written.
 func goDecl(goroot string) map[string]spells.Sandbox {
@@ -473,6 +499,36 @@ func TestAHookIsConfinedToItsBoxWhereTheKernelCan(t *testing.T) {
 	assert.FileExists(t, filepath.Join(cand.Home, "home-file"))
 	assert.FileExists(t, filepath.Join(cand.TempDir, "tmp-file"))
 	assert.NoFileExists(t, filepath.Join(outside, "escaped"))
+}
+
+// A target's read of /proc reaches a boxed hook's tree through the kernel, and stops at
+// its landlock domain: the hook lists /proc and reads its own entries, and cannot read
+// the environment of the process that started it, which sits outside that domain.
+// Without the grant it cannot list /proc at all.
+func TestAHooksProcGrantStopsAtItsLandlockDomainWhereTheKernelCan(t *testing.T) {
+	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
+		t.Skip("no landlock on this host: best-effort confines the environment only")
+	}
+	body := `ls /proc >/dev/null && cat /proc/$$/status >/dev/null && touch listed
+if cat "/proc/$1/environ" >/dev/null; then touch leaked; fi`
+	proc := map[string]spells.Sandbox{".:test": {Allow: []spells.SandboxAllow{{Path: "/proc", Mode: spells.SandboxAccessRO}}}}
+	for name, c := range map[string]struct {
+		env    HookEnv
+		listed bool
+	}{"granted": {HookEnv{Spells: proc}, true}, "not granted": {HookEnv{}, false}} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			cand := boxed(t, types.Candidate{Commit: "s", Dir: dir})
+			_, err := CommandGate(Command{"sh", "-c", body, "hook", strconv.Itoa(os.Getpid())}, c.env, nil).Validate(context.Background(), cand, nil)
+			require.NoError(t, err)
+			if c.listed {
+				assert.FileExists(t, filepath.Join(dir, "listed"))
+			} else {
+				assert.NoFileExists(t, filepath.Join(dir, "listed"))
+			}
+			assert.NoFileExists(t, filepath.Join(dir, "leaked"))
+		})
+	}
 }
 
 // git needs nothing from the runner's home: a hook runs it in its checkout with its box's.

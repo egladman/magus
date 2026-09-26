@@ -48,3 +48,13 @@ func TestParse(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// A path that fits sun_path is bound and dialed by itself on every platform: nothing is
+// opened, and nothing is held.
+func TestUnixNameLeavesAShortPathAsItIs(t *testing.T) {
+	const path = "/run/user/1000/magus/magus-99999-0123abcd.sock"
+	name, done, err := unixName(path)
+	require.NoError(t, err)
+	done()
+	assert.Equal(t, path, name)
+}

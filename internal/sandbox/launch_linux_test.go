@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
@@ -36,6 +39,8 @@ func TestMain(m *testing.M) {
 	switch os.Getenv(helperEnv) {
 	case "read":
 		os.Exit(helperRead(os.Getenv(helperPathEnv)))
+	case "bind":
+		os.Exit(helperBind(os.Getenv(helperPathEnv)))
 	case "fd":
 		// Before anything else opens a descriptor that could land on 3.
 		if _, err := unix.FcntlInt(3, unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
@@ -59,6 +64,19 @@ func helperRead(path string) int {
 		}
 		return exitReadFailed
 	}
+	return 0
+}
+
+func helperBind(path string) int {
+	ln, err := endpoint.Endpoint{Scheme: "unix", Addr: path}.Listen()
+	if err != nil {
+		os.Stderr.WriteString(err.Error() + "\n")
+		if errors.Is(err, fs.ErrPermission) {
+			return exitDenied
+		}
+		return exitReadFailed
+	}
+	_ = ln.Close()
 	return 0
 }
 
@@ -146,6 +164,43 @@ func TestCommandGrantsTheChildItsOwnProcEntries(t *testing.T) {
 	assert.Equal(t, 0, code, "the child reads its own status: %s", out)
 	code, out = confinedHelper(t, p, "read", own.Path)
 	assert.Equal(t, exitDenied, code, "and not the status of the magus that built the policy: %s", out)
+}
+
+// A read grant on all of /proc leaves the environment of a process outside the child's
+// landlock domain closed: the kernel checks ptrace access on it, and landlock refuses
+// that across domains. magusfile.buzz grants its test target /proc on this.
+func TestCommandProcGrantKeepsAnOutsideProcessesEnvironClosed(t *testing.T) {
+	requireLandlock(t)
+
+	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), filesystem.Rule{Path: "/proc", Read: true})}}
+	code, out := confinedHelper(t, p, "read", "/proc/self/environ")
+	assert.Equal(t, 0, code, "the child reads its own environment: %s", out)
+	code, out = confinedHelper(t, p, "read", "/proc/"+strconv.Itoa(os.Getpid())+"/environ")
+	assert.Equal(t, exitDenied, code, "and not the unconfined test process's: %s", out)
+}
+
+// A socket path past sun_path is bound through /proc/self/fd/<fd>, and landlock judges
+// that bind on the directory the link resolves to: a granted one allows it and an
+// ungranted one refuses it, with no /proc grant either way.
+func TestCommandJudgesALongSocketBindOnItsRealDirectory(t *testing.T) {
+	requireLandlock(t)
+
+	long := func() string {
+		dir := filesystem.ResolveRulePath(t.TempDir())
+		for len(dir) < 200 {
+			dir = filepath.Join(dir, strings.Repeat("d", 50))
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		return filepath.Join(dir, "magus-99999-0123abcd.sock")
+	}
+	granted, ungranted := long(), long()
+	grant := filesystem.Rule{Path: filepath.Dir(granted), Read: true, Write: true}
+	p := &Policy{FS: filesystem.Ruleset{Rules: append(testRules(t), grant)}}
+
+	code, out := confinedHelper(t, p, "bind", granted)
+	assert.Equal(t, 0, code, "a bind in a granted directory: %s", out)
+	code, out = confinedHelper(t, p, "bind", ungranted)
+	assert.Equal(t, exitDenied, code, "a bind in an ungranted one: %s", out)
 }
 
 // A caller's own ExtraFiles, a jobserver pipe say, reach the command after the

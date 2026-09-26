@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -526,13 +527,26 @@ func TestExecCancelledReportsCancellation(t *testing.T) {
 // only "exit -1", so the console said nothing about why the run ended.
 func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	// Kill the child from outside with SIGKILL, leaving the context alone, so this is
-	// the OOM shape rather than the cancellation one covered above.
+	// the OOM shape rather than the cancellation one covered above. The child is found by
+	// the pid it writes, since finding it by name reads other processes' /proc entries,
+	// which a sandboxed test may not.
+	pidFile := filepath.Join(t.TempDir(), "pid")
 	go func() {
-		time.Sleep(200 * time.Millisecond)
-		_ = exec.Command("pkill", "-KILL", "-f", "sleep 31").Run()
+		for t.Context().Err() == nil {
+			if b, err := os.ReadFile(pidFile); err == nil {
+				if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+					if p, err := os.FindProcess(pid); err == nil {
+						_ = p.Kill()
+					}
+					return
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}()
 
-	_, err := OsExec(context.Background(), "sleep", []string{"31"}, ".", nil)
+	// The rename publishes the pid whole, and the exec keeps it for sleep.
+	_, err := OsExec(context.Background(), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signal: killed", "the signal is the whole diagnosis")
 	assert.Contains(t, err.Error(), "OOM killer", "say what usually does this on CI")

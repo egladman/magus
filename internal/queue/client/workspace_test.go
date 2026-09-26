@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/spells"
 )
 
 func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
@@ -167,14 +168,15 @@ func TestWorkspaceAutoResolvableIsTheChangeClassifier(t *testing.T) {
 }
 
 // The hooks get the grants of the spells the base's projects resolved, not of every
-// spell this magus has registered.
-func TestWorkspaceSpellSandboxesAreTheResolvedSpells(t *testing.T) {
+// spell this magus has registered, and each target's own.
+func TestWorkspaceSandboxesAreTheResolvedSpellsAndTheTargets(t *testing.T) {
 	root := t.TempDir()
 	for rel, body := range map[string]string{
-		"magusfile.buzz":     "",
-		"api/magusfile.buzz": "import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n",
-		"api/go.mod":         "module example.com/api\n\ngo 1.25\n",
-		"api/main.go":        "package main\n",
+		"magusfile.buzz": "",
+		"api/magusfile.buzz": "import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go], \"targets\": {\n" +
+			"    \"go-test\": {\"sandbox\": {\"allow\": [{\"path\": \"/proc\", \"mode\": \"ro\"}]}},\n}});\n",
+		"api/go.mod":  "module example.com/api\n\ngo 1.25\n",
+		"api/main.go": "package main\n",
 	} {
 		abs := filepath.Join(root, filepath.FromSlash(rel))
 		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
@@ -184,7 +186,9 @@ func TestWorkspaceSpellSandboxesAreTheResolvedSpells(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
 
-	assert.Equal(t, []string{"go"}, slices.Sorted(maps.Keys(w.SpellSandboxes())))
+	got := w.Sandboxes()
+	assert.Equal(t, []string{"api:go-test", "go"}, slices.Sorted(maps.Keys(got)))
+	assert.Equal(t, spells.Sandbox{Allow: []spells.SandboxAllow{{Path: "/proc", Mode: spells.SandboxAccessRO}}}, got["api:go-test"])
 }
 
 func TestOpenWorkspaceNeedsATarget(t *testing.T) {
