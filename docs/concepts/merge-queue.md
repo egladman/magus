@@ -809,50 +809,52 @@ changes a setting itself. It reads over the network with your token, so pass one
 GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main --app <slug>
 ```
 
-Without `--app` it stops with an error carrying the app's registration link, since a
-setup without the app is not one the queue can run on. `-o json` prints the same as the
-`setup` of a `mergequeue.capabilities/v1` document: the status the queue posts and who
-its credential posts it as (empty until the App ID below is known), every check the base
-requires and the integration each is pinned to, the repository settings the queue needs,
-the app, and the steps.
+Without `--app` it stops with an error carrying the app's registration link and the
+command to run next, since a setup without the app is not one the queue can run on.
+`-o json` prints the same as the `setup` of a `mergequeue.capabilities/v1` document: the
+status the queue posts and who its credential posts it as, every check the base requires
+and the integration each is pinned to, the repository settings the queue needs, the app,
+and the steps.
 
 The app has two identifiers, both under About on its settings page
 (`https://github.com/settings/apps/<slug>`, or
 `https://github.com/organizations/<org>/settings/apps/<slug>` for an organization's app).
 Neither is secret, and they do not swap: the client id (it starts with `Iv`) is what
 `setup-magus` mints the token with, and the App ID (a number) is the only value a
-ruleset's `integration_id` accepts. `describe` cannot read either for you: GitHub answers
-`GET /apps/<slug>` for a private app with 404 to a token that is not the app's own
-installation's, the owner's `gh auth token` included. So the printed steps ask you for
-the client id, and `describe` takes the App ID as `--app-id`.
+ruleset's `integration_id` accepts. GitHub answers `GET /apps/<slug>` for a private app
+with 404 to every token but the app's own installation's, the owner's `gh auth token`
+included, so `describe` reads the App ID another way where GitHub offers one: on an
+organization's repository, once the app is installed there, it finds the app among the
+[organization's installations](https://docs.github.com/en/rest/orgs/orgs#list-app-installations-for-an-organization),
+which only an owner's token may list. Where it cannot (a user's repository, or a token
+that is not an owner's), it stops, naming the settings page, and prints the same command
+with `--app <slug>:<id>`: give it the App ID after the slug. An id that is not a positive
+integer without a leading zero, or that disagrees with the app GitHub shows, is an error,
+and so is a slug GitHub has no `<slug>[bot]` user for, which names no app at all.
 
 1. Commit `.github/workflows/queue.yaml` and `.github/workflows/queue-apply.yaml` (this
    repository's are the reference).
 2. Run `describe` without `--app`, open the registration link it prints, and click
    "Create GitHub App". It is pre-filled: private, no webhook, and contents, pull
    requests, commit statuses, actions and workflows write.
-3. Run `describe` again with `--app <slug>`, and run the commands it prints in order:
-   allow auto-merge, install the app on this repository alone (the install link, or
-   `<repo>/settings/installations` once it shows there), and create the `magus-queue`
-   environment with its secrets released to the default branch only. The last command
-   generates a private key on the app's settings page (a `.pem` downloads), stores it as
-   the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, asks for the client id and
-   stores it as `MAGUS_QUEUE_APP_CLIENT_ID`, then deletes the download and lists what it
-   stored. On a phone, paste the key into Settings > Environments > magus-queue > Add
-   secret, and the client id into Settings > Secrets and variables > Actions > Variables.
-4. Run the command `describe` printed last: it asks for the App ID and runs `describe`
-   again with `--app-id`. Its own last step is the ruleset change pinning `merge-queue`
-   to that App ID, with "Require branches to be up to date before merging" off: a
-   ruleset of its own when nothing requires it yet, a `gh api` rewrite of that ruleset,
-   or a link for any other. Your other rulesets stay as they are; run it as printed,
-   since `gh api` shows GitHub's own error when it refuses. The app must be installed
-   (step 3) before this pin holds: until it is, GitHub answers with 422 "Invalid
-   parameter required_status_checks: Invalid integration ids". An `--app-id` that is not
-   a number,
-   or that disagrees with an app `describe` can read, is an error. Once the pin holds,
-   `describe` prints no pin step. The pin is what makes the status unforgeable: anyone
-   with write access can post a status from GitHub Actions, and only the app posts as
-   the app.
+3. Run `describe` again with `--app <slug>` (or `--app <slug>:<id>` when it asks), and
+   run the commands it prints in order: allow auto-merge, install the app on this
+   repository alone, create the `magus-queue` environment with its secrets released to
+   the default branch only, set the `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's
+   client id (when GitHub hides it, `gh` asks for it), generate a private key on the
+   app's page, and store it as the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret.
+   That last command deletes every key of the app it finds in `~/Downloads` even when
+   storing fails, and with none there it stores nothing, so running it again is safe.
+   On a phone, the first is Settings > General > Pull Requests > "Allow auto-merge", the
+   client id goes into Settings > Secrets and variables > Actions > Variables, and the
+   key into Settings > Environments > magus-queue > Add secret.
+4. Apply the ruleset change it prints last, which requires `merge-queue` from the app's
+   id with "Require branches to be up to date before merging" off: a ruleset of its own
+   when nothing requires it yet, a `gh api` rewrite of that ruleset, or a link for any
+   other. Your other rulesets stay as they are. GitHub refuses the pin with 422 "Invalid
+   integration ids" until the app is installed, which step 3 did first. The pin is what
+   makes the status unforgeable: anyone with write access can post a status from GitHub
+   Actions, and only the app posts as the app.
 
 Require `merge-queue` only once the queue is on the default branch. Before that, nothing
 posts it, and every merge waits on it.
@@ -877,7 +879,7 @@ functions, each taking one record:
 
 | Function          | Receives                                                                                           | Returns                                                                                       |
 | ----------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `describe`        | `{base, remote_url, status_context, app, app_id, setup_steps}`                                     | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
+| `describe`        | `{base, remote_url, status_context, app, setup_steps}`                                             | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
 | `list_changes`    | `{base, remote_url}`                                                                               | `{changes, merged, unqueued, closed?}`                                                        |
 | `approval_at`     | the change plus `{commit}`                                                                         | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}`              |
 | `list_green`      | `{base, remote_url, context}`                                                                      | `{changes: [{id, repo, head}]}`                                                               |
@@ -905,10 +907,17 @@ pushes as, which commits every update commit unless `--committer` overrides it.
 `setup` is asked for with a `status_context`: `{status_context, credential: {id, name?},
 required_checks: [{context, integration?, events?}], settings: [{name, value, want}],
 app?, steps: [{title, command? or url?}]}`. `credential` is the integration the write
-credential posts statuses as (the `app` named; GitHub's provider requires one),
+credential posts statuses as (the `app` named; GitHub's provider requires one), whose
+`id` is never empty and equals `app.id` when the setup carries an `app`;
 `required_checks` what the base requires and the integration each is pinned to, and
 `steps` only when `setup_steps` is true, since they cost reads a job's token may not be
-allowed. A provider that returns no `setup` skips apply's credential check.
+allowed. A provider that returns no `setup` skips apply's credential check. The `app`
+that `describe` and `merge_change` receive is `{slug, id}`, the `--app` a person gave: `id` is
+empty unless they gave one after the slug, and both are empty when no app is named. A
+`describe` that cannot name the credential's integration returns `{missing_app: {reason,
+url, slug?}}` instead of the capabilities: what is missing, where the provider shows it,
+and the app's slug when only its id is missing. `magus queue describe` prints it with the
+command that runs it again, and `apply` stops on it.
 `list_artifacts`' `run` is `{repo, head_repo, head_branch, event, branch_event,
 definition}`: the repository the run belongs to and the one whose commit it ran, the
 branch it ran on, what started it, whether that event runs the branch's own copy of the
@@ -921,7 +930,7 @@ the queue carries over only across a rebase that changed nothing. `list_green` n
 every open change, whatever it targets, whose head carries the status `context` at
 success. `through` lists the changes beneath a stack's top that merge in the same call,
 lowest first, each with the commit it must still be at. `app` is apply's `--app`, the
-app the merge is made as. `merge_change` sets
+app the merge is made as, in the same `{slug, id}` shape. `merge_change` sets
 `by_provider` when the provider merged the change on its own rather than on this call;
 left out, it reads as the call's merge. `kick_back`'s `report` is Markdown in the
 queue's own words, every file name in it a code span. `claim` is what the verdict said

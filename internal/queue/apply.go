@@ -48,10 +48,10 @@ type Applier struct {
 	// StatusContext names the commit status an Applier posts; empty means
 	// [DefaultStatusContext].
 	StatusContext string
-	// App names the app the provider's write credential belongs to (github: a GitHub
-	// App's slug, which it requires); empty names none. Run refuses to start when the
-	// base requires StatusContext from an integration other than the credential's.
-	App string
+	// App is the app the provider's write credential belongs to (github: a GitHub App,
+	// which it requires); the zero App names none. Run refuses to start when the base
+	// requires StatusContext from an integration other than the credential's.
+	App types.App
 	// Interval is how long to wait between polls while verdicts are outstanding.
 	Interval time.Duration
 	// DryRun reports what would merge and calls nothing on the provider.
@@ -214,13 +214,10 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 // checkCredential refuses a base that requires the queue's status from an integration
 // other than the one the credential posts as: the provider would count none of the
 // statuses the queue posts, so nothing would merge. A provider that reports no setup
-// proves nothing either way; one that could not read its own app's id cannot be checked.
+// proves nothing either way.
 func checkCredential(s *types.Setup, base string) error {
 	if s == nil {
 		return nil
-	}
-	if s.Credential.ID == "" {
-		return errors.New("the provider could not read which integration the queue's credential posts its status as")
 	}
 	for _, rc := range s.RequiredChecks {
 		if rc.Context != s.StatusContext || rc.Integration == "" || rc.Integration == s.Credential.ID {

@@ -122,16 +122,14 @@ type ListQuery struct {
 	RemoteURL string // the remote's URL, for the provider to name its repository
 
 	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
-	// the base requires and who the write credential posts as. App names the app whose
-	// credential the queue writes with (github: a GitHub App's slug, which it requires
-	// with a StatusContext); empty names none. AppID is that app's integration id as the
-	// person read it, for a provider that cannot read the app itself (github: a private
-	// app is hidden from every token but its installation's). SetupSteps also asks for
-	// the steps that finish wiring the queue, which cost the provider more reads, some
+	// the base requires and who the write credential posts as. App is the app whose
+	// credential the queue writes with (github: a GitHub App, which it requires with a
+	// StatusContext); the zero App names none. Only its Slug and ID are read, and the ID
+	// only when the provider cannot read the app's own. SetupSteps also asks for the
+	// steps that finish wiring the queue, which cost the provider more reads, some
 	// needing permissions an apply job does not hold.
 	StatusContext string
-	App           string
-	AppID         string
+	App           App
 	SetupSteps    bool
 }
 
@@ -173,8 +171,7 @@ type Capabilities struct {
 type Setup struct {
 	// StatusContext is the commit status the queue posts, as asked.
 	StatusContext string `json:"status_context"`
-	// Credential is who the write credential posts statuses as. Its ID is empty only
-	// when App names an app whose id the provider could not read and nobody gave.
+	// Credential is who the write credential posts statuses as.
 	Credential Integration `json:"credential"`
 	// RequiredChecks are the checks the base requires before a change merges, the queue's
 	// own status among them once it is wired.
@@ -222,9 +219,7 @@ type Setting struct {
 
 // App is the app a write credential belongs to and where a person manages it.
 type App struct {
-	Slug string `json:"slug"`
-	// ID is empty when the provider could not read the app and [ListQuery.AppID] was
-	// empty; the steps then ask for it rather than pin to it.
+	Slug            string `json:"slug"`
 	ID              string `json:"id"`
 	ClientID        string `json:"client_id,omitempty"`
 	RegistrationURL string `json:"registration_url,omitempty"`
@@ -235,6 +230,21 @@ type App struct {
 	Variable    string `json:"variable,omitempty"`
 	Secret      string `json:"secret,omitempty"`
 }
+
+// MissingAppError is Describe declining to describe a setup until it knows the queue's
+// app: none was named, the one named does not exist, or the provider cannot read its id.
+// A rerun names the app, with its id when Slug is set.
+type MissingAppError struct {
+	// Reason is what is missing, in the provider's words.
+	Reason string
+	// URL is where the provider shows it: where an app is registered or listed, or the
+	// named app's own page.
+	URL string
+	// Slug is the app named, when only its id is missing; empty when the app is.
+	Slug string
+}
+
+func (e *MissingAppError) Error() string { return e.Reason + ": " + e.URL }
 
 // SetupStep is one thing a person does: run Command, or open URL.
 type SetupStep struct {
@@ -268,14 +278,16 @@ func (c Capabilities) Check() error {
 	return nil
 }
 
-// Check reports whether s names the status it describes, who the credential posts as,
-// and steps a person can follow.
+// Check reports whether s names the status it describes, who the credential posts as
+// (the integration of its App, when it names one), and steps a person can follow.
 func (s Setup) Check() error {
 	switch {
 	case s.StatusContext == "":
 		return errors.New("provider describes a setup for no status context")
-	case s.Credential.ID == "" && (s.App == nil || s.App.ID != ""):
+	case s.Credential.ID == "":
 		return errors.New("provider describes a setup without the integration its credential posts as")
+	case s.App != nil && s.App.ID != s.Credential.ID:
+		return fmt.Errorf("provider describes app %q as integration %q, and its credential as %q", s.App.Slug, s.App.ID, s.Credential.ID)
 	}
 	for _, rc := range s.RequiredChecks {
 		if rc.Context == "" {
@@ -299,7 +311,7 @@ type MergeOptions struct {
 	Message string // squash body when the author set none
 	// App is the applier's [ListQuery.App], the app the merge is made as; github refuses
 	// to merge without one.
-	App string
+	App App
 	// Through, when set, is the run of stacked changes beneath this one that merge in
 	// the same call ([StackMergeAtomic]), lowest first, each pinned to the head it must
 	// still be at.

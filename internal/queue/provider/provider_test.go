@@ -2,6 +2,11 @@ package provider
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -91,7 +96,9 @@ export fun retarget(io: {str: any}) > bool {
 export fun merge_change(io: {str: any}) > any {
     final through = serialize\Boxed.init(io["through"]).listValue();
     final pinned = through.len() == 1 and through[0].q("id").stringValue() == "5" and through[0].q("commit").stringValue() == "` + headE + `";
-    return {"merged": io["message"] == "* body" and io["app"] == "q" and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
+    final app = serialize\Boxed.init(io["app"]);
+    final named = app.q("slug").stringValue() == "q" and app.q("id").stringValue() == "812";
+    return {"merged": io["message"] == "* body" and named and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
 }
 
 export fun kick_back(io: {str: any}) > bool {
@@ -139,13 +146,16 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 
 // setupScript answers describe with a setup built from what it was asked.
 const setupScript = `
+import "serialize";
+
 export fun describe(io: {str: any}) > any {
+    final slug = serialize\Boxed.init(io["app"]).q("slug").stringValue();
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
         "status_context": io["status_context"],
-        "credential": {"id": io["app_id"], "name": io["app"]},
+        "credential": {"id": "812", "name": slug},
         "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
         "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
-        "app": {"slug": io["app"], "id": io["app_id"], "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
+        "app": {"slug": slug, "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
             "environment": "magus-queue", "variable": "V", "secret": "S"},
         "steps": [{"title": "Install it", "url": "https://github.com/apps/q/installations/new"}, {"title": "Store it", "command": "gh secret set S"}],
     }};
@@ -161,7 +171,7 @@ export fun mark(io: {str: any}) > bool { return true; }
 `
 
 func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
-	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", AppID: "812", SetupSteps: true})
+	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q"}, SetupSteps: true})
 	require.NoError(t, err)
 	assert.Equal(t, &types.Setup{
 		StatusContext: "gate",
@@ -180,25 +190,76 @@ func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
 	}, got.Setup)
 }
 
-// An app the provider could not read, with no App ID given, is a setup whose steps ask
-// for the id: the credential has none yet.
-func TestDescribeAcceptsAnAppWhoseIDIsNotKnown(t *testing.T) {
-	got, err := open(t, setupScript).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", SetupSteps: true})
-	require.NoError(t, err)
-	assert.Equal(t, types.Integration{Name: "q"}, got.Setup.Credential)
-	assert.Equal(t, "", got.Setup.App.ID)
-}
-
 // A setup a person could not follow is the provider's error, named where it broke.
 func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
-		{`"credential": {"id": io["app_id"], "name": io["app"]},`, ``, `setup: field "credential" is missing`},
-		{`{"id": io["app_id"], "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
+		{`"credential": {"id": "812", "name": slug},`, ``, `setup: field "credential" is missing`},
+		{`{"id": "812", "name": slug}`, `{"id": "", "name": slug}`, `without the integration its credential posts as`},
+		{`"app": {"slug": slug, "id": "812",`, `"app": {"slug": slug, "id": "",`, `app "q" as integration "", and its credential as "812"`},
 		{`"command": "gh secret set S"`, `"command": "gh secret set S", "url": "https://x"`, `exactly one of a command or a URL`},
 		{`"status_context": io["status_context"],`, `"status_context": "",`, `setup for no status context`},
 	} {
-		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: "q", AppID: "812"})
+		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q"}})
 		require.ErrorContains(t, err, tc.want, tc.to)
+	}
+}
+
+// missingAppScript declines to describe a setup for an app named without an id, and
+// describes one for an app named with one.
+const missingAppScript = `
+import "serialize";
+
+export fun describe(io: {str: any}) > any {
+    final app = serialize\Boxed.init(io["app"]);
+    final slug = app.q("slug").stringValue();
+    final id = app.q("id").stringValue();
+    if (io["base"] == "no reason") {
+        return {"missing_app": {"url": "https://example.invalid/apps/{slug}", "slug": slug}};
+    }
+    if (io["base"] == "no url") {
+        return {"missing_app": {"reason": "no id for {slug}", "url": "", "slug": slug}};
+    }
+    if (id == "") {
+        return {"missing_app": {"reason": "no id for {slug}", "url": "https://example.invalid/apps/{slug}", "slug": slug}};
+    }
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
+        "status_context": io["status_context"], "credential": {"id": id}, "app": {"slug": slug, "id": id}, "steps": [<any>],
+    }};
+}
+export fun list_changes(io: {str: any}) > any { return {}; }
+export fun approval_at(io: {str: any}) > any { return {}; }
+export fun list_green(io: {str: any}) > any { return {}; }
+export fun post_status(io: {str: any}) > bool { return true; }
+export fun retarget(io: {str: any}) > bool { return true; }
+export fun merge_change(io: {str: any}) > any { return {}; }
+export fun kick_back(io: {str: any}) > bool { return true; }
+export fun mark(io: {str: any}) > bool { return true; }
+`
+
+// The id a person gives travels in the app record, and a provider that needs it and was
+// given none says so as a *types.MissingAppError.
+func TestDescribePassesTheAppAsOneRecordAndDecodesAMissingApp(t *testing.T) {
+	p := open(t, missingAppScript)
+	_, err := p.Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q"}})
+	var missing *types.MissingAppError
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, &types.MissingAppError{Reason: "no id for q", URL: "https://example.invalid/apps/q", Slug: "q"}, missing)
+
+	got, err := p.Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate", App: types.App{Slug: "q", ID: "2034567"}})
+	require.NoError(t, err)
+	assert.Equal(t, &types.Setup{StatusContext: "gate", Credential: types.Integration{ID: "2034567"}, App: &types.App{Slug: "q", ID: "2034567"}}, got.Setup)
+}
+
+// A missing_app without a reason or a URL cannot tell a person what to do.
+func TestDescribeRefusesAMissingAppThatSaysNothing(t *testing.T) {
+	p := open(t, missingAppScript)
+	for base, want := range map[string]string{
+		"no reason": `field "reason" is missing`,
+		"no url":    `field "missing_app" needs a reason and a URL`,
+	} {
+		_, err := p.Describe(context.Background(), types.ListQuery{Base: base, App: types.App{Slug: "q"}})
+		require.ErrorContains(t, err, want, base)
+		assert.NotErrorAs(t, err, new(*types.MissingAppError), base)
 	}
 }
 
@@ -308,17 +369,18 @@ func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	require.ErrorContains(t, p.PostStatus(ctx, change, headA, types.CommitStatus{Context: "other", State: types.StateSuccess}), "provider refused")
 	require.NoError(t, p.Retarget(ctx, change, "main"))
 	require.ErrorContains(t, p.Retarget(ctx, change, "dev"), "provider refused")
-	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: "q",
+	app := types.App{Slug: "q", ID: "812"}
+	merged, err := p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: app,
 		Through: []types.PinnedChange{{ID: "5", Commit: headE}}})
 	require.NoError(t, err)
 	assert.Equal(t, types.MergeResult{}, merged, "the queue's own call merged the stack")
-	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: "q"})
+	merged, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: app})
 	require.NoError(t, err)
 	assert.Equal(t, types.MergeResult{ByProvider: true}, merged)
-	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other", App: "q"})
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other", App: app})
 	require.ErrorContains(t, err, "not merged: head moved")
-	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body"})
-	require.ErrorContains(t, err, "not merged", "the app reaches the script")
+	_, err = p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body", App: types.App{Slug: "q"}})
+	require.ErrorContains(t, err, "not merged", "the app's slug and id reach the script")
 	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Claim: "exit 1", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c",
 		Source: "o/r/runs/7", Reproduce: &types.Reproduction{Gate: "make test"}}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))
@@ -383,4 +445,203 @@ func TestAnUnknownProviderNamesBothPlacesItLooked(t *testing.T) {
 func TestTheBridgeRefusesAValueItDoesNotPass(t *testing.T) {
 	_, err := toValue(map[string]any{"n": 3})
 	require.EqualError(t, err, `field "n" is int, which the bridge does not pass`)
+}
+
+// fakeGitHub answers the GitHub provider's reads from answers, keyed by method, path and
+// query, and fails the test on any read it has no answer for. It returns the remote URL
+// of acme/widgets on it.
+func fakeGitHub(t *testing.T, answers map[string]answer) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.Method + " " + r.URL.Path
+		if r.URL.RawQuery != "" {
+			key += "?" + r.URL.RawQuery
+		}
+		a, ok := answers[key]
+		if !ok {
+			t.Errorf("unexpected read %s", key)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(a.status)
+		_, _ = io.WriteString(w, a.body)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("GITHUB_API_URL", srv.URL)
+	t.Setenv("GITHUB_TOKEN", "t")
+	t.Setenv("MERGEQUEUE_TOKEN", "")
+	return "https://" + strings.TrimPrefix(srv.URL, "http://") + "/acme/widgets"
+}
+
+// fakeWeb is the web host the GitHub provider derives from fakeGitHub's API root.
+func fakeWeb() string {
+	return "https://" + strings.TrimPrefix(os.Getenv("GITHUB_API_URL"), "http://")
+}
+
+type answer struct {
+	status int
+	body   string
+}
+
+var notFound = answer{http.StatusNotFound, `{"message": "Not Found"}`}
+
+// repoAnswers are the reads every describe with a status context makes of acme/widgets,
+// owned by a user or an organization, whose main branch nothing protects.
+func repoAnswers(ownerType string) map[string]answer {
+	return map[string]answer{
+		"GET /repos/acme/widgets": {200, `{"allow_auto_merge": true, "allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false,
+			"owner": {"type": "` + ownerType + `"}}`},
+		"GET /repos/acme/widgets/rules/branches/main": {200, `[]`},
+		"GET /repos/acme/widgets/branches/main":       {200, `{"protection": {}}`},
+		"GET /users/q[bot]":                           {200, `{"login": "q[bot]", "id": 333550495}`},
+		"GET /apps/q":                                 notFound,
+	}
+}
+
+func githubDescribe(t *testing.T, answers map[string]answer, app types.App, steps bool) (types.Capabilities, error) {
+	t.Helper()
+	remote := fakeGitHub(t, answers)
+	p, err := Open(context.Background(), "github")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+	return p.Describe(context.Background(), types.ListQuery{Base: "main", RemoteURL: remote, StatusContext: "merge-queue", App: app, SetupSteps: steps})
+}
+
+// A private app on an organization's repository is hidden from GET /apps/<slug>, and an
+// owner's token finds its App ID among the organization's installations: nobody types it.
+func TestDescribeGitHubReadsAPrivateAppsIDFromTheOrganizationsInstallations(t *testing.T) {
+	answers := repoAnswers("Organization")
+	answers["GET /orgs/acme/installations?per_page=100&page=1"] = answer{200, `{"total_count": 2, "installations": [
+		{"app_id": 15368, "app_slug": "github-actions"}, {"app_id": 2034567, "app_slug": "q"}]}`}
+	got, err := githubDescribe(t, answers, types.App{Slug: "q"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, types.Capabilities{
+		StackMerge: types.StackMergeAtomic, LinearStacks: true, Methods: []types.MergeMethod{types.MethodSquash}, QueueLabel: "merge-queue: ",
+		Committer: magustypes.Person{Name: "q[bot]", Email: "333550495+q[bot]@users.noreply.github.com"},
+		Setup: &types.Setup{
+			StatusContext: "merge-queue",
+			Credential:    types.Integration{ID: "2034567"},
+			Settings:      []types.Setting{{Name: "allow_auto_merge", Value: "true", Want: "true"}},
+		},
+	}, got)
+}
+
+// Where GitHub shows the App ID to no token describe holds, describe names where it is
+// and which app, and describes nothing.
+func TestDescribeGitHubRefusesAPrivateAppWhoseIDItCannotRead(t *testing.T) {
+	user := repoAnswers("User")
+	org := repoAnswers("Organization")
+	org["GET /orgs/acme/installations?per_page=100&page=1"] = notFound
+	for name, tc := range map[string]struct {
+		answers map[string]answer
+		want    func(web string) *types.MissingAppError
+	}{
+		"a user's repository": {user, func(web string) *types.MissingAppError {
+			return &types.MissingAppError{
+				Reason: "github: GitHub shows the App ID of the private app q to no token but its own installation's; it is under About on the app's settings page",
+				URL:    web + "/settings/apps/q", Slug: "q",
+			}
+		}},
+		"an organization's, to a token that is not an owner's": {org, func(web string) *types.MissingAppError {
+			return &types.MissingAppError{
+				Reason: "github: GitHub shows the App ID of the private app q only to its own installation's token and, once it is installed on acme, to an owner of acme; it is under About on the app's settings page",
+				URL:    web + "/organizations/acme/settings/apps/q", Slug: "q",
+			}
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := githubDescribe(t, tc.answers, types.App{Slug: "q"}, true)
+			var missing *types.MissingAppError
+			require.ErrorAs(t, err, &missing)
+			assert.Equal(t, tc.want(fakeWeb()), missing)
+		})
+	}
+}
+
+// A slug GitHub has no bot user for names no app at all, so describe asks for the slug
+// again rather than for an id; with no app named it links the registration.
+func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
+	answers := repoAnswers("User")
+	answers["GET /users/q[bot]"] = notFound
+	_, err := githubDescribe(t, answers, types.App{Slug: "q"}, true)
+	var missing *types.MissingAppError
+	require.ErrorAs(t, err, &missing)
+	web := fakeWeb()
+	assert.Equal(t, &types.MissingAppError{
+		Reason: "github: no GitHub App is named q, since GitHub has no user q[bot]; an app's slug ends the address of its settings page, and the apps are listed",
+		URL:    web + "/settings/apps",
+	}, missing)
+
+	_, err = githubDescribe(t, repoAnswers("User"), types.App{}, true)
+	require.ErrorAs(t, err, &missing)
+	web = fakeWeb()
+	assert.Equal(t, &types.MissingAppError{
+		Reason: "github: the merge queue writes only as its own GitHub App, and none is named; register one",
+		URL: web + "/settings/apps/new?name=acme-magus-queue&url=" + strings.ToLower(url.QueryEscape(web+"/acme/widgets")) +
+			"&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write",
+	}, missing)
+}
+
+// The id a person gives is the pin's integration when GitHub hides the app, and GitHub's
+// own answer when it does not; one that is not an App ID, or disagrees, is an error.
+func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
+	answers := repoAnswers("User")
+	answers["GET /repos/acme/widgets/pulls?state=all&base=main&sort=updated&direction=desc&per_page=20"] = answer{200, `[]`}
+	got, err := githubDescribe(t, answers, types.App{Slug: "q", ID: "2034567"}, true)
+	require.NoError(t, err)
+	web := fakeWeb()
+	assert.Equal(t, &types.Setup{
+		StatusContext: "merge-queue",
+		Credential:    types.Integration{ID: "2034567"},
+		Settings:      []types.Setting{{Name: "allow_auto_merge", Value: "true", Want: "true"}},
+		App: &types.App{Slug: "q", ID: "2034567",
+			RegistrationURL: web + "/settings/apps/new?name=acme-magus-queue&url=" + strings.ToLower(url.QueryEscape(web+"/acme/widgets")) +
+				"&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write",
+			InstallURL:  web + "/apps/q/installations/new",
+			Environment: "magus-queue", Variable: "MAGUS_QUEUE_APP_CLIENT_ID", Secret: "MAGUS_QUEUE_APP_PRIVATE_KEY"},
+		Steps: []types.SetupStep{
+			{Title: "Install q on acme/widgets only", URL: web + "/apps/q/installations/new"},
+			{Title: "Create the magus-queue environment, whose secrets only main can read, so pull request runs never see the key",
+				Command: "gh api -X PUT repos/acme/widgets/environments/magus-queue -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'\n" +
+					"gh api -X POST repos/acme/widgets/environments/magus-queue/deployment-branch-policies -f name=main -f type=branch"},
+			{Title: "Store the app's client id, under About on " + web + "/settings/apps/q; gh asks for it",
+				Command: "gh variable set MAGUS_QUEUE_APP_CLIENT_ID --repo acme/widgets"},
+			{Title: "Generate a private key on " + web + "/settings/apps/q (a .pem downloads), store it in the environment alone, and delete the download",
+				Command: "(\n" +
+					"  pem=$(find ~/Downloads -maxdepth 1 -name 'q.*.private-key.pem' -exec ls -t {} + | head -n 1)\n" +
+					"  if [ -n \"$pem\" ]; then\n" +
+					"    gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo acme/widgets --env magus-queue < \"$pem\"\n" +
+					"    find ~/Downloads -maxdepth 1 -name 'q.*.private-key.pem' -delete\n" +
+					"  else\n" +
+					"    echo 'no q key in ~/Downloads: generate one on " + web + "/settings/apps/q unless MAGUS_QUEUE_APP_PRIVATE_KEY is listed below' >&2\n" +
+					"  fi\n" +
+					"  gh secret ls --repo acme/widgets --env magus-queue\n" +
+					")"},
+			{Title: "Require merge-queue from 2034567 on main, in a ruleset of its own (your other rulesets stay as they are)",
+				Command: "gh api -X POST repos/acme/widgets/rulesets --input - <<'EOF'\n" +
+					`{"name":"magus merge queue","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/main"],"exclude":[]}},` +
+					`"rules":[{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,` +
+					`"required_status_checks":[{"context":"merge-queue","integration_id":2034567}]}}]}` + "\nEOF"},
+		},
+	}, got.Setup)
+
+	readable := repoAnswers("User")
+	readable["GET /apps/q"] = answer{200, `{"slug": "q", "id": 812, "client_id": "Iv23li", "name": "Q queue"}`}
+	for app, want := range map[types.App]string{
+		{Slug: "q", ID: "0812"}: "github: describe: the app's id '0812' is not an App ID, a positive integer with no leading zero",
+		{Slug: "q", ID: "Iv23"}: "github: describe: the app's id 'Iv23' is not an App ID, a positive integer with no leading zero",
+		{Slug: "q", ID: "813"}:  "github: describe: the app q is App ID 812, and the id given is 813",
+	} {
+		_, err := githubDescribe(t, readable, app, false)
+		require.ErrorContains(t, err, want, app.ID)
+	}
+}
+
+// Only 404 means GitHub hides the app; a 403 is the token's, and says so.
+func TestDescribeGitHubReportsAForbiddenAppRead(t *testing.T) {
+	answers := repoAnswers("User")
+	answers["GET /apps/q"] = answer{http.StatusForbidden, `{"message": "Forbidden"}`}
+	_, err := githubDescribe(t, answers, types.App{Slug: "q", ID: "2034567"}, false)
+	require.ErrorContains(t, err, `github: read the app q: HTTP 403: either it does not exist or the token lacks access to it: {"message": "Forbidden"}`)
+	assert.NotErrorAs(t, err, new(*types.MissingAppError))
 }

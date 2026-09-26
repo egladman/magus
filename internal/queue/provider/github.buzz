@@ -56,8 +56,8 @@
 //
 // The pure halves (reading pull requests, stacks, approvals, rulesets, merged changes,
 // run artifacts, the merge payload) are tested at the bottom, run by the provider
-// package's Go tests. The HTTP calls are not: verifying them means merging a real pull
-// request.
+// package's Go tests, which also drive describe against a fake GitHub. The other HTTP
+// calls are not: verifying them means merging a real pull request.
 
 import "assert";
 import "os";
@@ -340,16 +340,35 @@ export fun describe(io: {str: any}) > any !> any {
         return describeFrom(body, rules: rules, setup: null, committer: null);
     }
     final web = "https://" + apiHost(apiBase());
-    final slug = "{io["app"] ?? ""}";
+    final owner = repo.split("/")[0];
+    final org = serialize\jsonDecode(body).q("owner").q("type").stringValue() == "Organization";
+    final named = serialize\Boxed.init(io["app"]);
+    final slug = named.q("slug").stringValue();
+    final given = named.q("id").stringValue();
     if (slug == "") {
-        throw noApp(repo, web: web, repoBody: body);
+        return missingApp("github: the merge queue writes only as its own GitHub App, and none is named; register one",
+            url: registrationURL(web, repo: repo, org: org), slug: "");
+    }
+    if (given != "" and !isAppID(given)) {
+        throw "github: describe: the app's id '{given}' is not an App ID, a positive integer with no leading zero";
+    }
+    final user = get(apiBase() + "/users/" + escape(slug + "[bot]"), hdrs: hdrs);
+    if (user["status"] == 404) {
+        return missingApp("github: no GitHub App is named {slug}, since GitHub has no user {slug}[bot]; an app's slug ends the address of its settings page, and the apps are listed",
+            url: appsPage(web, owner: owner, org: org), slug: "");
+    }
+    final bot = botFrom(slug, user: expect(user, status: 200, what: "read the bot of the app {slug}"));
+    final app = readApp(slug, given: given, owner: owner, org: org, hdrs: hdrs);
+    if (app == null) {
+        var reason = "github: GitHub shows the App ID of the private app {slug} to no token but its own installation's";
+        if (org) {
+            reason = "github: GitHub shows the App ID of the private app {slug} only to its own installation's token and, once it is installed on {owner}, to an owner of {owner}";
+        }
+        return missingApp(reason + "; it is under About on the app's settings page", url: appsPage(web, owner: owner, org: org) + "/" + slug, slug: slug);
     }
     final steps = "{io["setup_steps"] ?? false}" == "true";
     final branch = readFor(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
         needs: "contents read on {repo}", hdrs: hdrs);
-    final app = appOf(get(apiBase() + "/apps/" + escape(slug), hdrs: hdrs), slug: slug, given: "{io["app_id"] ?? ""}", steps: steps);
-    final bot = botFrom(slug, user: expect(get(apiBase() + "/users/" + escape(slug + "[bot]"), hdrs: hdrs), status: 200,
-        what: "read the bot of the app {slug}"));
     var reports = [<{str: str}>];
     var rulesets = {<str: str>};
     if (steps) {
@@ -359,15 +378,39 @@ export fun describe(io: {str: any}) > any !> any {
     }
     final at = {"repo": repo, "base": base, "context": context, "web": web};
     return describeFrom(body, rules: rules, setup: setupFrom(at, repoBody: body, checks: requiredChecksFrom(rules, branch: branch),
-        reports: reports, rulesets: rulesets, app: app, steps: steps), committer: bot);
+        reports: reports, rulesets: rulesets, app: app!, steps: steps), committer: bot);
 }
 
-// noApp is describe's refusal of a setup without the queue's own app, naming how to
-// register one.
-fun noApp(repo: str, web: str, repoBody: str) > str !> any {
-    final org = serialize\jsonDecode(repoBody).q("owner").q("type").stringValue() == "Organization";
-    return "github: the merge queue writes only as its own GitHub App, and --app names none: register one at "
-        + registrationURL(web, repo: repo, org: org) + ", then `magus queue describe --app <its slug>` prints the rest of the setup";
+// missingApp is describe declining to describe a setup: reason says what is missing, url
+// where GitHub shows it, and slug names the app when only its id is missing.
+fun missingApp(reason: str, url: str, slug: str) > any {
+    return {"missing_app": {"reason": reason, "url": url, "slug": slug}};
+}
+
+// appsPage lists the GitHub Apps owner registered: a user's under their settings, an
+// organization's under its own.
+fun appsPage(web: str, owner: str, org: bool) > str {
+    if (org) {
+        return web + "/organizations/" + owner + "/settings/apps";
+    }
+    return web + "/settings/apps";
+}
+
+// isAppID reports whether s is an App ID as GitHub writes one: a positive integer with no
+// sign and no leading zero.
+fun isAppID(s: str) > bool {
+    if (s == "" or s.startsWith("0")) {
+        return false;
+    }
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b < 48 or b > 57) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
 }
 
 // botFrom is the committer of what the app pushes: its bot user, from user, GitHub's
@@ -392,7 +435,11 @@ final RULESET_NAME = "magus merge queue";
 // readFor reads url for describe's setup. A 403 or 404 names the permission the read
 // needs: a token without it reads the same as a missing resource.
 fun readFor(url: str, what: str, needs: str, hdrs: {str: str}) > str !> any {
-    final res = get(url, hdrs: hdrs);
+    return checkRead(get(url, hdrs: hdrs), what: what, needs: needs);
+}
+
+// checkRead is readFor on an answer already read.
+fun checkRead(res: {str: any}, what: str, needs: str) > str !> any {
     if (res["status"] == 403 or res["status"] == 404) {
         throw "github: {what}: HTTP {res["status"]}: either it does not exist or the token lacks {needs}: {res["body"]}";
     }
@@ -405,26 +452,54 @@ fun appFrom(body: str) > {str: str} !> any {
     return {"slug": a.q("slug").stringValue(), "id": id(a.q("id")), "client_id": a.q("client_id").stringValue(), "name": a.q("name").stringValue()};
 }
 
-// appOf reads the app from res, the answer to GET /apps/<slug>. GitHub answers 404 for a
-// private app to every token but its own installation's, the owner's included, so a
-// setup takes the App ID from given (--app-id) and the client id from the person, and
-// leaves the id empty when neither is known. Apply reads with steps false and needs the
-// id, so there it is an error.
-fun appOf(res: {str: any}, slug: str, given: str, steps: bool) > {str: str} !> any {
-    if (given != "" and std\parseInt(given) == null) {
-        throw "github: describe: --app-id '{given}' is not an App ID, which is a number";
-    }
-    if (res["status"] == 200) {
-        final app = appFrom("{res["body"]}");
+// readApp reads the app slug names, or null when neither GitHub nor given says its id.
+// GitHub answers GET /apps/<slug> for a private app with 404 to every token but the
+// app's own installation's, its owner's included; an organization's owner still lists
+// the apps installed there. given is the id the person named, which GitHub's own answer
+// must match. What GitHub hides, the app's name and client id, stays empty.
+fun readApp(slug: str, given: str, owner: str, org: bool, hdrs: {str: str}) > {str: str}? !> any {
+    final res = get(apiBase() + "/apps/" + escape(slug), hdrs: hdrs);
+    if (res["status"] != 404) {
+        final app = appFrom(checkRead(res, what: "read the app {slug}", needs: "access to it"));
         if (given != "" and given != (app["id"] ?? "")) {
-            throw "github: describe: the app {slug} is App ID {app["id"] ?? ""}, and --app-id says {given}";
+            throw "github: describe: the app {slug} is App ID {app["id"] ?? ""}, and the id given is {given}";
         }
         return app;
     }
-    if (!steps or (res["status"] != 403 and res["status"] != 404)) {
-        final _ = expect(res, status: 200, what: "read the app {slug} (a private app is visible only to its own installation's token)");
+    var found = given;
+    if (found == "" and org) {
+        found = installedAppID(owner, slug: slug, hdrs: hdrs);
     }
-    return {"slug": slug, "id": given, "client_id": "", "name": slug};
+    if (found == "") {
+        return null;
+    }
+    return {"slug": slug, "id": found, "client_id": "", "name": ""};
+}
+
+// installedAppID is the App ID of the app slug installed on the organization org, or ""
+// when it is not installed there or the token is not an owner's, which GitHub answers
+// with 404.
+fun installedAppID(org: str, slug: str, hdrs: {str: str}) > str !> any {
+    var found = "";
+    var page = 1;
+    while (found == "") {
+        final res = get(apiBase() + "/orgs/" + escape(org) + "/installations?per_page=100&page={page}", hdrs: hdrs);
+        if (res["status"] == 404) {
+            break;
+        }
+        final installations = serialize\jsonDecode(checkRead(res, what: "list the apps installed on {org}", needs: "an owner's read:org on {org}"))
+            .q("installations").listValue();
+        foreach (i in installations) {
+            if (i.q("app_slug").stringValue() == slug) {
+                found = id(i.q("app_id"));
+            }
+        }
+        if (installations.len() < 100) {
+            break;
+        }
+        page = page + 1;
+    }
+    return found;
 }
 
 // requiredChecksFrom reads the checks the base requires from its rulesets (rules, which
@@ -606,8 +681,10 @@ fun pinSteps(at: {str: str}, checks: [{str: str}], rulesets: {str: str}, credent
     final repo = at["repo"] ?? "";
     final context = at["context"] ?? "";
     final want = credential["id"] ?? "";
-    final who = "{want} ({credential["name"] ?? ""})";
-    final installed = ". The app must be installed on {repo} first: without it GitHub answers 422 \"Invalid parameter required_status_checks: Invalid integration ids\"";
+    var who = want;
+    if ((credential["name"] ?? "") != "") {
+        who = "{want} ({credential["name"] ?? ""})";
+    }
     final steps = mut [<any>];
     var required = false;
     foreach (c in checks) {
@@ -622,16 +699,16 @@ fun pinSteps(at: {str: str}, checks: [{str: str}], rulesets: {str: str}, credent
         final ruleset = c["ruleset"] ?? "";
         final title = "Pin {context} to {who}";
         if (ruleset == "") {
-            steps.append({"title": title + " in the branch protection of {at["base"] ?? ""}" + installed, "url": "{at["web"] ?? ""}/{repo}/settings/branches"});
+            steps.append({"title": title + " in the branch protection of {at["base"] ?? ""}", "url": "{at["web"] ?? ""}/{repo}/settings/branches"});
         } else if ((rulesets[ruleset] ?? "") == RULESET_NAME) {
-            steps.append({"title": title + " in ruleset {ruleset} ({RULESET_NAME})" + installed,
+            steps.append({"title": title + " in ruleset {ruleset} ({RULESET_NAME})",
                 "command": heredoc("gh api -X PUT repos/{repo}/rulesets/{ruleset}", body: {"rules": [statusRule(context, integration: want)]})});
         } else {
-            steps.append({"title": title + " in ruleset {ruleset}" + installed, "url": "{at["web"] ?? ""}/{repo}/rules/{ruleset}"});
+            steps.append({"title": title + " in ruleset {ruleset}", "url": "{at["web"] ?? ""}/{repo}/rules/{ruleset}"});
         }
     }
     if (!required) {
-        steps.append({"title": "Require {context} from {who} on {at["base"] ?? ""}, in a ruleset of its own (your other rulesets stay as they are)" + installed,
+        steps.append({"title": "Require {context} from {who} on {at["base"] ?? ""}, in a ruleset of its own (your other rulesets stay as they are)",
             "command": heredoc("gh api -X POST repos/{repo}/rulesets", body: {
                 "name": RULESET_NAME, "target": "branch", "enforcement": "active",
                 "conditions": {"ref_name": {"include": ["refs/heads/{at["base"] ?? ""}"], "exclude": [<str>]}},
@@ -652,37 +729,23 @@ fun registrationURL(web: str, repo: str, org: bool) > str {
     return page + "?name=" + escape(owner + "-magus-queue") + "&url=" + escape(web + "/" + repo) + "&public=false&webhook_active=false&" + APP_PERMISSIONS;
 }
 
-// credentialCommand stores the newest downloaded key of slug and the client id, asking
-// for the id when describe could not read it, deletes the key, and lists both. It runs
-// in bash and zsh alike, so it prompts with printf rather than read -p.
-fun credentialCommand(repo: str, slug: str, appPage: str, clientID: str) > str {
-    var cid = "  cid={shQuote(clientID)}\n";
-    if (clientID == "") {
-        cid = "  printf 'Client ID, under About on {appPage} (it starts with Iv): '\n  read -r cid\n";
-    }
-    return "(\n  set -e\n"
-        + "  pem=$(ls -t ~/Downloads/{slug}.*.private-key.pem | head -n 1)\n"
-        + "  test -n \"$pem\"\n"
-        + "  echo \"storing $pem\"\n"
-        + "  gh secret set {APP_SECRET} --repo {repo} --env {APP_ENVIRONMENT} < \"$pem\"\n"
-        + cid
-        + "  test -n \"$cid\"\n"
-        + "  gh variable set {APP_VARIABLE} --repo {repo} --body \"$cid\"\n"
-        + "  rm \"$pem\"\n"
+// keyCommand stores the newest private key of slug downloaded to ~/Downloads in the
+// environment, then deletes every downloaded key of slug whether or not storing it
+// worked, and lists the environment's secrets. With no key downloaded it stores nothing,
+// so a rerun after it succeeded changes nothing. find rather than a glob: zsh fails a
+// glob that matches nothing.
+fun keyCommand(repo: str, slug: str, appPage: str) > str {
+    final keys = "find ~/Downloads -maxdepth 1 -name " + shQuote(slug + ".*.private-key.pem");
+    return "(\n"
+        + "  pem=$(" + keys + ` -exec ls -t {} + | head -n 1)` + "\n"
+        + "  if [ -n \"$pem\" ]; then\n"
+        + "    gh secret set {APP_SECRET} --repo {repo} --env {APP_ENVIRONMENT} < \"$pem\"\n"
+        + "    " + keys + " -delete\n"
+        + "  else\n"
+        + "    echo " + shQuote("no {slug} key in ~/Downloads: generate one on {appPage} unless {APP_SECRET} is listed below") + " >&2\n"
+        + "  fi\n"
         + "  gh secret ls --repo {repo} --env {APP_ENVIRONMENT}\n"
-        + "  gh variable ls --repo {repo}\n"
         + ")";
-}
-
-// describeAgain asks for the App ID and runs describe with it.
-fun describeAgain(at: {str: str}, slug: str, appPage: str) > str {
-    var context = "";
-    if ((at["context"] ?? "") != "merge-queue") {
-        context = " --status-context {shQuote(at["context"] ?? "")}";
-    }
-    return "printf 'App ID, under About on {appPage}: '\n"
-        + "read -r appid\n"
-        + "GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base {at["base"] ?? ""}{context} --app {slug} --app-id \"$appid\"";
 }
 
 // setupFrom builds describe's setup from what GitHub answered. at carries repo, base,
@@ -708,24 +771,22 @@ fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{st
             "command": "gh api -X PATCH repos/{repo} -F allow_auto_merge=true"});
     }
     final slug = app["slug"] ?? "";
-    var appPage = web + "/settings/apps/" + slug;
-    if (org) {
-        appPage = web + "/organizations/" + repo.split("/")[0] + "/settings/apps/" + slug;
-    }
-    final appRecord = {"slug": slug, "id": app["id"] ?? "", "client_id": app["client_id"] ?? "",
+    final appPage = appsPage(web, owner: repo.split("/")[0], org: org) + "/" + slug;
+    final clientID = app["client_id"] ?? "";
+    final appRecord = {"slug": slug, "id": app["id"] ?? "", "client_id": clientID,
         "registration_url": registrationURL(web, repo: repo, org: org), "install_url": web + "/apps/" + slug + "/installations/new",
         "environment": APP_ENVIRONMENT, "variable": APP_VARIABLE, "secret": APP_SECRET};
-    todo.append({"title": "Install {slug} on {repo} only; {web}/{repo}/settings/installations lists it once it is", "url": web + "/apps/" + slug + "/installations/new"});
+    todo.append({"title": "Install {slug} on {repo} only", "url": web + "/apps/" + slug + "/installations/new"});
     todo.append({"title": "Create the {APP_ENVIRONMENT} environment, whose secrets only {at["base"] ?? ""} can read, so pull request runs never see the key",
         "command": "gh api -X PUT repos/{repo}/environments/{APP_ENVIRONMENT} -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'\n" +
             "gh api -X POST repos/{repo}/environments/{APP_ENVIRONMENT}/deployment-branch-policies -f name={at["base"] ?? ""} -f type=branch"});
-    todo.append({"title": "Generate a private key on {appPage} (a .pem downloads), then store it in the {APP_ENVIRONMENT} environment alone and the client id as {APP_VARIABLE}, and delete the download",
-        "command": credentialCommand(repo, slug: slug, appPage: appPage, clientID: app["client_id"] ?? "")});
-    if ((app["id"] ?? "") == "") {
-        todo.append({"title": "Read {slug}'s App ID under About on {appPage} and describe again with it, since GitHub shows a private app to no token but its own installation's. The ruleset's integration_id takes the App ID and nothing else; the client id only mints the token",
-            "command": describeAgain(at, slug: slug, appPage: appPage)});
-        return {"status_context": at["context"] ?? "", "credential": credential, "required_checks": required, "settings": settings, "app": appRecord, "steps": todo};
+    if (clientID == "") {
+        todo.append({"title": "Store the app's client id, under About on {appPage}; gh asks for it", "command": "gh variable set {APP_VARIABLE} --repo {repo}"});
+    } else {
+        todo.append({"title": "Store the app's client id", "command": "gh variable set {APP_VARIABLE} --repo {repo} --body {shQuote(clientID)}"});
     }
+    todo.append({"title": "Generate a private key on {appPage} (a .pem downloads), store it in the environment alone, and delete the download",
+        "command": keyCommand(repo, slug: slug, appPage: appPage)});
     foreach (s in pinSteps(at, checks: checks, rulesets: rulesets, credential: credential)) {
         todo.append(s);
     }
@@ -1572,7 +1633,7 @@ fun mergeFailure(res: {str: any}) > any !> any {
 // merged.
 export fun merge_change(io: {str: any}) > any !> any {
     final hdrs = writing("merge_change");
-    final app = "{io["app"] ?? ""}";
+    final app = serialize\Boxed.init(io["app"]).q("slug").stringValue();
     if (app == "") {
         throw "github: merge_change merges only as the queue's own GitHub App, and names none";
     }
@@ -2774,11 +2835,18 @@ test "the registration link pre-fills a private app with the queue's permissions
 
 final AT = {"repo": "acme/widgets", "base": "main", "context": "merge-queue", "web": "https://github.com"};
 
-test "without an app, describe refuses a setup and links the app's registration" {
-    final msg = noApp("acme/widgets", web: "https://github.com", repoBody: `{"owner": {"type": "Organization"}}`);
-    assert\equal(msg.startsWith("github: the merge queue writes only as its own GitHub App, and --app names none: register one at "
-        + "https://github.com/organizations/acme/settings/apps/new?"), want: true, message: msg);
-    assert\equal(msg.endsWith("then `magus queue describe --app <its slug>` prints the rest of the setup"), want: true, message: msg);
+test "an App ID is a positive integer as GitHub writes one" {
+    foreach (s in ["1", "812", "2034567"]) {
+        assert\equal(isAppID(s), want: true, message: s);
+    }
+    foreach (s in ["", "0", "0812", "+812", "-812", "812 ", "8.12", "Iv23li", "1e3"]) {
+        assert\equal(isAppID(s), want: false, message: s);
+    }
+}
+
+test "the apps a user or an organization registered are listed under their own settings" {
+    assert\equal(appsPage("https://github.com", owner: "acme", org: false), want: "https://github.com/settings/apps", message: "a user's");
+    assert\equal(appsPage("https://github.com", owner: "acme", org: true), want: "https://github.com/organizations/acme/settings/apps", message: "an organization's");
 }
 
 test "setup allows auto-merge and pins a context required from anyone to the app" {
@@ -2792,10 +2860,10 @@ test "setup allows auto-merge and pins a context required from anyone to the app
     assert\equal(setup.q("required_checks").listValue()[1].q("events").listValue()[0].stringValue(), want: "pull_request", message: "the event it was seen on");
     final steps = setup.q("steps").listValue();
     assert\equal(steps[0].q("title").stringValue(), want: "Allow auto-merge (Settings > General > Pull Requests > Allow auto-merge)", message: "auto-merge first");
-    assert\equal(steps.len(), want: 5, message: "auto-merge, install, environment, key and client id, the pin");
+    assert\equal(steps.len(), want: 6, message: "auto-merge, install, environment, variable, key, the pin");
     assert\equal(steps[0].q("command").stringValue(), want: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true", message: "auto-merge");
-    assert\equal(steps[3].q("title").stringValue().indexOf("https://github.com/settings/apps/acme-magus-queue") != null, want: true, message: "a user's app page");
-    final pin = steps[4].q("command").stringValue();
+    assert\equal(steps[4].q("title").stringValue().indexOf("https://github.com/settings/apps/acme-magus-queue") != null, want: true, message: "a user's app page");
+    final pin = steps[5].q("command").stringValue();
     assert\equal(pin.startsWith("gh api -X PUT repos/acme/widgets/rulesets/9 --input - <<'EOF'\n"), want: true, message: "the queue's own ruleset, rewritten");
     assert\equal(pin.indexOf(`"integration_id":812`) != null, want: true, message: "pinned to the app");
     assert\equal(pin.indexOf(`"strict_required_status_checks_policy":false`) != null, want: true, message: "no strict up-to-date");
@@ -2805,8 +2873,8 @@ test "setup requires the status from the app in a ruleset of its own when nothin
     final app = {"slug": "acme-magus-queue", "id": "812", "client_id": "Iv23li", "name": "acme magus queue"};
     final repo = `{"allow_auto_merge": true, "owner": {"type": "User"}}`;
     final steps = serialize\Boxed.init(setupFrom(AT, repoBody: repo, checks: [<{str: str}>], reports: [<{str: str}>], rulesets: {<str: str>}, app: app, steps: true)).q("steps").listValue();
-    assert\equal(steps.len(), want: 4, message: "install, environment, key and client id, the ruleset");
-    final ruleset = steps[3].q("command").stringValue();
+    assert\equal(steps.len(), want: 5, message: "install, environment, variable, key, the ruleset");
+    final ruleset = steps[4].q("command").stringValue();
     assert\equal(ruleset.startsWith("gh api -X POST repos/acme/widgets/rulesets --input - <<'EOF'\n"), want: true, message: "a ruleset of its own");
     assert\equal(ruleset.indexOf(`"integration_id":812`) != null, want: true, message: "pinned to the app");
     assert\equal(ruleset.indexOf(`"refs/heads/main"`) != null, want: true, message: "on the base");
@@ -2821,106 +2889,47 @@ test "with an app, setup installs it, stores its credential and moves the pin" {
     assert\equal(setup.q("app").q("install_url").stringValue(), want: "https://github.com/apps/acme-magus-queue/installations/new", message: "install link");
     assert\equal(setup.q("app").q("secret").stringValue(), want: APP_SECRET, message: "the secret setup-magus reads");
     final steps = setup.q("steps").listValue();
-    assert\equal(steps.len(), want: 5, message: "install, environment, key and client id, two pins");
-    final stored = steps[2].q("command").stringValue();
-    assert\contains(stored, item: "gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo acme/widgets --env magus-queue < \"$pem\"\n", message: "the key, environment only");
-    assert\contains(stored, item: "  cid='Iv23li'\n", message: "the client id, read from the app");
-    assert\equal(stored.indexOf("read -r cid") == null, want: true, message: "nothing to ask for");
-    assert\equal(steps[2].q("title").stringValue().indexOf("https://github.com/organizations/acme/settings/apps/acme-magus-queue") != null, want: true, message: "an organization's app page");
-    final pin = steps[3].q("command").stringValue();
+    assert\equal(steps.len(), want: 6, message: "install, environment, variable, key, two pins");
+    assert\equal(steps[2].q("command").stringValue(), want: "gh variable set MAGUS_QUEUE_APP_CLIENT_ID --repo acme/widgets --body 'Iv23li'", message: "the client id, read from the app");
+    assert\equal(steps[3].q("command").stringValue(),
+        want: keyCommand("acme/widgets", slug: "acme-magus-queue", appPage: "https://github.com/organizations/acme/settings/apps/acme-magus-queue"),
+        message: "the key, from an organization's app page");
+    final pin = steps[4].q("command").stringValue();
     assert\equal(pin.startsWith("gh api -X PUT repos/acme/widgets/rulesets/9 --input - <<'EOF'\n"), want: true, message: "the queue's own ruleset, rewritten");
     assert\equal(pin.indexOf(`"integration_id":812`) != null, want: true, message: "pinned to the app");
-    assert\equal(steps[4].q("url").stringValue(), want: "https://github.com/acme/widgets/settings/branches", message: "classic protection is edited by hand");
+    assert\equal(steps[5].q("title").stringValue(), want: "Pin merge-queue to 812 (acme magus queue) in the branch protection of main", message: "the app by id and name");
+    assert\equal(steps[5].q("url").stringValue(), want: "https://github.com/acme/widgets/settings/branches", message: "classic protection is edited by hand");
 }
 
-test "the key and client id command stores both, deletes the key and lists what it stored" {
-    assert\equal(credentialCommand("acme/widgets", slug: "magus-queue", appPage: "https://github.com/settings/apps/magus-queue", clientID: ""),
-        want: "(\n  set -e\n"
-            + "  pem=$(ls -t ~/Downloads/magus-queue.*.private-key.pem | head -n 1)\n"
-            + "  test -n \"$pem\"\n"
-            + "  echo \"storing $pem\"\n"
-            + "  gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo acme/widgets --env magus-queue < \"$pem\"\n"
-            + "  printf 'Client ID, under About on https://github.com/settings/apps/magus-queue (it starts with Iv): '\n"
-            + "  read -r cid\n"
-            + "  test -n \"$cid\"\n"
-            + "  gh variable set MAGUS_QUEUE_APP_CLIENT_ID --repo acme/widgets --body \"$cid\"\n"
-            + "  rm \"$pem\"\n"
+test "the key command stores the newest download, deletes every one and changes nothing on a rerun" {
+    assert\equal(keyCommand("acme/widgets", slug: "magus-queue", appPage: "https://github.com/settings/apps/magus-queue"),
+        want: "(\n"
+            + "  pem=$(find ~/Downloads -maxdepth 1 -name 'magus-queue.*.private-key.pem' -exec ls -t " + `{}` + " + | head -n 1)\n"
+            + "  if [ -n \"$pem\" ]; then\n"
+            + "    gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo acme/widgets --env magus-queue < \"$pem\"\n"
+            + "    find ~/Downloads -maxdepth 1 -name 'magus-queue.*.private-key.pem' -delete\n"
+            + "  else\n"
+            + "    echo 'no magus-queue key in ~/Downloads: generate one on https://github.com/settings/apps/magus-queue unless MAGUS_QUEUE_APP_PRIVATE_KEY is listed below' >&2\n"
+            + "  fi\n"
             + "  gh secret ls --repo acme/widgets --env magus-queue\n"
-            + "  gh variable ls --repo acme/widgets\n"
             + ")",
-        message: "asked for, since describe could not read it");
+        message: "no stdin read, no set -e between storing and deleting");
 }
 
-test "an app describe cannot read asks for its client id and App ID, and pins nothing" {
+test "an app whose client id GitHub hides is stored by gh's own prompt, and pinned by id alone" {
     final checks = [{"context": "merge-queue", "integration": "15368", "ruleset": "9"}];
-    final app = {"slug": "magus-queue", "id": "", "client_id": "", "name": "magus-queue"};
-    final setup = serialize\Boxed.init(setupFrom(AT, repoBody: `{"allow_auto_merge": true, "owner": {"type": "User"}}`, checks: checks,
-        reports: [<{str: str}>], rulesets: {"9": RULESET_NAME}, app: app, steps: true));
-    assert\equal(setup.q("credential").q("id").stringValue(), want: "", message: "the App ID is not known");
-    final steps = setup.q("steps").listValue();
-    assert\equal(steps.len(), want: 4, message: "install, environment, key and client id, describe again");
-    assert\contains(steps[2].q("command").stringValue(), item: "  read -r cid\n", message: "the client id is asked for");
-    foreach (s in steps) {
-        assert\equal(s.q("command").stringValue().indexOf("integration_id") == null, want: true, message: "no pin without an id: {s.q("title").stringValue()}");
-    }
-}
-
-test "an app describe cannot read prints the step that asks for the App ID and describes again" {
-    final app = {"slug": "magus-queue", "id": "", "client_id": "", "name": "magus-queue"};
-    final setup = serialize\Boxed.init(setupFrom(AT, repoBody: `{"allow_auto_merge": true, "owner": {"type": "User"}}`, checks: [<{str: str}>],
-        reports: [<{str: str}>], rulesets: {<str: str>}, app: app, steps: true));
-    final steps = setup.q("steps").listValue();
-    assert\equal(steps[steps.len() - 1].q("command").stringValue(),
-        want: "printf 'App ID, under About on https://github.com/settings/apps/magus-queue: '\n"
-            + "read -r appid\n"
-            + "GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main --app magus-queue --app-id \"$appid\"",
-        message: "describe again with the App ID");
-}
-
-test "an app describe cannot read pins the status to the App ID it was given" {
-    final checks = [{"context": "merge-queue", "integration": "15368", "ruleset": "9"}];
-    final app = appOf({"status": 404, "body": `{"message": "Not Found"}`}, slug: "magus-queue", given: "2034567", steps: true);
+    final app = {"slug": "magus-queue", "id": "2034567", "client_id": "", "name": ""};
     final setup = serialize\Boxed.init(setupFrom(AT, repoBody: `{"allow_auto_merge": true, "owner": {"type": "User"}}`, checks: checks,
         reports: [<{str: str}>], rulesets: {"9": RULESET_NAME}, app: app, steps: true));
     assert\equal(setup.q("credential").q("id").stringValue(), want: "2034567", message: "the given App ID posts the status");
     final steps = setup.q("steps").listValue();
-    assert\equal(steps.len(), want: 4, message: "install, environment, key and client id, pin");
-    assert\contains(steps[3].q("command").stringValue(), item: `"integration_id":2034567`, message: "pinned to the given App ID");
-    assert\contains(steps[3].q("title").stringValue(), item: "Invalid integration ids", message: "a missing install's symptom");
-    assert\contains(steps[0].q("title").stringValue(), item: "https://github.com/acme/widgets/settings/installations", message: "where to see the install");
-}
-
-test "a readable app is read, and an --app-id that disagrees with it is an error" {
-    final body = `{"slug": "magus-queue", "id": 812, "client_id": "Iv23li", "name": "magus queue"}`;
-    assert\equal(appOf({"status": 200, "body": body}, slug: "magus-queue", given: "", steps: true),
-        want: {"slug": "magus-queue", "id": "812", "client_id": "Iv23li", "name": "magus queue"}, message: "read from GitHub");
-    assert\equal(appOf({"status": 200, "body": body}, slug: "magus-queue", given: "812", steps: true)["id"], want: "812", message: "agreeing");
-    var reason = "";
-    try {
-        final _ = appOf({"status": 200, "body": body}, slug: "magus-queue", given: "813", steps: true);
-    } catch (e) {
-        reason = "{e}";
-    }
-    assert\contains(reason, item: "App ID 812, and --app-id says 813", message: "a disagreement names both");
-}
-
-test "an unreadable app is an error for apply, and an --app-id must be a number" {
-    var reason = "";
-    try {
-        final _ = appOf({"status": 404, "body": `{"message": "Not Found"}`}, slug: "magus-queue", given: "", steps: false);
-    } catch (e) {
-        reason = "{e}";
-    }
-    assert\contains(reason, item: "HTTP 404", message: "apply needs the id");
-    reason = "";
-    try {
-        final _ = appOf({"status": 404, "body": ""}, slug: "magus-queue", given: "Iv23li", steps: true);
-    } catch (e) {
-        reason = "{e}";
-    }
-    assert\contains(reason, item: "is not an App ID", message: "a client id is not an App ID");
-    assert\equal(appOf({"status": 404, "body": ""}, slug: "magus-queue", given: "", steps: true),
-        want: {"slug": "magus-queue", "id": "", "client_id": "", "name": "magus-queue"}, message: "describe goes on without it");
+    assert\equal(steps.len(), want: 5, message: "install, environment, variable, key, pin");
+    assert\equal(steps[0].q("title").stringValue(), want: "Install magus-queue on acme/widgets only", message: "one link, the install's");
+    assert\equal(steps[2].q("title").stringValue(), want: "Store the app's client id, under About on https://github.com/settings/apps/magus-queue; gh asks for it", message: "where it is");
+    assert\equal(steps[2].q("command").stringValue(), want: "gh variable set MAGUS_QUEUE_APP_CLIENT_ID --repo acme/widgets", message: "gh prompts; the script reads nothing");
+    assert\equal(steps[4].q("title").stringValue(), want: "Pin merge-queue to 2034567 in ruleset 9 (magus merge queue)", message: "no name GitHub did not give");
+    assert\equal(steps[4].q("command").stringValue(), want: heredoc("gh api -X PUT repos/acme/widgets/rulesets/9", body: {"rules": [statusRule("merge-queue", integration: "2034567")]}),
+        message: "pinned to the given App ID");
 }
 
 test "without steps, setup is the facts apply checks" {

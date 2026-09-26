@@ -1772,12 +1772,12 @@ func TestApplyCarriesAnApprovalOverARebaseAgainstThePlansChanges(t *testing.T) {
 // anything: no stale success is reset, no status posted.
 func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 	for name, tc := range map[string]struct {
-		app        string
+		app        types.App
 		credential types.Integration
 		pinned     string
 	}{
-		"pinned to GitHub Actions, holding the queue app's": {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "15368"},
-		"pinned to another app, holding the queue app's":    {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "977"},
+		"pinned to GitHub Actions, holding the queue app's": {app: types.App{Slug: "acme-queue"}, credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "15368"},
+		"pinned to another app, holding the queue app's":    {app: types.App{Slug: "acme-queue", ID: "812"}, credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "977"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -1813,11 +1813,6 @@ func TestCheckCredentialPassesWhatTheProviderCounts(t *testing.T) {
 			assert.NoError(t, checkCredential(s, "main"))
 		})
 	}
-}
-
-func TestCheckCredentialRefusesAnAppWhoseIDIsNotKnown(t *testing.T) {
-	s := &types.Setup{StatusContext: "merge-queue", Credential: types.Integration{Name: "magus-queue"}, App: &types.App{Slug: "magus-queue"}}
-	assert.EqualError(t, checkCredential(s, "main"), "the provider could not read which integration the queue's credential posts its status as")
 }
 
 // requireUnverified asserts err is applying stopping on a plan it could not verify.

@@ -293,16 +293,31 @@ func TestQueueDescribeSaysWhenTheBaseRequiresNoApproval(t *testing.T) {
 }
 
 // setupProvider describes a setup naming the status context and app describe was asked
-// about, so a test reads the query from the answer.
+// about, so a test reads the query from the answer. It declines one for the app
+// "unknown", and for the app "hidden" unless the id is given, and pins that one to it.
 const setupProvider = `
+import "serialize";
+
 export fun describe(io: {str: any}) > any {
     if (io["status_context"] == "") {
         return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2};
     }
+    final slug = serialize\Boxed.init(io["app"]).q("slug").stringValue();
+    final id = serialize\Boxed.init(io["app"]).q("id").stringValue();
+    if (slug == "unknown") {
+        return {"missing_app": {"reason": "no app is named unknown", "url": "https://example.invalid/apps"}};
+    }
+    if (slug == "hidden" and id == "") {
+        return {"missing_app": {"reason": "no id for hidden", "url": "https://example.invalid/apps/hidden", "slug": slug}};
+    }
+    if (slug == "hidden") {
+        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2,
+            "setup": {"status_context": io["status_context"], "credential": {"id": id}, "app": {"slug": slug, "id": id}, "steps": [<any>]}};
+    }
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "required_approvals": 2, "queue_label": "queue: ",
         "setup": {
             "status_context": io["status_context"],
-            "credential": {"id": "812", "name": "{io["app"]}"},
+            "credential": {"id": "812", "name": slug},
             "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["pull_request"]}],
             "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
             "steps": [
@@ -346,26 +361,51 @@ gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true
 `, string(out))
 }
 
-// An app the provider could not read has no id yet: describe says so rather than print
-// an empty one, and --app-id means nothing without the app it names.
-func TestQueueDescribeNamesAnAppWhoseIDIsNotKnown(t *testing.T) {
+// A provider that needs the app, or its id, says what and where; describe adds the
+// command that runs it again with the flags it was given.
+func TestQueueDescribeRendersTheRerunAMissingAppNeeds(t *testing.T) {
 	withOutput(t, "")
 	f := newSetupFixture(t)
-	src, err := os.ReadFile(f.provider)
+	root := shellWord(f.root)
+	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden")
+	var missing *types.MissingAppError
+	require.ErrorAs(t, err, &missing)
+	assert.EqualError(t, err, "magus queue describe: no id for hidden: https://example.invalid/apps/hidden; then run: magus --root "+root+
+		" queue describe --provider local.buzz --base main --app hidden:<id>")
+	_, err = f.run(t, "", "describe", "--status-context", "my gate", "--remote", "origin", "--vcs", "git", "--app", "unknown",
+		"--base", "main", "--provider", "local.buzz")
+	assert.EqualError(t, err, "magus queue describe: no app is named unknown: https://example.invalid/apps; then run: magus --root "+root+
+		" queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app <slug>")
+}
+
+// The id rides in --app after the slug and reaches the provider in the same record.
+func TestQueueDescribeTakesTheAppsIDInTheAppFlag(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden:2034567")
 	require.NoError(t, err)
-	src = []byte(strings.Replace(string(src), `"credential": {"id": "812", "name": "{io["app"]}"},`,
-		`"credential": {"id": "{io["app_id"]}", "name": "{io["app"]}"}, "app": {"slug": "{io["app"]}", "id": "{io["app_id"]}"},`, 1))
-	require.NoError(t, os.WriteFile(f.provider, src, 0o644))
-	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q")
-	require.NoError(t, err)
-	assert.Contains(t, string(out), "# the queue posts \"merge-queue\" as app q, whose id the provider could not read\n")
-	assert.NotContains(t, string(out), "# app q is integration")
-	out, err = f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q", "--app-id", "2034567")
-	require.NoError(t, err)
-	assert.Contains(t, string(out), "# the queue posts \"merge-queue\" as 2034567 (q)\n# ")
-	assert.Contains(t, string(out), "# app q is integration 2034567\n")
-	_, err = f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app-id", "2034567")
-	require.ErrorContains(t, err, "--app-id needs --app")
+	assert.Equal(t, `# local.buzz on main: merge methods squash; stacks merge atomic
+# main requires 2 approving reviews at the commit a review of a change's head covers
+# the queue posts "merge-queue" as 2034567
+# main requires no check
+# app hidden is integration 2034567
+# nothing left to set up
+`, string(out))
+}
+
+func TestQueueRefusesAnAppFlagOfAnotherShape(t *testing.T) {
+	withOutput(t, "")
+	f := newQueueFixture(t, "", "")
+	for _, app := range []string{":2034567", "hidden:", ":"} {
+		_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", app)
+		var misuse errUsage
+		require.ErrorAs(t, err, &misuse, app)
+		assert.EqualError(t, err, "magus queue describe: --app "+strconv.Quote(app)+" is not <slug> or <slug>:<id>")
+		_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--app", app, "verdicts")
+		assert.EqualError(t, err, "magus queue apply: --app "+strconv.Quote(app)+" is not <slug> or <slug>:<id>")
+	}
+	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q", "--app-id", "2034567")
+	assert.ErrorContains(t, err, "flag provided but not defined: -app-id")
 }
 
 // -o json carries the setup as the capabilities document's structure.

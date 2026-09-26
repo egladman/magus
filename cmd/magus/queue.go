@@ -12,7 +12,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
@@ -32,6 +35,7 @@ var queueOpenVCS = client.OpenVCS
 
 // queueEnv is what every verb shares: the checkout and the standard streams.
 type queueEnv struct {
+	root   string // the global --root as given, "" when it was not
 	dir    string // absolute
 	stdin  io.Reader
 	stdout io.Writer
@@ -55,7 +59,7 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 	if err != nil {
 		return fmt.Errorf("magus queue: --root %s: %w", dir, err)
 	}
-	e := &queueEnv{dir: abs, stdin: stdin, stdout: stdout, stderr: stderr}
+	e := &queueEnv{root: root, dir: abs, stdin: stdin, stdout: stdout, stderr: stderr}
 	var verb func(context.Context, *queueEnv, []string) error
 	switch args[0] {
 	case "describe":
@@ -242,15 +246,16 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 }
 
 func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, _, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
+	f, _, fs, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
 	if err != nil {
 		return err
 	}
 	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
-	if f.AppID != "" && f.App == "" {
-		return usagef("magus queue describe: --app-id needs --app, the app it is the id of")
+	app, err := parseQueueApp("describe", f.App)
+	if err != nil {
+		return err
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
@@ -274,7 +279,11 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	defer p.Close()
 	// An empty --status-context asks for no setup, whose reads need permissions a pull
 	// request job's token may lack.
-	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: f.App, AppID: f.AppID, SetupSteps: f.StatusContext != ""})
+	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: app, SetupSteps: f.StatusContext != ""})
+	var missing *types.MissingAppError
+	if errors.As(err, &missing) {
+		return fmt.Errorf("%w; then run: %s", err, renderRerun(e.root, fs, missing.Slug))
+	}
 	if err != nil {
 		return err
 	}
@@ -311,11 +320,7 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 		_, err := io.WriteString(w, b.String())
 		return err
 	}
-	if s.Credential.ID == "" {
-		fmt.Fprintf(&b, "# the queue posts %q as app %s, whose id the provider could not read\n", s.StatusContext, s.Credential.Name)
-	} else {
-		fmt.Fprintf(&b, "# the queue posts %q as %s\n", s.StatusContext, s.Credential)
-	}
+	fmt.Fprintf(&b, "# the queue posts %q as %s\n", s.StatusContext, s.Credential)
 	if len(s.RequiredChecks) == 0 {
 		fmt.Fprintf(&b, "# %s requires no check\n", base)
 	}
@@ -333,7 +338,7 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 	for _, st := range s.Settings {
 		fmt.Fprintf(&b, "# %s is %s; the queue needs %s\n", st.Name, st.Value, st.Want)
 	}
-	if a := s.App; a != nil && a.ID != "" {
+	if a := s.App; a != nil {
 		fmt.Fprintf(&b, "# app %s is integration %s", a.Slug, a.ID)
 		if a.ClientID != "" {
 			fmt.Fprintf(&b, ", client id %s", a.ClientID)
@@ -624,6 +629,10 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	case src.dir != "" && f.Workflow != "":
 		return usagef("magus queue apply: --workflow has no effect on a directory source")
 	}
+	app, err := parseQueueApp("apply", f.App)
+	if err != nil {
+		return err
+	}
 	who, err := parseCommitter(f.Committer)
 	if err != nil {
 		return usagef("magus queue apply: --committer: %v", err)
@@ -706,12 +715,53 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	a.Base, a.RemoteURL = f.Base, remoteURL
-	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, src.run, events
+	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Source, a.Events = f.StatusContext, app, f.Interval, globalCfg.DryRun, who, src.run, events
 	a.Reproduce = types.Reproduction{Gate: f.ReproduceGate, Regenerate: f.ReproduceRegenerate}
 	if regenerate != nil {
 		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Scratch: vars}, queue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
+}
+
+// parseQueueApp reads --app, "<slug>" or "<slug>:<id>"; empty is the zero App. The id's
+// form is the provider's to check.
+func parseQueueApp(verb, s string) (types.App, error) {
+	slug, id, withID := strings.Cut(s, ":")
+	if s != "" && (slug == "" || (withID && id == "")) {
+		return types.App{}, usagef("magus queue %s: --app %q is not <slug> or <slug>:<id>", verb, s)
+	}
+	return types.App{Slug: slug, ID: id}, nil
+}
+
+// renderRerun is the describe command line fs was parsed from, quoted for a shell, with
+// --app naming slug and a placeholder for its id, or a placeholder for the app when slug
+// is empty.
+func renderRerun(root string, fs *flag.FlagSet, slug string) string {
+	words := []string{"magus"}
+	if root != "" {
+		words = append(words, "--root", shellWord(root))
+	}
+	words = append(words, "queue", "describe")
+	for _, name := range []string{gen.FlagQueueDescribeProvider, gen.FlagQueueDescribeBase, gen.FlagQueueDescribeStatusContext,
+		gen.FlagQueueDescribeRemote, gen.FlagQueueDescribeVCS} {
+		if flagGiven(fs, name) {
+			words = append(words, "--"+name, shellWord(fs.Lookup(name).Value.String()))
+		}
+	}
+	if slug == "" {
+		return strings.Join(append(words, "--app", "<slug>"), " ")
+	}
+	return strings.Join(append(words, "--app", shellWord(slug)+":<id>"), " ")
+}
+
+// shellWord quotes s as one word for bash, or Go-quotes it when it holds a byte no shell
+// quote can carry.
+func shellWord(s string) string {
+	q, err := syntax.Quote(s, syntax.LangBash)
+	if err != nil {
+		return strconv.Quote(s)
+	}
+	return q
 }
 
 // parsePerson reads "Name <email>"; empty is the zero Person.

@@ -429,8 +429,6 @@ const (
 	FlagQueueApplyWorkflow = "workflow"
 	// queue describe: --app
 	FlagQueueDescribeApp = "app"
-	// queue describe: --app-id
-	FlagQueueDescribeAppID = "app-id"
 	// queue describe: --base
 	FlagQueueDescribeBase = "base"
 	// queue describe: --provider
@@ -1292,7 +1290,6 @@ type QueueDescribeFlags struct {
 	Base          string // --base
 	StatusContext string // --status-context
 	App           string // --app
-	AppID         string // --app-id
 	Remote        string // --remote
 	VCS           string // --vcs
 }
@@ -1303,8 +1300,7 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
 	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
-	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App, required with a --status-context)")
-	fs.StringVar(&f.AppID, FlagQueueDescribeAppID, "", "`id` of the --app integration, for a provider that cannot read the app (github: the App ID under About on a private app's settings page, never its client id); the status is pinned to it")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "App apply writes with, as `slug[:id]`; the id only where the provider cannot read it (github: a GitHub App, required with a --status-context)")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
@@ -1423,7 +1419,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
-	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "App whose credential the provider writes with, as `slug[:id]` (github: a GitHub App, required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it")
 	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
 	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")

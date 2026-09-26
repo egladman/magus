@@ -3,13 +3,13 @@
 //
 // A provider script exports these functions, each taking one record and returning one:
 //
-//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}
+//	describe({base, remote_url, status_context, app: {slug, id}, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?} or {missing_app: {reason, url, slug?}}
 //	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}], closed?: [{id, repo?}]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
 //	post_status(change + {commit, context, state, description}) > bool
 //	retarget(change + {base})                      > bool
-//	merge_change(change + {commit, message, app, through: [{id, commit}]}) > {merged, by_provider?, reason?}
+//	merge_change(change + {commit, message, app: {slug, id}, through: [{id, commit}]}) > {merged, by_provider?, reason?}
 //	kick_back(change + {commit, code, report, claim, paths, with, candidate_commit, source, reproduce?}) > bool
 //	mark(change + {mark})                          > bool
 //	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
@@ -19,11 +19,16 @@
 // required of a provider apply follows a validation run through, and without
 // required_checks apply reads no required check. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
-// unqueued record those of [types.UnqueuedChange]. describe's setup, asked for with a
-// status_context, carries [types.Setup] as status_context, credential {id, name?},
-// required_checks [{context, integration?, events?}], settings [{name, value, want}],
-// app? {slug, id, client_id?, registration_url?, install_url?, environment?, variable?,
-// secret?} and steps [{title, command? or url?}]. list_artifacts' run carries
+// unqueued record those of [types.UnqueuedChange]. An app record is the queue's app as
+// the person named it: its slug, and its id or "" when they gave none; both "" name no
+// app. describe's setup, asked for with a status_context, carries [types.Setup] as
+// status_context, credential {id, name?}, required_checks [{context, integration?,
+// events?}], settings [{name, value, want}], app? {slug, id, client_id?,
+// registration_url?, install_url?, environment?, variable?, secret?} and steps [{title,
+// command? or url?}]; the credential's id is never empty and equals the app's id. A
+// describe that cannot name the credential's integration returns missing_app instead,
+// carrying [types.MissingAppError]: what is missing, where the provider shows it, and
+// the slug when only the app's id is. list_artifacts' run carries
 // [types.RunOrigin] as repo, head_repo, head_branch, event, branch_event and
 // definition. Every key the contract lists
 // without a "?" is required: a missing one is an error, never a zero value, since a
@@ -32,10 +37,10 @@
 // the writes run only in apply, so a script should read its write credential under its
 // own name, letting a job that does not hold it fail rather than write.
 //
-// The records a script receives hold strings, bools, lists of strings (paths, with) and
-// lists of records (through). Scripts see Buzz's standard library (std, os, serialize,
-// ...) and one host module, "mergequeue", whose request(method, url, body, headers)
-// makes an HTTP request and returns {status, body}.
+// The records a script receives hold strings, bools, lists of strings (paths, with),
+// records (app) and lists of records (through). Scripts see Buzz's standard library
+// (std, os, serialize, ...) and one host module, "mergequeue", whose request(method,
+// url, body, headers) makes an HTTP request and returns {status, body}.
 package provider
 
 import (
@@ -204,6 +209,10 @@ func (p *Script) callRecord(ctx context.Context, op string, params map[string]an
 
 func (p *Script) where(op string) string { return fmt.Sprintf("provider %q: %s", p.name, op) }
 
+func appParams(a types.App) map[string]string {
+	return map[string]string{"slug": a.Slug, "id": a.ID}
+}
+
 func changeParams(c types.Change) map[string]any {
 	return map[string]any{
 		"id": c.ID, "repo": c.Repo, "head": c.Head, "ref": c.Ref, "branch": c.Branch,
@@ -214,10 +223,24 @@ func changeParams(c types.Change) map[string]any {
 // Describe calls describe. The queue checks what it reports before relying on it.
 func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabilities, error) {
 	r, err := p.callRecord(ctx, opDescribe, map[string]any{
-		"base": q.Base, "remote_url": q.RemoteURL, "status_context": q.StatusContext, "app": q.App, "app_id": q.AppID, "setup_steps": q.SetupSteps,
+		"base": q.Base, "remote_url": q.RemoteURL, "status_context": q.StatusContext, "app": appParams(q.App), "setup_steps": q.SetupSteps,
 	})
 	if err != nil {
 		return types.Capabilities{}, err
+	}
+	var missing *record
+	if err := r.decode(optional("missing_app", &missing)); err != nil {
+		return types.Capabilities{}, err
+	}
+	if missing != nil {
+		e := &types.MissingAppError{}
+		if err := missing.decode(required("reason", &e.Reason), required("url", &e.URL), optional("slug", &e.Slug)); err != nil {
+			return types.Capabilities{}, err
+		}
+		if e.Reason == "" || e.URL == "" {
+			return types.Capabilities{}, fmt.Errorf("%s: field %q needs a reason and a URL", r.where, "missing_app")
+		}
+		return types.Capabilities{}, e
 	}
 	var c types.Capabilities
 	var sm string
@@ -477,7 +500,7 @@ func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.Mer
 	params := changeParams(c)
 	params["commit"] = opts.Commit
 	params["message"] = opts.Message
-	params["app"] = opts.App
+	params["app"] = appParams(opts.App)
 	through := make([]map[string]string, len(opts.Through))
 	for i, pin := range opts.Through {
 		through[i] = map[string]string{"id": pin.ID, "commit": pin.Commit}
