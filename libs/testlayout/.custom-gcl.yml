@@ -27,3 +27,7 @@ plugins:
   - module: github.com/egladman/magus/libs/coldread
     import: github.com/egladman/magus/libs/coldread/plugin
     path: ../coldread
+  # conventions carries this repo's own rules over Go source, one plugin per rule.
+  - module: github.com/egladman/magus/libs/conventions
+    import: github.com/egladman/magus/libs/conventions/plugin
+    path: ../conventions

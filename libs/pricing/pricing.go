@@ -1,6 +1,6 @@
 // Package pricing is the checked-in model list-price table and the loader that
 // reads it. pricing.json records which vendor's published page the numbers came
-// from and the date they were read; TestNoHostSpecificBehaviorInCode is why the
+// from and the date they were read; the hostagnostic linter is why the
 // name lives in the data rather than in this prose.
 //
 // The table is the cost basis on purpose. A host's self-reported dollar figure
