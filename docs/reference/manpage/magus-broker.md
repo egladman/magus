@@ -11,7 +11,7 @@ The per-user process holding this host's capacity and shared services
 
 ## Synopsis
 
-**magus** broker [status|stop] [flags]
+**magus** broker [status|stop|units] [flags]
 
 ## Description
 
@@ -35,7 +35,15 @@ The broker setting in magus.yaml decides what a run does about it: required
 refuses a step when none answers (MGS3022, exit 69), best-effort (the default)
 runs unarbitrated and says so once, off never starts or contacts one.
 
-Run with no target, it serves in this process and logs to stderr.
+Run with no target, it serves in this process and logs to stderr. Under
+systemd it takes the socket the supervisor hands over (LISTEN_FDS), refusing
+one that is malformed or bound anywhere but broker.sock. \`magus broker units\`
+prints the systemd or launchd units for it; magus never installs them.
+
+## Options
+
+**--idle-exit** *duration* (default: 10m0s)
+: Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive
 
 ### broker stop options
 
@@ -50,6 +58,9 @@ Run with no target, it serves in this process and logs to stderr.
 **stop**
 : Stop the broker, or with --services only the services it hosts
 
+**units**
+: Print the systemd or launchd units that supervise the broker
+
 ## Examples
 
 *Is a broker up, and what holds capacity*
@@ -62,6 +73,12 @@ magus broker status
 
 ```sh
 magus broker stop --services
+```
+
+*Print the systemd units that socket-activate it*
+
+```sh
+magus broker units systemd
 ```
 
 *Never start or ask one, for this run*

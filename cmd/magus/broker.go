@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,34 +30,54 @@ import (
 const brokerReadyTimeout = 10 * time.Second
 
 func brokerCmd(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return brokerServe(ctx)
+	if brokerServes(args) {
+		return brokerServe(ctx, args)
 	}
 	switch args[0] {
-	case "-h", "--help", "help":
+	case "-h", "-help", "--help", "help":
 		brokerUsage()
 		return nil
 	case hint.BrokerStatus.Leaf():
 		return brokerStatus(ctx, args[1:])
 	case hint.BrokerStop.Leaf():
 		return brokerStop(ctx, args[1:])
+	case hint.BrokerUnits.Leaf():
+		return brokerUnits(args[1:])
 	default:
 		brokerUsage()
-		return usagef("magus broker: unknown target %q (want status or stop, or nothing to run one)", args[0])
+		return usagef("magus broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
 	}
 }
 
+// brokerServes reports whether a `broker` argv runs a broker in this process: no target,
+// only flags, and no request for help.
+func brokerServes(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	switch args[0] {
+	case "-h", "-help", "--help":
+		return false
+	}
+	return strings.HasPrefix(args[0], "-")
+}
+
 func brokerUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus broker [status|stop] [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus broker [status|stop|units] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The broker holds this host's capacity (slots and declared memory) and the")
 	fmt.Fprintln(os.Stderr, "services every magus on it shares. A run starts one when none answers; it")
 	fmt.Fprintln(os.Stderr, "listens on a unix socket only and exits once it has held nothing for ten minutes.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
-	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr")
+	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr; under systemd it")
+	fmt.Fprintln(os.Stderr, "          serves the socket the supervisor hands over")
 	fmt.Fprintln(os.Stderr, "  status  is one up, what it holds; exits non-zero when none is")
 	fmt.Fprintln(os.Stderr, "  stop    stop it, or with --services stop only the services it hosts")
+	fmt.Fprintln(os.Stderr, "  units   print the systemd or launchd units that supervise it")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags, with no target:")
+	fmt.Fprintln(os.Stderr, "  --idle-exit DURATION  exit after holding nothing this long; 0 never exits")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Socket: "+broker.DefaultAddr())
 	fmt.Fprintln(os.Stderr, "Log, when a run started it: "+brokerLogPath())
@@ -64,16 +85,41 @@ func brokerUsage() {
 
 // brokerServe is `magus broker`: serve this host's capacity and shared services until
 // idle, stopped or signalled. Losing the bind to a live broker is the ordinary end of a
-// start race, so it exits 0.
-func brokerServe(ctx context.Context) error {
-	addr := broker.DefaultAddr()
-	ln, err := broker.Listen(ctx, addr)
-	if errors.Is(err, broker.ErrRunning) {
-		fmt.Fprintf(os.Stderr, "magus: a broker is already serving %s\n", addr)
-		return nil
+// start race, so it exits 0. A socket a supervisor hands over is served instead of
+// binding one.
+func brokerServe(ctx context.Context, args []string) error {
+	var f *gen.BrokerFlags
+	rest, err := cmdParse("broker", args, func(fs *flag.FlagSet) {
+		f = gen.BindBroker(fs)
+		fs.Usage = brokerUsage
+	})
+	if err != nil {
+		return err
 	}
+	if len(rest) > 0 {
+		return usagef("magus broker: unexpected argument %q (want status, stop or units, or flags only to run one)", rest[0])
+	}
+	if f.IdleExit < 0 {
+		return usagef("magus broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
+	}
+
+	addr := broker.DefaultAddr()
+	ln, err := broker.Activated(addr)
 	if err != nil {
 		return fmt.Errorf("magus broker: %w", err)
+	}
+	from := "serving"
+	if ln != nil {
+		from = "serving the supervisor's socket"
+	} else {
+		ln, err = broker.Listen(ctx, addr)
+		if errors.Is(err, broker.ErrRunning) {
+			fmt.Fprintf(os.Stderr, "magus: a broker is already serving %s\n", addr)
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("magus broker: %w", err)
+		}
 	}
 
 	// Services outlive the runs that asked for them, so a journal records each one's
@@ -95,12 +141,17 @@ func brokerServe(ctx context.Context) error {
 	// to. The profile decides memory's reservation.
 	memMB := mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile)
 	slots := cache.MachineCeiling()
-	fmt.Fprintf(os.Stderr, "magus: broker (pid %d) serving %s: %d slots, %s; exits after %s holding nothing\n",
-		os.Getpid(), addr, slots, cache.FormatMB(memMB), brokerIdleText())
+	exits := "never exits for idleness"
+	if f.IdleExit > 0 {
+		exits = "exits after " + idleText(f.IdleExit) + " holding nothing"
+	}
+	fmt.Fprintf(os.Stderr, "magus: broker (pid %d) %s %s: %d slots, %s; %s\n",
+		os.Getpid(), from, addr, slots, cache.FormatMB(memMB), exits)
 
 	err = broker.Serve(ctx, ln,
 		broker.WithCapacity(memMB, slots),
 		broker.WithServices(serviceHost{reg}),
+		broker.WithIdleExit(f.IdleExit),
 		broker.WithLogger(slog.Default()),
 		broker.WithVersion(version),
 	)
@@ -184,11 +235,14 @@ func brokerStop(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("broker stop: %w", err)
 	}
-	if err := c.Shutdown(ctx); err != nil {
-		return fmt.Errorf("broker stop: %w", err)
-	}
-	if err := waitSocketGone(ctx, broker.DefaultAddr(), stopTimeout); err != nil {
+	// The hangup, not the socket file going, is the stop: under systemd the supervisor
+	// keeps the socket, and the next connection starts another broker.
+	sctx, cancel := context.WithTimeout(ctx, stopTimeout)
+	defer cancel()
+	if err := c.Shutdown(sctx); errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("broker stop: broker (pid %d) did not stop within %s", st.PID, stopTimeout)
+	} else if err != nil {
+		return fmt.Errorf("broker stop: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "magus: stopped broker (pid %d)\n", st.PID)
 	return nil
@@ -202,9 +256,12 @@ func queryBroker(ctx context.Context) (types.StatusBroker, error) {
 	return broker.QueryStatus(ctx, broker.DefaultAddr())
 }
 
-// brokerIdleText is the broker's idle window as a person reads it.
-func brokerIdleText() string {
-	return fmt.Sprintf("%d minutes", int(broker.DefaultIdleExit/time.Minute))
+// idleText is an idle window as a person reads it.
+func idleText(d time.Duration) string {
+	if d%time.Minute == 0 {
+		return fmt.Sprintf("%d minutes", int(d/time.Minute))
+	}
+	return d.String()
 }
 
 // brokerLogPath is where a broker a run started writes: the XDG state directory, which
@@ -270,7 +327,7 @@ func announceBroker(w io.Writer, pid int, output string, quiet bool) {
 		return
 	}
 	msg := fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
-		pid, brokerIdleText(), hint.BrokerStatus)
+		pid, idleText(broker.DefaultIdleExit), hint.BrokerStatus)
 	if output != "" && output != string(outputText) {
 		_ = report.NewLineEncoder(w).Encode(report.Notice{
 			Level:   slog.LevelInfo,

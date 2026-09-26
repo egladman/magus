@@ -874,6 +874,57 @@ func TestAValidationBundleApplyingCannotCheckIsRefused(t *testing.T) {
 	}
 }
 
+// A change to its own generator whose merge conflicts in the generated file, where
+// validation's regeneration wrote nothing, ships no bundle: its gate ran on the merge
+// with the conflict settled to the change's side. Applying builds that same commit
+// itself, so it merges it through an update commit rather than kicking the change back,
+// and runs nothing.
+func TestAGatedMergeSettlingAGeneratedConflictMergesWithoutABundle(t *testing.T) {
+	d := newDoubles(t)
+	c := change("1", "gen")
+	c.Branch = "feature"
+	v := validated(c, base, "")
+	after := oid("after", "1")
+	update := head("update")
+	conflict := []magustypes.Conflict{{Path: "gen/x.go", Kind: magustypes.ConflictKindContent}}
+	touched := []string{"gen/gen.go", "gen/x.go"}
+	d.caps()
+	marks := d.marks(nil)
+	d.bases(base, base, after)
+	d.rechecks(c, approvedAs(c))
+	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, base).RunAndReturn(makeCheckout).Once()
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
+	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(conflict, nil).Once()
+	d.facts.EXPECT().Classify(mock.Anything, []string{"gen/x.go"}).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+	d.vcs.EXPECT().KeepIncoming(mock.Anything, mock.Anything, []string{"gen/x.go"}).Return(nil).Once()
+	d.vcs.EXPECT().MarkResolved(mock.Anything, mock.Anything, []string{"gen/x.go"}).Return(nil).Once()
+	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #1", when)}).Return(v.CandidateCommit, nil).Once()
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, base, v.CandidateCommit).Return(touched, nil).Once()
+	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).Return(nil).Once()
+	d.facts.EXPECT().Classify(mock.Anything, touched).Return(map[string]types.Writes{"gen/x.go": {Output: true}}, nil)
+	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"gen/gen.go"}, nil)
+	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"gen/gen.go"}).
+		Return(types.Generation{Units: []string{"gen"}, Code: []string{"gen/gen.go"}}, nil).Once()
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, v.CandidateCommit).Return("validated", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
+		Return(magustypes.TreeMergeResult{Tree: "plain", Conflicts: conflict}, nil)
+	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "plain", "validated").Return([]string{"gen/x.go"}, nil).Twice()
+	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
+		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files", Author: bot, Committer: bot},
+		Tree:       "validated", Parents: []string{c.Head, base}}).Return(update, nil)
+	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
+	success := d.green(c, update).NotBefore(push)
+	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success).Run(func(mock.Arguments) { marks.add("merged") })
+	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	a.Regenerate = noRegeneration(t)
+	var events bytes.Buffer
+	a.Events = NewEvents(&events)
+	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	assert.Equal(t, []string{"1 queued", "merged", "1 none"}, marks.entries())
+	assert.Contains(t, events.String(), "took its own merge, the commit validation gated, which settles `gen/x.go` as the change has them")
+}
+
 // ciGate is a required check of the base besides the queue's own status, which applying
 // sets itself and so never waits on.
 func ciGate(state types.CommitState) []types.Check {

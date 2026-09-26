@@ -3,7 +3,7 @@
 magus\-broker \- The per\-user process holding this host's capacity and shared services
 .SH SYNOPSIS
 .B magus
-.RI "broker [status|stop] [flags]"
+.RI "broker [status|stop|units] [flags]"
 .SH DESCRIPTION
 The broker holds this host's capacity: the concurrency slots and declared
 memory_mb every magus on it shares, and the services runs keep warm between
@@ -25,7 +25,16 @@ The broker setting in magus.yaml decides what a run does about it: required
 refuses a step when none answers (MGS3022, exit 69), best\-effort (the default)
 runs unarbitrated and says so once, off never starts or contacts one.
 .PP
-Run with no target, it serves in this process and logs to stderr.
+Run with no target, it serves in this process and logs to stderr. Under
+systemd it takes the socket the supervisor hands over (LISTEN_FDS), refusing
+one that is malformed or bound anywhere but broker.sock. `magus broker units`
+prints the systemd or launchd units for it; magus never installs them.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-idle\-exit\fR \fIduration\fR (default: 10m0s)
+Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive
+.RE
 .SS broker stop options
 .RS
 .TP
@@ -40,6 +49,9 @@ The broker: its capacity, every claim holding it, and its services
 .TP
 \fBstop\fR
 Stop the broker, or with \-\-services only the services it hosts
+.TP
+\fBunits\fR
+Print the systemd or launchd units that supervise the broker
 .RE
 .SH EXAMPLES
 \fIIs a broker up, and what holds capacity\fR
@@ -52,6 +64,12 @@ magus broker status
 .PP
 .EX
 magus broker stop --services
+.EE
+.PP
+\fIPrint the systemd units that socket\-activate it\fR
+.PP
+.EX
+magus broker units systemd
 .EE
 .PP
 \fINever start or ask one, for this run\fR

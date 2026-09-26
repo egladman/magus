@@ -72,6 +72,24 @@ export fun mgs_getTools() > {str: Tool} {
     };
 }
 
+// The package managers' caches and stores, never ~/.npmrc beside them, which holds
+// registry tokens. pnpm keeps its store under XDG data on Linux and in ~/Library/pnpm on
+// macOS; each entry resolves on every OS and the one that does not exist grants nothing.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [
+            SandboxAllow{env = "npm_config_cache", base = "home", path = ".npm", mode = SandboxAccess.rw},
+            SandboxAllow{env = "PNPM_HOME", mode = SandboxAccess.rx},
+            SandboxAllow{base = "xdgData", path = "pnpm", mode = SandboxAccess.rw},
+            SandboxAllow{base = "home", path = "Library/pnpm", mode = SandboxAccess.rw},
+            SandboxAllow{base = "userCache", path = "pnpm", mode = SandboxAccess.rw},
+            SandboxAllow{env = "YARN_CACHE_FOLDER", base = "userCache", path = "yarn", mode = SandboxAccess.rw},
+            SandboxAllow{env = "COREPACK_HOME", base = "xdgCache", path = "node/corepack", mode = SandboxAccess.rw},
+        ],
+        env = SandboxEnv{passthrough = ["npm_config_cache", "PNPM_HOME", "YARN_CACHE_FOLDER", "COREPACK_HOME"]},
+    };
+}
+
 // The JavaScript flavors are claimed here too: one toolchain, one syntax.
 export fun mgs_getLanguage() > Language {
     return Language{

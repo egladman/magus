@@ -48,6 +48,10 @@ type Rule struct {
 	Read  bool
 	Write bool
 	Exec  bool
+	// Create lets the kernel layer make Path as a directory when it is missing, so a
+	// tool's declared cache can be granted before the tool first creates it. Only a
+	// declared grant sets it: a missing workspace or git directory stays missing.
+	Create bool
 }
 
 // Grants reports whether r grants access.

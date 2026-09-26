@@ -38,6 +38,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
 	{Name: "VersionBounds", Type: reflect.TypeFor[spells.VersionBounds]()},
 	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
+	// Leaves first: Sandbox.allow is [SandboxAllow] and Sandbox.env a SandboxEnv.
+	// RuntimeObject because a workspace-local spell's handle carries its Sandbox back
+	// into Buzz.
+	{Name: "SandboxAllow", Type: reflect.TypeFor[spells.SandboxAllow](), RuntimeObject: true},
+	{Name: "SandboxEnv", Type: reflect.TypeFor[spells.SandboxEnv](), RuntimeObject: true},
+	{Name: "Sandbox", Type: reflect.TypeFor[spells.Sandbox](), RuntimeObject: true},
 	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], and
 	// Language carries a CommentSyntax.
 	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock]()},
@@ -324,6 +330,11 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "External",
 		Type:  reflect.TypeFor[spells.External](),
 		Cases: []enumCase{{"none", ""}, {"reads", "reads-external"}, {"mutates", "mutates-external"}},
+	},
+	{
+		Name:  "SandboxAccess",
+		Type:  reflect.TypeFor[spells.SandboxAccess](),
+		Cases: []enumCase{{"none", ""}, {"ro", "ro"}, {"rx", "rx"}, {"rw", "rw"}, {"rwx", "rwx"}},
 	},
 }
 

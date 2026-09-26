@@ -15,6 +15,9 @@ grep 'done' consumed
 grep 'done' copy
 
 # A tool that no magus feeds proves nothing: a lock held elsewhere is refused at once.
+# holdslow left a ready file above; without removing it the wait below passes before
+# holdgate holds the lock.
+rm ready
 exec magus run holdgate . &
 exec bash -c 'for i in $(seq 200); do [ -f ready ] && exit 0; sleep 0.05; done; exit 1'
 exec bash -c 'echo x | cat | magus run consume .; [ $? -eq 75 ]'

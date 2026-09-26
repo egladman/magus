@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/types"
 )
 
@@ -136,4 +138,20 @@ func TestServerRowsNameEveryListener(t *testing.T) {
 	assert.Contains(t, got, "server  47001")
 	assert.Contains(t, got, "listen  47001  http 127.0.0.1:7391")
 	assert.Contains(t, got, "watch   47001  graph+symbols  /repo")
+}
+
+func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
+	privateSockDir(t)
+	err := brokerCmd(t.Context(), []string{"--idle-exit", "-1s"})
+	var usage errUsage
+	require.ErrorAs(t, err, &usage)
+	assert.False(t, broker.Live(t.Context(), broker.DefaultAddr()), "nothing was bound")
+}
+
+// TestBrokerIdleExitDefaultsToTheBrokers keeps the flag's declared default, a literal
+// in the CLI registry, on the package constant a broker a run starts uses.
+func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
+	fs := flag.NewFlagSet("broker", flag.ContinueOnError)
+	f := gen.BindBroker(fs)
+	assert.Equal(t, broker.DefaultIdleExit, f.IdleExit)
 }

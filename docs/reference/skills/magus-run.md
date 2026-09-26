@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `87` |
+| `agent-skill-version` | `88` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `177b06c0919b` |
+| `skill-content` | `03d4e6f94f87` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -163,7 +163,7 @@ STRUCTURED output only - `-o json|yaml|jsonl|template` - never console text.)
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
-magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
+magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
@@ -397,7 +397,7 @@ ends, so they are the opposite of the antipattern above:
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
-magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
+magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
