@@ -17,7 +17,6 @@ const (
 	NameClearCache       = "clear-cache"
 	NameCheckReview      = "check-review"
 	NameCheckDrift       = "check-drift"
-	NameRegenerateOwed   = "regenerate-owed"
 )
 
 // CatalogEntry is one named background maintenance job: a stable Name (the CLI leaf and
@@ -75,11 +74,6 @@ var catalog = []CatalogEntry{
 		Name: NameCheckDrift,
 		Desc: "notice, without blocking, when the last commit left generated output stale",
 		Argv: []string{"server", NameCheckDrift},
-	},
-	{
-		Name: NameRegenerateOwed,
-		Desc: "regenerate and stage the generated files a finished merge or rebase kept one side of",
-		Argv: []string{"server", NameRegenerateOwed},
 	},
 }
 

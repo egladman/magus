@@ -225,6 +225,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkMergeDriverLoads() },
 	},
 	{
+		Name:           "settle-hooks",
+		Doc:            "whether the registered git merge driver has the hooks that regenerate what a merge changed, or leaves that output stale",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSettleHooks() },
+	},
+	{
 		Name:           "owed-regeneration",
 		Doc:            "whether a merge kept one side of a generated file whose regeneration has not run",
 		Evidence:       types.EvidenceMeasured,

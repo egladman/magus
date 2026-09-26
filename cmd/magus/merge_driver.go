@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
@@ -16,7 +17,6 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -46,9 +46,9 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "`"+hint.VCSResolve.String()+"` runs it through `jj resolve` on jj. An opted-in file")
 	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
 	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
-	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes, and the")
-	fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NameRegenerateOwed)+"` job the post-merge, post-rewrite and")
-	fmt.Fprintln(os.Stderr, "post-commit hooks submit runs it once the merge or rebase has finished.")
+	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes,")
+	fmt.Fprintln(os.Stderr, "and the settle hooks `"+hint.Init.With("--vcs", "git")+"` writes beside it (`"+hint.VCSResolve.With("--hook")+"`)")
+	fmt.Fprintln(os.Stderr, "run it once the merge, rebase, cherry-pick or revert has the whole tree.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
@@ -98,6 +98,17 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 
 	if err := installer.InstallMergeDriver(ctx, m.Root(), globs); err != nil {
 		return fmt.Errorf("init: install %s merge driver: %w", name, err)
+	}
+	// The hooks are the driver's second half, and this is the one place that writes
+	// them (see ensureMergeDriver for why a workspace load does not).
+	if hooks, ok := installer.(types.RegenHookInstaller); ok {
+		installed, err := hooks.InstallRegenHook(ctx, m.Root(), hint.VCSResolve.With("--hook"))
+		if err != nil && !errors.Is(err, types.ErrVCSUnsupported) {
+			return fmt.Errorf("init: install %s settle hooks: %w", name, err)
+		}
+		if len(installed) > 0 {
+			slog.InfoContext(ctx, "init: wrote the settle hooks; a merge now regenerates what it changed", slog.String("hooks", strings.Join(installed, ", ")))
+		}
 	}
 
 	n := slog.Int("globs", len(globs.Outputs)+len(globs.AutoResolve))
@@ -151,6 +162,11 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 // no registration at all; either way the next merge conflicts every generated file by
 // hand, which reads as a merge problem rather than a setup one.
 //
+// The settle hooks are NOT touched here. They live in the repository's shared hooks
+// dir, which every worktree's magus would rewrite in turn on each load, and unlike the
+// attributes they run a generator: installing them is `magus init --vcs git`'s, once,
+// and `magus doctor` reports a registered driver whose hooks are missing.
+//
 // Best-effort by design: a read-only checkout, an unsupported VCS, or a workspace with no
 // declared outputs are all normal, and none of them should fail the command the user
 // actually ran.
@@ -166,8 +182,14 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 	}
 	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), workspaceMergeGlobs(m))
 	if err != nil {
-		// Error, not Debug: a torn managed section or a stuck lock leaves the merge driver
+		// A git dir this process may not write, which the queue's sandbox makes of every
+		// candidate's, is the one failure that is not a problem: no merge is ever run there.
+		// Every other one (a torn managed section, a stuck lock) leaves the merge driver
 		// unregistered, and nothing else would say so. The command itself still runs.
+		if errors.Is(err, fs.ErrPermission) {
+			slog.DebugContext(ctx, "merge-driver: registration not refreshed in a read-only git dir", slog.String("error", err.Error()))
+			return
+		}
 		slog.ErrorContext(ctx, "merge-driver: could not refresh registration", slog.String("error", err.Error()))
 		return
 	}
@@ -188,8 +210,8 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 // every output that project declares, which mid-rebase left the tree dirty against what git
 // had staged, so `git rebase --continue` refused. A loop by construction, at one full build
 // per conflicted file. It takes a side and records the owed regeneration instead; the
-// regenerate-owed job runs the record once the merge or rebase has finished (see
-// serverRegenerateOwed).
+// settle hooks run the record once the operation has the whole tree (see
+// vcsResolveHook).
 func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if len(args) < 5 {
 		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
@@ -266,11 +288,11 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 		slog.WarnContext(ctx, "merge-driver: kept the current version of a generated file but could not record its regeneration; regenerate before committing",
 			slog.String("path", relPath), slog.String("regenerate", regenerate), slog.String("error", err.Error()))
 	case !recorded:
-		// No git dir, so no hook will settle it.
+		// No git dir, so no settle hook; hg, Sapling and jj regenerate by hand.
 		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
 			slog.String("path", relPath), slog.String("regenerate", regenerate))
 	default:
-		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; it is regenerated once the merge finishes",
+		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; the settle hook regenerates it once the merge has the whole tree",
 			slog.String("path", relPath), slog.String("regenerate", regenerate))
 	}
 	return nil

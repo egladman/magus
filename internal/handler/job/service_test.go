@@ -143,7 +143,7 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 	}
 	require.Equal(t, []string{
 		"jobs/sync-graph", "jobs/rotate-activities", "jobs/rotate-logs", "jobs/prune-preserved",
-		"jobs/clear-cache", "jobs/check-review", "jobs/check-drift", "jobs/regenerate-owed",
+		"jobs/clear-cache", "jobs/check-review", "jobs/check-drift",
 	}, names)
 }
 

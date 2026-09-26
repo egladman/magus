@@ -1,0 +1,223 @@
+# The merge driver's registration writes the settle hooks, and each merge-shaped
+# operation regenerates what it changed once git has the whole tree, through
+# `magus vcs resolve --hook <name>`. The generator reads IN.txt and IN2.txt into
+# OUT.txt, and throws while FAIL exists.
+#
+# Covered: a clean merge that changes a generator input, a clean merge where the
+# driver kept one side of OUT.txt, a conflicted merge concluded by hand, a rebase, a
+# cherry-pick, and a regeneration that fails.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git config commit.gpgsign false
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz .gitignore .gitattributes IN.txt IN2.txt OUT.txt
+exec git commit -m initial
+exec git tag base
+
+# init registers the driver and writes the hooks; a workspace load alone refreshes only
+# the driver.
+exec magus describe file OUT.txt
+! exists .git/hooks/pre-merge-commit
+env XDG_CONFIG_HOME=$WORK/xdg
+exec magus init -vcs git
+exists .git/hooks/pre-merge-commit
+exists .git/hooks/pre-commit
+exists .git/hooks/post-commit
+exists .git/hooks/post-rewrite
+exists .git/hooks/post-applypatch
+grep 'vcs resolve --hook pre-merge-commit' .git/hooks/pre-merge-commit
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+# --- clean merge that changes a generator input --------------------------------
+exec git checkout -b input-only
+cp IN.other.txt IN.txt
+exec git commit -am 'other input'
+exec git checkout main
+# main moves on too, so the merge is a real one and not a fast-forward.
+cp NOTES.txt NOTES
+exec git add NOTES
+exec git commit -m notes
+# The hook regenerates, stages OUT.txt into the merge and stops git's own commit, so
+# the merge commit is the one the person makes and carries the regenerated output.
+! exec git merge --no-edit input-only
+stderr 'magus: this merge changed generator inputs; ran magus run generate:rw \.; staged 1 regenerated file\(s\) into the merge'
+stderr 'use .git commit. to complete the merge'
+exists .git/MERGE_HEAD
+exec git diff --cached --name-only
+stdout '^OUT\.txt$'
+exec git commit -m 'merge input-only'
+! stderr 'magus:'
+exec git show HEAD:OUT.txt
+stdout '^generated: other\+base2$'
+exec git status --porcelain --untracked-files=no
+! stdout .
+! exists .git/magus-settled-tree
+
+# --- clean merge where the driver kept one side of OUT.txt ---------------------
+exec git checkout -b stale-output base
+cp OUT.stale.txt OUT.txt
+exec git commit -am 'a stale output, changed by hand'
+exec git checkout -b driver-side base
+cp IN.gamma.txt IN.txt
+cp OUT.gamma.txt OUT.txt
+exec git commit -am 'gamma, regenerated'
+exec git checkout stale-output
+! exec git merge --no-edit driver-side
+! stdout 'CONFLICT'
+stderr 'merge-driver: kept the current version of a generated file'
+stderr 'staged 1 regenerated file\(s\) into the merge'
+exec git commit -m 'merge driver-side'
+exec git show HEAD:OUT.txt
+stdout '^generated: gamma\+base2$'
+! exists .git/magus-owed-regeneration.json
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+# --- conflicted merge, concluded by hand -----------------------------------------
+exec git checkout -b alpha base
+cp IN.alpha.txt IN.txt
+cp OUT.alpha.txt OUT.txt
+exec git commit -am alpha
+exec git checkout -b beta base
+cp IN.beta.txt IN.txt
+cp OUT.beta.txt OUT.txt
+exec git commit -am beta
+! exec git merge --no-edit alpha
+stdout 'CONFLICT \(content\): Merge conflict in IN.txt'
+! stdout 'CONFLICT.*OUT.txt'
+exists .git/magus-owed-regeneration.json
+cp IN.resolved.txt IN.txt
+exec git add IN.txt
+exec git commit -m 'merge alpha'
+stderr 'magus: this merge changed generator inputs; ran magus run generate:rw \.; staged 1 regenerated file\(s\) into this commit'
+exec git show HEAD:OUT.txt
+stdout '^generated: resolved\+base2$'
+! exists .git/magus-owed-regeneration.json
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+# --- rebase --------------------------------------------------------------------
+exec git checkout -b second-input base
+cp IN2.rho.txt IN2.txt
+exec git commit -am 'second input'
+exec git checkout -b rebased base
+cp IN.rho.txt IN.txt
+cp OUT.rho.txt OUT.txt
+exec git commit -am 'rho, regenerated on the old base'
+exec git rebase second-input
+stderr 'magus: this rebase changed generator inputs; ran magus run generate:rw \.; staged 1 regenerated file\(s\)'
+exec git diff --cached --name-only
+stdout '^OUT\.txt$'
+cmp OUT.txt OUT.rho-rho.txt
+exec git commit --amend --no-edit
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+# --- cherry-pick ---------------------------------------------------------------
+exec git checkout -b picked base
+cp IN.pick.txt IN.txt
+exec git commit -am 'pick me'
+exec git checkout -b picking base
+exec git cherry-pick picked
+stderr 'magus: this cherry-pick changed generator inputs; ran magus run generate:rw \.; staged 1 regenerated file\(s\)'
+cmp OUT.txt OUT.pick.txt
+exec git diff --cached --name-only
+stdout '^OUT\.txt$'
+exec git commit --amend --no-edit
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+# --- a regeneration that fails -------------------------------------------------
+exec git checkout main
+cp FAIL.txt FAIL
+! exec git merge --no-edit second-input
+stderr 'magus: could not regenerate after this merge'
+stderr 'the commit is stopped; regenerate with `magus run generate:rw \.`'
+stderr 'use .git commit. to complete the merge'
+exists .git/MERGE_HEAD
+exists .git/magus-owed-regeneration.json
+# Fixed, the commit that concludes the merge regenerates on its way in.
+rm FAIL
+exec git commit -m 'merge second-input'
+stderr 'staged 1 regenerated file\(s\) into this commit'
+exec git show HEAD:OUT.txt
+stdout '^generated: other\+rho$'
+! exists .git/magus-owed-regeneration.json
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+-- magus.yaml --
+default_charms: [rw]
+-- .gitignore --
+.magus/
+-- .gitattributes --
+# BEGIN magus-generated - do not edit this section manually
+*.go diff=golang
+*.py diff=python
+*.rs diff=rust
+*.md diff=markdown
+*.ts diff=typescript
+*.tsx diff=typescript
+*.buzz diff=buzz
+OUT.txt merge=magus linguist-generated
+# END magus-generated
+-- magusfile.buzz --
+import "magus";
+import "fs";
+magus\project({
+    "name": "acme-root",
+    "sources": ["IN.txt", "IN2.txt"],
+    "targets": {
+        "generate": {"skip_cache": "writes on every run; a replay would skip the write"},
+    },
+});
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("OUT.txt");
+    if (fs\exists("FAIL")) {
+        throw "the generator is broken";
+    }
+    fs\writeFile("OUT.txt", "generated: " + fs\readLines("IN.txt")[0] + "+" + fs\readLines("IN2.txt")[0] + "\n");
+}
+-- IN.txt --
+base
+-- IN2.txt --
+base2
+-- OUT.txt --
+generated: base+base2
+-- IN.other.txt --
+other
+-- IN.gamma.txt --
+gamma
+-- OUT.gamma.txt --
+generated: gamma+base2
+-- OUT.stale.txt --
+generated: stale by hand
+-- IN.alpha.txt --
+alpha
+-- OUT.alpha.txt --
+generated: alpha+base2
+-- IN.beta.txt --
+beta
+-- OUT.beta.txt --
+generated: beta+base2
+-- IN.resolved.txt --
+resolved
+-- IN2.rho.txt --
+rho
+-- IN.rho.txt --
+rho
+-- OUT.rho.txt --
+generated: rho+base2
+-- OUT.rho-rho.txt --
+generated: rho+rho
+-- IN.pick.txt --
+pick
+-- OUT.pick.txt --
+generated: pick+base2
+-- FAIL.txt --
+break the generator
+-- NOTES.txt --
+not a generator input

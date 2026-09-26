@@ -1644,6 +1644,18 @@ does not generate are reported and left alone. Pass --against <ref> to merge
 that ref first and settle what it conflicts with; add --dry-run to see the
 classification and have the merge backed out again.
 
+--hook <name> is how git runs resolve itself. magus init --vcs git writes
+the pre-merge-commit, pre-commit, post-commit, post-rewrite and
+post-applypatch hooks beside the merge driver, each calling resolve once the
+merge, cherry-pick, revert, rebase or am has the whole tree; magus doctor
+reports a driver whose hooks are missing. It regenerates only the projects
+whose declared sources or outputs the operation changed, plus what the merge
+driver recorded, and stages the result: into the commit git is about to make,
+or, for a clean merge, in place of git's own commit, which git then leaves to
+you as "git commit". After a rebase or a clean cherry-pick the commits already
+exist, so it stages and prints the amend; it never amends. A failed
+regeneration stops a pending commit and prints the command that does it.
+
 merge-driver is the per-file driver git and hg invoke during a merge. You do
 not run it by hand; it is wired per clone, because a driver registration
 cannot be committed. That is also why a forge reports conflicts your own
@@ -1699,6 +1711,7 @@ base in yourself on the others, then run resolve.`,
 			Short: "Settle an in-progress merge's conflicted generated files, then regenerate once",
 			Flags: []Flag{
 				{Name: "against", Kind: FlagString, Doc: "Merge this `ref` first, then settle what it conflicts with"},
+				{Name: "hook", Kind: FlagString, Doc: "Run as the git `hook` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand"},
 			},
 		},
 		{

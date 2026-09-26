@@ -101,6 +101,10 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
 	fmt.Fprintln(w, "                   Needs a clean tree. Leaves the merge in progress to")
 	fmt.Fprintln(w, "                   commit; with --dry-run it is backed out again.")
+	fmt.Fprintln(w, "  --hook <name>    run as the git hook <name>: once the merge, rebase,")
+	fmt.Fprintln(w, "                   cherry-pick, revert or am has the whole tree, regenerate")
+	fmt.Fprintln(w, "                   only what it changed and stage the result. The merge")
+	fmt.Fprintln(w, "                   driver's registration wires these; you do not run them.")
 	fmt.Fprintln(w, "  --dry-run        classify and report; touch nothing (global flag)")
 }
 
@@ -117,8 +121,14 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	}
 	// resolve mutates every conflicted path in the workspace. Widening
 	// `magus vcs resolve one/file.go` from one path to all of them would cost a tree.
-	if len(pos) > 0 {
+	if len(pos) > 0 && rf.Hook == "" {
 		return usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
+	}
+	if rf.Hook != "" {
+		if rf.Against != "" {
+			return usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
+		}
+		return vcsResolveHook(ctx, root, rc, rf.Hook, pos)
 	}
 
 	// Not the load dispatch would do: opening a workspace refreshes the merge-driver
@@ -171,8 +181,11 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", rf.Against)
 			return nil
 		}
-		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
-		return nil
+		if globalCfg.DryRun {
+			fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
+			return nil
+		}
+		return settleOwedByHand(ctx, root, rc, m, res.VCS)
 	}
 
 	if !globalCfg.DryRun {
