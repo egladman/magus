@@ -97,7 +97,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read # check out main's gha-queue.buzz
-      actions: write # read the run's jobs, dispatch queue.yaml
+      actions: write # read the run's jobs and queue.yaml's runs, dispatch queue.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,12 +120,16 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-actions: write
 
-      - name: Start a validation run on main once the pull request's run saw merge intent
+      # GitHub keeps one run pending per concurrency group and cancels the older one, so a
+      # dispatch per intent mostly cancels runs. This reads queue.yaml's unfinished runs on
+      # main and starts one only when none of them plans after the intent.
+      - name: Start a validation run on main once the pull request's run saw merge intent, unless one covers it
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: magus buzz tools/gha-queue.buzz -- dispatch --run "$RUN" --base "$MAIN"
+          INTENT_AT: ${{ github.event.workflow_run.created_at }}
+        run: magus buzz tools/gha-queue.buzz -- dispatch --run "$RUN" --base "$MAIN" --intent-at "$INTENT_AT"
 
   # Runs when CI finishes for a same-repository pull request. A queued change whose
   # required checks were running, or ran again on an update commit the queue pushed,
@@ -178,12 +182,15 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-actions: write
 
-      - name: Start a validation run on main
+      # On a `completed` event the run's updated_at is when CI finished: a validation that
+      # read the queue before then saw the change not yet ready.
+      - name: Start a validation run on main, unless one covers it
         if: steps.ci.outputs.queued == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: magus buzz tools/gha-queue.buzz -- start --base "$MAIN"
+          INTENT_AT: ${{ github.event.workflow_run.updated_at }}
+        run: magus buzz tools/gha-queue.buzz -- start --base "$MAIN" --intent-at "$INTENT_AT"
 
   # Follows only a run main's own queue.yaml made: a push or a dispatch, on main, of this
   # repository. Queue's plan job is skipped on a run cancelled before it started, and

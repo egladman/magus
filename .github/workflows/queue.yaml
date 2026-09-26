@@ -120,6 +120,8 @@ jobs:
       # the rest wait for the run the next merge starts. Nearly every change here touches
       # the root project, so the queue is one partition, and at 3 it validated three
       # changes per run while the rest waited a full run each.
+      # queue-apply.yaml's dispatch reads this step's start, by its name, as the moment
+      # the run read the queue.
       - id: plan
         name: Plan the queue
         env:
