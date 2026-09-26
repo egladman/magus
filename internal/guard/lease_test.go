@@ -368,6 +368,8 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git merge main",
 		"git cherry-pick abc123",
 		"cd sub && git commit -m done",
+		"git -c core.pager=cat stash --help",
+		"git stash --help | cat",
 	} {
 		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
@@ -383,6 +385,8 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git stash list",
 		"git stash show -p",
 		"git log --oneline -3",
+		"git stash --help",
+		"git commit -h",
 		"./magus run go::go-test . -- -run Guard ./cmd/magus/",
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)

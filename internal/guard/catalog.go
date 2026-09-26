@@ -230,11 +230,13 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",
 		Why: "These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. " +
 			"It is the one category where an over-eager refusal is the safe direction, which is why an unparsable line falls back to the pattern rather than passing. " +
-			"Verify in place instead: no magus run needs a clean tree."},
+			"Verify in place instead: no magus run needs a clean tree. " +
+			"git's own help passes, because git documents that it prints usage without running: `git stash --help`, `git reset -h`, `git help stash`. It has to be the whole line, with nothing between the verb and the flag, so `git reset --hard --help`, `git -c ... stash --help`, a `VAR=value` prefix, `sh -c` or a pipe are judged as work."},
 	{Name: string(denyRuleWorktreeRemove), Decision: "deny",
 		Catches: "removing a worktree, which may hold another session's uncommitted work",
 		Why: "A worktree is where another session may be working right now, and its uncommitted changes live nowhere else. " +
-			"Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds."},
+			"Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds. " +
+			"`git worktree remove --help` and `-h`, alone on the line, print usage and pass."},
 }
 
 // advisoryDocs documents every rule that EXPLAINS rather than refuses. Several are

@@ -14,7 +14,7 @@ Removing a worktree, which may hold another session's uncommitted work.
 
 ## Why
 
-A worktree is where another session may be working right now, and its uncommitted changes live nowhere else. Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds.
+A worktree is where another session may be working right now, and its uncommitted changes live nowhere else. Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds. `git worktree remove --help` and `-h`, alone on the line, print usage and pass.
 
 ## Seeing it
 

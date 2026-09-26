@@ -703,12 +703,18 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 //   - `<tool> help [<sub>...]` holds for a program a spell renders WITH subcommands. A
 //     single-purpose program reads the word as an operand: `gofmt help` formats a file.
 //
+// A program in helpSafePrograms is read by its own recognizer first, which also accepts
+// the subcommand paths no spell renders.
+//
 // `man <tool>` and `<tool> version` are not recognized. No routing rule judges `man`,
 // whose own name is the program, and a `version` verb reaches raw-tool only when a spell
 // renders it as an operation, which makes it work.
 func helpRequest(deps Dependencies, c hint.Invocation) bool {
 	if isMagusInvocation(c) {
 		return magusHelpRequest(c.Args)
+	}
+	if recognize, ok := helpSafePrograms[c.Name]; ok && recognize(c.Args) {
+		return true
 	}
 	if len(c.Args) == 0 {
 		return false
@@ -733,6 +739,83 @@ func helpRequest(deps Dependencies, c hint.Invocation) bool {
 	have := afterGlobalFlags(c.Name, c.Args)
 	return len(paths) > 0 && len(have) > 0 && have[0] == "help" &&
 		!slices.ContainsFunc(have[1:], func(a string) bool { return !subcommandWord(a) })
+}
+
+// helpSafePrograms are the programs whose help request is documented never to run the
+// command it names, so helpOnlyLine lets one through the destructive-command rules too.
+// A BSD tool that ignores an unknown `--help` and does the work is why this is an
+// allowlist rather than every program.
+//
+// jj, hg and sl are absent: each expands a user alias before it reads `--help` (jj's to
+// `util exec`, hg's and sl's to a `!` shell command), and neither documents otherwise.
+var helpSafePrograms = map[string]func(args []string) bool{
+	"git": gitHelpRequest,
+}
+
+// gitOptionParsers are git builtins that parse their argv with parse-options, which
+// prints usage and exits 129 on `--help` or a lone `-h` without running (gitcli(7),
+// "ENHANCED OPTION PARSER"). An alias cannot stand in for one: git ignores aliases that
+// hide existing commands (git-config(1), alias.*). The set is the verbs the git rules
+// judge.
+var gitOptionParsers = map[string]bool{
+	"add": true, "checkout": true, "cherry-pick": true, "clean": true, "commit": true,
+	"merge": true, "push": true, "rebase": true, "reset": true, "restore": true,
+	"revert": true, "stash": true, "worktree": true,
+}
+
+// gitHelpRequest reads a git argv with no global options: `git help [<cmd>...]`,
+// `git --help`, `git -h`, and a path of bare words ending in `--help` or `-h`.
+//
+// `git <word> --help` holds for any word: git rewrites it to `git help <word>` before
+// dispatch (git-help(1): "git --help ... is identical to git help ... because the former
+// is internally converted into the latter"), which for an alias prints its definition. A
+// deeper path, or `-h`, reaches the command itself, so its first word must be a
+// gitOptionParsers builtin: `git x -h` runs a `!` alias x with `-h` appended.
+//
+// A global option is work: `-c alias.x=...` defines what the next word runs and
+// `--exec-path` chooses the binaries.
+func gitHelpRequest(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	if args[0] == "help" {
+		return !slices.ContainsFunc(args[1:], func(a string) bool { return !subcommandWord(a) })
+	}
+	path, last := args[:len(args)-1], args[len(args)-1]
+	if last != "--help" && last != "-h" {
+		return false
+	}
+	if slices.ContainsFunc(path, func(a string) bool { return !subcommandWord(a) }) {
+		return false
+	}
+	return len(path) == 0 || len(path) == 1 && last == "--help" || gitOptionParsers[path[0]]
+}
+
+// helpOnlyLine reports a line that is exactly one help request for a helpSafePrograms
+// program, which the destructive-command rules let through. Anything the shell adds
+// around it is work: a pipe, a list, a redirect, a VAR=value prefix (GIT_EXEC_PATH picks
+// the binaries), a wrapper or `sh -c`, and a word the shell expands.
+func helpOnlyLine(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil || len(f.Stmts) != 1 {
+		return false
+	}
+	st := f.Stmts[0]
+	call, ok := st.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) > 0 || len(call.Args) == 0 || len(st.Redirs) > 0 ||
+		st.Negated || st.Background || st.Coprocess || st.Disown {
+		return false
+	}
+	words := make([]string, 0, len(call.Args))
+	for _, w := range call.Args {
+		lit := w.Lit()
+		if lit == "" {
+			return false
+		}
+		words = append(words, lit)
+	}
+	recognize, ok := helpSafePrograms[words[0]]
+	return ok && recognize(words[1:])
 }
 
 // magusHelpRequest reads a magus argv the way cmd/magus does (wantsUsage there): `-h` or
@@ -1568,7 +1651,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			}
 		}
 	}
-	if parsed {
+	// A help request for a program documented never to run on one prints usage, so the
+	// destructive-command rules have nothing to guard.
+	if parsed && !helpOnlyLine(command, d) {
 		if v, matched := gitGuard(cmds); matched {
 			if v.Deny != "" {
 				return v
@@ -1585,11 +1670,13 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			}
 			advisory = v
 		}
-	} else if v, matched := gitGuardFallback(command); matched {
-		if v.Deny != "" {
-			return v
+	} else if !parsed {
+		if v, matched := gitGuardFallback(command); matched {
+			if v.Deny != "" {
+				return v
+			}
+			advisory = v
 		}
-		advisory = v
 	}
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(deps, command)
