@@ -655,6 +655,8 @@ const (
 	FlagVCSCheckpointPreserve = "preserve"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
+	// vcs resolve: --hook
+	FlagVCSResolveHook = "hook"
 	// version: --client
 	FlagVersionClient = "client"
 	// watch: --backend
@@ -1269,12 +1271,14 @@ func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
 // VCSResolveFlags are the flags declared for `magus vcs resolve`.
 type VCSResolveFlags struct {
 	Against string // --against
+	Hook    string // --hook
 }
 
 // BindVCSResolve registers `magus vcs resolve`'s flags on fs and returns the destination.
 func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	var f VCSResolveFlags
 	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
+	fs.StringVar(&f.Hook, FlagVCSResolveHook, "", "Run as the git `hook` named, once the operation has the whole tree: regenerate what it changed and stage the result; wired by the merge driver's registration, not run by hand")
 	return &f
 }
 

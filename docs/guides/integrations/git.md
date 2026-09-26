@@ -12,10 +12,12 @@ magus writes three things into a repository, and no more:
 - a managed section in `.gitattributes`, marking every declared output as generated
   and routing it, and every file auto-resolution may settle, to magus's merge driver;
 - a `merge.magus.driver` registration in the clone's own git config, because a driver
-  cannot be committed;
-- the refresh, drift-notice and owed-regeneration hooks below, when the server starts.
+  cannot be committed, and, when `magus init --vcs git` wires it, the settle hooks that
+  finish what the driver starts (see
+  [Regeneration after the merge](#regeneration-after-the-merge));
+- the refresh and drift-notice hooks below, when the server starts.
 
-All three are managed sections or single config keys. Nothing rewrites your history,
+All of them are managed sections or single config keys. Nothing rewrites your history,
 your branches, or a hook body you wrote yourself. Hooks your workspace writes in Buzz
 are a fourth thing, installed only when you ask; see
 [Your own hooks, in Buzz](#your-own-hooks-in-buzz).
@@ -56,6 +58,16 @@ people disable with `--no-verify`, and a disabled hook enforces nothing at all.
 its output to `/dev/null`, so a hook can never fail your git command, and a broken or
 half-installed magus is invisible to it. A hook that is not certain it is correct does
 nothing and says nothing.
+
+One set of hooks is the exception to both rules, on purpose: the settle hooks the merge
+driver's registration writes. They run a generator, stage on your behalf, and speak up
+when they cannot. The rule above exists because a hook runs on a command that had
+nothing to do with magus, and a merge is the one command that does: the driver has
+already taken a side of a generated file inside it, on the promise that regeneration
+follows, and a hook that hands that promise off to a server that may not be running
+keeps it only sometimes. So those hooks keep it themselves, once, bounded to what the
+merge changed, and fire for nothing that is not a merge. The details are in
+[Regeneration after the merge](#regeneration-after-the-merge).
 
 ## The hooks magus installs
 
@@ -176,8 +188,10 @@ is not a conventional commit, by the rule CI applies to pull request titles.
 Two limits worth knowing. A hook runs only where someone installed it and did not pass
 `--no-verify`, so anything that must hold belongs in CI as well. And `magus server start`
 writes managed sections into `post-checkout`, `post-merge`, `post-rewrite`, `post-commit`
-and `pre-push`; install refuses those files as hooks it did not write, so a Buzz hook for
-one of those names needs the server's section removed first.
+and `pre-push`, and the merge driver's registration into `pre-merge-commit`,
+`pre-commit`, `post-commit`, `post-rewrite` and `post-applypatch`; install refuses those
+files as hooks it did not write, so a Buzz hook for one of those names needs the managed
+section removed first.
 
 ## The merge driver, and what it cannot do
 
@@ -262,35 +276,69 @@ own markers for a file the driver does not settle.
 
 The driver keeps the current version of the file and does not regenerate it. git calls
 it once per conflicted file while the merge is still writing the tree, so a generator
-started there would read a half-merged checkout. Instead the driver records what it
-owes: the project, the target that rebuilds the file, and the file itself, in
-`magus-owed-regeneration.json` in the worktree's git directory. Fifty kept files of one
-target are one entry.
+started there reads a half-merged checkout, and what it writes dirties the tree against
+what git has staged, which is how the first version of this driver stopped every
+`git rebase --continue` dead. Instead the driver records what it owes: the project, the
+target that rebuilds the file, and the file itself, in `magus-owed-regeneration.json` in
+the worktree's git directory. Fifty kept files of one target are one entry.
 
-`post-merge`, `post-rewrite` and `post-commit` carry a third managed section,
-`magus-regenerate-owed`, in the same shape as the others: post a `regenerate-owed` job,
-return. `post-commit` is there because a merge git stopped on is concluded by
-`git commit`, which never fires `post-merge`. On the server the job:
+The regeneration itself happens in the settle hooks, which `magus init --vcs git`
+writes beside the driver: a managed section `magus-regenerate` in `pre-merge-commit`,
+`pre-commit`, `post-commit`, `post-rewrite` and `post-applypatch`, each running
+`magus vcs resolve --hook <name>`. A workspace load refreshes the driver's
+registration and deliberately not the hooks: the hooks dir is shared by every worktree
+of the repository, and a hook that runs a generator is written once, on request, not
+by whichever worktree's magus loaded last. `magus doctor` reports a registered driver
+whose hooks are missing under `settle-hooks`. Each hook fires once the tree is whole, and the hook
+regenerates more than the driver kept: every project whose declared sources or outputs
+the operation changed runs its `generate` target, deepest projects first, so `docs`
+regenerates before the root that indexes its pages. A clean merge that brings in a
+change to a generator's input regenerates its output too, driver or no driver. An
+operation that touches no generator's input runs nothing and prints nothing.
 
-1. returns at once when nothing is owed, which is every ordinary commit;
-2. waits up to 30 seconds for the merge or rebase to let go of the tree, because
-   `post-rewrite` fires before a rebase removes its state and `post-commit` fires on every
-   pick, and otherwise leaves the record for the hook that fires when it finishes;
-3. runs each owed target once with `:rw`, deepest projects first, so `docs` regenerates
-   before the root that indexes its pages;
-4. stages the declared outputs of the rebuilt projects that changed, and clears the
-   record.
+What happens to the regenerated output follows the hook, because git's hooks differ in
+whether the commit exists yet:
 
-It prints one line naming the runs, the file count and how to finish. It never amends:
-the job runs after git has returned, while you may be typing the next command, so it
-stages the result and prints `git commit --amend --no-edit` when HEAD is an unpushed
-commit, or asks for a new commit when HEAD may already be published.
+| Operation                                                                        | Hook               | Where the output lands                                                                                                                                        |
+| -------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `git merge`, `git pull` (clean)                                                  | `pre-merge-commit` | Staged into the merge, and git's own commit is stopped: "use 'git commit' to complete the merge". Your `git commit` is the merge commit, already regenerated. |
+| a merge, cherry-pick or revert git stopped on, then `git commit` or `--continue` | `pre-commit`       | Staged into that commit.                                                                                                                                      |
+| `git cherry-pick`, `git revert` (clean)                                          | `post-commit`      | Staged after the commit; the line prints `git commit --amend --no-edit`.                                                                                      |
+| `git rebase`, `git pull --rebase`, `--continue`                                  | `post-rewrite`     | Staged after the rebase, once for the whole rebase; the line prints the amend.                                                                                |
+| `git am`                                                                         | `post-applypatch`  | Staged after the last patch of the series; the line prints the amend.                                                                                         |
 
-A failed regeneration leaves the record in place. `magus doctor` reports a non-empty
-record under `owed-regeneration` with the commands that settle it; run
-`magus job run regenerate-owed` to retry, or `magus server regenerate-owed` in a clone
-with no server, where no hook is installed. Only git records owed regenerations. Under
-Mercurial and Sapling the driver logs the command to run, as before.
+The clean-merge row is the deliberate one. git computes a merge commit's tree before it
+runs `pre-merge-commit`, so output staged there would land in your index and not in the
+commit. Stopping the commit is git's own `--no-commit` shape: nothing is rewritten, no
+stale merge commit is ever written, and the `git commit` you run next carries the
+regenerated output without running the generator again. magus never amends; after a
+rebase or a clean pick the commits exist, so it stages, tells you, and leaves the amend
+to you.
+
+The hooks are quiet where they do not apply. `pre-commit` and `post-commit` read the git
+directory from the shell and start magus only under `MERGE_HEAD`, `CHERRY_PICK_HEAD` or
+`REVERT_HEAD`; a pick inside a rebase waits for `post-rewrite`; a cherry-pick with picks
+still to come is left alone, since staging would make the next pick refuse, and the last
+pick settles the lot. Two cases are missed: a clean single `git revert`, which writes no
+`REVERT_HEAD`, and `git merge --squash`, which makes no merge commit. Both are ordinary
+commits to the hooks; the drift notice catches them.
+
+Failure is loud. A regeneration that fails, or a workspace that cannot load mid-merge,
+prints why and the exact `magus run generate:rw ...` to run; in `pre-merge-commit` and
+`pre-commit` it also stops the commit, so no commit carries output magus knows is stale
+(`git commit --no-verify` commits anyway, and says so). The run stays owed in the git
+directory, `magus doctor` reports it under `owed-regeneration`, and `magus vcs resolve`
+with nothing conflicted runs what is owed, stages it and clears the record. The one
+failure that does not stop a commit is magus itself being absent: the hooks dir is
+shared by every worktree of a repository, each with a `./magus` of its own, so a hook
+that finds no binary, or one that predates `vcs resolve --hook`, prints a line saying
+the operation was not regenerated and lets the commit through.
+
+Only git has these hooks. Under Mercurial, Sapling and jj the driver logs the command to
+run before committing, and `magus vcs resolve` runs it. The merge queue never runs them
+either: it merges trees without a checkout and regenerates each candidate through its own
+hook, and the registration refresh a queue candidate cannot write is skipped, not
+reported.
 
 **A forge never runs a custom merge driver.** `merge=magus` needs `merge.magus.driver` in
 a git config, which is per-clone and cannot be committed, so github.com computes

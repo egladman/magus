@@ -73,18 +73,21 @@ The paths above are user-global. Each repository you ran magus in also holds:
 
 `magus init` also wires git, in three places a `rm` will not reach:
 
-| Where                                                    | What to remove                                                                         |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `.gitattributes`                                         | the block between `# BEGIN magus-generated` and `# END magus-generated`                |
-| `.git/config`                                            | `git config --unset merge.magus.driver`                                                |
-| `.git/hooks/post-checkout`, `post-merge`, `post-rewrite` | the block between `# BEGIN magus-refresh` and `# END magus-refresh`, in each           |
-| `.git/hooks/post-commit`, `pre-push`                     | the block between `# BEGIN magus-drift-notice` and `# END magus-drift-notice`, in each |
+| Where                                                                                         | What to remove                                                                         |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `.gitattributes`                                                                              | the block between `# BEGIN magus-generated` and `# END magus-generated`                |
+| `.git/config`                                                                                 | `git config --unset merge.magus.driver`                                                |
+| `.git/hooks/post-checkout`, `post-merge`, `post-rewrite`                                      | the block between `# BEGIN magus-refresh` and `# END magus-refresh`, in each           |
+| `.git/hooks/post-commit`, `pre-push`                                                          | the block between `# BEGIN magus-drift-notice` and `# END magus-drift-notice`, in each |
+| `.git/hooks/pre-merge-commit`, `pre-commit`, `post-commit`, `post-rewrite`, `post-applypatch` | the block between `# BEGIN magus-regenerate` and `# END magus-regenerate`, in each     |
 
-You can leave these. git treats a merge driver it cannot execute as a plain conflict,
-and the hooks end in `|| true`, so a missing `magus` never fails a git operation. The
-drift-notice hooks are the same shape: delete the block (or the whole hook file, if
-nothing else uses it) to stop the automatic notice, or run `magus server start` again
-after removing it to have it reinstalled.
+You can leave these. git treats a merge driver it cannot execute as a plain conflict;
+the refresh and drift-notice hooks end in `|| true`, so a missing `magus` never fails a
+git operation there; and the `magus-regenerate` blocks print one line and let the
+commit through when `magus` is missing. Delete a block (or the whole hook file, if
+nothing else uses it) to stop the integration. `magus server start` puts the refresh
+and drift-notice ones back; `magus init --vcs git` puts the `magus-regenerate` ones
+back.
 
 ## Shell setup
 

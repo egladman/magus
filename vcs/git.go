@@ -1092,11 +1092,6 @@ var gitRefreshHooks = []string{"post-checkout", "post-merge", "post-rewrite"}
 // gitRefreshHooks, just addressed to a different job.
 var gitDriftHooks = []string{"post-commit", "pre-push"}
 
-// gitRegenHooks fire when an operation that may have run the merge driver has finished:
-// a merge, a rebase or amend, and the commit that concludes a merge git stopped on (that
-// path fires post-commit, never post-merge).
-var gitRegenHooks = []string{"post-commit", "post-merge", "post-rewrite"}
-
 // InstallMergeDriver writes .gitattributes entries and registers the magus merge driver
 // and the diff drivers git does not ship, all under one repository lock so a concurrent
 // install cannot pair one's attributes with the other's registration. A root outside any
@@ -1780,13 +1775,87 @@ func (v gitVCS) InstallDriftHook(ctx context.Context, root, command string) ([]s
 }
 
 // InstallRegenHook implements types.RegenHookInstaller: after it returns, each of
-// gitRegenHooks runs command, fail-open, beside the refresh and drift sections and any
-// hand-written body. It returns the hooks it changed, none when all were current. Same
-// error and locking contract as InstallRefreshHook.
+// SettleHooks runs command with its own name appended, beside the refresh and drift
+// sections and any hand-written body, and post-merge no longer carries the section an
+// earlier magus wrote there. It returns the hooks it changed, none when all were
+// current. Same error and locking contract as InstallRefreshHook.
+//
+// Not fail-open, unlike the other hook sections: the command is the merge driver's
+// second half, and a failure it swallowed would be a commit carrying stale output that
+// nothing reports. In the two hooks git runs before it commits, a regeneration that
+// failed stops the commit. What does stay open is the binary itself: the hooks dir is
+// shared by every worktree of the repository, each with a magus of its own, so a
+// missing one (127) or one that predates the flag (2, usage) prints a line and lets the
+// commit through rather than failing every other worktree's merges.
 func (v gitVCS) InstallRegenHook(ctx context.Context, root, command string) ([]string, error) {
-	return installGitHookSections(ctx, root, gitRegenHooks, regenMarkers, func(string) string {
-		return command + " >/dev/null 2>&1 || true\n"
+	installed, err := installGitHookSections(ctx, root, SettleHooks, regenMarkers, func(name string) string {
+		return gitSettleHookBody(name, command)
 	})
+	if err != nil {
+		return nil, err
+	}
+	removed, err := removeGitHookSections(ctx, root, []string{"post-merge"}, regenMarkers)
+	return append(installed, removed...), err
+}
+
+// gitSettleHookBody is the shell one settle hook runs. The pre-commit and post-commit
+// guards read the operation state off the git dir so an ordinary commit, which is most
+// of them, never starts magus; post-rewrite fires for an amend too, which is not a
+// merge. The guards are `if` blocks rather than early exits so a section below this one
+// still runs.
+func gitSettleHookBody(name, command string) string {
+	bin, _, _ := strings.Cut(command, " ")
+	run := command + " " + name
+	tolerate := "magus_rc=$?\n" +
+		"if [ $magus_rc -eq 2 ] || [ $magus_rc -eq 127 ]; then\n" +
+		"  echo \"magus: the settle hook did not run: " + bin + " is missing or predates 'vcs resolve --hook', so this operation is not regenerated; run '" + bin + " vcs resolve' once it is\" >&2\n"
+	stop := "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
+	const end = "fi\n"
+	guarded := func(test, body string) string {
+		var b strings.Builder
+		b.WriteString("if " + test + "; then\n")
+		for _, line := range strings.SplitAfter(strings.TrimSuffix(body, "\n"), "\n") {
+			b.WriteString("  " + line)
+		}
+		b.WriteString("\nfi\n")
+		return b.String()
+	}
+	const stateHeads = "magus_git_dir=$(git rev-parse --git-dir) && { [ -e \"$magus_git_dir/CHERRY_PICK_HEAD\" ] || [ -e \"$magus_git_dir/REVERT_HEAD\" ]"
+	switch name {
+	case HookPreMergeCommit:
+		return run + "\n" + tolerate + stop + end
+	case HookPreCommit:
+		return guarded(stateHeads+" || [ -e \"$magus_git_dir/MERGE_HEAD\" ]; }", run+"\n"+tolerate+stop+end)
+	case HookPostCommit:
+		return guarded(stateHeads+"; }", run+"\n"+tolerate+end)
+	case HookPostRewrite:
+		return guarded("[ \"$1\" = rebase ]", run+" \"$@\"\n"+tolerate+end)
+	default:
+		return run + "\n" + tolerate + end
+	}
+}
+
+// removeGitHookSections deletes the m section from each named hook of root's repository
+// and returns the hooks it changed. A hook without one is left as it is.
+func removeGitHookSections(ctx context.Context, root string, names []string, m managedMarkers) ([]string, error) {
+	paths, ok, err := gitRepoPathsOf(ctx, root)
+	if err != nil || !ok {
+		return nil, err
+	}
+	var removed []string
+	err = withRepoLock(ctx, paths.commonDir, func() error {
+		for _, name := range names {
+			changed, err := removeManagedSection(filepath.Join(paths.hooksDir, name), m)
+			if err != nil {
+				return err
+			}
+			if changed {
+				removed = append(removed, name)
+			}
+		}
+		return nil
+	})
+	return removed, err
 }
 
 // gitArgChunkSize bounds pathspecs per git invocation. Resolving in bulk exists to avoid

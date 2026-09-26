@@ -479,13 +479,14 @@ type DriftHookInstaller interface {
 	InstallDriftHook(ctx context.Context, root, command string) ([]string, error)
 }
 
-// RegenHookInstaller is the capability (sibling of DriftHookInstaller) to install a hook
-// firing once a merge, rebase, amend or merge-concluding commit has finished, to run
-// command: the job that regenerates the files the merge driver kept one side of. The
-// driver cannot do it, since it runs while the merge is still writing the tree. Same
-// managed-section and fail-open contract as the other hook installers; callers skip the
-// install on *VCSUnsupportedError. It returns the labels of the hooks it installed, for
-// a notice.
+// RegenHookInstaller is the capability (sibling of DriftHookInstaller) to install the
+// hooks that settle a merge-shaped operation once it has the whole tree: each runs
+// command with the hook's own name appended, and command regenerates what the operation
+// changed and stages it. The merge driver cannot do it, since it runs while the merge is
+// still writing the tree. Same managed-section contract as the other hook installers,
+// but NOT fail-open: in a hook git runs before it commits, command's failure stops the
+// commit. Callers skip the install on *VCSUnsupportedError. It returns the labels of the
+// hooks it changed, for a notice.
 type RegenHookInstaller interface {
 	InstallRegenHook(ctx context.Context, root, command string) ([]string, error)
 }
