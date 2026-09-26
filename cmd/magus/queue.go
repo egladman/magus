@@ -12,7 +12,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
@@ -34,6 +37,7 @@ var queueOpenVCS = client.OpenVCS
 
 // queueEnv is what every verb shares: the checkout and the standard streams.
 type queueEnv struct {
+	root   string // the global --root as given, "" when it was not
 	dir    string // absolute
 	stdin  io.Reader
 	stdout io.Writer
@@ -57,7 +61,7 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 	if err != nil {
 		return fmt.Errorf("magus queue: --root %s: %w", dir, err)
 	}
-	e := &queueEnv{dir: abs, stdin: stdin, stdout: stdout, stderr: stderr}
+	e := &queueEnv{root: root, dir: abs, stdin: stdin, stdout: stdout, stderr: stderr}
 	var verb func(context.Context, *queueEnv, []string) error
 	switch args[0] {
 	case "describe":
@@ -251,7 +255,7 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 }
 
 func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, _, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
+	f, _, fs, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
 	if err != nil {
 		return err
 	}
@@ -281,6 +285,10 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	// An empty --status-context asks for no setup, whose reads need permissions a pull
 	// request job's token may lack.
 	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
+	var refused *types.SetupRefusedError
+	if errors.As(err, &refused) {
+		return fmt.Errorf("%w; then run: %s", err, renderRerun(e.root, fs, refused.App))
+	}
 	if err != nil {
 		return err
 	}
@@ -717,6 +725,33 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		a.Regenerate = queue.CommandRegenerate(regenerate, queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: queueSpellGrants(), Scratch: vars}, queue.NewHookLog(e.stderr))
 	}
 	return a.Run(ctx, pl)
+}
+
+// renderRerun is the describe command line fs was parsed from, quoted for a shell, with
+// app, the provider's own value, in place of the --app it was given.
+func renderRerun(root string, fs *flag.FlagSet, app string) string {
+	words := []string{"magus"}
+	if root != "" {
+		words = append(words, "--root", shellWord(root))
+	}
+	words = append(words, "queue", "describe")
+	for _, name := range []string{gen.FlagQueueDescribeProvider, gen.FlagQueueDescribeBase, gen.FlagQueueDescribeStatusContext,
+		gen.FlagQueueDescribeRemote, gen.FlagQueueDescribeVCS} {
+		if flagGiven(fs, name) {
+			words = append(words, "--"+name, shellWord(fs.Lookup(name).Value.String()))
+		}
+	}
+	return strings.Join(append(words, "--app", shellWord(app)), " ")
+}
+
+// shellWord quotes s as one word for bash, or Go-quotes it when it holds a byte no shell
+// quote can carry.
+func shellWord(s string) string {
+	q, err := syntax.Quote(s, syntax.LangBash)
+	if err != nil {
+		return strconv.Quote(s)
+	}
+	return q
 }
 
 // parsePerson reads "Name <email>"; empty is the zero Person.

@@ -33,8 +33,8 @@ apply report what would merge and call nothing on the provider.
 .SS queue describe options
 .RS
 .TP
-\fB\-\-app\fR \fIslug\fR
-`slug` of the app apply writes with (github: a GitHub App, required with a \-\-status\-context)
+\fB\-\-app\fR \fIapp\fR
+`app` apply writes with, as the provider names it (github: a GitHub App's slug[:App ID], required with a \-\-status\-context)
 .TP
 \fB\-\-base\fR \fIbranch\fR
 `branch` the queue merges into
@@ -138,8 +138,8 @@ Version control `backend` of the checkout at \-\-root
 .SS queue apply options
 .RS
 .TP
-\fB\-\-app\fR \fIslug\fR
-`slug` of the app whose credential the provider writes with (github: a GitHub App, required). apply refuses to start when the base requires \-\-status\-context from another integration (MGS3019)
+\fB\-\-app\fR \fIapp\fR
+`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires \-\-status\-context from another integration (MGS3019)
 .TP
 \fB\-\-base\fR \fIbranch\fR
 `branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it
@@ -215,6 +215,12 @@ magus queue describe --provider github --base main
 .PP
 .EX
 magus queue describe --provider github --base main --app acme-magus-queue
+.EE
+.PP
+\fIThe same for a private app whose App ID GitHub hides\fR
+.PP
+.EX
+magus queue describe --provider github --base main --app acme-magus-queue:2034567
 .EE
 .PP
 \fIList what carries merge intent\fR

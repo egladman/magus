@@ -3,7 +3,7 @@
 //
 // A provider script exports these functions, each taking one record and returning one:
 //
-//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}
+//	describe({base, remote_url, status_context, app, setup_steps}) > {stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?} or {refused: {reason, url, app}}
 //	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [{id, head, repo?, mark?}], closed?: [{id, repo?}]}
 //	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	list_green({base, remote_url, context})        > {changes: [{id, repo, head}]}
@@ -19,11 +19,15 @@
 // required of a provider apply follows a validation run through, and without
 // required_checks apply reads no required check. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
-// unqueued record those of [types.UnqueuedChange]. describe's setup, asked for with a
-// status_context, carries [types.Setup] as status_context, credential {id, name?},
-// required_checks [{context, integration?, events?}], settings [{name, value, want}],
-// app? {slug, id, client_id?, registration_url?, install_url?, environment?, variable?,
-// secret?} and steps [{title, command? or url?}]. list_artifacts' run carries
+// unqueued record those of [types.UnqueuedChange]. app is --app as the person gave it,
+// in the provider's own notation, which the queue never reads. describe's setup, asked
+// for with a status_context, carries [types.Setup] as status_context, credential {id,
+// name?}, required_checks [{context, integration?, events?}], settings [{name, value,
+// want}], app? {slug, id, client_id?, registration_url?, install_url?, environment?,
+// variable?, secret?} and steps [{title, command? or url?}]. A describe that cannot
+// describe a setup for that app returns refused instead, carrying
+// [types.SetupRefusedError]: what is missing, where the provider shows it, and the app
+// to ask again with. list_artifacts' run carries
 // [types.RunOrigin] as repo, head_repo, head_branch, event, branch_event and
 // definition. Every key the contract lists
 // without a "?" is required: a missing one is an error, never a zero value, since a
@@ -218,6 +222,20 @@ func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabil
 	})
 	if err != nil {
 		return types.Capabilities{}, err
+	}
+	var refused *record
+	if err := r.decode(optional("refused", &refused)); err != nil {
+		return types.Capabilities{}, err
+	}
+	if refused != nil {
+		e := &types.SetupRefusedError{}
+		if err := refused.decode(required("reason", &e.Reason), required("url", &e.URL), required("app", &e.App)); err != nil {
+			return types.Capabilities{}, err
+		}
+		if e.Reason == "" || e.URL == "" || e.App == "" {
+			return types.Capabilities{}, fmt.Errorf("%s: field %q needs a reason, a URL and an app", r.where, "refused")
+		}
+		return types.Capabilities{}, e
 	}
 	var c types.Capabilities
 	var sm string
