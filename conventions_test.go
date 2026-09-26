@@ -3562,11 +3562,7 @@ func TestTrustedJobsRestoreNoActionsCache(t *testing.T) {
 	const prOnlyIf = "github.event_name == 'pull_request'"
 	const offPR = "github.event_name != 'pull_request'"
 	alwaysUntrusted := map[string]bool{"queue.yaml": true}
-	// TODO: queue-apply.yaml belongs to another change; delete this entry once its
-	// mise-action carries cache: false. The test fails when the entry is no longer needed.
-	exempt := map[string]string{
-		"queue-apply.yaml/apply": "jdx/mise-action restores main's scope beside the queue's write token",
-	}
+	exempt := map[string]string{}
 
 	grantsWrite := func(n *yaml.Node) bool {
 		switch n.Kind {
