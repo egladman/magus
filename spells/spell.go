@@ -43,6 +43,7 @@ type Spell struct {
 	languageExtensions  []string        // file extensions that ARE the language, from the Language record
 	comments            *CommentSyntax  // declared comment/string syntax; nil when the spell declares none
 	symbolIndexer       *SymbolIndexer  // declared symbol-indexing capability; nil when the spell declares none
+	sandbox             *Sandbox        // declared host grants for its tools; nil when the spell declares none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	internal            bool
@@ -117,6 +118,10 @@ func (s *Spell) Comments() *CommentSyntax { return s.comments }
 // it declares none. A non-nil result is what makes a project bound to this spell
 // symbol-capable; nothing else answers that question.
 func (s *Spell) SymbolIndexer() *SymbolIndexer { return s.symbolIndexer }
+
+// Sandbox returns what the spell's tools need from the host under the sandbox, or nil
+// when it declares nothing.
+func (s *Spell) Sandbox() *Sandbox { return s.sandbox }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
@@ -352,6 +357,11 @@ func WithLanguageExtensions(exts []string) Option {
 // registered without it is not symbol-capable.
 func WithSymbolIndexer(si *SymbolIndexer) Option {
 	return func(s *Spell) { s.symbolIndexer = si }
+}
+
+// WithSandbox sets the host grants the spell's tools need under the sandbox.
+func WithSandbox(sb *Sandbox) Option {
+	return func(s *Spell) { s.sandbox = sb }
 }
 
 // WithComments sets the comment and string syntax the spell declares for its

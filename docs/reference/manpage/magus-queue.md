@@ -118,9 +118,6 @@ apply report what would merge and call nothing on the provider.
 **--parallel** *int*
 : Candidates built or gated at once across every partition; 0 is one per CPU
 
-**--plan** *file*
-: The mergequeue.plan/v1 \`file\`
-
 **--regenerate** *command*
 : \`command\` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin
 
@@ -132,6 +129,9 @@ apply report what would merge and call nothing on the provider.
 
 **--scratch-env** *NAME=DIR*
 : \`NAME=DIR\` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
+
+**--stdin**
+: Read the mergequeue.plan/v1 document from stdin; required
 
 **--target** *target* (default: ci)
 : magus \`target\` the affected set is computed for; not with --facts
@@ -244,7 +244,7 @@ magus queue plan --provider github --out plan.json < changes.json
 *Validate every candidate*
 
 ```sh
-magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'
+magus queue validate --stdin --verdicts verdicts --gate 'magus run ci' < plan.json
 ```
 
 *Merge the green ones as they arrive*

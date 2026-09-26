@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/spells"
 )
 
 // Save validates what it writes with validateAfterMerge, which layers the file
@@ -58,7 +60,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, cfg.Server.IdleTTL)
 	assert.Equal(t, "Bearer xyz", cfg.Telemetry.Headers["Authorization"])
 
-	var got *SandboxAllowPath
+	var got *spells.SandboxAllow
 	for i := range cfg.Sandbox.Allow {
 		if cfg.Sandbox.Allow[i].Name == "homebin" {
 			got = &cfg.Sandbox.Allow[i]
@@ -66,7 +68,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	}
 	require.NotNil(t, got, "sandbox.allow homebin entry not found")
 	assert.Equal(t, "/home/user/.local/bin", got.Path)
-	assert.Equal(t, "ro", got.Mode)
+	assert.Equal(t, spells.SandboxAccessRO, got.Mode)
 }
 
 // TestKnownKeys checks that the reflection-derived key set is well-formed: non-empty,

@@ -111,9 +111,6 @@ Validate this one `change`; the changes beneath it in its partition are merged u
 \fB\-\-parallel\fR \fIint\fR
 Candidates built or gated at once across every partition; 0 is one per CPU
 .TP
-\fB\-\-plan\fR \fIfile\fR
-The mergequeue.plan/v1 `file`
-.TP
 \fB\-\-regenerate\fR \fIcommand\fR
 `command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin
 .TP
@@ -125,6 +122,9 @@ Let hooks read magus's remote cache from the GitHub Actions cache service throug
 .TP
 \fB\-\-scratch\-env\fR \fINAME=DIR\fR
 `NAME=DIR` sets NAME to DIR in the candidate's scratch directory for every hook, so the cache it names is the candidate's own; repeatable
+.TP
+\fB\-\-stdin\fR
+Read the mergequeue.plan/v1 document from stdin; required
 .TP
 \fB\-\-target\fR \fItarget\fR (default: ci)
 magus `target` the affected set is computed for; not with \-\-facts
@@ -238,7 +238,7 @@ magus queue plan --provider github --out plan.json < changes.json
 \fIValidate every candidate\fR
 .PP
 .EX
-magus queue validate --plan plan.json --verdicts verdicts --gate 'magus run ci'
+magus queue validate --stdin --verdicts verdicts --gate 'magus run ci' < plan.json
 .EE
 .PP
 \fIMerge the green ones as they arrive\fR

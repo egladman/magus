@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,10 +12,31 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/spells"
+)
+
+// goDecl and cargoDecl stand in for the go and rust spells' declarations; the real ones
+// are tested where the spells load (internal/spell).
+var (
+	goDecl = spells.Sandbox{
+		Allow: []spells.SandboxAllow{
+			{Env: "GOROOT", Mode: spells.SandboxAccessRX},
+			{Env: "GOCACHE", Base: spells.SandboxBaseUserCache, Path: "go-build", Mode: spells.SandboxAccessRWX},
+		},
+		Env: spells.SandboxEnv{Passthrough: []string{"GOCACHE", "GOFLAGS"}},
+	}
+	cargoDecl = spells.Sandbox{Allow: []spells.SandboxAllow{
+		{Base: "$CARGO_HOME", Path: "registry", Mode: spells.SandboxAccessRW},
+		{Base: spells.SandboxBaseHome, Path: ".cargo/registry", Mode: spells.SandboxAccessRW},
+	}}
+	miseDecl = spells.Sandbox{Allow: []spells.SandboxAllow{
+		{Env: "MISE_DATA_DIR", Base: spells.SandboxBaseXDGData, Path: "mise", Mode: spells.SandboxAccessRX},
+	}}
 )
 
 // hostOptions is a realistic linux host: a workspace in a linked worktree, a home
-// holding secrets and tool caches, and a PATH mixing system, home and relative dirs.
+// holding secrets and tool caches, a PATH mixing system, home and relative dirs, the go
+// and rust spells loaded and mise allowed by the workspace.
 func hostOptions(t *testing.T) (PolicyOptions, string) {
 	t.Helper()
 	root := filesystem.ResolveRulePath(t.TempDir())
@@ -36,10 +58,12 @@ func hostOptions(t *testing.T) (PolicyOptions, string) {
 			"HOME=" + home,
 			"TMPDIR=/tmp/shared",
 			"GITHUB_TOKEN=ghp_secret",
+			"GOROOT=/usr/local/go",
 			"GOCACHE=" + root + "/gocache",
 			"MISE_DATA_DIR=/opt/mise",
 		},
-		InstallDirs: []string{"/usr/local/go"},
+		Sandbox: miseDecl,
+		Spells:  map[string]spells.Sandbox{"go": goDecl, "rust": cargoDecl},
 	}, root
 }
 
@@ -102,6 +126,33 @@ func TestBuildPolicyGrants(t *testing.T) {
 	}
 }
 
+// The core knows no toolchain. With every toolchain's variable pointing somewhere and
+// no declaration loaded, nothing a toolchain keeps is granted and none of those
+// variables reaches a child: each arrives only through a spell or the workspace.
+func TestBuildPolicyKnowsNoToolchain(t *testing.T) {
+	tc := filesystem.ResolveRulePath(t.TempDir())
+	home := filepath.Join(tc, "home")
+	names := []string{
+		"GOROOT", "GOPATH", "GOCACHE", "GOMODCACHE", "GOENV", "GOLANGCI_LINT_CACHE", "GOFLAGS",
+		"CARGO_HOME", "RUSTUP_HOME", "PNPM_HOME", "npm_config_cache", "YARN_CACHE_FOLDER", "COREPACK_HOME",
+		"PIP_CACHE_DIR", "UV_CACHE_DIR", "MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "ASDF_DATA_DIR",
+		"BUF_CACHE_DIR", "TRIVY_CACHE_DIR",
+	}
+	environ := []string{"PATH=/usr/bin", "HOME=" + home}
+	for _, n := range names {
+		environ = append(environ, n+"="+filepath.Join(tc, "tools", n))
+	}
+	p := BuildPolicy(PolicyOptions{Workspace: filepath.Join(tc, "ws"), Home: home, GOOS: "linux", Environ: environ})
+
+	for _, r := range p.FS.Rules {
+		assert.False(t, filesystem.Under(r.Path, filepath.Join(tc, "tools")), "toolchain path granted: %s", r.Path)
+		assert.False(t, filesystem.Under(r.Path, home), "home path granted: %s", r.Path)
+	}
+	for _, n := range names {
+		assert.False(t, p.AllowsEnv(n), "%s reaches a child", n)
+	}
+}
+
 // PATH entries grant exec one directory at a time. Home and its ancestors (/ among
 // them) are skipped, and so is a relative entry, or a PATH with ~ on it would grant
 // the whole home tree.
@@ -115,11 +166,10 @@ func TestBuildPolicyPathEntries(t *testing.T) {
 // temp dir: the shared one holds other programs' sockets.
 func TestBuildPolicyBaseEnv(t *testing.T) {
 	o, root := hostOptions(t)
-	o.Env = env.Allowlist{Names: []string{"GOCACHE"}}
 	p := BuildPolicy(o)
 
 	assert.Contains(t, p.BaseEnv, "TMPDIR="+filepath.Join(root, "tmp"))
-	assert.Contains(t, p.BaseEnv, "GOCACHE="+root+"/gocache")
+	assert.Contains(t, p.BaseEnv, "GOCACHE="+root+"/gocache", "the go spell passes GOCACHE through")
 	assert.NotContains(t, p.BaseEnv, "TMPDIR=/tmp/shared")
 	for _, kv := range p.BaseEnv {
 		assert.False(t, strings.HasPrefix(kv, "GITHUB_TOKEN="), "secret leaked: %s", kv)
@@ -139,8 +189,10 @@ func TestBuildPolicyBaseEnvIsNeverNil(t *testing.T) {
 func TestBuildPolicyKeepsUserRulesAndPassthrough(t *testing.T) {
 	o, root := hostOptions(t)
 	extra := filepath.Join(root, "data")
-	o.Allow = []filesystem.Rule{{Path: extra, Read: true, Write: true}}
-	o.Env = env.Allowlist{Prefixes: []string{"MISE_*"}}
+	o.Sandbox = spells.Sandbox{
+		Allow: []spells.SandboxAllow{{Path: extra, Mode: spells.SandboxAccessRW}},
+		Env:   spells.SandboxEnv{Passthrough: []string{"MISE_*"}},
+	}
 	p := BuildPolicy(o)
 
 	assert.NoError(t, check(p, filesystem.Write, filepath.Join(extra, "out")))
@@ -161,26 +213,9 @@ func TestBuildPolicyResolvesRulePaths(t *testing.T) {
 	assert.NoError(t, check(p, filesystem.Read, filepath.Join(realDir, "file.txt")))
 }
 
-func TestBuildPolicyDefaultCachesFollowTheOS(t *testing.T) {
-	darwin := toolRules(map[string]string{}, "/Users/u", "darwin")
-	linux := toolRules(map[string]string{"XDG_CACHE_HOME": "/xdg"}, "/home/u", "linux")
-	assert.Contains(t, darwin, rwx("/Users/u/Library/Caches/go-build"))
-	assert.Contains(t, linux, rwx("/xdg/go-build"))
-	assert.Contains(t, linux, rw("/home/u/go/pkg/mod"))
-
-	// No home and no variables: nothing under a relative path.
-	assert.Empty(t, toolRules(map[string]string{}, "", "linux"))
-
-	// A variable naming home, an ancestor of it, or a relative path grants nothing.
-	for _, r := range toolRules(map[string]string{"GOCACHE": "off", "XDG_CACHE_HOME": "/home/u", "GOMODCACHE": "/"}, "/home/u", "linux") {
-		assert.NotContains(t, []string{"off", "/home/u", "/"}, r.Path)
-		assert.True(t, filepath.IsAbs(r.Path), "relative rule %q", r.Path)
-	}
-}
-
 func TestBuildPolicyMergesDuplicatePaths(t *testing.T) {
 	ws := t.TempDir()
-	p := BuildPolicy(PolicyOptions{Workspace: ws, Allow: []filesystem.Rule{rx(ws)}})
+	p := BuildPolicy(PolicyOptions{Workspace: ws, Sandbox: spells.Sandbox{Allow: []spells.SandboxAllow{{Path: ws, Mode: spells.SandboxAccessRX}}}})
 	var n int
 	for _, r := range p.FS.Rules {
 		if r.Path == filesystem.ResolveRulePath(ws) {
@@ -189,4 +224,247 @@ func TestBuildPolicyMergesDuplicatePaths(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, n)
+}
+
+// A declared writable grant may be created when missing; a path a core grant names may
+// not, even when a declaration also names it writable, so a missing workspace stays a
+// failure rather than a directory the sandbox makes.
+func TestBuildPolicyCreatesOnlyDeclaredPaths(t *testing.T) {
+	root := t.TempDir()
+	ws, cache := filepath.Join(root, "gone"), filepath.Join(root, "cache")
+	p := BuildPolicy(PolicyOptions{Workspace: ws, Sandbox: spells.Sandbox{Allow: []spells.SandboxAllow{
+		{Path: ws, Mode: spells.SandboxAccessRW},
+		{Path: cache, Mode: spells.SandboxAccessRW},
+	}}})
+	creates := map[string]bool{}
+	for _, r := range p.FS.Rules {
+		creates[r.Path] = r.Create
+	}
+	assert.False(t, creates[filesystem.ResolveRulePath(ws)], "the workspace is a core grant")
+	assert.True(t, creates[filesystem.ResolveRulePath(cache)], "a declared cache may be created")
+}
+
+// mergeLayers is the one merge every layer goes through. Entries union, the same path
+// at two layers gets both modes, passthrough unions, and an entry reads its variable
+// before its base.
+func TestMergeLayers(t *testing.T) {
+	entry := func(env, base, path string, mode spells.SandboxAccess) spells.SandboxAllow {
+		return spells.SandboxAllow{Env: env, Base: base, Path: path, Mode: mode}
+	}
+	layer := func(pass []string, allow ...spells.SandboxAllow) spells.Sandbox {
+		return spells.Sandbox{Allow: allow, Env: spells.SandboxEnv{Passthrough: pass}}
+	}
+	// A declared writable grant may be created when it is missing.
+	created := func(r filesystem.Rule) filesystem.Rule {
+		r.Create = true
+		return r
+	}
+	for name, tc := range map[string]struct {
+		vars      map[string]string
+		layers    []spells.Sandbox
+		want      []filesystem.Rule
+		wantNames []string
+		wantPfx   []string
+	}{
+		"no layers": {},
+		"rx and rw at two layers make rwx": {
+			layers: []spells.Sandbox{
+				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRX)),
+				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRW)),
+			},
+			want: []filesystem.Rule{created(rwx("/opt/tool"))},
+		},
+		"a later ro layer never narrows": {
+			layers: []spells.Sandbox{
+				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRW)),
+				layer(nil, entry("", "", "/opt/tool", spells.SandboxAccessRO)),
+			},
+			want: []filesystem.Rule{created(rw("/opt/tool"))},
+		},
+		"an empty mode is ro": {
+			layers: []spells.Sandbox{layer(nil, entry("", "", "/opt/tool", ""))},
+			want:   []filesystem.Rule{ro("/opt/tool")},
+		},
+		"the variable wins over the base": {
+			vars:   map[string]string{"GOCACHE": "/fast/gocache"},
+			layers: []spells.Sandbox{layer(nil, entry("GOCACHE", "userCache", "go-build", spells.SandboxAccessRWX))},
+			want:   []filesystem.Rule{created(rwx("/fast/gocache"))},
+		},
+		"the base when the variable is unset": {
+			vars:   map[string]string{"XDG_CACHE_HOME": "/xdg"},
+			layers: []spells.Sandbox{layer(nil, entry("GOCACHE", "userCache", "go-build", spells.SandboxAccessRWX))},
+			want:   []filesystem.Rule{created(rwx("/xdg/go-build"))},
+		},
+		"a $VAR base takes the first entry of a list": {
+			vars:   map[string]string{"GOPATH": "/a:/b"},
+			layers: []spells.Sandbox{layer(nil, entry("", "$GOPATH", "pkg/mod", spells.SandboxAccessRW))},
+			want:   []filesystem.Rule{created(rw("/a/pkg/mod"))},
+		},
+		"an unset $VAR base grants nothing": {
+			layers: []spells.Sandbox{layer(nil, entry("", "$CARGO_HOME", "registry", spells.SandboxAccessRW))},
+		},
+		"a variable naming home, an ancestor or a relative path grants nothing": {
+			vars: map[string]string{"GOCACHE": "off", "GOMODCACHE": "/", "XDG_CACHE_HOME": "/home/u"},
+			layers: []spells.Sandbox{layer(nil,
+				entry("GOCACHE", "userCache", "go-build", spells.SandboxAccessRWX),
+				entry("GOMODCACHE", "home", "go/pkg/mod", spells.SandboxAccessRW),
+				entry("", "$XDG_CACHE_HOME", "", spells.SandboxAccessRW),
+			)},
+		},
+		"passthrough unions across layers": {
+			layers:    []spells.Sandbox{layer([]string{"GOFLAGS"}), layer([]string{"CARGO_HOME", "MISE_*"})},
+			wantNames: []string{"GOFLAGS", "CARGO_HOME"},
+			wantPfx:   []string{"MISE_*"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := hostDirs{vars: tc.vars, home: "/home/u", goos: "linux"}
+			rules, allow := h.mergeLayers(tc.layers...)
+			assert.Equal(t, append([]filesystem.Rule{}, tc.want...), rules)
+			assert.Equal(t, append(env.DefaultAllow(), tc.wantNames...), allow.Names)
+			assert.Equal(t, tc.wantPfx, allow.Prefixes)
+		})
+	}
+}
+
+// userCache and userConfig follow the OS the way Go's os.UserCacheDir does; the xdg
+// bases do not.
+func TestBasesFollowTheOS(t *testing.T) {
+	darwin := hostDirs{vars: map[string]string{"XDG_CACHE_HOME": "/xdg"}, home: "/Users/u", goos: "darwin"}
+	assert.Equal(t, "/Users/u/Library/Caches", darwin.base(spells.SandboxAllow{Base: "userCache"}))
+	assert.Equal(t, "/Users/u/Library/Application Support", darwin.base(spells.SandboxAllow{Base: "userConfig"}))
+	assert.Equal(t, "/xdg", darwin.base(spells.SandboxAllow{Base: "xdgCache"}))
+	linux := hostDirs{home: "/home/u", goos: "linux"}
+	assert.Equal(t, "/home/u/.cache", linux.base(spells.SandboxAllow{Base: "userCache"}))
+	assert.Equal(t, "/home/u/.local/share", linux.base(spells.SandboxAllow{Base: "xdgData"}))
+	assert.Equal(t, "/home/u/.local/state", linux.base(spells.SandboxAllow{Base: "xdgState"}))
+	assert.Empty(t, hostDirs{goos: "linux"}.base(spells.SandboxAllow{Base: "userCache"}), "no home, no base")
+}
+
+// A binRoot base is the install root of a binary on PATH, found through its symlinks,
+// and only a real install counts: requires tells a toolchain from a shim of that name.
+func TestBinRootFindsTheInstallBehindPath(t *testing.T) {
+	dir := filesystem.ResolveRulePath(t.TempDir())
+	install := filepath.Join(dir, "go")
+	for _, d := range []string{"go/bin", "go/pkg/tool", "links", "shims"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, d), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(install, "bin/go"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(install, "bin/go"), filepath.Join(dir, "links/go")))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "shims/go"), []byte("#!/bin/sh\n"), 0o755))
+
+	goroot := spells.SandboxAllow{Base: "binRoot", Bin: "go", Requires: "pkg/tool", Mode: spells.SandboxAccessRX}
+	resolve := func(path string) []filesystem.Rule {
+		rules, _ := hostDirs{vars: map[string]string{"PATH": path}, goos: "linux"}.mergeLayers(spells.Sandbox{Allow: []spells.SandboxAllow{goroot}})
+		return rules
+	}
+	assert.Equal(t, []filesystem.Rule{rx(install)}, resolve(filepath.Join(dir, "links")), "through a symlink")
+	assert.Empty(t, resolve(filepath.Join(dir, "shims")), "a shim outside a bin/ has no root")
+	require.NoError(t, os.Remove(filepath.Join(install, "pkg/tool")))
+	assert.Empty(t, resolve(filepath.Join(install, "bin")), "a root without pkg/tool is not a Go install")
+}
+
+// Scoped keeps the core and the workspace layer, cuts the spell layer to the named
+// spells and adds the target's declaration. The go spell's cache and environment reach
+// only a scope that includes it.
+func TestScopedCutsTheSpellLayer(t *testing.T) {
+	o, root := hostOptions(t)
+	p := BuildPolicy(o)
+	gocache := filepath.Join(root, "gocache/ab/x")
+	registry := filepath.Join(o.Home, ".cargo/registry/x.crate")
+
+	goOnly := p.Scoped([]string{"go"}, nil)
+	assert.NoError(t, check(goOnly, filesystem.Exec, gocache))
+	assert.ErrorIs(t, check(goOnly, filesystem.Write, registry), filesystem.ErrDenied)
+	assert.True(t, goOnly.AllowsEnv("GOFLAGS"))
+	assert.NoError(t, check(goOnly, filesystem.Exec, "/opt/mise/installs/x"), "the workspace layer stays")
+
+	rustOnly := p.Scoped([]string{"rust"}, nil)
+	assert.ErrorIs(t, check(rustOnly, filesystem.Read, gocache), filesystem.ErrDenied)
+	assert.NoError(t, check(rustOnly, filesystem.Write, registry))
+	assert.False(t, rustOnly.AllowsEnv("GOFLAGS"))
+	assert.NotContains(t, rustOnly.BaseEnv, "GOCACHE="+root+"/gocache")
+
+	target := &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(root, "fixtures"), Mode: spells.SandboxAccessRW}}}
+	withTarget := p.Scoped([]string{"rust"}, target)
+	assert.NoError(t, check(withTarget, filesystem.Write, filepath.Join(root, "fixtures/x")))
+	assert.NoError(t, check(withTarget, filesystem.Write, registry))
+	assert.ErrorIs(t, check(p, filesystem.Write, filepath.Join(root, "fixtures/x")), filesystem.ErrDenied,
+		"a target's declaration is its own")
+
+	assert.Same(t, goOnly, p.Scoped([]string{"go", "go"}, nil), "memoized by the sorted names")
+	assert.Same(t, goOnly, rustOnly.Scoped([]string{"go"}, nil), "built from every spell, whatever the receiver kept")
+	all := p.Scoped(nil, nil)
+	assert.NoError(t, check(all, filesystem.Exec, gocache))
+	assert.NoError(t, check(all, filesystem.Write, registry))
+}
+
+// A lease-narrowed policy stays narrowed through Scoped.
+func TestScopedKeepsTheLeaseBoundary(t *testing.T) {
+	o, root := hostOptions(t)
+	b := &leaseBoundary{id: "l1", root: filesystem.ResolveRulePath(o.Workspace), granted: []string{filepath.Join(o.Workspace, "pkg")}}
+	p := b.apply(BuildPolicy(o))
+	scoped := p.Scoped([]string{"go"}, nil)
+	assert.ErrorIs(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/main.go")), filesystem.ErrDenied)
+	assert.NoError(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/pkg/x.go")))
+	assert.Equal(t, "l1", scoped.Lease)
+}
+
+// A step records its project's spells: a spell op started under it gets those and its
+// own spell's grants, the step's own processes keep every spell's, and without a
+// recorded step nothing is narrowed.
+func TestScopeToSpellNarrowsOnlyUnderAStep(t *testing.T) {
+	o, root := hostOptions(t)
+	p := BuildPolicy(o)
+	gocache := filepath.Join(root, "gocache/ab/x")
+	ctx := WithPolicy(context.Background(), p)
+
+	assert.Same(t, p, PolicyFromContext(ScopeToSpell(ctx, "rust")), "no step, no narrowing")
+
+	step := WithStep(ctx, []string{"rust"}, nil)
+	assert.NoError(t, check(PolicyFromContext(step), filesystem.Exec, gocache), "the step's own processes keep every spell")
+	assert.ErrorIs(t, check(PolicyFromContext(ScopeToSpell(step, "rust")), filesystem.Read, gocache), filesystem.ErrDenied)
+	assert.NoError(t, check(PolicyFromContext(ScopeToSpell(step, "go")), filesystem.Exec, gocache), "an op gets its own spell")
+
+	target := &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(root, "fixtures"), Mode: spells.SandboxAccessRW}}}
+	targetStep := WithStep(ctx, []string{"rust"}, target)
+	for _, q := range []*Policy{PolicyFromContext(targetStep), PolicyFromContext(ScopeToSpell(targetStep, "rust"))} {
+		assert.NoError(t, check(q, filesystem.Write, filepath.Join(root, "fixtures/x")), "the target layer reaches both")
+	}
+	inner := WithStep(targetStep, []string{"go"}, nil)
+	assert.ErrorIs(t, check(PolicyFromContext(inner), filesystem.Write, filepath.Join(root, "fixtures/x")), filesystem.ErrDenied,
+		"a step reached from inside another does not inherit its target's grants")
+}
+
+// A spell's or a target's declaration that no host could honor is refused with every
+// bad entry named.
+func TestCheckDeclarationRefuses(t *testing.T) {
+	for name, sb := range map[string]spells.Sandbox{
+		"unknown mode":      {Allow: []spells.SandboxAllow{{Base: "home", Path: ".x", Mode: "RW"}}},
+		"unknown base":      {Allow: []spells.SandboxAllow{{Base: "tmp", Path: "x"}}},
+		"escaping path":     {Allow: []spells.SandboxAllow{{Base: "xdgCache", Path: "../x"}}},
+		"absolute sub-path": {Allow: []spells.SandboxAllow{{Base: "xdgCache", Path: "/x"}}},
+		"whole base":        {Allow: []spells.SandboxAllow{{Base: "userCache"}}},
+		"empty entry":       {Allow: []spells.SandboxAllow{{Mode: spells.SandboxAccessRW}}},
+		"bad env":           {Allow: []spells.SandboxAllow{{Env: "GO*", Base: "home", Path: "go"}}},
+		"bad var base":      {Allow: []spells.SandboxAllow{{Base: "$", Path: "x"}}},
+		"binRoot path bin":  {Allow: []spells.SandboxAllow{{Base: "binRoot", Bin: "/usr/bin/go"}}},
+		"variable in path":  {Allow: []spells.SandboxAllow{{Path: "$HOME/.cache"}}},
+		"relative literal":  {Allow: []spells.SandboxAllow{{Path: "build"}}},
+		"bad passthrough":   {Env: spells.SandboxEnv{Passthrough: []string{"GO*"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Error(t, CheckDeclaration(sb))
+		})
+	}
+	assert.NoError(t, CheckDeclaration(spells.Sandbox{
+		Allow: []spells.SandboxAllow{
+			{Env: "GOROOT", Mode: spells.SandboxAccessRX},
+			{Env: "GOMODCACHE", Base: "$GOPATH", Path: "pkg/mod", Mode: spells.SandboxAccessRW},
+			{Base: "binRoot", Bin: "go", Requires: "pkg/tool", Mode: spells.SandboxAccessRX},
+			{Path: "/opt/tool", Mode: spells.SandboxAccessRX},
+			{Path: "~/.local/share/tool"},
+		},
+		Env: spells.SandboxEnv{Passthrough: []string{"GOFLAGS", "MISE_*"}},
+	}))
 }

@@ -1,12 +1,14 @@
 package spell
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -225,6 +227,10 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
+	sandbox, err := decodeSandbox(src)
+	if err != nil {
+		return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
+	}
 	m := spells.Descriptor{
 		Name:               name,
 		IgnoreDirs:         ignoreDirs,
@@ -234,6 +240,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 		LanguageExtensions: langExts,
 		Comments:           comments,
 		SymbolIndexer:      indexer,
+		Sandbox:            sandbox,
 		Opaque:             src.Bool("opaque"),
 	}
 
@@ -668,6 +675,66 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 		return nil, fmt.Errorf("symbol indexer: command.bin is required")
 	}
 	return &spells.SymbolIndexer{Format: f, Command: cmd}, nil
+}
+
+// decodeSandbox reads mgs_getSandbox's declaration, nil when the spell exports none.
+//
+// Every rule is checked here, at load, because a grant that cannot be honored is a
+// declaration bug: resolved later, a bad one would quietly grant nothing, and the tool
+// would fail under the sandbox with a permission error naming a path, not the spell.
+func decodeSandbox(src obj) (*spells.Sandbox, error) {
+	rec, ok := src.Obj("sandbox")
+	if !ok {
+		return nil, nil //nolint:nilnil // a spell that needs nothing from the host is not an error; nil is that answer
+	}
+	sb, err := decodeSandboxRecord(rec)
+	if err != nil {
+		return nil, err
+	}
+	return &sb, nil
+}
+
+// decodeSandboxRecord reads one sandbox declaration, a spell's or a target's, and
+// refuses what sandbox.CheckDeclaration refuses. An unknown key is an error too: a
+// misspelled one would leave its entry granting nothing, which looks like a sandbox
+// working.
+func decodeSandboxRecord(rec obj) (spells.Sandbox, error) {
+	var sb spells.Sandbox
+	var errs []error
+	errs = append(errs, unknownKeys("sandbox", rec, "allow", "env"))
+	for i, o := range rec.Objs("allow") {
+		errs = append(errs, unknownKeys(fmt.Sprintf("allow[%d]", i), o, "name", "env", "base", "bin", "path", "requires", "mode"))
+		var a spells.SandboxAllow
+		a.Name, _ = o.Str("name")
+		a.Env, _ = o.Str("env")
+		a.Base, _ = o.Str("base")
+		a.Bin, _ = o.Str("bin")
+		a.Path, _ = o.Str("path")
+		a.Requires, _ = o.Str("requires")
+		mode, _ := o.Str("mode")
+		a.Mode = spells.SandboxAccess(mode)
+		sb.Allow = append(sb.Allow, a)
+	}
+	if e, ok := rec.Obj("env"); ok {
+		errs = append(errs, unknownKeys("env", e, "passthrough"))
+		pass, err := e.Strs("passthrough")
+		if err != nil {
+			errs = append(errs, fmt.Errorf("env.passthrough: %w", err))
+		}
+		sb.Env.Passthrough = pass
+	}
+	errs = append(errs, sandbox.CheckDeclaration(sb))
+	return sb, errors.Join(errs...)
+}
+
+func unknownKeys(where string, o obj, known ...string) error {
+	var errs []error
+	for _, k := range o.Keys() {
+		if !slices.Contains(known, k) {
+			errs = append(errs, fmt.Errorf("%s: unknown key %q (want one of %s)", where, k, strings.Join(known, ", ")))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // decodeComments reads the comment/string syntax inside a Language record,

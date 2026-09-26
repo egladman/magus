@@ -16,6 +16,24 @@ export fun mgs_getTools() > {str: Tool} {
     return {"rustc": Tool{probe = Command{bin = "rustc", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}}};
 }
 
+// cargo gets its registry and git checkouts and its installed binaries, never its home:
+// $CARGO_HOME/credentials.toml holds the registry token.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [
+            SandboxAllow{env = "RUSTUP_HOME", base = "home", path = ".rustup", mode = SandboxAccess.rx},
+            // CARGO_HOME defaults to ~/.cargo; with it unset the $CARGO_HOME entries grant nothing.
+            SandboxAllow{base = "$CARGO_HOME", path = "bin", mode = SandboxAccess.rx},
+            SandboxAllow{base = "$CARGO_HOME", path = "registry", mode = SandboxAccess.rw},
+            SandboxAllow{base = "$CARGO_HOME", path = "git", mode = SandboxAccess.rw},
+            SandboxAllow{base = "home", path = ".cargo/bin", mode = SandboxAccess.rx},
+            SandboxAllow{base = "home", path = ".cargo/registry", mode = SandboxAccess.rw},
+            SandboxAllow{base = "home", path = ".cargo/git", mode = SandboxAccess.rw},
+        ],
+        env = SandboxEnv{passthrough = ["CARGO_HOME", "RUSTUP_HOME"]},
+    };
+}
+
 export fun mgs_getLanguage() > Language {
     return Language{
         name = "rust",

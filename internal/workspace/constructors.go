@@ -338,6 +338,12 @@ func Timeout(d string) TargetOption {
 	return func(t *types.Target) { t.Timeout = d }
 }
 
+// Sandbox returns a TargetOption setting the target's own sandbox declaration. See
+// types.Target.Sandbox; check it with sandbox.CheckDeclaration before calling.
+func Sandbox(sb spells.Sandbox) TargetOption {
+	return func(t *types.Target) { t.Sandbox = &sb }
+}
+
 // IncludeOS overrides whether the host OS keys this target's cache entry.
 func IncludeOS(v bool) TargetOption {
 	return func(t *types.Target) { t.IncludeOS = &v }

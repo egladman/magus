@@ -523,6 +523,15 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Timeout(raw)))
 			}
+			// The same declaration magus.yaml's sandbox and a spell's mgs_getSandbox make,
+			// through the spell decoder, so every layer accepts the same shape.
+			if sv, ok := pv.MapGet("sandbox"); ok {
+				sb, err := spell.DecodeSandboxValue(sv)
+				if err != nil {
+					return nil, types.DiagnosticErrorf(types.AllowlistUnresolved, "magus.project: targets[%q].sandbox: %v", name, err)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Sandbox(sb)))
+			}
 		}
 	}
 	return opts, nil

@@ -116,8 +116,9 @@ final REGENERATE = candidateMagus("run generate:rw");
 // validateArgs names no project: the queue appends the change's affected projects to
 // each hook line, or "/" when that set is no proof. Hooks read main's signed cache
 // through the queue's read-only proxy; the runner's cache token stays with the queue.
+// The plan arrives on stdin; validate() feeds it.
 export fun validateArgs(dir: str, change: str) > [str] {
-    final args = mut ["queue", "validate", SANDBOX, "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
+    final args = mut ["queue", "validate", SANDBOX, "--stdin", "--only", change, "--verdicts", dir + "/verdicts",
         "--gate", GATE, "--regenerate", REGENERATE, "--remote-cache-read"];
     foreach (a in SCRATCH) {
         args.append(a);
@@ -193,7 +194,8 @@ fun plan(depth: str) > void !> any {
 }
 
 fun validate(change: str) > void !> any {
-    proc\exec("magus", args: validateArgs(queueDir(), change: change), opts: {});
+    final dir = queueDir();
+    proc\exec("magus", args: validateArgs(dir, change: change), opts: {"stdin": fs\readFile(dir + "/plan.json")});
 }
 
 // awaitJob polls every 10s, one API request each, until run says whether job runs; a
@@ -390,7 +392,7 @@ test "outputs render a compact matrix and its count" {
 }
 
 test "validation hooks are lines a person can run once they name the projects, with caches the queue keeps private" {
-    assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--sandbox=required", "--plan", "/t/queue/plan.json", "--only", "482",
+    assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--sandbox=required", "--stdin", "--only", "482",
         "--verdicts", "/t/queue/verdicts",
         "--gate", "go run ./cmd/magus run ci --no-default-charms",
         "--regenerate", "go run ./cmd/magus run generate:rw",

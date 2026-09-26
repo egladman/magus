@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,41 +13,49 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-// FromConfig builds the sandbox policy for the workspace at root from cfg and the host:
-// its environment, the running binary, the checkout's git directories and the go
-// toolchain on PATH. It creates the private temp dir children get as TMPDIR (see
-// privateTempDir).
+// FromConfig builds the sandbox policy for the workspace at root from cfg, the sandbox
+// declarations of the spells the workspace loaded (see spells.Sandboxes), and the host:
+// its environment, the running binary and the checkout's git directories. It creates
+// the private temp dir children get as TMPDIR (see privateTempDir).
 //
-// A sandbox.allow entry that does not resolve, and a passthrough pattern that does not
-// parse, are errors (MGS2004): a sandbox that quietly grants less than was written
-// breaks builds in ways nobody can trace, and one that grants more is not a sandbox.
-func FromConfig(root, cacheDir string, cfg config.SandboxConfig) (*Policy, error) {
+// A sandbox.allow entry that cannot be honored, a literal path naming an unset
+// variable, and a passthrough pattern that does not parse are errors (MGS2004): a
+// sandbox that quietly grants less than was written breaks builds in ways nobody can
+// trace, and one that grants more is not a sandbox. An entry reading env or a base is
+// the exception by design: it names where a tool would look, and a variable left unset
+// is a tool left at its default.
+func FromConfig(root, cacheDir string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox) (*Policy, error) {
 	tmp, err := privateTempDir(os.TempDir(), root)
 	if err != nil {
 		return nil, err
 	}
-	return FromConfigWithTempDir(root, cacheDir, tmp, cfg)
+	return FromConfigWithTempDir(root, cacheDir, tmp, cfg, spellGrants)
 }
 
 // FromConfigWithTempDir is FromConfig with tempDir, a directory the caller keeps private
 // to this policy's children, as their TMPDIR in place of one FromConfig creates. It
 // must lie outside root.
-func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxConfig) (*Policy, error) {
+func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox) (*Policy, error) {
 	home, _ := os.UserHomeDir()
 	var errs []error
-	allow := make([]filesystem.Rule, 0, len(cfg.Allow))
-	for _, a := range cfg.Allow {
-		rule, err := filesystem.ExpandUserRule(a.Path, a.Mode, home, os.LookupEnv)
-		if err != nil {
-			errs = append(errs, err)
+	for i, a := range cfg.Allow {
+		if err := checkAllow(a); err != nil {
+			errs = append(errs, fmt.Errorf("sandbox: allow[%d] %s: %w", i, a.Name, err))
 			continue
 		}
-		allow = append(allow, rule)
+		// A literal path is resolved strictly here, where an unset $VAR or a missing home
+		// can still be refused; BuildPolicy would only drop it.
+		if a.Base == "" && a.Path != "" && (a.Env == "" || os.Getenv(a.Env) == "") {
+			if _, err := filesystem.ExpandUserRule(a.Path, string(a.Mode), home, os.LookupEnv); err != nil {
+				errs = append(errs, err)
+			}
+		}
 	}
-	passthrough, err := env.Parse(cfg.Env.Passthrough)
+	_, err := env.Parse(cfg.Env.Passthrough)
 	errs = append(errs, err)
 	if err := errors.Join(errs...); err != nil {
 		return nil, types.WrapDiagnostic(types.AllowlistUnresolved, err, "sandbox config for %s", root)
@@ -62,10 +69,6 @@ func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxCon
 		return nil, fmt.Errorf("sandbox: locate the running binary: %w", err)
 	}
 	gitDir, commonDir := gitDirs(root)
-	var installs []string
-	if goroot := goRootOnPath(home); goroot != "" {
-		installs = append(installs, goroot)
-	}
 	return BuildPolicy(PolicyOptions{
 		Mode:         cfg.Mode,
 		Workspace:    root,
@@ -77,9 +80,8 @@ func FromConfigWithTempDir(root, cacheDir, tempDir string, cfg config.SandboxCon
 		Home:         home,
 		GOOS:         runtime.GOOS,
 		Environ:      os.Environ(),
-		InstallDirs:  installs,
-		Allow:        allow,
-		Env:          passthrough,
+		Sandbox:      cfg.Declaration(),
+		Spells:       spellGrants,
 	}), nil
 }
 
@@ -147,26 +149,4 @@ func linkedGitDirs(dotgit string) (gitDir, commonDir string) {
 		}
 	}
 	return filepath.Clean(gitDir), filepath.Clean(commonDir)
-}
-
-// goRootOnPath returns the GOROOT of the go binary on PATH when it resolves into a Go
-// install (<root>/bin/go beside <root>/pkg/tool), the toolchain directory a build execs
-// the compiler from. A shim resolves elsewhere and yields nothing, and so does a root
-// that would contain home.
-func goRootOnPath(home string) string {
-	bin, err := exec.LookPath("go")
-	if err != nil {
-		return ""
-	}
-	if bin, err = filepath.EvalSymlinks(bin); err != nil {
-		return ""
-	}
-	root := filepath.Dir(filepath.Dir(bin))
-	if filepath.Base(filepath.Dir(bin)) != "bin" || (home != "" && filesystem.Under(home, root)) {
-		return ""
-	}
-	if info, err := os.Stat(filepath.Join(root, "pkg", "tool")); err != nil || !info.IsDir() {
-		return ""
-	}
-	return root
 }

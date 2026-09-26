@@ -89,6 +89,8 @@ const (
 	FlagAgentTar = "tar"
 	// broker stop: --services
 	FlagBrokerStopServices = "services"
+	// broker: --idle-exit
+	FlagBrokerIdleExit = "idle-exit"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --check
@@ -473,8 +475,6 @@ const (
 	FlagQueueValidateOnly = "only"
 	// queue validate: --parallel
 	FlagQueueValidateParallel = "parallel"
-	// queue validate: --plan
-	FlagQueueValidatePlan = "plan"
 	// queue validate: --regenerate
 	FlagQueueValidateRegenerate = "regenerate"
 	// queue validate: --remote
@@ -483,6 +483,8 @@ const (
 	FlagQueueValidateRemoteCacheRead = "remote-cache-read"
 	// queue validate: --scratch-env
 	FlagQueueValidateScratchEnv = "scratch-env"
+	// queue validate: --stdin
+	FlagQueueValidateStdin = "stdin"
 	// queue validate: --target
 	FlagQueueValidateTarget = "target"
 	// queue validate: --vcs
@@ -529,6 +531,8 @@ const (
 	FlagRunShard = "shard"
 	// run: --skip
 	FlagRunSkip = "skip"
+	// run: --stdin
+	FlagRunStdin = "stdin"
 	// run: --step
 	FlagRunStep = "step"
 	// run: --timeout
@@ -747,6 +751,7 @@ type RunFlags struct {
 	Step              bool          // --step
 	Race              string        // --race
 	Timeout           time.Duration // --timeout
+	Stdin             bool          // --stdin
 	Shard             string        // --shard
 	NShards           int           // --n-shards
 	NoVolatilityRetry bool          // --no-volatility-retry
@@ -768,8 +773,9 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
 	fs.StringVar(&f.Race, FlagRunRace, "", "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.")
 	fs.DurationVar(&f.Timeout, FlagRunTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
-	fs.StringVar(&f.Shard, FlagRunShard, "", "This run's shard index within a CI matrix; paired with --n-shards")
-	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Total shard count for this CI matrix run; paired with --shard")
+	fs.BoolVar(&f.Stdin, FlagRunStdin, false, "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects")
+	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
+	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagRunPreflight, "", "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)")
@@ -1357,7 +1363,7 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 // It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type QueueValidateFlags struct {
-	Plan            string // --plan
+	Stdin           bool   // --stdin
 	Gate            string // --gate
 	Regenerate      string // --regenerate
 	Verdicts        string // --verdicts
@@ -1373,7 +1379,7 @@ type QueueValidateFlags struct {
 // BindQueueValidate registers `magus queue validate`'s flags on fs and returns the destination.
 func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	var f QueueValidateFlags
-	fs.StringVar(&f.Plan, FlagQueueValidatePlan, "", "The mergequeue.plan/v1 `file`")
+	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1 document from stdin; required")
 	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects appended; exit 0 is green")
 	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects appended and the generated files to rewrite listed on stdin")
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
@@ -1872,6 +1878,18 @@ type ServerReloadFlags struct {
 func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 	var f ServerReloadFlags
 	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
+	return &f
+}
+
+// BrokerFlags are the flags declared for `magus broker`.
+type BrokerFlags struct {
+	IdleExit time.Duration // --idle-exit
+}
+
+// BindBroker registers `magus broker`'s flags on fs and returns the destination.
+func BindBroker(fs *flag.FlagSet) *BrokerFlags {
+	var f BrokerFlags
+	fs.DurationVar(&f.IdleExit, FlagBrokerIdleExit, time.Duration(600000000000), "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive")
 	return &f
 }
 

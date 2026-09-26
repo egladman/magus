@@ -96,3 +96,11 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 export fun mgs_getTools() > {str: Tool} {
     return {"buf": Tool{probe = Command{bin = "buf", args = ["--version"]}}};
 }
+
+// buf caches remote modules and plugins under the XDG cache on every OS but Windows.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [SandboxAllow{env = "BUF_CACHE_DIR", base = "xdgCache", path = "buf", mode = SandboxAccess.rw}],
+        env = SandboxEnv{passthrough = ["BUF_CACHE_DIR"]},
+    };
+}

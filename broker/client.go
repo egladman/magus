@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -169,16 +168,16 @@ func (c *Client) Release(ctx context.Context, id string) {
 	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote}, nil)
 }
 
-// AcquireService starts, or reuses, the shared service svc under key and returns once
+// AcquireService starts, or reuses, the shared service spec under key and returns once
 // it is ready. The reference rides this connection: ReleaseService drops it, and so
 // does the connection closing. An *Error with CodeNoServices means the broker hosts
-// none and the caller runs the service itself.
-func (c *Client) AcquireService(ctx context.Context, key string, svc spells.Service) error {
+// none and the caller runs the service itself; CodeMalformed means spec has no command.
+func (c *Client) AcquireService(ctx context.Context, key string, spec ServiceSpec) error {
 	cn, err := c.open(ctx)
 	if err != nil {
 		return err
 	}
-	return cn.roundTrip(ctx, c.next(), typeServiceAcquire, serviceRequest{Key: key, Service: &svc}, typeServiceReply, nil, nil)
+	return cn.roundTrip(ctx, c.next(), typeServiceAcquire, serviceAcquireRequest{Key: key, Service: spec.wire()}, typeServiceReply, nil, nil)
 }
 
 // ReleaseService drops one reference AcquireService took. The broker keeps the service
@@ -188,7 +187,7 @@ func (c *Client) ReleaseService(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	return cn.roundTrip(ctx, c.next(), typeServiceRelease, serviceRequest{Key: key}, typeServiceReply, nil, nil)
+	return cn.roundTrip(ctx, c.next(), typeServiceRelease, serviceReleaseRequest{Key: key}, typeServiceReply, nil, nil)
 }
 
 // StopServices stops every service the broker hosts and returns how many, leaving the
@@ -217,14 +216,24 @@ func (c *Client) Status(ctx context.Context) (types.StatusBroker, error) {
 	return st, err
 }
 
-// Shutdown stops the broker. Every claim on the host is dropped with it; runs already
-// going keep going, unarbitrated or refused according to their broker policy.
+// Shutdown stops the broker and returns once it has hung up, which it does after it
+// stops accepting. Every claim on the host is dropped with it; runs already going keep
+// going, unarbitrated or refused according to their broker policy. Under a supervisor
+// holding the socket, the next connection starts another broker.
 func (c *Client) Shutdown(ctx context.Context) error {
 	cn, err := c.connect(ctx)
 	if err != nil {
 		return err
 	}
-	return cn.roundTrip(ctx, c.next(), typeShutdown, shutdownRequest{Magic: shutdownMagic}, typeShutdownReply, nil, nil)
+	if err := cn.roundTrip(ctx, c.next(), typeShutdown, shutdownRequest{Magic: shutdownMagic}, typeShutdownReply, nil, nil); err != nil {
+		return err
+	}
+	select {
+	case <-cn.dead:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Close hangs up, which releases everything this client holds on the broker. Safe to

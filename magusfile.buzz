@@ -29,7 +29,6 @@ import "vcs";
 import "archive";
 import "crypto";
 import "serialize";
-import "io";
 import "encoding/json";
 import "std";
 import "time";
@@ -241,7 +240,6 @@ magus\project({
         // other change leaves the key unmoved and a hit reverts the committed file.
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
-        "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
         "test": {"timeout": "15m"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
@@ -632,7 +630,7 @@ fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registr
 // output back out of a file magus wrote. That is the shell-parsing shape this
 // magusfile avoids everywhere else, and it drifts the moment the tag scheme changes.
 //
-// Behind the gha charm, like ci_shard below, rather than on whether $GITHUB_STEP_SUMMARY
+// Behind the gha charm rather than on whether $GITHUB_STEP_SUMMARY
 // happens to be set: the workflow asks with `image-build:cd,gha`, and a local
 // `magus run image-build:cd` stays quiet because nobody asked, not because it noticed
 // where it runs (docs/doctrine.md, "Told, never guessed").
@@ -3484,54 +3482,6 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     // the test target so the dependency compiles share its build fingerprint.
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
-}
-
-// Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and
-// a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.
-//
-// Transport only: the plan names its own outputs and renders its own summary, so porting
-// this to another provider is a rewrite of the two file formats and nothing else.
-export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
-    var input = "";
-    if (!proc\stdinIsTerminal()) {
-        input = io\stdin.readAll();
-    }
-    if (input == "") {
-        throw "ci-shard: no shard plan on stdin - pipe one in: magus affected ci --plan | magus run ci-shard:gha";
-    }
-    final plan = serialize\jsonDecode(input);
-    // Every name and value comes from the plan, in its order. Nothing here knows
-    // which outputs exist, so a plan that grows one reaches Actions without this
-    // function changing - and cannot lose one by failing to mention it.
-    var block = "";
-    foreach (o in plan.q("outputs").listValue()) {
-        block = block + o.q("name").stringValue() + "=" + o.q("value").stringValue() + "\n";
-    }
-
-    if (!ctx.hasCharm("gha")) {
-        magus\log.info("ci-shard preview (add the gha charm - `magus run ci-shard:gha` - to write $GITHUB_OUTPUT):\n" + block);
-        return;
-    }
-    final path = os\env("GITHUB_OUTPUT");
-    var p = "";
-    if (path != null) { p = "{path}"; }
-    if (p == "") {
-        throw "ci-shard: the gha charm is set but $GITHUB_OUTPUT is unset - run this inside a GitHub Actions step";
-    }
-    var existing = "";
-    if (fs\exists(p)) { existing = fs\readFile(p); }
-    fs\writeFile(p, existing + block);
-
-    // The plan renders its own summary - a shard table, or the report explaining
-    // which green run's verdict it inherited. Appended, because a job summary is
-    // shared by every step that writes one.
-    final summaryPath = os\env("GITHUB_STEP_SUMMARY");
-    if (summaryPath != null and ("{summaryPath}") != "") {
-        final sp = "{summaryPath}";
-        var existingSummary = "";
-        if (fs\exists(sp)) { existingSummary = fs\readFile(sp); }
-        fs\writeFile(sp, existingSummary + plan.q("summary").stringValue());
-    }
 }
 
 // rebuild_console rebuilds console/gen with the console project's own esbuild build
