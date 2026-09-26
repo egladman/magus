@@ -525,6 +525,189 @@ import "a"; final from_b = 2;
 	require.NoError(t, sess.Exec(ctx, `import "a";`), "cyclic import should not error")
 }
 
+// TestImport_EveryImporterBindsASharedModule covers one module imported from several
+// sessions: two files imported under aliases (each its own sub-session) that both
+// import the same file and the same declaration module, and the top-level chunk
+// importing both after them. Upstream evaluates the module once and binds it in every
+// importer. The shared loadedPaths guard used to answer "already loaded" to every
+// importer after the first, so b saw neither `shared` nor Thing, and neither did the
+// chunk.
+func TestImport_EveryImporterBindsASharedModule(t *testing.T) {
+	dir := writeTxtar(t, `
+-- shared.buzz --
+export fun twice(n: int) > int { return n * 2; }
+-- a.buzz --
+import "magus/lib";
+import "shared" as shared;
+export fun make() > Thing { return Thing{ n = shared\twice(1) }; }
+-- b.buzz --
+import "magus/lib";
+import "shared" as shared;
+export fun make() > Thing { return Thing{ n = shared\twice(2) }; }
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+	sess.SetModuleDecls("magus/lib", `export object Thing { n: int = 0, label: str = "t" }`)
+
+	require.NoError(t, sess.Exec(ctx, `
+import "a" as a;
+import "b" as b;
+import "magus/lib";
+import "shared" as shared;
+final fromA = a\make().n;
+final fromB = b\make().n;
+final direct = Thing{ n = shared\twice(3) };
+final n = direct.n;
+final label = direct.label;
+`))
+	globals := sess.Globals()
+	for name, want := range map[string]string{"fromA": "2", "fromB": "4", "n": "6", "label": "t"} {
+		got, ok := globals[name]
+		require.True(t, ok, "%s not set", name)
+		assert.Equal(t, want, got.String(), name)
+	}
+}
+
+// TestImport_AnAliasedFileSeesAFlatImportsExportedFinals covers a sub-session reading an
+// exported final of a module its parent flat-imported. The aliased file's own import
+// finds the name already bound and returns early, so its checker knows the module only
+// through what it inherits. It inherited the exported funs but not the exported finals
+// (the form a variadic host method's declaration takes too), so the namespace it built
+// from one lacked the other and `consts\K` read as a member the module does not have.
+// A module exporting no fun gets no namespace type at all, which hides the gap.
+func TestImport_AnAliasedFileSeesAFlatImportsExportedFinals(t *testing.T) {
+	dir := writeTxtar(t, `
+-- consts.buzz --
+export final K = 7;
+export fun one() > int { return 1; }
+-- a.buzz --
+import "consts";
+export fun k() > int { return consts\K; }
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+
+	require.NoError(t, sess.Exec(ctx, `
+import "consts";
+import "a" as a;
+final got = a\k();
+`))
+	got, ok := sess.Globals()["got"]
+	require.True(t, ok, "got not set")
+	assert.Equal(t, "7", got.String())
+}
+
+// TestImport_AFlatImportAfterAnAliasedOneBindsFromTheCache covers the same file imported
+// under an alias and then flat in one session: the second import binds the first
+// evaluation's exports unqualified and under the namespace the file declares.
+func TestImport_AFlatImportAfterAnAliasedOneBindsFromTheCache(t *testing.T) {
+	dir := writeTxtar(t, `
+-- shared.buzz --
+namespace shared;
+export fun twice(n: int) > int { return n * 2; }
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+
+	require.NoError(t, sess.Exec(ctx, `
+import "shared" as s;
+import "shared";
+final sum = s\twice(1) + twice(2) + shared\twice(3);
+`))
+	got, ok := sess.Globals()["sum"]
+	require.True(t, ok, "sum not set")
+	assert.Equal(t, "12", got.String())
+}
+
+// TestImport_AModuleRunsOnceForEveryImporter pins upstream's OP_IMPORT: one evaluation
+// per path, however many sessions import it. Binding from the cache must not run the
+// top level again.
+func TestImport_AModuleRunsOnceForEveryImporter(t *testing.T) {
+	dir := writeTxtar(t, `
+-- counted.buzz --
+import "host";
+host\tick();
+export final v = 1;
+-- a.buzz --
+import "counted" as counted;
+export final av = counted\v;
+-- b.buzz --
+import "counted" as counted;
+export final bv = counted\v;
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+	runs := 0
+	mod := vmpackage.NewMap()
+	mod.MapSet("tick", vmpackage.DirectValue("host.tick", func(context.Context, []vmpackage.Value) (vmpackage.Value, error) {
+		runs++
+		return vmpackage.Null, nil
+	}))
+	sess.SetNativeModule("host", mod)
+
+	require.NoError(t, sess.Exec(ctx, `
+import "a" as a;
+import "b" as b;
+import "counted";
+final sum = a\av + b\bv + v;
+`))
+	got, ok := sess.Globals()["sum"]
+	require.True(t, ok, "sum not set")
+	assert.Equal(t, "3", got.String())
+	assert.Equal(t, 1, runs, "the module's top level ran once")
+}
+
+// TestImport_AFailedLoadIsRetried covers a long-lived session (a REPL, the language
+// server) where an import failed once. A later import of the same path loads it again
+// rather than finding it already loaded with nothing to bind; that holds for a file
+// and for a declaration module.
+func TestImport_AFailedLoadIsRetried(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "flaky.buzz")
+	require.NoError(t, os.WriteFile(file, []byte("export final x = undefinedName;\n"), 0o644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+	fail := true
+	mod := vmpackage.NewMap()
+	mod.MapSet("once", vmpackage.DirectValue("host.once", func(context.Context, []vmpackage.Value) (vmpackage.Value, error) {
+		if fail {
+			fail = false
+			return vmpackage.Null, errors.New("first call fails")
+		}
+		return vmpackage.IntValue(5), nil
+	}))
+	sess.SetNativeModule("host", mod)
+	sess.SetModuleDecls("magus/flaky", "import \"host\";\nexport final y = host\\once();\n")
+
+	require.Error(t, sess.Exec(ctx, `import "flaky" as f;`), "the file does not compile")
+	require.Error(t, sess.Exec(ctx, `import "magus/flaky";`), "the declaration module raises")
+	require.NoError(t, os.WriteFile(file, []byte("export final x = 4;\n"), 0o644))
+
+	require.NoError(t, sess.Exec(ctx, `
+import "flaky" as f;
+import "magus/flaky";
+final sum = f\x + y;
+`))
+	got, ok := sess.Globals()["sum"]
+	require.True(t, ok, "sum not set")
+	assert.Equal(t, "9", got.String())
+}
+
 // TestImport_SearchPathFullImportPath verifies the whole import path — not just
 // its trailing segment — is substituted for `?` in a search-path template,
 // matching upstream Buzz: import "lib/mod" resolves lib/mod.buzz, not mod.buzz.
