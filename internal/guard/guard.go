@@ -846,9 +846,9 @@ func envelopeWritePath(input map[string]any) string {
 // next change to any host would mean a magus release. The matcher in a host's own config is
 // where the host's vocabulary lives.
 //
-// TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" (a
+// The hostagnostic linter matches host NAMES, so a switch over "Read"/"Bash" (a
 // per-host branch in everything but spelling) passes it untouched.
-// TestGuardDoesNotBranchOnHostToolVocabulary is the layer that catches that one: a host's
+// The hostvocab linter is the layer that catches that one: a host's
 // word for a tool may not appear as a string literal in guard code at all, so a lookup
 // table is no cheaper than a switch. These three constants are what it leaves room for.
 const (

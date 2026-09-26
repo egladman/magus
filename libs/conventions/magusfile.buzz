@@ -1,0 +1,83 @@
+// magusfile.buzz for conventions, a standalone Go module (github.com/egladman/magus/libs/conventions)
+// at libs/conventions: the analyzers enforcing this repository's own rules over Go
+// source (host-agnostic code, the guard's vocabulary and rule text, ASCII strings,
+// the cmd/magus import ratchet, stutter, `-o name` emitters, test isolation). Its
+// own module for the reason libs/coldread gives: golangci-lint compiles a plugin
+// INTO its binary, so the rules have to be a dependency it can pin.
+//
+//   magus run build libs/conventions   compile the analyzers and the plugin glue
+//   magus run test libs/conventions    run the analysistest suite
+//   magus run ci libs/conventions      lint, build, and test
+//
+// Nothing in the magus module imports it, and nothing should: the consumer is
+// `golangci-lint custom`, which reads libs/testlayout/.custom-gcl.yml.
+
+import "magus";
+import "../../tools/drift" as drift;
+
+// go spell claims **/*.go and the module files. This file's own export-fun targets
+// need no declaration: magus binds the magusfile driver to every project.
+import "magus/spell/go";
+// Imported for its dprint op only, NOT added to the spells list: binding markdown here
+// would also claim this tree's **/*.md for markdownlint, which the root project lints.
+import "magus/spell/markdown";
+import "../../spells/golang/gomod" as gomod;
+
+import "fs";
+
+magus\project({
+    "spells": [go],
+    // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
+    "targets": {
+        // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
+        "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+    },
+});
+
+// A pure library, so the pipeline is the Go lifecycle plus index-generate, matching
+// libs/coldread. Each target delegates to the go spell's ops.
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    gomod\replaceWorkspaceModules(ctx, go, "libs/conventions");
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md, this project's target catalog, from this magusfile.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Declared so `magus vcs resolve` can find the target that settles a conflict here.
+    ctx.writesFiles("MAGUS.md");
+    // Scoped to this project; see libs/coldread for why these are its inputs.
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    final doc = magus\describe(["graph", "-o", "markdown", "libs/conventions"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    // Both declarations as in libs/coldread, which says what each one cost when missing.
+    // The markdown glob mirrors this project's dprint.json `includes`; keep the two in step.
+    ctx.readsFiles("dprint.json");
+    ctx.modifiesExistingFiles("**/*.md", "**/*.go", "go.mod", "go.sum");
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+    markdown["dprint"](ctx);
+}
+// go-vet only, as in libs/coldread: this module is what the custom golangci-lint
+// binary is built FROM.
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+// Compiles every analyzer package; ./... because the module root holds none.
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx, {"args": ["./..."]}); }
+// The profile is a declared output: the root's coverage badge is one figure over every
+// Go module, recorded from each module's own run rather than re-measured.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.writesFiles("coverage.out");
+    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+}
+
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
+}

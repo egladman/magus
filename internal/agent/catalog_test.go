@@ -3,9 +3,13 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -905,4 +909,167 @@ func TestOfferedLocalSkillsSkipStampedLitterAndRequireADescription(t *testing.T)
 	writeLocalSkill(t, dir, "bare", "# no frontmatter\n")
 	_, err = catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{})
 	assert.EqualError(t, err, "agent: "+filepath.Join(".agents/skills", "bare", "SKILL.md")+" has no frontmatter description, so no host can list it")
+}
+
+// guardAdviceSkillCoverage maps each advisory the guard can emit to a token that
+// must appear in some installed skill.
+//
+// The token is a magus surface name, not a phrase: the skill teaches the same
+// thing in its own words and rewording it should not fail a gate, but dropping
+// the CAPABILITY should.
+var guardAdviceSkillCoverage = map[string]string{
+	"update":     ":update",
+	"checkpoint": "magus vcs checkpoint",
+	"search":     "magus refs",
+	"cwd":        "magus where",
+}
+
+// TestGuardAdviceHasSkillCoverage keeps the guard's advisories reachable on every
+// host, not just the one that can inject them.
+//
+// An advise reaches the MODEL on Claude Code alone. Codex rejects the
+// additionalContext key outright, Cursor's command surface has no channel for a
+// non-denial, and OpenCode can only log one for the person. That is those hosts'
+// contract and magus cannot widen it, so the guard advisory is a timelier
+// delivery of guidance, never its only copy.
+//
+// The installed skills ARE the common channel: plain files every host reads,
+// carrying no host conditionals. So anything the guard would advise has to be in
+// one, or three hosts out of four never learn it. That was not true when this was
+// written: the charm advisory existed with the charm appearing in no skill at all,
+// while the OpenCode plugin's own comment claimed "the same guidance ships in the
+// installed skills, which is why the skills and the guard say the same things".
+//
+// Sources rather than installed copies, because the source is what a contributor
+// edits and what `magus agent install` regenerates from.
+func TestGuardAdviceHasSkillCoverage(t *testing.T) {
+	const embeddedSkillDir = "skills"
+	entries, err := fs.ReadDir(skillFS, embeddedSkillDir)
+	require.NoError(t, err, "read %s", embeddedSkillDir)
+
+	var allBodies strings.Builder
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		body, err := fs.ReadFile(skillFS, path.Join(embeddedSkillDir, entry.Name(), "SKILL.md"))
+		require.NoError(t, err, "read skill %s", entry.Name())
+		allBodies.Write(body)
+	}
+	all := allBodies.String()
+
+	for advisory, token := range guardAdviceSkillCoverage {
+		assert.Contains(t, all, token,
+			"the %s advisory teaches %q, and no skill under %s mentions it.\n"+
+				"An advise reaches the model on Claude Code only, so a skill is where the other three\n"+
+				"hosts learn this. Add it to the skill that owns the topic, or drop the advisory.",
+			advisory, token, embeddedSkillDir)
+	}
+}
+
+// TestTargetIsTheTaughtNoun pins the worst vocabulary-drift regression: the
+// printed target definition and the magus-run skill's opening both teaching
+// "target" as the unit of work, rather than sliding back to "operation" or
+// "task" (docs/concepts/targets.md bans both as a Target substitute). This is
+// deliberately narrow (a broad synonym grep false-positives too easily), so it
+// only pins these two known-worst sites.
+func TestTargetIsTheTaughtNoun(t *testing.T) {
+	lower := strings.ToLower(types.TargetDefinition)
+	assert.Contains(t, lower, "target", "TargetDefinition must teach target as the unit of work")
+	assert.NotContains(t, lower, "operation", "TargetDefinition must not substitute operation for target")
+	assert.NotContains(t, lower, "task", "TargetDefinition must not substitute task for target")
+
+	data, err := fs.ReadFile(skillFS, "skills/magus-run/SKILL.md")
+	require.NoError(t, err, "read magus-run SKILL.md")
+	paragraphs := strings.SplitN(string(data), "\n\n", 3)
+	require.GreaterOrEqual(t, len(paragraphs), 2, "SKILL.md must have an opening paragraph after its heading")
+	opening := strings.ToLower(paragraphs[1])
+
+	assert.Contains(t, opening, "target", "the magus-run skill opening must teach target as the unit of work")
+	assert.NotContains(t, opening, "operation", "the magus-run skill opening must not substitute operation for target")
+	// "task orchestrator" is the blessed product-positioning phrase (README.md uses it);
+	// strip it before checking, so this pins task NOT being used as the taught noun
+	// without banning the positioning phrase itself.
+	withoutBlessedPhrase := strings.ReplaceAll(opening, "task orchestrator", "")
+	assert.NotContains(t, withoutBlessedPhrase, "task",
+		"the magus-run skill opening must not teach task as the unit of work (task orchestrator excepted)")
+}
+
+// vcsDriverSpellings maps each driver's Name() to how a human-facing surface may spell
+// it. Unmapped names FAIL rather than pass, so adding a fifth backend forces a decision
+// here instead of shipping a surface that silently covers four of five.
+var vcsDriverSpellings = map[string][]string{
+	"git": {"git"},
+	"hg":  {"Mercurial", "hg"},
+	"sl":  {"Sapling", "sl"},
+	"jj":  {"Jujutsu", "jj"},
+}
+
+// TestAgentSurfaceNamesEveryVCSDriver keeps the agent surface at parity with the drivers.
+//
+// vcs/parity_test.go already pins parity for nineteen DRIVER METHODS across all four
+// backends, so the repo has decided this matters. That enforcement stopped at the driver
+// and never reached the surfaces a reader meets, and the gap was not theoretical: the
+// magus-vcs-hygiene DESCRIPTION named git and only git, and a description is what a host
+// matches on to decide whether to load a skill at all. An agent in a Mercurial repo about
+// to run `hg purge` would never have loaded the skill that exists to stop it.
+//
+// The driver list is READ FROM THE SOURCE rather than restated, so this cannot drift from
+// what magus actually drives.
+func TestAgentSurfaceNamesEveryVCSDriver(t *testing.T) {
+	names := vcsDriverNames(t)
+	require.NotEmpty(t, names, "found no VCS drivers; the Name() scan below stopped matching")
+
+	catalog, err := os.ReadFile("catalog.go")
+	require.NoError(t, err)
+	desc := vcsHygieneDescription(t, string(catalog))
+
+	for _, name := range names {
+		spellings, ok := vcsDriverSpellings[name]
+		require.Truef(t, ok, "vcs driver %q has no entry in vcsDriverSpellings; decide how the agent surface should spell it", name)
+		assert.Truef(t, containsAny(desc, spellings),
+			"the magus-vcs-hygiene description never names the %q backend (any of %v), so a host will not load it for that repository", name, spellings)
+	}
+}
+
+// vcsDriverNames reads each driver's Name() return straight out of vcs/*.go.
+func vcsDriverNames(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(repoRoot, "vcs", "*.go"))
+	require.NoError(t, err)
+	re := regexp.MustCompile(`func \(v \w+VCS\) Name\(\) string\s*{\s*return "([^"]+)"`)
+	var names []string
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(f)
+		require.NoError(t, err)
+		for _, m := range re.FindAllStringSubmatch(string(body), -1) {
+			names = append(names, m[1])
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// vcsHygieneDescription pulls the one description line the skill catalog registers.
+func vcsHygieneDescription(t *testing.T, catalog string) string {
+	t.Helper()
+	for line := range strings.SplitSeq(catalog, "\n") {
+		if strings.Contains(line, `name: "magus-vcs-hygiene"`) {
+			return line
+		}
+	}
+	t.Fatal("magus-vcs-hygiene is not registered in internal/agent/catalog.go")
+	return ""
+}
+
+func containsAny(haystack string, needles []string) bool {
+	for _, n := range needles {
+		if strings.Contains(haystack, n) {
+			return true
+		}
+	}
+	return false
 }

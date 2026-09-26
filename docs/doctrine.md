@@ -297,14 +297,14 @@ The contract is small enough to hold in your head. `magus session hook` takes
 the thing to judge on stdin, either plain text or a payload keyed by FIELD
 (`tool_input.command`, `file_path`, `prompt`), never by a host name or a tool
 name. `-o template=` renders the verdict into whatever shape the host's reply
-takes. `TestNoHostSpecificBehaviorInCode` fails the build when a host's NAME
+takes. The `hostagnostic` linter fails the build when a host's NAME
 appears in code anywhere but a path on disk, and the `magus-guard-coverage:`
 line each template carries feeds a parity gate that fails when a host was never
 asked about a decision the contract grew.
 
 A branch keyed on a host's tool vocabulary rather than its name - a switch over
 `Read` and `Bash` - is a per-host branch in everything but spelling, and the
-name test cannot see it. `TestGuardDoesNotBranchOnHostToolVocabulary` is the
+name check cannot see it. The `hostvocab` linter is the
 second layer: it fails the build when a host's word for a tool appears as a
 string literal in guard code at all, so a lookup table is no cheaper than a
 switch. The activity-event tool labels are magus's own vocabulary for that
