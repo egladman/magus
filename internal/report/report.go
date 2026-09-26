@@ -240,14 +240,11 @@ type RunRemote = cache.RemoteTally
 // run.summary with dry set closes it.
 type RunDry struct{}
 
-// RunDetach is where an invocation handed to the server with --detach stands. State is
-// "coalesced" (an identical one was already running, so none was queued), "queued"
-// (handed over, not waited on), "running" (handed over and waited on), "unwatched"
-// (the wait stopped; the run continues), "passed" or "failed".
+// RunDetach is a run --detach started in the background: the process running it, its
+// own session leader, and the file its output goes to.
 type RunDetach struct {
-	Invocation string `json:"invocation,omitempty"`
-	State      string `json:"state"`
-	DurationMs int64  `json:"duration_ms,omitempty"` // passed and failed only
+	PID int    `json:"pid"`
+	Log string `json:"log"`
 }
 
 // RunSummary is the end-of-run footer: hit/miss/error counts (or, for a dry run,

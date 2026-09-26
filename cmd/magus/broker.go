@@ -70,14 +70,19 @@ func brokerUsage() {
 	fmt.Fprintln(os.Stderr, "listens on a unix socket only and exits once it has held nothing for ten minutes.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
-	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr; under systemd it")
-	fmt.Fprintln(os.Stderr, "          serves the socket the supervisor hands over")
+	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr or to --log; under")
+	fmt.Fprintln(os.Stderr, "          systemd it serves the socket the supervisor hands over")
 	fmt.Fprintln(os.Stderr, "  status  is one up, what it holds; exits non-zero when none is")
 	fmt.Fprintln(os.Stderr, "  stop    stop it, or with --services stop only the services it hosts")
 	fmt.Fprintln(os.Stderr, "  units   print the systemd or launchd units that supervise it")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags, with no target:")
 	fmt.Fprintln(os.Stderr, "  --idle-exit DURATION  exit after holding nothing this long; 0 never exits")
+	fmt.Fprintln(os.Stderr, "  --log FILE            write its log to FILE instead of stderr")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Signals: SIGHUP reopens the --log file. A first SIGTERM drains: nothing new is")
+	fmt.Fprintln(os.Stderr, "seated, and it exits once the runs holding it finish or shutdown_grace passes.")
+	fmt.Fprintln(os.Stderr, "A second SIGTERM, or a SIGINT, stops its services and exits now.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Socket: "+broker.DefaultAddr())
 	fmt.Fprintln(os.Stderr, "Log, when a run started it: "+brokerLogPath())
@@ -101,6 +106,11 @@ func brokerServe(ctx context.Context, args []string) error {
 	}
 	if f.IdleExit < 0 {
 		return usagef("magus broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
+	}
+	if f.Log != "" {
+		if err := redirectStdio(f.Log); err != nil {
+			return fmt.Errorf("magus broker: %w", err)
+		}
 	}
 
 	addr := broker.DefaultAddr()
@@ -148,12 +158,24 @@ func brokerServe(ctx context.Context, args []string) error {
 	fmt.Fprintf(os.Stderr, "magus: broker (pid %d) %s %s: %d slots, %s; %s\n",
 		os.Getpid(), from, addr, slots, cache.FormatMB(memMB), exits)
 
+	ctx, stopNow := context.WithCancel(ctx)
+	defer stopNow()
+	drain := make(chan struct{})
+	release := lifecycle{
+		hangup:         func() { reopenBrokerLog(ctx, f.Log) },
+		stop:           func() { close(drain) },
+		stopNow:        stopNow,
+		interruptIsNow: true,
+	}.watch(ctx)
+	defer release()
+
 	err = broker.Serve(ctx, ln,
 		broker.WithCapacity(memMB, slots),
 		broker.WithServices(serviceHost{reg}),
 		broker.WithIdleExit(f.IdleExit),
 		broker.WithLogger(slog.Default()),
 		broker.WithVersion(version),
+		broker.WithDrain(drain, globalCfg.ShutdownGrace),
 	)
 	// The broker's own context may be done (a signal), and Shutdown's wait for a service
 	// still starting returns at once on a done context, so teardown gets a fresh bound.
@@ -161,6 +183,20 @@ func brokerServe(ctx context.Context, args []string) error {
 	defer cancel()
 	reg.Shutdown(stopCtx)
 	return err
+}
+
+// reopenBrokerLog answers SIGHUP. A broker logging to stderr under a supervisor has no
+// file to reopen, and says so rather than exiting.
+func reopenBrokerLog(ctx context.Context, path string) {
+	if path == "" {
+		slog.InfoContext(ctx, "broker: SIGHUP reopens the --log file, and this broker logs to stderr")
+		return
+	}
+	if err := redirectStdio(path); err != nil {
+		slog.ErrorContext(ctx, "broker: could not reopen its log; still writing to the old one", slog.String("error", err.Error()))
+		return
+	}
+	slog.InfoContext(ctx, "broker: reopened its log", slog.String("log", path))
 }
 
 func brokerStatus(ctx context.Context, args []string) error {
@@ -283,7 +319,7 @@ func stateLogPath(name string) string {
 // without one being started.
 var spawnBroker = func() (pid int, logPath string, err error) {
 	logPath = brokerLogPath()
-	pid, err = spawnDetached([]string{"broker"}, logPath)
+	pid, err = spawnDetached([]string{"broker", "--" + gen.FlagBrokerLog, logPath}, logPath)
 	return pid, logPath, err
 }
 

@@ -207,6 +207,9 @@ still working on it. Exit 1 means a gate is unmet.`,
 	},
 }
 
+// detachDoc is --detach on run and affected, which detach the same way.
+const detachDoc = "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server"
+
 var runCommand = Command{
 	Name:        "run",
 	Short:       "Run a target for selected projects",
@@ -255,8 +258,7 @@ plan renders more than once without being computed again.`,
 		{Name: "skip", Kind: FlagCustom, Doc: "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
-		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the server and return immediately; follow it with magus status --watch"},
-		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
+		{Name: "detach", Kind: FlagBool, Doc: detachDoc},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
 		{Name: "race", Kind: FlagString, Doc: "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock."},
@@ -424,8 +426,7 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
-		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the server and return immediately; follow it with magus status --watch"},
-		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
+		{Name: "detach", Kind: FlagBool, Doc: detachDoc},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
 		{Name: "race", Kind: FlagString, Doc: "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock."},
@@ -1130,7 +1131,13 @@ The socket address is resolved in priority order:
   default ($XDG_RUNTIME_DIR/magus/server.sock)
 
 A detached server logs to $XDG_STATE_HOME/magus/server.log; under
---foreground it logs to stderr for the supervisor to keep.`,
+--foreground it logs to stderr for the supervisor to keep.
+
+Signals:
+  SIGHUP           reload configuration, the same as ` + "`magus server reload`" + `
+  SIGTERM, SIGINT  stop: close the socket, cancel the runs it adopted, and
+                   wait up to shutdown_grace (default 5m) for them to unwind
+  a second one     exit now`,
 	Usage: "magus server <start|stop|status|reload> [flags]",
 	// Each subcommand carries its own flags. --foreground sat on the parent with
 	// "(server start)" in its doc, and stop's --socket was not declared at all, bound
@@ -1211,13 +1218,27 @@ The broker setting in magus.yaml decides what a run does about it: required
 refuses a step when none answers (MGS3022, exit 69), best-effort (the default)
 runs unarbitrated and says so once, off never starts or contacts one.
 
-Run with no target, it serves in this process and logs to stderr. Under
-systemd it takes the socket the supervisor hands over (LISTEN_FDS), refusing
-one that is malformed or bound anywhere but broker.sock. ` + "`magus broker units`" + `
-prints the systemd or launchd units for it; magus never installs them.`,
+Run with no target, it serves in this process and logs to stderr, or to the
+file --log names. Under systemd it takes the socket the supervisor hands over
+(LISTEN_FDS), refusing one that is malformed or bound anywhere but
+broker.sock. ` + "`magus broker units`" + ` prints the systemd or launchd units for
+it; magus never installs them.
+
+Signals:
+  SIGHUP   reopen the --log file, for a log rotator that moved it aside
+  SIGTERM  drain: seat no new claim or service, turning each away with the
+           reason, and exit once the runs holding it finish or
+           shutdown_grace (default 5m) passes
+  SIGTERM  a second one, or SIGINT at any time: stop its services and exit now
+
+A run the drain turns away is refused under broker: required (MGS3022) and
+runs unarbitrated under best-effort, each naming the draining broker. Runs
+still holding claims when the broker exits keep going and re-assert them on
+the next one.`,
 	Usage: "magus broker [status|stop|units] [flags]",
 	Flags: []Flag{
 		{Name: "idle-exit", Kind: FlagDuration, Default: 10 * time.Minute, Doc: "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive"},
+		{Name: "log", Kind: FlagString, Doc: "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log"},
 	},
 	Children: []Command{
 		{

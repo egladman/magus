@@ -240,24 +240,10 @@ func (s *Sink) EmitShardTotal(ctx context.Context, shard string, nShards int, el
 	s.emit(ctx, report.ShardTotal{Shard: shard, NShards: nShards, DurationMs: elapsed.Milliseconds()})
 }
 
-// DetachState is where an invocation handed to the server with --detach stands.
-type DetachState string
-
-// The states [Sink.EmitDetach] reports.
-const (
-	DetachCoalesced DetachState = "coalesced" // an identical invocation was already running; none was queued
-	DetachQueued    DetachState = "queued"    // handed to the server, not waited on
-	DetachRunning   DetachState = "running"   // handed to the server and waited on
-	DetachUnwatched DetachState = "unwatched" // the wait stopped; the run continues on the server
-	DetachPassed    DetachState = "passed"
-	DetachFailed    DetachState = "failed"
-)
-
-// EmitDetach emits where a detached invocation stands. Prose prints it at any level,
-// with the command that reads the invocation back. elapsed is the run's duration and
-// counts only for passed and failed.
-func (s *Sink) EmitDetach(ctx context.Context, invocation string, state DetachState, elapsed time.Duration) {
-	s.emit(ctx, report.RunDetach{Invocation: invocation, State: string(state), DurationMs: elapsed.Milliseconds()})
+// EmitDetach reports a run started in the background: its pid and the log its output
+// goes to. Prose prints it at any level.
+func (s *Sink) EmitDetach(ctx context.Context, pid int, logPath string) {
+	s.emit(ctx, report.RunDetach{PID: pid, Log: logPath})
 }
 
 // RecordValues records what target returned on each project, for a format that
@@ -540,30 +526,10 @@ func (t textEncoder) summary(ctx context.Context, e report.RunSummary) {
 	_ = t.term.EndRun(ctx, footer)
 }
 
-// detach hands back the invocation and the command that reads it, never a dashboard to
-// poll: the id is addressable, and its journal holds the outcome, timings and output
-// refs whenever the reader wants them.
+// detach names the process and the file, the two things a person needs to follow a run
+// that no longer has their terminal.
 func (t textEncoder) detach(ctx context.Context, e report.RunDetach) {
-	readIt := "  read it with: " + hint.QueryInvocation.With(e.Invocation) + "\n"
-	took := cache.FormatDuration(time.Duration(e.DurationMs) * time.Millisecond)
-	switch DetachState(e.State) {
-	case DetachCoalesced:
-		t.say(ctx, "magus: the server is already running this exact command; not queued twice\n")
-	case DetachQueued:
-		t.say(ctx, "magus: detached as %s\n%s", e.Invocation, readIt)
-	case DetachRunning:
-		t.say(ctx, "magus: running as %s on the server\n", e.Invocation)
-	case DetachUnwatched:
-		// Ctrl-C detaches the watcher, not the run: say how to pick it up again rather
-		// than implying it was cancelled.
-		t.say(ctx, "\nmagus: stopped waiting; %s is still running on the server\n%s", e.Invocation, readIt)
-	case DetachPassed:
-		t.say(ctx, "magus: %s passed (%s)\n%s", e.Invocation, took, readIt)
-	case DetachFailed:
-		t.say(ctx, "magus: %s failed (%s)\n%s", e.Invocation, took, readIt)
-	default:
-		t.say(ctx, "magus: %s %T %+v\n", unrenderedEvent, e, e)
-	}
+	t.say(ctx, "magus: detached as pid %d; its output goes to %s\n", e.PID, e.Log)
 }
 
 // notice rides the hint channel: the run that pays for a notice is often a gate run

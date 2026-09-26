@@ -57,7 +57,7 @@ plan renders more than once without being computed again.
 : With --graph: cap displayed depth (0 = unlimited)
 
 **--detach**
-: Hand the run to the server and return immediately; follow it with magus status --watch
+: Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 
 **--graph**
 : Render the dependency graph for the selected scope instead of executing
@@ -103,9 +103,6 @@ plan renders more than once without being computed again.
 
 **--upstream**
 : With --graph: show dependents instead of dependencies
-
-**--wait**
-: With --detach, block until the run finishes and exit with its status
 
 ## Targets
 

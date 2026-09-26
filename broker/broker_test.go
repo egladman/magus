@@ -531,3 +531,100 @@ func TestShutdownStopsTheBroker(t *testing.T) {
 		t.Fatal("shutdown did not stop the broker")
 	}
 }
+
+// awaitDrain waits until the broker reports it is draining, the point after which every
+// new claim meets the refusal.
+func awaitDrain(t *testing.T, addr string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		st, err := QueryStatus(t.Context(), addr)
+		return err == nil && st.Draining
+	}, 5*time.Second, 5*time.Millisecond, "the broker never reported draining")
+}
+
+func awaitServe(t *testing.T, done <-chan error, why string) {
+	t.Helper()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal(why)
+	}
+}
+
+// TestDrainSeatsNothingNewAndStopsWhenTheLastHolderLeaves is the first SIGTERM's
+// contract: runs already holding the broker finish, new ones are told why they were
+// turned away, and the broker goes as soon as nothing holds it.
+func TestDrainSeatsNothingNewAndStopsWhenTheLastHolderLeaves(t *testing.T) {
+	addr := testAddr(t)
+	drain := make(chan struct{})
+	host := &fakeHost{}
+	_, done := serve(t, addr, WithCapacity(4000, 4), WithServices(host), WithDrain(drain, time.Hour))
+	holder := dial(t, addr)
+	v, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+
+	close(drain)
+	awaitDrain(t, addr)
+
+	late := dial(t, addr)
+	_, err = late.Request(t.Context(), types.MachineClaim{Project: "api", Target: "build", Slots: 1})
+	var be *Error
+	require.ErrorAs(t, err, &be)
+	assert.Equal(t, CodeDraining, be.Code)
+	assert.Contains(t, be.Message, fmt.Sprintf("the broker (pid %d) is shutting down", os.Getpid()),
+		"the refusal names the process that turned the run away")
+
+	err = late.AcquireService(t.Context(), "pg", ServiceSpec{Command: []string{"postgres"}})
+	require.ErrorAs(t, err, &be)
+	assert.Equal(t, CodeDraining, be.Code, "a new service reference is a new hold, and is refused the same way")
+
+	assert.Len(t, holders(t, addr), 1, "the holder keeps its claim through the drain")
+	holder.Release(t.Context(), v.ID)
+	awaitServe(t, done, "the broker did not stop once its last holder released")
+}
+
+func TestDrainGivesUpAfterItsGrace(t *testing.T) {
+	addr := testAddr(t)
+	drain := make(chan struct{})
+	_, done := serve(t, addr, WithCapacity(4000, 4), WithDrain(drain, 10*time.Millisecond))
+	v, err := dial(t, addr).Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+
+	close(drain)
+	awaitServe(t, done, "a drain whose grace passed kept waiting for a holder")
+}
+
+func TestDrainWithNothingHeldStopsAtOnce(t *testing.T) {
+	addr := testAddr(t)
+	drain := make(chan struct{})
+	_, done := serve(t, addr, WithDrain(drain, time.Hour))
+	dial(t, addr) // a connection holding nothing does not keep a drain waiting
+	close(drain)
+	awaitServe(t, done, "a broker holding nothing waited out its drain grace")
+}
+
+// TestDrainStillRecordsAReassertion: a claim re-asserted during a drain belongs to a step
+// already running, so refusing it would only hide that step from status.
+func TestDrainStillRecordsAReassertion(t *testing.T) {
+	addr := testAddr(t)
+	drain := make(chan struct{})
+	serve(t, addr, WithCapacity(4000, 4), WithDrain(drain, time.Hour))
+	holder := dial(t, addr)
+	_, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	require.NoError(t, err)
+	close(drain)
+	awaitDrain(t, addr)
+
+	rejoined := dial(t, addr)
+	cn, err := rejoined.connect(t.Context())
+	require.NoError(t, err)
+	var reply claimReply
+	require.NoError(t, cn.roundTrip(t.Context(), rejoined.next(), typeClaim,
+		claimRequest{Claim: types.MachineClaim{Project: "api", Target: "build", Slots: 1}, Reassert: true},
+		typeClaimReply, &reply, nil))
+	assert.True(t, reply.Verdict.Granted)
+	assert.Len(t, holders(t, addr), 2)
+}

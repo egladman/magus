@@ -199,6 +199,9 @@ Default build width relative to the machine: conservative (half the cores), bala
 \fBMAGUS_BROKER\fR
 Whether a run asks the broker for this host's capacity and shared services: required refuses a step when none answers (MGS3022, exit 69), best\-effort runs unarbitrated and says so once, off never starts or contacts one (default: best\-effort). Equivalent magus.yaml key: \fBbroker\fR.
 .TP
+\fBMAGUS_SHUTDOWN_GRACE\fR
+How long the broker (waiting for the runs holding it) and the server (waiting for the runs it cancelled to unwind) take to stop after a first SIGTERM; a second SIGTERM stops either at once, and 0 stops at once (default: 5m). Equivalent magus.yaml key: \fBshutdown_grace\fR.
+.TP
 \fBMAGUS_HISTORY_PATH\fR
 Path to the runtime\-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: \fBhistory_path\fR.
 .TP

@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10,12 +11,14 @@ import (
 // TestBrokerUnitsRenderWhatTheSupervisorReads pins the units byte for byte, with a
 // binary path that needs quoting and a socket path carrying systemd's specifier
 // character: a unit that parses differently from what was printed is a broker that
-// never starts.
+// never starts. The grace has a fractional second, so the stop timeout pins rounding
+// up: a supervisor that kills a second early kills a broker still draining.
 func TestBrokerUnitsRenderWhatTheSupervisorReads(t *testing.T) {
 	f := unitFacts{
 		exe:       "/opt/my tools/magus",
 		socket:    "/run/user/1000/magus%/broker.sock",
 		log:       "/home/eli/.local/state/magus/broker.log",
+		grace:     90*time.Second + 500*time.Millisecond,
 		home:      "/home/eli",
 		configDir: "/home/eli/.config",
 		env:       [][2]string{{"TMPDIR", "/var/folders/x&y/T/"}},
@@ -41,7 +44,10 @@ Requires=magus-broker.socket
 After=magus-broker.socket
 
 [Service]
-ExecStart="/opt/my tools/magus" broker
+ExecStart="/opt/my tools/magus" broker --shutdown-grace=1m30.5s
+ExecReload=kill -HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=151
 `},
 	}, systemd)
 
@@ -59,6 +65,10 @@ ExecStart="/opt/my tools/magus" broker
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>
+    <string>--shutdown-grace</string>
+    <string>1m30.5s</string>
+    <string>--log</string>
+    <string>/home/eli/.local/state/magus/broker.log</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -71,6 +81,8 @@ ExecStart="/opt/my tools/magus" broker
   <true/>
   <key>ProcessType</key>
   <string>Background</string>
+  <key>ExitTimeOut</key>
+  <integer>151</integer>
   <key>StandardErrorPath</key>
   <string>/home/eli/.local/state/magus/broker.log</string>
 </dict>

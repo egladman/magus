@@ -86,6 +86,7 @@ func brokerToProto(b *types.StatusBroker) *statusv1.Broker {
 			HeldSlots:   int32(c.HeldSlots),
 		},
 		IdleExitSeconds: int32(b.IdleExitSeconds),
+		Draining:        b.Draining,
 	}
 	for _, h := range c.Holders {
 		out.Capacity.Holders = append(out.Capacity.Holders, &statusv1.Claim{

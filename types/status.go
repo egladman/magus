@@ -254,6 +254,9 @@ type StatusBroker struct {
 	// IdleExitSeconds is how long the broker stays up once it holds nothing: no claim,
 	// no service with a dependent.
 	IdleExitSeconds int `json:"idle_exit_seconds,omitzero" yaml:"idle_exit_seconds,omitempty"`
+	// Draining is set once a SIGTERM asked the broker to stop: it seats nothing new and
+	// exits when what it holds is released or its shutdown grace passes.
+	Draining bool `json:"draining,omitzero" yaml:"draining,omitempty"`
 }
 
 // StatusServer is the server's own report: the person-started process serving MCP, the

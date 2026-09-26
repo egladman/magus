@@ -31,7 +31,7 @@ var sinkEvents = []any{
 	report.RunStep{Label: "api", Project: "api", Target: "build", Status: "dry"},
 	report.RunSummary{Hits: 1, Misses: 1, DurationMs: 20},
 	report.RunRemote{Hits: 1, Failures: 1},
-	report.RunDetach{Invocation: "inv1", State: string(DetachPassed), DurationMs: 1200},
+	report.RunDetach{PID: 4242, Log: "/state/magus/detached/run.log"},
 	report.ShardTotal{Shard: "1", NShards: 4, DurationMs: 1500},
 	report.Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "every-event notice"},
 	report.DiagnosticEmitted{Unit: "api", Code: "MGS1028", Message: "seeded by LICENSE"},
@@ -136,7 +136,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 	s.EmitNotice(ctx, slog.LevelWarn, types.AffectedSetUncomputable, "full build")
 	s.EmitDiagnostic(ctx, "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
 	s.EmitShardTotal(ctx, "1", 4, time.Second)
-	s.EmitDetach(ctx, "inv1", DetachQueued, 0)
+	s.EmitDetach(ctx, 4242, "/state/run.log")
 	checkOutputOverlap(ctx, []cache.Step{
 		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
 		{ProjectPath: "b", Target: "build", Outputs: []string{"dist/**"}},
@@ -151,7 +151,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 		report.Notice{Level: slog.LevelWarn, Code: string(types.AffectedSetUncomputable), Message: "full build"},
 		report.DiagnosticEmitted{Unit: "api", Code: string(types.UndeclaredSeedingFile), Message: "seeded by LICENSE"},
 		report.ShardTotal{Shard: "1", NShards: 4, DurationMs: 1000},
-		report.RunDetach{Invocation: "inv1", State: string(DetachQueued)},
+		report.RunDetach{PID: 4242, Log: "/state/run.log"},
 		report.OutputOverlapDetected{ProjectA: "a", ProjectB: "b", Target: "build", Overlapping: []string{"dist/**"}},
 	}, enc.got)
 	assert.True(t, enc.closed)
@@ -214,8 +214,7 @@ func TestTextSinkProse(t *testing.T) {
 		// The zero case is the point: a configured remote that did nothing says so.
 		{report.RunRemote{}, "remote: 0 restored, 0 missed, 0 stored, 0 failed (0 B down, 0 B up)\n"},
 		{report.RunRemote{Hits: 1, Misses: 2, Stored: 3, DownBytes: 2048}, "remote: 1 restored, 2 missed, 3 stored, 0 failed (2.0 KiB down, 0 B up)\n"},
-		{report.RunDetach{Invocation: "inv1", State: string(DetachQueued)}, "magus: detached as inv1\n  read it with: magus query invocation inv1\n"},
-		{report.RunDetach{State: string(DetachCoalesced)}, "magus: the server is already running this exact command; not queued twice\n"},
+		{report.RunDetach{PID: 4242, Log: "/state/run.log"}, "magus: detached as pid 4242; its output goes to /state/run.log\n"},
 		// Debug detail stays out of a default run.
 		{report.DiagnosticEmitted{Unit: "api", Code: "MGS1028"}, ""},
 		{report.ShardTotal{Shard: "1", NShards: 2}, ""},
@@ -225,7 +224,7 @@ func TestTextSinkProse(t *testing.T) {
 }
 
 // -q and -s raise the level past progress, never past what explains a failure: notices,
-// diagnostics and a detached run's outcome still print.
+// diagnostics and where a detached run went still print.
 func TestTextSinkSilentKeepsWhatExplainsAFailure(t *testing.T) {
 	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
 	interactive.SetHintsEnabled(true)
@@ -237,14 +236,14 @@ func TestTextSinkSilentKeepsWhatExplainsAFailure(t *testing.T) {
 	s.emit(ctx, report.RunSummary{Hits: 1})
 	s.EmitNotice(ctx, slog.LevelWarn, "", "silent-run notice")
 	s.emit(ctx, report.DeterminismMismatch{Project: "api", Target: "build"})
-	s.EmitDetach(ctx, "inv1", DetachFailed, time.Second)
+	s.EmitDetach(ctx, 4242, "/state/run.log")
 
 	got := out.String()
 	assert.NotContains(t, got, "projects:")
 	assert.NotContains(t, got, "summary:")
 	assert.Contains(t, got, "hint: silent-run notice\n")
 	assert.Contains(t, got, "["+string(types.NondeterministicOutput)+"] non-deterministic output")
-	assert.Contains(t, got, "magus: inv1 failed (1.0s)\n")
+	assert.Contains(t, got, "magus: detached as pid 4242; its output goes to /state/run.log\n")
 }
 
 // The notice channel is the hint one in text: the run that pays for a notice is often a

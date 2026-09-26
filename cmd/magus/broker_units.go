@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/service"
 )
 
 // Supervisors `magus broker units` prints for.
@@ -22,6 +25,11 @@ const (
 
 // launchdLabel names the broker's launchd agent, and its plist file.
 const launchdLabel = "magus.broker"
+
+// stopMargin is how long past shutdown_grace a supervisor waits before SIGKILL: the
+// broker stops its services only once the drain ends, a teardown bounded by
+// service.DefaultShutdownTimeout.
+const stopMargin = service.DefaultShutdownTimeout + 20*time.Second
 
 // brokerUnit is one file a supervisor reads to run the broker.
 type brokerUnit struct {
@@ -35,7 +43,8 @@ type brokerUnit struct {
 type unitFacts struct {
 	exe       string // the magus binary the supervisor runs
 	socket    string // the path every run dials
-	log       string // where a launchd agent's stderr goes
+	log       string // the file a launchd agent's broker logs to
+	grace     time.Duration
 	home      string
 	configDir string
 	// env pins the variables the socket path is derived from, for a supervisor that
@@ -121,6 +130,7 @@ func gatherUnitFacts() (unitFacts, error) {
 		exe:       exe,
 		socket:    strings.TrimPrefix(broker.DefaultAddr(), "unix://"),
 		log:       brokerLogPath(),
+		grace:     globalCfg.ShutdownGrace,
 		home:      home,
 		configDir: configDir,
 	}
@@ -142,7 +152,19 @@ func gatherUnitFacts() (unitFacts, error) {
 // not make, so its agent starts the broker at login, keeps it alive and turns idle exit
 // off; the broker binds broker.sock itself. The agent pins the variables the socket
 // path comes from, because launchd starts agents with an environment of its own.
+//
+// Both pin shutdown_grace on the command line and give the supervisor that long plus
+// stopMargin between SIGTERM and SIGKILL, so the supervisor waits out the drain the
+// broker actually runs, whatever config it would otherwise read. KillMode=mixed sends
+// systemd's SIGTERM to the broker alone: the services it hosts share its cgroup, and
+// the runs it is draining still use them.
+//
+// The launchd broker logs through --log so SIGHUP's reopen works under a rotator;
+// StandardErrorPath names the same file for what is written before the broker opens
+// it. Under systemd stderr goes to the journal, which needs no reopen.
 func renderBrokerUnits(supervisor string, f unitFacts) ([]brokerUnit, error) {
+	grace := f.grace.String()
+	stopSecs := strconv.FormatInt(int64((f.grace+stopMargin+time.Second-1)/time.Second), 10)
 	switch supervisor {
 	case supervisorSystemd:
 		dir := filepath.Join(f.configDir, "systemd", "user")
@@ -157,17 +179,20 @@ DirectoryMode=0700
 [Install]
 WantedBy=sockets.target
 `, systemdEscape(f.socket))
-		service := fmt.Sprintf(`[Unit]
+		svc := fmt.Sprintf(`[Unit]
 Description=magus broker: this host's capacity and shared services
 Requires=magus-broker.socket
 After=magus-broker.socket
 
 [Service]
-ExecStart=%s broker
-`, systemdQuote(f.exe))
+ExecStart=%s broker --shutdown-grace=%s
+ExecReload=kill -HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=%s
+`, systemdQuote(f.exe), grace, stopSecs)
 		return []brokerUnit{
 			{Supervisor: supervisor, Path: filepath.Join(dir, "magus-broker.socket"), Content: socket},
-			{Supervisor: supervisor, Path: filepath.Join(dir, "magus-broker.service"), Content: service},
+			{Supervisor: supervisor, Path: filepath.Join(dir, "magus-broker.service"), Content: svc},
 		}, nil
 
 	case supervisorLaunchd:
@@ -184,6 +209,10 @@ ExecStart=%s broker
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>
+    <string>--shutdown-grace</string>
+    <string>` + grace + `</string>
+    <string>--log</string>
+    <string>` + xmlText(f.log) + `</string>
   </array>
 `)
 		if len(f.env) > 0 {
@@ -199,6 +228,8 @@ ExecStart=%s broker
   <true/>
   <key>ProcessType</key>
   <string>Background</string>
+  <key>ExitTimeOut</key>
+  <integer>` + stopSecs + `</integer>
   <key>StandardErrorPath</key>
   <string>` + xmlText(f.log) + `</string>
 </dict>

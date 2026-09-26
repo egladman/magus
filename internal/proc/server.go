@@ -152,6 +152,11 @@ type Options struct {
 	// Server, if set, is read on every Status RPC and reported as StatusReply.Server.
 	// Only `magus server` sets it.
 	Server func() *types.StatusServer
+	// CallerOwnsSignals leaves SIGINT, SIGTERM and SIGHUP to the caller. Without it Start
+	// installs a handler that shuts the server down on any of them and re-raises the
+	// signal, which is right for a proc server living inside one run and wrong for a
+	// process that reloads on SIGHUP.
+	CallerOwnsSignals bool
 }
 
 // Server serves HTTP on a Unix-domain socket: the proc routes under /proc/v1/ that child
@@ -180,6 +185,8 @@ type Server struct {
 	once     sync.Once
 	done     chan struct{} // closed when Close begins, to stop the signal watcher goroutine
 	closed   chan struct{} // closed when Close has drained every in-flight request
+
+	callerOwnsSignals bool
 }
 
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
@@ -299,6 +306,8 @@ func New(opts Options) (*Server, error) {
 		cancel:      cancel,
 		done:        make(chan struct{}),
 		closed:      make(chan struct{}),
+
+		callerOwnsSignals: opts.CallerOwnsSignals,
 	}
 	handler, err := srv.routes()
 	if err != nil {
@@ -413,7 +422,9 @@ func (s *Server) Start() error {
 	s.mu.Unlock()
 
 	go func() { _ = s.http.Serve(ln) }()
-	watchSignals(s, s.cancel)
+	if !s.callerOwnsSignals {
+		watchSignals(s, s.cancel)
+	}
 	return nil
 }
 

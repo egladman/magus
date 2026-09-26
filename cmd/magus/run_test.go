@@ -3,13 +3,9 @@ package main
 import (
 	"context"
 	"flag"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -468,9 +464,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	assert.NoFileExists(t, filepath.Join(m.Root(), "site", "generated.txt"))
 }
 
-// TestWithoutDetachFlagStripsEverySpelling pins the loop guard on --detach. The argv is
-// re-submitted to the server verbatim, so a --detach left in it would make the server
-// detach again, handing the work to itself indefinitely.
+// TestWithoutDetachFlagStripsEverySpelling pins the loop guard on --detach. The detached
+// child runs the rest of the argv, so a --detach left in it would detach again, forever.
 func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 	got := withoutDetachFlag([]string{"ci", "-detach", "docs", "--detach", "--detach=true", "--detach-me"})
 	assert.Equal(t, []string{"ci", "docs", "--detach-me"}, got,
@@ -481,76 +476,6 @@ func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 
 	assert.Equal(t, []string{"ci", "--", "--detach"}, withoutDetachFlag([]string{"ci", "--", "--detach"}),
 		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
-}
-
-// TestLocalOnlyFlagsNeverReachTheServer guards the argv that is re-submitted.
-//
-// --detach left in would make the server detach again, handing the work to
-// itself forever. --wait left in would be acted on by a run that is not
-// detaching, where it is a usage error, so a valid local invocation would
-// arrive at the server as an invalid one.
-func TestLocalOnlyFlagsNeverReachTheServer(t *testing.T) {
-	got := withoutDetachFlag([]string{
-		"ci", "-detach", "docs", "--detach", "--detach=true", "--wait", "--wait=true", "--detach-me", "--waiting",
-	})
-	assert.Equal(t, []string{"ci", "docs", "--detach-me", "--waiting"}, got,
-		"both local flags go, in every spelling; lookalikes stay")
-
-	assert.Equal(t, []string{"ci", "--", "--wait"},
-		withoutDetachFlag([]string{"ci", "--", "--wait"}),
-		"past the separator the tokens belong to the forwarded tool")
-}
-
-// --detach --wait hands the run to the server and then polls awaitInvocation until a
-// status appears. That loop's only bound is ctx.Done, and --timeout was applied AFTER
-// the detach branch returned, so it never reached the loop: `magus run --detach --wait
-// --timeout 30s` waited forever on a run that never finished.
-//
-// Read out of the source rather than exercised: reaching the detach branch at runtime
-// needs a loaded workspace and a live server, which is far more than checking that one
-// statement precedes another.
-func TestRunAppliesTheTimeoutBeforeDetaching(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
-	path := filepath.Join(filepath.Dir(thisFile), "run.go")
-
-	src, err := os.ReadFile(path)
-	require.NoError(t, err)
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, src, 0)
-	require.NoError(t, err)
-	cond := func(e ast.Expr) string {
-		return string(src[fset.Position(e.Pos()).Offset:fset.Position(e.End()).Offset])
-	}
-
-	var fn *ast.FuncDecl
-	for _, decl := range file.Decls {
-		if d, isFn := decl.(*ast.FuncDecl); isFn && d.Name.Name == "runTarget" {
-			fn = d
-			break
-		}
-	}
-	require.NotNil(t, fn, "runTarget not found in run.go")
-
-	// Both guards are top-level statements of runTarget, so their order in the body is
-	// the order they execute in.
-	timeoutAt, detachAt := -1, -1
-	for i, stmt := range fn.Body.List {
-		ifStmt, isIf := stmt.(*ast.IfStmt)
-		if !isIf {
-			continue
-		}
-		switch text := cond(ifStmt.Cond); {
-		case timeoutAt < 0 && strings.Contains(text, "rf.Timeout"):
-			timeoutAt = i
-		case detachAt < 0 && text == "rf.Detach":
-			detachAt = i
-		}
-	}
-	require.GreaterOrEqual(t, timeoutAt, 0, "no `if rf.Timeout ...` guard in runTarget")
-	require.GreaterOrEqual(t, detachAt, 0, "no `if rf.Detach` guard in runTarget")
-	assert.Less(t, timeoutAt, detachAt,
-		"--timeout must bind the context before --detach returns, or --detach --wait has no bound at all")
 }
 
 func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {

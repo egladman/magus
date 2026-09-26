@@ -70,6 +70,7 @@ config server.maintenance.rotate_activities
 config server.maintenance.rotate_logs
 config server.maintenance.sync_graph
 config server.workspaces
+config shutdown_grace
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
 config stall_timeout
@@ -114,7 +115,6 @@ flag affected/step
 flag affected/target
 flag affected/timeout
 flag affected/upstream
-flag affected/wait
 flag agent/dir
 flag agent/dry-run
 flag agent/force
@@ -123,6 +123,7 @@ flag agent/prune
 flag agent/skill-form
 flag agent/tar
 flag broker/idle-exit
+flag broker/log
 flag buzz/C
 flag buzz/check
 flag buzz/coverprofile
@@ -196,7 +197,6 @@ flag run/stdin
 flag run/step
 flag run/timeout
 flag run/upstream
-flag run/wait
 flag session/brief
 flag session/limit
 flag session/since

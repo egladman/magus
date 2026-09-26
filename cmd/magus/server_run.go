@@ -169,6 +169,8 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		Limiter:         lim,
 		Version:         version,
 		Address:         cfg.Server.Address,
+		// serverStart answers them: SIGHUP reloads, and a stop is bounded by shutdown_grace.
+		CallerOwnsSignals: true,
 	})
 	if err != nil {
 		slog.Error("server: init failed", slog.String("error", err.Error()))
@@ -184,19 +186,34 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		return
 	}
 	procServer = srv // publish so serverStart's blocking loop unblocks on an RPC shutdown
+	var once sync.Once
+	stopped := make(chan struct{})
+	serverStopped = stopped
+	stopServer = func() {
+		once.Do(func() {
+			// Drain in-flight handlers (srv.Close cancels them and waits on connWg) before
+			// reg.close so a workspace can't be closed under an in-flight build.
+			srv.Close()
+			reg.close()
+			_ = brokerClient.Close()
+			close(stopped)
+		})
+	}
 	go func() {
-		// Tear down on either path: a signal (ctx cancelled via NotifyContext) or an RPC
-		// `server stop` (which calls srv.Close, closing srv.Done). Waiting only on ctx.Done
-		// missed the RPC path (srv.Close cancels the listener's own context, not this one),
-		// so a stopped server leaked its warm workspaces.
+		// An RPC `server stop` closes srv.Done without touching ctx, and a server that
+		// waited only on ctx leaked its warm workspaces.
 		select {
 		case <-ctx.Done():
 		case <-srv.Done():
 		}
-		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
-		// workspace can't be closed under an in-flight build. Close is idempotent.
-		srv.Close()
-		reg.close()
-		_ = brokerClient.Close()
+		stopServer()
 	}()
 }
+
+// stopServer tears the server down: its socket, the runs it adopted, its workspaces. It
+// blocks until those runs have unwound and is safe to call more than once; serverStopped
+// closes when it has finished. Both are set by startServer.
+var (
+	stopServer    = func() {}
+	serverStopped <-chan struct{}
+)

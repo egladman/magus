@@ -132,6 +132,10 @@ const (
 	CodeNoServices ErrorCode = "no-services"
 	// CodeService is a service that could not be started or never became ready.
 	CodeService ErrorCode = "service"
+	// CodeDraining is a new claim or service reference asked of a broker that is shutting
+	// down: it seats nothing new while the runs it holds finish. The next run to find no
+	// broker starts another.
+	CodeDraining ErrorCode = "draining"
 )
 
 // errorReply is the body of an error frame.

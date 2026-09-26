@@ -16,11 +16,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 ### Added
 
-- **`magus affected ci` sizes its gate to the change.** Every changed file gets a tier
-  (trivial, mechanical, scoped, full) with its evidence. Below full the gate runs only
-  the drift check and lint, or Go tests narrowed through `go list` by the go spell's new
-  `go-test-packages` op. A trivial change runs nothing and exits 0.
-  `--no-redundancy-check` runs the full gate.
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
 - **The agent guard refuses a backtick command substitution.** Inside double quotes a
@@ -30,6 +25,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
   other clients of the protocol it runs share the target's slots instead of
   choosing a width of their own. A target that declares no `slots` is unchanged.
+- **A first SIGTERM drains the broker, bounded by `shutdown_grace`.** It turns new claims
+  and services away, naming itself, and exits once its holders finish or the grace
+  (default 5m, `MAGUS_SHUTDOWN_GRACE`) passes; `broker status` shows it draining. The
+  server cancels its runs and waits the same grace. A second SIGTERM, or SIGINT to the
+  broker, exits now.
 - **`broker: required | best-effort | off` decides what a run does without a broker.**
   `required` refuses a step (MGS3022, exit 69), `best-effort` (the default) runs
   unarbitrated and says so once, and `off` never starts or contacts one. Also
@@ -400,13 +400,21 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   ignored. Pass one or the other.
 - **Breaking for SDK callers: the daemon names are gone from the Go API.** `magus.Daemon`,
   `SetDaemon` and `ServeDaemon` are `Server`, `SetServer` and `Serve`;
-  `types.EntryPointDaemon`, `HolderDaemon`, `DaemonRequired` and `DaemonSocketWithheld`
-  are `EntryPointServer`, `HolderServer`, `ServerRequired` and `ProcSocketWithheld`. The
+  `types.EntryPointDaemon`, `HolderDaemon` and `DaemonSocketWithheld` are
+  `EntryPointServer`, `HolderServer` and `ProcSocketWithheld`; `DaemonRequired` is gone. The
   `internal/daemon` package is `internal/server`.
 - **Breaking: the wire says server where it said daemon.** `Pool.daemon_version` is
   reserved and replaced by `owner_version`; `JOB_HOLDER_DAEMON` is reserved and replaced by
   `JOB_HOLDER_SERVER`; the entry point recorded on an event is `server`, not `daemon`; and
   the doctor check `daemon-version` is `server-version`.
+- **Breaking: `--detach` runs the command in the background itself and needs no server.**
+  The run becomes its own session, appends to a log under
+  `$XDG_STATE_HOME/magus/detached/` and holds its own broker connection; magus prints its
+  pid and log path. The `run.detach` record carries `pid` and `log`. MGS5004 is retired.
+- **SIGHUP no longer stops the server or the broker.** The server reloads its
+  configuration, as `magus server reload` does; the broker reopens the file its new
+  `--log` flag names, so a log rotator can move it aside. A broker a run starts logs
+  through `--log` to `$XDG_STATE_HOME/magus/broker.log`.
 - **Breaking: sockets and logs moved.** `$XDG_RUNTIME_DIR/magus/broker.sock` and
   `server.sock` replace `magus-daemon.sock`, and a detached broker or server logs to
   `$XDG_STATE_HOME/magus/`, which survives logout, instead of beside its socket. The
@@ -464,10 +472,6 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
   reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
   `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
-- **The redundancy check, CI verdict inheritance and job completion skip only a trivial
-  change.** A comment-only edit, and markdown a package embeds or a gate target reads,
-  no longer skip the gate. A job's completion gate on `ci` passes on a green `ci` gate
-  when the change since it is trivial.
 - **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
   count. magus reads no environment variable to guess it runs in CI, so the same command
   behaves the same everywhere, and `concurrency_profile` stays `balanced`
@@ -672,6 +676,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   runs its advisors in one step; delete those keys from `with:`. An input switch reading
   anything but `true` or `false` now fails the step, and one failing advisor no longer
   stops the rest.
+- **Breaking: `--wait` on `run` and `affected`, with no replacement.** It waited on a run
+  handed to the server, and `--detach` no longer hands a run to anything; to wait for a
+  run, leave off `--detach`.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.

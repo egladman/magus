@@ -321,6 +321,9 @@ tags/magus-ledger/
 # through a spell, so there is no successor spell page to send a reader to.
 concepts/spells/buzz/
 reference/codes/sandbox/MGS3015/
+# --detach stopped handing work to the server: it starts the run as its own session with
+# a log file, so there is no process left for MGS5004 to require.
+reference/codes/services/MGS5004/
 # The pinning tag is down to one page, reference/remote-spells.md; a one-page tag gets no
 # index, as with the tags above.
 tags/pinning/

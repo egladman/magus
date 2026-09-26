@@ -61,8 +61,6 @@ const (
 	FlagAffectedTimeout = "timeout"
 	// affected: --upstream
 	FlagAffectedUpstream = "upstream"
-	// affected: --wait
-	FlagAffectedWait = "wait"
 	// agent adoption: --commands
 	FlagAgentAdoptionCommands = "commands"
 	// agent harness apply: --id
@@ -91,6 +89,8 @@ const (
 	FlagBrokerStopServices = "services"
 	// broker: --idle-exit
 	FlagBrokerIdleExit = "idle-exit"
+	// broker: --log
+	FlagBrokerLog = "log"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --check
@@ -539,8 +539,6 @@ const (
 	FlagRunTimeout = "timeout"
 	// run: --upstream
 	FlagRunUpstream = "upstream"
-	// run: --wait
-	FlagRunWait = "wait"
 	// self install-shorthand: --dir
 	FlagSelfInstallShorthandDir = "dir"
 	// self install-shorthand: --force
@@ -746,7 +744,6 @@ type RunFlags struct {
 	NoCache           bool          // --no-cache
 	NoDefaultCharms   bool          // --no-default-charms
 	Detach            bool          // --detach
-	Wait              bool          // --wait
 	Open              bool          // --open
 	Step              bool          // --step
 	Race              string        // --race
@@ -767,8 +764,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.IntVar(&f.Depth, FlagRunDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
 	fs.BoolVar(&f.NoCache, FlagRunNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	fs.BoolVar(&f.NoDefaultCharms, FlagRunNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
-	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
-	fs.BoolVar(&f.Wait, FlagRunWait, false, "With --detach, block until the run finishes and exit with its status")
+	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server")
 	fs.BoolVar(&f.Open, FlagRunOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
 	fs.StringVar(&f.Race, FlagRunRace, "", "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.")
@@ -816,7 +812,6 @@ type AffectedFlags struct {
 	NoRedundancyCheck bool          // --no-redundancy-check
 	Preflight         string        // --preflight
 	Detach            bool          // --detach
-	Wait              bool          // --wait
 	Open              bool          // --open
 	Step              bool          // --step
 	Race              string        // --race
@@ -837,8 +832,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagAffectedPreflight, "", "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green")
-	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
-	fs.BoolVar(&f.Wait, FlagAffectedWait, false, "With --detach, block until the run finishes and exit with its status")
+	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server")
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagAffectedStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
 	fs.StringVar(&f.Race, FlagAffectedRace, "", "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.")
@@ -1884,12 +1878,14 @@ func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 // BrokerFlags are the flags declared for `magus broker`.
 type BrokerFlags struct {
 	IdleExit time.Duration // --idle-exit
+	Log      string        // --log
 }
 
 // BindBroker registers `magus broker`'s flags on fs and returns the destination.
 func BindBroker(fs *flag.FlagSet) *BrokerFlags {
 	var f BrokerFlags
 	fs.DurationVar(&f.IdleExit, FlagBrokerIdleExit, time.Duration(600000000000), "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive")
+	fs.StringVar(&f.Log, FlagBrokerLog, "", "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log")
 	return &f
 }
 
