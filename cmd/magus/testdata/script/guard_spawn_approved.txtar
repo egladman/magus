@@ -4,7 +4,7 @@
 # take effect. Also checks that registering the rule leaves a guard_policy line on the
 # activity trail (internal/guard/policy.go's RecordPolicy).
 #
-# guard_policy_test.go (package magus) used to cover this directly against Inspect, but
+# guard_test.go (package magus) used to cover this directly against Inspect, but
 # that package is deliberately free of the Buzz VM (see register_test.go's init), so a
 # magusfile\guard.spawn rule never actually registers there. This script runs the real
 # binary instead, the same as guard_git.txtar does for the VCS rules.

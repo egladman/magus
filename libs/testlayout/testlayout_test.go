@@ -45,6 +45,25 @@ func TestAnalyzerCrossCutting(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "crosscutting")
 }
 
+// TestAnalyzerStrict checks the three options a tree adds on top of Unpaired: the
+// marker stops excusing a file, benchmark files lose their exemption, and a _unix
+// file name is reported whether it holds tests or source. Allow is then the one
+// exit left, which conventions_test.go takes.
+func TestAnalyzerStrict(t *testing.T) {
+	analyzer, err := New(Options{
+		Allow:          []string{"conventions_test.go"},
+		Unpaired:       true,
+		IgnoreMarker:   true,
+		PairBenchmarks: true,
+		NoUnixSuffix:   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	analysistest.Run(t, analysistest.TestData(), analyzer, "strict")
+}
+
 // TestAnalyzerAllow checks that a glob excuses a file the default rule reports:
 // widget_conformance_test.go narrows widget.go exactly as resolver_edge_cases
 // narrows resolver.
