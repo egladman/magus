@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/vcs"
 )
 
 func configCmd(ctx context.Context, root string, cfg config.Config, args []string) error {
@@ -44,7 +45,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 	case "view":
 		return runConfigView(cfg, subArgs)
 	case "set":
-		return runConfigSet(subArgs)
+		return runConfigSet(ctx, subArgs)
 	case "history":
 		return configHistoryCmd(ctx, root, cfg, subArgs)
 	case "cache":
@@ -127,7 +128,7 @@ func intOrDef(n int, def string) string {
 	return strconv.Itoa(n)
 }
 
-func runConfigSet(args []string) error {
+func runConfigSet(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	sf := gen.BindConfigSet(fs)
@@ -174,7 +175,7 @@ func runConfigSet(args []string) error {
 		cfgPath = config.Filename
 	}
 
-	if err := config.Save(cfgPath, key, value); err != nil {
+	if err := config.Save(vcs.WriteJudge(ctx, judgeDir("")), cfgPath, key, value); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s: %s = %s\n", cfgPath, key, value)

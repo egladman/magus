@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/vcs"
 )
 
 // starterMagusfileBuzz is the starter magusfile written by `magus init` when a
@@ -103,10 +104,11 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return fmt.Errorf("init --global: %w", err)
 		}
-		if err := config.Init(cfgPath, inf.Force); err != nil {
+		wrote, err := config.Init(vcs.WriteJudge(ctx, judgeDir(root)), cfgPath, inf.Force)
+		if err != nil {
 			return err
 		}
-		slog.InfoContext(ctx, "init: wrote global config", slog.String("path", cfgPath))
+		logConfigInit(ctx, cfgPath, wrote)
 		printInitNextSteps(ctx, cfgPath, false, false)
 		return nil
 	}
@@ -138,13 +140,31 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if err := config.Init(cfgPath, inf.Force); err != nil {
+	wrote, err := config.Init(vcs.WriteJudge(ctx, judgeDir(root)), cfgPath, inf.Force)
+	if err != nil {
 		return err
 	}
-	slog.InfoContext(ctx, "init: wrote config", slog.String("path", cfgPath))
+	logConfigInit(ctx, cfgPath, wrote)
 
 	printInitNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
+}
+
+// judgeDir is the directory whose repository orders this binary against the one that
+// wrote a config: root, or the working directory when root is "".
+func judgeDir(root string) string {
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+	return root
+}
+
+func logConfigInit(ctx context.Context, cfgPath string, wrote bool) {
+	if wrote {
+		slog.InfoContext(ctx, "init: wrote a config holding no keys; every key keeps its built-in default", slog.String("path", cfgPath))
+		return
+	}
+	slog.InfoContext(ctx, "init: config exists, left as it is", slog.String("path", cfgPath))
 }
 
 // xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
@@ -184,11 +204,11 @@ func printInitPlan(root string, global, local, force bool) error {
 		cfgPath = filepath.Join(root, config.Filename)
 	}
 
-	verb := "would write"
+	verb := "would write, holding no keys"
 	if _, err := os.Stat(cfgPath); err == nil {
-		verb = "exists, would be left alone (pass --force to overwrite)"
+		verb = "exists, would be left alone (pass --force to replace it with one holding no keys)"
 		if force {
-			verb = "exists, would be OVERWRITTEN (--force)"
+			verb = "exists, would be REPLACED with one holding no keys (--force)"
 		}
 	}
 	fmt.Fprintf(os.Stdout, "config:       %s - %s\n", cfgPath, verb)
@@ -221,7 +241,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 		return
 	}
 
-	interactive.Emit(os.Stderr, fmt.Sprintf("config written to %s", cfgPath))
+	interactive.Emit(os.Stderr, fmt.Sprintf("config: %s (set a key with `%s`)", cfgPath, hint.ConfigSet.With("key=<key>,value=<value>")))
 
 	if scaffolded {
 		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.buzz")

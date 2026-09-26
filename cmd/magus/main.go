@@ -126,6 +126,7 @@ func runCLI() int {
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
+	rootCtx = types.WithMagusBuild(rootCtx, selfBuild())
 	// Adopt the ancestry a parent magus passed down, before anything can take a project
 	// lock. Stamped here rather than in BeginInvocation because every subcommand that
 	// locks needs it, including the ones with no invocation record of their own (clean).

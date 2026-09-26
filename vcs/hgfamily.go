@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,7 +41,7 @@ func hgUsername(as types.Person) ([]string, error) {
 // writeHgFamilyMergeDriverSection routes the output and auto-resolve globs to the magus
 // merge tool in the hg-family config at path, each glob once. The caller holds
 // withRepoLock.
-func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs) (bool, error) {
+func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[merge-patterns]\n")
 	all := slices.Concat(globs.Outputs, globs.AutoResolve)
@@ -54,7 +55,7 @@ func writeHgFamilyMergeDriverSection(path string, globs types.MergeDriverGlobs) 
 	body.WriteString("magus.args = vcs merge-driver $base $local $other 0 $local\n")
 	body.WriteString("magus.premerge = False\n")
 	body.WriteString("magus.gui = False\n")
-	return writeManagedSection(path, generatedMarkers, body.String(), configFile)
+	return writeManagedSection(path, generatedMarkers, body.String(), configFile, j)
 }
 
 // hgFamilyMergeDriverCommand is MergeDriverCommand for hg and Sapling: the merge tool
@@ -77,20 +78,20 @@ func hgFamilyMergeDriverCommand(ctx context.Context, prog, root string) (string,
 
 // writeHgFamilyRefreshSection registers an `update` hook running command in the
 // hg-family config at path. The caller holds withRepoLock.
-func writeHgFamilyRefreshSection(path, command string) (bool, error) {
+func writeHgFamilyRefreshSection(path, command string, j stamp.Judge) (bool, error) {
 	body := fmt.Sprintf("[hooks]\nupdate.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
-	return writeManagedSection(path, refreshMarkers, body, configFile)
+	return writeManagedSection(path, refreshMarkers, body, configFile, j)
 }
 
 // writeHgFamilyDriftSection registers each of hgFamilyDriftHooks to run command in the
 // hg-family config at path. The caller holds withRepoLock.
-func writeHgFamilyDriftSection(path, command string) (bool, error) {
+func writeHgFamilyDriftSection(path, command string, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[hooks]\n")
 	for _, name := range hgFamilyDriftHooks {
 		fmt.Fprintf(&body, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
 	}
-	return writeManagedSection(path, driftMarkers, body.String(), configFile)
+	return writeManagedSection(path, driftMarkers, body.String(), configFile, j)
 }
 
 // hgFamilyGlobs prefixes each pathspec with Mercurial's "glob:" pattern kind, for the two

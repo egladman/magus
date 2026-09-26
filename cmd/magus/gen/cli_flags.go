@@ -1979,7 +1979,7 @@ func BindInit(fs *flag.FlagSet) *InitFlags {
 	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
 	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
-	fs.BoolVar(&f.Force, FlagInitForce, false, "Overwrite an existing config file")
+	fs.BoolVar(&f.Force, FlagInitForce, false, "Replace an existing config file with one holding no keys")
 	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
 	return &f
 }

@@ -968,8 +968,9 @@ project-local file → MAGUS_* environment variables → CLI flags.
 
 The view sub-command prints the effective merged configuration. The set
 sub-command writes a key-value pair to the local (or global) config file.
-The init sub-command materializes the built-in defaults to a magus.yaml so
-they can be edited by hand.
+"magus init" writes a magus.yaml holding no keys, so every key keeps its
+built-in default until set. A config file a newer magus wrote is never
+replaced: set stops and names the build to update to.
 
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
@@ -1391,6 +1392,13 @@ always wired in the repo.
 With --global only the global config is written; the per-clone workspace
 bootstrap (magusfile stub + merge driver) is skipped.
 
+The config holds no keys: every key keeps its built-in default until
+"magus config set" changes it, so no key a later magus removes is pinned
+there. An existing config is left as it is; --force replaces it with an
+empty one. Nothing a newer magus wrote (the config, the managed sections in
+.gitattributes and the hooks, the merge driver registration) is replaced:
+init stops and names the build to update to.
+
 The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
 
 The "spell" subcommand scaffolds a new spell instead of bootstrapping a
@@ -1401,7 +1409,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 		{Name: "global", Kind: FlagBool, Doc: "Write only the global config; skip the workspace bootstrap"},
 		{Name: "dry-run", Kind: FlagBool, Doc: "Print the config, magusfile, and merge-driver destinations without writing any of them"},
 		{Name: "local", Kind: FlagBool, Doc: "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/"},
-		{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing config file"},
+		{Name: "force", Kind: FlagBool, Doc: "Replace an existing config file with one holding no keys"},
 		{Name: "vcs", Kind: FlagString, Doc: "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY"},
 	},
 	Examples: []Example{

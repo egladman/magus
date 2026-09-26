@@ -914,6 +914,11 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (writt
 		return nil, nil, err
 	}
 	for _, skill := range skills {
+		if err := c.checkInstalledNotNewer(filepath.Join(dir, dest, skill.Name, "SKILL.md")); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, skill := range skills {
 		rel := filepath.Join(skill.Name, "SKILL.md")
 		outPath := filepath.Join(dir, dest, rel)
 		if !force {
@@ -939,6 +944,36 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (writt
 		written = append(written, filepath.Join(dest, rel))
 	}
 	return written, changed, nil
+}
+
+// checkInstalledNotNewer refuses to overwrite the skill at path when its stamp names an
+// agent-skill-version or knowledge-schema-version newer than this binary's: an older
+// install would teach agents last release's verbs over the newer ones. Those two numbers
+// are the stamp's whole ordering. It carries no build identity, since the installed copies
+// are often tracked and a per-build stamp would change them on every rebuild. A missing or
+// unstamped file is not refused.
+func (c *Catalog) checkInstalledNotNewer(path string) error {
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("agent install: read %s: %w", path, err)
+	}
+	m := footerVersionRe.FindSubmatch(body)
+	if m == nil {
+		return nil
+	}
+	skillVersion, _ := strconv.Atoi(string(m[1]))
+	schemaVersion, _ := strconv.Atoi(string(m[2]))
+	if skillVersion <= SkillVersion && schemaVersion <= c.schemaVersion {
+		return nil
+	}
+	return fmt.Errorf("agent install: %s was installed by a newer magus (agent-skill-version %d, knowledge-schema-version %d) than this binary "+
+		"(agent-skill-version %d, knowledge-schema-version %d), and replacing it would undo what the newer one wrote. "+
+		"Update this binary (`%s` for a release, or bring a checkout of magus up to date and rebuild it), "+
+		"or rerun this command with a magus at least that new",
+		path, skillVersion, schemaVersion, SkillVersion, c.schemaVersion, hint.SelfUpdate)
 }
 
 // StaleSkillDirs returns the installed skill directories under <dir>/<dest> that

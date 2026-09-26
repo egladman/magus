@@ -9,7 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/spells"
 )
 
@@ -20,7 +22,7 @@ import (
 // trip through both code paths is the only thing that catches that divergence.
 func TestSave_PlainBoolFalseSurvivesTheRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "magus.yaml")
-	require.NoError(t, Save(path, "server.enabled", "false"))
+	require.NoError(t, Save(stamp.Judge{}, path, "server.enabled", "false"))
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
@@ -31,7 +33,7 @@ func TestSave_PlainBoolFalseSurvivesTheRoundTrip(t *testing.T) {
 // a set that landed under the old key would be a setting magus silently ignores.
 func TestSave_RetiredKeyNamesItsReplacement(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "magus.yaml")
-	err := Save(path, "daemon.maintenance.sync_graph", "1h")
+	err := Save(stamp.Judge{}, path, "daemon.maintenance.sync_graph", "1h")
 	require.EqualError(t, err, `config key "daemon.maintenance.sync_graph" was renamed to "server.maintenance.sync_graph"`)
 	assert.NoFileExists(t, path)
 }
@@ -49,7 +51,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 		{"sandbox.allow.homebin.path", "/home/user/.local/bin"}, // slice-of-struct (by name)
 		{"sandbox.allow.homebin.mode", "ro"},
 	} {
-		require.NoError(t, Save(path, c.key, c.value), "Save(%s=%s)", c.key, c.value)
+		require.NoError(t, Save(stamp.Judge{}, path, c.key, c.value), "Save(%s=%s)", c.key, c.value)
 	}
 
 	cfg, err := Load(path)
@@ -92,7 +94,7 @@ func TestSave_CreatesMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	require.NoError(t, Save(path, "cache.dir", "/tmp/mydir"))
+	require.NoError(t, Save(stamp.Judge{}, path, "cache.dir", "/tmp/mydir"))
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
@@ -104,7 +106,7 @@ func TestSave_MutatesOnlyTouchedKey(t *testing.T) {
 	path := filepath.Join(dir, "magus.yaml")
 
 	require.NoError(t, os.WriteFile(path, []byte("concurrency: 4\nlog:\n  format: plain\n"), 0o644))
-	require.NoError(t, Save(path, "cache.dir", "/data/cache"))
+	require.NoError(t, Save(stamp.Judge{}, path, "cache.dir", "/data/cache"))
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
@@ -117,8 +119,8 @@ func TestSave_IntValidation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 
-	assert.Error(t, Save(path, "concurrency", "banana"), "expected error for non-int value")
-	require.NoError(t, Save(path, "concurrency", "8"))
+	assert.Error(t, Save(stamp.Judge{}, path, "concurrency", "banana"), "expected error for non-int value")
+	require.NoError(t, Save(stamp.Judge{}, path, "concurrency", "8"))
 	cfg, _ := Load(path)
 	assert.Equal(t, 8, cfg.Concurrency)
 }
@@ -128,14 +130,14 @@ func TestSave_BoolValidation(t *testing.T) {
 	path := filepath.Join(dir, "magus.yaml")
 
 	for _, bad := range []string{"maybe", "y", "nope"} {
-		assert.Error(t, Save(path, "dry_run", bad), "expected error for %q", bad)
+		assert.Error(t, Save(stamp.Judge{}, path, "dry_run", bad), "expected error for %q", bad)
 	}
 
 	for _, good := range []string{"true", "1", "false", "0"} {
-		assert.NoError(t, Save(path, "dry_run", good), "Save bool %q", good)
+		assert.NoError(t, Save(stamp.Judge{}, path, "dry_run", good), "Save bool %q", good)
 	}
 
-	require.NoError(t, Save(path, "dry_run", "true"))
+	require.NoError(t, Save(stamp.Judge{}, path, "dry_run", "true"))
 	cfg, _ := Load(path)
 	assert.True(t, cfg.DryRun, "DryRun should be true")
 }
@@ -143,24 +145,85 @@ func TestSave_BoolValidation(t *testing.T) {
 func TestSave_UnknownKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
-	assert.Error(t, Save(path, "nonexistent.key", "value"), "expected error for unknown key")
+	assert.Error(t, Save(stamp.Judge{}, path, "nonexistent.key", "value"), "expected error for unknown key")
 }
 
-// TestInit_WritesBuiltinDefaults verifies that Init writes a valid config
-// file, refuses overwrite without --force, and obeys --force when set.
-func TestInit_WritesBuiltinDefaults(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "magus.yaml")
+var (
+	olderWriter = stamp.Writer{Version: "v0.4.3", Commit: "1111111aaaa", Date: "2026-09-01T00:00:00Z"}
+	newerWriter = stamp.Writer{Version: "v0.5.0", Commit: "2222222bbbb", Date: "2026-09-20T00:00:00Z"}
+)
 
-	require.NoError(t, Init(path, false))
+// Init on an empty config dir writes a file that loads to the defaults and names no key:
+// a key it wrote would be one a later magus may remove and then refuse to load.
+func TestInitWritesNoKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "magus", Filename)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+
+	wrote, err := Init(stamp.Judge{Self: olderWriter}, path, false)
+	require.NoError(t, err)
+	assert.True(t, wrote)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, initHeader+"# written by "+olderWriter.String()+"\n", string(data))
+	var keys map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &keys))
+	assert.Empty(t, keys)
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
-	// A fresh config writes cache entries; the flag is opt-OUT.
-	assert.True(t, cfg.Cache.WriteEnabled(), "Init: cache.write.enabled should default true")
+	assert.Equal(t, Defaults().Cache, cfg.Cache)
+}
 
-	assert.Error(t, Init(path, false), "expected refusal to overwrite")
-	assert.NoError(t, Init(path, true), "Init --force")
+// An existing config is left alone, keys and all; --force replaces it unless a newer
+// magus wrote it.
+func TestInitLeavesAnExistingConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Filename)
+	mine := "# written by " + newerWriter.String() + "\nlog:\n  format: json\n"
+	require.NoError(t, os.WriteFile(path, []byte(mine), 0o644))
+
+	wrote, err := Init(stamp.Judge{Self: olderWriter}, path, false)
+	require.NoError(t, err)
+	assert.False(t, wrote)
+	assertFileText(t, path, mine)
+
+	_, err = Init(stamp.Judge{Self: olderWriter}, path, true)
+	var down *stamp.DowngradeError
+	require.ErrorAs(t, err, &down)
+	assertFileText(t, path, mine)
+
+	wrote, err = Init(stamp.Judge{Self: newerWriter}, path, true)
+	require.NoError(t, err)
+	assert.True(t, wrote)
+}
+
+// Save refuses a config a newer magus wrote, naming both, and replaces and restamps one
+// an older or unstamped magus wrote.
+func TestSaveRefusesANewerWriter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Filename)
+	newer := "# written by " + newerWriter.String() + "\nlog:\n  format: json\n"
+	require.NoError(t, os.WriteFile(path, []byte(newer), 0o644))
+
+	err := Save(stamp.Judge{Self: olderWriter}, path, "log.format", "text")
+	var down *stamp.DowngradeError
+	require.ErrorAs(t, err, &down)
+	assert.Contains(t, err.Error(), path)
+	assert.Contains(t, err.Error(), "v0.5.0")
+	assert.Contains(t, err.Error(), "v0.4.3")
+	assertFileText(t, path, newer)
+
+	for _, prior := range []string{"# written by " + olderWriter.String() + "\n", ""} {
+		require.NoError(t, os.WriteFile(path, []byte(prior+"log:\n  format: json\n"), 0o644))
+		require.NoError(t, Save(stamp.Judge{Self: newerWriter}, path, "log.format", "text"))
+		assertFileText(t, path, "# written by "+newerWriter.String()+"\nlog:\n  format: text\n")
+	}
+}
+
+func assertFileText(t *testing.T, path, want string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, want, string(data))
 }
 
 // TestSave_RejectsInvalidScalar verifies that validation fires
@@ -172,7 +235,7 @@ func TestSave_RejectsInvalidScalar(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("log:\n  format: json\n"), 0o644))
 	original, _ := os.ReadFile(path)
 
-	err := Save(path, "log.format", "bogus")
+	err := Save(stamp.Judge{}, path, "log.format", "bogus")
 	require.Error(t, err, "Save accepted invalid log value, want validation error")
 	var ve *ValidationError
 	assert.ErrorAs(t, err, &ve)
@@ -227,7 +290,7 @@ func TestSave_CreatesParentDirectory(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "subdir", "magus.yaml")
 
-	require.NoError(t, Save(path, "log.format", "json"))
+	require.NoError(t, Save(stamp.Judge{}, path, "log.format", "json"))
 	_, err := os.Stat(path)
 	assert.NoError(t, err, "file not created")
 }

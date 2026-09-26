@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,7 +172,7 @@ func TestExportRevisionBadRev(t *testing.T) {
 func TestWriteManagedHookNewFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-checkout")
 	body := gitHookBody("post-checkout", "magus server sync")
-	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile)
+	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 
@@ -182,10 +183,10 @@ func TestWriteManagedHookNewFile(t *testing.T) {
 
 func TestWriteManagedHookIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-merge")
-	_, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile)
+	_, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
 	require.NoError(t, err)
 
-	changed, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile)
+	changed, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.False(t, changed, "re-installing an unchanged section is a no-op")
 }
@@ -195,7 +196,7 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'my own hook'\n"), 0o755))
 
 	body := gitHookBody("post-rewrite", "magus server sync")
-	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile)
+	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assertFile(t, path, "#!/bin/sh\necho 'my own hook'\n\n"+refreshMarkers.section(body), 0o755)
@@ -239,7 +240,7 @@ func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift, 0o755)
 
 	refresh := refreshMarkers.section("magus job run sync-graph >/dev/null 2>&1 || true\n")
-	_, err = writeManagedSection(postCommit, refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile)
+	_, err = writeManagedSection(postCommit, refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
@@ -1340,6 +1341,68 @@ func TestEnsureMergeDriverIdempotent(t *testing.T) {
 	}
 }
 
+// The 09-26 incident: a ./magus built from an old branch rewrote the shared merge driver
+// registration and skipped the settle hooks a newer magus had installed. Two builds of one
+// repository, the older one's commit an ancestor of the newer's: the older is refused at
+// every shared write and changes nothing. Its commit date is the LATER one, so the refusal
+// comes from ancestry, not from the fallback.
+func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	oldCommit := gitRun2(t, repo, "rev-parse", "HEAD")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.txt"), []byte("a\n"), 0o644))
+	gitRun(t, repo, "add", "a.txt")
+	gitRun(t, repo, "commit", "-q", "-m", "the settle hooks")
+	newCommit := gitRun2(t, repo, "rev-parse", "HEAD")
+
+	build := func(version, commit, date string) context.Context {
+		return types.WithMagusBuild(t.Context(), types.MagusBuild{Version: version, Commit: commit, Date: date})
+	}
+	newer := build("v0.4.3-164-g"+newCommit[:9], newCommit, "2026-09-20T00:00:00Z")
+	older := build("v0.4.3-120-g"+oldCommit[:9], oldCommit, "2026-09-25T00:00:00Z")
+	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
+
+	require.NoError(t, gitVCS{}.InstallMergeDriver(newer, repo, globs))
+	_, err = gitVCS{}.InstallRegenHook(newer, repo, "magus vcs resolve --hook")
+	require.NoError(t, err)
+	assert.Equal(t, stamp.Self(newer).String(), gitConfigValue(t, repo, gitWriterKey))
+
+	attrs := filepath.Join(repo, ".gitattributes")
+	preCommit := filepath.Join(repo, ".git", "hooks", "pre-merge-commit")
+	snapshot := func() []string {
+		a, err := os.ReadFile(attrs)
+		require.NoError(t, err)
+		h, err := os.ReadFile(preCommit)
+		require.NoError(t, err)
+		return []string{string(a), string(h), gitConfigValue(t, repo, gitMergeDriverKey)}
+	}
+	before := snapshot()
+	assert.Contains(t, before[0], "written by magus v0.4.3-164-g")
+	assert.Contains(t, before[1], "written by magus v0.4.3-164-g")
+
+	var down *stamp.DowngradeError
+	_, err = gitVCS{}.InstallRegenHook(older, repo, "magus vcs resolve")
+	require.ErrorAs(t, err, &down)
+	assert.Equal(t, preCommit, down.File)
+	err = gitVCS{}.InstallMergeDriver(older, repo, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
+	require.ErrorAs(t, err, &down)
+	assert.Equal(t, attrs, down.File)
+	assert.Equal(t, before, snapshot(), "a refused writer changes nothing")
+
+	// The registration alone, as a hand edit or another binary's path would leave it.
+	gitRun(t, repo, "config", gitMergeDriverKey, "/elsewhere/magus"+gitDriverArgs)
+	err = gitVCS{}.InstallMergeDriver(older, repo, globs)
+	require.ErrorAs(t, err, &down)
+	assert.Contains(t, down.File, filepath.Join(".git", "config"))
+	assert.Equal(t, "/elsewhere/magus"+gitDriverArgs, gitConfigValue(t, repo, gitMergeDriverKey))
+
+	require.NoError(t, gitVCS{}.InstallMergeDriver(newer, repo, globs), "the newer build repairs it")
+	assert.Equal(t, before[2], gitConfigValue(t, repo, gitMergeDriverKey))
+}
+
 // An auto-resolve glob routes to the driver without linguist-generated, since the file is
 // source a reviewer must see, and a slashless one is anchored at the root as magus.yaml's
 // globs are. Installing the same globs again changes nothing.
@@ -1625,7 +1688,7 @@ func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
 	outputGlobs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 
 	// Commit the section as an LF blob, the way every non-Windows contributor does.
-	_, wanted, err := gitVCS{}.gitAttrsState(repo, outputGlobs)
+	_, wanted, err := gitVCS{}.gitAttrsState(t.Context(), repo, outputGlobs)
 	require.NoError(t, err)
 	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n", ".gitattributes": wanted})
 	gitRun(t, repo, "config", "core.autocrlf", "true")
