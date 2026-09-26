@@ -155,6 +155,22 @@ type PipeRecord struct {
 	Body string
 }
 
+// Finding is one violation a lint rule written in Buzz reports: where it is, which
+// rule found it, what is wrong and what to do. A script WRITES it, so it ships as the
+// magus/lint source module (`import "magus/lint";`) rather than with a host method.
+//
+// Line and Col are 1-based; 0 means the rule has no single position to point at, such
+// as a file that is missing. URL is the page documenting the rule, empty when none does.
+type Finding struct {
+	Path    string
+	Line    int
+	Col     int
+	Rule    string
+	Message string
+	Fix     string
+	URL     string `buzz:"url"`
+}
+
 // TargetArtifact is one file a target actually produced: a declared output glob expanded
 // against the working tree. Glob is carried alongside Path because the declaration is
 // what makes the file a build artifact rather than an incidental file, and a reader

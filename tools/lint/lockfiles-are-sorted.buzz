@@ -1,0 +1,78 @@
+// lockfiles-are-sorted holds every line-per-entry .lock file to byte order within each
+// block a comment or blank line delimits, so the file has one right order whether a
+// writer or a person produced it. Blocks keep a hand-written reason attached to the
+// entries it explains.
+namespace lockfiles;
+
+import "assert";
+import "strings";
+import "magus/lint";
+import "tools/lint/support" as support;
+
+// ENCODER_ORDERED are the .lock files whose encoder orders them, not their lines, so byte
+// order says nothing about them. An entry naming no lockfile in the tree is stale.
+//
+// magus.lock is absent on purpose: no remote spell is declared, so spell-lock writes
+// none. The day one appears this rule reports it, and the entry comes back with it.
+export final ENCODER_ORDERED = {
+    "proto/buf.lock": "buf's own format",
+};
+
+export fun reads() > [str] {
+    return ["**/*.lock"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final exempted = mut {<str: bool>};
+    foreach (f in files) {
+        if (ENCODER_ORDERED[f.value] != null) {
+            exempted[f.value] = true;
+            continue;
+        }
+        var prev = "";
+        var n = 0;
+        foreach (line in support\read(f).split("\n")) {
+            n = n + 1;
+            final entry = line.trim();
+            if (entry == "" or entry.startsWith("#")) {
+                prev = "";
+                continue;
+            }
+            if (prev != "" and strings\compare(entry, b: prev) <= 0) {
+                found.append(Finding{ path = f.value, line = n,
+                    message = "lockfile entry out of byte order (or duplicated) within its block: " + entry + " follows " + prev,
+                    fix = "Move the entry to its sorted place; a comment line starts a new block." });
+            }
+            prev = entry;
+        }
+    }
+    foreach (p in support\sorted(ENCODER_ORDERED.keys())) {
+        if (exempted[p] == null) {
+            found.append(Finding{ path = p, message = "ENCODER_ORDERED names " + p + ", which is not in the tree",
+                fix = "Delete the entry from tools/lint/lockfiles-are-sorted.buzz." });
+        }
+    }
+    return found;
+}
+
+test "sorted blocks and encoder-ordered files pass" {
+    final files = support\fixture({
+        "versions.lock": "# tools\na 1\nb 2\n\n# a new block restarts the order\na 3\n",
+        "proto/buf.lock": "z\na\n",
+    });
+    assert\equal(check(files).len(), want: 0, message: "clean");
+}
+
+test "an entry out of order or duplicated is reported at its line" {
+    final got = check(support\fixture({"docs/active.urls.lock": "https://b\nhttps://a\nhttps://a\n", "proto/buf.lock": ""}));
+    assert\equal(got.len(), want: 2, message: "two findings");
+    assert\equal(got[0].line, want: 2, message: "first line");
+    assert\equal(got[0].message, want: "lockfile entry out of byte order (or duplicated) within its block: https://a follows https://b", message: "order");
+    assert\equal(got[1].line, want: 3, message: "second line");
+    assert\equal(got[1].message, want: "lockfile entry out of byte order (or duplicated) within its block: https://a follows https://a", message: "duplicate");
+}
+
+test "an exemption naming no lockfile is stale" {
+    assert\equal(support\messages(check([<Path>])), want: ["ENCODER_ORDERED names proto/buf.lock, which is not in the tree"], message: "stale");
+}

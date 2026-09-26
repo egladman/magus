@@ -1,0 +1,103 @@
+// What the lint rules share: reading a handed-in file, turning a byte offset into a line,
+// and writing a fixture tree for a rule's tests. Not a rule itself, so tools/lint.buzz
+// does not name it.
+namespace support;
+
+import "fs";
+import "strings";
+import "magus/lint";
+
+import "assert";
+
+// read returns the file f names. The runner hands workspace-relative paths with no base;
+// a test's fixture carries its temporary directory as the base.
+export fun read(f: Path) > str !> any {
+    if (f.base == "") {
+        return fs\readFile(f.value);
+    }
+    return fs\readFile(f.base + "/" + f.value);
+}
+
+// named returns the handed-in file whose workspace path is p, or null.
+export fun named(files: [Path], p: str) > Path? {
+    foreach (f in files) {
+        if (f.value == p) {
+            return f;
+        }
+    }
+    return null;
+}
+
+// lineAt returns the 1-based line holding byte offset off of src.
+export fun lineAt(src: str, off: int) > int {
+    var line = 1;
+    var nl = src.indexOf("\n");
+    while (nl != null and nl! < off) {
+        line = line + 1;
+        nl = src.indexOf("\n", from: nl! + 1);
+    }
+    return line;
+}
+
+// lineOf returns the line of the first occurrence of needle in src, or 0. A needle may
+// lead with newlines to anchor at a line start; the line reported is the one its text
+// starts on.
+export fun lineOf(src: str, needle: str) > int {
+    final i = src.indexOf(needle);
+    if (i == null) {
+        return 0;
+    }
+    return lineAt(src, off: i! + needle.len() - strings\trimPrefix(needle, prefix: "\n").len());
+}
+
+// sorted returns keys in byte order, so a rule reports in the same order every run.
+export fun sorted(keys: [str]) > [str] {
+    final copy = mut [<str>];
+    foreach (k in keys) {
+        copy.append(k);
+    }
+    return copy.sort(fun (a: str, b: str) > bool => strings\compare(a, b: b) < 0);
+}
+
+// missing is the finding a rule reports for a file it reads that the tree lacks.
+export fun missing(p: str) > Finding {
+    return Finding{ path = p, message = "cannot read " + p,
+        fix = "this rule reads it; restore the file or move the rule with it" };
+}
+
+// fixture writes files, each a workspace path and its content, under a new temporary
+// directory and returns them as the runner would hand them to a rule.
+export fun fixture(files: {str: str}) > [Path] !> any {
+    final root = fs\tempDir("lint-");
+    final paths = mut [<Path>];
+    foreach (p in sorted(files.keys())) {
+        final full = root + "/" + p;
+        fs\mkdirAll(fs\dirname(full));
+        fs\writeFile(full, content: files[p]!);
+        paths.append(Path{ value = p, base = root });
+    }
+    return paths;
+}
+
+// messages is each finding's message, which is what most tests compare.
+export fun messages(found: [Finding]) > [str] {
+    final acc = mut [<str>];
+    foreach (f in found) {
+        acc.append(f.message);
+    }
+    return acc;
+}
+
+test "lineAt and lineOf count from 1 and anchor a leading newline" {
+    final src = "a\nb\n  c: 1\n";
+    assert\equal(lineAt(src, off: 0), want: 1, message: "first byte");
+    assert\equal(lineAt(src, off: 2), want: 2, message: "after a newline");
+    assert\equal(lineOf(src, needle: "\n  c:"), want: 3, message: "anchored needle");
+    assert\equal(lineOf(src, needle: "zz"), want: 0, message: "absent");
+}
+
+test "fixture round-trips through read" {
+    final files = fixture({"a/b.lock": "x\n"});
+    assert\equal(files[0].value, want: "a/b.lock", message: "workspace path kept");
+    assert\equal(read(files[0]), want: "x\n", message: "content");
+}
