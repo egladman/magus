@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/sessions"
@@ -1768,8 +1768,7 @@ func (d *ServerInfo) sockDirOrDefault() string {
 func isSocketAlive(ctx context.Context, path string) bool {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "unix", path)
+	conn, err := endpoint.Endpoint{Scheme: "unix", Addr: path}.Dial(ctx)
 	if err != nil {
 		return false
 	}
