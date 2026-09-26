@@ -525,6 +525,92 @@ import "a"; final from_b = 2;
 	require.NoError(t, sess.Exec(ctx, `import "a";`), "cyclic import should not error")
 }
 
+// TestImport_EveryImporterBindsASharedModule covers one module imported from several
+// sessions: two files imported under aliases (each its own sub-session) that both
+// import the same file and the same declaration module, and the top-level chunk
+// importing both after them. Upstream evaluates the module once and binds it in every
+// importer. The shared loadedPaths guard used to answer "already loaded" to every
+// importer after the first, so b saw neither `shared` nor Thing, and neither did the
+// chunk.
+func TestImport_EveryImporterBindsASharedModule(t *testing.T) {
+	dir := writeTxtar(t, `
+-- shared.buzz --
+export fun twice(n: int) > int { return n * 2; }
+-- a.buzz --
+import "magus/lib";
+import "shared" as shared;
+export fun make() > Thing { return Thing{ n = shared\twice(1) }; }
+-- b.buzz --
+import "magus/lib";
+import "shared" as shared;
+export fun make() > Thing { return Thing{ n = shared\twice(2) }; }
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+	sess.SetModuleDecls("magus/lib", `export object Thing { n: int = 0, label: str = "t" }`)
+
+	require.NoError(t, sess.Exec(ctx, `
+import "a" as a;
+import "b" as b;
+import "magus/lib";
+import "shared" as shared;
+final fromA = a\make().n;
+final fromB = b\make().n;
+final direct = Thing{ n = shared\twice(3) };
+final n = direct.n;
+final label = direct.label;
+`))
+	globals := sess.Globals()
+	for name, want := range map[string]string{"fromA": "2", "fromB": "4", "n": "6", "label": "t"} {
+		got, ok := globals[name]
+		require.True(t, ok, "%s not set", name)
+		assert.Equal(t, want, got.String(), name)
+	}
+}
+
+// TestImport_EveryImporterSeesANativeModulesDeclarations covers a native module that
+// also ships declarations, imported by the chunk and then by two aliased files: each
+// importer's checker must know every member, or a call it makes reads as a member the
+// module does not have. triple is declared as an exported final, the form a variadic
+// host method takes, which the sub-sessions did not inherit.
+func TestImport_EveryImporterSeesANativeModulesDeclarations(t *testing.T) {
+	dir := writeTxtar(t, `
+-- a.buzz --
+import "host";
+export fun one() > int { return host\double(1) + host\triple(0); }
+-- b.buzz --
+import "host";
+export fun two() > int { return host\double(2); }
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+	mod := vmpackage.NewMap()
+	mod.MapSet("double", vmpackage.DirectValue("host.double", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
+		return vmpackage.IntValue(args[0].AsInt() * 2), nil
+	}))
+	mod.MapSet("triple", vmpackage.DirectValue("host.triple", func(_ context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
+		return vmpackage.IntValue(args[0].AsInt() * 3), nil
+	}))
+	sess.SetNativeModule("host", mod)
+	sess.SetModuleDecls("host", "export extern fun double(n: int) > int;\nexport final triple: any = null;")
+
+	require.NoError(t, sess.Exec(ctx, `
+import "host";
+import "a" as a;
+import "b" as b;
+final sum = a\one() + b\two() + host\double(3);
+`))
+	got, ok := sess.Globals()["sum"]
+	require.True(t, ok, "sum not set")
+	assert.Equal(t, "12", got.String())
+}
+
 // TestImport_SearchPathFullImportPath verifies the whole import path — not just
 // its trailing segment — is substituted for `?` in a search-path template,
 // matching upstream Buzz: import "lib/mod" resolves lib/mod.buzz, not mod.buzz.
