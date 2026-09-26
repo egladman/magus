@@ -3195,6 +3195,109 @@ func TestStartMergeInALinkedCheckoutReportsConflicts(t *testing.T) {
 	assert.NotEmpty(t, conflicts)
 }
 
+// stackFixture is a bare remote that serves partial clones, with main and branches a and
+// b off it: a rewrites line 5 of every m file and b line 45, so b content-merges each one
+// with a candidate of a, and b alone changes t1.txt. Under git 2.55 these exact bytes make
+// the merge of b ask the remote for a blob the merge wrote.
+func stackFixture(t *testing.T) string {
+	t.Helper()
+	isolateGitConfig(t)
+	const n = 40
+	files := map[string]string{"t1.txt": "t1 base\n"}
+	for i := 1; i <= n; i++ {
+		var b strings.Builder
+		for l := 1; l <= 50; l++ {
+			fmt.Fprintf(&b, "m%d %d\n", i, l)
+		}
+		files[fmt.Sprintf("m%d.txt", i)] = b.String()
+	}
+	seed := t.TempDir()
+	gitInitRepo(t, seed, files)
+	gitRun(t, seed, "branch", "-M", "main")
+	for _, edit := range []struct {
+		branch, line, to string
+	}{{"a", "5", "five"}, {"b", "45", "forty-five"}} {
+		gitRun(t, seed, "checkout", "-q", "-b", edit.branch, "main")
+		for i := 1; i <= n; i++ {
+			name := fmt.Sprintf("m%d.txt", i)
+			was := fmt.Sprintf("m%d %s\n", i, edit.line)
+			edited := strings.Replace(files[name], was, fmt.Sprintf("m%d %s\n", i, edit.to), 1)
+			require.NoError(t, os.WriteFile(filepath.Join(seed, name), []byte(edited), 0o644))
+		}
+		if edit.branch == "b" {
+			require.NoError(t, os.WriteFile(filepath.Join(seed, "t1.txt"), []byte("t1 theirs\n"), 0o644))
+		}
+		gitRun(t, seed, "commit", "-q", "-am", edit.branch)
+	}
+	gitRun(t, seed, "checkout", "-q", "main")
+	remote := t.TempDir()
+	gitRun(t, remote, "clone", "-q", "--bare", seed, ".")
+	gitRun(t, remote, "config", "uploadpack.allowFilter", "true")
+	gitRun(t, remote, "config", "uploadpack.allowAnySHA1InWant", "true")
+	return remote
+}
+
+// buildStack builds, as the queue does, a candidate of a onto main and then one of b onto
+// that, each in a checkout of its own that is removed once the candidate is committed.
+func buildStack(t *testing.T, root string) (string, error) {
+	t.Helper()
+	g, ctx := gitVCS{}, t.Context()
+	tips := map[string]string{}
+	for _, branch := range []string{"main", "a", "b"} {
+		id, err := g.FetchRef(ctx, root, "origin", "refs/heads/"+branch)
+		require.NoError(t, err)
+		tips[branch] = id
+	}
+	build := func(onto, head string) (string, error) {
+		co := filepath.Join(t.TempDir(), "co")
+		if err := g.CreateCheckout(ctx, root, co, onto); err != nil {
+			return "", err
+		}
+		defer func() { assert.NoError(t, g.RemoveCheckout(ctx, root, co)) }()
+		if err := g.StartMerge(ctx, co, head, queueIdentity); err != nil {
+			return "", err
+		}
+		return g.Commit(ctx, co, types.CheckoutCommit{CommitMeta: queueMeta("candidate")})
+	}
+	first, err := build(tips["main"], tips["a"])
+	if err != nil {
+		return "", err
+	}
+	return build(first, tips["b"])
+}
+
+// A candidate is built onto the one beneath it after that one's checkout is gone, so the
+// commit it builds on, which no remote has, must stay in the clone's store.
+func TestACandidateBuildsOnTheCommitOfTheOneBeneathIt(t *testing.T) {
+	remote := stackFixture(t)
+	root := t.TempDir()
+	gitRun(t, root, "clone", "-q", "file://"+remote, ".")
+	gitConfigureFixture(t, root)
+
+	top, err := buildStack(t, root)
+	require.NoError(t, err)
+	got, err := gitVCS{}.ReadFileAt(t.Context(), root, top, "m7.txt")
+	require.NoError(t, err)
+	assert.Contains(t, got, "m7 five\n")
+	assert.Contains(t, got, "m7 forty-five\n")
+}
+
+// In a partial clone, git's checkout after a merge can count a blob the merge just wrote
+// as missing and ask the remote for it, which never had it. No candidate is built in one.
+func TestCreateCheckoutRefusesAPartialClone(t *testing.T) {
+	remote := stackFixture(t)
+	root := t.TempDir()
+	gitRun(t, root, "clone", "-q", "--filter=blob:none", "file://"+remote, ".")
+	gitConfigureFixture(t, root)
+
+	_, err := buildStack(t, root)
+	require.ErrorContains(t, err, "is a partial clone")
+	assert.NotContains(t, err.Error(), "not our ref")
+	listed, err := gitVCS{}.Checkouts(t.Context(), root)
+	require.NoError(t, err)
+	assert.Empty(t, listed)
+}
+
 func TestBundleCarriesCommitsWithoutRefs(t *testing.T) {
 	f := newRemoteFixture(t)
 	g := gitVCS{}

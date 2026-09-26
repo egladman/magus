@@ -2962,6 +2962,17 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 	if pathUnder(realPath(root), realPath(dir)) {
 		return fmt.Errorf("vcs: checkout %s lies inside %s, where discovery would index it as a copy of the workspace", dir, root)
 	}
+	// git's checkout after a merge (2.54 and 2.55 measured) looks blobs up in a
+	// loose-object directory listing cached before the merge wrote its own, finds those
+	// missing, and fetches them.
+	remote, err := gitPromisorRemote(ctx, root)
+	if err != nil {
+		return err
+	}
+	if remote != "" {
+		return fmt.Errorf("vcs: %s is a partial clone, which asks remote %q for any object it lacks; a merge in a checkout of it "+
+			"can ask for a blob the merge just wrote, which the remote never had: check out from a full clone", root, remote)
+	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
 	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "add", "--quiet", "--detach",
@@ -3069,6 +3080,32 @@ func checkConfiguredRemote(ctx context.Context, dir, remote string) error {
 		return fmt.Errorf("git config remote.%s.url: %w", remote, err)
 	}
 	return nil
+}
+
+// gitPromisorRemote names the remote the repository at root fetches missing objects from
+// on demand, "" when it has none. A partial clone records one in extensions.partialClone,
+// remote.<name>.promisor, or both.
+func gitPromisorRemote(ctx context.Context, root string) (string, error) {
+	name, err := gitOutput(ctx, root, gitOpts{}, "config", "--get", "extensions.partialClone")
+	switch {
+	case err == nil && name != "":
+		return name, nil
+	case err != nil && exitCode(err) != 1:
+		return "", fmt.Errorf("git config extensions.partialClone: %w", err)
+	}
+	out, err := gitOutput(ctx, root, gitOpts{}, "config", "--type=bool", "--get-regexp", `^remote\..*\.promisor$`)
+	switch {
+	case exitCode(err) == 1:
+		return "", nil
+	case err != nil:
+		return "", fmt.Errorf("git config remote.*.promisor: %w", err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if key, on, _ := strings.Cut(line, " "); on == "true" {
+			return strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".promisor"), nil
+		}
+	}
+	return "", nil
 }
 
 // FetchRef implements types.RevisionFetcher.
