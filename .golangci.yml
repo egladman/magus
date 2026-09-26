@@ -115,7 +115,59 @@ linters:
     # fights the formatter.
     - coldread
 
+    # This repo's own rules over Go source, one linter each, from libs/conventions
+    # (its readme.md says what each reports). They were tree-walking tests in
+    # conventions_test.go; the policy (paths, word lists, ceilings) lives below.
+    - hostagnostic
+    - hostvocab
+    - ruletext
+    - asciistrings
+    - importceiling
+    - stutter
+    - nameoutput
+    - testisolation
+
+    # types is the near-leaf domain package; see the rule below.
+    - depguard
+
   settings:
+    depguard:
+      rules:
+        # types/doc.go's contract: no filesystem, VCS, or process execution. What it
+        # forbids is REACHING THE WORLD; string work over paths and host:port stays
+        # legal, which is why path/filepath and net are not here. Of magus it may
+        # import only the four packages allowed below. internal/json is one because
+        # every package that encodes JSON must use it.
+        #
+        # Every deny ends in `$` because depguard matches prefixes, and `os` would
+        # otherwise ban os/signal too. The magus prefix has no `$` on purpose.
+        types-pure-domain:
+          list-mode: lax
+          files:
+            - "${base-path}/types/*.go"
+            - "!$test"
+          allow:
+            - github.com/egladman/magus/spells$
+            - github.com/egladman/magus/libs/diagnostics$
+            - github.com/egladman/magus/internal/json$
+            - github.com/egladman/magus/types/enum$
+          deny:
+            - pkg: os$
+              desc: types is the near-leaf domain package and may not reach the world
+            - pkg: os/exec$
+              desc: types is the near-leaf domain package and may not reach the world
+            - pkg: io/fs$
+              desc: types is the near-leaf domain package and may not reach the world
+            - pkg: net/http$
+              desc: types is the near-leaf domain package and may not reach the world
+            - pkg: database/sql$
+              desc: types is the near-leaf domain package and may not reach the world
+            - pkg: os/user$
+              desc: types is the near-leaf domain package and may not reach the world
+            - pkg: github.com/egladman/magus/
+              desc: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus
+
+
     custom:
       testlayout:
         type: module
@@ -149,6 +201,126 @@ linters:
           # until a sweep rewrites those to state the invariant the test pins.
           disable:
             - history
+
+      hostagnostic:
+        type: module
+        description: reports Go source naming an agent host outside a filesystem path
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          # Generated output, fixtures, and the embedded skill bodies, which are
+          # documentation checked elsewhere.
+          skip-dirs: [.git, .magus, .claude, .agents, .opencode, node_modules, gen, testdata,
+                      docs, blog, skills, releases, manpage, schema]
+
+      hostvocab:
+        type: module
+        description: reports a host's tool name spelled as a string literal in guard code
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          # The only code that sees a host's hook payload. Tree-wide, "Read" and
+          # "Task" are ordinary words and would report hundreds of times.
+          files:
+            - internal/guard/*.go
+            - cmd/magus/shell*.go
+            - cmd/magus/guard_*.go
+            - internal/agent/*.go
+          # magus's own labels (hookToolCommand, hookToolWrite, hookToolRead in
+          # internal/guard/guard.go) are deliberately none of these.
+          words: [Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, Bash, Task, TodoWrite,
+                  WebFetch, WebSearch, ExitPlanMode, read_file, write_file, edit_file, list_dir,
+                  apply_patch, run_terminal_cmd, str_replace_editor, codebase_search, shell]
+
+      ruletext:
+        type: module
+        description: reports guard rule text in the guard's CLI half
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          files: [cmd/magus/shell.go]
+          prefix: "magus workspace:"
+
+      asciistrings:
+        type: module
+        description: reports typographic glyphs in user-facing string literals
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          # Exactly the files the ASCII sweep fixed, not whole packages: cmd/magus,
+          # status.go's pool display and internal/cache/log.go keep drawing glyphs on
+          # purpose, and files the sweep never touched may carry drift it was not
+          # scoped to fix. Reverting any one fix here still fails.
+          files:
+            - types/describe.go
+            - internal/render/target_graph.go
+            - cmd/magus-docs/main.go
+            - internal/observability/otlp/provider.go
+            - internal/handler/mcp/registry.go
+            - internal/handler/mcp/output.go
+            - internal/handler/mcp/where.go
+            - cmd/magus/query.go
+            - internal/guard/shell.go
+            - internal/guard/write.go
+            - cmd/magus/config_console.go
+            - internal/doctor/checks.go
+            - cmd/magus/init.go
+            - internal/config/load.go
+            - internal/config/validate.go
+            - internal/interp/repl.go
+            - internal/interp/bindings/pry.go
+            - std/platform.go
+            - std/env.go
+            - std/markdown.go
+            - std/buzz_stdlib.go
+            - std/archive.go
+            - std/buzz_signature.go
+            - internal/cache/output.go
+
+      importceiling:
+        type: module
+        description: holds a package's imports under a prefix at or below a ceiling
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          rules:
+            # A RATCHET on cmd/magus's internal/ imports: it may fall, never rise.
+            # It was 25 in May, 36 in July, 48 in August and 63 in September, while
+            # cmd/magus's references to the root package rose 71 -> 189; the
+            # concurrency clamp exists in both cmd/magus/main.go and magus.go. 67
+            # since the merge queue's packages moved from libs/mergequeue to
+            # internal/queue. Raising it is a sentence in the commit message.
+            - package: github.com/egladman/magus/cmd/magus
+              prefix: github.com/egladman/magus/internal/
+              max: 67
+
+      stutter:
+        type: module
+        description: reports exported names that repeat their package's name
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          min-package: 3
+          # Packages whose exported names repeat the package name on purpose, each
+          # with a reason.
+          allow: []
+
+      nameoutput:
+        type: module
+        description: requires every name-format switch arm to render through an emitter
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          package: github.com/egladman/magus/cmd/magus
+          case: outputName
+          emitters: [emitNames, emitNamesOf, outputDst]
+
+      testisolation:
+        type: module
+        description: requires an isolating TestMain in every test binary that links the runtime dir
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          # Where magus resolves the per-user runtime directory the broker and the
+          # server listen in. libs/testkit points a test process somewhere private.
+          package: github.com/egladman/magus/internal/proc/sockdir
+          calls: [testkit.Main, testkit.Isolated]
 
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a
@@ -417,6 +589,48 @@ linters:
         linters: [testlayout]
       - path: ^vcs/parity_test\.go$
         linters: [testlayout]
+
+      # stutter's backlog, in testlayout's shape above: each entry is a rename to
+      # make, and the fix deletes it. The rule was a test that read the symbol graph
+      # and skipped whenever the index was empty, which in the test run was always,
+      # so these 40 names reached main unseen. Each rule names its symbols, so a new
+      # stutter in the same file still fails.
+      - path: ^internal/agent/catalog\.go$
+        linters: [stutter]
+        text: ^agent\.(AgentsFile|AgentSkill) stutters
+      - path: ^internal/ci/forecast/forecast\.go$
+        linters: [stutter]
+        text: ^forecast\.Forecaster stutters
+      - path: ^internal/file/diff/diff\.go$
+        linters: [stutter]
+        text: ^diff\.DiffContent stutters
+      - path: ^internal/file/watch/watch\.go$
+        linters: [stutter]
+        text: ^watch\.Watcher stutters
+      - path: ^internal/handler/graph/handler\.go$
+        linters: [stutter]
+        text: ^graph\.GraphHandler stutters
+      - path: ^internal/handler/mcp/describe\.go$
+        linters: [stutter]
+        text: ^mcp\.(MCPToolDefinition|MCPToolEntry|MCPToolsOutput) stutters
+      - path: ^internal/render/render\.go$
+        linters: [stutter]
+        text: ^render\.RenderOption stutters
+      - path: ^internal/service/registry\.go$
+        linters: [stutter]
+        text: ^service\.ServiceStatus stutters
+      - path: ^internal/spell/target\.go$
+        linters: [stutter]
+        text: ^spell\.(SpellModulePath|SpellModuleSource) stutters
+      - path: ^internal/workspace/registry\.go$
+        linters: [stutter]
+        text: ^workspace\.(WorkspaceRegistry|WorkspaceRegistryFromContext) stutters
+      - path: ^project/insight\.go$
+        linters: [stutter]
+        text: ^project\.(ProjectStat|ProjectStats) stutters
+      - path: ^std/encoding/[a-z0-9]+/[a-z0-9]+\.go$
+        linters: [stutter]
+        text: ^(base64\.Base64(URL)?(Encode|Decode)|csv\.CSV(Parse|Stringify)|hex\.Hex(Encode|Decode)|ini\.INI(Parse|Stringify)|json\.JSON(Parse|Stringify)|toml\.TOML(Parse|Stringify)|url\.URL(Encode|Decode|Parse|Build)|xml\.XML(Element|Render|Parse)|yaml\.YAML(Parse|Stringify)) stutters
 
 # Formatting is gated HERE, not by the format target, because `gofmt -l` cannot fail: it
 # reports on stdout and exits 0, and magus reads an op's verdict from the exit code alone.
