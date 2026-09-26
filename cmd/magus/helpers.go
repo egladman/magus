@@ -201,7 +201,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 		// startup already opened this workspace for most subcommands, and an open
 		// workspace answers everything an inspected one does; loading it twice doubled
 		// the cost of `magus ls`.
-		if magusLoaded.Load() && magusErr == nil && rootOverride == magusRootOverride {
+		if magusLoaded.Load() && magusErr == nil && magusValue != nil && rootOverride == magusRootOverride {
 			inspectValue = magusValue
 			return
 		}
