@@ -945,6 +945,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   from an organization's installations where an owner's token lists them; elsewhere it
   names the app's settings page and prints the rerun with `--app <slug>:<id>`. The printed
   key step reads no stdin and deletes the download even when storing fails.
+- **The merge queue starts a validation run only when no unfinished one covers the
+  change.** On merge intent, and when CI finishes on a queued head, it skips if a run on
+  main is pending or planned later, so triggers no longer cancel each other's pending
+  runs. Each decision is a named notice.
 - **The merge queue's gate replays main's cache.** It ran `ci` while main's shards
   stored entries under `ci:gha`, and charms key every step, so an unchanged base
   missed every entry. The gate now runs `ci:gha`, and a test holds its keys equal to
