@@ -898,10 +898,11 @@ func (s *Session) Warnings() []Diagnostic {
 // It is NOT side-effect-free. Resolving the program's imports executes each imported
 // module's top-level code and reads its file from disk, so the checker can see the
 // globals and types they define (there is no check-only import pass). It also mutates
-// session state (loadedPaths, env, importedTypes). Call it on a fresh or throwaway
-// session (the embedded playground path (dry.Diagnostics) makes a new one per call),
-// never on a live session you still intend to Exec, or a later real import will be
-// skipped as already-loaded.
+// session state (loadedPaths, importCache, env, importedTypes). Call it on a fresh or
+// throwaway session (the embedded playground path (dry.Diagnostics) makes a new one per
+// call), never on a live session you still intend to Exec: a later real import binds
+// the module from what this call cached without running it again, so its top level runs
+// here, against whatever the file said at the time.
 func (s *Session) Diagnostics(code string) []Diagnostic {
 	// Diagnostics takes no per-call ctx (see the doc comment above); it runs
 	// against the session's own lifetime like the rest of the no-ctx surface.
@@ -1175,6 +1176,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		s.collectImportedModule(boundName, src)
 		exports, err := s.execImport(ctx, src)
 		if err != nil {
+			// Forget the attempt, so a later import in a long-lived session retries it
+			// rather than finding it loaded with nothing to bind.
+			delete(s.loadedPaths, key)
 			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
 		s.importCache[key] = s.cacheBindings(src, exports)
@@ -1223,6 +1227,14 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		return ImportBound, nil
 	}
 	s.loadedPaths[abs] = true
+	// A load that fails before its bindings are cached is forgotten, so a later import in
+	// a long-lived session retries it; that is what keeps "no cache entry" meaning "still
+	// loading" above.
+	defer func() {
+		if s.importCache[abs] == nil {
+			delete(s.loadedPaths, abs)
+		}
+	}()
 
 	data, err := s.readImportSource(path)
 	if err != nil {
