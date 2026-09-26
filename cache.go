@@ -46,7 +46,7 @@ func (m *Magus) PruneRemoteCache(ctx context.Context, olderThan time.Duration, k
 	if m.cache == nil {
 		return types.ErrNoCache
 	}
-	return m.cache.PruneRemote(ctx, cache.RetentionPolicy{OlderThan: olderThan, KeepLast: keepLast, DryRun: dryRun})
+	return m.cache.PruneRemote(m.ContextWithSecrets(ctx), cache.RetentionPolicy{OlderThan: olderThan, KeepLast: keepLast, DryRun: dryRun})
 }
 
 // ExportCache writes the entire cache to w as a gzip-compressed tar archive.
@@ -101,7 +101,7 @@ func (m *Magus) SaveToolchainCache(ctx context.Context, tool string, usedWithin 
 	if err != nil {
 		return ToolchainCache{}, err
 	}
-	res, err := m.cache.SaveToolchain(ctx, key, roots, usedWithin)
+	res, err := m.cache.SaveToolchain(m.ContextWithSecrets(ctx), key, roots, usedWithin)
 	return toolchainReport(tool, dirs, res), err
 }
 
@@ -116,7 +116,7 @@ func (m *Magus) RestoreToolchainCache(ctx context.Context, tool string) (Toolcha
 	if err != nil {
 		return ToolchainCache{}, err
 	}
-	res, err := m.cache.RestoreToolchain(ctx, key, roots)
+	res, err := m.cache.RestoreToolchain(m.ContextWithSecrets(ctx), key, roots)
 	return toolchainReport(tool, dirs, res), err
 }
 
@@ -410,7 +410,7 @@ func (m *Magus) PublishOutput(ctx context.Context, ref string) (string, error) {
 	if m.cache == nil {
 		return "", types.ErrNoCache
 	}
-	return m.cache.PublishOutput(ctx, ref)
+	return m.cache.PublishOutput(m.ContextWithSecrets(ctx), ref)
 }
 
 // OutputByRefRemote resolves a ref to its captured bytes and descriptor, falling back
@@ -422,7 +422,7 @@ func (m *Magus) OutputByRefRemote(ctx context.Context, ref string) ([]byte, Outp
 	if m.cache == nil {
 		return m.OutputByRef(ref)
 	}
-	data, d, err := m.cache.OutputByRef(ctx, ref)
+	data, d, err := m.cache.OutputByRef(m.ContextWithSecrets(ctx), ref)
 	return data, newOutputDescriptor(d), err
 }
 

@@ -574,7 +574,7 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
-	ctx = secret.ContextWithResolver(ctx, m.resolver)
+	ctx = m.ContextWithSecrets(ctx)
 	var errs []error
 	for _, p := range m.All() {
 		srcs, err := interp.FindAll(p.Dir)
@@ -2081,8 +2081,10 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 	return nil
 }
 
-// ContextWithSecrets installs this workspace's secret resolver on ctx, so a caller
-// outside the run path can redact against the credentials this workspace has resolved.
+// ContextWithSecrets installs this workspace's secret resolver on ctx. A run, a magusfile
+// load and every facade method that reaches the remote tier install it through here: a
+// backend spell reads its credential with magus\secret.read, which errors without one.
+// A caller outside those paths uses it to redact against the credentials resolved so far.
 //
 // It hands out a CONTEXT, not the resolver. The server needs redaction on its serving
 // paths (internal/trail writes MCP request and response payloads verbatim, and those are
