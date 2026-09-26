@@ -248,7 +248,7 @@ func bash(command string) map[string]any {
 	return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": command}}
 }
 
-// The Buzz tests in tools/policy/guard.buzz pin each rule against argvs it builds by hand.
+// The Buzz tests in tools/policy/*.buzz pin each rule against argvs they build by hand.
 // This pins the other half: the policy the root magusfile actually registers, reached
 // through the Go guard from the shell line or tool call a host sends, so a parse the Go
 // side changes, or a request field it stops filling, fails here and not in a session.
