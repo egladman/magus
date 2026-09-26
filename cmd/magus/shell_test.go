@@ -152,7 +152,7 @@ func touchedProjects(g hint.Gate) []string {
 
 // TestGuardDecisionsCoverEveryVerdictTheHookEmits keeps agent.GuardDecisions
 // honest, which is what makes it usable as the contract the host-parity gate
-// compares against (see TestHostGluesCoverTheGuardContract in dogfood_test.go).
+// compares against (see TestHostGluesCoverTheGuardContract in internal/agent/guard_test.go).
 //
 // Two directions, and both are load-bearing:
 //

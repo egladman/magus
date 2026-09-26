@@ -1,7 +1,7 @@
 # EXTRACTION PARITY: a shipped session-load adapter, executed against a synthetic
 # transcript.
 #
-# The sibling gate in conventions_test.go checks that every adapter DECLARES what
+# The sibling gate in internal/agent/session_test.go checks that every adapter DECLARES what
 # its host supplies and that the guide's table agrees. A declaration can be
 # sincere and still wrong, because nothing there runs the file: the OpenCode guard
 # plugin declared a correct stance for months while invoking a subcommand that no

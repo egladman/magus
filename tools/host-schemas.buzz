@@ -1,7 +1,7 @@
 // host-schemas.buzz refreshes the agent-host schemas vendored under
 // testdata/hosts, and says when one has moved upstream.
 //
-// The schemas are what conventions_test.go grades this repository's hook configs and
+// The schemas are what internal/agent's tests grade this repository's hook configs and
 // rendered verdicts against. Vendoring them is what keeps that test off the network;
 // this script is the other half, because a vendored copy with nothing that re-fetches
 // it is a snapshot that quietly ages into a claim about a host that no longer exists.

@@ -1,6 +1,6 @@
 # TRANSPORT PARITY: the shipped guard templates, executed against real host events.
 #
-# The sibling gate in conventions_test.go checks that every host DECLARES a stance for
+# The sibling gate in internal/agent/guard_test.go checks that every host DECLARES a stance for
 # every decision and surface. A declaration can be sincere and still wrong, because
 # nothing there runs the file: the OpenCode plugin declared a correct stance for
 # months while invoking a subcommand that no longer existed, so it never received a
@@ -27,7 +27,7 @@
 # proves the routes agree; a case that set only one would grade only one.
 #
 # Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
-# in conventions_test.go fails when the guard contract grows a cell no case covers.
+# in internal/agent/guard_test.go fails when the guard contract grows a cell no case covers.
 
 # jq comes from the machine, not from mise, and that is deliberate: jq is a runtime
 # dependency of the TEMPLATES a user installs into their host, not of building magus,
@@ -724,7 +724,7 @@ exec git -c user.email=t@example.com -c user.name=T commit -q -m init
 mkdir .magus/runs
 
 # case: path/ask unreachable - the push gate is the only rule that asks, and it reads a shell
-# command; no rule asks about a write. The rendered arm is graded in conventions_test.go.
+# command; no rule asks about a write. The rendered arm is graded in internal/agent/guard_test.go.
 # case: mcp/ask unreachable - the same: no rule asks about an MCP call.
 
 # hosts: claude-code

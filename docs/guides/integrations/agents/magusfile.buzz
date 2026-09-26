@@ -143,7 +143,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // output byte for byte.
 //
 // The output lands in the ROOT project's testdata, because that is where the host schemas
-// live and where conventions_test.go reads them. Declared with writesFiles so the snapshot
+// live and where internal/agent's tests read them. Declared with writesFiles so the snapshot
 // covers it and a cross-project write is not a surprise.
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
@@ -247,8 +247,8 @@ export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
 
 // 'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is
 // lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked
-// elsewhere: conventions_test.go verifies that this repository's own hook config invokes them and
-// that each declares a stance for every decision and surface in the guard contract (the
+// elsewhere: conventions_test.go verifies that this repository's own hook config invokes them;
+// internal/agent/guard_test.go that each declares a stance for every decision and surface in the guard contract (the
 // magus-guard-coverage lines); the docs conventions target verifies that the guide embeds them
 // verbatim and that its parity tables match those lines.
 //
