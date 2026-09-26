@@ -14,26 +14,22 @@ first denial teaches it, and prose that repeats a deny is prose nobody reads.
 
 ## Which magus binary
 
-Use `./magus`. The released binary on PATH is below this workspace's
-`required_version` floor, so it cannot load the tree at all. Build one with
-`magus run go-build .`, which regenerates the go:embed'd spell bytecode a bare
-link would bake in stale. Keep an existing `./magus`; do not rebuild per command.
-`magus doctor` reports both halves (`guard-binary`, `required-version-covers-schema`),
-and this flips back the moment a release carries the floor.
+`./magus`, built by `magus run go-build .`. `tools/policy/guard.buzz` says when it
+is stale (its go-build stamp no longer matches the sources), unstamped, or another
+checkout's, and names the escape when it cannot load the tree. Keep it; do not
+rebuild per command.
 
-A gate run can leave you without `./magus`: `go-build` declares no outputs on
-purpose, so a read-only run leaves no binary behind. Rebuild after gating.
+Not enforced:
 
-Bootstrap deadlock: change the magusfile schema, or pull a change adding a type
-the spell runtime provides, and every magus command fails at workspace load,
-including the one that would build the binary that understands it. Escape by
-shelving just that hunk (`git stash push -- <file>`) or restoring the pre-pull
-spell sources long enough to build. Only the spells the root magusfile IMPORTS
-have to be shelved; a local spell that fails to load is logged and skipped.
-
-NEVER run, copy, or link another worktree's `./magus`. It was linked from that
-tree's sources, so its verdicts describe a tree that exists nowhere, and what it
-regenerates lands here unmarked. Nothing enforces this.
+- A read-only gate run leaves no `./magus` (`go-build` declares no outputs).
+  Without one the hook falls back to the PATH release, which is below
+  `required_version` and lacks the bootstrap exemption. Rebuild after gating.
+- A copy or symlink of another checkout's binary is not caught; running one by
+  its path is.
+- A rebuild that demands a hook flag the wired config does not pass (09-24:
+  `--agent-name`) denies every tool call of every session whose hook runs that
+  `./magus`. Rename it (`mv magus magus.new`) and run it by that name until the
+  hook config is reapplied.
 
 ## The gate
 

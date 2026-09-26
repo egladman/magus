@@ -1340,8 +1340,8 @@ func TestTransportCasesCoverTheContract(t *testing.T) {
 // and why. Every other cell owes a real case.
 var unreachableCases = map[string]string{
 	"mcp/advise": "every rule that fires on a judged MCP call denies, and the advisory families that " +
-		"could reach one (gate-repeat, graph-stale, stale-binary) each need state a testscript cannot " +
-		"make deterministic: run logs inside the window, a stale symbol index, a binary older than its sources",
+		"could reach one (gate-repeat, graph-stale) each need state a testscript cannot " +
+		"make deterministic: run logs inside the window, a stale symbol index",
 	"path/ask": "the push gate is the only rule that asks, and it reads a shell command; no rule asks about a write. " +
 		"The arm is rendered and graded by TestRenderedGuardVerdictsValidateAgainstTheirHostSchema instead",
 	"mcp/ask": "the push gate is the only rule that asks, and it reads a shell command; no rule asks about an MCP call. " +

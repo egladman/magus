@@ -69,6 +69,26 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	}, got)
 }
 
+// Where the line runs, the file each program is named by, and the binary answering the
+// hook all reach the rule.
+func TestCommandRuleSeesWhereAndWhichBinary(t *testing.T) {
+	rule, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    final bin = magus\guard.binary();
+    return magus\guard.advise("{req.dir}|{req.workspace}|{req.commands[0].path}|{bin.path != ""}|{bin.stamp}");
+});
+`)
+	require.NoError(t, err)
+	got, err := rule(t.Context(), types.CommandRequest{
+		Dir: "/w/b/sub", Workspace: "/w/b",
+		Commands: []types.CommandInvocation{{Program: "magus", Path: "/w/a/magus", Args: []string{"ls"}}},
+	}, hint.NewGate(t.TempDir(), "claude-code/s1"))
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAdvise, Reason: "/w/b/sub|/w/b|/w/a/magus|true|" + buildStamp}, got)
+}
+
 // once and count are one store for both rules, so a key means one thing to the policy.
 func TestCommandRuleSharesOnceWithTheSpawnRule(t *testing.T) {
 	src := `

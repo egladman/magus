@@ -497,8 +497,16 @@ var Magus = Module{
 					Returns: []Ret{{Type: TypeInt}},
 					Extern:  true,
 				},
+				{
+					Name: "binary",
+					Doc: "The magus binary answering the guard: {path, stamp}. path is the running executable " +
+						"with symlinks resolved; stamp is the text its build passed through the linker, empty " +
+						"when it passed none, so a rule can tell which sources that build came from.",
+					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardBinary"}},
+					Extern:  true,
+				},
 			},
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest"},
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "GuardBinary"},
 		},
 		{
 			Name: "harness",

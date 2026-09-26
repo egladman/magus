@@ -344,6 +344,11 @@ tags/fingerprint/
 # A rule page is generated per shipped rule, so the old page retires rather than aliases.
 reference/rules/person-only/
 
+# The stale-binary rule left the shipped guard for this repository's own policy, which
+# judges a binary by the stamp go-build links into it. A rule page is generated per
+# shipped rule, so it retires rather than aliases.
+reference/rules/stale-binary/
+
 # The code-search and doc-search advisories were deleted once symbol-search denied a search
 # the graph answers exactly. A rule page is generated per shipped rule, so both retire.
 reference/rules/code-search/

@@ -463,9 +463,12 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     // dependency is the fix; declaring the .bo as an input is not, because ctx.readsFiles
     // REPLACES a target's footprint rather than adding to it, and would drop **/*.go.
     ctx.needs(spells_generate);
+    // The stamp is read AFTER spells_generate, so it records the bytecode this link embeds.
+    // The guard policy compares it with the checkout to say when ./magus is stale.
+    final stamp = agentpolicy\buildStamp(".");
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
-            "-ldflags", ld_flags(),
+            "-ldflags", ld_flags() + " -X github.com/egladman/magus/internal/interp/bindings.buildStamp=" + stamp,
             "-o", "magus",
             "./cmd/magus"],
     });

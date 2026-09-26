@@ -42,6 +42,8 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 | `role`        | `worker` when a lease binds the calling session in this checkout, else `root`         |
 | `lease`       | the bound job row for a worker, null for root                                         |
 | `checkout`    | for a line that runs `git push` only: the checkout's state (below); null otherwise    |
+| `dir`         | the directory the line runs in, as the host reported it; empty when it reported none  |
+| `workspace`   | the root of the workspace holding `dir`, empty when none does                         |
 
 `checkout` is read in the directory the push runs in (after any `-C`), through the
 version control that resolves there, and only for a push, since it costs processes:
@@ -57,6 +59,7 @@ Each entry of `commands`:
 | `program` | the program's base name                                                                     |
 | `args`    | its arguments as the shell would pass them; a variable or substitution renders empty        |
 | `repeats` | true inside a `while` or `until` loop, which reruns it until a condition changes; not `for` |
+| `path`    | the program's file when the line names it by a path, made absolute against `dir` (below)    |
 
 `commands` is what the built-in rules read: the line is parsed rather than matched, and
 wrappers (`env`, `timeout`, `nohup`, `sh -c`, `eval`, ...) are peeled to the program
@@ -64,9 +67,21 @@ they run, so `GH_TOKEN=x timeout 60 gh pr checks 1` arrives as one `gh` entry. M
 it rather than on `command`: a pattern over the raw line cannot tell a pipe from one
 inside quotes.
 
+`path` is empty for a program found on `PATH`, and whenever the file is not known before
+the line runs: a word holding a variable or substitution, a relative path after a `cd`
+on the same line, a program reparsed out of a `sh -c` payload, or no `dir` to resolve it
+against. Symlinks are left as spelled.
+
 `magus\guard.once(key)`, `magus\guard.count(key)` and `magus\job\list()` work here as
 they do in a [spawn rule](guard-spawn.md), and share its store: a key means one thing to
 the whole policy.
+
+`magus\guard.binary()` describes the magus answering the hook: `path`, the running
+executable with symlinks resolved, and `stamp`, the text its build passed through the
+linker (`-X github.com/egladman/magus/internal/interp/bindings.buildStamp=<text>`), empty
+when it passed none. magus never reads the stamp; a build and a rule agree on its format,
+which is how a rule can tell whether the binary judging it was built from the sources in
+front of it.
 
 ## Strengthen only, fail open, tighten live
 
@@ -149,6 +164,16 @@ It holds rules magus does not ship, because they are that repository's preferenc
 - **Changelog entries are fragments.** Once `changes/unreleased/` exists in the checkout,
   a write that adds a line to CHANGELOG.md's `[Unreleased]` section is denied; a fix to a
   released section is not.
+- **Each checkout runs its own binary.** A `magus` named by a path that sits at the root
+  of one checkout of magus, run against another, is denied, as is `go -C` into another
+  checkout of magus for a verb its targets cover; the bootstrap link into a checkout with
+  no binary yet passes. magus run against a workspace that is not a checkout of magus is
+  magus used as a tool, and passes.
+- **Say when ./magus is stale.** go-build links a digest of each source the guard's
+  verdicts and the workspace load come from into the binary; a command judged by a
+  ./magus whose sources have since changed content, or by one linked without the stamp,
+  is advised once per state to rebuild, with the bootstrap escape when the host
+  declarations moved.
 
 Three habits keep a policy like it maintainable:
 

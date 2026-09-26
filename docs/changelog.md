@@ -48,6 +48,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   unset, it is written when a signing key is held; `true` makes remote writes required.
 - **Claude Code MCP tool calls reach the guard.** A `mcp__magus__.*` `PreToolUse` entry
   forwards the call envelope. No rule judges MCP calls yet.
+- **A command rule sees where a line runs and which binary judges it.** The request
+  carries `dir` and `workspace`, each command its `path` when the line names the program
+  by one, and `magus\guard.binary()` returns the hook binary's `path` and the `stamp` its
+  build linked in.
 - **`concurrency_profile` sets build width relative to the machine.** `conservative` (half
   the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
   `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
@@ -237,6 +241,8 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `merge-queue: <method>` label on a stack's top queues the stack.
 - **`MergeStarter.StartMerge` takes the identity to act as.** A merge started for a
   machine no longer depends on the box's configured git identity.
+- **MGS1021 from a binary built from the checkout it cannot load names the way out.**
+  Such a binary cannot rebuild itself, so the error names the source link to run instead.
 - **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
   it before starting (`undeclared_seeds` in `-o json`), and an undeclared build input rings
   the console's notification center.
@@ -275,6 +281,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   lives on the queue's flags rather than on the hook's command line. It may repeat.
 - **A kick-back comment reproduces the failure.** Each kick-back is a new comment with
   the run's link and the command that failed, runnable as written.
+- **The queue acts on the base's other required checks.** Apply reads them at the head
+  (the provider's optional `required_checks`): running ones wait with `WAIT_CHECKS`, red
+  ones on a head carrying the base's tip kick back with `KICK_RED`, and red ones from an
+  older base get one update commit merging the base in, which runs them again.
+- **A `merge-queue: <method>` label queues any pull request.** On a pull request outside
+  a stack, applied by someone with write access, it is merge intent like auto-merge,
+  which GitHub will not enable on a pull request it says conflicts. The queue then
+  resolves the conflict or kicks it back naming the files.
 - **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
   affected listings and failing results carry up to three `{id, command, argv, why}`
   entries, filtered by the acting lease's role and journaled per session.
@@ -420,6 +434,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
   target now passes `--concurrency-profile aggressive` on the command line, the same
   flag any other caller would use - not an environment variable read by magus itself.
+- **A step claims the memory it has been measured to use.** Machine admission claims the
+  smaller of a target's `memory_mb` and 1.25 times its highest measured peak over at least
+  three successful runs, so a declaration sized for the worst case no longer refuses peers
+  that would fit. `magus status` and MGS3009 say whether a figure is declared or measured.
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
   path.
@@ -580,6 +598,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   that edits generator code must commit outputs that are current on top of the base. If
   they are stale, the kick-back names the stale files and says how to fix them. If they are
   current, the change merges.
+- **The queue lands a change whose generated files drifted.** Planning no longer kicks
+  back with `KICK_REGENERATION`; validation regenerates the candidate, gates it, and
+  uploads it as `candidate.bundle`. Apply runs none of the change's code: it takes that
+  commit only once it checks its parent and that it changes declared outputs alone.
 - **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
   `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
   package leaves the command alone.
@@ -674,9 +696,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
   `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
   headers through it, pass it with `WithSink` and close it after the run.
+- **The `stale-binary` advisory and the `go -C` deny into another checkout of magus.**
+  Both judged only magus's own repository, which now keeps them in its guard policy.
 
 ### Fixed
 
+- **Breaking for SDK callers: `magus clean` keeps outputs the VCS tracks.** It
+  deleted committed generated files, with or without `--cache`, and left the tree
+  dirty. `CleanOutputs` returns `CleanedOutputs`, listing removed and kept paths.
 - **A broken working tree no longer switches off the approved spawn rule.** The committed
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a
@@ -799,6 +826,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
   A conflicted merge there read as one that never started, and a file named `*.txt`
   staged every `.txt` file. A merge already underway is now refused.
+- **Go ops key their cache on the platform they build for.** The go spell's build, vet,
+  test and lint ops fold `GOOS`, `GOARCH`, `GOARM` and `GOAMD64` into their cache keys,
+  so a run for another platform no longer replays the host's result.
 - **The `output-pipe`/`output-redirect` exemption for `magus query output` and
   `magus refs --text` now sees past a global flag.** It anchored on the first argument
   after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
@@ -828,6 +858,13 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   tools no selected target drives. Cache keys are unchanged.
 - **`--root` from another directory no longer loads that directory's modules.** A
   magusfile's imports resolve against its project, then the workspace root.
+- **`magus run test . -- -run X` runs only the selected tests.** The workspace's `test`
+  target passed explicit arguments to `go test`, which replaced the forwarded ones, so every
+  narrowed run executed the whole suite. It now appends its forwarded args and skips the
+  coverage floor when narrowed; the spell docs show the `+ args` idiom.
+- **Args after `--` reach only the target you name.** A cached replay's gates, `--preflight`
+  steps and the settle step no longer receive them, so `magus run test . -- -run X` stops
+  failing in its generate step with `flag provided but not defined: -run`.
 - **A run the machine's build budget refuses says so.** It exited 75 with nothing after
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and
@@ -836,6 +873,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   A bare output ref and `--attempts` broke that tie by a random attempt hash, so they
   could answer with the older run. Each record now stores when it was persisted, and
   that decides the tie.
+- **Sandboxed `go generate` and `go run` work again.** The sandbox grants the Go build cache
+  execute as well as read and write: since Go 1.24, `go run` and `go tool` exec the binaries
+  they cache there, so every `go run` generator failed with `permission denied`.
 - **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
   wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
   its message and Help link. Health reports down when every workspace failed, and the

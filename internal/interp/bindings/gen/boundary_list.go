@@ -57,6 +57,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
 	{Name: "Grant", Zero: types.Grant{}, Encode: func(v any) vm.Value { return ObjectGrant(v.(types.Grant)) }},
 	{Name: "Graph", Zero: types.GraphView{}, Encode: func(v any) vm.Value { return ObjectGraphView(v.(types.GraphView)) }},
+	{Name: "GuardBinary", Zero: types.GuardBinary{}, Encode: func(v any) vm.Value { return ObjectGuardBinary(v.(types.GuardBinary)) }},
 	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict)) }},
 	{Name: "Hotspots", Zero: types.HotspotOutput{}, Encode: func(v any) vm.Value { return ObjectHotspotOutput(v.(types.HotspotOutput)) }},
 	{Name: "HttpResponse", Zero: types.HTTPResponse{}, Encode: func(v any) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},

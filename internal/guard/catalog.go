@@ -281,10 +281,6 @@ var advisoryDocs = []RuleDoc{
 			"It fires on TWO shapes. On one line (`magus run lint . && magus run lint docs`), it narrows the chained-run text to the combined form; a chain of genuinely different targets stays chained-run's text and domain. Across two separate calls, it compares the session's last magus run/affected invocation against this one: same target, same charms, a different project set, inside a ten-minute window. " +
 			"Charms count as part of the target identity, so `lint` and `lint:rw` are never combined into one call. Held to one firing per session for the cross-call shape; the one-line shape speaks every time, like chained-run beside it."},
 	{Name: string(advisoryStageClassify), Decision: "advise", Catches: "staging without classifying, when generated and source differ"},
-	{Name: string(advisoryStaleBinary), Decision: "advise",
-		Catches: "a verdict from a binary older than the rules in the tree around it",
-		Why: "The failure this catches is silent and convincing: change a rule, run the guard, read `pass`, conclude the rule does not work, when what answered was the previous build. " +
-			"That happened twice in one session, both times because a rebuild had been skipped without anyone noticing. It is appended to a DENY every time rather than held, because a refusal from rules the caller has already changed is the case it exists for."},
 	{Name: string(advisoryUnleasedWrite), Decision: "advise", Catches: "a write magus cannot attribute while a fleet is running"},
 }
 
@@ -325,8 +321,7 @@ func Rule(name string) (RuleDoc, bool) {
 // constants. Declared here rather than derived, for the same reason the docs are: a kind
 // that nothing lists is a kind nothing can miss.
 var advisoryKinds = []hint.MarkerKind{
-	advisoryStaleBinary, advisorySourceRead,
-	advisoryPrecedent, advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource,
+	advisorySourceRead, advisoryPrecedent, advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource,
 	advisoryRegenSource, advisoryGraphStale, advisoryGateRepeat, advisoryFocus,
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,

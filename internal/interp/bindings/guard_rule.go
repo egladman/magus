@@ -4,8 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
@@ -93,7 +97,31 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 		}
 		return vm.IntValue(int64(facts.Count(kind))), nil
 	}))
+	guardMap.MapSet("binary", directVal(obs, "magus.guard.binary", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) != 0 {
+			return vm.Null, errors.New(`magus\guard.binary: takes no arguments`)
+		}
+		return bindinggen.ObjectGuardBinary(guardBinary()), nil
+	}))
 }
+
+// buildStamp is set by the linker and left empty by every build that sets nothing:
+//
+//	-ldflags "-X github.com/egladman/magus/internal/interp/bindings.buildStamp=<text>"
+var buildStamp string
+
+var guardBinary = sync.OnceValue(func() types.GuardBinary {
+	b := types.GuardBinary{Stamp: buildStamp}
+	exe, err := os.Executable()
+	if err != nil {
+		return b
+	}
+	if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil {
+		exe = resolved
+	}
+	b.Path = exe
+	return b
+})
 
 // ruleFactsArg resolves once/count's session and turns the author's key into a marker
 // kind. The key is hashed because a marker kind is a filename component, and prefixed so

@@ -53,12 +53,9 @@ func TestRankOwnBuild(t *testing.T) {
 		{name: "joined output flag", cwd: fresh, command: "go build -o=magus ./cmd/magus", advise: true},
 		{name: "absolute output in root", cwd: fresh, command: "go build -o " + filepath.Join(fresh, "magus") + " ./cmd/magus", advise: true},
 		{name: "wrapped", cwd: fresh, command: "mise exec -- go build -o magus ./cmd/magus", advise: true},
-		{name: "global -C", cwd: elsewhere, command: "go -C " + fresh + " build -o magus ./cmd/magus", advise: true, says: fresh},
-		{name: "subcommand -C", cwd: elsewhere, command: "go build -C " + fresh + " -o magus ./cmd/magus", advise: true, says: fresh},
-		{name: "joined -C", cwd: elsewhere, command: "go build -C=" + fresh + " -o magus ./cmd/magus", advise: true},
+		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: "go build -C " + filepath.Base(fresh) + " -o magus ./cmd/magus", advise: true, says: fresh},
 
 		{name: "binary exists", cwd: built, command: "go build -o magus ./cmd/magus", deny: true, says: "already has a magus binary"},
-		{name: "binary exists by -C", cwd: elsewhere, command: "go -C " + built + " build -o magus ./cmd/magus", deny: true, says: "./magus run go-build ."},
 		{name: "another package", cwd: fresh, command: "go build -o magus ./cmd/magus-ruledocs", deny: true},
 		{name: "two packages", cwd: fresh, command: "go build -o magus ./cmd/magus ./cmd/magus-ruledocs", deny: true},
 		{name: "another output path", cwd: fresh, command: "go build -o bin/magus ./cmd/magus", deny: true},
@@ -70,9 +67,9 @@ func TestRankOwnBuild(t *testing.T) {
 		{name: "foreign module", cwd: foreign, command: "go build -o magus ./cmd/magus", deny: true},
 
 		// A -C outside the workspace passes the pure rule, which has no way to know what is
-		// there. A checkout of magus is covered by the same targets, so the deny holds.
-		{name: "sibling checkout, global -C", cwd: elsewhere, command: "go -C " + built + " test ./...", deny: true, says: "checkout of magus itself"},
-		{name: "sibling checkout, subcommand -C", cwd: elsewhere, command: "go test -C " + built + " ./...", deny: true},
+		// there; a checkout of magus there is this repository's policy to judge.
+		{name: "another magus checkout by -C", cwd: elsewhere, command: "go -C " + built + " test ./..."},
+		{name: "a bootstrap into another checkout by -C", cwd: elsewhere, command: "go -C " + fresh + " build -o magus ./cmd/magus"},
 		{name: "foreign tree by -C", cwd: elsewhere, command: "go -C " + foreign + " test ./..."},
 		{name: "magus against another root", cwd: elsewhere, command: "./magus --root " + fresh + " run go-build ."},
 	}

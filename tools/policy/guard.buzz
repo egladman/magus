@@ -18,6 +18,10 @@
 //   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
+//   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
+//   go-into-checkout (deny): `go -C` into another checkout of magus, bootstrap link aside.
+//   stale-binary (advise once per state): the ./magus answering this hook was built from
+//     sources that have since moved, by the stamp go-build links into it.
 //   change-role-spawn-not-isolated (deny, spawn): a code-changing worker sharing a checkout.
 //   changelog-unreleased-edit (deny, write): a hand edit adding to CHANGELOG.md's
 //     [Unreleased] section, once changes/unreleased/ exists.
@@ -26,6 +30,8 @@ namespace agentpolicy;
 import "std";
 import "magus";
 import "fs";
+import "path";
+import "crypto";
 
 // The one command that answers CI for every open pull request.
 final board = "gh pr list --state open --json number,mergeable,statusCheckRollup";
@@ -78,15 +84,24 @@ final changeRoles = ["feat", "fix", "refactor", "perf", "docs", "test", "chore"]
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = mut [<Program>];
     foreach (c in req.commands) {
-        programs.append(Program{ name = c.program, args = c.args, repeats = c.repeats });
+        programs.append(Program{ name = c.program, args = c.args, repeats = c.repeats, path = c.path });
+    }
+    final denial = decideBinaries(programs, where: Where{ dir = req.dir, workspace = req.workspace }, disk: onDisk());
+    if (denial != "") {
+        return magus\guard.deny(denial);
     }
     var checkout: Checkout? = null;
     if (req.checkout != null) {
         checkout = Checkout{ detached = req.checkout!.branch == "", remoteBranches = req.checkout!.remoteBranches };
     }
-    return decide(programs, caller: Caller{ role = req.role, title = req.parent }, checkout: checkout, once: fun (key: str) > bool {
+    final once = fun (key: str) > bool {
         return magus\guard.once(key);
-    });
+    };
+    final verdict = decide(programs, caller: Caller{ role = req.role, title = req.parent }, checkout: checkout, once: once);
+    if (verdict.decision != "allow" or rebuilds(programs)) {
+        return verdict;
+    }
+    return decideStale(hookBinary(req.workspace), once: once);
 }
 
 // judgeSpawn is the spawn rule the root magusfile registers.
@@ -115,6 +130,8 @@ object Program {
     name: str,
     args: [str],
     repeats: bool,
+    // path is the file the line names the program by, "" when found on PATH or unknown.
+    path: str = "",
 }
 
 // Caller is who runs a command: role is root or worker (a lease binds it), and title is
@@ -128,6 +145,354 @@ object Caller {
 object Checkout {
     detached: bool,
     remoteBranches: [str],
+}
+
+// Where is where a command runs: the directory the host reported, and the workspace root
+// holding it. Either is "" when unknown.
+object Where {
+    dir: str,
+    workspace: str,
+}
+
+// Disk answers the three questions the binary rules ask the filesystem, passed in so the
+// tests below can describe a tree without building one.
+object Disk {
+    // isCheckout: dir is the root of a checkout of magus.
+    isCheckout: fun (dir: str) > bool,
+    // hasBinary: dir holds a file named magus.
+    hasBinary: fun (dir: str) > bool,
+    // sameFile: a and b name one file, however each is spelled.
+    sameFile: fun (a: str, b: str) > bool,
+}
+
+// The first line of go.mod in a checkout of magus, and in nothing else.
+final moduleLine = "module github.com/egladman/magus";
+
+fun onDisk() > Disk {
+    return Disk{
+        isCheckout = fun (dir: str) > bool {
+            final mod = fs\readFile("{dir}/go.mod") catch "";
+            return mod.split("\n")[0].trim() == moduleLine;
+        },
+        hasBinary = fun (dir: str) > bool {
+            return fs\exists("{dir}/magus") catch true;
+        },
+        sameFile = fun (a: str, b: str) > bool {
+            final x = fs\stat(a) catch null;
+            final y = fs\stat(b) catch null;
+            if (x == null or y == null) { return false; }
+            return x!.size == y!.size and x!.mtime == y!.mtime and x!.mode == y!.mode;
+        },
+    };
+}
+
+// decideBinaries is the denial for a line that runs one checkout's build tools against
+// another checkout of magus, "" when nothing on the line does. Every fact it needs must be
+// known before the line runs: a path held in a variable, or a relative one with no
+// directory to resolve it against, is unknown and passes.
+export fun decideBinaries(programs: [Program], where: Where, disk: Disk) > str {
+    foreach (p in programs) {
+        final denial = foreignBinary(p, where: where, disk: disk);
+        if (denial != "") { return denial; }
+        final goDenial = goIntoCheckout(p, where: where, disk: disk);
+        if (goDenial != "") { return goDenial; }
+    }
+    return "";
+}
+
+// foreignBinary: `<checkout A>/magus` run against checkout B, both checkouts of magus. The
+// binary carries A's guard rules, host declarations and spell bytecode, so its verdicts
+// describe A and what it regenerates lands in B unmarked. A magus run against a workspace
+// that is not a checkout of magus (a benchmark tree, a fixture) is magus used as a tool,
+// and passes.
+fun foreignBinary(p: Program, where: Where, disk: Disk) > str {
+    if (p.name != "magus" or p.path == "") { return ""; }
+    final built = path\clean(fs\dirname(p.path));
+    final isCheckout = disk.isCheckout;
+    if (!isCheckout(built)) { return ""; }
+    var target = where.workspace;
+    final root = flagValue(p.args, long: "--root", short: "");
+    if (root != null) {
+        target = absolute(root!, dir: where.dir);
+    }
+    if (target == "" or target == built or !isCheckout(target)) { return ""; }
+    final sameFile = disk.sameFile;
+    if (sameFile("{target}/magus", p.path)) { return ""; }
+    return ("`{p.path}` was built in {built}, and this line runs it against {target}, another checkout "
+        + "of magus. A binary carries the guard rules, host declarations and spell bytecode of the tree "
+        + "it was built from, so its verdicts describe {built}, and what it regenerates lands in {target} "
+        + "unmarked. Run {target}'s own binary: `{target}/magus --root {target} ...`. "
+        + ownBinaryHint(target, disk: disk)).trim();
+}
+
+// goIntoCheckout: `go -C <dir>` out of this workspace and into a checkout of magus, for a
+// verb one of that checkout's targets covers. The pure raw-tool rule passes a -C that
+// leaves the workspace, since a foreign tree is not its to funnel; a checkout of magus is.
+// The one exception is the bootstrap link into a checkout with no binary yet.
+fun goIntoCheckout(p: Program, where: Where, disk: Disk) > str {
+    if (p.name != "go") { return ""; }
+    final call = goCall(p.args);
+    if (call.chdir == "" or !escapes(call.chdir) or call.args.len() == 0) { return ""; }
+    final verb = call.args[0];
+    final covered = ["build", "test", "vet", "run", "generate"].indexOf(verb) != null
+        or (verb == "mod" and call.args.len() > 1 and call.args[1] == "tidy");
+    if (!covered) { return ""; }
+    final root = absolute(call.chdir, dir: where.dir);
+    final isCheckout = disk.isCheckout;
+    if (root == "" or !isCheckout(root)) { return ""; }
+    if (bootstrapLink(call.args, root: root)) {
+        final hasBinary = disk.hasBinary;
+        if (!hasBinary(root)) { return ""; }
+        return "Not a bootstrap: {root} already has a magus binary. Rebuild it with "
+            + "`{root}/magus --root {root} run go-build .`. If that binary cannot load the tree "
+            + "(MGS1021 after a pull or merge), move it aside first, then link: "
+            + "`mv {root}/magus {root}/magus.old`, then `go -C {root} build -o magus ./cmd/magus`.";
+    }
+    return ("`go -C {root} {verb}` runs a toolchain command in another checkout of magus, outside its "
+        + "cache and its drift tracking. Run the target from that checkout: "
+        + "`{root}/magus --root {root} run <target> .`. " + ownBinaryHint(root, disk: disk)).trim();
+}
+
+// ownBinaryHint is how to get root a binary of its own, "" when it has one.
+fun ownBinaryHint(root: str, disk: Disk) > str {
+    final hasBinary = disk.hasBinary;
+    if (hasBinary(root)) { return ""; }
+    return "It has none yet: link one with `go -C {root} build -o magus ./cmd/magus`, then stamp it "
+        + "with `{root}/magus --root {root} run go-build .`.";
+}
+
+// GoCall is a go command's -C directory, "" for none, and its argv from the subcommand on
+// with -C removed. go accepts -C first, before the subcommand or right after it.
+object GoCall {
+    chdir: str,
+    args: [str],
+}
+
+fun goCall(args: [str]) > GoCall {
+    var chdir = "";
+    var rest = args;
+    if (rest.len() > 1 and rest[0] == "-C") {
+        chdir = rest[1];
+        rest = rest.sub(2);
+    } else if (rest.len() > 0 and rest[0].startsWith("-C=")) {
+        chdir = rest[0].sub(3);
+        rest = rest.sub(1);
+    }
+    if (chdir == "" and rest.len() > 2 and rest[1] == "-C") {
+        chdir = rest[2];
+        rest = [rest[0]] + rest.sub(3);
+    } else if (chdir == "" and rest.len() > 1 and rest[1].startsWith("-C=")) {
+        chdir = rest[1].sub(3);
+        rest = [rest[0]] + rest.sub(2);
+    }
+    return GoCall{ chdir = chdir, args = rest };
+}
+
+// bootstrapLink: `build -o magus ./cmd/magus` and nothing else, landing as root/magus.
+fun bootstrapLink(args: [str], root: str) > bool {
+    if (args.len() == 0 or args[0] != "build") { return false; }
+    var output = "";
+    final pkgs = mut [<str>];
+    var i = 1;
+    while (i < args.len()) {
+        final a = args[i];
+        if (a == "-o" and i + 1 < args.len()) {
+            output = args[i + 1];
+            i = i + 1;
+        } else if (a.startsWith("-o=")) {
+            output = a.sub(3);
+        } else if (a.startsWith("-")) {
+            return false;
+        } else {
+            pkgs.append(a);
+        }
+        i = i + 1;
+    }
+    return pkgs.len() == 1 and path\clean(pkgs[0]) == "cmd/magus" and output != ""
+        and absolute(output, dir: root) == "{root}/magus";
+}
+
+// escapes: a -C naming a directory outside the workspace, read textually as the raw-tool
+// rule reads it.
+fun escapes(dir: str) > bool {
+    final clean = path\clean(dir);
+    return path\isAbs(clean) or clean == ".." or clean.startsWith("../");
+}
+
+// absolute is p made absolute against dir and cleaned, "" when p is relative and dir is
+// unknown, or p itself is unknown.
+fun absolute(p: str, dir: str) > str {
+    if (p == "") { return ""; }
+    if (path\isAbs(p)) { return path\clean(p); }
+    if (dir == "") { return ""; }
+    return path\clean("{dir}/{p}");
+}
+
+// The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
+// the skills it serves, and the host declarations and spell bytecode it embeds, which are
+// what a magusfile loads against. go-build links a digest of each into the binary.
+final stampGlobs = [
+    "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
+    "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
+    "internal/spell/gen/decls/*.buzz", "internal/spell/gen/*.bo",
+];
+
+// stampFiles are the stamped files under root, root-relative, tests left out: a test is
+// not linked into the binary. fs\glob answers relative to the working directory, so both
+// sides are made absolute before one is cut from the other.
+fun stampFiles(root: str) > [str] !> any {
+    final base = path\abs(root);
+    final files = mut [<str>];
+    foreach (pattern in stampGlobs) {
+        foreach (found in fs\glob("{base}/{pattern}")) {
+            final rel = path\abs(found.value).sub(base.len() + 1);
+            if (!rel.endsWith("_test.go")) {
+                files.append(rel);
+            }
+        }
+    }
+    return files;
+}
+
+fun digestOf(file: str) > str !> any {
+    return crypto\sha256File(file).sub(0, len: 12);
+}
+
+// buildStamp is what go-build links into ./magus: `<path>=<digest>` for every stamped file
+// under root, comma-separated.
+export fun buildStamp(root: str) > str !> any {
+    final entries = mut [<str>];
+    foreach (rel in stampFiles(root)) {
+        final digest = digestOf("{root}/{rel}");
+        entries.append("{rel}={digest}");
+    }
+    return entries.join(",");
+}
+
+// movedSince lists the stamped files under root whose content is not what stamp recorded:
+// changed, added, or removed. A file no newer than builtAt, the binary's mtime, is the one
+// the build read, so only newer files are hashed.
+export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
+    final recorded = mut {<str: str>};
+    final order = mut [<str>];
+    foreach (entry in stamp.split(",")) {
+        final at = entry.indexOf("=");
+        if (at != null) {
+            final rel = entry.sub(0, len: at!);
+            recorded[rel] = entry.sub(at! + 1);
+            order.append(rel);
+        }
+    }
+    final moved = mut [<str>];
+    final present = mut {<str: bool>};
+    foreach (rel in stampFiles(root)) {
+        present[rel] = true;
+        final was = recorded[rel];
+        if (was == null) {
+            moved.append(rel);
+        } else if (fs\stat("{root}/{rel}").mtime > builtAt and digestOf("{root}/{rel}") != was!) {
+            moved.append(rel);
+        }
+    }
+    foreach (rel in order) {
+        if (!(present[rel] ?? false)) {
+            moved.append(rel);
+        }
+    }
+    return moved;
+}
+
+// HookBinary is what the stale-binary rule knows about the magus answering the hook:
+// whether it is this workspace's own ./magus, whether go-build stamped it, and which
+// stamped sources moved since.
+object HookBinary {
+    ours: bool,
+    stamped: bool,
+    moved: [str],
+}
+
+// hookBinary reads HookBinary off the filesystem. A binary that is not this workspace's
+// own ./magus (one on PATH, another checkout's) has no sources here to be stale against.
+fun hookBinary(workspace: str) > HookBinary {
+    final none = HookBinary{ ours = false, stamped = false, moved = [<str>] };
+    if (workspace == "") { return none; }
+    final bin = magus\guard.binary();
+    final own = "{workspace}/magus";
+    final sameFile = onDisk().sameFile;
+    if (bin.path == "" or (bin.path != own and !sameFile(own, bin.path))) { return none; }
+    if (bin.stamp == "") {
+        return HookBinary{ ours = true, stamped = false, moved = [<str>] };
+    }
+    final built = fs\stat(bin.path) catch null;
+    if (built == null) { return none; }
+    final moved = movedSince(workspace, stamp: bin.stamp, builtAt: built!.mtime) catch [<str>];
+    return HookBinary{ ours = true, stamped = true, moved = moved };
+}
+
+final unstampedAdvice = "./magus carries no go-build stamp: it was linked by a bare `go build` "
+    + "(the bootstrap) or before stamps existed, so its embedded spell bytecode and host "
+    + "declarations are whatever the link found, and nothing can say which sources its verdicts "
+    + "come from. Stamp it: `./magus run go-build .`.";
+
+// decideStale advises once per moved set that the ./magus answering this hook was built
+// from other sources than the checkout holds now: proven by content, not by mtimes. It
+// never denies: running a stale binary is how it gets rebuilt.
+export fun decideStale(bin: HookBinary, once: fun (key: str) > bool) > GuardVerdict {
+    if (!bin.ours) {
+        return magus\guard.allow();
+    }
+    if (!bin.stamped) {
+        if (once("stale-binary:unstamped")) { return magus\guard.advise(unstampedAdvice); }
+        return magus\guard.allow();
+    }
+    if (bin.moved.len() == 0 or !once("stale-binary:" + bin.moved.join(","))) {
+        return magus\guard.allow();
+    }
+    var named = bin.moved;
+    var more = "";
+    if (named.len() > 5) {
+        more = " and {named.len() - 5} more";
+        named = named.sub(0, len: 5);
+    }
+    final text = "./magus was built before {bin.moved.len()} of its sources moved: {named.join(", ")}{more}. "
+        + "This verdict, and the workspace it loads, come from the PREVIOUS sources. "
+        + "Rebuild: `./magus run go-build .`.";
+    var declsMoved = false;
+    foreach (rel in bin.moved) {
+        if (rel.startsWith("internal/spell/gen/decls/")) { declsMoved = true; }
+    }
+    if (!declsMoved) {
+        return magus\guard.advise(text);
+    }
+    return magus\guard.advise(text + " " + deadlockEscape);
+}
+
+// deadlockEscape is the way out for a binary that cannot load the tree and so cannot
+// rebuild itself.
+final deadlockEscape = "The host declarations moved, so the next load may fail with MGS1021, and a "
+    + "binary that cannot load the tree cannot rebuild itself. The escape, one command at a time: "
+    + "`mv magus magus.old`, `go build -o magus ./cmd/magus` (if that fails with `undefined:` in a "
+    + "gen/ package, the merge kept one side's generated code: restore those gen/ directories from "
+    + "the side that produced them, or three-way merge them with `git merge-file`, then link again), "
+    + "then `./magus run go-build .`.";
+
+// rebuilds: the line is itself the rebuild, which a staleness advisory would only delay.
+fun rebuilds(programs: [Program]) > bool {
+    foreach (p in programs) {
+        if (p.name == "magus") {
+            final ops = operandsOf(p.args, valueFlags: magusValueFlags);
+            if (ops.len() > 1 and ops[0] == "run") {
+                final target = ops[1].split(":")[0];
+                if (target == "go-build" or target == "spells-generate" or target == "generate") {
+                    return true;
+                }
+            }
+        }
+        if (p.name == "go" and goCall(p.args).args.len() > 0 and goCall(p.args).args[0] == "build") {
+            return true;
+        }
+    }
+    return false;
 }
 
 // decide is judge over plain records, with the once-per-session gate passed in so the tests
@@ -458,7 +823,7 @@ fun jsonFields(args: [str]) > [str] {
 }
 
 // request is the programs a command runs, each spelled as its argv. A leading "loop:" marks
-// the program as repeated by a polling loop.
+// the program as repeated by a polling loop, and a program word holding a slash is its path.
 fun request(argvs: [[str]]) > [Program] {
     final programs = mut [<Program>];
     foreach (argv in argvs) {
@@ -468,7 +833,13 @@ fun request(argvs: [[str]]) > [Program] {
             repeats = true;
             words = words.sub(1);
         }
-        programs.append(Program{ name = words[0], args = words.sub(1), repeats = repeats });
+        var name = words[0];
+        var file = "";
+        if (name.indexOf("/") != null) {
+            file = name;
+            name = fs\basename(name);
+        }
+        programs.append(Program{ name = name, args = words.sub(1), repeats = repeats, path = file });
     }
     return programs;
 }
@@ -688,6 +1059,165 @@ test "a thinking role, an isolated worker, a continue and an untitled spawn pass
     std\assert(decideSpawn("spawn", title: "orchestrator/feat guard-command", isolated: true).decision == "allow", message: "isolated");
     std\assert(decideSpawn("continue", title: "", isolated: false).decision == "allow", message: "a continue");
     std\assert(decideSpawn("spawn", title: "audit the store", isolated: false).decision == "allow", message: "no title grammar");
+}
+
+// fakeDisk is a tree where checkouts are checkouts of magus, binaries hold a ./magus, and
+// two paths are one file only when spelled alike.
+fun fakeDisk(checkouts: [str], binaries: [str]) > Disk {
+    return Disk{
+        isCheckout = fun (dir: str) > bool { return checkouts.indexOf(dir) != null; },
+        hasBinary = fun (dir: str) > bool { return binaries.indexOf(dir) != null; },
+        sameFile = fun (a: str, b: str) > bool { return a == b; },
+    };
+}
+
+// Two checkouts of magus side by side, each with its own binary, and a benchmark tree.
+final twoCheckouts = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a", "/w/b"]);
+final inB = Where{ dir = "/w/b", workspace = "/w/b" };
+
+fun binaryDenial(argvs: [[str]], where: Where, disk: Disk) > str {
+    return decideBinaries(request(argvs), where: where, disk: disk);
+}
+
+test "another checkout's binary run against this one is denied, naming this one's binary" {
+    foreach (argv in [
+        ["/w/a/magus", "describe", "projects"],
+        ["/w/a/magus", "run", "go-build", "."],
+        ["/w/a/magus", "--root", ".", "ls"],
+        ["/w/a/magus", "--root", "/w/b", "ls"],
+    ]) {
+        final denial = binaryDenial([argv], where: inB, disk: twoCheckouts);
+        std\assert(denial.indexOf("was built in /w/a") != null, message: argv.join(" "));
+        std\assert(denial.indexOf("`/w/b/magus --root /w/b ...`") != null, message: "names the right binary");
+    }
+    final bare = binaryDenial([["/w/a/magus", "ls"]], where: inB, disk: fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a"]));
+    std\assert(bare.indexOf("go -C /w/b build -o magus ./cmd/magus") != null, message: "names the bootstrap when there is no binary");
+}
+
+test "a binary run against its own checkout, on PATH, unknown, or on a non-magus tree stays silent" {
+    foreach (argv in [
+        ["/w/a/magus", "--root", "/w/a", "run", "go-build", "."],
+        ["/w/a/magus", "--root", "../a", "ls"],
+        ["/w/b/magus", "run", "lint", "."],
+        ["magus", "ls"],
+        ["/w/a/magus", "--root", "", "ls"],
+    ]) {
+        std\assert(binaryDenial([argv], where: inB, disk: twoCheckouts) == "", message: argv.join(" "));
+    }
+    final bench = Where{ dir = "/w/b/benchmarks/repo", workspace = "/w/b/benchmarks/repo" };
+    std\assert(binaryDenial([["/w/b/magus", "affected", "ci", "--plan"]], where: bench, disk: twoCheckouts) == "", message: "magus as a tool on another workspace");
+    std\assert(binaryDenial([["/opt/bin/magus", "ls"]], where: inB, disk: twoCheckouts) == "", message: "a binary outside any checkout");
+    std\assert(binaryDenial([["/w/a/magus", "--root", "b", "ls"]], where: Where{ dir = "", workspace = "/w/b" }, disk: twoCheckouts) == "", message: "a relative root with no directory is unknown");
+    final aliased = Disk{
+        isCheckout = twoCheckouts.isCheckout,
+        hasBinary = twoCheckouts.hasBinary,
+        sameFile = fun (a: str, b: str) > bool { return true; },
+    };
+    std\assert(binaryDenial([["/w/a/magus", "--root", "/w/b", "ls"]], where: inB, disk: aliased) == "", message: "two spellings of one file");
+}
+
+test "go -C into another checkout of magus is denied for a verb its targets cover" {
+    foreach (argv in [
+        ["go", "-C", "/w/a", "test", "./..."],
+        ["go", "test", "-C", "../a", "./..."],
+        ["go", "-C=/w/a", "vet", "./..."],
+        ["go", "-C", "/w/a", "mod", "tidy"],
+    ]) {
+        final denial = binaryDenial([argv], where: inB, disk: twoCheckouts);
+        std\assert(denial.indexOf("/w/a/magus --root /w/a run <target> .") != null, message: argv.join(" "));
+    }
+}
+
+test "go -C into a foreign tree, inside the workspace, or for an uncovered verb stays silent" {
+    final disk = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a", "/w/b"]);
+    foreach (argv in [
+        ["go", "-C", "/elsewhere", "test", "./..."],
+        ["go", "-C", "sub", "test", "./..."],
+        ["go", "-C", "/w/a", "version"],
+        ["go", "-C", "/w/a", "env", "GOPATH"],
+        ["go", "test", "./..."],
+    ]) {
+        std\assert(binaryDenial([argv], where: inB, disk: disk) == "", message: argv.join(" "));
+    }
+}
+
+test "the bootstrap link into another checkout passes only while it has no binary" {
+    final fresh = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/b"]);
+    foreach (argv in [
+        ["go", "-C", "/w/a", "build", "-o", "magus", "./cmd/magus"],
+        ["go", "build", "-C", "/w/a", "-o", "/w/a/magus", "cmd/magus/"],
+    ]) {
+        std\assert(binaryDenial([argv], where: inB, disk: fresh) == "", message: argv.join(" "));
+    }
+    final built = binaryDenial([["go", "-C", "/w/a", "build", "-o", "magus", "./cmd/magus"]], where: inB, disk: twoCheckouts);
+    std\assert(built.indexOf("Not a bootstrap") != null, message: "a binary already there");
+    std\assert(built.indexOf("mv /w/a/magus /w/a/magus.old") != null, message: "names the deadlock escape");
+    std\assert(binaryDenial([["go", "-C", "/w/a", "build", "-o", "bin/magus", "./cmd/magus"]], where: inB, disk: fresh).indexOf("run <target>") != null, message: "another output is an ordinary build");
+}
+
+fun stale(moved: [str]) > HookBinary {
+    return HookBinary{ ours = true, stamped = true, moved = moved };
+}
+
+test "a ./magus whose sources moved is advised once per moved set, naming them" {
+    final once = counter();
+    final v = decideStale(stale(["internal/guard/shell.go"]), once: once);
+    std\assert(v.decision == "advise", message: "moved");
+    std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names the file");
+    std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
+    std\assert(v.reason.indexOf("magus.old") == null, message: "no deadlock talk for a Go source");
+    std\assert(decideStale(stale(["internal/guard/shell.go"]), once: once).decision == "allow", message: "once per set");
+    std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == "advise", message: "a new set speaks again");
+
+    final decls = decideStale(stale(["internal/spell/gen/decls/magus.buzz"]), once: counter());
+    std\assert(decls.reason.indexOf("mv magus magus.old") != null, message: "host declarations name the escape");
+    std\assert(decls.reason.indexOf("git merge-file") != null, message: "and the gen/ repair");
+
+    final many = decideStale(stale(["a", "b", "c", "d", "e", "f", "g"]), once: counter());
+    std\assert(many.reason.indexOf("and 2 more") != null, message: "caps the list");
+}
+
+test "an unstamped ./magus is advised once; another binary and an unmoved one stay silent" {
+    final once = counter();
+    final unstamped = HookBinary{ ours = true, stamped = false, moved = [<str>] };
+    std\assert(decideStale(unstamped, once: once).decision == "advise", message: "unstamped");
+    std\assert(decideStale(unstamped, once: once).decision == "allow", message: "once");
+    std\assert(decideStale(HookBinary{ ours = false, stamped = false, moved = [<str>] }, once: counter()).decision == "allow", message: "not ours");
+    std\assert(decideStale(stale([<str>]), once: counter()).decision == "allow", message: "nothing moved");
+}
+
+test "the rebuild itself is not held up by the staleness it cures" {
+    foreach (argv in [
+        ["./magus", "run", "go-build", ".", "-s"],
+        ["./magus", "run", "spells-generate:rw", "."],
+        ["go", "build", "-o", "magus", "./cmd/magus"],
+    ]) {
+        std\assert(rebuilds(request([argv])), message: argv.join(" "));
+    }
+    std\assert(!rebuilds(request([["./magus", "run", "lint", "."]])), message: "any other run");
+}
+
+test "the stamp records every stamped source, and movedSince names what changed" {
+    final root = fs\tempDir("stamp") catch "";
+    std\assert(root != "", message: "a temp dir");
+    fs\mkdirAll("{root}/internal/guard") catch void;
+    fs\mkdirAll("{root}/internal/spell/gen/decls") catch void;
+    fs\writeFile("{root}/internal/guard/shell.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/guard/shell_test.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 1;\n") catch void;
+
+    final stamp = buildStamp(root) catch "";
+    std\assert(stamp.indexOf("internal/guard/shell.go=") != null, message: "a rule source");
+    std\assert(stamp.indexOf("internal/spell/gen/decls/magus.buzz=") != null, message: "a host declaration");
+    std\assert(stamp.indexOf("shell_test.go") == null, message: "a test is not linked in");
+    std\assert((movedSince(root, stamp: stamp, builtAt: 0.0) catch ["error"]).len() == 0, message: "nothing moved");
+
+    fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 2;\n") catch void;
+    fs\writeFile("{root}/internal/guard/policy.go", content: "package guard\n") catch void;
+    fs\remove("{root}/internal/guard/shell.go") catch void;
+    final moved = movedSince(root, stamp: stamp, builtAt: 0.0) catch [<str>];
+    std\assert(moved.join(",") == "internal/guard/policy.go,internal/spell/gen/decls/magus.buzz,internal/guard/shell.go", message: moved.join(","));
+    fs\removeAll(root) catch void;
 }
 
 // A CHANGELOG.md as it stands on main: an [Unreleased] section above a released one.

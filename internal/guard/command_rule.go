@@ -3,6 +3,10 @@ package guard
 import (
 	"cmp"
 	"context"
+	"path"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -99,10 +103,12 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Session:     who.Session,
 		Command:     in.command,
 		Description: in.description,
-		Commands:    commandInvocations(in.command, in.dialect),
+		Commands:    commandInvocations(in.command, in.dialect, at.dir),
 		Parent:      spawnedAs(facts, who.Agent),
 		Role:        role,
 		Lease:       lease,
+		Dir:         at.dir,
+		Workspace:   at.workspace,
 	}
 }
 
@@ -133,12 +139,13 @@ func actingRole(ctx context.Context, at location, lease string) (types.AgentRole
 //
 // A loop inside a wrapper's script (`sh -c 'while ...'`) is not marked: the wrapper's
 // payload is parsed on its own, outside the loop walk.
-func commandInvocations(command string, d Dialect) []types.CommandInvocation {
+func commandInvocations(command string, d Dialect, dir string) []types.CommandInvocation {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return nil
 	}
 	var out []types.CommandInvocation
+	moved := false
 	var visit func(root syntax.Node, repeats bool)
 	visit = func(root syntax.Node, repeats bool) {
 		syntax.Walk(root, func(n syntax.Node) bool {
@@ -149,8 +156,17 @@ func commandInvocations(command string, d Dialect) []types.CommandInvocation {
 					return false
 				}
 			case *syntax.CallExpr:
-				for _, inv := range peelWrappers(literalWords(n.Args), d) {
-					out = append(out, types.CommandInvocation{Program: inv.Name, Args: inv.Args, Repeats: repeats})
+				words := literalWords(n.Args)
+				for _, inv := range peelWrappers(words, d) {
+					out = append(out, types.CommandInvocation{
+						Program: inv.Name,
+						Args:    inv.Args,
+						Repeats: repeats,
+						Path:    programPath(n.Args, words, inv, dir, moved),
+					})
+					if inv.Name == "cd" || inv.Name == "pushd" || inv.Name == "popd" {
+						moved = true
+					}
 				}
 			}
 			return true
@@ -158,4 +174,47 @@ func commandInvocations(command string, d Dialect) []types.CommandInvocation {
 	}
 	visit(f, false)
 	return out
+}
+
+// programPath is the file inv runs when the line names it by a path, resolved against dir,
+// or "" when that file is not known before the line runs. The program word is found by
+// position: inv's arguments are the tail of words, so the word before them names it. A
+// program reparsed out of a `-c` payload has no such word here and stays unknown.
+func programPath(parts []*syntax.Word, words []string, inv hint.Invocation, dir string, moved bool) string {
+	i := len(words) - len(inv.Args) - 1
+	if i < 0 || path.Base(words[i]) != inv.Name || !slices.Equal(words[i+1:], inv.Args) {
+		return ""
+	}
+	word := words[i]
+	if !strings.Contains(word, "/") || strings.HasPrefix(word, "~") || !fixedPath(parts[i].Parts) {
+		return ""
+	}
+	if filepath.IsAbs(word) {
+		return filepath.Clean(word)
+	}
+	if dir == "" || moved {
+		return ""
+	}
+	return filepath.Join(dir, word)
+}
+
+// fixedPath reports whether a word's value is fixed before the line runs: no variable,
+// substitution or glob inside it. Stricter than literalOnly, which lets a glob through.
+func fixedPath(parts []syntax.WordPart) bool {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			if strings.ContainsAny(p.Value, "*?[") {
+				return false
+			}
+		case *syntax.SglQuoted:
+		case *syntax.DblQuoted:
+			if !fixedPath(p.Parts) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }

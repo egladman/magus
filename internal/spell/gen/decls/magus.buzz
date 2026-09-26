@@ -527,6 +527,11 @@ export object GuardVerdict {
     reason: str = "",
 }
 
+export object GuardBinary {
+    path: str = "",
+    stamp: str = "",
+}
+
 export object LeaseCheck {
     target: str = "",
     project: str = "",
@@ -686,6 +691,7 @@ export object SpawnRequest {
 
 export object CommandInvocation {
     program: str = "",
+    path: str = "",
     args: [str] = [],
     repeats: bool = false,
 }
@@ -705,6 +711,8 @@ export object CommandRequest {
     role: str = "",
     lease: Job? = null,
     checkout: CheckoutState? = null,
+    dir: str = "",
+    workspace: str = "",
 }
 
 export object WriteRequest {
@@ -833,6 +841,7 @@ export object guard {
     static extern fun advise(text: str) > GuardVerdict;
     static extern fun allow() > GuardVerdict;
     static extern fun bash(rule: {str: any}) > void;
+    static extern fun binary() > GuardBinary;
     static extern fun command(rule: Function) > void;
     static extern fun count(key: str) > int;
     static extern fun deny(text: str) > GuardVerdict;

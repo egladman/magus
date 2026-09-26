@@ -19,6 +19,7 @@ guard
 guard.advise
 guard.allow
 guard.bash
+guard.binary
 guard.command
 guard.count
 guard.deny

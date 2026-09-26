@@ -679,9 +679,9 @@ func adviseInstalledSkillWrite(filePath string) string {
 // magusOwnSourceTree reports whether the working directory is a checkout of magus's own
 // sources.
 //
-// The same identification staleGuardNotice makes, moved from the binary's directory to the
-// working directory: these rules judge the tree being EDITED rather than the one the binary
-// was built from, and in a worktree those are routinely different checkouts.
+// It reads the working directory, not the binary's: these rules judge the tree being
+// EDITED rather than the one the binary was built from, and in a worktree those are
+// routinely different checkouts.
 func magusOwnSourceTree() bool {
 	for _, marker := range []string{"magusfile.buzz", filepath.Join("cmd", "magus"), filepath.Join("internal", "agent")} {
 		if _, err := os.Stat(marker); err != nil {

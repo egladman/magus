@@ -77,5 +77,4 @@ name is the entry below. `magus describe rules` prints the same list.
 | [source-read](source-read.md)           | an unbounded source read the symbol index has already answered                          |
 | [split-run](split-run.md)               | the same target run again on a different project set, on one line or as a separate call |
 | [stage-classify](stage-classify.md)     | staging without classifying, when generated and source differ                           |
-| [stale-binary](stale-binary.md)         | a verdict from a binary older than the rules in the tree around it                      |
 | [unleased-write](unleased-write.md)     | a write magus cannot attribute while a fleet is running                                 |
