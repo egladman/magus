@@ -1784,7 +1784,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return sandboxErr
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
-	ctx = secret.ContextWithResolver(ctx, m.resolver)
+	ctx = m.ContextWithSecrets(ctx)
 	// So a magusfile binding can record a governance event (a credential granted, an
 	// endpoint opened) without the trail path being threaded through the VM.
 	ctx = trail.ContextWithBase(ctx, m.CacheDir())
