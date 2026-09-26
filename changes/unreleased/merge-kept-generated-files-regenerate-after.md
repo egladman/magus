@@ -1,7 +1,7 @@
-### Added
+### Changed
 
-- **A merge's kept generated files regenerate after it finishes.** The merge driver records
-  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
-  a `regenerate-owed` job that runs each once, deepest project first, and stages the
-  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
-  record (`owed-regeneration`).
+- **A merge regenerates what it changed, in the merge.** The merge driver's registration
+  writes settle hooks running `magus vcs resolve --hook` on the whole tree: projects
+  whose sources or outputs the operation changed regenerate and are staged, a clean
+  merge's commit is left to `git commit`, and a failed regeneration stops the commit.
+  `regenerate-owed` is gone.

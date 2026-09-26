@@ -29,7 +29,9 @@ var (
 	generatedMarkers = managedMarkers{begin: "# BEGIN magus-generated", end: "# END magus-generated"}
 	refreshMarkers   = managedMarkers{begin: "# BEGIN magus-refresh", end: "# END magus-refresh"}
 	driftMarkers     = managedMarkers{begin: "# BEGIN magus-drift-notice", end: "# END magus-drift-notice"}
-	regenMarkers     = managedMarkers{begin: "# BEGIN magus-regenerate-owed", end: "# END magus-regenerate-owed"}
+	// The begin is a prefix of the "magus-regenerate-owed" banner an earlier magus
+	// wrote, so a write over that section replaces it rather than stacking below it.
+	regenMarkers = managedMarkers{begin: "# BEGIN magus-regenerate", end: "# END magus-regenerate"}
 )
 
 // section wraps body, which ends in a newline, in m's banner and end lines.
@@ -149,6 +151,48 @@ func nextLineStart(text string, pos int) int {
 		return pos + nl + 1
 	}
 	return len(text)
+}
+
+// removeManagedSection deletes every m section from path, keeping the rest, and reports
+// whether path changed. A missing file, or one holding no section, is left alone. The
+// caller holds withRepoLock.
+func removeManagedSection(path string, m managedMarkers) (bool, error) {
+	target := path
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		target = resolved
+	}
+	data, err := os.ReadFile(target)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	text := string(data)
+	spans, err := managedSpans(text, m)
+	if err != nil {
+		return false, fmt.Errorf("vcs: %s: %w", path, err)
+	}
+	if len(spans) == 0 {
+		return false, nil
+	}
+	var kept strings.Builder
+	prev := 0
+	for _, s := range spans {
+		kept.WriteString(text[prev:s.start])
+		prev = s.end
+	}
+	kept.WriteString(text[prev:])
+	// A section sits between blank lines, and removing it leaves those behind.
+	next := strings.TrimRight(kept.String(), "\n") + "\n"
+	info, err := os.Stat(target)
+	if err != nil {
+		return false, fmt.Errorf("vcs: stat %s: %w", path, err)
+	}
+	if err := file.WriteFileAtomic(target, []byte(next), info.Mode().Perm()); err != nil {
+		return false, fmt.Errorf("vcs: write %s: %w", path, err)
+	}
+	return true, nil
 }
 
 // managedSectionPresent reports whether path holds a complete m section, using the same

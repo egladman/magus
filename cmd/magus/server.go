@@ -64,8 +64,6 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverCheckReview(ctx, root, rest)
 	case job.NameCheckDrift:
 		return serverCheckDrift(ctx, root, rest)
-	case job.NameRegenerateOwed:
-		return serverRegenerateOwed(ctx, root, rest)
 	default:
 		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
@@ -284,7 +282,6 @@ var startServerSurface = func(ctx context.Context, cancel context.CancelFunc) {
 
 	installRefreshHooks(ctx)
 	installDriftHooks(ctx)
-	installRegenHooks(ctx)
 
 	// serverProvider was built by startServer (which runs before this command handler)
 	// so the bridge Magus shares the same OTel instruments the per-workspace builds record
