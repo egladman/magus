@@ -100,7 +100,6 @@ const (
 	denyRuleWorktreeRemove    denyRuleName = "worktree-remove"
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
-	denyRuleCd                denyRuleName = "cd"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
@@ -598,27 +597,6 @@ func magusCdTargets(command string, d Dialect) []string {
 	return out
 }
 
-// shellUsesCd reports whether the line runs the cd builtin ahead of a magus command, the
-// shape the catalog names: magus is CWD-relative, so a cd there is how the right command
-// lands on the wrong project. Parsed commands are preferred so `bash -c 'cd ...'` and a
-// subshell `(cd ... && ...)` are seen the same way; the regex is only the
-// unparseable-line fallback.
-//
-// A cd with no magus command AFTER it passes, alone on its line or ahead of ordinary
-// work (`cd dir && go test`, `cd dir; ls`): it relocates nothing this rule is about, and
-// on a host whose shell persists across calls a bare cd is how a session moves into its
-// own checkout.
-func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
-	if parsed {
-		cdAt := slices.IndexFunc(cmds, isCdInvocation)
-		if cdAt < 0 {
-			return false
-		}
-		return slices.ContainsFunc(cmds[cdAt+1:], isMagusWork)
-	}
-	return cdCmdRe.MatchString(command) && magusMentionRe.MatchString(command)
-}
-
 func isCdInvocation(c hint.Invocation) bool {
 	return c.Name == "cd" || filepath.Base(c.Name) == "cd"
 }
@@ -857,7 +835,7 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 
 // helpRequest reports an invocation whose only effect is printing the tool's usage or
 // version. The rules that route WORK through magus (raw-tool, process-poll, output-pipe,
-// output-redirect, cd, throwaway-copy and the dependency and install advisories) let one
+// output-redirect, throwaway-copy and the dependency and install advisories) let one
 // through; the rules guarding credentials, destructive operations, human sign-off and
 // other checkouts never consult it.
 //
@@ -1143,15 +1121,6 @@ var (
 	// which is not this rule's business. `git restore` targets worktree files by
 	// definition, so its bare form counts.
 	scopedRevertRe = regexp.MustCompile(`\bgit\s+checkout\b[^&|;]*\s--\s|\bgit\s+restore\b`)
-	// Unparseable-line fallback for shellUsesCd. Anchored at a command position
-	// so a `cd` inside a commit message or a quoted string does not trip it.
-	cdCmdRe = regexp.MustCompile(cmdPos + `cd\b`)
-	// The other half of that fallback: shellUsesCd also requires a magus command
-	// somewhere on the line, and without a parse tree "somewhere" is all an unparseable
-	// line can promise. A path segment ending in "magus" counts, the way isMagusInvocation
-	// counts `./magus`.
-	magusMentionRe = regexp.MustCompile(cmdPos + `(?:\S*/)?magus\b`)
-
 	// notesWriteRe matches an invocation that would AUTHOR a note. It is the
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
 	// gitGuard: anchoring the verb to the program misses every global flag in between.
@@ -1248,15 +1217,6 @@ var (
 	// into the output.
 	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
 		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
-	// DENY, not advise. Advise was tuned out: agents kept prefixing `cd <dir> &&`
-	// on every shell call, which relocates later commands on the line and re-fires
-	// shell chpwd hooks (mise among them) that can fail with an empty command.
-	// Magus takes the project as an argument; a host that needs a one-shot
-	// directory change has a working_directory / cwd field that does not rewrite
-	// the command line. A DIFFERENT workspace is `--root <path>`, not a cd.
-	denyCd = "Do not `cd`. The project is an argument, written bare: `" + hint.Run.With("<target>", "libs/foo") + "`. A different workspace is `--root <path>`; `" + hint.Where.With("<name>") + "` resolves a fuzzy name.\n" +
-		"Your shell tool has a working_directory (or cwd) field: set that. A `cd` prefix relocates every later command on the line."
-
 	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
 	// answer a reader can misread as "absent" and fall back to grep on, so whichever
 	// advisory sent them to refs owes them this sentence.
@@ -1675,8 +1635,8 @@ func nothingRanNote(command string, d Dialect) string {
 
 func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
-	// because they are about its SHAPE (a pipe, a redirect, a cd before a magus
-	// call) rather than which program runs.
+	// because they are about its SHAPE (a pipe, a redirect, a magus call in a
+	// throwaway copy) rather than which program runs.
 	//
 	// A matched git rule that only ADVISES is held, not returned: returning here
 	// let a trailing `git commit` downgrade a deny to an advisory. Deny always
@@ -1772,12 +1732,8 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	pipedVerb, pipedFilter, pipedToFilter := magusPipedToFilter(command, d)
 	redirVerb, redirDest, redirected := magusRedirected(command, d)
 	switch {
-	// Throwaway before the general cd deny: the same line matches both, and the
-	// throwaway reason is the one that says why THAT relocation is wrong.
 	case magusInThrowawayCopy(command, d):
 		return ShellVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
-	case shellUsesCd(cmds, parsed, command):
-		return ShellVerdict{Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}
 	case rawToolDeny:
 		match, _ := rawToolMatch(deps, rawToolCmd)
 		reason := runGuardAdvice(match)

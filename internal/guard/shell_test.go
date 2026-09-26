@@ -372,17 +372,15 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Only run and affected carry the flag, so nothing else is advised toward it.
 		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
-		// A cd WITHIN the workspace, ahead of a magus command, is denied: name the
-		// project instead. A cd into a temp or scratchpad copy is the throwaway rule
-		// above (more specific); "./magus" counts the same as "magus" on PATH.
-		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
-		// A cd alone on its line relocates nothing after it, and is how a session whose
-		// shell persists moves into its own checkout.
+		// A cd ahead of magus is the same command as the project operand, so it passes.
+		// A cd into a temp or scratchpad copy is the throwaway rule above, and one into
+		// another checkout of this repository is sibling-checkout, resolved on disk.
+		{command: "cd libs/gopherbuzz && magus run test ."},
 		{command: "cd libs/diagnostics"},
 		{command: "cd /Users/someone/checkouts/guard-terms"},
-		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint .", rule: denyRule{Name: denyRuleCd}},
-		// A cd ahead of ordinary, non-magus work is not this rule's business: nothing
-		// after it lands on the wrong project, since nothing after it is magus.
+		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint ."},
+		// `cd X && git ...` is `git -C X ...`: the git rules judge it either way.
+		{command: "cd /repo && git log --oneline -3"},
 		{command: "cd libs/diagnostics; ls"},
 		{command: "bash -c 'cd /tmp && ls'"},
 		{command: "(cd libs/diagnostics && ls)"},
@@ -450,9 +448,6 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "grep -rn BZZ1008 libs/"},
 		// A search of another tree has no answer in this workspace's graph.
 		{command: "grep -rn MGS2011 /tmp/elsewhere"},
-		// magus is CWD-relative, so cd-then-magus is denied: the project is an
-		// argument; only a different WORKSPACE needs --root.
-		{command: "cd libs/diagnostics && magus run test", rule: denyRule{Name: denyRuleCd}},
 		{command: "magus run test libs/diagnostics"},
 		{command: "grep pattern onefile.txt"},
 		{command: "grep -n x file.go"},
@@ -578,7 +573,7 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		// Those rules still judge work, and a flag only some tools read as help.
 		{command: "ps -h", rule: denyRule{Name: denyRuleProcessPoll}},
 		{command: "magus memory get help | head", rule: denyRule{Name: denyRuleOutputPipe}},
-		{command: "cd libs && magus run test --help=false", rule: denyRule{Name: denyRuleCd}},
+		{command: "magus run test --help=false | tail", rule: denyRule{Name: denyRuleOutputPipe}},
 		// One per protected rule: none of them consults helpRequest.
 		{command: "magus config token print --help", rule: denyRule{Name: denyRuleCredentialVerb}},
 		{command: "magus notes capture --help", rule: denyRule{Name: denyRuleNotesAuthor}},

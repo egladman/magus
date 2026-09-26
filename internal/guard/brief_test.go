@@ -22,7 +22,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"inline span", "Build with `MAGUS_NO_WAIT=1 ./magus run go-build .` first.", denyRuleUnknownEnv},
 		{"fenced block", "Validate:\n```bash\n./magus run lint . 2>&1 | tail -30\n```\n", denyRuleOutputPipe},
 		{"unlabeled fence", "Run:\n```\ngit add -A\n```", denyRuleStageAll},
-		{"prompt marker in a block", "Then:\n```console\n$ cd libs/foo && magus run test .\n```", denyRuleCd},
+		{"prompt marker in a block", "Then:\n```console\n$ magus run test . > out.log\n```", denyRuleOutputRedirect},
 		{"exit echo", "Check it with `./magus run test .; echo \"EXIT $?\"`.", denyRuleExitStatusEcho},
 		{"placeholder is a word", "Run `MAGUS_NO_WAIT=1 magus run <target> <project>`.", denyRuleUnknownEnv},
 

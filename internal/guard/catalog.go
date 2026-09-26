@@ -62,7 +62,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 			"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. " +
-			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the cd, output-pipe, output-redirect and unknown-env rules."},
+			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules."},
 	{Name: string(denyRuleCacheDirWrite), Decision: "deny", Catches: "a write into this checkout's magus cache dir, which magus alone owns"},
 	{Name: string(denyRuleClaimedDeclaration), Decision: "deny",
 		Catches: "a leased edit landing in a declaration another live job claims (`run.go#executeStages`)",
@@ -71,13 +71,6 @@ var denyRuleDocs = []RuleDoc{
 			"The edit is applied to the file in memory and its changed lines are placed by the same diff-driver matching the job footprint uses, so the declaration this names is the one `magus job wait` would report. " +
 			"It fires only for a job-bound writer whose own claims in the file do not name the declaration, and only when another live job claims a declaration of that file; an edit that lands in the writer's claims, in no one's, or above the first declaration passes. " +
 			"A payload carrying no edit, such as a whole-file write, and a file whose lines cannot be placed stay graded by path alone."},
-	{Name: string(denyRuleCd), Decision: "deny",
-		Catches: "a `cd` before a magus command, when the project is an argument",
-		Why: "magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project. " +
-			"The project is an argument and is written bare (`magus run build libs/foo`); a DIFFERENT workspace is `--root <path>`, and `magus where <name>` resolves a fuzzy name. " +
-			"A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. " +
-			"A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. " +
-			"A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line."},
 	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
 		Catches: "a line ending by printing an exit status, which the harness already reports",
 		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +

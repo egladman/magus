@@ -22,7 +22,7 @@ import (
 // how an agent drives magus and edits files. The rest stay inline-only, because a
 // workspace's own committed scripts legitimately run raw tools and git.
 var scriptJudgedRules = []denyRuleName{
-	denyRuleBusyWait, denyRuleScriptedRewrite, denyRuleCd, denyRuleThrowawayCopy,
+	denyRuleBusyWait, denyRuleScriptedRewrite, denyRuleThrowawayCopy,
 	denyRuleOutputPipe, denyRuleOutputRedirect, denyRuleUnknownEnv,
 }
 
