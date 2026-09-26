@@ -15,8 +15,11 @@ type MachineClaim struct {
 	Target     string `json:"target" yaml:"target"`
 	DeclaredBy string `json:"declared_by,omitempty" yaml:"declared_by,omitempty"` // absent when that is Target itself
 	MemoryMB   int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
-	Slots      int    `json:"slots,omitzero" yaml:"slots,omitempty"`
-	PID        int    `json:"pid" yaml:"pid"`
+	// Sizing is where MemoryMB came from, so a refusal can say whether it rests on a
+	// declaration or on measured runs.
+	Sizing MemorySizing `json:"sizing,omitzero" yaml:"sizing,omitempty"`
+	Slots  int          `json:"slots,omitzero" yaml:"slots,omitempty"`
+	PID    int          `json:"pid" yaml:"pid"`
 	// Dir is where the claiming run was started. One broker serves every worktree, so a
 	// pid alone does not say which tree to go and look at.
 	Dir string `json:"dir,omitempty" yaml:"dir,omitempty"`
@@ -44,14 +47,15 @@ func (c MachineClaim) Run() string {
 // MachineClaimant is one step's hold on the machine budget. Since is when the claim was
 // granted.
 type MachineClaimant struct {
-	Project  string    `json:"project" yaml:"project"`
-	Target   string    `json:"target" yaml:"target"`
-	PID      int       `json:"pid,omitzero" yaml:"pid,omitempty"`
-	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
-	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
-	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
-	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
-	Since    time.Time `json:"since,omitempty" yaml:"since,omitempty"`
+	Project  string       `json:"project" yaml:"project"`
+	Target   string       `json:"target" yaml:"target"`
+	PID      int          `json:"pid,omitzero" yaml:"pid,omitempty"`
+	MemoryMB int          `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Sizing   MemorySizing `json:"sizing,omitzero" yaml:"sizing,omitempty"`
+	Slots    int          `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string       `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string       `json:"command,omitempty" yaml:"command,omitempty"`
+	Since    time.Time    `json:"since,omitempty" yaml:"since,omitempty"`
 }
 
 // MachineVerdict is the budget's answer to one admission request.

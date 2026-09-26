@@ -493,7 +493,7 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 	for _, h := range c.Holders {
 		fmt.Fprintf(tw, "held\t%d\t%s\n", h.PID, strings.Join(nonEmpty(
 			fmt.Sprintf("slots %d", max(h.Slots, 1)),
-			mbText("mem ", h.MemoryMB),
+			holderMemText(h),
 			holderProject(h.Project)+" "+h.Target,
 			h.Dir, h.Command, sinceText(h.Since)), "  "))
 	}
@@ -564,6 +564,17 @@ func mbText(prefix string, mb int) string {
 		return ""
 	}
 	return prefix + cache.FormatMB(mb)
+}
+
+// holderMemText is a holder's memory claim, naming the runs it was measured over when
+// it was sized from them. A bare figure is a declaration: a claimant recorded by a magus
+// that does not report sizing reads the same way, which is what it claimed.
+func holderMemText(h types.MachineClaimant) string {
+	text := mbText("mem ", h.MemoryMB)
+	if text != "" && h.Sizing.Measured() {
+		text += " " + h.Sizing.String()
+	}
+	return text
 }
 
 // holderProject names the workspace root the way a refusal does.

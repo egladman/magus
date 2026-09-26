@@ -105,8 +105,12 @@ export fun mark(io: {str: any}) > bool {
     return io["id"] == "7" and io["repo"] == "acme/acme" and io["mark"] != "kicked_back";
 }
 
+export fun required_checks(io: {str: any}) > any {
+    return {"checks": [{"name": "ci gate", "state": "failure"}, {"name": "{io["commit"]}", "state": "{io["title"]}"}]};
+}
+
 export fun list_artifacts(io: {str: any}) > any {
-    final run = {"repo": "o/r", "head_repo": "o/r", "head_branch": "main", "event": "push", "branch_event": true, "definition": "q.yaml"};
+    final run ={"repo": "o/r", "head_repo": "o/r", "head_branch": "main", "event": "push", "branch_event": true, "definition": "q.yaml"};
     if (io["source"] == "no run") {
         return {"complete": true, "artifacts": [<any>]};
     }
@@ -345,6 +349,21 @@ func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
 	assert.False(t, noRuns.ListsArtifacts())
 	_, err = noRuns.ListArtifacts(context.Background(), "done")
 	require.EqualError(t, err, `provider "echo" does not export list_artifacts`)
+}
+
+func TestRequiredChecksDecodesEachStateAndIsOptional(t *testing.T) {
+	c := types.Change{ID: "7", Repo: "acme/acme", Head: headA, Base: "main", Method: types.MethodSquash, Title: "pending"}
+	got, err := open(t, script).RequiredChecks(context.Background(), c, headD)
+	require.NoError(t, err)
+	assert.Equal(t, []types.Check{{Name: "ci gate", State: types.StateFailure}, {Name: headD, State: types.StatePending}}, got)
+
+	c.Title = "red"
+	_, err = open(t, script).RequiredChecks(context.Background(), c, headD)
+	require.EqualError(t, err, `provider "echo": required_checks: check "`+headD+`" has state "red", want pending, success or failure`)
+
+	none, err := open(t, strings.Split(script, "export fun required_checks")[0]).RequiredChecks(context.Background(), c, headD)
+	require.NoError(t, err)
+	assert.Nil(t, none, "a provider that cannot read them reports none")
 }
 
 func TestAnUnknownProviderNamesBothPlacesItLooked(t *testing.T) {

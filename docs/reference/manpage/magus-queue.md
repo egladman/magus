@@ -166,7 +166,7 @@ apply report what would merge and call nothing on the provider.
 : \`provider\`: a built-in name (github) or a .buzz file
 
 **--regenerate** *command*
-: The base's own regeneration \`command\` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; no credential reaches it
+: The base's own regeneration \`command\` and its arguments, run with no shell and the projects that regenerate them appended as arguments and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from

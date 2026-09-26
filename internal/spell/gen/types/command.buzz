@@ -22,5 +22,6 @@ export object Command {
     sourcesEach: bool = false,
     capture: bool = false,
     secrets: {str: str} = {},
+    envKeys: [str] = [],
     hints: [Hint] = [],
 }

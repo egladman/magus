@@ -5,8 +5,7 @@
 // regenerating produces, which is what `magus vcs resolve` does. Silent unless generated
 // files actually conflict - an ordinary source conflict is the author's business.
 //
-// Reads the `offer-fix-label` and `fix-label` inputs, and writes its section of the pull
-// request's one magus comment through advice\publish.
+// Writes its section of the pull request's one magus comment through advice\publish.
 import "proc";
 import "advice";
 import "magus";
@@ -116,7 +115,7 @@ fun conflictTitle(n: int) > str {
 //
 // Both lists are named, because "conflicts in hand-written files are still yours" was true
 // and useless - the merge that produced this comment already knows which files those are.
-fun conflictBody(base: str, files: [str], mine: [str], label: str) > str {
+fun conflictBody(base: str, files: [str], mine: [str]) > str {
     final parts = mut ["These conflicts are in build output. Nothing here has to be reconciled by "
         + "hand, because the correct merge of a generated file is not a blend of two byte "
         + "streams - it is whatever regenerating produces.\n\n"
@@ -137,11 +136,6 @@ fun conflictBody(base: str, files: [str], mine: [str], label: str) > str {
             + "them alone:\n\n");
         foreach (f in mine) { parts.append("- `" + f + "`\n"); }
     }
-    if (label != "") {
-        parts.append("\nOr label this pull request **`" + label + "`** and magus does exactly "
-            + "the above on a runner and pushes the result. The label is the consent, so "
-            + "removing it stops magus touching the branch again.\n");
-    }
     return parts.join("") + "\nWhy a conflict is reported at all when your own clone would settle it: "
         + "a merge driver has to be registered per clone and cannot be committed, so "
         + "github.com computes mergeability with a plain three-way merge. "
@@ -155,9 +149,6 @@ fun main() > void !> str {
     final pr = pull.number;
     final base = pull.base;
     final head = pull.headSha;
-    // Empty unless a workflow honours the label: an offer nobody can accept is noise.
-    var label = "";
-    if (advice\input("offer-fix-label") == "true") { label = advice\input("fix-label"); }
     if (pr == "" and base == "" and head == "") {
         // No PR context at all: not a pull request, or the file was loaded to run its
         // test blocks. Either way there is nothing to advise on, and refusing to start
@@ -187,8 +178,7 @@ fun main() > void !> str {
     }
 
     advice\publish(repo, pr: pr, name: section, title: conflictTitle(files.len()),
-        body: conflictBody(base, files: files, mine: authored(all, generated: files),
-            label: label));
+        body: conflictBody(base, files: files, mine: authored(all, generated: files)));
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 
@@ -205,7 +195,7 @@ test "conflictPaths on a clean merge yields nothing" {
 }
 
 test "conflictBody names every file and the command that settles them" {
-    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"], mine: mut [], label: "");
+    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"], mine: mut []);
     std\assert(body.indexOf("- `MAGUS.md`") != null, message: "names the first file");
     std\assert(body.indexOf("- `gen/target-graph.json`") != null, message: "names the second");
     std\assert(body.indexOf("magus vcs resolve") != null, message: "names the command");
@@ -215,28 +205,17 @@ test "conflictBody names every file and the command that settles them" {
 }
 
 test "conflictBody names the conflicts magus will not touch, and says nothing when there are none" {
-    final mixed = conflictBody("main", files: ["MAGUS.md"], mine: ["internal/run.go"], label: "");
+    final mixed = conflictBody("main", files: ["MAGUS.md"], mine: ["internal/run.go"]);
     std\assert(mixed.indexOf("- `internal/run.go`") != null, message: "names the authored conflict");
     std\assert(mixed.indexOf("are yours") != null, message: "scopes what it does not cover");
 
-    final only = conflictBody("main", files: ["MAGUS.md"], mine: mut [], label: "");
+    final only = conflictBody("main", files: ["MAGUS.md"], mine: mut []);
     std\assert(only.indexOf("are yours") == null, message: "no empty section when magus settles everything");
-}
-
-// Every other assertion here reads a substring that CONCATENATION produced, so an
-// interpolation that stopped firing and rendered literal braces would leave this file green.
-test "conflictBody offers the label only where the fixer is enabled" {
-    final offered = conflictBody("main", files: ["MAGUS.md"], mine: mut [], label: "magus:regenerate:requested");
-    std\assert(offered.indexOf("`magus:regenerate:requested`") != null, message: "names the label");
-    std\assert(offered.indexOf("removing it stops magus") != null, message: "says how to revoke");
-
-    final silent = conflictBody("main", files: ["MAGUS.md"], mine: mut [], label: "");
-    std\assert(silent.indexOf("label this pull request") == null, message: "no offer when disabled");
 }
 
 test "conflictBody and conflictTitle render their counts, not the placeholder" {
     final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"],
-        mine: ["internal/run.go"], label: "");
+        mine: ["internal/run.go"]);
     std\assert(body.indexOf("settles these 2") != null, message: "the generated count renders");
     std\assert(body.indexOf("These 1 are yours") != null, message: "the authored count renders");
     std\assert(conflictTitle(3) == "Merge conflicts in generated files (3)", message: "the summary line renders");
