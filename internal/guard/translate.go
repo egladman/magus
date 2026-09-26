@@ -510,11 +510,11 @@ func searchesRevision(c hint.Invocation, dir string) bool {
 	if path.Base(c.Name) != "git" {
 		return false
 	}
-	i := slices.Index(c.Args, "grep")
-	if i < 0 {
+	g := parseGit(c.Args)
+	if g.sub != "grep" {
 		return false
 	}
-	args := c.Args[i+1:]
+	args := g.rest
 	sep := slices.Index(args, "--")
 	before := args
 	if sep >= 0 {

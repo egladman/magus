@@ -65,6 +65,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		// A revision is not the tree the graph was built from.
 		{`git grep -n 'MGS30[23]' origin/main -- types`, denyRule{}},
 		{`git grep -n 'MGS30[23]' no-such-rev`, denyRule{}},
+		{`git --no-pager grep -n 'MGS30[23]' origin/main -- types`, denyRule{}},
 		// A pipe's stdin is not the tree.
 		{`cat notes.txt | grep 'MGS30[23]'`, denyRule{}},
 		// Another tree is not this workspace's graph.

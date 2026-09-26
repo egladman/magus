@@ -390,8 +390,8 @@ func repairInvocation(c hint.Invocation) bool {
 		return len(words) > 0 && undeclaredLeaseVerbs[words[0]]
 	}
 	if c.Name == "git" {
-		words := magusSubcommandWords(c.Args)
-		return len(words) > 0 && gitReadVerbs[words[0]]
+		g := parseGit(c.Args)
+		return g.alias == "" && gitReadVerbs[g.sub]
 	}
 	return undeclaredLeaseReaders[path.Base(c.Name)]
 }
@@ -757,12 +757,12 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 
 // vcsGlobalValueFlags are, per backend, the global options that take their value as the
 // NEXT word, so reading past them reaches the subcommand of a relocated call. A flag
-// spelled with `=` carries its own value and is skipped as one word.
+// spelled with `=` carries its own value and is skipped as one word. git's are
+// gitValuedGlobals, read by parseGit.
 var vcsGlobalValueFlags = map[string][]string{
-	"git": {"-C", "-c", "--work-tree", "--git-dir", "--namespace"},
-	"hg":  {"-R", "--repository", "--repo", "--cwd", "--config"},
-	"sl":  {"-R", "--repository", "--repo", "--cwd", "--config"},
-	"jj":  {"-R", "--repository", "--at-operation", "--at-op", "--config", "--config-toml", "--config-file", "--color"},
+	"hg": {"-R", "--repository", "--repo", "--cwd", "--config"},
+	"sl": {"-R", "--repository", "--repo", "--cwd", "--config"},
+	"jj": {"-R", "--repository", "--at-operation", "--at-op", "--config", "--config-toml", "--config-file", "--color"},
 }
 
 // isPush reports whether a parsed command publishes: git push, hg push, sl push (with or
@@ -773,6 +773,10 @@ func isPush(c hint.Invocation) bool {
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.
 func vcsSubcommand(c hint.Invocation) (sub string, rest []string) {
+	if c.Name == "git" {
+		g := parseGit(c.Args)
+		return g.sub, g.rest
+	}
 	valued := vcsGlobalValueFlags[c.Name]
 	for i := 0; i < len(c.Args); i++ {
 		a := c.Args[i]
@@ -815,6 +819,10 @@ func vcsMutation(c hint.Invocation) string {
 		}
 		return ""
 	case "git":
+		// The word an inline alias defines can run any of the verbs below.
+		if g := parseGit(c.Args); g.alias != "" {
+			return "git -c " + g.alias
+		}
 	default:
 		return ""
 	}

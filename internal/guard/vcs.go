@@ -70,10 +70,14 @@ func isDependencyMutation(c hint.Invocation) bool {
 // matches however it is reached.
 func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if c.Name != "git" || len(c.Args) == 0 {
+		if c.Name != "git" {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		g := parseGit(c.Args)
+		if g.alias != "" {
+			return denyInlineAlias(g.alias), true
+		}
+		sub, rest := g.sub, g.rest
 		switch sub {
 		case "stash":
 			// Reading a stash is safe. RESTORING one is not, which this rule used to
@@ -164,10 +168,11 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 		if isPush(c) {
 			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 		}
-		if c.Name != "git" || len(c.Args) == 0 {
+		if c.Name != "git" {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		g := parseGit(c.Args)
+		sub, rest := g.sub, g.rest
 		switch sub {
 		case "push":
 			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
@@ -207,6 +212,111 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	return ShellVerdict{}, false
 }
 
+// gitCommand is a git argv split where git itself splits it: the global options git reads
+// before its subcommand (git(1) OPTIONS), the subcommand, and what follows it. Every git
+// rule reads the subcommand from here, so an option in front of it (`git -C . reset
+// --hard`, `git --no-pager stash`) cannot hide it from one of them.
+type gitCommand struct {
+	// at indexes sub in the argv, -1 when the argv names no subcommand.
+	at   int
+	sub  string
+	rest []string
+	// dirs are the -C operands in order. git resolves each relative one against the
+	// directory the one before it reached, so they apply in sequence.
+	dirs []string
+	// opaque is set by --git-dir or --work-tree, which point git at a repository by a path
+	// that need not be a checkout's directory, so no location can be read off them.
+	opaque bool
+	// configured is set by any -c or --config-env, which can change what the subcommand
+	// does: grep.patternType makes `git grep` a PCRE search.
+	configured bool
+	// alias is the first inline config key that can define an alias, "" for none.
+	alias string
+}
+
+// gitValuedGlobals are the global options that take their value as the NEXT word. Each
+// long one also accepts `--opt=value`; git reads -C and -c only in the separate form.
+var gitValuedGlobals = map[string]bool{
+	"-C": true, "-c": true, "--config-env": true, "--git-dir": true, "--work-tree": true,
+	"--namespace": true, "--attr-source": true, "--shallow-file": true, "--super-prefix": true,
+}
+
+// parseGit reads a git argv, the words after `git`, up to its subcommand.
+//
+// `--help`, `-h`, `--version` and `-v` end the options and become the `help` or `version`
+// command, as git rewrites them. Any other flag is skipped as one word: git refuses an
+// option it does not know before running anything, so reading past one can only judge a
+// command that never runs. The options that print and exit (`--exec-path` with no value,
+// `--list-cmds=`, `--html-path`) are read past for the same reason, and judging the words
+// after them costs a deny on a line nobody writes.
+func parseGit(args []string) gitCommand {
+	g := gitCommand{at: -1}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--help", "-h":
+			g.at, g.sub, g.rest = i, "help", args[i+1:]
+			return g
+		case "--version", "-v":
+			g.at, g.sub, g.rest = i, "version", args[i+1:]
+			return g
+		}
+		if !strings.HasPrefix(a, "-") {
+			g.at, g.sub, g.rest = i, a, args[i+1:]
+			return g
+		}
+		name, value, joined := strings.Cut(a, "=")
+		switch {
+		case !joined && gitValuedGlobals[a]:
+			if i+1 >= len(args) {
+				return g
+			}
+			i++
+			value = args[i]
+		case !joined || name == "-C" || name == "-c":
+			continue
+		}
+		switch name {
+		case "-C":
+			// git skips an empty -C rather than failing on it.
+			if value != "" {
+				g.dirs = append(g.dirs, value)
+			}
+		case "--git-dir", "--work-tree":
+			g.opaque = true
+		case "-c", "--config-env":
+			g.configured = true
+			if key, _, _ := strings.Cut(value, "="); g.alias == "" && definesAlias(key) {
+				g.alias = key
+			}
+		}
+	}
+	return g
+}
+
+// definesAlias reports a config key that can make a git word run another command: an
+// alias, or an include, which loads a file that may define one. Section names are
+// case-insensitive, so `ALIAS.x` counts.
+func definesAlias(key string) bool {
+	section, _, _ := strings.Cut(strings.ToLower(key), ".")
+	return section == "alias" || section == "include" || section == "includeif"
+}
+
+// denyInlineAlias refuses a git line that defines an alias inline, key naming the config
+// key that does.
+//
+// A deny rather than judging the line as every destructive verb at once: the arguments
+// those rules read (--hard, the pathspec, the stash entry) come from the alias body too,
+// and `--config-env` or an include keeps that body off the line altogether. Spelling the
+// expansion out loses nothing.
+func denyInlineAlias(key string) ShellVerdict {
+	return ShellVerdict{
+		Deny: "Spell out the git command the alias stands for, and run that.\n" +
+			"`" + key + "` set inline defines what a git word runs on this line alone, so no git rule can read which command it is: one that resets, cleans or pushes would pass unjudged.",
+		Rule: denyRule{Name: denyRuleInlineAlias, Arg: key},
+	}
+}
+
 // isTreeIdentityQuery reports whether a `git rev-parse` invocation is asking WHICH
 // REVISION this is, rather than one of the many repository-layout questions the
 // same subcommand answers (`--show-toplevel`, `--git-dir`, `--is-inside-work-tree`).
@@ -241,6 +351,9 @@ func isTreeIdentityQuery(args []string) bool {
 // over-eager deny really is the safe direction, because these rules guard work
 // that cannot be recovered.
 func gitGuardFallback(command string) (ShellVerdict, bool) {
+	if m := inlineAliasRe.FindStringSubmatch(command); m != nil {
+		return denyInlineAlias(m[1]), true
+	}
 	switch {
 	case stashRe.MatchString(command) && !stashSafeRe.MatchString(command):
 		return denyWholeTree("git stash"), true
