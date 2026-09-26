@@ -724,7 +724,7 @@ exec git -c user.email=t@example.com -c user.name=T commit -q -m init
 mkdir .magus/runs
 
 # case: path/ask unreachable - the push gate is the only rule that asks, and it reads a shell
-# command; no rule asks about a write. The rendered arm is graded in host_schema_test.go.
+# command; no rule asks about a write. The rendered arm is graded in conventions_test.go.
 # case: mcp/ask unreachable - the same: no rule asks about an MCP call.
 
 # hosts: claude-code

@@ -142,7 +142,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // output byte for byte.
 //
 // The output lands in the ROOT project's testdata, because that is where the host schemas
-// live and where host_schema_test.go reads them. Declared with writesFiles so the snapshot
+// live and where conventions_test.go reads them. Declared with writesFiles so the snapshot
 // covers it and a cross-project write is not a surprise.
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);

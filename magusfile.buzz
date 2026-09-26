@@ -189,12 +189,12 @@ magus\project({
         "opencode.json",
         // The one hook config the glob above cannot reach, because Claude Code
         // keeps its hooks in settings.json rather than a file named for them.
-        // host_schema_test.go grades this exact path against the vendored schema
-        // and conventions_test.go asserts it invokes the shipped template rather
-        // than inlining a copy, so an edit here can turn the root tests red.
+        // conventions_test.go grades this exact path against the vendored schema
+        // and asserts it invokes the shipped template rather than inlining a
+        // copy, so an edit here can turn the root tests red.
         ".claude/settings.json",
         "spells/harness/**/*.buzz",
-        // The vendored agent-host schemas host_schema_test.go grades the hook configs
+        // The vendored agent-host schemas conventions_test.go grades the hook configs
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
         // refresh would otherwise not invalidate the tests that read them.
         "testdata/hosts/**/*.json",
@@ -256,6 +256,7 @@ magus\project({
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
+        "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},
         // NO skip_cache, and the reason it used to carry is now an input instead. The
         // answer still depends on trivy's vulnerability database rather than on this tree
         // alone, which is why a hit once reported yesterday's CVEs against today's image;

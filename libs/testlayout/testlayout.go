@@ -53,7 +53,10 @@ an in-package test would close an import cycle, and that case is worth a //nolin
 naming the cycle rather than a silent convention.
 
 With the unpaired option it reports every X_test.go with no X.go, unless a source
-family (X_linux.go) stands in or the file opens with "// cross-cutting: <why>".`
+family (X_linux.go) stands in or the file opens with "// cross-cutting: <why>".
+ignore-marker takes that second exit away, pair-benchmarks holds X_bench_test.go to
+the same rule instead of exempting it, and no-unix-suffix reports any Go file named
+with a _unix segment.`
 
 // conventional lists test filenames that have no source counterpart by design,
 // with the number of uses each has in the Go standard library. Every entry is
@@ -64,10 +67,15 @@ var conventional = []string{
 	"example_test.go", "*_example_test.go", // 105: godoc renders examples from it
 	"main_test.go",                           // 6: the TestMain entry point
 	"internal_test.go", "*_internal_test.go", // 3: white-box companion to an external test package
-	"all_test.go",                      // 5: package-wide suite
+	"all_test.go",                    // 5: package-wide suite
+	"fuzz_test.go", "*_fuzz_test.go", // 15
+}
+
+// benchmarkNames are the conventional names for a file of benchmarks kept apart from
+// the unit tests, exempt like the rest unless [Options.PairBenchmarks] is set.
+var benchmarkNames = []string{
 	"bench_test.go", "*_bench_test.go", // 9
 	"benchmark_test.go", "*_benchmark_test.go", // 6
-	"fuzz_test.go", "*_fuzz_test.go", // 15
 }
 
 // buildSuffixes are trailing segments the Go build system reads as a constraint
@@ -75,7 +83,8 @@ var conventional = []string{
 // rawconn.go.
 //
 // Every entry is a GOOS or GOARCH from `go tool dist list` on Go 1.26, plus
-// `unix`, which go/build honors without being a platform. An earlier version
+// `unix`, which go/build honors in a //go:build line but never in a file name,
+// so a _unix.go file carries its constraint as a tag. An earlier version
 // also carried `generic`, `other`, `stub`, `posix`, and `asm` because they read
 // like build tags. None is one, and each made resolver_generic_test.go beside
 // resolver.go silently exempt. Nobody reports a linter for staying quiet, so a
@@ -104,6 +113,22 @@ type Options struct {
 	// tree_test.go covers tree_linux.go and tree_darwin.go when no tree.go exists.
 	// A file carrying [CrossCuttingMarker] above its package clause is exempt.
 	Unpaired bool `json:"unpaired"`
+
+	// IgnoreMarker stops [CrossCuttingMarker] from exempting a file under Unpaired,
+	// for a tree that names its few unpaired test files in Allow, where every
+	// exception is visible in one place, instead of in each file's header.
+	IgnoreMarker bool `json:"ignore-marker"`
+
+	// PairBenchmarks drops the benchmark file names (bench_test.go,
+	// X_bench_test.go and the benchmark_ forms) from the conventional exemptions,
+	// so benchmarks live in the _test.go of the file they measure.
+	PairBenchmarks bool `json:"pair-benchmarks"`
+
+	// NoUnixSuffix reports every Go file, test or source, whose name ends in a
+	// _unix segment. The toolchain reads no constraint from that segment, so the
+	// file's //go:build line decides what it serves and the name only suggests
+	// it; name the platforms instead (X_linux.go, X_darwin.go, X_other.go).
+	NoUnixSuffix bool `json:"no-unix-suffix"`
 }
 
 // CrossCuttingMarker opens a line comment above the package clause of a test file
@@ -138,17 +163,26 @@ var Analyzer = newAnalyzer(Options{})
 
 func newAnalyzer(opts Options) *analysis.Analyzer {
 	l := linter{
-		unpaired: opts.Unpaired,
+		unpaired:       opts.Unpaired,
+		ignoreMarker:   opts.IgnoreMarker,
+		pairBenchmarks: opts.PairBenchmarks,
+		noUnixSuffix:   opts.NoUnixSuffix,
 		// Combined once. Per test file, this list is walked but never rebuilt.
 		exempt: slices.Concat(conventional, opts.Allow),
+	}
+	if !opts.PairBenchmarks {
+		l.exempt = append(l.exempt, benchmarkNames...)
 	}
 
 	return &analysis.Analyzer{Name: "testlayout", Doc: doc, Run: l.run}
 }
 
 type linter struct {
-	exempt   []string
-	unpaired bool
+	exempt         []string
+	unpaired       bool
+	ignoreMarker   bool
+	pairBenchmarks bool
+	noUnixSuffix   bool
 }
 
 func (l linter) run(pass *analysis.Pass) (any, error) {
@@ -169,6 +203,10 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 		path := tf.Name()
 
 		name := filepath.Base(path)
+		if l.noUnixSuffix && unixSuffixed(name) {
+			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: unixSuffixMessage(name)})
+		}
+
 		if !strings.HasSuffix(name, "_test.go") {
 			continue
 		}
@@ -197,7 +235,8 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			listings[dir] = sources
 		}
 
-		if message := l.check(name, sources, crossCutting(f)); message != "" {
+		marked := !l.ignoreMarker && crossCutting(f)
+		if message := l.check(name, sources, marked); message != "" {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: message})
 		}
 	}
@@ -229,13 +268,55 @@ func (l linter) check(name string, sources map[string]bool, marked bool) string 
 		return fmt.Sprintf("%s narrows %s.go; these tests belong in %s_test.go", name, owner, owner)
 	}
 
+	// Reached only under PairBenchmarks, since otherwise the name was exempted. It is
+	// reported with or without Unpaired: a benchmark file always has a file it measures.
+	if matchesAny(benchmarkNames, name) {
+		return fmt.Sprintf("%s keeps benchmarks apart from the tests of the file they measure; "+
+			"move them into that file's _test.go", name)
+	}
+
 	if !l.unpaired || marked || pairsWithFamily(trimmed, sources) {
 		return ""
+	}
+
+	if l.ignoreMarker {
+		return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
+			"of the file they exercise, or, when no single file owns them, add it to the allow list", name)
 	}
 
 	return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
 		"of the file they exercise, or, when no single file owns them, open the file with "+
 		"`// %s <why>` above the package clause", name, CrossCuttingMarker)
+}
+
+// unixSuffixed reports whether name, less .go and _test, ends in build suffixes of
+// which one is unix: relay_unix.go and relay_unix_amd64_test.go, but not unix.go.
+func unixSuffixed(name string) bool {
+	base := strings.TrimSuffix(strings.TrimSuffix(name, ".go"), "_test")
+	for {
+		i := strings.LastIndex(base, "_")
+		if i < 0 {
+			return false
+		}
+
+		switch segment := base[i+1:]; {
+		case segment == "unix":
+			return true
+		case !slices.Contains(buildSuffixes, segment):
+			return false
+		}
+
+		base = base[:i]
+	}
+}
+
+func unixSuffixMessage(name string) string {
+	stem := strings.TrimSuffix(strings.TrimSuffix(name, ".go"), "_test")
+	stem = stem[:strings.LastIndex(stem, "_unix")]
+
+	return fmt.Sprintf("%s is named for unix, which a file name does not constrain; name the platforms "+
+		"it serves, %s_linux.go and %s_darwin.go, with %s_other.go for the rest and %s.go for what they share",
+		name, stem, stem, stem, stem)
 }
 
 // pairsWithFamily reports whether some source file is base plus build suffixes only,
@@ -279,7 +360,11 @@ func crossCutting(f *ast.File) bool {
 // configured glob. The patterns were validated by [New], so a match error here
 // would mean a pattern that changed after construction, and there is none.
 func (l linter) exempted(name string) bool {
-	for _, pattern := range l.exempt {
+	return matchesAny(l.exempt, name)
+}
+
+func matchesAny(patterns []string, name string) bool {
+	for _, pattern := range patterns {
 		if ok, _ := filepath.Match(pattern, name); ok {
 			return true
 		}

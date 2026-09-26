@@ -87,3 +87,27 @@ func TestUpdateLock(t *testing.T) {
 	assert.Equal(t, second, got)
 	assert.NoFileExists(t, filepath.Join(root, LockFile+".flock"), "the flock never sits beside the committed lock")
 }
+
+// A lock that pins nothing is never written, and an update that unpins the last spell
+// removes the file rather than leaving a header and a version behind.
+func TestUpdateLockWritesNoEmptyLock(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	lockPath := filepath.Join(root, LockFile)
+	empty := func(Lock) (Lock, error) { return Lock{Version: lockVersion}, nil }
+
+	require.NoError(t, UpdateLock(t.Context(), root, empty))
+	assert.NoFileExists(t, lockPath, "no remote spell, no lock")
+
+	pinned := Lock{Version: lockVersion, Spells: map[string]LockEntry{
+		"ghcr.io/team/lint": {Tag: "v1", Digest: digest.FromBytes([]byte("one"))},
+	}}
+	require.NoError(t, UpdateLock(t.Context(), root, func(Lock) (Lock, error) { return pinned, nil }))
+	require.FileExists(t, lockPath)
+
+	require.NoError(t, UpdateLock(t.Context(), root, empty))
+	assert.NoFileExists(t, lockPath, "unpinning the last spell removes the lock")
+	got, err := ReadLock(root)
+	require.NoError(t, err)
+	assert.Equal(t, Lock{Version: lockVersion}, got)
+}

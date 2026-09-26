@@ -52,6 +52,23 @@ With `unpaired` on, two things still pair a test file that has no `X.go`:
   does the marker below the package clause. It excuses a missing pair only: a
   marked file that narrows a source name is still reported.
 
+### Stricter layouts
+
+Three more options tighten `unpaired` for a tree that wants every test file
+paired, each off by default:
+
+- `ignore-marker`: the marker stops excusing a file. The few files with no single
+  home go in `allow` instead, so every exception sits in the config.
+- `pair-benchmarks`: the benchmark names in the table below lose their exemption.
+  `resolver_bench_test.go` narrows `resolver.go` like any other test file, and a
+  benchmark file that narrows nothing is still reported, since it measures some
+  file whose `_test.go` should hold it.
+- `no-unix-suffix`: any Go file named `X_unix.go` or `X_unix_test.go` is
+  reported. The toolchain reads `unix` from a `//go:build` line but never from a
+  file name, so the name only suggests what the tag decides. Name the platforms
+  instead: `X_linux.go`, `X_darwin.go`, `X_other.go`, and `X.go` for the shared
+  part.
+
 ## Where the conventions come from
 
 No published Go style guide states a test-file naming rule. Go by Example says the
@@ -74,8 +91,9 @@ from counting it rather than from taste. Counts are occurrences in `$GOROOT/src`
 | `all_test.go`                                             | 5    | package-wide suite                              |
 | `internal_test.go`, `*_internal_test.go`, `*_pkg_test.go` | 6    | white-box companion to an external test package |
 
-Trailing GOOS and GOARCH segments are also exempt, plus `unix`, so
-`rawconn_unix_test.go` still pairs with `rawconn.go`. Without that the standard
+Trailing GOOS and GOARCH segments are also exempt, plus `unix` (unless
+`no-unix-suffix` reports it), so `rawconn_unix_test.go` still pairs with
+`rawconn.go`. Without that the standard
 library reports 51 files instead of 16, and every one of the difference is a
 platform variant.
 
@@ -108,6 +126,10 @@ linters:
           # table above for what this costs, and "Opting into unpaired" for the
           # two ways a test file still pairs.
           unpaired: false
+          # See "Stricter layouts".
+          ignore-marker: false
+          pair-benchmarks: false
+          no-unix-suffix: false
 ```
 
 ## Building the binary
