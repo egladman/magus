@@ -316,6 +316,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **A run that may write the remote tier backfills it.** A local hit whose key the remote
   tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
   contract gains that optional function.
+- **Signed Go toolchain bundles.** `magus config cache export --toolchain go --remote`
+  signs `GOCACHE` and `GOMODCACHE` into the remote tier; `import --toolchain go
+  --remote` restores the newest bundle that verifies against the trust set, so a
+  magus miss recompiles only what changed. An unverified bundle is refused.
 - **A spawn rule sees its continue target's facts and the job store.** `target` carries
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
@@ -511,6 +515,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   count. magus reads no environment variable to guess it runs in CI, so the same command
   behaves the same everywhere, and `concurrency_profile` stays `balanced`
   (`min(cores, 8)`) unless something asks otherwise.
+- **Go-source conventions run in `magus run lint`.** Ten tree-walking tests in
+  `conventions_test.go` became golangci-lint analyzers in `libs/conventions`
+  (`hostagnostic`, `hostvocab`, `ruletext`, `asciistrings`, `importceiling`,
+  `stutter`, `nameoutput`, `testisolation`) plus a `depguard` rule for `types`.
+  They report at the offending line and take `//nolint:<name>`.
 - **The guard denies every channel a bound lease could use to rewrite its row** (`magus
   job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
 - **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
@@ -570,6 +579,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   id no longer reads as unbound: the guard denies with the path, the CLI commands that
   resolve a lease fail, and `magus job exec --vacate` clears it. The guard lets that
   command and help through, so an agent can recover.
+- **Repository file conventions run as `lint-files`.** The checks on lockfiles, workflows,
+  magusfiles, hook configs, skill declarations and the landing rotator moved out of a Go
+  test into `cmd/magus-filelint`, which the root `lint` target runs. Each finding names
+  the file, the line, and the fix.
 - **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
   `--log-format`. It withheld per-target results with no stream to carry them; `-o jsonl`
   is the one way to select it.
@@ -867,6 +880,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **Guard advisories no longer fire on paths outside the workspace.** A command whose every
   path lies outside the root, or a write into a scratch directory, is advised nothing, and
   scripted-rewrite no longer refuses a script whose every named path is outside it.
+- **The guard lets a tool's help through.** `go clean --help`, `gofmt -h` and
+  `magus run --help | grep charm` pass the rules that route work through magus. A help
+  flag handed to a program, as in `go run main.go --help`, is still work, and the
+  credential and destructive-command rules still refuse.
 - **Imported cache files are 0644, and a running target's crash record survives the same
   target running twice at once.** Stale inflight temp files and staging directories are
   collected.
@@ -928,6 +945,14 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   from an organization's installations where an owner's token lists them; elsewhere it
   names the app's settings page and prints the rerun with `--app <slug>:<id>`. The printed
   key step reads no stdin and deletes the download even when storing fails.
+- **The merge queue's gate replays main's cache.** It ran `ci` while main's shards
+  stored entries under `ci:gha`, and charms key every step, so an unchanged base
+  missed every entry. The gate now runs `ci:gha`, and a test holds its keys equal to
+  the shards'.
+- **A queue hook's sandbox carries the base's target grants.** It already took the grants
+  of every spell the base resolved; it now adds each target's own `sandbox` declaration.
+  The gate stacks a target's sandbox on the hook's, so a grant the hook lacked, like this
+  repo's test target reading `/proc`, was unusable.
 - **The merge queue no longer asks the remote for blobs its own merges wrote.** In a
   partial clone, git fetched them as missing and the remote refused, failing the
   candidate as a machine error. `queue validate` and `queue apply` now refuse a partial
