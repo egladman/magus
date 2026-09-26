@@ -117,6 +117,7 @@ var commandsWithoutOutput = map[string]bool{
 	"queue ls":                 true,
 	"queue plan":               true,
 	"queue validate":           true,
+	"queue gate":               true,
 	"server prune-preserved":   true,
 	"server reload":            true,
 	"server rotate-activities": true,

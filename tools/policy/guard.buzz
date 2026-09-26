@@ -26,6 +26,8 @@
 //     read (init, server start, config set, agent install, agent harness apply/install/remove)
 //     run by a ./magus stale-binary judges stale, or, for state outside the checkout, by one
 //     whose stamped commit is not on the base branch.
+//   spawn-without-job-row (deny, spawn): a spawn whose `<parent>/<role> <job>` title names no
+//     live job row the spawner may hand out; an unreadable job store advises instead.
 //   change-role-spawn-not-isolated (deny, spawn): a code-changing worker sharing a checkout.
 //   changelog-unreleased-edit (deny, write): a hand edit adding to CHANGELOG.md's
 //     [Unreleased] section, once changes/unreleased/ exists.
@@ -79,9 +81,34 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
 }
 
-// judgeSpawn is the spawn rule the root magusfile registers.
+// judgeSpawn is the spawn rule the root magusfile registers. magus\job.list answers from the
+// rows the guard pinned for this hook call, and throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
-    return spawn\decideSpawn(req.kind, title: req.description, isolated: req.isolated);
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    final facts = spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease };
+    var rows: [helpers\JobRow]? = null;
+    var unreadable = "";
+    try {
+        final read = mut [<helpers\JobRow>];
+        foreach (row in magus\job.list().jobs) {
+            read.append(helpers\JobRow{ id = row.id, parent = row.parent, state = row.state });
+        }
+        rows = read;
+    } catch (e) {
+        unreadable = errorText(e);
+    }
+    return spawn\decideSpawn(facts, rows: rows, unreadable: unreadable);
+}
+
+// errorText is a caught host error's message: a magus\* call throws a map, not a str.
+fun errorText(e: any) > str {
+    if (e is {str: str}) {
+        return (e as? {str: str})!["message"] ?? "{e}";
+    }
+    return "{e}";
 }
 
 // judgeWrite is the write rule the root magusfile registers. The two facts it reads from

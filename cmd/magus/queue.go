@@ -50,7 +50,7 @@ func queueCmd(ctx context.Context, root string, args []string) error {
 func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		queueUsage(stderr)
-		return usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, or apply)")
+		return usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, gate, or apply)")
 	}
 	dir := root
 	if dir == "" {
@@ -71,13 +71,15 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 		verb = queuePlan
 	case "validate":
 		verb = queueValidate
+	case "gate":
+		verb = queueGate
 	case "apply":
 		verb = queueApply
 	case "-h", "--help", "help":
 		queueUsage(stdout)
 		return nil
 	default:
-		return usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, or apply)", args[0])
+		return usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, gate, or apply)", args[0])
 	}
 	err = verb(ctx, e, args[1:])
 	var misuse errUsage
@@ -95,6 +97,7 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "  ls        ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document")
 	fmt.Fprintln(w, "  plan      check approval, find stacks, drop what conflicts with the base, partition by affected set")
 	fmt.Fprintln(w, "  validate  build and gate a candidate per change, writing each verdict as it is decided (read access only)")
+	fmt.Fprintln(w, "  gate      run a command in a checkout of HEAD boxed and sandboxed as validate runs --gate")
 	fmt.Fprintln(w, "  apply     rebuild and merge the green verdicts <source> holds (holds the write credential; runs no change's code)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The checkout is the one at the global --root, and relative paths resolve against it.")
@@ -161,8 +164,8 @@ func (e *queueEnv) path(p string) string {
 }
 
 // queueParse parses one verb's flags, bound by bind, and exactly the operands named,
-// returning them in order. Its usage lists the verb's own flags; magus's global flags
-// apply as everywhere.
+// returning them in order; a last operand named "<name>..." takes every one left. Its
+// usage lists the verb's own flags; magus's global flags apply as everywhere.
 func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func(*flag.FlagSet) F, operands ...string) (F, []string, *flag.FlagSet, error) {
 	var (
 		flags F
@@ -188,8 +191,9 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 	if err != nil {
 		return flags, nil, nil, err
 	}
+	variadic := len(operands) > 0 && strings.HasSuffix(operands[len(operands)-1], "...")
 	switch {
-	case len(got) > len(operands):
+	case len(got) > len(operands) && !variadic:
 		return flags, nil, nil, usagef("magus queue %s: unexpected argument %q", verb, got[len(operands)])
 	case len(got) < len(operands):
 		return flags, nil, nil, usagef("magus queue %s: missing <%s>", verb, operands[len(got)])
@@ -569,6 +573,51 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 		"MAGUS_CACHE_REMOTE_INSECURE=false",
 		"MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
 	), nil
+}
+
+// queueGate runs its command in a candidate box of HEAD through queue.GateCommit, the
+// path validate's gate takes, with the sandbox and grants validate would give it, read
+// by the same openFacts.
+func queueGate(ctx context.Context, e *queueEnv, args []string) error {
+	f, operands, _, err := queueParse(e, "gate", "magus queue gate [flags] -- <command> [args...]", args, gen.BindQueueGate, "command...")
+	if err != nil {
+		return err
+	}
+	var names []string
+	if f.Env != "" {
+		names = strings.Split(f.Env, ",")
+	}
+	drv, _, err := e.open(ctx, f.Remote, f.VCS)
+	if err != nil {
+		return err
+	}
+	head, err := drv.FindCommit(ctx, e.dir, "HEAD")
+	if err != nil {
+		return err
+	}
+	_, grants, closeFacts, err := e.openFacts(ctx, "gate", false, "", "ci")
+	if err != nil {
+		return err
+	}
+	// Closed before the gate runs: the gate's magus may share this workspace's cache.
+	if err := closeFacts(); err != nil {
+		return err
+	}
+	env, err := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}.Pass(names)
+	if err != nil {
+		return usagef("magus queue gate: --env: %v", err)
+	}
+	scratch, cleanup, err := queueScratch("mergequeue-")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	err = queue.GateCommit(ctx, drv, e.dir, scratch, head.ID, operands, env, e.stdout, e.stderr)
+	if why, code, ok := queue.HookFailed(err); ok {
+		fmt.Fprintf(e.stderr, "magus queue gate: the gate on %s %s\n", head.Short, why)
+		return magustypes.ExitError{Code: code}
+	}
+	return err
 }
 
 // queuePlanSource is a verdict source that also carries the plan its verdicts answer to.
