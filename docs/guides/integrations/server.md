@@ -138,6 +138,29 @@ keeps it alive, and the broker binds `broker.sock` itself. The agent pins `TMPDI
 `XDG_RUNTIME_DIR` to the values `magus broker units` saw, because the socket's path is
 derived from them and launchd starts agents with an environment of its own.
 
+Both units fit the drain the broker runs on its first `SIGTERM`:
+
+| Concern               | systemd service                      | launchd agent                                          |
+| --------------------- | ------------------------------------ | ------------------------------------------------------ |
+| how long the drain is | `--shutdown-grace` on `ExecStart`    | `--shutdown-grace` in `ProgramArguments`               |
+| wait before `SIGKILL` | `TimeoutStopSec`: the grace plus 60s | `ExitTimeOut`: the grace plus 60s                      |
+| who gets `SIGTERM`    | `KillMode=mixed`: the broker alone   | the broker                                             |
+| `SIGHUP`, log reopen  | `ExecReload=kill -HUP $MAINPID`      | `launchctl kill SIGHUP gui/$(id -u)/magus.broker`      |
+| where the log goes    | stderr, into the journal             | `--log`, with `StandardErrorPath` naming the same file |
+
+The grace is the `shutdown_grace` that `magus broker units` resolved, pinned on the
+command line so the broker drains for exactly as long as its supervisor waits; to change
+it, print the units again. The 60 seconds past it cover the broker stopping the services
+it hosts, which it does only once the drain ends. That is also why systemd's `SIGTERM`
+goes to the broker alone: those services share its cgroup, and the runs it is draining
+still use them. systemd's own stop timeout defaults to 90 seconds, far short of the
+5-minute default grace.
+
+Under systemd the journal keeps the log, so `systemctl --user reload magus-broker` only
+matters once you add `--log` to `ExecStart`. The launchd broker writes its log itself so
+that a rotator's `SIGHUP` reopens it; `StandardErrorPath` catches anything printed before
+it opens the file.
+
 ## The server
 
 The server is what a person asks for. It serves MCP and the console, the APIs behind
