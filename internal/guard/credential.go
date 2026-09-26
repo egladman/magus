@@ -149,25 +149,6 @@ func namesTokenState(location location, candidate string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// lineWords renders every word of a shell line: each command's arguments, each redirect's
-// target, heredoc bodies, and the words inside command substitutions. A token file is refused
-// whether it is read, written, copied or merely named, so the question is not which command
-// takes it but whether any word does.
-func lineWords(command string, d Dialect) []string {
-	f, err := parseFile(command, d)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	syntax.Walk(f, func(n syntax.Node) bool {
-		if w, ok := n.(*syntax.Word); ok {
-			out = append(out, literalWord(w.Parts))
-		}
-		return true
-	})
-	return out
-}
-
 // tokenStateDenial is the one text both surfaces refuse with.
 func tokenStateDenial(what string) string {
 	return "magus guard denied access to " + what + ", which holds magus's token secrets: the operator token or the token store.\n\n" +
@@ -187,17 +168,91 @@ func denyTokenStatePath(location location, filePath string) string {
 
 // denyTokenStateCommand is the command surface: the reason a shell line names the token
 // state, or "". An unparsable line is matched as text.
+//
+// Every word counts: each command's arguments, each redirect's target, heredoc bodies, and
+// the words inside command substitutions. A token file is refused whether it is read,
+// written, copied or merely named, so the question is not which command takes it but
+// whether any word does. A name passed to a metadata lister (tokenStateListers) is not a read: the listing shows
+// the state dir's file names, `mcp_token` and `tokens.d/<name>.json`, and a token's name
+// is what `magus config mcp connector ls` already prints. The secret is inside the file.
+// The exemption holds only while the names stay names: a listing inside a substitution,
+// or piped into anything but a text filter, can hand a file to a reader (`ls ... | xargs
+// cat`), so it is refused like any other mention.
 func denyTokenStateCommand(location location, command string, d Dialect) string {
-	words := lineWords(command, d)
-	if words == nil {
-		words = []string{command}
+	f, err := parseFile(command, d)
+	if err != nil {
+		if namesTokenState(location, command) {
+			return tokenStateDenial(command)
+		}
+		return ""
 	}
-	for _, w := range words {
-		if namesTokenState(location, w) {
-			return tokenStateDenial(w)
+	listed := map[*syntax.Word]bool{}
+	reason := ""
+	var stack []syntax.Node
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+			return true
+		}
+		stack = append(stack, n)
+		if reason != "" {
+			return true
+		}
+		if call, ok := n.(*syntax.CallExpr); ok && len(call.Args) > 1 &&
+			tokenStateListers[filepath.Base(literalWord(call.Args[0].Parts))] && namesStayNames(stack, d) {
+			for _, arg := range call.Args[1:] {
+				listed[arg] = true
+			}
+		}
+		if w, ok := n.(*syntax.Word); ok && !listed[w] {
+			if text := literalWord(w.Parts); namesTokenState(location, text) {
+				reason = tokenStateDenial(text)
+			}
+		}
+		return true
+	})
+	return reason
+}
+
+// tokenStateListers print a file's name and metadata and never its content.
+var tokenStateListers = map[string]bool{"ls": true, "du": true, "stat": true, "test": true, "[": true}
+
+// namesStayNames reports that the output of the innermost node of stack reaches only the
+// console or text filters: no enclosing substitution, and every pipe it feeds is filters.
+func namesStayNames(stack []syntax.Node, d Dialect) bool {
+	for i := len(stack) - 2; i >= 0; i-- {
+		switch n := stack[i].(type) {
+		case *syntax.CmdSubst, *syntax.ProcSubst:
+			return false
+		case *syntax.BinaryCmd:
+			if (n.Op == syntax.Pipe || n.Op == syntax.PipeAll) && stack[i+1] == syntax.Node(n.X) &&
+				!onlyTextFilters(n.Y, d) {
+				return false
+			}
 		}
 	}
-	return ""
+	return true
+}
+
+// onlyTextFilters reports a statement every command of which is a name filter. awk and sed
+// are left out: each can run a command or read a file its input names.
+func onlyTextFilters(s *syntax.Stmt, d Dialect) bool {
+	only := true
+	syntax.Walk(s, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok && only {
+			for _, c := range peelWrappers(literalWords(call.Args), d) {
+				only = only && nameFilters[filepath.Base(c.Name)]
+			}
+		}
+		return only
+	})
+	return only
+}
+
+// nameFilters trim or count lines of text and never open a file their input names.
+var nameFilters = map[string]bool{
+	"grep": true, "egrep": true, "fgrep": true, "head": true, "tail": true,
+	"wc": true, "sort": true, "uniq": true, "cut": true, "column": true,
 }
 
 // rankTokenState outranks every other verdict on the line, as the cache-dir rule does: no
