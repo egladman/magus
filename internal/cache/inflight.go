@@ -54,6 +54,60 @@ type inflightTarget struct {
 
 const inflightPrefix = "inflight-"
 
+// RunningTarget is one target executing in this process.
+type RunningTarget struct {
+	Project string // repo-relative project directory, "." for the root
+	Target  string
+	Started time.Time
+}
+
+// InFlight returns the targets this process is executing right now, across every Cache
+// it opened, sorted by project then target; nil when none. A cache replay counts while
+// it holds its seat. It is what a stop would discard, so a Ctrl+C handler asks it before
+// deciding whether a press needs confirming. That handler starts before any workspace
+// loads and cannot reach a Cache, hence process scope. Safe for concurrent use.
+func InFlight() []RunningTarget {
+	executing.mu.Lock()
+	defer executing.mu.Unlock()
+	if len(executing.targets) == 0 {
+		return nil
+	}
+	out := make([]RunningTarget, 0, len(executing.targets))
+	for _, t := range executing.targets {
+		out = append(out, t)
+	}
+	slices.SortFunc(out, func(a, b RunningTarget) int {
+		if a.Project != b.Project {
+			return strings.Compare(a.Project, b.Project)
+		}
+		return strings.Compare(a.Target, b.Target)
+	})
+	return out
+}
+
+// executing backs [InFlight].
+var executing = processInflight{targets: map[uint64]RunningTarget{}}
+
+type processInflight struct {
+	mu      sync.Mutex
+	next    uint64
+	targets map[uint64]RunningTarget
+}
+
+// add records t and returns the function that clears that record alone.
+func (p *processInflight) add(t RunningTarget) func() {
+	p.mu.Lock()
+	p.next++
+	key := p.next
+	p.targets[key] = t
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		delete(p.targets, key)
+		p.mu.Unlock()
+	}
+}
+
 // newInflight returns a tracker writing under dir, or nil when dir is empty. A nil
 // tracker is usable: every method is nil-safe, so a cache with nowhere to write records
 // nothing rather than making each call site check.
@@ -77,17 +131,21 @@ func (i *inflight) start(project, target string) func() {
 	}
 	host, _ := os.Hostname()
 
+	started := time.Now()
+
 	i.mu.Lock()
 	i.next++
 	key := i.next
 	i.running[key] = inflightTarget{
 		Project: project, Target: target,
-		Pid: os.Getpid(), Host: host, Started: time.Now(),
+		Pid: os.Getpid(), Host: host, Started: started,
 	}
 	i.flushLocked()
 	i.mu.Unlock()
+	clearProcess := executing.add(RunningTarget{Project: project, Target: target, Started: started})
 
 	return func() {
+		clearProcess()
 		i.mu.Lock()
 		delete(i.running, key)
 		i.flushLocked()
@@ -139,9 +197,8 @@ func (i *inflight) flushLocked() {
 	}
 }
 
-// Running reports what this process currently has in flight, for a test and for any
-// future caller that wants to say what a cancellation is abandoning. Nothing in the run
-// path reads it today.
+// Running reports what this tracker currently has in flight. [InFlight] is the
+// process-wide view a cancellation reads.
 func (i *inflight) Running() []inflightTarget {
 	if i == nil {
 		return nil
