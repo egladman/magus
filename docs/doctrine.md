@@ -180,6 +180,52 @@ key, no drift comparison, and no diagnostic. Its uncertainties - no ledger, no
 live lease, a file that will not parse - fail open with at most an
 advisory.
 
+### Friction that carries meaning
+
+A tool made perfectly smooth stops telling you what it did. Every act collapses
+into the same keystroke, and a pull, a push, a delete and a cache hit read
+alike. magus keeps resistance where the resistance is the information, after
+[Designing Friction](https://designingfriction.com/) by Luna Maurer and Roel
+Wouters, with Alexandra Barancova. Their five moves map onto this tool as
+follows.
+
+- **Discomfort.** Output states the uncomfortable fact rather than a
+  reassuring one. A lookup the index cannot vouch for answers "unknown, not
+  absent" (`cmd/magus/stale_index.go`). A target past its ceiling fails with
+  [MGS3011](reference/codes/sandbox/MGS3011.md) and is never a skip. A
+  setting magus cannot honor fails the command, as
+  [Misconfiguration is an error](#misconfiguration-is-an-error-never-a-warning)
+  requires.
+- **Time delay.** A pause sits in front of an act that cannot be taken back,
+  never inside the loop that verifies. The first Ctrl+C only arms a
+  three-second window (`confirmWindow`, `cmd/magus/interrupt.go`). The
+  `push-ungated` guard rule stops a push at a commit no green gate has run
+  on.
+- **Engage the body.** The verb names the physical act, and the person does it
+  with their own hands. Registry transfers are `graph pull` and `spell pull`,
+  never a side effect of another verb. The acts in
+  [Manual on purpose](#manual-on-purpose) stay a person's keystroke.
+- **Non-positive.** magus publishes what it refused to build and why, in
+  [A record of refusals](#a-record-of-refusals), and a budget it cannot fit is
+  refused at once ([MGS3009](reference/codes/sandbox/MGS3009.md)) rather than
+  queued behind a spinner.
+- **Unpredictable self.** A refusal hands back the command to run, so the
+  person decides the next move instead of following a default the tool picked
+  for them ([A refusal carries its reason](#a-refusal-carries-its-reason)).
+
+The test for any new resistance is whether it carries information. The
+`push-ungated` catalog entry names the failure it replaced: an advisory that
+fired on every push having read nothing was "a toll rather than a reminder".
+Friction that tells the fast caller and the careless caller the same sentence
+is a toll, and a toll is removed. This principle never slows
+[the loop that verifies](#optimize-the-loop-that-verifies-never-the-loop-that-generates):
+a cache hit stays instant, and the pause belongs to the act that leaves the
+machine.
+
+The mechanisms are the ones named above. The debt is the rest of the surface:
+the console and the Go SDK have not been read against this entry, and until
+they are, their smoothness is unexamined rather than chosen.
+
 ### Worth cloning
 
 Assume magus can be reproduced. A model given the binary can recover the
