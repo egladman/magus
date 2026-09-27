@@ -73,6 +73,26 @@ func TestCatalogCatchesReadAsOneLine(t *testing.T) {
 	}
 }
 
+// TestCatalogRowsDescribeTheirOwnRule pins that no two rows share Catches or Why text: a row
+// pasted from its neighbor documents the wrong rule under the right name.
+func TestCatalogRowsDescribeTheirOwnRule(t *testing.T) {
+	t.Parallel()
+	catches, why := map[string]string{}, map[string]string{}
+	for _, r := range Rules() {
+		if prior, ok := catches[r.Catches]; ok {
+			t.Errorf("%q and %q share Catches %q", prior, r.Name, r.Catches)
+		}
+		catches[r.Catches] = r.Name
+		if r.Why == "" {
+			continue
+		}
+		if prior, ok := why[r.Why]; ok {
+			t.Errorf("%q and %q share Why text", prior, r.Name)
+		}
+		why[r.Why] = r.Name
+	}
+}
+
 // TestRuleLookupIsExact pins that a near-miss reports absent. Resolving one would hand a
 // reader a different rule's terms under the name they asked about.
 func TestRuleLookupIsExact(t *testing.T) {
