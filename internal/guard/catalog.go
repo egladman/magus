@@ -266,6 +266,13 @@ var advisoryDocs = []RuleDoc{
 			"It ADVISES rather than refuses: measured 2026-09-26, about three in four denies were a search the reader needed, and the refused agent then read the whole file into context. " +
 			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(denyRuleReadNavigation), Decision: "deny",
+		Catches: "a whole read of a mapped Go or Markdown file over 120 lines",
+		Why: "The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. " +
+			"120 lines is the p90 of a bounded read; measured 2026-09-26 over 66,548 Bash reads, 3.6% of whole reads were followed by an edit of that file. " +
+			"Silent on a short file, Buzz (no symbol index), a generated output, a path outside the workspace, a stale index, a heading count the graph disagrees with, and a read feeding a pipe or redirect."},
+	{Name: string(advisoryReadSymbol), Decision: "advise",
+		Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked"},
 	{Name: string(advisoryChainedRun), Decision: "advise",
 		Catches: "several magus runs chained on one line, where the dependency graph would have run them",
 		Why: "Targets compose through ctx.needs, so the last one usually pulls the rest in order and each extra invocation reloads the workspace. " +
@@ -363,7 +370,7 @@ var advisoryKinds = []hint.MarkerKind{
 // these have one.
 var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
-	advisoryChainedRun,
+	advisoryChainedRun, advisoryReadSymbol,
 }
 
 // advisoryNames is every advisory's name, held or not: the set the catalog must cover.

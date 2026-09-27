@@ -103,6 +103,7 @@ const (
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
+	denyRuleReadNavigation    denyRuleName = "read-navigation"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
@@ -1949,6 +1950,11 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	if pipedRead.ok {
 		return ShellVerdict{Context: graphPipeAdvice(pipedRead), Kind: advisoryGraphPipe, Brief: graphPipeBrief}
+	}
+	if parsed {
+		if v, ok := readVerdict(deps, command, d); ok {
+			return v
+		}
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):

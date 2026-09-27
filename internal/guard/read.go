@@ -30,11 +30,6 @@ import (
 // a heading count the graph disagrees with, and a read whose output feeds a pipe, a
 // redirect or a substitution rather than the reader.
 
-const (
-	denyRuleReadNavigation denyRuleName = "read-navigation"
-	advisoryReadSymbol     denyRuleName = "read-symbol"
-)
-
 // wholeReadLines is the p90 length of a bounded read.
 const wholeReadLines = 120
 

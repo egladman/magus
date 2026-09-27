@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 )
@@ -131,9 +132,9 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 		answer  []string
 	}{
 		{`cat internal/store/store.go`, []string{
-			"`" + "./magus explain file:internal/store/store.go` maps this file",
+			"`" + hint.Explain.With("file:internal/store/store.go") + "` maps this file",
 			"130 lines, 3 declarations",
-			"./magus refs <name> --definition --source",
+			hint.Refs.With("<name>", "--definition", "--source"),
 			"What the file holds (3 declarations):\n  3-5: Store\n  6-31: Open\n  32-130: Close",
 		}},
 		{`cat -n internal/store/store.go`, nil},
@@ -245,6 +246,6 @@ func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 		assert.Equal(t, denyRule{Name: advisoryReadSymbol, Arg: tt.name}, v.Rule, tt.command)
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Contains(t, v.Context, tt.lines, tt.command)
-		assert.Contains(t, v.Context, "./magus refs "+tt.name+" --definition --source", tt.command)
+		assert.Contains(t, v.Context, hint.Refs.With(tt.name, "--definition", "--source"), tt.command)
 	}
 }
