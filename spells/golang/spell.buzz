@@ -238,8 +238,12 @@ fun golangCILint(target: Target) > Command {
 // `./...` is a default, not a fixed arg: a magusfile that passes args replaces it,
 // so one package's tests need not compile every test binary in the module. A bare
 // go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree.
+//
+// -trimpath matches go-build's: without it, a compiled test binary's build ID
+// bakes in this worktree's absolute path, so the cache can never hit from another
+// worktree at the same content.
 fun goTest(target: Target) > Command {
-    return Command{bin = "go", args = ["test"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
+    return Command{bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
@@ -268,7 +272,8 @@ fun goModEdit(target: Target) > Command {
 fun goModJSON(target: Target) > Command {
     return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true};
 }
-fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."], envKeys = GO_PLATFORM_ENV}; }
+// -trimpath: see go-test above; keeps vet's cache key worktree-independent too.
+fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath", "./..."], envKeys = GO_PLATFORM_ENV}; }
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
