@@ -157,3 +157,25 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
 // apart from "given as empty".
 func strPtr(s string) *string { return &s }
+
+// TestRefuseUnorderedFileShareTransitiveDependsOn pins that depends_on orders a pair even
+// through an intermediate row (C3): B depends on M, M depends on A, so B and A are ordered
+// though neither names the other directly.
+func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"magusfile.buzz": "target a {}\n"}
+	bRoot := gitRepo(t, files)
+	aRoot := gitRepo(t, files)
+	aRev := commitRepo(t, aRoot)
+
+	loc := tmpLoc(t, bRoot)
+	s := NewStore(loc)
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
+	seed(t, s, types.Job{ID: "M", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot, DependsOn: []string{"A"}})
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	candidate := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"M"}}
+	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", candidate))
+}

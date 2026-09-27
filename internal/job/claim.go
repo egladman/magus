@@ -180,7 +180,8 @@ func literalClaimableFile(root, entry string) (string, bool) {
 
 // orderedPair reports whether id and other are already sequenced: one an ancestor or
 // descendant of the other by parent chain, walked over combined (which must carry id even
-// when it is not declared yet), or one names the other directly in depends_on.
+// when it is not declared yet), or one reaches the other through depends_on, any number of
+// hops.
 func orderedPair(combined []types.Job, id, other string) bool {
 	if slices.ContainsFunc(types.JobAncestors(combined, id), func(r types.Job) bool { return r.ID == other }) {
 		return true
@@ -188,11 +189,31 @@ func orderedPair(combined []types.Job, id, other string) bool {
 	if slices.ContainsFunc(types.JobAncestors(combined, other), func(r types.Job) bool { return r.ID == id }) {
 		return true
 	}
-	dependsOn := func(from, on string) bool {
-		i := slices.IndexFunc(combined, func(r types.Job) bool { return r.ID == from })
-		return i >= 0 && slices.Contains(combined[i].DependsOn, on)
+	return dependsOnTransitively(combined, id, other) || dependsOnTransitively(combined, other, id)
+}
+
+// dependsOnTransitively reports whether from reaches on by following depends_on edges over
+// combined. seen guards a depends_on cycle from looping forever.
+func dependsOnTransitively(combined []types.Job, from, on string) bool {
+	seen := map[string]bool{from: true}
+	queue := []string{from}
+	for len(queue) > 0 {
+		i := slices.IndexFunc(combined, func(r types.Job) bool { return r.ID == queue[0] })
+		queue = queue[1:]
+		if i < 0 {
+			continue
+		}
+		for _, dep := range combined[i].DependsOn {
+			if dep == on {
+				return true
+			}
+			if !seen[dep] {
+				seen[dep] = true
+				queue = append(queue, dep)
+			}
+		}
 	}
-	return dependsOn(id, other) || dependsOn(other, id)
+	return false
 }
 
 // touchedInFile is what holder has changed inside file so far, restricted to file, for the
