@@ -34,8 +34,9 @@
 //     its branch takes: the conventional subject tools/commits.buzz defines on the base
 //     branch, one lowercase imperative line anywhere else.
 //   pull-request-text (deny): a `gh pr create|edit` title or description that names a
-//     person, credits a tool, narrates its session, runs long, or has a title the pr-title
-//     check would fail.
+//     person, credits a tool, narrates its session, runs past the word budget its diff
+//     earns, has no lead paragraph or has a heading, or has a title the pr-title check
+//     would fail. Prose outside the lead-and-bullets shape is advised once per pull request.
 //   changelog-unreleased-edit (deny, write): a hand edit adding to CHANGELOG.md's
 //     [Unreleased] section, once changes/unreleased/ exists.
 //   code-comments (advise once per session, write): a write that adds code comments.
@@ -96,7 +97,8 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     };
     final texts = withHeredocs(programs, line: req.command);
     final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
-        baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir), once: once);
+        baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
+        diff: pullRequests\branchDiff(req.workspace), once: once);
     if (verdict.decision != "allow" or stale\rebuilds(programs)) {
         return verdict;
     }
@@ -199,9 +201,10 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 
 // decide is judge over plain records. The order is the verdict: the gate and push denials
 // first, then the gh denials, then the commit and pull request text denials, then the gh
-// advisories. baseBranch is the checkout's branch when it is the base branch, "" otherwise;
-// line is the shell line as sent and files the description files it names.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, once: fun (key: str) > bool) > GuardVerdict {
+// advisories, then the pull request text advisories. baseBranch is the checkout's branch
+// when it is the base branch, "" otherwise; line is the shell line as sent, files the
+// description files it names, and diff reads the branch's diff for a description's budget.
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool) > GuardVerdict {
     final verdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
     if (verdict.decision != "allow") {
         return verdict;
@@ -211,14 +214,14 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
         return github;
     }
     final commit = subjects\decideCommit(programs, baseBranch: baseBranch);
-    final pull = pullRequests\decidePullRequest(programs, line: line, files: files);
+    final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, once: once);
     if (commit.decision == "deny" and pull.decision == "deny") {
         return magus\guard.deny(commit.reason + "\n\n" + pull.reason);
     }
     if (commit.decision == "deny") {
         return commit;
     }
-    if (pull.decision == "deny") {
+    if (pull.decision == "deny" or github.decision == "allow") {
         return pull;
     }
     return github;
