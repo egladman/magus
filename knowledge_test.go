@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
+	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -707,4 +708,77 @@ func readShard(t *testing.T, s knowledge.RemoteShards, key string) string {
 	b, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	return string(b)
+}
+
+// extractDepsFixture writes one of internal/deps's txtar fixtures into dir.
+func extractDepsFixture(t *testing.T, name, dir string) {
+	t.Helper()
+	archive, err := txtar.ParseFile(filepath.Join("internal", "deps", "testdata", name))
+	require.NoError(t, err)
+	for _, f := range archive.Files {
+		path := filepath.Join(dir, f.Name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, f.Data, 0o644))
+	}
+}
+
+// TestLoadKnowledgePackagesReadsEveryEcosystem pins the table-driven load: each
+// project's manifest is read with the lockfile resolved for it, joined from the
+// workspace root, and a project whose manifests need a lock they did not get is named
+// once in the log rather than once per manifest.
+func TestLoadKnowledgePackagesReadsEveryEcosystem(t *testing.T) {
+	root := t.TempDir()
+	extractDepsFixture(t, "npm/pnpm.txtar", filepath.Join(root, "web"))
+	extractDepsFixture(t, "python/uv.txtar", filepath.Join(root, "py"))
+	extractDepsFixture(t, "cargo/cargo.txtar", filepath.Join(root, "rs"))
+	bun := filepath.Join(root, "bun")
+	require.NoError(t, os.MkdirAll(bun, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bun, "package.json"), []byte(`{"dependencies": {"left-pad": "^1.3.0"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bun, "bun.lockb"), []byte("\x00bun"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bun, "pyproject.toml"), []byte("[project]\ndependencies = [\"requests\"]\n"), 0o644))
+
+	projects := types.ProjectsOutput{Workspace: root, Projects: []types.ProjectEntry{
+		{Path: "web", Dir: filepath.Join(root, "web"), Manifests: []string{"package.json"}, Lockfiles: []string{"web/pnpm-lock.yaml"}},
+		{Path: "py", Dir: filepath.Join(root, "py"), Manifests: []string{"pyproject.toml"}, Lockfiles: []string{"py/uv.lock"}},
+		{Path: "rs", Dir: filepath.Join(root, "rs"), Manifests: []string{"Cargo.toml"}, Lockfiles: []string{"rs/Cargo.lock"}},
+		{Path: "bun", Dir: bun, Manifests: []string{"package.json", "pyproject.toml"}, Lockfiles: []string{"bun/bun.lockb"}},
+	}}
+	var buf bytes.Buffer
+	got := loadKnowledgePackages(t.Context(), projects, slog.New(slog.NewTextHandler(&buf, nil)))
+
+	pkg := func(manager, name, version string) types.KnowledgePackage {
+		return types.KnowledgePackage{Manager: manager, Name: name, Version: version}
+	}
+	serde := pkg("cargo", "serde", "1.0.217")
+	serde.Replaced = true
+	assert.Equal(t, map[string][]types.KnowledgePackage{
+		"web": {
+			pkg("npm", "@connectrpc/connect", "2.1.2"),
+			pkg("npm", "d3-drag", "3.0.0"),
+			pkg("npm", "highlight.js", "11.11.1"),
+			pkg("npm", "typescript", "5.8.3"),
+		},
+		"py": {
+			pkg("python", "pydantic-core", "2.27.1"),
+			pkg("python", "pytest", "8.3.4"),
+			pkg("python", "pyyaml", "6.0.2"),
+			pkg("python", "requests", "2.32.3"),
+			pkg("python", "ruff", "0.8.4"),
+		},
+		"rs": {
+			pkg("cargo", "cc", "1.2.5"),
+			pkg("cargo", "rand", "0.8.5"),
+			pkg("cargo", "rand", "0.9.0"),
+			pkg("cargo", "regex", "1.11.1"),
+			serde,
+			pkg("cargo", "tempfile", "3.14.0"),
+			pkg("cargo", "winapi", "0.3.9"),
+		},
+	}, got, "the bun project contributes nothing and no key")
+
+	logged := buf.String()
+	assert.Equal(t, 1, strings.Count(logged, "knowledge: a manifest yielded no package versions"), logged)
+	assert.Contains(t, logged, "project=bun")
+	assert.Contains(t, logged, "package.json read, no lockfile it understands (pnpm-lock.yaml, package-lock.json, npm-shrinkwrap.json, yarn.lock); no npm nodes for bun")
+	assert.Contains(t, logged, "pyproject.toml read, no lockfile it understands (uv.lock, poetry.lock, pdm.lock, Pipfile.lock); no python nodes for bun")
 }
