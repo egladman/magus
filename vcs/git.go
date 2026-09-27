@@ -2324,7 +2324,10 @@ const gitWaitDelay = 10 * time.Second
 // GIT_TERMINAL_PROMPT=0 because git and ssh read a credential prompt from /dev/tty, not
 // from stdin, so an auth-required remote would hang a build forever on a prompt nobody
 // sees. GIT_NO_REPLACE_OBJECTS=1 because a refs/replace/ ref would otherwise substitute
-// one commit or tree for another under every read and merge.
+// one commit or tree for another under every read and merge. GIT_OPTIONAL_LOCKS=0
+// because a status otherwise rewrites the index under index.lock as a side effect, and
+// magus reads run beside the person's own git (a guard hook, the daemon, a merge driver
+// git starts while it holds that lock): theirs then dies on "index.lock: File exists".
 //
 // In a checkout CreateCheckout made, the call is isolated whatever o says, carries
 // gitCheckoutPins, and reads the repository through the paths recorded at creation. When
@@ -2341,7 +2344,7 @@ func gitExec(ctx context.Context, dir string, o gitOpts, args ...string) *exec.C
 	}
 	cmd := exec.CommandContext(ctx, "git", append(argv, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(gitEnviron(), "GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1")
+	cmd.Env = append(gitEnviron(), "GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_OPTIONAL_LOCKS=0")
 	if o.Literal {
 		cmd.Env = append(cmd.Env, "GIT_LITERAL_PATHSPECS=1")
 	}
