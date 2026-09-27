@@ -65,6 +65,14 @@ var denyRuleDocs = []RuleDoc{
 			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. " +
 			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules."},
 	{Name: string(denyRuleCacheDirWrite), Decision: "deny", Catches: "a write into this checkout's magus cache dir, which magus alone owns"},
+	{Name: string(denyRuleChainedRun), Decision: "deny",
+		Catches: "magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast",
+		Why: "A pipe of magus runs keeps what the chain was for: stages whose projects overlap run in order, a failed stage stops the ones after it, and the last stage exits with the first failure (MGS3030), so no `set -o pipefail` is needed. " +
+			"It differs from `&&` in one way, which the deny states: a stage on disjoint projects runs alongside the others and finishes even after an upstream stage fails. The pipeline still exits red. " +
+			"The same target chained over several project sets is served the pipe too, which keeps the order the chain chose; the deny names the one call for when order does not matter. Measured 2026-09-27, every such chain was `generate:rw docs` then `generate:rw .`, which one call would reverse. " +
+			"It advises instead, and says why, wherever the pipe would do something else. That covers `||`, a redirect or any other command on the line, and a later `affected` stage, which reads its projects from the diff before the upstream's writes land: `affected generate:rw` stays its own call ahead of `affected ci`. " +
+			"It also covers a later `run` naming no projects, which would inherit the upstream's; a stage that reads stdin, takes no locks, or writes -o output upstream; stages on different binaries or roots; " +
+			"a stage after `go-build` or `build` in magus's own checkout, since every stage starts at once and would run the ./magus being replaced; and Windows, where no pipe proves its upstream."},
 	{Name: string(denyRuleClaimedDeclaration), Decision: "deny",
 		Catches: "a leased edit landing in a declaration another live job claims (`run.go#executeStages`)",
 		Why: "A write path may claim one declaration of a file, so two jobs can start on one file and integrate in order. " +
@@ -281,11 +289,6 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryReadSymbol), Decision: "advise",
 		Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked",
 		Why:     "Silent inside a method: refs resolves bare names, so its command would print every method of that name."},
-	{Name: string(advisoryChainedRun), Decision: "advise",
-		Catches: "several magus runs chained on one line, where the dependency graph would have run them",
-		Why: "Targets compose through ctx.needs, so the last one usually pulls the rest in order and each extra invocation reloads the workspace. " +
-			"It ADVISES rather than refuses because two genuinely independent targets on one line are real work, and only the graph knows which case this is. " +
-			"The exception worth knowing: `affected ci` does not regenerate. Where the gate strips the workspace's default charms, its composed `generate` is a drift gate, so `affected generate:rw` comes first as its own invocation."},
 	{Name: string(advisoryFocus), Decision: "advise", Catches: "a read or write outside the paths the running job declared"},
 	{Name: string(advisoryGateRepeat), Decision: "advise", Catches: "the gate run again soon after it passed, repeating work already done"},
 	{Name: string(advisoryGeneratedWrite), Decision: "advise", Catches: "a hand edit to a declared output, which the next run overwrites"},
@@ -319,10 +322,10 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisorySkillSource), Decision: "advise", Catches: "a write to an installed skill copy rather than to its source"},
 	{Name: string(advisorySourceRead), Decision: "advise", Catches: "an unbounded source read the symbol index has already answered"},
 	{Name: string(advisorySplitRun), Decision: "advise",
-		Catches: "the same target run again on a different project set, on one line or as a separate call",
+		Catches: "the same target run again on a different project set, as a separate call",
 		Why: "`magus run` and `magus affected` take one target and many projects, so the same target run twice on two project sets is usually one call typed as two: `magus run lint . docs` covers what `magus run lint .` and `magus run lint docs` would otherwise cost as two workspace loads. " +
-			"It fires on TWO shapes. On one line (`magus run lint . && magus run lint docs`), it narrows the chained-run text to the combined form; a chain of genuinely different targets stays chained-run's text and domain. Across two separate calls, it compares the session's last magus run/affected invocation against this one: same target, same charms, a different project set, inside a ten-minute window. " +
-			"Charms count as part of the target identity, so `lint` and `lint:rw` are never combined into one call. Held to one firing per session for the cross-call shape; the one-line shape speaks every time, like chained-run beside it."},
+			"It compares the session's last magus run/affected invocation against this one: same target, same charms, a different project set, inside a ten-minute window. The one-line shape (`magus run lint . && magus run lint docs`) is chained-run's, which refuses it and names the combined call. " +
+			"Charms count as part of the target identity, so `lint` and `lint:rw` are never combined into one call. Held to one firing per session."},
 	{Name: string(advisoryStageClassify), Decision: "advise", Catches: "staging without classifying, when generated and source differ"},
 	{Name: string(advisoryUnleasedWrite), Decision: "advise", Catches: "a write magus cannot attribute while a fleet is running"},
 }
@@ -378,7 +381,7 @@ var advisoryKinds = []hint.MarkerKind{
 // these have one.
 var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
-	advisoryChainedRun, advisoryReadSymbol,
+	advisoryReadSymbol,
 }
 
 // advisoryNames is every advisory's name, held or not: the set the catalog must cover.

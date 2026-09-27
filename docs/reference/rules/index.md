@@ -22,6 +22,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [busy-wait](busy-wait.md)                         | a loop that only sleeps between polls, holding a tool slot for its whole wait                     |
 | [buzz-unbriefed](buzz-unbriefed.md)               | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                              |
+| [chained-run](chained-run.md)                     | magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast |
 | [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)           |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                     |
 | [exit-status-echo](exit-status-echo.md)           | a line ending by printing an exit status, which the harness already reports                       |
@@ -56,7 +57,6 @@ name is the entry below. `magus describe rules` prints the same list.
 | Rule                                    | Catches                                                                                        |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [capture-filter](capture-filter.md)     | a filter over a run capture or log, which cuts the failure block apart                         |
-| [chained-run](chained-run.md)           | several magus runs chained on one line, where the dependency graph would have run them         |
 | [checkpoint-state](checkpoint-state.md) | a command reaching for a tree's identity, which a revision alone cannot give                   |
 | [focus](focus.md)                       | a read or write outside the paths the running job declared                                     |
 | [gate-repeat](gate-repeat.md)           | the gate run again soon after it passed, repeating work already done                           |
@@ -79,6 +79,6 @@ name is the entry below. `magus describe rules` prints the same list.
 | [scope-drift](scope-drift.md)           | a write into a project this session has no dependency edge to                                  |
 | [skill-source](skill-source.md)         | a write to an installed skill copy rather than to its source                                   |
 | [source-read](source-read.md)           | an unbounded source read the symbol index has already answered                                 |
-| [split-run](split-run.md)               | the same target run again on a different project set, on one line or as a separate call        |
+| [split-run](split-run.md)               | the same target run again on a different project set, as a separate call                       |
 | [stage-classify](stage-classify.md)     | staging without classifying, when generated and source differ                                  |
 | [unleased-write](unleased-write.md)     | a write magus cannot attribute while a fleet is running                                        |

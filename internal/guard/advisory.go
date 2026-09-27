@@ -31,11 +31,10 @@ const (
 	advisoryLeasedPath hint.MarkerKind = "leased-path"
 	// advisorySplitRun covers two shapes of the same mistake: `magus run` (or `affected`)
 	// takes one target and many projects, so the same target run twice on different
-	// project sets is usually one call typed twice. On ONE line it is a denyRuleName,
-	// like advisoryChainedRun beside it, because a chain worth questioning on sight is
-	// worth questioning every time it is typed again. ACROSS two calls it is held to one
-	// firing per session (see internal/guard/splitrun.go), since the session already
-	// knows and a second reminder of the same standing fact teaches nothing new.
+	// project sets is usually one call typed twice. On ONE line the chained-run deny names
+	// the combined call instead. ACROSS two calls it is held to one firing per session (see
+	// internal/guard/splitrun.go), since the session already knows and a second reminder of
+	// the same standing fact teaches nothing new.
 	advisorySplitRun hint.MarkerKind = "split-run"
 	// advisorySharedCheckout fires on a SPAWN, which is the one moment the choice between
 	// one checkout and two is still free to make.
@@ -73,13 +72,6 @@ const (
 	advisoryPushGate        denyRuleName = "push-gate"
 	advisoryRevertClassify  denyRuleName = "revert-classify"
 	advisoryCheckpointState denyRuleName = "checkpoint-state"
-	// advisoryChainedRun names an advisory that was firing anonymously. Unnamed, it was
-	// outside every count magus keeps, so the rule this repo applies to its own advice
-	// (next.go: uptake is a query, and advice nobody takes gets deleted) could not reach
-	// it. MEASURED 2026-09-20: it fired three times in one session on the same shape and
-	// was ignored all three, which is a fact worth being able to READ rather than
-	// reconstruct from a transcript.
-	advisoryChainedRun denyRuleName = "chained-run"
 	// advisoryReadSymbol is a bounded read inside one declaration; see read.go.
 	advisoryReadSymbol denyRuleName = "read-symbol"
 )

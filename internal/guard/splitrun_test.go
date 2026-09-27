@@ -61,27 +61,20 @@ func TestSplitRunTargetIdentity(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// The ONE-LINE shape: chainedRunRe already flags this line, and a shared target across
-// every invocation on it narrows the text to the combined form. A chain of different
-// targets keeps chained-run's own text, which stays its domain.
+// A one-line chain chained-run only advises on still words the combined form when every
+// stage shares a target; a chain of different targets keeps chained-run's own text.
 func TestSplitRunLineGivesCombinedForm(t *testing.T) {
-	v := Evaluate(testDependencies(), "magus run lint . && magus run lint docs")
+	v := Evaluate(testDependencies(), "magus run lint . || magus run lint docs")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus run lint . docs", "the combined form the reader can run instead")
 	assert.Contains(t, v.Context, "runs both in one invocation")
-	assert.Equal(t, denyRuleName(advisorySplitRun), v.Rule.Name)
 
-	different := Evaluate(testDependencies(), "magus run generate . && magus run lint .")
-	assert.Contains(t, different.Context, "compose through ctx.needs", "different targets stay chained-run's domain")
+	different := Evaluate(testDependencies(), "magus run generate . || magus run lint .")
+	assert.Contains(t, different.Context, "compose through ctx.needs")
 	assert.NotContains(t, different.Context, "runs both in one invocation")
-}
 
-// Charms differing on one line is the same "different target" shape as a differing
-// name: lint and lint:rw are never folded into one combined command.
-func TestSplitRunLineDifferentCharmsStaysChainedRun(t *testing.T) {
-	v := Evaluate(testDependencies(), "magus run lint . && magus run lint:rw docs")
-	assert.Contains(t, v.Context, "compose through ctx.needs")
-	assert.NotContains(t, v.Context, "runs both in one invocation")
+	charms := Evaluate(testDependencies(), "magus run lint . || magus run lint:rw docs")
+	assert.NotContains(t, charms.Context, "runs both in one invocation", "lint and lint:rw are two targets")
 }
 
 // The ACROSS-CALLS shape, exercised through gradeSplitRun directly: no cache dir and no

@@ -2,6 +2,8 @@ package guard
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -1786,36 +1788,140 @@ func TestGuardAllowsReadingTheReport(t *testing.T) {
 	}
 }
 
-// The pattern this caught was mine, run perhaps twenty times in one session: format, then
-// lint, then generate, as separate invocations. `lint` needs `format` needs `generate`, so
-// the last one alone does all three: every earlier call was a workspace reload to redo work
-// the next call redid anyway.
-//
-// An advisory rather than a deny: two independent targets on one line is real work, and only
-// the dependency graph knows which case a given chain is.
-func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
-	chained := []string{
-		"./magus run format . --silent; ./magus run lint . --silent",
-		"magus run generate . && magus run lint .",
-		"./magus run generate . --silent; ./magus run format . --silent; ./magus run lint . --silent",
-		// The gate counts too, and this exact line is how the rule's own author tripped MGS4007
-		// an hour after writing it: console:build left an output behind that the gate then read.
-		"./magus run build console --silent; ./magus affected ci --no-default-charms",
-	}
-	for _, cmd := range chained {
-		v := Evaluate(testDependencies(), cmd)
-		assert.Empty(t, v.Deny, "a chain is questionable, not forbidden: %s", cmd)
-		assert.Contains(t, v.Context, "compose through ctx.needs", cmd)
+// A pipe of magus runs orders overlapping stages and stops at the first failure (MGS3030),
+// so a sequenced chain is refused toward the pipe of the same stages, spelled as typed.
+func TestChainedRunDeniesTowardThePipe(t *testing.T) {
+	for _, tc := range []struct{ command, pipe string }{
+		{"magus run generate . && magus run lint .", "magus run generate . | magus run lint ."},
+		{"./magus run format . --silent; ./magus run lint . --silent", "./magus run format . --silent | ./magus run lint . --silent"},
+		{"./magus run generate . ; ./magus run format . && ./magus run lint .", "./magus run generate . | ./magus run format . | ./magus run lint ."},
+		{"magus run build libs/a && magus run test libs/b -- -run TestX", "magus run build libs/a | magus run test libs/b -- -run TestX"},
+		{"magus run lint . | magus run test . && magus run build .", "magus run lint . | magus run test . | magus run build ."},
+		{"magus affected generate:rw && magus run test .", "magus affected generate:rw | magus run test ."},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		require.NotEmpty(t, v.Deny, tc.command)
+		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
+		require.Len(t, v.Next, 1, tc.command)
+		assert.Equal(t, tc.pipe, v.Next[0].Run, tc.command)
+		assert.Equal(t, "deny-chained-run", v.Next[0].ID)
+		assert.Contains(t, v.Deny, tc.pipe, "the full deny names the pipe when no next is served")
+		assert.Contains(t, v.Lead, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
+		assert.Contains(t, v.Lead, "exits red", tc.command)
+
+		served := Evaluate(testDependencies(), tc.pipe)
+		assert.Empty(t, served.Deny, "the served pipe passes the guard: %s", tc.pipe)
+		assert.NotEqual(t, denyRuleChainedRun, served.Rule.Name, "a pipe is the remedy, not a chain: %s", tc.pipe)
 	}
 
-	// One invocation is the shape being taught, and must stay silent.
 	for _, cmd := range []string{
 		"./magus run lint . --silent",
 		"magus run build api web/studio",
 		"echo 'magus run format . ; magus run lint .'",
+		"magus run generate:rw . | magus run test .",
 	} {
 		assert.Empty(t, Evaluate(testDependencies(), cmd).Context, "should not fire: %s", cmd)
 	}
+}
+
+// The same target over several project sets still gets the pipe, which keeps the order the
+// chain chose: measured over the transcripts, every such chain was `generate:rw docs` then
+// `generate:rw .`, and one call would run `.` first because docs depends on it. The deny
+// names the one call for when the order does not matter.
+func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
+	for _, tc := range []struct{ command, pipe, combined string }{
+		{"magus run generate:rw docs && magus run generate:rw .", "magus run generate:rw docs | magus run generate:rw .", "magus run generate:rw docs ."},
+		{"./magus run test libs/a --silent; ./magus run test libs/b libs/a --silent", "./magus run test libs/a --silent | ./magus run test libs/b libs/a --silent", "./magus run test libs/a libs/b --silent"},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		require.NotEmpty(t, v.Deny, tc.command)
+		assert.Equal(t, denyRuleChainedRun, v.Rule.Name)
+		require.Len(t, v.Next, 1)
+		assert.Equal(t, tc.pipe, v.Next[0].Run)
+		assert.Contains(t, v.Lead, "when their order does not matter: `"+tc.combined+"`")
+		assert.Empty(t, Evaluate(testDependencies(), tc.combined).Deny)
+	}
+
+	// Charms are part of the target, so a differing charm is two targets and no one call.
+	v := Evaluate(testDependencies(), "magus run lint . && magus run lint:rw docs")
+	require.Len(t, v.Next, 1)
+	assert.Equal(t, "magus run lint . | magus run lint:rw docs", v.Next[0].Run)
+	assert.NotContains(t, v.Lead, "when their order does not matter")
+}
+
+// Every chain a pipe would change keeps the advisory, and says what the pipe would do.
+func TestChainedRunAdvisesWherePipingChangesTheChain(t *testing.T) {
+	for _, tc := range []struct{ command, why string }{
+		{"magus run lint . || magus run test .", "runs the next stage only when one FAILS"},
+		{"magus run build . && date && magus run test .", "a command other than a plain magus run"},
+		{"FOO=1 magus run build . && magus run test .", "a command other than a plain magus run"},
+		{"magus run build . && magus run test $(pkgs)", "a command other than a plain magus run"},
+		{"magus run build . && magus run test . &", "a redirect, `&` or `!`"},
+		{"magus run build libs/a && magus run test", "inherit the upstream's projects"},
+		// The gate reads its projects from the diff before an upstream's writes land, so
+		// regenerating ahead of it stays its own invocation; this line is also how the old
+		// advisory's author tripped MGS4007 on an output console:build left behind.
+		{"magus affected generate:rw && magus affected ci", "reads its projects from the diff"},
+		{"./magus run build console --silent; ./magus affected ci --no-default-charms", "reads its projects from the diff"},
+		{"magus run test . -o json && magus run lint .", "-o output would feed the next stage"},
+		{"magus run lint . && magus run ci --stdin", "read stdin"},
+		{"magus run lint . && magus --dry-run run test .", "take no locks"},
+		{"magus run lint . && magus run ls .", "`run ls` takes no locks"},
+		{"magus run lint . && ./magus run test .", "different magus binaries"},
+		{"magus --root ../w run lint . && magus run test .", "different magus binaries or workspaces"},
+	} {
+		v := Evaluate(testDependencies(), tc.command)
+		assert.Empty(t, v.Deny, tc.command)
+		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
+		assert.Contains(t, v.Context, "\nNot refused, because ", tc.command)
+		assert.Contains(t, v.Context, tc.why, tc.command)
+	}
+
+	// A line that does not parse is read by its shape and only advised on.
+	v := Evaluate(testDependencies(), "magus run lint . && magus run test . )")
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "compose through ctx.needs")
+}
+
+// Windows proves no pipe's upstream, so there a pipe neither orders nor stops its stages.
+func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
+	restore := pipesProveStages
+	pipesProveStages = false
+	t.Cleanup(func() { pipesProveStages = restore })
+
+	v := Evaluate(testDependencies(), "magus run generate . && magus run lint .")
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "cannot prove a pipe's upstream")
+}
+
+// In magus's own checkout go-build and build relink ./magus. Every pipe stage starts at
+// once, so the stage after one would run the binary being replaced; `&&` runs the new one.
+// The bootstrap link itself is raw-tool's, alone on its line.
+func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
+	own := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte("module "+ownModule+"\n"), 0o644))
+	deps := testDependencies()
+	deps.scope = workspaceScope{root: own}
+
+	for _, cmd := range []string{
+		"./magus run go-build . && ./magus run generate:rw .",
+		"./magus run go_build . -s && ./magus run test .",
+		"./magus run build . ; ./magus run test .",
+		"./magus run go::go-build . -- -o ./magus ./cmd/magus && ./magus run test .",
+	} {
+		v := Evaluate(deps, cmd)
+		assert.Empty(t, v.Deny, cmd)
+		assert.Contains(t, v.Context, "relinks ./magus", cmd)
+	}
+	assert.NotEmpty(t, Evaluate(deps, "./magus run test . && ./magus run go-build .").Deny,
+		"a relink in the LAST stage replaces nothing a later stage runs")
+
+	other := testDependencies()
+	other.scope = workspaceScope{root: t.TempDir()}
+	assert.NotEmpty(t, Evaluate(other, "magus run build web && magus run test web").Deny,
+		"build relinks nothing another workspace's stages run")
+
+	assert.Equal(t, denyRuleRawTool, Evaluate(testDependencies(), "go build -o magus ./cmd/magus && ./magus run go-build .").Rule.Name)
 }
 
 // Naming the side deliberately is the spelling the merge-side deny points at, so it must
