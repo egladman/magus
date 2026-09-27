@@ -181,6 +181,32 @@ func TestExplainResolvesByName(t *testing.T) {
 	assert.Equal(t, "target:pkg/a:gen", out.Node.ID)
 }
 
+// TestExplainCarriesAPackagesDocsURL pins the docs URL on the card: derived for a
+// package at its version attr, absent for a replaced package (its name and version
+// describe different modules) and for every other kind.
+func TestExplainCarriesAPackagesDocsURL(t *testing.T) {
+	g := mergeAll([]Shard{assemblePackages(map[string][]types.KnowledgePackage{
+		"web": {{Manager: "npm", Name: "@connectrpc/connect", Version: "2.1.2"}},
+		".":   {{Manager: "gomod", Name: "example.com/fork", Version: "v1.2.0", Replaced: true}},
+		"a":   {{Manager: "gomod", Name: "golang.org/x/mod", Version: "v0.38.0"}},
+		"b":   {{Manager: "gomod", Name: "golang.org/x/mod", Version: "v0.37.0"}},
+	})})
+
+	for ref, want := range map[string]string{
+		"package:npm @connectrpc/connect": "https://www.npmjs.com/package/@connectrpc/connect/v/2.1.2",
+		"package:gomod golang.org/x/mod":  "https://pkg.go.dev/golang.org/x/mod@v0.37.0",
+		"package:gomod example.com/fork":  "",
+	} {
+		out, ok := g.Explain(ref)
+		require.True(t, ok, ref)
+		assert.Equal(t, want, out.DocsURL, ref)
+	}
+
+	out, ok := sampleGraph().Explain("target:pkg/a:build")
+	require.True(t, ok)
+	assert.Empty(t, out.DocsURL, "only a package has a docs URL")
+}
+
 func TestExplainUnknown(t *testing.T) {
 	_, ok := sampleGraph().Explain("nonesuch-xyz")
 	assert.False(t, ok)

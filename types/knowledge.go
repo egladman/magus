@@ -1100,6 +1100,11 @@ type KnowledgeExplainOutput struct {
 	BlastRadius   int                `json:"blast_radius"   yaml:"blast_radius"`
 	Out           []KnowledgeEdgeRef `json:"out,omitempty"  yaml:"out,omitempty"`
 	In            []KnowledgeEdgeRef `json:"in,omitempty"   yaml:"in,omitempty"`
+	// DocsURL is a package node's documentation page for the version its version attr
+	// names, derived from manager, name and version when the card is built, never
+	// stored or fetched. Empty for other kinds, a replaced package, and a manager with
+	// no known docs site.
+	DocsURL string `json:"docs_url,omitempty" yaml:"docs_url,omitempty"`
 }
 
 // KnowledgePathStep is one hop along a path, oriented as walked (From -> To).

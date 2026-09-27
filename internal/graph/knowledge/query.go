@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
@@ -554,7 +555,8 @@ func (g *Graph) Select(input string, budget int) types.KnowledgeGraphOutput {
 }
 
 // Explain resolves ref to a node and returns its context card, or ok=false when
-// nothing resolves.
+// nothing resolves. A package node that is not replaced carries the documentation URL
+// of the version its version attr names.
 func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 	id, ok := g.resolveOne(ref)
 	if !ok {
@@ -567,6 +569,9 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		Node:          n,
 		BlastRadius:   g.blastRadius(id),
+	}
+	if n.Kind == types.KindPackage && n.Attrs[attrPackageReplaced] == "" {
+		out.DocsURL, _ = deps.DocsURL(n.Attrs[attrPackageManager], n.Label, n.Attrs[AttrPackageVersion])
 	}
 	for _, e := range g.out[id] {
 		out.Out = append(out.Out, g.edgeRef(e, types.EdgeOut, e.Target))
