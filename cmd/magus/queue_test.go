@@ -851,6 +851,14 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 		assert.Contains(t, save.If, cond)
 	}
 	assert.Contains(t, flag(argvs[at["save"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "the save signs what it stores")
+
+	// Every other step of the job (third-party actions, the unboxed describe and notes
+	// verify steps, and the restore box above) must never see the raw key: only the gate
+	// and save steps that the --env allowlists above hand it into their own sandbox.
+	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+		_, carries := s.Env["MAGUS_CACHE_SIGNING_KEY"]
+		assert.Equal(t, s.Name == gateStep.Name || s.Name == save.Name, carries, s.Name)
+	}
 }
 
 // Moving a shard's gate into the queue's box must not move a cache key: main's shards
