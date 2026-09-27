@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -374,111 +375,54 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 	return root, cacheDir
 }
 
-// TestJobExecVacateIsANoOpWithNoBinding pins the ABSENT verdict: a checkout that never
-// bound anything vacates cleanly, printing rather than failing, because a no-op must not
-// read as an error.
-func TestJobExecVacateIsANoOpWithNoBinding(t *testing.T) {
-	root, _ := execFixture(t)
-	out := captureStdout(t, func() {
-		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
-	})
-	assert.Contains(t, out, "holds no job")
-}
-
-// TestJobExecVacateRefusesAnInFlightJob pins the semantics this exists to fix without
-// reopening the escape denyLeaseScopedRebind closes: a checkout may not walk away from a
-// job the store still says is declared or running, because its next write would land
-// ungraded from then on. The marker is left in place.
-func TestJobExecVacateRefusesAnInFlightJob(t *testing.T) {
-	for _, state := range []types.JobState{types.StateDeclared, types.StateRunning} {
-		t.Run(string(state), func(t *testing.T) {
-			row := leaseRow("lease-enforcement/wave4/docs", "")
-			row.State = state
-			root, cacheDir := execFixture(t, row)
-			require.NoError(t, job.BindLease(cacheDir, row.ID))
-
-			err := jobExec(t.Context(), root, []string{"--vacate"})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), row.ID)
-			assert.Contains(t, err.Error(), string(state))
-			assert.Equal(t, row.ID, boundMarker(t, cacheDir), "a refused vacate changed nothing")
-		})
-	}
-}
-
-// TestJobExecVacateAllowsAJobThatAlreadyExited is the exact shape of the four-day bug
-// this verb exists to fix: a checkout bound to a job that returned its result (exited)
-// and that nobody will ever wait on. types.JobState.Live counts exited as live, on
-// purpose, so a rejected wait can send work back to the same write paths; but that is a
-// property of grading writes against a LIVE lease, not a reason to keep a checkout
-// hostage to a lease its own holder is done with. Every later state (pass, fail,
-// no_return) vacates the same way, and so does every state the store never declared at
-// all: proof there is no lingering boundary for any of them to protect.
-func TestJobExecVacateAllowsAJobThatAlreadyExited(t *testing.T) {
-	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
-		t.Run(string(state), func(t *testing.T) {
-			row := leaseRow("lease-enforcement/wave4/docs", "")
-			row.State = state
-			root, cacheDir := execFixture(t, row)
-			require.NoError(t, job.BindLease(cacheDir, row.ID))
-
-			out := captureStdout(t, func() {
-				require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
-			})
-			assert.Contains(t, out, row.ID)
-			assert.Empty(t, boundMarker(t, cacheDir), "the marker is gone")
-		})
-	}
-}
-
-// A marker that does not read makes every lease resolution in the checkout an error, so
-// vacating must clear it rather than fail on the same read.
-func TestJobExecVacateClearsAMarkerThatDoesNotRead(t *testing.T) {
-	root, cacheDir := execFixture(t)
-	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
-	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("not a lease id!\n"), 0o644))
-
-	out := captureStdout(t, func() {
-		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
-	})
-	assert.Contains(t, out, "cleared a lease marker that did not read")
-	assert.Empty(t, boundMarker(t, cacheDir))
-}
-
-// boundMarker reads the checkout-wide marker, failing the test on one that does not read.
-func boundMarker(t *testing.T, cacheDir string) string {
+// bindCheckout records id as the checkout's binding, as the guard does when a caller whose
+// host names no session takes a job there.
+func bindCheckout(t *testing.T, cacheDir, id string) {
 	t.Helper()
-	id, err := job.LeaseFromMarker(cacheDir)
-	require.NoError(t, err)
-	return id
+	require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir}).Bind(job.Caller{}, id))
 }
 
-// TestJobExecVacateAllowsAJobTheStoreDoesNotCarry covers the UNKNOWN case: a marker
-// naming an id no row declares (a reset ledger, a store from before this one) has no
-// boundary left to fail open against, so it vacates rather than wedging the checkout on
-// an id nobody can even look up.
-func TestJobExecVacateAllowsAJobTheStoreDoesNotCarry(t *testing.T) {
-	root, cacheDir := execFixture(t)
-	require.NoError(t, job.BindLease(cacheDir, "harness/no-such-job"))
+// TestJobExecWritesNoMarker pins the half of the 2026-09-26 fix that lives in the CLI: exec
+// records the base and the checkout, and binds nobody. A CLI process cannot tell a subagent
+// from its parent, so a binding it wrote was the checkout's, and the parent sharing that
+// checkout was graded as the subagent from its next call.
+func TestJobExecWritesNoMarker(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	row := leaseRow("lease-enforcement/wave4/docs", "")
+	row.State = types.StateRunning
+	root, cacheDir := execFixture(t, row)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
+		require.NoError(t, jobExec(t.Context(), root, []string{row.ID, "--base", "rev1"}))
 	})
-	assert.Contains(t, out, "harness/no-such-job")
-	assert.Empty(t, boundMarker(t, cacheDir))
+	assert.Contains(t, out, "took "+row.ID)
+
+	_, err := os.Stat(job.MarkerPath(cacheDir))
+	assert.True(t, os.IsNotExist(err), "exec writes no checkout record")
+	lease, from := job.ActingLease(cacheDir, "")
+	assert.Equal(t, []any{"", types.LeaseSource("")}, []any{lease, from}, "the checkout acts under nothing")
+
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	abs, err := filepath.Abs(root)
+	require.NoError(t, err)
+	assert.Equal(t, []any{"rev1", abs}, []any{rows[0].ReportedBase, rows[0].CheckoutRoot}, "the base and the checkout are recorded")
 }
 
-// TestJobExecVacateRejectsBeingCombinedWithOtherArgs: --vacate gives up whichever job
-// this checkout holds, so a positional job or a --base to record is nothing it can act on.
-func TestJobExecVacateRejectsBeingCombinedWithOtherArgs(t *testing.T) {
-	root, _ := execFixture(t)
+// Exec takes exactly one job: the read form it had printed a binding the CLI no longer
+// holds, and a job that already ended has nothing left to take.
+func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
+	done := leaseRow("lease-enforcement/wave4/done", "")
+	done.State = types.StatePass
+	root, _ := execFixture(t, done)
 
-	err := jobExec(t.Context(), root, []string{"--vacate", "some/job"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "takes no job")
-
-	err = jobExec(t.Context(), root, []string{"--vacate", "--base", "rev1"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--base")
+	for name, args := range map[string][]string{
+		"no job":        nil,
+		"two jobs":      {"a", "b"},
+		"an unknown id": {"harness/no-such-job", "--base", "rev1"},
+		"an ended job":  {done.ID, "--base", "rev1"},
+	} {
+		assert.Error(t, jobExec(t.Context(), root, args), name)
+	}
 }

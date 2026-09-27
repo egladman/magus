@@ -33,6 +33,13 @@ func tmpLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
 	return cacheDir, root, job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
 }
 
+// bindCheckout records id as the checkout's binding, as the guard does when a caller whose
+// host names no session takes a job there.
+func bindCheckout(t *testing.T, cacheDir, id string) {
+	t.Helper()
+	require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir}).Bind(job.Caller{}, id))
+}
+
 // seed writes a row whole, the way a fixture means it: every field this test declared and
 // nothing carried over from a previous one.
 func seed(t *testing.T, s *job.Store, row types.Job) types.Job {
@@ -63,7 +70,7 @@ func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 
 func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
-	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))
+	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
@@ -73,37 +80,36 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 		Status:  types.CheckFail,
 		Message: `this checkout's marker binds lease "adj/marker" while the environment claims "adj/from-env"`,
 		Details: []string{
-			"the marker is what `magus job exec` wrote here, so magus grades every write under adj/marker and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
+			"the guard wrote the marker when a caller whose host names no session ran `magus job exec` here, so magus grades every write under adj/marker and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
 			"unset BAGGAGE, or take the lease you mean here with `magus job exec adj/from-env`",
 		},
 	}, got)
 }
 
 // TestActingLeasePrefersTheMarkerOverTheEnvironment pins the precedence the check above
-// reports on. The marker is written into a checkout by `job exec`; the environment member
-// is a claim the worker makes about itself, and letting the claim win meant a worker
-// bound to one job could be graded against another's write paths by exporting its id.
+// reports on. The marker is written into a checkout by the guard on `job exec`; the
+// environment member is a claim the worker makes about itself, and letting the claim win
+// meant a worker bound to one job could be graded against another's write paths by
+// exporting its id.
 func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
 	cacheDir, _, _ := tmpLedger(t)
-	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))
+	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	lease, from, err := job.ActingLease(cacheDir, trail.LeaseFromEnv())
-	require.NoError(t, err)
+	lease, from := job.ActingLease(cacheDir, trail.LeaseFromEnv())
 	assert.Equal(t, "adj/marker", lease)
 	assert.Equal(t, types.LeaseSourceContested, from)
 
 	// With no marker the environment is the only answer there is, which stays true: a
 	// checkout nobody bound is the unattributed case the guard fails open on.
-	lease, from, err = job.ActingLease(t.TempDir(), trail.LeaseFromEnv())
-	require.NoError(t, err)
+	lease, from = job.ActingLease(t.TempDir(), trail.LeaseFromEnv())
 	assert.Equal(t, "adj/from-env", lease)
 	assert.Equal(t, types.LeaseSourceEnv, from)
 }
 
 func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	require.NoError(t, job.BindLease(cacheDir, "adj/live"))
+	bindCheckout(t, cacheDir, "adj/live")
 	path, err := store.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -118,7 +124,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 
 func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
-	require.NoError(t, job.BindLease(cacheDir, "adj/no-such-lease"))
+	bindCheckout(t, cacheDir, "adj/no-such-lease")
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
@@ -136,7 +142,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
-	require.NoError(t, job.BindLease(cacheDir, "adj/done"))
+	bindCheckout(t, cacheDir, "adj/done")
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
@@ -151,7 +157,7 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "adj/stateless"})
-	require.NoError(t, job.BindLease(cacheDir, "adj/stateless"))
+	bindCheckout(t, cacheDir, "adj/stateless")
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
@@ -166,7 +172,7 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
-	require.NoError(t, job.BindLease(cacheDir, "adj/live"))
+	bindCheckout(t, cacheDir, "adj/live")
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
@@ -213,7 +219,7 @@ func registeredLease(t *testing.T, id string) (cacheDir, root string) {
 	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
 	_, err := store.Exec(context.Background(), id, "abc123")
 	require.NoError(t, err)
-	require.NoError(t, job.BindLease(cacheDir, id))
+	bindCheckout(t, cacheDir, id)
 	return cacheDir, root
 }
 

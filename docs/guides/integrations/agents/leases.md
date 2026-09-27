@@ -169,27 +169,18 @@ the CLI, the `magus_job` MCP tool and `magus\job` all reach the same file and
 only one of them is a command a pattern can read. A session holding no lease,
 the orchestrator or a person at a terminal, writes anything.
 
-**Taking a lease is one-way.** `magus job exec` for a session that already holds
-a different job is refused. Retaking is how a holder would be graded against
-another job's paths, and it costs nothing to a holder that runs its bootstrap
-twice: taking the lease it already holds is allowed and does nothing.
-
-**`magus job exec --vacate` gives the binding up.** One-way means one-way until
-something releases it, and nothing did: the marker outlives the job it names,
-so a checkout bound to one that finished (exited, passed, failed, or was never
-returned) stayed stuck until a person deleted the file by hand. `--vacate`
-clears it instead, refusing only while the job is still `declared` or
-`running` - walking away from those two would leave the checkout's next write
-ungraded. A job already exited, one the store no longer carries, or no binding
-at all all vacate cleanly, and a checkout with nothing bound reports that
-rather than erroring. It releases only the SESSION's own binding, so a sibling
-session working in the same checkout keeps its lease.
+**Taking a lease is one-way while the job is in flight.** `magus job exec` from a
+caller whose job is still `declared` or `running` is refused when it names a
+different job: retaking is how a holder would be graded against another job's
+paths. Taking the lease it already holds is allowed and only records the base.
+Once the held job has exited, passed, failed, or was never returned, the next
+`magus job exec` takes the next job; nothing has to be given up first.
 
 **A workspace-load file needs a worktree of its own.** `fork` refuses a job
 whose `write_paths` cover a file magus must READ to load the workspace - any
 project's `magusfile.buzz` or `magusfiles/*.buzz`, its `magus.yaml`, and the
 workspace-local spell sources those magusfiles import - while another live job
-with write paths is already bound to the same checkout. The refusal names the
+with write paths was already taken in the same checkout. The refusal names the
 file and the job that holds the checkout, and the fix it names is a worktree
 rather than a narrower boundary. Half-saved, one of those files stops the workspace
 loading for EVERY worker in the checkout at once: they lose `magus run`, `magus
@@ -338,29 +329,29 @@ says so rather than printing terms nobody may act on.
 
 ```sh
 magus job exec <job>
-magus job exec <job> --session <the host's session id>
 ```
 
-That takes the lease on the job in this checkout and records the base this tree
-landed on beside the checkpoint the job was handed, with the divergence between
-them as a fact rather than a refusal. With no job named, it prints the one this
-checkout holds.
+That takes the job in this checkout: it records the base this tree landed on
+beside the checkpoint the job was handed, with the divergence between them as a
+fact rather than a refusal, and the checkout it was taken in.
 
-**A lease binds per SESSION, not per checkout.** `--session` names the session
-taking it, as the agent host names the conversation to its own hooks, and the
-binding is that session's. So several workers sharing one checkout each hold
-their own lease, each has its own write paths graded, and each is denied outside them.
-Without it the binding is the whole checkout's, which is what every binding was
-before: a session that reports none, and a session nobody bound, both read the
-checkout-wide marker, so a worktree bound by hand still grades the sessions
-inside it. A session that HAS its own binding never reads the checkout-wide one,
-which is the boundary that matters - a worker bound to one job cannot silently
-act under another.
+**The guard binds the caller, not the checkout.** When the guard hook lets
+`magus job exec <job>` (or `magus_job op=exec`) through, it records that the
+caller acts under the job, keyed on exactly the host, session and subagent ids
+the host put on the hook call. So several workers sharing one checkout each hold
+their own lease, each has its own write paths graded, and none of them binds the
+orchestrator: a subagent shares its parent's session id, and only its agent id
+tells the two apart. The lookup is exact, with no fallback from a subagent to its
+session or from a session to the checkout. The CLI itself binds nobody, because
+it cannot tell who ran it.
 
-Pass the same id your host reports to the guard hook, or the two halves bind and
-grade under different names. Where the host reports no session, the
-checkout-wide fallback is the honest answer: one worker per checkout, which is
-the arrangement the worktree rule asks for anyway.
+A worker whose spawn title names its job (see
+[job attribution](../../../reference/guard-spawn.md#job-attribution)) is bound
+already, and its first hook call records its base; its exec changes nothing.
+
+Where the host reports no session or subagent id at all, the binding is the
+checkout's, read only by callers that report none either: one worker per
+checkout, which is the arrangement the worktree rule asks for anyway.
 
 The base is the half a revision cannot supply on its own. The checkpoint is what
 the orchestrator HANDED the job; the base is what the checkout actually LANDED
@@ -497,13 +488,16 @@ the cache directory and the private temp dir alone, which is the sandbox's readi
 refusing every write under such a job.
 
 Both tiers resolve the acting lease the same way, in this order: an explicit
-`--lease`, the job magus recorded the calling subagent was spawned for, the job
-`magus job exec` took in the checkout, then the `BAGGAGE` a worker inherited.
-Every tier but the last is a record; `BAGGAGE` is the worker's claim about
-itself, so it answers only when no record does, and a checkout whose binding
-disagrees with it grades under the binding. The verdict names the tier that
-answered as `lease_from`: `flag`, `agent`, `marker`, `env`, or `contested` for a
-binding that overruled a different claim.
+`--lease`, the job the guard recorded for the calling session or subagent (by
+spawn attribution or its `magus job exec`), the checkout's record for a caller
+that reports neither id, then the `BAGGAGE` a worker inherited. A process that is
+not a hook, the sandbox's included, knows no caller id and reads only the
+checkout's record and its claim. Every tier but the last is a record; `BAGGAGE`
+is the worker's claim about itself, so it answers only when no record does, and
+a record that disagrees with it wins. The verdict names the tier that answered as
+`lease_from`: `flag`, `agent` (the caller's record, session-only callers
+included), `marker` (the checkout's), `env`, or `contested` for a record that
+overruled a different claim.
 
 A host runs its hooks from wherever it likes, so the guard locates that checkout
 from the `cwd` its hook envelope reports and falls back to the hook process's

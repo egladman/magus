@@ -200,7 +200,7 @@ The target layer reaches both a target's own processes and its ops' children.
 
 A checkout that acts as a delegated worker gets a write grant NARROWER than the one above. When the sandbox is on and the acting lease resolves to a live [job](../guides/integrations/agents/leases.md) row with a parent and non-empty `write_paths`, the write grant inside the checkout becomes those paths (globbed against the workspace root), plus the cache directory and the private temp dir; reads are unchanged, grants outside the checkout keep their writes, and a refusal is recorded on the trail as a `sandbox_denial` naming the job. It is DERIVED from the row rather than declared again here, because the agent guard already grades writes against the same field and two declarations would let the kernel refuse something other than what the guard explains. A root job, an unknown job, and a workspace with no declared jobs are all unchanged.
 
-The marker that binds a checkout to its lease lives under the user state dir (`$XDG_STATE_HOME/magus/checkouts/<hash of the cache dir>/`), not in the cache dir. The cache dir is inside every run's write grant, so a marker there is one a confined run could rewrite to claim a wider lease.
+A run is not a hook and knows no agent host's session, so it reads the checkout's own binding, the one the guard writes when a caller whose host names no session takes a job there, or its `BAGGAGE` claim. That marker lives under the user state dir (`$XDG_STATE_HOME/magus/checkouts/<hash of the cache dir>/`), not in the cache dir. The cache dir is inside every run's write grant, so a marker there is one a confined run could rewrite to claim a wider lease.
 
 ### Environment scrubbing
 

@@ -359,9 +359,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
 	facts := hint.NewGate(location.cacheDir, who.factsKey())
-	agentJob := agentJobFor(who, location)
-	actingLease, leaseFrom, leaseErr := resolveLease(who, location, req.Lease, agentJob)
-	if leaseErr == nil && agentJob != "" && actingLease == agentJob && registerAgentBase(ctx, deps, location, agentJob) {
+	bound := boundJob(who, location)
+	actingLease, leaseFrom := resolveLease(who, req.Lease, bound)
+	if bound != "" && actingLease == bound && registerAgentBase(ctx, deps, location, bound) {
 		ctx = withJobStoreRows(ctx, location)
 	}
 	tool := hookToolCommand
@@ -372,17 +372,6 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		tool = hookToolWrite
 	}
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease, LeaseFrom: leaseFrom}
-	if leaseErr != nil && !req.Observe {
-		// The repair and a help read stay open, or a checkout with a bad marker would be one
-		// no agent could recover.
-		if !isPath && repairsUnreadableMarker(input) {
-			verdict.Decision, verdict.Context = "advise", leaseErr.Error()
-		} else {
-			verdict.Decision, verdict.Reason = "deny", denyUnresolvedLease(leaseErr)
-		}
-		appendHookActivity(ctx, location, input, who, tool, actingLease, "", "", policyDigest, verdict, workspaceRuleRecord{})
-		return verdict
-	}
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
@@ -701,6 +690,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			preauth:     preauth,
 			lease:       actingLease,
 		}, who, location)
+		// Last, so a line any rule refused or put to a person binds nobody.
+		if verdict.Decision == "pass" || verdict.Decision == "advise" {
+			bindOnExec(ctx, location, who, input)
+		}
 	}
 	// The two notices about the acting lease ITSELF: a row that has finished and an id
 	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look

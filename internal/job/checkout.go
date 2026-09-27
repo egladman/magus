@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,23 +16,21 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
-// LeaseMarkerName is the file that binds a lease to a checkout for a caller that reports
-// NO session. It exists because the environment cannot carry a lease into a hook: a host
-// runs its hooks with its own environment, so a worker exporting BAGGAGE for its shell is
-// invisible to the guard judging its commands. A file keyed by the checkout is the one
-// channel the worker's shell, the host's hook and the sandbox all read. See
-// [LeaseQuery.Resolve] for where it ranks, and [MarkerPath] for where it lives.
+// LeaseMarkerName is the file that binds a lease to a checkout for a caller its host names
+// no session or agent for. The environment cannot carry a lease into a hook, since a host
+// runs its hooks with its own environment, so a file keyed by the checkout is the one
+// channel such a caller's shell, the host's hook and the sandbox all read. Only the guard
+// writes it (see [Store.Bind]), and only an identity-less caller reads it.
 const LeaseMarkerName = "lease"
 
 // markerKind is the user state directory's subdirectory the markers live under.
 const markerKind = "checkouts"
 
-// MarkerPath is where the checkout-wide marker for the checkout whose cache dir is
-// cacheDir lives, or "" when there is no cache dir or no user state dir.
+// MarkerPath is where the checkout record for the checkout whose cache dir is cacheDir
+// lives, or "" when there is no cache dir or no user state dir.
 //
 // NOT in the cache dir. The sandbox grants a run write access to its workspace, and the
 // cache dir sits inside it by default, so a marker there is one a confined run could
@@ -41,16 +38,6 @@ const markerKind = "checkouts"
 // and guard alike, would act on what it wrote. The sandbox grants the user state dir to
 // nobody.
 func MarkerPath(cacheDir string) string {
-	dir := markerDir(cacheDir)
-	if dir == "" {
-		return ""
-	}
-	return filepath.Join(dir, LeaseMarkerName)
-}
-
-// markerDir holds this checkout's markers: under the user state dir, in a directory
-// named for the cache dir's resolved path, since that is what identifies a checkout here.
-func markerDir(cacheDir string) string {
 	if cacheDir == "" {
 		return ""
 	}
@@ -66,77 +53,20 @@ func markerDir(cacheDir string) string {
 		key = resolved
 	}
 	sum := sha256.Sum256([]byte(key))
-	return filepath.Join(base, "magus", markerKind, hex.EncodeToString(sum[:12]))
-}
-
-// leaseMarkerDir holds the per-session markers, one file each.
-//
-// A checkout used to hold exactly one, which made the binding a fact about the DIRECTORY.
-// Three workers sharing a checkout therefore could not each hold a lease: the second
-// bind was refused as a rebind, all three ran unattributed, and every write-path rule fell
-// silent at once while looking exactly like a guarded session.
-const leaseMarkerDir = "leases"
-
-// Checkout is where a lease binds: one checkout's cache dir, and the session the caller
-// reported inside it. The zero Session is the checkout-wide binding, which is what a
-// caller that reports no session reads and writes, unchanged from when that was the only
-// binding there was.
-//
-// SESSION, not process: the guard hook, the worker's shell and the sandbox are three
-// processes of one session, and the id is what the host calls the conversation. A host
-// that reports none still gets the old behavior rather than no behavior.
-type Checkout struct {
-	CacheDir string
-	Session  string
-}
-
-// marker names the file this session's binding lives in.
-//
-// The session id is HASHED rather than sanitized, the same rule hint.MarkerPath applies
-// to the same value: it is a host-chosen string that may hold anything at all, separators
-// included, and a filename assembled from one is a filename the input picked.
-func (c Checkout) marker() string {
-	dir := markerDir(c.CacheDir)
-	if dir == "" {
-		return ""
-	}
-	if c.Session == "" {
-		return filepath.Join(dir, LeaseMarkerName)
-	}
-	sum := sha256.Sum256([]byte(c.Session))
-	return filepath.Join(dir, leaseMarkerDir, hex.EncodeToString(sum[:12]))
-}
-
-// Marker reads the lease bound to this session in this checkout, or "" when none is bound.
-// A marker that cannot be read, or that holds anything but a lease id, is an error: the
-// binding is unknown, and reading it as none would hand the call to a lower source.
-//
-// A session with no marker of its own falls back to the CHECKOUT-WIDE one. That is what
-// keeps a worktree an orchestrator bound by hand grading the sessions inside it, and it
-// errs in the safe direction: the fallback grades a write that would otherwise be graded
-// by nobody. A session that HAS its own marker never reads the other one, which is the
-// boundary: a worker bound to one job cannot be graded, or act, under another.
-func (c Checkout) Marker() (string, error) {
-	id, err := readMarker(c.marker())
-	if id != "" || err != nil || c.Session == "" {
-		return id, err
-	}
-	return readMarker(Checkout{CacheDir: c.CacheDir}.marker())
+	return filepath.Join(base, "magus", markerKind, hex.EncodeToString(sum[:12]), LeaseMarkerName)
 }
 
 // LeaseQuery is what a caller knows about itself when it asks which lease it acts under.
-// Checkout is where the call runs; the other fields are the answers only the caller can
-// bring, each empty when it has none.
+// Each field is empty when the caller has no such answer.
 type LeaseQuery struct {
-	Checkout Checkout
-	// OwnMarkerOnly reads this session's own marker and never the checkout-wide fallback.
-	// Bind sets it: whether a session may take a lease is a question about what that
-	// session holds, and a hand-bound checkout must not refuse every worker in it.
-	OwnMarkerOnly bool
 	// Flag is an explicit --lease the caller's wiring passed.
 	Flag string
-	// AgentJob is the job magus recorded the calling subagent was spawned for.
-	AgentJob string
+	// CallerJob is the job an identified caller's own record names (see [Store.Bound]).
+	CallerJob string
+	// CheckoutJob is the job the checkout record names. Only a caller with no identity
+	// may pass it: an identified caller reading it would be graded as whichever
+	// identity-less caller last took a job in the same checkout.
+	CheckoutJob string
 	// Claim is the lease the process says it acts under, from its BAGGAGE or from the
 	// client an adopted run was forwarded from.
 	Claim string
@@ -144,34 +74,22 @@ type LeaseQuery struct {
 
 // Resolve returns the lease the caller acts under and which source answered, or "" and
 // no source when none did. It is the one order the guard, the job store, doctor, the
-// sandbox and the journal all grade by: an explicit flag, the subagent's spawn record, the
-// checkout's marker, and only then the claim.
+// sandbox and the journal all grade by: an explicit flag, the caller's record, the
+// checkout's record, and only then the claim.
 //
 // A record outranks the claim because the claim is the one answer a worker can rewrite
 // from its own shell: a worker bound to one job that could export another's id would be
 // graded against that job's write paths. When a lower source named a different lease than
 // the one that answered, the source is [types.LeaseSourceContested], so a surface can say
 // something was overruled.
-//
-// An unreadable or invalid marker is an error whatever outranks it.
-func (q LeaseQuery) Resolve() (string, types.LeaseSource, error) {
-	var marker string
-	var err error
-	if q.OwnMarkerOnly {
-		marker, err = readMarker(q.Checkout.marker())
-	} else {
-		marker, err = q.Checkout.Marker()
-	}
-	if err != nil {
-		return "", "", err
-	}
+func (q LeaseQuery) Resolve() (string, types.LeaseSource) {
 	sources := []struct {
 		lease string
 		from  types.LeaseSource
 	}{
 		{q.Flag, types.LeaseSourceFlag},
-		{q.AgentJob, types.LeaseSourceAgent},
-		{marker, types.LeaseSourceMarker},
+		{q.CallerJob, types.LeaseSourceAgent},
+		{q.CheckoutJob, types.LeaseSourceMarker},
 		{q.Claim, types.LeaseSourceEnv},
 	}
 	for i, s := range sources {
@@ -180,246 +98,146 @@ func (q LeaseQuery) Resolve() (string, types.LeaseSource, error) {
 		}
 		for _, lower := range sources[i+1:] {
 			if lower.lease != "" && lower.lease != s.lease {
-				return s.lease, types.LeaseSourceContested, nil
+				return s.lease, types.LeaseSourceContested
 			}
 		}
-		return s.lease, s.from, nil
+		return s.lease, s.from
 	}
-	return "", "", nil
+	return "", ""
 }
 
-// Bind writes the marker binding lease id to this session in this checkout, creating the
-// directory if needed. An id ValidJobID rejects is refused, so the marker never holds a
-// value Marker would read back as nothing.
-//
-// BINDING IS ONE-WAY for a worker. A session already acting under a lease cannot bind
-// itself to a different one, because that is the whole boundary: a worker that can name
-// the orchestrator's row is graded against the orchestrator's paths from its next command.
-// Re-binding the lease it already holds is allowed and does nothing, so a worker that
-// runs its bootstrap twice is not refused. Only an UNBOUND session, which is the
-// orchestrator or the person, binds.
-//
-// It reads THIS session's own marker, never the checkout-wide fallback Marker reads. The
-// fallback exists so an unbound session is still GRADED by whatever the checkout holds;
-// letting it refuse a bind as well would make a checkout the orchestrator took by hand
-// unusable by any worker in it, which is the deadlock the per-session marker exists to
-// undo. The environment still refuses, because a worker that inherited one lease and
-// names another is claiming to be two parties.
-func (c Checkout) Bind(id string) error {
-	if !types.ValidJobID(id) {
-		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only)", id)
-	}
-	bound, _, err := LeaseQuery{Checkout: c, OwnMarkerOnly: true, Claim: trail.LeaseFromEnv()}.Resolve()
-	if err != nil {
-		return fmt.Errorf("job: bind lease: %w", err)
-	}
-	if bound != "" && bound != id {
-		return &RefusedError{
-			Lease: id, Actor: Actor{Lease: bound},
-			Rule: fmt.Sprintf("re-binding it to %s is how a worker would be graded against another lease's paths", id),
-		}
-	}
-	path := c.marker()
+// readRecord reads one binding record: "" when it is absent, cannot be read, or holds
+// anything but a lease id. Only the guard writes records, through a rename, so one that
+// does not read was damaged from outside magus, and reading it as none grades the call
+// exactly as a caller nobody bound.
+func readRecord(path string) string {
 	if path == "" {
-		return fmt.Errorf("job: bind lease: no cache dir or user state dir to key the marker by")
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("job: bind lease: %w", err)
-	}
-	if err := os.WriteFile(path, []byte(id+"\n"), 0o644); err != nil {
-		return fmt.Errorf("job: bind lease: %w", err)
-	}
-	return nil
-}
-
-// Vacate clears this session's marker, so a later Bind can take a different lease (or the
-// same one again, which it already permitted). Returns the lease it cleared, or "" when
-// the session held none.
-//
-// Idempotent by construction: a session with no marker already reads back "", and
-// removing a file that is already gone is not an error here, so a repeated vacate, or one
-// racing a sibling process clearing the same marker, is a no-op rather than a failure.
-// This is the file half only; whether the lease it named is one a caller SHOULD be giving
-// up is judged by the caller (see `magus job exec --vacate`), which reads the row first.
-//
-// It clears ONLY this session's marker. A session vacating on its way out must not
-// release the binding a sibling session in the same checkout is still working under.
-func (c Checkout) Vacate() (string, error) {
-	path := c.marker()
-	if path == "" {
-		return "", nil
-	}
-	// A marker that does not hold a lease id is removed all the same: clearing it is the
-	// fix for the error every resolution through it reports.
-	id, _ := readMarker(path)
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("job: vacate lease: %w", err)
-	}
-	return id, nil
-}
-
-// readMarker reads one marker file: "" when it is absent, and an error when it cannot be
-// read or does not hold a lease id.
-func readMarker(path string) (string, error) {
-	if path == "" {
-		return "", nil
+		return ""
 	}
 	raw, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
 	if err != nil {
-		return "", fmt.Errorf("job: read lease marker: %w", err)
+		return ""
 	}
 	id := strings.TrimSpace(string(raw))
 	if !types.ValidJobID(id) {
-		return "", fmt.Errorf("job: lease marker %s holds %q, which is not a lease id; `%s` clears it", path, id, hint.JobExec.With("--vacate"))
-	}
-	return id, nil
-}
-
-// BoundLeases names every lease bound in this checkout, whichever session holds it,
-// sorted and deduplicated. It is what lets a fork see the workers already here, which no
-// single session can answer about the others.
-func BoundLeases(cacheDir string) []string {
-	dir := markerDir(cacheDir)
-	if dir == "" {
-		return nil
-	}
-	// A marker that does not read is skipped here: this lists who is bound, and every
-	// resolution through that marker reports it as the error it is.
-	seen := map[string]bool{}
-	if id, _ := readMarker(filepath.Join(dir, LeaseMarkerName)); id != "" {
-		seen[id] = true
-	}
-	entries, err := os.ReadDir(filepath.Join(dir, leaseMarkerDir))
-	if err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			if id, _ := readMarker(filepath.Join(dir, leaseMarkerDir, e.Name())); id != "" {
-				seen[id] = true
-			}
-		}
-	}
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
-	slices.Sort(out)
-	return out
-}
-
-// Subagent is one subagent as its host names it on every hook call it makes: the host,
-// the session it shares with its parent, and the id the host gave it.
-type Subagent struct {
-	Host    string
-	Session string
-	ID      string
-}
-
-// agentMarkerDir holds the subagent bindings, beside the jobs file.
-const agentMarkerDir = "agents"
-
-// agentMarker names the file a's binding lives in, "" when the store has no directory or
-// a names no subagent. Hashed for the reason [Checkout.marker] hashes a session.
-func (s *Store) agentMarker(a Subagent) string {
-	if s.err != nil || s.path == "" || a.ID == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(a.Host + "\x00" + a.Session + "\x00" + a.ID))
-	return filepath.Join(filepath.Dir(s.path), agentMarkerDir, hex.EncodeToString(sum[:12]))
+	return id
 }
 
-// BindAgent records that subagent a was spawned for job id, so every hook call carrying
-// a's id resolves to that lease from whichever checkout it runs in.
+// Caller is who a hook call comes from, as its host names it on every call: the host, the
+// session, and the subagent inside that session. A root session has no Agent; a host
+// that reports neither id leaves the caller identity-less.
+type Caller struct {
+	Host    string
+	Session string
+	Agent   string
+}
+
+// Identified reports whether the host named the caller at all.
+func (c Caller) Identified() bool { return c.Session != "" || c.Agent != "" }
+
+// agentRecordDir holds the identified callers' records, beside the jobs file.
+const agentRecordDir = "agents"
+
+// record names the file c's binding lives in: an identified caller's in the repository's
+// state directory, keyed on exactly (host, session, agent), and an identity-less caller's
+// under the checkout. "" when there is nowhere to key it.
 //
-// It lives in the repository's state directory rather than any checkout's cache dir. A
-// worker in its own worktree has a cache dir of its own, so a record the spawner filed in
-// its cache dir was one the worker's hook never found; and the sandbox grants a run its
-// cache dir, so a record there was one a confined run could rewrite.
+// Hashed rather than sanitized: the ids are host-chosen strings that may hold anything,
+// separators included, and a filename assembled from one is a filename the input picked.
+func (s *Store) record(c Caller) string {
+	if !c.Identified() {
+		return MarkerPath(s.cacheDir)
+	}
+	if s.err != nil || s.path == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(c.Host + "\x00" + c.Session + "\x00" + c.Agent))
+	return filepath.Join(filepath.Dir(s.path), agentRecordDir, hex.EncodeToString(sum[:12]))
+}
+
+// Bind records that caller c acts under job id, replacing whatever it held. An identified
+// caller's record is the repository's and answers only for that exact (host, session,
+// agent), from whichever checkout the call runs in; an identity-less caller's is this
+// Store's checkout's.
 //
-// Whether the spawner may hand id out is the caller's judgment; this only records it.
-func (s *Store) BindAgent(a Subagent, id string) error {
+// The repository's state directory rather than any checkout's cache dir: a worker in its
+// own worktree has a cache dir of its own, so a record filed in the spawner's was one the
+// worker's hook never found, and the sandbox grants a run its cache dir, so a record
+// there was one a confined run could rewrite.
+//
+// Whether c may take id is the guard's judgment; this only records it.
+func (s *Store) Bind(c Caller, id string) error {
 	if !types.ValidJobID(id) {
 		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only)", id)
 	}
-	path := s.agentMarker(a)
+	path := s.record(c)
 	if path == "" {
-		return fmt.Errorf("job: bind agent: %w", cmp.Or(s.err, errors.New("no state dir or no agent id to key the binding by")))
+		return fmt.Errorf("job: bind: %w", cmp.Or(s.err, errors.New("no state dir or cache dir to key the binding by")))
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("job: bind agent: %w", err)
+		return fmt.Errorf("job: bind: %w", err)
 	}
-	// Through a rename: the subagent's own hooks may be reading it already.
+	// Through a rename: the caller's own hooks may be reading it already.
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
 	if err != nil {
-		return fmt.Errorf("job: bind agent: %w", err)
+		return fmt.Errorf("job: bind: %w", err)
 	}
 	_, werr := tmp.WriteString(id + "\n")
 	cerr := tmp.Close()
 	if err := cmp.Or(werr, cerr, os.Rename(tmp.Name(), path)); err != nil {
 		_ = os.Remove(tmp.Name())
-		return fmt.Errorf("job: bind agent: %w", err)
+		return fmt.Errorf("job: bind: %w", err)
 	}
 	return nil
 }
 
-// AgentJob is the job subagent a was spawned for, "" when none was recorded.
+// Bound is the job c's own record names, "" when none does. Exact: a subagent never reads
+// its session's record, a session never reads a subagent's, and an identified caller never
+// reads the checkout's.
 //
-// A binding that does not read is none, unlike a checkout's marker: nothing but the
-// spawn record writes it, so there is no repair to point at, and reading it as none
-// grades the call exactly as it was graded before the binding existed.
-//
-// TODO: bindings are never swept; one small file per attributed spawn.
-func (s *Store) AgentJob(a Subagent) string {
-	id, _ := readMarker(s.agentMarker(a))
-	return id
+// TODO: records are never swept; one small file per binding.
+func (s *Store) Bound(c Caller) string {
+	return readRecord(s.record(c))
 }
 
-// ActingLease resolves the lease for a caller that reports no session and no subagent:
-// this checkout's checkout-wide marker, else claim. claim is the lease the process says it
-// acts under: trail.LeaseFromEnv for a process reading its own environment, or the lease
-// an adopted run was forwarded with. See [LeaseQuery.Resolve].
-func ActingLease(cacheDir, claim string) (string, types.LeaseSource, error) {
-	return LeaseQuery{Checkout: Checkout{CacheDir: cacheDir}, Claim: claim}.Resolve()
+// ActingLease resolves the lease for a process that is not a hook, and so knows no session
+// and no subagent: this checkout's record, else claim. claim is the lease the process says
+// it acts under: trail.LeaseFromEnv for a process reading its own environment, or the
+// lease an adopted run was forwarded with. See [LeaseQuery.Resolve].
+func ActingLease(cacheDir, claim string) (string, types.LeaseSource) {
+	return LeaseQuery{CheckoutJob: readRecord(MarkerPath(cacheDir)), Claim: claim}.Resolve()
 }
 
-// LeaseFromMarker is the checkout-wide marker. See [Checkout.Marker].
-func LeaseFromMarker(cacheDir string) (string, error) { return Checkout{CacheDir: cacheDir}.Marker() }
-
-// BindLease binds the checkout-wide marker. See [Checkout.Bind].
-func BindLease(cacheDir, id string) error { return Checkout{CacheDir: cacheDir}.Bind(id) }
-
-// VacateLease clears the checkout-wide marker. See [Checkout.Vacate].
-func VacateLease(cacheDir string) (string, error) { return Checkout{CacheDir: cacheDir}.Vacate() }
-
-// heldHere returns the live rows with write paths that are bound to this checkout,
-// excluding the job being forked.
-func heldHere(rows []types.Job, cacheDir, forking string) []types.Job {
-	bound := BoundLeases(cacheDir)
-	if len(bound) == 0 {
+// HeldIn returns the live rows with write paths whose holder recorded its base in the
+// checkout at root: the workers already working there, whoever they are.
+func HeldIn(rows []types.Job, root string) []types.Job {
+	if root == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
 		return nil
 	}
 	var out []types.Job
 	for _, row := range rows {
-		if row.ID == forking || !slices.Contains(bound, row.ID) {
-			continue
+		// A row that is over holds nothing, or a checkout would stay refused over every job
+		// that ever passed in it.
+		if row.CheckoutRoot == abs && row.State.Live() && len(row.WritePaths) > 0 {
+			out = append(out, row)
 		}
-		// A row that is over holds nothing. A checkout still carrying the marker of a job
-		// that passed is a checkout nobody is working in, and refusing the next fork over
-		// it would strand the worktree until somebody remembered to vacate.
-		if !row.State.Live() || len(row.WritePaths) == 0 {
-			continue
-		}
-		out = append(out, row)
 	}
 	return out
 }
 
+// heldHere is [HeldIn] without the job being forked.
+func heldHere(rows []types.Job, root, forking string) []types.Job {
+	return slices.DeleteFunc(HeldIn(rows, root), func(row types.Job) bool { return row.ID == forking })
+}
+
 // RefuseSharedCheckout refuses a fork whose write paths cover a file the WORKSPACE has to
-// load, while another live job with write paths is already bound to this checkout.
+// load, while another live job with write paths is already working in this checkout.
 //
 // THE ONE COLLISION A WORKER CANNOT SEE. Two jobs overlapping costs the two workers
 // involved a conflict they can read; a half-saved magusfile costs every worker in the
@@ -437,7 +255,7 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 	if store == nil || len(candidate.WritePaths) == 0 {
 		return nil
 	}
-	held := heldHere(rows, store.cacheDir, id)
+	held := heldHere(rows, store.root, id)
 	if len(held) == 0 {
 		return nil
 	}
@@ -558,7 +376,7 @@ func writePathCovering(paths []string, rel string) (string, bool) {
 	return "", false
 }
 
-// WriteProof grades candidate's write paths against every other live job bound to this
+// WriteProof grades candidate's write paths against every other live job working in this
 // checkout. See [types.JobWriteProof] for why the three answers are distinct.
 //
 // A nil Store answers alone: a caller with no store knows of no other holder.
@@ -566,7 +384,7 @@ func (s *Store) WriteProof(rows []types.Job, id string, candidate types.Job) typ
 	if s == nil {
 		return types.WriteProofAlone
 	}
-	held := heldHere(rows, s.cacheDir, id)
+	held := heldHere(rows, s.root, id)
 	if len(held) == 0 {
 		return types.WriteProofAlone
 	}

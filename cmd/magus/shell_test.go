@@ -1013,9 +1013,10 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	_, err = job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
 		Update(t.Context(), worker.ID, func(cur *types.Job) { *cur = worker })
 	require.NoError(t, err)
-	require.NoError(t, job.BindLease(cacheDir, worker.ID))
+	bindCheckout(t, cacheDir, worker.ID)
 
-	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s1","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
+	// No session_id: the checkout's record answers only a caller its host names no session for.
+	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
 	var out bytes.Buffer
 	err = shellStdin(context.Background(), strings.NewReader(envelope), &out, []string{"-o", "name"})
 	var silent errSilent
@@ -1338,7 +1339,8 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	// hook's inherited lease-b was passed in as a flag and outranked both of these.
 	t.Run("the session's binding outranks the baggage claim", func(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, "")
-		require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("lease-a"))
+		require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+			Bind(job.Caller{Session: "bound-session"}, "lease-a"))
 		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
 		got, err := run(owned, "--path", "--session", "bound-session", "-o", "json")
 		require.NoError(t, err, "graded under the binding's lease-a, whose ground this is")
@@ -1371,26 +1373,33 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 		`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
 		`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
 	for name, tc := range map[string]struct {
-		setup func(t *testing.T, ctx context.Context, cacheDir string)
+		setup func(t *testing.T, ctx context.Context, cacheDir, root string)
 		args  []string
 		want  string
 	}{
 		"flag": {args: []string{"--lease", "lease-a"}, want: `"lease_from": "flag"`},
 		"env": {
-			setup: func(t *testing.T, _ context.Context, _ string) {
+			setup: func(t *testing.T, _ context.Context, _, _ string) {
 				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 			},
 			want: `"lease_from": "env"`,
 		},
 		"marker": {
-			setup: func(t *testing.T, _ context.Context, cacheDir string) {
-				require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("lease-a"))
+			setup: func(t *testing.T, _ context.Context, cacheDir, _ string) {
+				bindCheckout(t, cacheDir, "lease-a")
 			},
-			args: []string{"--session", "bound-session"},
 			want: `"lease_from": "marker"`,
 		},
+		"session": {
+			setup: func(t *testing.T, _ context.Context, cacheDir, root string) {
+				require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+					Bind(job.Caller{Session: "bound-session"}, "lease-a"))
+			},
+			args: []string{"--session", "bound-session"},
+			want: `"lease_from": "agent"`,
+		},
 		"agent": {
-			setup: func(t *testing.T, ctx context.Context, _ string) {
+			setup: func(t *testing.T, ctx context.Context, _, _ string) {
 				require.NoError(t, shellStdin(ctx, strings.NewReader(spawned), io.Discard, []string{"--agent-name", "claude-code", "-o", "name"}))
 			},
 			args: []string{"--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3"},
@@ -1400,9 +1409,9 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
 			t.Setenv(trail.EnvBaggage, "")
-			ctx, _, cacheDir := fleetFixture(t, fleetLeases()...)
+			ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
 			if tc.setup != nil {
-				tc.setup(t, ctx, cacheDir)
+				tc.setup(t, ctx, cacheDir, root)
 			}
 			var out bytes.Buffer
 			err := shellStdin(ctx, strings.NewReader(rewire), &out, append(tc.args, "-o", "json"))

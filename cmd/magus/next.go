@@ -74,13 +74,10 @@ func newNextGate(root string) nextGate {
 	return nextGate{gate: hint.NewGate(dir, ""), role: role, writePaths: writePaths}
 }
 
-// actingRole grades the acting lease against this checkout's job store. A binding that
-// cannot be read serves the worker's narrower set, the answer an unreadable store gets.
+// actingRole grades the acting lease against this checkout's job store. A store that
+// cannot be read serves the worker's narrower set.
 func actingRole(cacheDir, root string) (hint.Role, []string) {
-	id, _, err := job.ActingLease(cacheDir, trail.LeaseFromEnv())
-	if err != nil {
-		return hint.RoleWorker, nil
-	}
+	id, _ := job.ActingLease(cacheDir, trail.LeaseFromEnv())
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

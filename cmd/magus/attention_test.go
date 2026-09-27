@@ -9,7 +9,6 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -191,7 +190,7 @@ func TestRecordAttentionOpenStoresTheLease(t *testing.T) {
 			if tc.bound != "" {
 				cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 				require.NoError(t, err)
-				require.NoError(t, job.BindLease(cacheDir, tc.bound))
+				bindCheckout(t, cacheDir, tc.bound)
 			}
 			if tc.claim != "" {
 				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)

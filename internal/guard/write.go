@@ -318,9 +318,9 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// Held once per session per lease: the second write into the same lease's paths
 		// repeats a fact the writer already has, while a different lease is a new one.
 		return writeGrade{Decision: "advise", Kind: advisoryLeasedPath, Key: leasedPathKey(owner.ID), Context: fmt.Sprintf(
-			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
+			"magus workspace: if you are lease %s, take it with `%s` so the guard grades your writes (a process no hook sees sets %s=%s instead); if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
-			owner.ID, envHookLease, owner.ID, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State)}
+			owner.ID, hint.JobExec.With(owner.ID), envHookLease, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State)}
 	}
 	return writeGrade{}
 }

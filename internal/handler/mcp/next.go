@@ -37,11 +37,7 @@ func (f nextFilter) served(next []hint.Next) []hint.Next {
 
 // role reads the acting job's row off this checkout's job store.
 func (f nextFilter) role() (hint.Role, []string) {
-	// A binding that cannot be read serves the worker's narrower set.
-	id, _, err := job.ActingLease(f.cacheDir, trail.LeaseFromEnv())
-	if err != nil {
-		return hint.RoleWorker, nil
-	}
+	id, _ := job.ActingLease(f.cacheDir, trail.LeaseFromEnv())
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

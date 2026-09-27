@@ -7,7 +7,6 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,7 +135,7 @@ func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 		assert.Empty(t, adviseSharedCheckoutSpawn(ctx, hint.NewGate(cacheDir, "quiet"), at))
 	})
 
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "holder"}.Bind(held.ID))
+	execHere(t, ctx, held.ID)
 
 	gate := hint.NewGate(cacheDir, "orchestrator")
 	note := adviseSharedCheckoutSpawn(ctx, gate, at)

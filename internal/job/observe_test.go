@@ -2,8 +2,6 @@ package job
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -309,8 +307,8 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	assert.Equal(t, "git does not report changed regions (RegionReporter)", status.FootprintReason)
 }
 
-// overlapFixture is two checkouts of one repository, root binding job a and other binding
-// job b, each marker in its checkout's own .magus.
+// overlapFixture is two checkouts of one repository, job a taken in root and job b in
+// other.
 type overlapFixture struct {
 	root, other string
 	driver      *mocks.MockVCSDriver
@@ -320,16 +318,9 @@ type overlapFixture struct {
 func newOverlapFixture(t *testing.T) overlapFixture {
 	t.Helper()
 	f := overlapFixture{root: t.TempDir(), other: t.TempDir(), driver: mocks.NewMockVCSDriver(t)}
-	bind := func(dir, id string) {
-		cacheDir := filepath.Join(dir, ".magus")
-		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-		writeMarker(t, cacheDir, id+"\n")
-	}
-	bind(f.root, "a")
-	bind(f.other, "b")
 	f.rows = []types.Job{
-		{ID: "a", Checkpoint: "reva", WritePaths: []string{"api"}, State: types.StateRunning},
-		{ID: "b", Checkpoint: "revb+digest", WritePaths: []string{"api/x.go"}, State: types.StateRunning},
+		{ID: "a", Checkpoint: "reva", WritePaths: []string{"api"}, State: types.StateRunning, CheckoutRoot: f.root},
+		{ID: "b", Checkpoint: "revb+digest", WritePaths: []string{"api/x.go"}, State: types.StateRunning, CheckoutRoot: f.other},
 	}
 	return f
 }
@@ -355,8 +346,7 @@ func TestOverlapFootprints(t *testing.T) {
 		name       string
 		a, b       []types.RegionChange
 		regionsErr error
-		unbindB    bool
-		listErr    error
+		untakenB   bool
 		askA, askB bool
 		want       types.JobOverlapFootprint
 	}{
@@ -408,11 +398,11 @@ func TestOverlapFootprints(t *testing.T) {
 			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func Y() {"}},
 		},
 		{
-			name:    "checkout missing",
-			a:       []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
-			unbindB: true,
-			askA:    true,
-			want:    types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository is bound to b"},
+			name:     "checkout missing",
+			a:        []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
+			untakenB: true,
+			askA:     true,
+			want:     types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository has taken b"},
 		},
 		{
 			name:       "capability declined",
@@ -421,21 +411,13 @@ func TestOverlapFootprints(t *testing.T) {
 			want: types.JobOverlapFootprint{Verdict: types.FootprintUnknown,
 				Reason: "a: git does not report changed regions (RegionReporter); b: git does not report changed regions (RegionReporter)"},
 		},
-		{
-			name:    "checkouts unlistable",
-			listErr: errors.New("not a repository"),
-			want: types.JobOverlapFootprint{Verdict: types.FootprintUnknown,
-				Reason: "a: the checkouts of this repository could not be listed: not a repository;" +
-					" b: the checkouts of this repository could not be listed: not a repository"},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newOverlapFixture(t)
-			if tc.unbindB {
-				require.NoError(t, os.Remove(MarkerPath(filepath.Join(f.other, ".magus"))))
+			if tc.untakenB {
+				f.rows[1].CheckoutRoot = ""
 			}
-			f.driver.EXPECT().OtherCheckouts(f.root).Return([]string{f.other}, tc.listErr)
 			if tc.askA {
 				f.driver.EXPECT().ChangedFiles(mock.Anything, f.root, "reva").Return(changed, nil)
 				f.driver.EXPECT().Regions(mock.Anything, f.root, "reva", files).Return(tc.a, tc.regionsErr)
@@ -445,9 +427,8 @@ func TestOverlapFootprints(t *testing.T) {
 				f.driver.EXPECT().Regions(mock.Anything, f.other, "revb", files).Return(tc.b, tc.regionsErr)
 			}
 			overlaps := []types.JobOverlap{{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}}}
-			cacheDirOf := func(dir string) (string, error) { return filepath.Join(dir, ".magus"), nil }
 
-			got := OverlapFootprints(t.Context(), f.driver, f.root, cacheDirOf, f.rows, overlaps)
+			got := OverlapFootprints(t.Context(), f.driver, f.rows, overlaps)
 
 			assert.Equal(t, []types.JobOverlap{{
 				JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: &tc.want,
@@ -456,33 +437,16 @@ func TestOverlapFootprints(t *testing.T) {
 	}
 }
 
-// Checkouts sharing one cache dir bind every lease in both, and diffing whichever came first
-// would compare the wrong tree.
-func TestOverlapFootprintsRefusesALeaseTwoCheckoutsClaim(t *testing.T) {
-	t.Parallel()
-
-	f := newOverlapFixture(t)
-	f.driver.EXPECT().OtherCheckouts(f.root).Return([]string{f.other}, nil)
-	shared := filepath.Join(f.root, ".magus")
-	overlaps := []types.JobOverlap{{JobA: "a", JobB: "b"}}
-
-	got := OverlapFootprints(t.Context(), f.driver, f.root, func(string) (string, error) { return shared, nil }, f.rows, overlaps)
-
-	assert.Equal(t, &types.JobOverlapFootprint{
-		Verdict: types.FootprintUnknown,
-		Reason:  "a: more than one checkout is bound to a; b: no checkout of this repository is bound to b",
-	}, got[0].Footprint)
-	assert.Nil(t, overlaps[0].Footprint, "the caller's overlaps are not written through")
-}
-
 func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{{ID: "a", Checkpoint: "reva"}, {ID: "b"}}
-	got := OverlapFootprints(t.Context(), nil, "/repo", nil, rows, []types.JobOverlap{{JobA: "a", JobB: "b"}})
+	rows := []types.Job{{ID: "a", Checkpoint: "reva", CheckoutRoot: "/repo"}, {ID: "b"}}
+	overlaps := []types.JobOverlap{{JobA: "a", JobB: "b"}}
+	got := OverlapFootprints(t.Context(), nil, rows, overlaps)
 
 	assert.Equal(t, &types.JobOverlapFootprint{
 		Verdict: types.FootprintUnknown,
 		Reason:  "a: no version control answered here; b: b was declared without a checkpoint",
 	}, got[0].Footprint)
+	assert.Nil(t, overlaps[0].Footprint, "the caller's overlaps are not written through")
 }

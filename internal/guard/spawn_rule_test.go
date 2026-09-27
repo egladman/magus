@@ -249,7 +249,7 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+	execHere(t, ctx, row.ID)
 
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
@@ -263,7 +263,6 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 func TestSpawnRuleRoleIsComputed(t *testing.T) {
 	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
-	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 
 	probe := &spawnRuleProbe{}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
@@ -271,7 +270,7 @@ func TestSpawnRuleRoleIsComputed(t *testing.T) {
 	assert.Equal(t, types.AgentRoleRoot, probe.asked[0].Role)
 	assert.Nil(t, probe.asked[0].Lease)
 
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}, row.ID)
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
 	assert.Equal(t, types.AgentRoleWorker, probe.asked[1].Role)
@@ -373,8 +372,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
 	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
-	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+	execHere(t, ctx, row.ID)
 
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
@@ -445,6 +443,21 @@ func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {
 		}
 	}
 	return out
+}
+
+// bindCaller records who as acting under id, the record bindOnExec writes.
+func bindCaller(t *testing.T, ctx context.Context, who hookAttribution, id string) {
+	t.Helper()
+	at := hookLocation(ctx, Dependencies{})
+	require.NoError(t, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bind(who.caller(), id))
+}
+
+// execHere records id as taken in the fixture's checkout, as `magus job exec` does.
+func execHere(t *testing.T, ctx context.Context, id string) {
+	t.Helper()
+	at := hookLocation(ctx, Dependencies{})
+	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, id, "rev")
+	require.NoError(t, err)
 }
 
 // hookJSON renders an envelope the way a host writes it to the hook's stdin.
@@ -782,7 +795,7 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	}
 	ctx, root := fleetFixture(t, running("worker-job", ""), running("victim-job", ""), running("sub-job", "worker-job"), running("grandchild-job", "sub-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "worker-session"}.Bind("worker-job"))
+	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "worker-session"}, "worker-job")
 	facts := hint.NewGate(cacheDir, hookAttribution{Host: "claude-code", Session: "worker-session"}.factsKey())
 
 	spawn := func(title, child string) {
@@ -797,10 +810,10 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	spawn("worker/forger victim-job", "forged")
 	rec, ok := readSpawnedAgent(facts, "forged")
 	require.True(t, ok)
-	assert.Empty(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).AgentJob(job.Subagent{Host: "claude-code", Session: "worker-session", ID: "forged"}),
+	assert.Empty(t, job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Bound(job.Caller{Host: "claude-code", Session: "worker-session", Agent: "forged"}),
 		"a leased spawner cannot hand out a job outside its own tree")
 	assert.Equal(t, "victim-job", rec.UntrustedJob, "the claim is kept for a reader")
-	assert.Equal(t, "worker-job", graded("forged").Lease, "the forged child is graded under the spawner's own binding")
+	assert.Empty(t, graded("forged").Lease, "no record answers for the forged child, and it never reads its spawner's")
 
 	spawn("worker/integrator grandchild-job", "helper")
 	assert.Equal(t, "grandchild-job", graded("helper").Lease, "a job forked beneath the spawner's lease is its to hand out")
@@ -819,7 +832,7 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 	}
 	ctx, _ := fleetFixture(t, running("agent-job"), running("bound-job"), running("claimed-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("bound-job"))
+	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "bound-session"}, "bound-job")
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator agent-job", "", "", "", "a1b2c3"), Host: "claude-code"})
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=claimed-job")
 
@@ -835,7 +848,7 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 			Request{Input: "ls", Host: "claude-code", Session: "free-session"},
 			answer{"claimed-job", types.LeaseSourceEnv},
 		},
-		"the checkout's binding over the claim": {
+		"the session's binding over the claim": {
 			Request{Input: "ls", Host: "claude-code", Session: "bound-session"},
 			answer{"bound-job", types.LeaseSourceContested},
 		},
@@ -858,6 +871,183 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 			assert.Equal(t, tc.want, answer{last.Lease, last.LeaseFrom}, "the trail records the same answer")
 		})
 	}
+}
+
+// bashCall is Claude Code's PreToolUse for a Bash call, from the subagent agent inside
+// session, or from the root session when agent is "".
+func bashCall(t *testing.T, session, agent, command string) string {
+	t.Helper()
+	env := map[string]any{"session_id": session, "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": command}}
+	if agent != "" {
+		env["agent_id"], env["agent_type"] = agent, "general-purpose"
+	}
+	return hookJSON(t, env)
+}
+
+// graded is what a verdict says about who acted: whether it refused, and under which lease.
+type graded struct {
+	Denied bool
+	Lease  string
+	From   types.LeaseSource
+}
+
+func gradedAs(v Verdict) graded { return graded{v.Decision == "deny", v.Lease, v.LeaseFrom} }
+
+// TestASubagentsExecNeverBindsItsParent is the 2026-09-26 incident. An orchestrator spawned
+// a researcher in the foreground, so no spawn response attributed it while it ran, and the
+// researcher ran `magus job exec` on a read-only job in the orchestrator's checkout. The
+// CLI wrote a checkout-wide marker, the orchestrator's session fell back to it, and its
+// next `job fork` and `git merge` were refused as the worker's.
+func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Criteria: "research only", ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
+	ctx, root := fleetFixture(t,
+		types.Job{ID: "harness-audit", Criteria: "the audit", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}},
+		research)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	const session = "8f2c6a1e"
+
+	// The foreground spawn's PreToolUse; its PostToolUse lands only after the child stops.
+	foreground := strings.Replace(claudeSpawnEnvelope, `"run_in_background":true`, `"run_in_background":false`, 1)
+	require.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: foreground, Host: "claude-code"}).Decision)
+
+	exec := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "./magus job exec "+research.ID), Host: "claude-code"})
+	require.Equal(t, graded{}, gradedAs(exec), "the child held nothing when it took the job")
+	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Exec(ctx, research.ID, "23558048b")
+	require.NoError(t, err, "the CLI half of the exec")
+
+	child := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "a1b2c3", "ls"), Host: "claude-code"})
+	assert.Equal(t, graded{Lease: research.ID, From: types.LeaseSourceAgent}, gradedAs(child), "the child is graded under the job it took")
+
+	got := map[string]graded{}
+	for _, command := range []string{"./magus job fork harness-audit/next --criteria 'the next step'", "git merge linux-platform-design"} {
+		got[command] = gradedAs(Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "", command), Host: "claude-code"}))
+	}
+	assert.Equal(t, map[string]graded{
+		"./magus job fork harness-audit/next --criteria 'the next step'": {},
+		"git merge linux-platform-design":                                {},
+	}, got, "the parent sharing the child's session and checkout acts under nothing")
+
+	lease, from := job.ActingLease(cacheDir, "")
+	assert.Equal(t, graded{}, graded{Lease: lease, From: from}, "a process that is not a hook, the sandbox's run included, reads no binding either")
+}
+
+// Exec binds exactly the identity the host named on the call, through either door, and
+// nobody sharing its session or checkout.
+func TestExecBindsTheCallersIdentity(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	running := func(id string) types.Job {
+		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	}
+	ctx, _ := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
+
+	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
+	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec --base 77aa01c agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
+	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__magus_job",
+		"tool_input": map[string]any{"op": "exec", "id": "tool-job"}})
+	Judge(ctx, Dependencies{}, Request{Input: tool, Host: "claude-code"})
+
+	got := map[string]string{}
+	for name, req := range map[string]Request{
+		"the session-only caller":   {Input: "ls", Host: "codex", Session: "s1"},
+		"the subagent":              {Input: "ls", Host: "claude-code", Session: "s2", Agent: "a1"},
+		"the job tool's caller":     {Input: "ls", Host: "claude-code", Session: "s3"},
+		"the subagent's parent":     {Input: "ls", Host: "claude-code", Session: "s2"},
+		"a sibling subagent":        {Input: "ls", Host: "claude-code", Session: "s2", Agent: "a2"},
+		"the session on other host": {Input: "ls", Host: "claude-code", Session: "s1"},
+		"an identity-less caller":   {Input: "ls"},
+	} {
+		got[name] = Judge(ctx, Dependencies{}, req).Lease
+	}
+	assert.Equal(t, map[string]string{
+		"the session-only caller":   "session-job",
+		"the subagent":              "agent-job",
+		"the job tool's caller":     "tool-job",
+		"the subagent's parent":     "",
+		"a sibling subagent":        "",
+		"the session on other host": "",
+		"an identity-less caller":   "",
+	}, got)
+}
+
+// A job that has exited or ended holds its caller to nothing, so the next exec takes the
+// next job with nothing to give up first. Exited is live, yet nobody is required to wait
+// on it, so a caller held to it could be stuck for good.
+func TestExecAfterAnEndedJobRebinds(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
+		t.Run(string(state), func(t *testing.T) {
+			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
+			next := types.Job{ID: "next-job", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
+			ctx, _ := fleetFixture(t, held, next)
+			who := hookAttribution{Host: "claude-code", Session: "s1", Agent: "a1"}
+			bindCaller(t, ctx, who, held.ID)
+
+			v := Judge(ctx, Dependencies{}, Request{Input: "magus job exec next-job", Host: who.Host, Session: who.Session, Agent: who.Agent})
+			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, gradedAs(v))
+			assert.Equal(t, next.ID, boundJob(who, hookLocation(ctx, Dependencies{})))
+		})
+	}
+}
+
+// A job still declared or running holds its caller: taking another is how a worker would
+// be graded against a boundary nobody handed it. Taking its own again passes.
+func TestExecUnderARunningJobIsRefused(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	for _, state := range []types.JobState{types.StateDeclared, types.StateRunning} {
+		t.Run(string(state), func(t *testing.T) {
+			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
+			other := types.Job{ID: "other-job", State: types.StateDeclared, WritePaths: []string{"internal/other/**"}}
+			ctx, _ := fleetFixture(t, held, other)
+			who := hookAttribution{Host: "claude-code", Session: "s1", Agent: "a1"}
+			bindCaller(t, ctx, who, held.ID)
+			judge := func(input string) graded {
+				return gradedAs(Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host, Session: who.Session, Agent: who.Agent}))
+			}
+
+			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec other-job"))
+			assert.Equal(t, graded{Denied: true, Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus_job op=exec id=other-job"))
+			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, judge("magus job exec held-job"))
+			assert.Equal(t, held.ID, boundJob(who, hookLocation(ctx, Dependencies{})), "a refused exec rebinds nothing")
+		})
+	}
+}
+
+// A worker its spawn already attributed is bound; its exec records the base and binds
+// nothing new, here or in the checkout.
+func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	ctx, _ := fleetFixture(t, row)
+	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	at := hookLocation(ctx, Dependencies{})
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	jobs, err := store.Path()
+	require.NoError(t, err)
+	records := func() []string {
+		entries, err := os.ReadDir(filepath.Join(filepath.Dir(jobs), "agents"))
+		require.NoError(t, err)
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		return names
+	}
+	before := records()
+	require.Len(t, before, 1, "the spawn recorded the child")
+
+	v := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, "magus job exec guard-facts"), Host: "claude-code"})
+	assert.Equal(t, graded{Lease: row.ID, From: types.LeaseSourceAgent}, gradedAs(v))
+
+	assert.Equal(t, before, records(), "no second record")
+	assert.Equal(t, row.ID, store.Bound(who.caller()))
+	_, err = os.Stat(job.MarkerPath(at.cacheDir))
+	assert.True(t, os.IsNotExist(err), "no checkout record")
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Equal(t, "77aa01c", rows[0].ReportedBase, "the base already reported is kept")
 }
 
 // denyEverySpawn is a magusfile whose spawn rule denies every spawn.

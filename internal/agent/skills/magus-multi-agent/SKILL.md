@@ -372,16 +372,15 @@ The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
 partitioned{{if .Full}} - and every diff-since-checkpoint in Integrate and verify
-silently lies when the recorded base is not the real one{{end}}. A worker's first
-required act is `magus job exec <its id>`, which takes the lease in that checkout
-and records the base it landed on. Where the host names its session, the worker
-passes `--session <that id>` and the lease is the SESSION's rather than the
-checkout's, so workers sharing a tree each hold one and each has its own write
-paths graded{{if .Full}}; without it the binding is the whole checkout's, the second
-worker's is refused as a rebind, and every worker after the first runs
-unattributed, which looks exactly like a guarded session and denies nothing{{end}}.
-Pass the same id the host reports to its guard hook, or the two halves bind and
-grade under different names. The
+silently lies when the recorded base is not the real one{{end}}. A worker whose
+spawn title names its job (`<parent>/<role> <job>`) is bound already and records
+its base on its first call; any other worker runs `magus job exec <its id>` once,
+which records the base it landed on. The guard binds the caller that ran it, keyed
+on the session and subagent ids the host names, so workers sharing a tree each
+hold their own lease and none of them binds you{{if .Full}}. Nothing to pass: the
+CLI cannot tell a subagent from its parent, which is why the binding is the
+guard's, and a host that names neither id binds the checkout for every caller like
+it{{end}}. The
 answer is a status recorded on the row - match, revision-match (same revision,
 different uncommitted patch), diverged, or unknown - plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status
@@ -401,7 +400,7 @@ an investigation or a helpful revert of something correct{{end}}.
 
 Write paths are the WRITE boundary. The guard reads them as a READ boundary too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
-once `magus job exec <its id>` takes the lease in its checkout.{{if .Full}} The
+once it holds its lease.{{if .Full}} The
 read boundary is its projects plus what they declare `depends_on`, so a shared library
 it legitimately builds on stays open.{{end}} When a worker must READ something it
 must not WRITE, put that path in the row's `read_paths` instead of widening

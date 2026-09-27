@@ -2254,18 +2254,13 @@ field of a live one. Every path flag is repeatable or comma-separated, and an
 empty segment is refused rather than dropped. There is no --state: this declares a
 new job, and one nobody has taken is declared.
 
-exec takes the lease on a job in this checkout. It writes the marker every
-lease-scoped rule reads, and records the base this tree actually landed on beside
-the checkpoint the job was handed, with the divergence between them as a fact
-rather than a refusal. Two acts under one verb, because splitting them left the
-base unrecorded on every job anybody took by hand.
-
-exec --vacate gives that marker up instead of writing one, so the checkout can
-exec a different job. Refused while the job is still declared or running, since
-walking away mid-flight would leave the checkout's next write ungraded; a job
-already exited, one the store no longer carries, or no binding at all, all
-vacate cleanly, which is what a checkout stuck on a lease nobody will ever wait
-on needs.
+exec takes a job in this checkout. It records the base this tree actually landed
+on beside the checkpoint the job was handed, with the divergence between them as
+a fact rather than a refusal. The guard hook binds the caller when it lets exec
+through, keyed on the session and subagent its agent host names, so a subagent's
+exec never binds its parent; a host that names neither binds the checkout. A
+caller holding a job still declared or running is refused another; once its job
+has exited or ended, the next exec takes the next job.
 
 exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
 reads the same record from any checkout. The run behind the result's output ref is
@@ -2331,11 +2326,9 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
-			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. The binding is the SESSION's when --session names one, so several sessions in one checkout each hold their own. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
+			Description: "Record the base this tree is on and the checkout the job was taken in. The guard hook binds the caller to the job when it lets this through, keyed on the session and subagent its host names; a host that names neither binds this checkout.",
 			Flags: []Flag{
 				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
-				{Name: "session", Kind: FlagString, Doc: "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's"},
-				{Name: "vacate", Kind: FlagBool, Doc: "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running"},
 			},
 		},
 		{
@@ -2394,7 +2387,6 @@ shows what it is doing.`,
 		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
 		{"Declare it from a record", "magus job fork --stdin < job.json"},
 		{"Take it in this checkout", "magus job exec session-load/core"},
-		{"Give up this checkout's binding", "magus job exec --vacate"},
 		{"Return it with its result", "magus job exit session-load/core --stdin < result.json"},
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},

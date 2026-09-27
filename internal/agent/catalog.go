@@ -216,7 +216,10 @@ import (
 // untaken job past jobs.stale_after), so a worktree is removed only once its job is done.
 // 88: magus-run's plan pipe runs the plan's shards with `magus run --stdin`; the ci-shard
 // target it named is gone.
-const SkillVersion = 88
+// 89: magus-multi-agent drops `magus job exec --session`. The guard binds whoever runs
+// exec, keyed on the host's session and subagent ids, and a worker its spawn title
+// attributed needs no exec at all.
+const SkillVersion = 89
 
 const skillLicense = "GPL-3.0-or-later"
 

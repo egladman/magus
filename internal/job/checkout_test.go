@@ -18,7 +18,7 @@ import (
 // parallel tests here cannot pin it one test at a time.
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// writeMarker writes content as cacheDir's checkout-wide marker.
+// writeMarker writes content as cacheDir's checkout record.
 func writeMarker(t *testing.T, cacheDir, content string) {
 	t.Helper()
 	path := MarkerPath(cacheDir)
@@ -61,7 +61,8 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 		u.State, u.WritePaths = types.StateRunning, []string{"internal/job/store.go"}
 	}, limits, nil)
 	require.NoError(t, err)
-	require.NoError(t, Checkout{CacheDir: loc.CacheDir}.Bind(held.ID))
+	_, err = s.Exec(ctx, held.ID, "rev")
+	require.NoError(t, err)
 
 	_, err = ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
 		u.State, u.WritePaths = types.StateDeclared, []string{"magusfile.buzz", "docs"}
@@ -104,7 +105,8 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.WriteProofAlone, alone.WriteProof, "nothing else holds the checkout")
-	require.NoError(t, Checkout{CacheDir: loc.CacheDir}.Bind(alone.ID))
+	_, err = s.Exec(ctx, alone.ID, "rev")
+	require.NoError(t, err)
 
 	disjoint, err := ForkMerge(ctx, s, "wave/second", func(u *types.Job) {
 		u.State, u.WritePaths = types.StateDeclared, []string{"internal/guard"}
@@ -185,21 +187,23 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 }
 
 // TestSharedCheckoutRefusalIgnoresAJobThatIsOver is why the rule reads the STATE: a
-// checkout still carrying the marker of a job that passed is a checkout nobody is
-// working in, and refusing the next fork over it would strand the worktree.
+// checkout a job that passed was taken in is a checkout nobody is working in, and
+// refusing the next fork over it would strand the worktree.
 func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	root := loadableRoot(t)
-	loc := tmpLoc(t, root)
-	s := NewStore(loc)
+	s := NewStore(tmpLoc(t, root))
 
 	done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
-		u.State, u.WritePaths = types.StatePass, []string{"internal/job/store.go"}
+		u.State, u.WritePaths = types.StateRunning, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
-	require.NoError(t, Checkout{CacheDir: loc.CacheDir}.Bind(done.ID))
+	_, err = s.Exec(ctx, done.ID, "rev")
+	require.NoError(t, err)
+	_, err = s.Update(ctx, done.ID, func(u *types.Job) { u.State = types.StatePass })
+	require.NoError(t, err)
 
 	next, err := ForkMerge(ctx, s, "wave/next", func(u *types.Job) {
 		u.State, u.WritePaths = types.StateDeclared, []string{"magus.yaml"}
@@ -208,70 +212,11 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 	assert.Equal(t, types.WriteProofAlone, next.WriteProof)
 }
 
-// TestTwoSessionsInOneCheckoutEachHoldTheirOwnLease is the binding three workers sharing
-// this repository could not have. The marker used to be one file per CHECKOUT, so the
-// second worker's bind read the first's id, was refused as a rebind, and all three ran
-// unattributed: every write-path rule fell silent at once while looking exactly like a guarded
-// session.
-func TestTwoSessionsInOneCheckoutEachHoldTheirOwnLease(t *testing.T) {
-	t.Parallel()
-
-	cacheDir := t.TempDir()
-	one := Checkout{CacheDir: cacheDir, Session: "session-one"}
-	two := Checkout{CacheDir: cacheDir, Session: "session-two"}
-
-	require.NoError(t, one.Bind("wave/one"))
-	require.NoError(t, two.Bind("wave/two"))
-
-	assert.Equal(t, "wave/one", markerOf(t, one))
-	assert.Equal(t, "wave/two", markerOf(t, two))
-	assert.ElementsMatch(t, []string{"wave/one", "wave/two"}, BoundLeases(cacheDir))
-
-	t.Run("a session bound to one lease cannot act under another", func(t *testing.T) {
-		err := one.Bind("wave/two")
-		require.Error(t, err)
-		assert.Equal(t, "wave/one", markerOf(t, one), "the refused bind changed nothing")
-		assert.NoError(t, one.Bind("wave/one"), "re-running its own bootstrap is not refused")
-	})
-
-	t.Run("vacating one leaves the sibling bound", func(t *testing.T) {
-		cleared, err := one.Vacate()
-		require.NoError(t, err)
-		assert.Equal(t, "wave/one", cleared)
-		assert.Empty(t, markerOf(t, one))
-		assert.Equal(t, "wave/two", markerOf(t, two), "the sibling session still holds its own")
-		assert.Equal(t, []string{"wave/two"}, BoundLeases(cacheDir))
-	})
-}
-
-// TestASessionWithNoMarkerFallsBackToTheCheckout pins the documented fallback: a caller
-// that reports no session, and a session nobody bound, both read the checkout-wide
-// marker, which is what every binding was before this.
-func TestASessionWithNoMarkerFallsBackToTheCheckout(t *testing.T) {
-	t.Parallel()
-
-	cacheDir := t.TempDir()
-	require.NoError(t, BindLease(cacheDir, "wave/checkout-wide"))
-
-	wide := Checkout{CacheDir: cacheDir}
-	assert.Equal(t, "wave/checkout-wide", markerOf(t, wide), "no session reported")
-	assert.Equal(t, "wave/checkout-wide", markerOf(t, Checkout{CacheDir: cacheDir, Session: "unbound"}))
-
-	require.NoError(t, Checkout{CacheDir: cacheDir, Session: "mine"}.Bind("wave/mine"))
-	assert.Equal(t, "wave/mine", markerOf(t, Checkout{CacheDir: cacheDir, Session: "mine"}),
-		"a session that has its own marker never reads the checkout's")
-	assert.Equal(t, "wave/checkout-wide", markerOf(t, wide), "the checkout-wide binding is untouched")
-}
-
 // TestLeaseQueryResolvesInOneOrder pins the order every caller grades by. The claim ranks
 // last: it is the one answer a worker can rewrite from its own shell, so a claim that
 // outranked a record would let a worker bound to one job act under another's write paths.
 func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
 	t.Parallel()
-
-	bound := t.TempDir()
-	require.NoError(t, BindLease(bound, "wave/marker"))
-	unbound := t.TempDir()
 
 	type answer struct {
 		Lease string
@@ -281,52 +226,51 @@ func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
 		query LeaseQuery
 		want  answer
 	}{
-		"nothing answers": {LeaseQuery{Checkout: Checkout{CacheDir: unbound}}, answer{}},
+		"nothing answers": {LeaseQuery{}, answer{}},
 		"the claim alone": {
-			LeaseQuery{Checkout: Checkout{CacheDir: unbound}, Claim: "wave/claim"},
+			LeaseQuery{Claim: "wave/claim"},
 			answer{"wave/claim", types.LeaseSourceEnv},
 		},
-		"the marker alone": {
-			LeaseQuery{Checkout: Checkout{CacheDir: bound}},
+		"the checkout's record alone": {
+			LeaseQuery{CheckoutJob: "wave/marker"},
 			answer{"wave/marker", types.LeaseSourceMarker},
 		},
-		"a claim that agrees with the marker": {
-			LeaseQuery{Checkout: Checkout{CacheDir: bound}, Claim: "wave/marker"},
+		"a claim that agrees with the checkout's record": {
+			LeaseQuery{CheckoutJob: "wave/marker", Claim: "wave/marker"},
 			answer{"wave/marker", types.LeaseSourceMarker},
 		},
-		"the marker over a different claim": {
-			LeaseQuery{Checkout: Checkout{CacheDir: bound}, Claim: "wave/claim"},
+		"the checkout's record over a different claim": {
+			LeaseQuery{CheckoutJob: "wave/marker", Claim: "wave/claim"},
 			answer{"wave/marker", types.LeaseSourceContested},
 		},
-		"the agent's job alone": {
-			LeaseQuery{Checkout: Checkout{CacheDir: unbound}, AgentJob: "wave/agent"},
+		"the caller's record alone": {
+			LeaseQuery{CallerJob: "wave/agent"},
 			answer{"wave/agent", types.LeaseSourceAgent},
 		},
-		"the agent's job agreeing with every lower source": {
-			LeaseQuery{Checkout: Checkout{CacheDir: bound}, AgentJob: "wave/marker", Claim: "wave/marker"},
-			answer{"wave/marker", types.LeaseSourceAgent},
+		"the caller's record agreeing with the claim": {
+			LeaseQuery{CallerJob: "wave/agent", Claim: "wave/agent"},
+			answer{"wave/agent", types.LeaseSourceAgent},
 		},
-		"the agent's job over a different marker": {
-			LeaseQuery{Checkout: Checkout{CacheDir: bound}, AgentJob: "wave/agent"},
+		"the caller's record over a different claim": {
+			LeaseQuery{CallerJob: "wave/agent", Claim: "wave/claim"},
 			answer{"wave/agent", types.LeaseSourceContested},
 		},
 		"the flag alone": {
-			LeaseQuery{Checkout: Checkout{CacheDir: unbound}, Flag: "wave/flag"},
+			LeaseQuery{Flag: "wave/flag"},
 			answer{"wave/flag", types.LeaseSourceFlag},
 		},
 		"the flag over a different claim": {
-			LeaseQuery{Checkout: Checkout{CacheDir: unbound}, Flag: "wave/flag", Claim: "wave/claim"},
+			LeaseQuery{Flag: "wave/flag", Claim: "wave/claim"},
 			answer{"wave/flag", types.LeaseSourceContested},
 		},
 		"the flag over everything": {
-			LeaseQuery{Checkout: Checkout{CacheDir: bound}, Flag: "wave/flag", AgentJob: "wave/agent", Claim: "wave/claim"},
+			LeaseQuery{Flag: "wave/flag", CallerJob: "wave/agent", Claim: "wave/claim"},
 			answer{"wave/flag", types.LeaseSourceContested},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			lease, from, err := tc.query.Resolve()
-			require.NoError(t, err)
+			lease, from := tc.query.Resolve()
 			assert.Equal(t, tc.want, answer{lease, from})
 		})
 	}
@@ -334,7 +278,7 @@ func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
 
 // TestMarkerLivesOutsideTheCacheDir: the sandbox grants a run its workspace, cache dir
 // included, so a marker there let a confined run rename its own lease, or drop it, for
-// every later run in the checkout. A file a run writes where the marker used to be is now
+// every later run in the checkout. A file a run writes where the marker used to be is
 // nobody's binding.
 func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	state := t.TempDir()
@@ -343,7 +287,7 @@ func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
-	require.NoError(t, BindLease(cacheDir, "wave/worker"))
+	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
 	assert.True(t, strings.HasPrefix(MarkerPath(cacheDir), state+string(filepath.Separator)),
 		"the marker is under the state dir: %s", MarkerPath(cacheDir))
 	entries, err := os.ReadDir(cacheDir)
@@ -351,83 +295,88 @@ func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	assert.Empty(t, entries, "binding writes nothing into the cache dir")
 
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte("wave/root\n"), 0o644))
-	lease, from, err := ActingLease(cacheDir, "")
-	require.NoError(t, err)
+	lease, from := ActingLease(cacheDir, "")
 	assert.Equal(t, "wave/worker", lease, "a marker-shaped file in the cache dir binds nothing")
 	assert.Equal(t, types.LeaseSourceMarker, from)
 }
 
-// A subagent's binding is the repository's, not a checkout's: a worktree of the same
-// repository reads it, and it answers only for the exact host, session and agent id.
-func TestAgentBindingIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
-	state := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", state)
+// An identified caller's binding is the repository's, not a checkout's: a worktree of the
+// same repository reads it.
+func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	main, worktree := t.TempDir(), t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"),
 		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n"), 0o644))
 	spawner := NewStore(Location{CacheDir: filepath.Join(main, ".magus"), Root: main})
 	worker := NewStore(Location{CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
-	child := Subagent{Host: "claude-code", Session: "s1", ID: "a1b2c3"}
+	child := Caller{Host: "claude-code", Session: "s1", Agent: "a1b2c3"}
 
-	require.NoError(t, spawner.BindAgent(child, "wave/worker"))
-	assert.Error(t, spawner.BindAgent(child, "not a lease"), "an id ValidJobID rejects is refused")
+	require.NoError(t, spawner.Bind(child, "wave/worker"))
+	assert.Error(t, spawner.Bind(child, "not a lease"), "an id ValidJobID rejects is refused")
 
-	got := map[string]string{}
-	for name, a := range map[string]Subagent{
-		"the child":            child,
-		"another agent":        {Host: "claude-code", Session: "s1", ID: "d4e5f6"},
-		"another session":      {Host: "claude-code", Session: "s2", ID: "a1b2c3"},
-		"another host":         {Host: "codex", Session: "s1", ID: "a1b2c3"},
-		"the parent, no agent": {Host: "claude-code", Session: "s1"},
-	} {
-		got[name] = worker.AgentJob(a)
-	}
-	assert.Equal(t, map[string]string{
-		"the child": "wave/worker", "another agent": "", "another session": "", "another host": "", "the parent, no agent": "",
-	}, got)
+	assert.Equal(t, "wave/worker", worker.Bound(child))
 	for _, dir := range []string{main, worktree} {
 		_, err := os.Stat(filepath.Join(dir, ".magus"))
 		assert.True(t, os.IsNotExist(err), "nothing is written into %s's cache dir", dir)
 	}
 }
 
-// TestLeaseQueryRefusesAMarkerItCannotRead pins that an unreadable binding is an error
-// whatever else answers: reading it as none would hand the call to the claim, which is the
-// one source a worker can rewrite.
-func TestLeaseQueryRefusesAMarkerItCannotRead(t *testing.T) {
-	t.Parallel()
-
-	cacheDir := t.TempDir()
-	writeMarker(t, cacheDir, "not a lease id!\n")
-	for name, q := range map[string]LeaseQuery{
-		"with a claim": {Checkout: Checkout{CacheDir: cacheDir}, Claim: "wave/claim"},
-		"with a flag":  {Checkout: Checkout{CacheDir: cacheDir}, Flag: "wave/flag"},
-		"a session":    {Checkout: Checkout{CacheDir: cacheDir, Session: "s1"}},
-		"nothing else": {Checkout: Checkout{CacheDir: cacheDir}},
-	} {
-		lease, from, err := q.Resolve()
-		require.Error(t, err, name)
-		assert.Contains(t, err.Error(), "not a lease id", name)
-		assert.Empty(t, lease, name)
-		assert.Empty(t, from, name)
+// TestNoRecordAnswersForAnotherKey is the boundary the 2026-09-26 incident crossed: a
+// subagent's exec wrote a binding its parent then read. Every key reads its own record
+// and nothing else, so no caller is ever graded as another.
+func TestNoRecordAnswersForAnotherKey(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	s := NewStore(Location{CacheDir: filepath.Join(root, ".magus"), Root: root})
+	bound := map[string]Caller{
+		"wave/child":    {Host: "claude-code", Session: "s1", Agent: "a1b2c3"},
+		"wave/parent":   {Host: "claude-code", Session: "s1"},
+		"wave/checkout": {Host: "opencode"},
+	}
+	for id, c := range bound {
+		require.NoError(t, s.Bind(c, id))
 	}
 
-	unreadable := t.TempDir()
-	require.NoError(t, os.MkdirAll(MarkerPath(unreadable), 0o755))
-	_, _, err := LeaseQuery{Checkout: Checkout{CacheDir: unreadable}}.Resolve()
-	require.Error(t, err, "a marker path that does not read as a file is not an absent marker")
-
-	cleared, err := Checkout{CacheDir: cacheDir}.Vacate()
-	require.NoError(t, err, "vacating is how the bad marker is cleared")
-	assert.Empty(t, cleared)
-	_, _, err = LeaseQuery{Checkout: Checkout{CacheDir: cacheDir}}.Resolve()
-	assert.NoError(t, err)
+	got := map[string]string{}
+	for name, c := range map[string]Caller{
+		"the child":                  bound["wave/child"],
+		"the parent":                 bound["wave/parent"],
+		"an identity-less caller":    bound["wave/checkout"],
+		"another identity-less host": {Host: "other"},
+		"another agent":              {Host: "claude-code", Session: "s1", Agent: "d4e5f6"},
+		"another session":            {Host: "claude-code", Session: "s2", Agent: "a1b2c3"},
+		"another host":               {Host: "codex", Session: "s1", Agent: "a1b2c3"},
+		"an agent with no session":   {Host: "claude-code", Agent: "a1b2c3"},
+	} {
+		got[name] = s.Bound(c)
+	}
+	assert.Equal(t, map[string]string{
+		"the child":                  "wave/child",
+		"the parent":                 "wave/parent",
+		"an identity-less caller":    "wave/checkout",
+		"another identity-less host": "wave/checkout",
+		"another agent":              "",
+		"another session":            "",
+		"another host":               "",
+		"an agent with no session":   "",
+	}, got)
+	lease, from := ActingLease(filepath.Join(root, ".magus"), "")
+	assert.Equal(t, []any{"wave/checkout", types.LeaseSourceMarker}, []any{lease, from},
+		"a process that is not a hook reads the checkout's record")
 }
 
-// markerOf reads c's marker, failing the test on a marker that does not read.
-func markerOf(t *testing.T, c Checkout) string {
-	t.Helper()
-	id, err := c.Marker()
-	require.NoError(t, err)
-	return id
+// Only the guard writes a record, through a rename, so one that does not read is damage
+// from outside, and it reads as no binding rather than as a refusal nothing could clear.
+func TestARecordThatDoesNotReadIsNone(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	cacheDir := t.TempDir()
+	s := NewStore(Location{CacheDir: cacheDir})
+
+	writeMarker(t, cacheDir, "not a lease id!\n")
+	assert.Empty(t, s.Bound(Caller{}))
+	lease, from := ActingLease(cacheDir, "wave/claim")
+	assert.Equal(t, []any{"wave/claim", types.LeaseSourceEnv}, []any{lease, from})
+
+	require.NoError(t, s.Bind(Caller{}, "wave/worker"), "a binding replaces what did not read")
+	assert.Equal(t, "wave/worker", s.Bound(Caller{}))
 }

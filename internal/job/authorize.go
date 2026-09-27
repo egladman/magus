@@ -15,9 +15,11 @@ import (
 // BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor may write anything; a
 // bound one is a worker acting under one row, and the rules below are what it may do to
 // the book from inside it. Unbound says nothing about who is writing: an orchestrator and
-// an agent that never bound its checkout are both unbound. Binding is the checkout's lease
-// marker or the BAGGAGE channel, the same two the guard reads, so a worker cannot be one
-// party to the guard and another to the store.
+// an agent nobody bound are both unbound. A process binds through the checkout's record or
+// its BAGGAGE claim. The guard also reads the calling session's and subagent's record,
+// which no process can see, and refuses a bound caller's rebinding writes before they run
+// (denyLeaseScopedRebind), so for a hook-identified worker that rule is the enforcement
+// and this store is the backstop for everyone else.
 //
 // Who the writer is beyond its lease is not the actor's: a row's registered_by is stamped
 // from the write's context (trail.StampOrigin), where each door put its entry point,
@@ -28,12 +30,11 @@ type Actor struct {
 }
 
 // ActingActor is the party this process acts as for the checkout whose cache dir is
-// cacheDir: the lease [ActingLease] resolves from the checkout's binding and this
-// process's BAGGAGE claim. A process with no lease is the unbound actor; a binding that
-// cannot be read is an error, never the unbound actor.
-func ActingActor(cacheDir string) (Actor, error) {
-	lease, _, err := ActingLease(cacheDir, trail.LeaseFromEnv())
-	return Actor{Lease: lease}, err
+// cacheDir: the lease [ActingLease] resolves from the checkout's record and this
+// process's BAGGAGE claim. A process with no lease is the unbound actor.
+func ActingActor(cacheDir string) Actor {
+	lease, _ := ActingLease(cacheDir, trail.LeaseFromEnv())
+	return Actor{Lease: lease}
 }
 
 // Bound reports whether this actor is a worker acting under a lease.

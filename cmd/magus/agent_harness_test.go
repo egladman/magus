@@ -11,7 +11,6 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
@@ -81,16 +80,11 @@ func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
 	claimed := proc.WithLease(context.Background(), "fleet/claimed")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
 
-	require.NoError(t, job.BindLease(cacheDir, "fleet/bound"))
+	bindCheckout(t, cacheDir, "fleet/bound")
 	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")
 	assert.Equal(t, "fleet/bound", acting(claimed), "the binding over a different claim")
 
 	err = agentHarnessInstallCmd(context.Background(), root, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
-
-	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("not a lease id!\n"), 0o644))
-	err = agentHarnessInstallCmd(context.Background(), root, nil)
-	require.Error(t, err, "a binding that does not read refuses, never reads as unbound")
-	assert.Contains(t, err.Error(), "not a lease id")
 }
