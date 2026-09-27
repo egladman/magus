@@ -94,7 +94,7 @@ linters:
     # accumulates test files no source file accounts for. `unpaired` below adds the
     # broader house rule, "every X_test.go needs an X.go", which the Go standard
     # library would fail on 34% of its test files. A test file with no single
-    # source file to cover opens with `// cross-cutting: <why>` instead. The
+    # source file to cover is named in its allow setting below instead. The
     # reasoning and the stdlib measurements are in libs/testlayout/readme.md.
     #
     # This linter only exists in .magus/custom-gcl. The stock golangci-lint on PATH
@@ -176,17 +176,17 @@ linters:
         description: reports a test file whose name narrows a source file's name
         original-url: github.com/egladman/magus/libs/testlayout
         settings:
-          unpaired: true
+          report-unpaired: true
           # Every unpaired test file names its reason here rather than in its own
-          # header, so the exceptions are one list a reviewer can read.
-          ignore-marker: true
+          # header, so the exceptions are one list a reviewer can read. That is why
+          # honor-marker stays off.
           allow:
             # Repo-wide gates over the tree's shape; no one source file owns them.
             - conventions_test.go
           # Benchmarks live in the _test.go of what they measure.
           pair-benchmarks: true
           # Name the platforms (X_linux.go, X_darwin.go, X_other.go), never unix.
-          no-unix-suffix: true
+          report-unix-suffix: true
 
       coldread:
         type: module
@@ -197,7 +197,7 @@ linters:
           # line. It is a separate setting because its fix can move a clause across
           # a line break rather than swapping one character, which reviews as a
           # different kind of edit.
-          wrapped: true
+          report-wrapped: true
           # history fired 359 times over this tree when the check landed, most of
           # them "used to" in test docs pinning a past regression. It stays off
           # until a sweep rewrites those to state the invariant the test pins.
@@ -210,10 +210,21 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
-          # Generated output, fixtures, and the embedded skill bodies, which are
-          # documentation checked elsewhere.
-          skip-dirs: [.git, .magus, .claude, .agents, .opencode, node_modules, gen, testdata,
-                      docs, blog, skills, releases, manpage, schema]
+          # Generated output, and the packages that embed documentation checked
+          # elsewhere. Each must name a directory holding Go files; the go tool
+          # never builds dot directories or testdata, so they need no entry.
+          skip-dirs: [gen, docs, schema]
+          hosts: [claude, opencode, codex, aider, windsurf]
+          # Cursor is a terminal position and a pagination token far more often
+          # than the host, so only the shapes that mean the host are matched: the
+          # proper noun in parentheses, its machinery, and a comparison against
+          # the host label. A bare `case "cursor":` is not matched, since no
+          # line-level pattern separates it from a diff-session or memory op.
+          host-patterns:
+            - '\(Cursor\)'
+            - '(?i)\bcursor (hooks?|ide|editor|rules)\b'
+            - '(?i)[!=]=\s*"cursor"'
+          hint: magus names a host only in a path such as .claude/skills
 
       hostvocab:
         type: module
@@ -233,6 +244,9 @@ linters:
           words: [Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, Bash, Task, TodoWrite,
                   WebFetch, WebSearch, ExitPlanMode, read_file, write_file, edit_file, list_dir,
                   apply_patch, run_terminal_cmd, str_replace_editor, codebase_search, shell]
+          hint: >-
+            record magus's own label (hookToolCommand, hookToolWrite, hookToolRead) and let
+            the wrapper in the reader's config map to it by which flag it passes
 
       ruletext:
         type: module
@@ -242,6 +256,7 @@ linters:
           module: github.com/egladman/magus
           files: [cmd/magus/shell.go]
           prefix: "magus workspace:"
+          hint: the guard is internal/guard, and `magus session ls` replays its rules
 
       asciistrings:
         type: module
@@ -302,9 +317,8 @@ linters:
         description: reports exported names that repeat their package's name
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          min-package: 3
-          # Packages whose exported names repeat the package name on purpose, each
-          # with a reason.
+          # Package names, as their package clauses spell them, whose exported
+          # names repeat the package name on purpose, each with a reason.
           allow: []
 
       filenames:
@@ -313,7 +327,9 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
-          skip-dirs: [.git, node_modules, .claude, gen, testdata]
+          # The go tool never builds dot directories or testdata, so the walk skips
+          # them without an entry here.
+          skip-dirs: [gen]
           suffixes: [test, linux, darwin, windows, unix, other, amd64, arm64, js, wasm, freebsd,
                      openbsd, netbsd]
           # Segments that are one established word. Adding one says "this is a
@@ -334,8 +350,11 @@ linters:
         settings:
           module: github.com/egladman/magus
           package: github.com/egladman/magus/cmd/magus
-          case: outputName
+          case-ident: outputName
           emitters: [emitNames, emitNamesOf, outputDst]
+          hint: >-
+            the destination is --tee's; a single value is emitNames([]string{v}), a slice of
+            records is emitNamesOf(records, func(r T) string { return r.Field })
 
       testisolation:
         type: module
@@ -347,6 +366,9 @@ linters:
           module: github.com/egladman/magus
           package: github.com/egladman/magus/internal/proc/sockdir
           calls: [testkit.Main, testkit.Isolated]
+          hint: >-
+            unisolated, its tests can reach the person's real runtime directory, dial their
+            broker, and bind a pool beside their server
 
       # A CI or VCS provider (GitHub, GitLab, ...) is reached only by a Buzz op magus
       # invokes - a provider spell, a queue provider script, a tools/*.buzz driver -
@@ -365,6 +387,9 @@ linters:
         settings:
           module: github.com/egladman/magus
           dirs: [internal/queue, internal/job, internal/handler, internal/service, cmd/magus]
+          hint: >-
+            magus reaches a provider only by a Buzz op it invokes (docs/doctrine.md, "provider
+            I/O is Buzz"); an allow entry below is for magus's own remote services
           # Known CI/VCS provider client SDKs. None is a dependency today (go.mod has
           # none of these); the entry stands so the day one is added, this is what
           # refuses it rather than a review catching it by eye.
@@ -610,7 +635,7 @@ linters:
       - path: ^internal/report/
         linters: [sloglint]
 
-      # testlayout's ignore-marker, pair-benchmarks and no-unix-suffix landed with the
+      # testlayout's unhonored marker, pair-benchmarks and report-unix-suffix landed with the
       # root package clean and the files below outstanding. This list is the backlog,
       # not a set of exemptions: each entry is a file to rename or fold into its
       # source's _test.go, and the fix deletes the entry, so the list only shrinks.

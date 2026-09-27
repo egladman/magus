@@ -12,6 +12,7 @@ func TestAnalyzer(t *testing.T) {
 	analyzer, err := New(Options{
 		Files: []string{"guard/*.go"},
 		Words: []string{"Read", "Write", "Bash", "Task"},
+		Hint:  "the labels are hookTool*",
 	})
 	if err != nil {
 		t.Fatal(err)

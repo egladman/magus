@@ -7,6 +7,8 @@
 package plugin
 
 import (
+	"fmt"
+
 	"github.com/egladman/magus/libs/testlayout"
 	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
@@ -23,7 +25,7 @@ func init() {
 func newPlugin(raw any) (register.LinterPlugin, error) {
 	opts, err := register.DecodeSettings[testlayout.Options](raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("testlayout: settings: %w", err)
 	}
 
 	analyzer, err := testlayout.New(opts)
@@ -38,6 +40,7 @@ type linter struct {
 	analyzer *analysis.Analyzer
 }
 
+// BuildAnalyzers returns the one analyzer the settings configured.
 func (l *linter) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{l.analyzer}, nil
 }

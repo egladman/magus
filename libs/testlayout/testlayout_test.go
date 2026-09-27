@@ -20,11 +20,11 @@ func TestAnalyzer(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), Analyzer, "sprawl")
 }
 
-// TestAnalyzerUnpaired checks the opt-in half: the cross-cutting shape sprawl
-// leaves alone is reported once Unpaired is set, and a narrowing name still gets
-// the narrowing message rather than the weaker unpaired one.
-func TestAnalyzerUnpaired(t *testing.T) {
-	analyzer, err := New(Options{Unpaired: true})
+// TestAnalyzerReportUnpaired checks the opt-in half: the cross-cutting shape
+// sprawl leaves alone is reported once ReportUnpaired is set, and a narrowing name
+// still gets the narrowing message rather than the weaker unpaired one.
+func TestAnalyzerReportUnpaired(t *testing.T) {
+	analyzer, err := New(Options{ReportUnpaired: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,12 +32,13 @@ func TestAnalyzerUnpaired(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "unpaired")
 }
 
-// TestAnalyzerCrossCutting checks the exits from the Unpaired rule: a marker with a
-// reason above the package clause, and a platform family standing in for the missing
-// source file. An empty reason, a marker below the package clause, and a marked file
-// that narrows a source name are all still reported.
-func TestAnalyzerCrossCutting(t *testing.T) {
-	analyzer, err := New(Options{Unpaired: true})
+// TestAnalyzerHonorMarker checks the exits from the ReportUnpaired rule once the
+// marker is honored: a marker with a reason above the package clause, and a
+// platform family standing in for the missing source file. An empty reason, a
+// marker below the package clause, and a marked file that narrows a source name
+// are all still reported.
+func TestAnalyzerHonorMarker(t *testing.T) {
+	analyzer, err := New(Options{ReportUnpaired: true, HonorMarker: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,17 +46,16 @@ func TestAnalyzerCrossCutting(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "crosscutting")
 }
 
-// TestAnalyzerStrict checks the three options a tree adds on top of Unpaired: the
-// marker stops excusing a file, benchmark files lose their exemption, and a _unix
-// file name is reported whether it holds tests or source. Allow is then the one
-// exit left, which conventions_test.go takes.
+// TestAnalyzerStrict checks what a tree adds on top of ReportUnpaired: the marker,
+// left unhonored, excuses nothing, benchmark files lose their exemption, and a
+// _unix file name is reported whether it holds tests or source. Allow is then the
+// one exit left, which conventions_test.go takes.
 func TestAnalyzerStrict(t *testing.T) {
 	analyzer, err := New(Options{
-		Allow:          []string{"conventions_test.go"},
-		Unpaired:       true,
-		IgnoreMarker:   true,
-		PairBenchmarks: true,
-		NoUnixSuffix:   true,
+		Allow:            []string{"conventions_test.go"},
+		ReportUnpaired:   true,
+		PairBenchmarks:   true,
+		ReportUnixSuffix: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -76,12 +76,12 @@ func TestAnalyzerAllow(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "allowed")
 }
 
-// TestAnalyzerNoMainTests checks the opt-in option: a _test.go in package main
-// is reported, and the same analyzer run over sprawl - which holds no main or
-// main_test package files - reports exactly what the default analyzer already
+// TestAnalyzerReportMainTests checks the opt-in option: a _test.go in package
+// main is reported, and the same analyzer run over sprawl (which holds no main or
+// main_test package files) reports exactly what the default analyzer already
 // does, proving the option adds nothing there.
-func TestAnalyzerNoMainTests(t *testing.T) {
-	analyzer, err := New(Options{NoMainTests: true})
+func TestAnalyzerReportMainTests(t *testing.T) {
+	analyzer, err := New(Options{ReportMainTests: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestAnalyzerNoMainTests(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "mainpkg", "sprawl")
 }
 
-// TestIsMainTestPackage pins the exact package names [Options.NoMainTests]
+// TestIsMainTestPackage pins the exact package names [Options.ReportMainTests]
 // targets: the binary's own package and its external test variant, and no
 // other.
 func TestIsMainTestPackage(t *testing.T) {

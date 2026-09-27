@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/golangci/plugin-module-register/register"
@@ -13,8 +14,12 @@ import (
 // this test is that the json tags, not a copy, are what carry the values across.
 func TestNewPluginDecodesSettings(t *testing.T) {
 	p, err := newPlugin(map[string]any{
-		"allow":    []any{"*_bench_test.go"},
-		"unpaired": true,
+		"allow":              []any{"*_bench_test.go"},
+		"report-unpaired":    true,
+		"honor-marker":       true,
+		"pair-benchmarks":    true,
+		"report-unix-suffix": true,
+		"report-main-tests":  true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -45,10 +50,11 @@ func TestNewPluginRejectsMalformedGlob(t *testing.T) {
 
 // TestNewPluginRejectsUnknownKey pins register.DecodeSettings's DisallowUnknownFields
 // behaviour: a misspelled settings key is a silent no-op in most linters, and here
-// it is a load error naming the key.
+// it is a load error naming the linter and the key.
 func TestNewPluginRejectsUnknownKey(t *testing.T) {
-	if _, err := newPlugin(map[string]any{"allowed": []any{"*_test.go"}}); err == nil {
-		t.Fatal("expected an unknown settings key to fail")
+	_, err := newPlugin(map[string]any{"ignore-marker": true})
+	if err == nil || !strings.HasPrefix(err.Error(), "testlayout: settings: ") {
+		t.Fatalf("want an unknown settings key to fail naming the linter, got %v", err)
 	}
 }
 

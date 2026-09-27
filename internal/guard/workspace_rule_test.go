@@ -15,15 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// staleLoad is what a ./magus older than the tree reports: it cannot load the working tree,
+// errStaleLoad is what a ./magus older than the tree reports: it cannot load the working tree,
 // and parsing the approved copy with the same binary fails the same way.
-var staleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/policy/guard": buzz: line 73:14: object CommandInvocation has no field or method "vcs"`)
+var errStaleLoad = errors.New(`magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/policy/guard": buzz: line 73:14: object CommandInvocation has no field or method "vcs"`)
 
 // unloadedDeps is a workspace whose working tree and approved copy both fail to load.
 func unloadedDeps() Dependencies {
-	approvedErr := errors.New("approved magusfile: " + staleLoad.Error())
+	approvedErr := errors.New("approved magusfile: " + errStaleLoad.Error())
 	return Dependencies{
-		LoadFailure:         staleLoad,
+		LoadFailure:         errStaleLoad,
 		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return nil, approvedErr },
 		ApprovedSpawnRule:   func(context.Context) (workspace.SpawnRule, error) { return nil, approvedErr },
 		ApprovedWriteRule:   func(context.Context) (workspace.WriteRule, error) { return nil, approvedErr },
@@ -32,8 +32,8 @@ func unloadedDeps() Dependencies {
 
 // staleFailures are the failures unloadedDeps reports on either seam.
 var staleFailures = []trail.RuleFailure{
-	{Side: decidedByWorktree, Error: "the magusfile failed to load: " + staleLoad.Error()},
-	{Side: decidedByApproved, Error: "the rule could not be resolved: approved magusfile: " + staleLoad.Error()},
+	{Side: decidedByWorktree, Error: "the magusfile failed to load: " + errStaleLoad.Error()},
+	{Side: decidedByApproved, Error: "the rule could not be resolved: approved magusfile: " + errStaleLoad.Error()},
 }
 
 // recordLoadedPolicy leaves the marker a hook call writes after a policy loads.
@@ -91,8 +91,8 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		Decision:      "deny",
 		Reason: "magus workspace: `git push` is denied because this workspace's guard policy is not running. " +
 			"It registered a magus\\guard.command rule the last time it loaded, and now neither the working tree nor its approved copy loads:\n" +
-			"  worktree: the magusfile failed to load: " + staleLoad.Error() + "\n" +
-			"  approved: the rule could not be resolved: approved magusfile: " + staleLoad.Error() + "\n" +
+			"  worktree: the magusfile failed to load: " + errStaleLoad.Error() + "\n" +
+			"  approved: the rule could not be resolved: approved magusfile: " + errStaleLoad.Error() + "\n" +
 			"That rule judges pushes, pull request merges and magus verbs that write shared state, so these wait until it loads; " +
 			"every other call still runs on the built-in rules.\n" +
 			"The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`. " +
@@ -167,7 +167,7 @@ func TestLoadFailureOfOneRuleStaysOpen(t *testing.T) {
 	}{
 		{"the working tree's rule raises", Dependencies{CommandRule: raises}},
 		{"the approved rule raises under a broken working tree", Dependencies{
-			LoadFailure:         staleLoad,
+			LoadFailure:         errStaleLoad,
 			ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return raises, nil },
 		}},
 	}
@@ -239,7 +239,7 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	approved := (&commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no watching"}}).rule()
 	deps := Dependencies{
-		LoadFailure:         staleLoad,
+		LoadFailure:         errStaleLoad,
 		ApprovedCommandRule: func(context.Context) (workspace.CommandRule, error) { return approved, nil },
 	}
 	v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code", Session: "s1"})

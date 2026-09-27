@@ -1757,14 +1757,14 @@ func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
 	case r.stdout && r.file != "" && !magusFlag(r.args, "tee"):
 		lead = "`" + r.verb + " " + r.dest + "`: console text is not a format anything should parse."
 		why = "--tee writes the structured record to the file and still prints it."
-		switch {
-		case format == "":
+		switch format {
+		case "":
 			structured := "json"
 			if words := magusSubcommandWords(r.args); len(words) > 0 && isRunVerb(words[0]) {
 				structured = "jsonl"
 			}
 			flags = []string{"-o", structured, "--tee", r.file}
-		case format == "json" || format == "jsonl":
+		case "json", "jsonl":
 			flags = []string{"--tee", r.file}
 		default:
 			return "", nil

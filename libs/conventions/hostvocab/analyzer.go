@@ -3,12 +3,13 @@
 //
 // A switch or lookup table over "Read" or "Bash" is a per-host branch with the
 // host's name filed off: no host name appears in it, so hostagnostic passes it,
-// and the next time a host renames a tool it costs a magus release. The literal
+// and the next time a host renames a tool it costs a release. The literal
 // is the whole signal; comments that quote the words are not reported.
 package hostvocab
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/token"
 	"slices"
@@ -18,9 +19,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-const message = "guard code spells the host tool name %q: record magus's own label " +
-	"(hookToolCommand, hookToolWrite, hookToolRead) and let the wrapper in the reader's config map to it " +
-	"by which flag it passes; if the literal must stay, add //nolint:hostvocab naming where that decision is written down"
+const message = "spells the host tool name %q: branch on a label of your own that the host's configuration maps to, " +
+	"not on the host's word for it; if the literal must stay, add //nolint:hostvocab naming where that decision is written down"
 
 // Options configures the analyzer returned by [New].
 type Options struct {
@@ -33,6 +33,10 @@ type Options struct {
 
 	// Words are what agent hosts call their tools.
 	Words []string `json:"words"`
+
+	// Hint is appended to every diagnostic: the repository's own remedy, which
+	// may name the labels it uses in place of the words.
+	Hint string `json:"hint"`
 }
 
 // New returns the analyzer configured by opts, erroring on a malformed glob or
@@ -45,7 +49,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		return nil, errors.New("hostvocab: words is empty, so nothing would be reported")
 	}
 	if err := source.InModule("hostvocab", opts.Module, func(root string) error {
-		return opts.Files.Check("hostvocab", "files", root)
+		return opts.Files.RequireMatches("hostvocab", "files", root)
 	}); err != nil {
 		return nil, err
 	}
@@ -75,7 +79,7 @@ func run(pass *analysis.Pass, opts Options) error {
 				return true
 			}
 			if v, err := strconv.Unquote(lit.Value); err == nil && slices.Contains(opts.Words, v) {
-				pass.Reportf(lit.Pos(), message, v)
+				pass.Reportf(lit.Pos(), "%s", source.Hint(fmt.Sprintf(message, v), opts.Hint))
 			}
 			return true
 		})

@@ -18,8 +18,11 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
 
-Every path, word list, ceiling and exemption lives in the root `.golangci.yml`,
-so the analyzers carry the mechanism and the config carries the policy.
+Every path, word list, host name, ceiling and exemption lives in the root
+`.golangci.yml`, so the analyzers carry the mechanism and the config carries the
+policy. No diagnostic names this repository's identifiers or paths on its own: an
+analyzer whose remedy is repository-specific takes a `hint` setting, appended to
+each of its diagnostics.
 
 ## Scope
 
@@ -29,14 +32,22 @@ each module under `libs/`, on the same config, with only `hostagnostic`,
 The rest name root-module paths.
 
 `filenames` reads beyond its package on purpose: its vocabulary is every Go file
-name under the root of `module`, nested modules included, walked once per run. Rules over source text also read the files a package's build
-constraints exclude on this platform, so a darwin run still checks the
-`_linux.go` files the walks did.
+name the go tool would read under the root of `module`, nested modules included,
+walked once when the plugin loads. Like the go tool, the walk never enters a dot
+or underscore directory or `testdata`. Rules over source text also read the files
+a package's build constraints exclude on this platform, so a darwin run still
+checks the `_linux.go` files the walks did.
 
-A setting that names a path (`files`, `package`) is checked against the tree
-when the plugin loads, from the directory whose `go.mod` declares `module`. A
-pattern matching no file, or a package with no Go files, is a load error naming
-the setting: a scope that matches nothing would otherwise report nothing.
+A setting that names a path (`files`, `package`, `dirs`, `skip-dirs`) is checked
+against the tree when the plugin loads, from the directory whose `go.mod`
+declares `module`. A pattern matching no file, a package or directory with no Go
+files, or a skip entry naming no directory that holds Go files, is a load error
+naming the setting: a scope that matches nothing would otherwise report nothing,
+and a skip entry that matches nothing is a setting the tree moved out from under.
+
+`stutter` reads the package name from the package clause, which is what a call
+site spells, and skips `package main`, which has none. Its zero settings check
+every package name of three bytes or more.
 
 `testisolation` carries reach as a package fact along imports, which needs type
 information; the rest load types only because golangci-lint leaves the package

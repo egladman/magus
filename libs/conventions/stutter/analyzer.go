@@ -3,38 +3,47 @@
 //
 // Stricter than revive's stutter check, which needs a word boundary after the
 // package name: here any exported name opening with the package name, case
-// folded, is reported, so run.Runner is too. The package name is the last
-// element of the import path.
+// folded, is reported, so run.Runner is too. The package name is the one its
+// package clause declares, which is what a call site spells; a main package
+// has no call sites and is not checked.
 package stutter
 
 import (
 	"errors"
 	"go/ast"
 	"go/token"
-	"path"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
 )
 
 const message = "%s.%s stutters: it reads as %s.%s... at every call site; drop the package name from the " +
 	"symbol, or add %q to stutter's allow setting and say why"
 
-// Options configures the analyzer returned by [New].
+const defaultMinPackageLen = 3
+
+// Options configures the analyzer returned by [New]. The zero value checks
+// every package whose name is three bytes or longer.
 type Options struct {
-	// MinPackage is the shortest package name checked. A two-letter package
-	// shares a prefix with too many ordinary words for the match to mean much.
-	MinPackage int `json:"min-package"`
+	// MinPackageLen is the shortest package name checked, in bytes; zero means
+	// 3. A two-letter package shares a prefix with too many ordinary words for
+	// the match to mean much.
+	MinPackageLen int `json:"min-package-len"`
 
 	// Allow names packages whose exported names repeat the package on purpose.
 	Allow []string `json:"allow"`
 }
 
-// New returns the analyzer configured by opts, erroring on a MinPackage below 1.
+// New returns the analyzer configured by opts, erroring on a negative
+// MinPackageLen.
 func New(opts Options) (*analysis.Analyzer, error) {
-	if opts.MinPackage < 1 {
-		return nil, errors.New("stutter: min-package must be at least 1")
+	if opts.MinPackageLen < 0 {
+		return nil, errors.New("stutter: min-package-len is negative")
+	}
+	if opts.MinPackageLen == 0 {
+		opts.MinPackageLen = defaultMinPackageLen
 	}
 	return &analysis.Analyzer{
 		Name: "stutter",
@@ -44,9 +53,13 @@ func New(opts Options) (*analysis.Analyzer, error) {
 }
 
 func run(pass *analysis.Pass, opts Options) error {
-	pkg := path.Base(strings.TrimSuffix(pass.Pkg.Path(), "_test"))
-	if len(pkg) < opts.MinPackage || slices.Contains(opts.Allow, pkg) {
+	pkg := strings.TrimSuffix(pass.Pkg.Name(), "_test")
+	if pkg == "main" || len(pkg) < opts.MinPackageLen || slices.Contains(opts.Allow, pkg) {
 		return nil
+	}
+	files, err := source.Files(pass)
+	if err != nil {
+		return err
 	}
 	check := func(id *ast.Ident) {
 		name := id.Name
@@ -54,7 +67,7 @@ func run(pass *analysis.Pass, opts Options) error {
 			pass.Reportf(id.Pos(), message, pkg, name, pkg, pkg, pkg)
 		}
 	}
-	for _, f := range pass.Files {
+	for _, f := range files {
 		for _, decl := range f.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:

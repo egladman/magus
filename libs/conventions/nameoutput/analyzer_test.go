@@ -10,7 +10,12 @@ import (
 )
 
 func options(pkg string) Options {
-	return Options{Package: pkg, Case: "outputName", Emitters: []string{"emitNames", "emitNamesOf", "outputDst"}}
+	return Options{
+		Package:   pkg,
+		CaseIdent: "outputName",
+		Emitters:  []string{"emitNames", "emitNamesOf", "outputDst"},
+		Hint:      "a single value is emitNames([]string{v})",
+	}
 }
 
 // TestAnalyzer reports the arm that prints directly and passes the one that
@@ -48,7 +53,7 @@ func TestNewRejectsMovedPackage(t *testing.T) {
 }
 
 func TestNewRejectsMissingField(t *testing.T) {
-	if _, err := New(Options{Package: "cli", Case: "outputName"}); err == nil {
+	if _, err := New(Options{Package: "cli", CaseIdent: "outputName"}); err == nil {
 		t.Fatal("expected no emitters to fail at construction")
 	}
 }

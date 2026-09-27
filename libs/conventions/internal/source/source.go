@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -84,10 +86,10 @@ func (g Globs) Validate(linter string) error {
 	return nil
 }
 
-// Check errors, naming linter and setting, on a pattern that matches no file
-// under root. A scope that matches nothing reports nothing, so a moved file
-// would otherwise turn the rule off without a word.
-func (g Globs) Check(linter, setting, root string) error {
+// RequireMatches errors, naming linter and setting, on a pattern that matches
+// no file under root. A scope that matches nothing reports nothing, so a moved
+// file would otherwise turn the rule off without a word.
+func (g Globs) RequireMatches(linter, setting, root string) error {
 	for _, p := range g {
 		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(p)))
 		if err != nil {
@@ -101,9 +103,9 @@ func (g Globs) Check(linter, setting, root string) error {
 	return nil
 }
 
-// CheckPackage errors, naming linter and setting, when the import path pkg
+// RequirePackage errors, naming linter and setting, when the import path pkg
 // inside module has no Go files under root.
-func CheckPackage(linter, setting, root, module, pkg string) error {
+func RequirePackage(linter, setting, root, module, pkg string) error {
 	dir := root
 	if pkg != module {
 		rel, ok := strings.CutPrefix(pkg, module+"/")
@@ -117,6 +119,83 @@ func CheckPackage(linter, setting, root, module, pkg string) error {
 			linter, setting, pkg, root)
 	}
 	return nil
+}
+
+// GoFiles returns the slash-separated path, relative to root, of every .go file
+// the go tool would read under root, nested modules included. Like the go tool,
+// it skips a file or directory whose name begins with "." or "_", and any
+// directory named testdata.
+func GoFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == root {
+			return nil
+		}
+		name := d.Name()
+		ignored := strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
+		switch {
+		case d.IsDir() && (ignored || name == "testdata"):
+			return filepath.SkipDir
+		case d.IsDir(), ignored, !strings.HasSuffix(name, ".go"):
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// RequireDirNames errors, naming linter and setting, on a name that is no
+// directory on the path of any of files, as [GoFiles] returns them for root.
+// A skip entry that skips nothing is one the tree moved out from under.
+func RequireDirNames(linter, setting, root string, names, files []string) error {
+	dirs := map[string]bool{}
+	for _, f := range files {
+		segs := strings.Split(f, "/")
+		for _, s := range segs[:len(segs)-1] {
+			dirs[s] = true
+		}
+	}
+	for _, n := range names {
+		if !dirs[n] {
+			return fmt.Errorf("%s: %s entry %q names no directory holding Go files under %s; it skips nothing, fix the setting",
+				linter, setting, n, root)
+		}
+	}
+	return nil
+}
+
+// RequireDirs errors, naming linter and setting, on a slash-separated directory
+// relative to root that holds none of files at or below it, as [GoFiles]
+// returns them for root.
+func RequireDirs(linter, setting, root string, dirs, files []string) error {
+	for _, d := range dirs {
+		if !slices.ContainsFunc(files, func(f string) bool { return strings.HasPrefix(f, d+"/") }) {
+			return fmt.Errorf("%s: %s entry %q holds no Go files under %s; the code it named moved, fix the setting",
+				linter, setting, d, root)
+		}
+	}
+	return nil
+}
+
+// Hint appends a repository's own remedy to a diagnostic. The analyzers word
+// their messages without naming any one repository's identifiers or paths,
+// and the configuration supplies those.
+func Hint(message, hint string) string {
+	if hint == "" {
+		return message
+	}
+	return message + "; " + hint
 }
 
 // Root returns the directory whose go.mod declares module, searching up from

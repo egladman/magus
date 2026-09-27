@@ -40,6 +40,7 @@ type linter struct {
 	analyzer *analysis.Analyzer
 }
 
+// BuildAnalyzers returns the one analyzer the settings configured.
 func (l *linter) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{l.analyzer}, nil
 }

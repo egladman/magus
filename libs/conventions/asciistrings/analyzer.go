@@ -49,7 +49,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		return nil, err
 	}
 	if err := source.InModule("asciistrings", opts.Module, func(root string) error {
-		return opts.Files.Check("asciistrings", "files", root)
+		return opts.Files.RequireMatches("asciistrings", "files", root)
 	}); err != nil {
 		return nil, err
 	}

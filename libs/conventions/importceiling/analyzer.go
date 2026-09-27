@@ -36,6 +36,7 @@ type Options struct {
 	// then exist on disk.
 	Module string `json:"module"`
 
+	// Rules caps one package each. A package no rule names is not checked.
 	Rules []Rule `json:"rules"`
 }
 
@@ -49,7 +50,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	}
 	if err := source.InModule("importceiling", opts.Module, func(root string) error {
 		for _, r := range opts.Rules {
-			if err := source.CheckPackage("importceiling", "rules.package", root, opts.Module, r.Package); err != nil {
+			if err := source.RequirePackage("importceiling", "rules.package", root, opts.Module, r.Package); err != nil {
 				return err
 			}
 		}

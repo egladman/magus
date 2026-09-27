@@ -3,4 +3,4 @@
 // is worth catching wherever it lands.
 package sdk
 
-import _ "example.com/go-github" // want `imports "example.com/go-github", shaped like a CI/VCS provider client library`
+import _ "example.com/go-github" // want `imports "example.com/go-github", shaped like a CI/VCS provider client library.*; provider I/O lives in scripts$`

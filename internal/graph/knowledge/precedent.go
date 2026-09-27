@@ -132,7 +132,7 @@ func (m precedentMiner) depDirection(pk precedentPackages) []types.Precedent {
 	for k := range edges {
 		pairs[[2]string{min(k[0], k[1]), max(k[0], k[1])}] = true
 	}
-	var out []types.Precedent
+	out := make([]types.Precedent, 0, len(pairs))
 	for p := range pairs {
 		fwd, back := p, [2]string{p[1], p[0]}
 		if len(edges[back]) > len(edges[fwd]) {
@@ -187,7 +187,7 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 			imports[lt][pk.dir[from]][pk.dir[to]] = true
 		}
 	}
-	var out []types.Precedent
+	out := make([]types.Precedent, 0, len(imports))
 	for layer, byDir := range imports {
 		dirs := slices.SortedFunc(maps.Keys(byDir), func(a, b string) int {
 			return cmp.Or(cmp.Compare(len(byDir[b]), len(byDir[a])), cmp.Compare(a, b))

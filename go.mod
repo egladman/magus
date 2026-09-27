@@ -127,17 +127,15 @@ tool (
 )
 
 // These replace directives are LOCAL-DEV ONLY: replace is never transitive, so a
-// downstream consumer of this module never sees them. That is by design, the
-// standard Go pattern for a multi-module repo - but there is no real tagged
-// version behind the requires above for it to fall back to: libs/diagnostics and
-// libs/gopherbuzz have never been tagged, so a downstream `go get` or
-// `go install` on this module fails outright (unknown revision .../v0.0.0, or
-// go install's blanket refusal to build any module whose go.mod carries a
-// replace directive - see internal/agent/skills/magus-sdk/SKILL.md). Not
-// something to "clean up": deleting these would break every in-repo build
-// (go run ./cmd/magus, magus run build) against the unresolvable v0.0.0 the
-// require lines name; tagging the nested modules, not removing the directives,
-// is what would fix downstream consumption.
+// downstream `go get` of this module resolves the tagged versions the requires
+// above name (libs/diagnostics/v0.1.0, libs/gopherbuzz/v0.1.0) and never sees
+// them. In this repo they build against the working tree instead, so a change to
+// a nested module is exercised by the commit that makes it, with no
+// tag-then-bump round trip. Not something to "clean up": without them every
+// in-repo build (go run ./cmd/magus, magus run build) compiles the last tag, not
+// the code beside it. Their one cost downstream is `go install
+// github.com/egladman/magus/cmd/magus@...`, which refuses any module whose go.mod
+// carries a replace directive (see internal/agent/skills/magus-sdk/SKILL.md).
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz

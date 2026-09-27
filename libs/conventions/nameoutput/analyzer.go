@@ -1,15 +1,18 @@
-// Package nameoutput keeps `-o name` on the structured-output destination.
+// Package nameoutput keeps a name output format on the structured-output
+// destination.
 //
-// The generic formatter cannot render the name format, so every command answers
+// When a generic formatter cannot render the name format, every command answers
 // it in its own switch arm, and an arm that prints to stdout directly bypasses
-// --tee: the flag is accepted, nothing is written, and nothing says so. Each
-// `case outputName:` arm must call an emitter, where an emitter is one of the
-// seeds or any package function that calls one. The closure is what keeps a
-// command's own helper from needing an allowlist entry.
+// wherever structured output was sent: the destination flag is accepted, nothing
+// is written, and nothing says so. Each arm selecting the configured identifier
+// must call an emitter, where an emitter is one of the seeds or any package
+// function that calls one. The closure is what keeps a command's own helper
+// from needing an allowlist entry.
 package nameoutput
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"slices"
 	"strings"
@@ -18,11 +21,10 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-const message = "this `case %s:` arm must render through %s: printing to stdout directly bypasses --tee, " +
-	"which then accepts the flag and writes an empty file; a single value is emitNames([]string{v}), " +
-	"a slice of records is emitNamesOf(records, func(r T) string { return r.Field })"
+const message = "this `case %s:` arm must render through %s: printing to stdout directly bypasses the " +
+	"structured-output destination, which then accepts its flag and writes an empty file"
 
-const renamed = "no `case %s:` arm found in %s: the format constant was renamed; update nameoutput's case setting"
+const renamed = "no `case %s:` arm found in %s: the identifier was renamed; update nameoutput's case-ident setting"
 
 // Options configures the analyzer returned by [New].
 type Options struct {
@@ -33,20 +35,24 @@ type Options struct {
 	// Package is the import path held to the rule.
 	Package string `json:"package"`
 
-	// Case is the identifier a name arm selects.
-	Case string `json:"case"`
+	// CaseIdent is the identifier a name arm selects, alone in its case clause.
+	CaseIdent string `json:"case-ident"`
 
 	// Emitters seed the set of functions that reach the structured destination.
 	Emitters []string `json:"emitters"`
+
+	// Hint is appended to every report of an arm that bypasses the emitters:
+	// the repository's own remedy, which may show how its emitters are called.
+	Hint string `json:"hint"`
 }
 
 // New returns the analyzer configured by opts, erroring on a missing field.
 func New(opts Options) (*analysis.Analyzer, error) {
-	if opts.Package == "" || opts.Case == "" || len(opts.Emitters) == 0 {
-		return nil, errors.New("nameoutput: package, case and emitters are all required")
+	if opts.Package == "" || opts.CaseIdent == "" || len(opts.Emitters) == 0 {
+		return nil, errors.New("nameoutput: package, case-ident and emitters are all required")
 	}
 	if err := source.InModule("nameoutput", opts.Module, func(root string) error {
-		return source.CheckPackage("nameoutput", "package", root, opts.Module, opts.Package)
+		return source.RequirePackage("nameoutput", "package", root, opts.Module, opts.Package)
 	}); err != nil {
 		return nil, err
 	}
@@ -74,18 +80,19 @@ func run(pass *analysis.Pass, opts Options) error {
 	for _, f := range files {
 		ast.Inspect(f, func(n ast.Node) bool {
 			clause, ok := n.(*ast.CaseClause)
-			if !ok || !picks(clause, opts.Case) {
+			if !ok || !picks(clause, opts.CaseIdent) {
 				return true
 			}
 			arms++
 			if !callsAny(clause.Body, emitters) {
-				pass.Reportf(clause.Pos(), message, opts.Case, strings.Join(opts.Emitters, " or "))
+				msg := fmt.Sprintf(message, opts.CaseIdent, strings.Join(opts.Emitters, " or "))
+				pass.Reportf(clause.Pos(), "%s", source.Hint(msg, opts.Hint))
 			}
 			return true
 		})
 	}
 	if arms == 0 {
-		pass.Reportf(files[0].Name.Pos(), renamed, opts.Case, opts.Package)
+		pass.Reportf(files[0].Name.Pos(), renamed, opts.CaseIdent, opts.Package)
 	}
 	return nil
 }

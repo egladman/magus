@@ -1,8 +1,10 @@
 package plugin
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/conventions/internal/sourcetest"
 	"github.com/golangci/plugin-module-register/register"
 )
 
@@ -10,17 +12,18 @@ import (
 // path production runs, and checks the registered name matches the analyzer's:
 // golangci-lint's settings key, enable entry and //nolint name all have to agree.
 func TestPluginsRegister(t *testing.T) {
+	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
 		"asciistrings":  map[string]any{"files": []any{"types/*.go"}},
-		"filenames":     map[string]any{"module": "example.com/m", "allow": []any{"runtime"}},
-		"hostagnostic":  map[string]any{"skip-dirs": []any{"gen"}},
-		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}},
+		"filenames":     map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "allow": []any{"runtime"}},
+		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
+		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
 		"importceiling": map[string]any{"rules": []any{map[string]any{"package": "a", "prefix": "b/", "max": 1}}},
-		"nameoutput":    map[string]any{"package": "a", "case": "outputName", "emitters": []any{"emitNames"}},
-		"providerio":    map[string]any{"dirs": []any{"internal/queue"}},
-		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:"},
-		"stutter":       map[string]any{"min-package": 3},
-		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}},
+		"nameoutput":    map[string]any{"package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
+		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
+		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
+		"stutter":       map[string]any{"min-package-len": 3},
+		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}, "hint": "see docs"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			build, err := register.GetPlugin(name)
@@ -47,13 +50,14 @@ func TestPluginsRegister(t *testing.T) {
 }
 
 // TestUnknownKeyFails pins DisallowUnknownFields: a misspelled key is a load
-// error rather than a silently ignored setting.
+// error naming the linter rather than a silently ignored setting.
 func TestUnknownKeyFails(t *testing.T) {
 	build, err := register.GetPlugin("stutter")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := build(map[string]any{"min-package": 3, "alow": []any{"x"}}); err == nil {
-		t.Fatal("expected an unknown settings key to fail")
+	_, err = build(map[string]any{"min-package-len": 3, "alow": []any{"x"}})
+	if err == nil || !strings.HasPrefix(err.Error(), "stutter: settings: ") {
+		t.Fatalf("want an unknown settings key to fail naming the linter, got %v", err)
 	}
 }

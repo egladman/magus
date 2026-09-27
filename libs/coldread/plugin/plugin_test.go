@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/golangci/plugin-module-register/register"
@@ -12,9 +13,9 @@ import (
 // and a copy is where a new option compiles clean while ignoring the user's yaml.
 func TestNewPluginDecodesSettings(t *testing.T) {
 	p, err := newPlugin(map[string]any{
-		"allow":   []any{"*_gen.go"},
-		"wrapped": true,
-		"disable": []any{"history"},
+		"allow":          []any{"*_gen.go"},
+		"report-wrapped": true,
+		"disable":        []any{"history"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -51,10 +52,11 @@ func TestNewPluginRejectsUnknownCheck(t *testing.T) {
 
 // TestNewPluginRejectsUnknownKey pins register.DecodeSettings's DisallowUnknownFields
 // behaviour: a misspelled settings key is a silent no-op in most linters, and here
-// it is a load error naming the key.
+// it is a load error naming the linter and the key.
 func TestNewPluginRejectsUnknownKey(t *testing.T) {
-	if _, err := newPlugin(map[string]any{"allowed": []any{"*_gen.go"}}); err == nil {
-		t.Fatal("expected an unknown settings key to fail")
+	_, err := newPlugin(map[string]any{"allowed": []any{"*_gen.go"}})
+	if err == nil || !strings.HasPrefix(err.Error(), "coldread: settings: ") {
+		t.Fatalf("want an unknown settings key to fail naming the linter, got %v", err)
 	}
 }
 

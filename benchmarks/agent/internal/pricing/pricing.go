@@ -26,8 +26,8 @@
 //
 // The table carries no batch, fast-mode or inference-geo pricing. Those are
 // billing modes the published page also lists, but benchmarks/agent's runner
-// always issues an ordinary interactive request (runner/agent.sh execs `claude
-// -p` with no batch, fast-mode or inference_geo lever), so no run this package
+// always issues an ordinary interactive request (runner/agent.sh execs the agent
+// CLI in print mode with no batch, fast-mode or inference_geo lever), so no run this package
 // ever prices could have used one. Options and Effective existed here with no
 // caller but their own tests; wire them back in, with the rates restored from
 // the vendor's page, if the runner ever gains a way to select a mode.

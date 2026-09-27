@@ -37,11 +37,11 @@ func TestAnalyzer(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), only(t, CheckAside, Options{}), "asides")
 }
 
-// TestAnalyzerWrapped checks the opt-in half: a line ending in a spaced hyphen
-// carries the aside onto the next line, and a line holding both shapes still
-// reports once.
-func TestAnalyzerWrapped(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), only(t, CheckAside, Options{Wrapped: true}), "wrapped")
+// TestAnalyzerReportWrapped checks the opt-in half: a line ending in a spaced
+// hyphen carries the aside onto the next line, and a line holding both shapes
+// still reports once.
+func TestAnalyzerReportWrapped(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), only(t, CheckAside, Options{ReportWrapped: true}), "wrapped")
 }
 
 // TestAnalyzerAllow checks that the glob excuses a FILE rather than a comment:
@@ -53,7 +53,7 @@ func TestAnalyzerAllow(t *testing.T) {
 // TestIntentChecks runs each intent check over its own package of reported and
 // silent cases.
 func TestIntentChecks(t *testing.T) {
-	for _, check := range []Check{CheckRestate, CheckSteps, CheckHistory, CheckDocstub, CheckCommentedCode} {
+	for _, check := range []Check{CheckRestate, CheckSteps, CheckHistory, CheckDocStub, CheckCommentedCode} {
 		t.Run(string(check), func(t *testing.T) {
 			analysistest.Run(t, analysistest.TestData(), only(t, check, Options{}), string(check))
 		})
