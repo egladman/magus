@@ -48,7 +48,7 @@ func bytesTrimNewline(b []byte) []byte {
 }
 
 // writeProbeableHarness registers a descriptor named id whose one managed command
-// is command, wired at a path this test controls, and applies it, so
+// is command, wired at a path this test controls, and merges its plan, so
 // VerifyHarness has a real config to read and probeHarnessCommands has a real
 // command string to run.
 func writeProbeableHarness(t *testing.T, root, id, command string) {
@@ -65,8 +65,7 @@ func writeProbeableHarness(t *testing.T, root, id, command string) {
   }]
 }`
 	registerHarnessSpell(t, id, body)
-	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: id})
-	require.NoError(t, err)
+	mergeHarness(t, root, id)
 }
 
 // writeFakeMagusBinary satisfies checkProbeEnvironment's presence check without
@@ -188,8 +187,8 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 // never renders a verdict, is still reported verified from presence alone: there
 // is nothing for the probe to run, and that is not a gap.
 // Both forms of both wrappers, because the skip used to match the .sh suffix alone:
-// porting checkpoint and rehydrate to Buzz made every apply --id claude-code write a
-// config its own verify then called uncovered, on the grounds that a recorder had
+// porting checkpoint and rehydrate to Buzz made every claude-code config merged from
+// its descriptor one its own verify then called uncovered, on the grounds that a recorder had
 // rendered no verdict.
 func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 	for _, command := range []string{

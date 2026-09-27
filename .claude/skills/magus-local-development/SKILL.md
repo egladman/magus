@@ -132,5 +132,5 @@ The guard already advises repo-wide `rg` / `grep -r` / `find -name` toward
 them as the shell shapes those rules already judge.
 
 A side rules file is the opposite of host-agnostic glue: invisible to
-`harness verify`, unowned by apply, and gone the next time someone treats
+`harness verify`, absent from what `describe harness` prints, and gone the next time someone treats
 `.cursor/` as disposable host state.

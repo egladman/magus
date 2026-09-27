@@ -55,7 +55,7 @@ func TestLoadFailureDeniesGatedVerbs(t *testing.T) {
 		{"magus -s server start", "`magus server start`"},
 		{"./magus config set --global key=log.format,value=json", "`magus config set`"},
 		{"./magus agent install --global /home/me/.claude/skills", "`magus agent install`"},
-		{"./magus agent harness apply", "`magus agent harness apply`"},
+		{"./magus agent harness install", "`magus agent harness install`"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.line, func(t *testing.T) {

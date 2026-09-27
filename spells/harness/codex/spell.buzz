@@ -7,10 +7,12 @@
 //
 // To adapt without modifying Magus source: copy this spell into the workspace,
 // change only the import path (keep provider), edit Buzz, then
-// `magus agent harness apply`. See magus-workspace-rules "Adapting a Buzz harness".
+// merge what `magus describe harness codex` prints. See magus-workspace-rules "Adapting a
+// Buzz harness".
 //
-// Magus invokes the reserved harness_* names on apply/verify. The fragments are
-// opaque host JSON; Magus merges them and does not rewrite command fields.
+// Magus invokes the reserved harness_* names on describe/verify. The fragments are
+// opaque host JSON; Magus prints them for a person to merge and does not rewrite command
+// fields.
 
 import "magus/spell";
 import "assert";
@@ -141,7 +143,7 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 
 fun codex_mcp() > {str: any} {
     // Codex MCP lives in ~/.codex/config.toml (user-global). Magus does not
-    // write it; apply prints a short paste hint. Placeholders avoid Buzz {...}.
+    // write it; describe prints a short paste hint. Placeholders avoid Buzz {...}.
     final hint = "Paste into ~/.codex/config.toml (token via secret ref / env __TOKEN_REF__):\n\n"
         + "[mcp_servers.magus]\n"
         + "url = \"__URL__\"\n"
@@ -175,7 +177,7 @@ fun codex_push_rule(pattern: str) > str {
 // One rule per backend magus drives, since each publishes through its own verb. `sl push
 // --to` is the Sapling push by prefix.
 fun codex_rules() > str {
-    return "# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.\n"
+    return "# Printed by magus describe harness codex. Delete this file to drop these prompts.\n"
         + "#\n"
         + "# Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The\n"
         + "# magus PermissionRequest hook answers it: a push a passing gate covers is approved\n"
@@ -200,7 +202,7 @@ export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
     return codex_prompts();
 }
 
-test "mgs_getName is the harness id apply and verify look up" {
+test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
 }
 
@@ -296,7 +298,7 @@ test "harness_mcp is a paste hint for Codex user config.toml" {
     final mcp = codex_mcp();
     assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref");
     assert\isTrue("{mcp["hint"]}".indexOf("bearer_token_env_var") != null, "names env bind");
-    assert\isTrue("{mcp["hint"]}".indexOf("__TOKEN_REF__") != null, "placeholder for apply");
+    assert\isTrue("{mcp["hint"]}".indexOf("__TOKEN_REF__") != null, "placeholder for describe");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
 }
 

@@ -118,8 +118,8 @@ guard rule.
 1. Show the rule in the file the agent actually loads, not the one you edited.
    `{{cmd "agent harness verify"}}` answers this for wiring{{if .Full}}. The two differ more
    often than anyone expects: a skill directory this repo does not install into
-   receives nothing, and a forked harness spell reaches the host only once
-   `{{cmd "agent harness apply"}}` rewrites its config{{end}}.
+   receives nothing, and a forked harness spell reaches the host only once a person
+   merges what `{{cmd "describe harness"}}` prints into its config{{end}}.
 2. Re-run the command the evidence cites and read the verdict.{{if .Full}} A change that
    does not move the verdict on the command that motivated it changed nothing,
    and nothing else in the loop would have said so.{{end}}
@@ -159,7 +159,7 @@ Workspace-owned adaptation: declare an override, change no import and no provide
 
 1. Copy the shipped spell tree into the workspace (for example
    `harness/cursor/` beside the magusfile). Keep `mgs_getName()` as the host id
-   (`cursor`, `claude-code`, ...) so apply/verify still resolve that id.
+   (`cursor`, `claude-code`, ...) so describe and verify still resolve that id.
 2. In `magus.yaml`, replace the registry path with that directory, as Go's
    `replace` does:
 
@@ -176,8 +176,9 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
    the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
-4. Run `{{cmd "agent harness apply"}}` (or `--id <id>`) and
-   `{{cmd "agent harness verify"}}`. Apply prints MCP setup guidance only; the user owns host MCP client
+4. Run `{{cmd "describe harness"}} <id>`, have a person read and run the merge
+   command it prints (magus never writes host config), then run
+   `{{cmd "agent harness verify"}}`. MCP setup is printed as guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
    `magus.yaml` entry and the forked spell together.
 

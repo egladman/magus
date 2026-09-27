@@ -1,13 +1,13 @@
 // OpenCode agent-host harness. Skills-only: OpenCode has no shell-command hook
 // config file Magus can merge. The guard rides a TypeScript plugin
-// (docs/guides/integrations/agents/opencode-plugin.ts), not harness apply.
+// (docs/guides/integrations/agents/opencode-plugin.ts), not a merged hook config.
 //
 //   import "spells/harness/opencode" as opencode
 //   magus\harness.provider(opencode)
 //
 // To adapt without modifying Magus source: copy this spell into the workspace,
-// change only the import path (keep provider), edit Buzz. Apply writes no hook
-// config when config path is empty, only the push permission in opencode.json
+// change only the import path (keep provider), edit Buzz. `magus describe harness
+// opencode` prints no hook config when config path is empty, only the push permission in opencode.json
 // (harness_prompts); verify does not claim guard coverage from a missing config. See magus-workspace-rules "Adapting a Buzz harness".
 
 import "magus/spell";
@@ -106,7 +106,7 @@ test "harness_prompts asks before every backend's bare push and push with argume
     }
 }
 
-test "mgs_getName is the harness id apply and verify look up" {
+test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "opencode", "id must match magus\\harness.provider wiring and --id");
 }
 
@@ -124,7 +124,7 @@ test "harness_skills installs both forms under .opencode/skills" {
     assert\equal(paths[0], ".opencode/skills", "OpenCode reads .opencode/skills");
 }
 
-test "harness_entries is empty because apply writes nothing" {
+test "harness_entries is empty because no hook config is merged" {
     assert\equal(opencode_entries().len(), 0, "guard is the TypeScript plugin not managed_entries");
 }
 

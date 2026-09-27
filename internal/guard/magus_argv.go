@@ -13,7 +13,7 @@ import (
 // magusGlobalFlags is the flag set magus parses before its subcommand, built from the same
 // generated config binding the CLI uses plus the flags the CLI binds by hand. The guard reads
 // a magus argv with it so a flag's value is never mistaken for a subcommand word: a rule that
-// matched on `agent harness apply` missed `magus --root . agent harness apply`.
+// matched on `agent harness install` missed `magus --root . agent harness install`.
 //
 // cmd/magus's TestGuardKnowsEveryGlobalFlag holds the hand-bound half to the CLI's own
 // binding (bindGlobalFlags and bindDisplayFlags), so a new global flag cannot reopen that

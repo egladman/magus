@@ -226,7 +226,10 @@ import (
 // 91: magus-multi-agent drops `--gates` from `magus describe job`. The read it named is
 // unconditional now: describe job always prints where each goal stands, graded against
 // the evidence magus holds, alongside the terms it already printed.
-const SkillVersion = 91
+// 92: `magus agent harness apply` and `remove` are gone. magus-workspace-rules sends an
+// adapted harness through `magus describe harness`, which prints the host config and the
+// merge command a person runs; magus never writes host config.
+const SkillVersion = 92
 
 const skillLicense = "GPL-3.0-or-later"
 

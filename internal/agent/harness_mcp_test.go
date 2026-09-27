@@ -7,9 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestApplyHarnessMCPRecordsHintOnly(t *testing.T) {
-	update := HarnessUpdate{ID: "cursor"}
-	err := applyHarnessMCP(HarnessDescriptor{
+func TestHarnessMCPHintRendersGuidanceOnly(t *testing.T) {
+	hint, err := harnessMCPHint(HarnessDescriptor{
 		ID: "cursor",
 		MCP: &HarnessMCP{
 			TokenRef: DefaultHarnessMCPTokenRef,
@@ -17,17 +16,16 @@ func TestApplyHarnessMCPRecordsHintOnly(t *testing.T) {
 			Hint:     "Wire Magus MCP in Cursor Settings -> Tools & MCP at __URL__; export __TOKEN_REF__ first. Magus does not write mcp.json.",
 			Docs:     "docs/guides/integrations/mcp.md",
 		},
-	}, &update)
+	})
 	require.NoError(t, err)
-	assert.Contains(t, update.MCPHint, DefaultHarnessMCPURL)
-	assert.Contains(t, update.MCPHint, DefaultHarnessMCPTokenRef)
-	assert.Contains(t, update.MCPHint, "docs/guides/integrations/mcp.md")
-	assert.NotContains(t, update.MCPHint, "__TOKEN_REF__")
+	assert.Contains(t, hint, DefaultHarnessMCPURL)
+	assert.Contains(t, hint, DefaultHarnessMCPTokenRef)
+	assert.Contains(t, hint, "docs/guides/integrations/mcp.md")
+	assert.NotContains(t, hint, "__TOKEN_REF__")
 }
 
-func TestApplyHarnessMCPRegisterSketch(t *testing.T) {
-	update := HarnessUpdate{ID: "claude-code"}
-	err := applyHarnessMCP(HarnessDescriptor{
+func TestHarnessMCPHintRegisterSketch(t *testing.T) {
+	hint, err := harnessMCPHint(HarnessDescriptor{
 		ID: "claude-code",
 		MCP: &HarnessMCP{
 			TokenRef: DefaultHarnessMCPTokenRef,
@@ -35,11 +33,11 @@ func TestApplyHarnessMCPRegisterSketch(t *testing.T) {
 			Hint:     "Resolve __TOKEN_REF__, then run the host CLI.",
 			Register: []string{"claude", "mcp", "add", "--transport", "http", "magus", "__URL__"},
 		},
-	}, &update)
+	})
 	require.NoError(t, err)
-	assert.Contains(t, update.MCPHint, "claude mcp add")
-	assert.Contains(t, update.MCPHint, DefaultHarnessMCPURL)
-	assert.Contains(t, update.MCPHint, "command sketch (not executed)")
+	assert.Contains(t, hint, "claude mcp add")
+	assert.Contains(t, hint, DefaultHarnessMCPURL)
+	assert.Contains(t, hint, "command sketch (not executed)")
 }
 
 func TestValidateHarnessMCPRejectsEmbeddedToken(t *testing.T) {

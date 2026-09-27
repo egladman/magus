@@ -530,11 +530,12 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	return ""
 }
 
-// denyLeaseScopedHarness refuses, under a lease, the commands that rewire a host harness.
-// The hook wiring is what lets the guard see an agent at all, so a worker that could
-// rewrite it could stop being graded.
+// denyLeaseScopedHarness refuses, under a lease, the command that rewrites a harness's
+// skill trees. The skills are what steers a worker, so a worker that could rewrite them
+// could rewrite its own instructions. magus writes no host hook wiring at all: `magus
+// describe harness` prints it for a person to merge.
 //
-// `magus agent harness` refuses the same commands itself, but a CLI process knows only the
+// `magus agent harness install` refuses itself too, but a CLI process knows only the
 // checkout's binding and its own BAGGAGE claim. The guard also knows the calling subagent
 // and the host session, so a worker attributed by either is refused here.
 func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, command string) string {
@@ -550,13 +551,11 @@ func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, comm
 			continue
 		}
 		words := magusSubcommandWords(c.Args)
-		for _, rewire := range []hint.Command{hint.AgentHarnessApply, hint.AgentHarnessInstall, hint.AgentHarnessRemove} {
-			if rewire.MatchedBy(words) {
-				return fmt.Sprintf(
-					"magus workspace: leave the host harness alone. "+leaseActorClause("rewire a host harness")+"\n"+
-						"`%s` would rewrite the hook wiring the guard grades your calls through, and this call acts under lease %s.",
-					command, actingLease)
-			}
+		if hint.AgentHarnessInstall.MatchedBy(words) {
+			return fmt.Sprintf(
+				"magus workspace: leave the host harness alone. "+leaseActorClause("rewrite a harness's skills")+"\n"+
+					"`%s` would rewrite the skills that steer your calls, and this call acts under lease %s.",
+				command, actingLease)
 		}
 	}
 	return ""

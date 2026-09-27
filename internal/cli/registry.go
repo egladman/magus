@@ -95,11 +95,11 @@ against the value -o json emits, so its field names are the json keys.`,
 var describeCommand = Command{
 	Name:        "describe",
 	Short:       "Define a magus concept and list its entities",
-	Description: "Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph) and list every entity of that kind, or detail one when a name is given.",
-	Tags:        []string{"cli", "magus describe", "spell", "charm", "target", "project", "workspace", "module", "mcp-tool", "tool", "file", "graph", "introspection"},
+	Description: "Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, harness) and list every entity of that kind, or detail one when a name is given.",
+	Tags:        []string{"cli", "magus describe", "spell", "charm", "target", "project", "workspace", "module", "mcp-tool", "tool", "file", "graph", "harness", "introspection"},
 	Long: `Define a magus concept and list every entity of that kind. The noun is
 one of spell, charm, target, project, workspace, module, mcp-tool, tool, file,
-or graph; singular and plural are interchangeable. Pass a name after the noun
+graph, or harness; singular and plural are interchangeable. Pass a name after the noun
 to detail a single entity instead of listing them all. (The knowledge graph
 lives under magus graph: export for the merged graph, stats for its shape.)
 
@@ -192,9 +192,28 @@ job and never blocks the holder still working on it. It is the same grading
 		{Name: "graph", Short: "Emit the target catalog and dependency graph"},
 		{Name: "rules", Short: "List the guard rules this workspace enforces, and what each one catches"},
 		{Name: "rule", Short: "Detail one guard rule, by the name a verdict reported"},
+		{
+			Name:  "harness",
+			Short: "Print the host config a wired harness needs and the command you run to merge it",
+			Description: "Print each entry a wired harness's host files lack, and the one command that merges them. " +
+				"magus never writes host config; -o json prints the exact fragments that command reads back.",
+			Long: `Print what the host files of a harness wired with magus\harness.provider(<spell>)
+need: each entry to add, each hook entry replaced or retired because the descriptor
+changed it, each key to set, and each whole file to write. Then it prints the one
+command that merges them, which you read and run yourself. magus never writes host
+config: the hook wiring is what lets the guard see an agent at all, so a change to
+it is one a person makes with their own hands.
+
+-o json prints the plan the command reads back: files keyed by path, each with the
+exact fragment to merge (jq's * operator: objects merge key by key, and an array
+arrives whole, with your own entries kept in place) or the whole content to write.
+The command needs jq. Omit the id for every wired harness.`,
+		},
 	},
 	Examples: []Example{
 		{"List every target", "magus describe targets"},
+		{"Print what every wired harness needs merged", "magus describe harness"},
+		{"One harness's exact fragments, for review or your own merge", "magus describe harness <id> -o json"},
 		{"List what the guard enforces", "magus describe rules"},
 		{"Look up the rule a verdict named", "magus describe rule stage-all"},
 		{"List a charm's declaring targets", "magus describe charm rw"},
@@ -1495,8 +1514,8 @@ caller that cannot extract a session id must still be able to get a verdict.
 
 --transport names the form of the hook calling, such as sh or buzz, as that form
 declares it. Installed hook glue passes it, and glue that passes it without
---agent-name is refused with MGS3024: the configuration "magus agent harness
-apply" writes names the host, so a call that does not is a stale or hand-written
+--agent-name is refused with MGS3024: the configuration "magus describe
+harness" prints names the host, so a call that does not is a stale or hand-written
 config, never defaulted to one host. With --agent-name and --session it names the CALLER that the
 once-per-session notices and the full text of a repeated deny are kept for, as
 one key, host/transport/session. A session id alone is not enough: two hosts can
@@ -2699,13 +2718,12 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
-harness applies, removes, or verifies harnesses selected with
+harness installs the skill trees of, or verifies, harnesses selected with
 magus\harness.provider (several hosts are fine when you bounce between LLM
-tools): apply merges opaque host-config fragments the descriptor already
-names, remove deletes only those same fragments (a user's own hooks beside
-them are untouched, and nothing is asked for confirmation - pass --dry-run to
-preview one first), and verify actually runs the wired guard command against
-a synthetic event rather than trusting its mere presence in the config. Omit
+tools): verify actually runs the wired guard command against a synthetic
+event rather than trusting its mere presence in the config. The host config
+is yours for the same reason AGENTS.md is: magus describe harness prints the
+entries it needs and the one command that merges them, and you run it. Omit
 --id to act on every magusfile-wired provider. Guard feedback that keeps
 recurring is doctor's recurring-guard-denials check, not a verb here.
 
@@ -2728,9 +2746,7 @@ a pattern no graph verb fits.`,
 	Usage: "magus agent <install|harness|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
-		{Name: "harness", Short: "Apply, remove, or verify harnesses wired in the magusfile", Children: []Command{
-			{Name: "apply", Short: "Write descriptor-managed hook entries", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to apply every magusfile-wired provider"}}},
-			{Name: "remove", Short: "Delete only the descriptor-managed hook entries apply would have written, leaving a user's own hooks untouched", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to remove every magusfile-wired provider"}}},
+		{Name: "harness", Short: "Install skills for, or verify, harnesses wired in the magusfile", Children: []Command{
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
 			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
 		}},

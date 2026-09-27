@@ -43,7 +43,7 @@
 # call on this host and one everywhere else.
 #
 # Every call passes on the --agent-name this script was given (`--agent-name cursor`, from
-# the configuration `magus agent harness apply` writes) so the observation magus records
+# the configuration `magus describe harness` prints) so the observation magus records
 # says which host produced it; a config that names none is refused (MGS3024). Cursor carries conversation_id on every hook and session_id on
 # the session ones, so the session is attributable too; neither can change a verdict.
 #
@@ -89,7 +89,7 @@ done
 [ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # The host this entry is wired into, from the entry's own argv and nowhere else; the
-# configuration `magus agent harness apply` writes passes `--agent-name cursor`.
+# configuration `magus describe harness` prints passes `--agent-name cursor`.
 agent_name=
 while [ $# -gt 0 ]; do
   case $1 in
@@ -167,7 +167,7 @@ fi
 # and every event says why on stderr. The write and shell gates are where an unguarded
 # call would slip through, so they fail closed here rather than allowing.
 if [ -z "$agent_name" ]; then
-  unnamed="[MGS3024] this hook was not given --agent-name, so nothing was judged. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host."
+  unnamed="[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what \`magus describe harness\` prints into the host's hook configuration; the commands it prints name the host."
   printf 'cursor-hook.sh: %s\n' "$unnamed" >&2
   case $event_name in
   beforeShellExecution | preToolUse)

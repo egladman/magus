@@ -19,13 +19,13 @@ const DefaultHarnessMCPURL = "http://127.0.0.1:7391/mcp"
 
 // HarnessMCP is optional MCP setup guidance declared by a harness spell.
 // Magus never writes host MCP client config: the user owns registration.
-// Apply only records Hint (and optional Register argv sketch / Docs link)
+// A plan only carries Hint (and optional Register argv sketch / Docs link)
 // for the CLI to print.
 type HarnessMCP struct {
 	Enabled  *bool  `json:"enabled,omitempty"`
 	TokenRef string `json:"token_ref,omitempty"`
 	URL      string `json:"url,omitempty"`
-	// Hint is the short instruction recorded for apply (host CLI command, paste
+	// Hint is the short instruction describe prints (host CLI command, paste
 	// fragment, or "see docs"). Must not contain a resolved secret.
 	Hint string `json:"hint,omitempty"`
 	// Docs is an optional path or URL to host/Magus MCP documentation.
@@ -109,18 +109,17 @@ func looksLikeEmbeddedMCPSecret(blob string) bool {
 	return false
 }
 
-// applyHarnessMCP records user-owned MCP setup guidance on update. It never
-// writes a host MCP config file and never resolves the secret ref.
-func applyHarnessMCP(d HarnessDescriptor, update *HarnessUpdate) error {
+// harnessMCPHint renders d's user-owned MCP setup guidance, empty when it declares none. It
+// never reads a host MCP config file and never resolves the secret ref.
+func harnessMCPHint(d HarnessDescriptor) (string, error) {
 	m := d.MCP
 	if !m.GuidanceEnabled() {
-		return nil
+		return "", nil
 	}
 	if err := validateHarnessMCP(m); err != nil {
-		return fmt.Errorf("harness %q mcp: %w", d.ID, err)
+		return "", fmt.Errorf("harness %q mcp: %w", d.ID, err)
 	}
-	update.MCPHint = renderMCPSetupHint(m, m.urlOrDefault(), m.tokenRefOrDefault())
-	return nil
+	return renderMCPSetupHint(m, m.urlOrDefault(), m.tokenRefOrDefault()), nil
 }
 
 func renderMCPSetupHint(m *HarnessMCP, url, ref string) string {

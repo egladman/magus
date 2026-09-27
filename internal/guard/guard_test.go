@@ -181,7 +181,7 @@ func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: got.Reason}, got)
 	assert.Contains(t, got.Reason, string(types.HookHostUnnamed))
 	assert.Contains(t, got.Reason, "--agent-name")
-	assert.Contains(t, got.Reason, "magus agent harness apply")
+	assert.Contains(t, got.Reason, "magus describe harness")
 	assert.NotContains(t, got.Reason, "buzz")
 }
 

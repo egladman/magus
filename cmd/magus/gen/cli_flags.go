@@ -63,12 +63,8 @@ const (
 	FlagAffectedUpstream = "upstream"
 	// agent adoption: --commands
 	FlagAgentAdoptionCommands = "commands"
-	// agent harness apply: --id
-	FlagAgentHarnessApplyID = "id"
 	// agent harness install: --id
 	FlagAgentHarnessInstallID = "id"
-	// agent harness remove: --id
-	FlagAgentHarnessRemoveID = "id"
 	// agent harness verify: --id
 	FlagAgentHarnessVerifyID = "id"
 	// agent: --dir
@@ -2070,30 +2066,6 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
 	fs.StringVar(&f.SkillForm, FlagAgentSkillForm, "both", "Skill form to install: both (default), short, or full (agent install)")
-	return &f
-}
-
-// AgentHarnessApplyFlags are the flags declared for `magus agent harness apply`.
-type AgentHarnessApplyFlags struct {
-	ID string // --id
-}
-
-// BindAgentHarnessApply registers `magus agent harness apply`'s flags on fs and returns the destination.
-func BindAgentHarnessApply(fs *flag.FlagSet) *AgentHarnessApplyFlags {
-	var f AgentHarnessApplyFlags
-	fs.StringVar(&f.ID, FlagAgentHarnessApplyID, "", "Harness ID; omit to apply every magusfile-wired provider")
-	return &f
-}
-
-// AgentHarnessRemoveFlags are the flags declared for `magus agent harness remove`.
-type AgentHarnessRemoveFlags struct {
-	ID string // --id
-}
-
-// BindAgentHarnessRemove registers `magus agent harness remove`'s flags on fs and returns the destination.
-func BindAgentHarnessRemove(fs *flag.FlagSet) *AgentHarnessRemoveFlags {
-	var f AgentHarnessRemoveFlags
-	fs.StringVar(&f.ID, FlagAgentHarnessRemoveID, "", "Harness ID; omit to remove every magusfile-wired provider")
 	return &f
 }
 

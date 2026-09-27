@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
-	"time"
+	"slices"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,19 +26,15 @@ func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) er
 		return usagef("magus agent harness: a subcommand is required")
 	}
 	switch args[0] {
-	case "apply":
-		return agentHarnessApplyCmd(ctx, rootOverride, args[1:])
 	case "install":
 		return agentHarnessInstallCmd(ctx, rootOverride, args[1:])
-	case "remove":
-		return agentHarnessRemoveCmd(ctx, rootOverride, args[1:])
 	case "verify":
 		return agentHarnessVerifyCmd(ctx, rootOverride, args[1:])
 	case "-h", "--help", "help":
 		agentHarnessUsage(os.Stdout)
 		return nil
 	default:
-		return usagef("magus agent harness: unknown subcommand %q (want apply, install, remove, or verify)", args[0])
+		return usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
 	}
 }
 
@@ -134,17 +131,7 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	return nil
 }
 
-func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []string) error {
-	return runHarnessChange(ctx, rootOverride, args, "apply", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
-		lease, err := harnessActingLease(ctx, root)
-		if err != nil {
-			return agent.HarnessUpdate{}, err
-		}
-		return agent.ApplyHarness(ctx, agent.HarnessApplyOptions{Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: lease})
-	})
-}
-
-// harnessActingLease is the lease a harness change is refused under: the checkout's
+// harnessActingLease is the lease a harness skill install is refused under: the checkout's
 // binding, else the claim this process was launched with.
 func harnessActingLease(ctx context.Context, root string) (string, error) {
 	lease, _, err := checkoutLease(root, proc.LeaseFromContext(ctx))
@@ -163,78 +150,110 @@ func checkoutLease(root, claim string) (string, types.LeaseSource, error) {
 	return lease, from, nil
 }
 
-// agentHarnessRemoveCmd is ApplyHarness's inverse on the CLI: it deletes only the
-// managed entries and config_defaults values apply would have written, and never
-// asks for confirmation (see RemoveHarness's doc comment for why). It prints
-// exactly what changed the same way apply does, and honors --dry-run to preview a
-// removal first.
-func agentHarnessRemoveCmd(ctx context.Context, rootOverride string, args []string) error {
-	return runHarnessChange(ctx, rootOverride, args, "remove", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
-		lease, err := harnessActingLease(ctx, root)
-		if err != nil {
-			return agent.HarnessUpdate{}, err
+// describeHarness renders `magus describe harness [<id>]`: what each wired host's files
+// need, and the one command a person runs to merge it. It reads and prints; the host files
+// are the person's, so nothing here writes one.
+func describeHarness(ctx context.Context, rootOverride string, args []string) error {
+	pos, err := cmdParse("describe harness", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus describe harness [<id>] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Print the host config a harness wired with magus\\harness.provider(<spell>) needs:")
+			fmt.Fprintln(os.Stderr, "each entry a host file lacks, and the one command that merges them. magus never")
+			fmt.Fprintln(os.Stderr, "writes host config; run the command yourself. -o json prints the exact fragments")
+			fmt.Fprintln(os.Stderr, "that command reads back. Omit <id> for every wired harness.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
 		}
-		return agent.RemoveHarness(ctx, agent.HarnessRemoveOptions{Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: lease})
 	})
-}
-
-// runHarnessChange runs `agent harness <verb> [--id]`: change against one descriptor, or
-// every magusfile-wired provider when --id is omitted, printing each update.
-func runHarnessChange(ctx context.Context, rootOverride string, args []string, verb string,
-	change func(ctx context.Context, root, id string) (agent.HarnessUpdate, error),
-) error {
-	name := "magus agent harness " + verb
-	fset := flag.NewFlagSet("agent harness "+verb, flag.ContinueOnError)
-	id := fset.String("id", "", "harness descriptor ID; omit to "+verb+" every magusfile-wired provider")
-	bindDisplayFlags(fset)
-	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err != nil {
 		return err
 	}
-	if len(fset.Args()) != 0 {
-		return usagef("%s: positional arguments are not accepted", name)
+	if len(pos) > 1 {
+		return usagef("magus describe harness: takes at most one harness id")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
-		return fmt.Errorf("%s: no workspace here: run it from inside one or pass --root <path>", name)
+		return fmt.Errorf("magus describe harness: no workspace here: run it from inside one or pass --root <path>")
 	}
-	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
+	id := ""
+	if len(pos) == 1 {
+		id = pos[0]
+	}
+	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, id)
 	if err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		return fmt.Errorf("magus describe harness: %w", err)
 	}
+	plans := make([]agent.HarnessPlan, 0, len(ids))
 	for _, harnessID := range ids {
-		update, err := change(ctx, root, harnessID)
+		plan, err := agent.PlanHarness(ctx, root, harnessID)
 		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+			return fmt.Errorf("magus describe harness: %s: %w", harnessID, err)
 		}
-		if err := writeHarnessOutput(os.Stdout, update); err != nil {
+		plans = append(plans, plan)
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		// One plan prints bare, so the merge command can read `.files` straight off it.
+		if id != "" {
+			return emitFormatted(opts, plans[0])
+		}
+		return emitFormatted(opts, plans)
+	case outputName:
+		return emitNamesOf(plans, func(p agent.HarnessPlan) string { return p.ID })
+	}
+	for i, plan := range plans {
+		if i > 0 {
+			fmt.Fprintln(os.Stdout)
+		}
+		if err := writeHarnessPlan(os.Stdout, plan); err != nil {
 			return err
 		}
-		recordHarnessChange(ctx, root, verb, update)
 	}
 	return nil
 }
 
-// recordHarnessChange appends a host-config change to the activity trail. The hook wiring
-// is what lets the guard see an agent at all, so its arrival and removal belong beside the
-// guard_policy rows for the rules it carries. A plan or a no-op records nothing.
-func recordHarnessChange(ctx context.Context, root, verb string, update agent.HarnessUpdate) {
-	if !update.Changed || update.Planned {
-		return
+func writeHarnessPlan(w io.Writer, plan agent.HarnessPlan) error {
+	var err error
+	printf := func(format string, args ...any) {
+		if err == nil {
+			_, err = fmt.Fprintf(w, format, args...)
+		}
 	}
-	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return
+	if plan.Current() {
+		printf("%s harness: current\n", plan.ID)
+	} else {
+		printf("%s harness: %d file(s) to merge\n", plan.ID, len(plan.Files))
+		for _, path := range slices.Sorted(maps.Keys(plan.Files)) {
+			file := plan.Files[path]
+			state := "missing"
+			if file.Exists {
+				state = "exists"
+			}
+			printf("  %s (%s)\n", path, state)
+			for _, change := range file.Changes {
+				if change.Op == agent.HarnessWrite {
+					printf("    write the whole file\n")
+					continue
+				}
+				value, encErr := json.Marshal(change.Value)
+				if encErr != nil && err == nil {
+					err = encErr
+				}
+				printf("    %s %s: %s\n", change.Op, change.Key, value)
+			}
+		}
+		printf("merge it yourself (magus never writes host config; needs jq):\n  %s\n", plan.Merge)
 	}
-	trail.Append(ctx, base, trail.Event{
-		Ts:        time.Now().UnixMilli(),
-		Kind:      trail.KindConfigChange,
-		Origin:    types.Origin{EntryPoint: types.EntryPointCLI},
-		Workspace: root,
-		Action:    "harness." + verb,
-		Outcome:   trail.OutcomeOK,
-		Preview:   update.ID + " " + update.Path,
-	})
+	if plan.MCPHint != "" {
+		printf("mcp %s (user-owned; Magus does not write host MCP config):\n%s\n", plan.ID, plan.MCPHint)
+	}
+	return err
 }
 
 func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []string) error {
@@ -262,13 +281,13 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		if err != nil {
 			return fmt.Errorf("magus agent harness verify: %w", err)
 		}
-		if err := writeHarnessOutput(os.Stdout, result); err != nil {
+		if err := writeHarnessVerification(os.Stdout, result); err != nil {
 			return err
 		}
 		// Skills-only is not a failure: a descriptor that wires no guard at all (an
 		// empty config.path) has nothing to be uncovered, and treating it as one
 		// would make every skills-only host block `magus agent harness verify`
-		// forever. It must still never print as "verified"; see writeHarnessOutput.
+		// forever. It must still never print as "verified"; see writeHarnessVerification.
 		if result.Status != agent.HarnessVerified && result.Status != agent.HarnessSkillsOnly && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s (%s)", result.Status, result.Reason)
 		}
@@ -296,7 +315,7 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 		return []string{id}, ctx, nil
 	}
 	if len(wired) == 0 {
-		return nil, ctx, usagef("pass --id <harness-id>, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
+		return nil, ctx, usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
 	}
 	return wired, ctx, nil
 }
@@ -309,80 +328,46 @@ func workspaceHarnessNames(ws types.WorkspaceRepository) []string {
 	return nil
 }
 
-func writeHarnessOutput(w io.Writer, value any) error {
+func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) error {
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err
 	}
 	if opts.Format != FormatText {
-		return writeFormatted(w, opts, value)
+		return writeFormatted(w, opts, typed)
 	}
-	switch typed := value.(type) {
-	case agent.HarnessUpdate:
-		verb := "already current"
-		switch {
-		case typed.Removed && typed.Planned:
-			verb = "would remove"
-		case typed.Removed && typed.Changed:
-			verb = "removed"
-		case typed.Removed:
-			verb = "nothing to remove for"
-		case typed.Planned:
-			verb = "would update"
-		case typed.Changed:
-			verb = "updated"
-		}
-		path := typed.Path
-		if path == "" {
-			path = "(hooks: none)"
-		}
-		if _, err = fmt.Fprintf(w, "%s %s harness: %s\n", verb, typed.ID, path); err != nil {
-			return err
-		}
-		for _, prompt := range typed.Prompts {
-			if err == nil {
-				_, err = fmt.Fprintf(w, "%s %s approval prompt: %s\n", verb, typed.ID, prompt)
-			}
-		}
-		if err == nil && typed.MCPHint != "" {
-			_, err = fmt.Fprintf(w, "mcp %s (user-owned; Magus does not write host MCP config):\n%s\n", typed.ID, typed.MCPHint)
-		}
-	case agent.HarnessVerification:
-		_, err = fmt.Fprintf(w, "%s %s harness: %s", typed.Status, typed.ID, typed.Path)
-		if typed.Reason != "" {
-			_, err = fmt.Fprintf(w, " (%s)", typed.Reason)
+	_, err = fmt.Fprintf(w, "%s %s harness: %s", typed.Status, typed.ID, typed.Path)
+	if err == nil && typed.Reason != "" {
+		_, err = fmt.Fprintf(w, " (%s)", typed.Reason)
+	}
+	if err == nil {
+		_, err = fmt.Fprintln(w)
+	}
+	if err == nil && typed.PromptStatus != "" {
+		_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.PromptStatus, typed.ID)
+		if err == nil && typed.PromptReason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.PromptReason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)
 		}
-		if err == nil && typed.PromptStatus != "" {
-			_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.PromptStatus, typed.ID)
-			if err == nil && typed.PromptReason != "" {
-				_, err = fmt.Fprintf(w, " (%s)", typed.PromptReason)
-			}
-			if err == nil {
-				_, err = fmt.Fprintln(w)
-			}
+	}
+	if err == nil && typed.MCPStatus != "" {
+		_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCPStatus, typed.ID, typed.MCPReason)
+		if err == nil {
+			_, err = fmt.Fprintln(w)
 		}
-		if err == nil && typed.MCPStatus != "" {
-			_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCPStatus, typed.ID, typed.MCPReason)
-			if err == nil {
-				_, err = fmt.Fprintln(w)
-			}
-		}
-	default:
-		return fmt.Errorf("magus agent harness: unsupported output type %T", value)
 	}
 	return err
 }
 
 func agentHarnessUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent harness <apply|install|remove|verify> [--id <harness-id>] [flags]")
+	fmt.Fprintln(w, "Usage: magus agent harness <install|verify> [--id <harness-id>] [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Apply, install, remove, or verify harnesses selected with magus\\harness.provider(<spell>).")
-	fmt.Fprintln(w, "remove is apply's inverse: it deletes only the managed entries and config_defaults")
-	fmt.Fprintln(w, "values apply would have written, and leaves a user's own hooks beside them untouched.")
-	fmt.Fprintln(w, "It does not ask for confirmation; pass --dry-run to preview one first.")
+	fmt.Fprintln(w, "Install the skill trees of, or verify, harnesses selected with magus\\harness.provider(<spell>).")
+	fmt.Fprintln(w, "verify runs the wired guard command against a synthetic event rather than trusting")
+	fmt.Fprintln(w, "its presence in the config. The host config itself is yours: `magus describe harness`")
+	fmt.Fprintln(w, "prints what to merge and the command that merges it, and magus never writes it.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Omit --id to act on every wired provider (several hosts are fine when you bounce")
 	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell.")

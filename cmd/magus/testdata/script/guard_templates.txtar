@@ -747,7 +747,7 @@ stdin $WORK/push-line.txt
 ! exec magus shell -o json
 stdout '"decision": "deny"'
 stdout 'predates approval prompts'
-stdout 'magus agent harness apply'
+stdout 'magus describe harness'
 ! stdout '"decision": "ask"'
 
 # case: command/deny
@@ -771,7 +771,7 @@ stdin $WORK/push-command.json
 exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'own terminal'
-stdout 'magus agent harness apply --id codex'
+stdout 'magus describe harness codex'
 ! stdout '"permissionDecision":"ask"'
 
 mkdir .codex/rules
@@ -823,7 +823,7 @@ stdin $WORK/push-command-turn.json
 exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'MGS3024'
-stdout 'magus agent harness apply'
+stdout 'magus describe harness'
 ! stdout '"permissionDecision":"ask"'
 env HOST_NAME=codex
 

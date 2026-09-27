@@ -307,7 +307,7 @@ export const MagusGuard: Plugin = async () => {
         throw new Error(
           `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
             "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push reaches the prompt " +
-            'its own "permission.bash" entries configure, which magus agent harness apply --id opencode writes. ' +
+            'its own "permission.bash" entries configure, which magus describe harness opencode prints. ' +
             "Ask them to run it from their own terminal.",
         );
       case "advise":

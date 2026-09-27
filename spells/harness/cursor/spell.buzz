@@ -7,10 +7,12 @@
 //
 // To adapt without modifying Magus source: copy this spell into the workspace,
 // change only the import path (keep provider), edit Buzz, then
-// `magus agent harness apply`. See magus-workspace-rules "Adapting a Buzz harness".
+// merge what `magus describe harness cursor` prints. See magus-workspace-rules "Adapting a
+// Buzz harness".
 //
-// Magus invokes the reserved harness_* names on apply/verify. The fragments are
-// opaque host JSON; Magus merges them and does not rewrite command fields.
+// Magus invokes the reserved harness_* names on describe/verify. The fragments are
+// opaque host JSON; Magus prints them for a person to merge and does not rewrite command
+// fields.
 
 import "magus/spell";
 import "assert";
@@ -138,7 +140,7 @@ fun list_contains(hay: [str], needle: str) > bool {
     return false;
 }
 
-test "mgs_getName is the harness id apply and verify look up" {
+test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "cursor", "id must match magus\\harness.provider wiring and --id");
 }
 

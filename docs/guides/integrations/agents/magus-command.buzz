@@ -415,7 +415,7 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
         final packed = body!.replace(" ", with: "").replace("\t", with: "");
         if (packed.indexOf(pushRule!) != null) { return ""; }
     }
-    return "no .codex/rules/magus.rules carries the prompt rule for this push, which magus agent harness apply --id codex writes";
+    return "no .codex/rules/magus.rules carries the prompt rule for this push, which magus describe harness codex prints";
 }
 
 // shellFlags parses this script's own argv: the `magus shell` flags the entry that wired

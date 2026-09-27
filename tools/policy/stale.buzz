@@ -211,8 +211,8 @@ export fun stateWrite(programs: [helpers\Program]) > StateWrite? {
                 if (ops[0] == "agent" and sub == "install" and !tar) {
                     return StateWrite{ verb = "agent install", shared = global };
                 }
-                if (ops[0] == "agent" and sub == "harness" and ops.len() > 2 and ["apply", "install", "remove"].indexOf(ops[2]) != null) {
-                    return StateWrite{ verb = "agent harness {ops[2]}", shared = false };
+                if (ops[0] == "agent" and sub == "harness" and ops.len() > 2 and ops[2] == "install") {
+                    return StateWrite{ verb = "agent harness install", shared = false };
                 }
             }
         }
@@ -418,7 +418,7 @@ test "a stale ./magus is denied every state-writing verb, naming the rebuild" {
     foreach (argv in stateWriters + [
         ["./magus", "agent", "install", ".claude/skills", "--force"],
         ["./magus", "config", "set", "key=cache.dir,value=/tmp/c"],
-        ["./magus", "agent", "harness", "apply"],
+        ["./magus", "agent", "harness", "install"],
     ]) {
         final v = writeVerdict(argv, bin: staleBin, onBase: mainHolds(["c1"]));
         std\assert(v.decision == "deny", message: argv.join(" "));

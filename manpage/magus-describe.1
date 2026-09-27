@@ -7,7 +7,7 @@ magus\-describe \- Define a magus concept and list its entities
 .SH DESCRIPTION
 Define a magus concept and list every entity of that kind. The noun is
 one of spell, charm, target, project, workspace, module, mcp\-tool, tool, file,
-or graph; singular and plural are interchangeable. Pass a name after the noun
+graph, or harness; singular and plural are interchangeable. Pass a name after the noun
 to detail a single entity instead of listing them all. (The knowledge graph
 lives under magus graph: export for the merged graph, stats for its shape.)
 .PP
@@ -107,12 +107,27 @@ List the guard rules this workspace enforces, and what each one catches
 .TP
 \fBrule\fR
 Detail one guard rule, by the name a verdict reported
+.TP
+\fBharness\fR
+Print the host config a wired harness needs and the command you run to merge it
 .RE
 .SH EXAMPLES
 \fIList every target\fR
 .PP
 .EX
 magus describe targets
+.EE
+.PP
+\fIPrint what every wired harness needs merged\fR
+.PP
+.EX
+magus describe harness
+.EE
+.PP
+\fIOne harness's exact fragments, for review or your own merge\fR
+.PP
+.EX
+magus describe harness <id> -o json
 .EE
 .PP
 \fIList what the guard enforces\fR

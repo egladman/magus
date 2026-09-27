@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 10754
-skill_short_bytes: 8605
+skill_full_bytes: 10866
+skill_short_bytes: 8696
 ---
 
 # magus-workspace-rules
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `91` |
+| `agent-skill-version` | `92` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `3f2c50e3fc1f` |
+| `skill-content` | `657299d96042` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -195,7 +195,7 @@ Workspace-owned adaptation: declare an override, change no import and no provide
 
 1. Copy the shipped spell tree into the workspace (for example
    `harness/cursor/` beside the magusfile). Keep `mgs_getName()` as the host id
-   (`cursor`, `claude-code`, ...) so apply/verify still resolve that id.
+   (`cursor`, `claude-code`, ...) so describe and verify still resolve that id.
 2. In `magus.yaml`, replace the registry path with that directory, as Go's
    `replace` does:
 
@@ -212,8 +212,9 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
    the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
-4. Run `magus agent harness apply` (or `--id <id>`) and
-   `magus agent harness verify`. Apply prints MCP setup guidance only; the user owns host MCP client
+4. Run `magus describe harness <id>`, have a person read and run the merge
+   command it prints (magus never writes host config), then run
+   `magus agent harness verify`. MCP setup is printed as guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
    `magus.yaml` entry and the forked spell together.
 
@@ -360,8 +361,8 @@ guard rule.
 1. Show the rule in the file the agent actually loads, not the one you edited.
    `magus agent harness verify` answers this for wiring. The two differ more
    often than anyone expects: a skill directory this repo does not install into
-   receives nothing, and a forked harness spell reaches the host only once
-   `magus agent harness apply` rewrites its config.
+   receives nothing, and a forked harness spell reaches the host only once a person
+   merges what `magus describe harness` prints into its config.
 2. Re-run the command the evidence cites and read the verdict. A change that
    does not move the verdict on the command that motivated it changed nothing,
    and nothing else in the loop would have said so.
@@ -401,7 +402,7 @@ Workspace-owned adaptation: declare an override, change no import and no provide
 
 1. Copy the shipped spell tree into the workspace (for example
    `harness/cursor/` beside the magusfile). Keep `mgs_getName()` as the host id
-   (`cursor`, `claude-code`, ...) so apply/verify still resolve that id.
+   (`cursor`, `claude-code`, ...) so describe and verify still resolve that id.
 2. In `magus.yaml`, replace the registry path with that directory, as Go's
    `replace` does:
 
@@ -418,8 +419,9 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
    the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
-4. Run `magus agent harness apply` (or `--id <id>`) and
-   `magus agent harness verify`. Apply prints MCP setup guidance only; the user owns host MCP client
+4. Run `magus describe harness <id>`, have a person read and run the merge
+   command it prints (magus never writes host config), then run
+   `magus agent harness verify`. MCP setup is printed as guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
    `magus.yaml` entry and the forked spell together.
 

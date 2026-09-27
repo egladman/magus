@@ -58,7 +58,7 @@ func agentUsage(w io.Writer) {
 		"render the embedded skills and write or stream them into named destinations",
 		"(<skills-dir>, ...)")
 	tty.ProseItem(w, tty.SystemProbe, "  harness            ",
-		"apply or verify a user-owned harness descriptor in this workspace")
+		"install skills for, or verify, a harness wired in the magusfile")
 	tty.ProseItem(w, tty.SystemProbe, "  starter            ",
 		"print a starter AGENTS.md to stdout to own and tweak; never writes a file")
 	tty.ProseItem(w, tty.SystemProbe, "  adoption           ",

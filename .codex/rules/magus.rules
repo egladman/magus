@@ -1,4 +1,4 @@
-# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.
+# Printed by magus describe harness codex. Delete this file to drop these prompts.
 #
 # Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The
 # magus PermissionRequest hook answers it: a push a passing gate covers is approved

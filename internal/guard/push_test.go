@@ -215,7 +215,7 @@ func TestAskReachesOnlyACallerThatRendersIt(t *testing.T) {
 	assert.Equal(t, "deny", v.Decision)
 	assert.Equal(t, string(denyRulePushUngated), v.Rule)
 	assert.Contains(t, v.Reason, "predates approval prompts")
-	assert.Contains(t, v.Reason, "magus agent harness apply")
+	assert.Contains(t, v.Reason, "magus describe harness")
 	assert.Contains(t, v.Reason, "abc1234", "the refusal still names what it refused")
 
 	gated := judgePushFrom(t, false, "pass", "")

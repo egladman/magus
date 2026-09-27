@@ -24,13 +24,12 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
-harness applies, removes, or verifies harnesses selected with
+harness installs the skill trees of, or verifies, harnesses selected with
 magus\\harness.provider (several hosts are fine when you bounce between LLM
-tools): apply merges opaque host-config fragments the descriptor already
-names, remove deletes only those same fragments (a user's own hooks beside
-them are untouched, and nothing is asked for confirmation - pass --dry-run to
-preview one first), and verify actually runs the wired guard command against
-a synthetic event rather than trusting its mere presence in the config. Omit
+tools): verify actually runs the wired guard command against a synthetic
+event rather than trusting its mere presence in the config. The host config
+is yours for the same reason AGENTS.md is: magus describe harness prints the
+entries it needs and the one command that merges them, and you run it. Omit
 --id to act on every magusfile-wired provider. Guard feedback that keeps
 recurring is doctor's recurring-guard-denials check, not a verb here.
 
@@ -74,16 +73,6 @@ a pattern no graph verb fits.
 **--tar**
 : Stream a tar archive to stdout instead of writing files (agent install)
 
-### agent harness apply options
-
-**--id** *string*
-: Harness ID; omit to apply every magusfile-wired provider
-
-### agent harness remove options
-
-**--id** *string*
-: Harness ID; omit to remove every magusfile-wired provider
-
 ### agent harness verify options
 
 **--id** *string*
@@ -105,7 +94,7 @@ a pattern no graph verb fits.
 : Render the embedded skills and write or stream them into named destinations
 
 **harness**
-: Apply, remove, or verify harnesses wired in the magusfile
+: Install skills for, or verify, harnesses wired in the magusfile
 
 **starter**
 : Print a starter AGENTS.md to stdout; never writes a file

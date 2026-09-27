@@ -168,7 +168,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // Installed glue that names no host is refused with MGS3024 instead of answered in a
 // guessed host's dialect. This bumps because the CONFIG and the glue moved together: a
 // config written for 17 sets the environment variable an 18 copy never reads, so every
-// call it makes is refused until `magus agent harness apply` rewrites it.
+// call it makes is refused until the config is rewritten.
 const GuardTemplateVersion = 18
 
 // GuardTemplateMarker introduces the version line each template carries, and is
