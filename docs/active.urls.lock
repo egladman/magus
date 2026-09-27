@@ -148,6 +148,7 @@ debugging/
 decisions/
 decisions/0001-bounded-concurrency-with-recursive-invocation/
 decisions/0002-remote-spells-are-imported-by-registry-path/
+decisions/0003-running-an-invocation-on-another-operating-system/
 dependencies/
 development/
 development/cmd-magus-starter/
@@ -972,6 +973,7 @@ tags/sandbox/
 tags/scanners/
 tags/scheduler/
 tags/scip/
+tags/scope/
 tags/secret-provider/
 tags/secrets/
 tags/security/
