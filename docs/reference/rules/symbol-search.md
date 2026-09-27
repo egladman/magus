@@ -1,16 +1,16 @@
 ---
-title: "symbol-search: a text search of the tree or of named Go files for names the graph answers exactly: symbols or diagnostic codes"
-description: "A deny rule: it refuses a text search of the tree or of named Go files for names the graph answers exactly: symbols or diagnostic codes, and names what to run instead."
+title: "symbol-search: a text search for symbols or diagnostic codes the graph answers exactly"
+description: "A deny rule: it refuses a text search for symbols or diagnostic codes the graph answers exactly, and names what to run instead."
 tags: [guard, rules, symbol-search, deny]
 ---
 
 # symbol-search
 
-A deny rule: it refuses a text search of the tree or of named Go files for names the graph answers exactly: symbols or diagnostic codes, and names what to run instead.
+A deny rule: it refuses a text search for symbols or diagnostic codes the graph answers exactly, and names what to run instead.
 
 ## What it catches
 
-A text search of the tree or of named Go files for names the graph answers exactly: symbols or diagnostic codes.
+A text search for symbols or diagnostic codes the graph answers exactly.
 
 ## Why
 
