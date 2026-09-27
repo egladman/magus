@@ -77,7 +77,33 @@ func TestGitHookOperationHonorsTheExportedIndex(t *testing.T) {
 
 	dirty, err := HookDirtyFiles(ctx, dir, op)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"g", "h"}, dirty, "what the operation's index holds against HEAD, and h is not untracked there")
+	assert.Empty(t, dirty, "the operation's index holds g and h as the tree has them; the default index would call h untracked")
+}
+
+// A merge that deletes a generated file stages the deletion itself. The regeneration
+// that follows writes other outputs, and staging those must not name the deleted path,
+// which git add refuses once neither the index nor the tree holds it.
+func TestHookStageAfterAMergeThatDeletesAFile(t *testing.T) {
+	dir := settleRepo(t)
+	ctx := t.Context()
+	gitRun(t, dir, "checkout", "-q", "-b", "drop")
+	gitRun(t, dir, "rm", "-q", "f")
+	gitRun(t, dir, "commit", "-q", "-m", "drop f")
+	gitRun(t, dir, "checkout", "-q", "side")
+	gitRun(t, dir, "merge", "-q", "--no-commit", "--no-ff", "drop")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "g"), []byte("regenerated\n"), 0o644))
+
+	op, ok, err := GitHookOperation(ctx, dir, HookEvent{Hook: HookPreCommit})
+	require.NoError(t, err)
+	require.True(t, ok)
+	dirty, err := HookDirtyFiles(ctx, dir, op)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"g"}, dirty)
+	require.NoError(t, HookStage(ctx, dir, op, dirty))
+
+	staged, err := gitOutput(ctx, dir, gitOpts{}, "diff", "--cached", "--name-status", "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, "D\tf\nM\tg", staged)
 }
 
 // TestGitHookOperationAfterTheCommit: post-commit settles a single pick and the last of
