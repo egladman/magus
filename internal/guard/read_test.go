@@ -94,8 +94,8 @@ func TestReadCallsSkipConsumedOutput(t *testing.T) {
 func readFixture(t *testing.T) string {
 	t.Helper()
 	body := func(n int) string { return strings.Repeat("\t_ = 0\n", n) }
-	// 1 package, 3 comment, 4 type, 6 comment, 7-30 Open, 32-130 Close.
-	store := "package store\n\n// Store holds nothing.\ntype Store struct{}\n\n// Open opens.\nfunc (s *Store) Open() error {\n" +
+	// 1 package, 3 comment, 4 type, 6 comment, 7-30 Open, 32-130 the Close method.
+	store := "package store\n\n// Store holds nothing.\ntype Store struct{}\n\n// Open opens.\nfunc Open() error {\n" +
 		body(22) + "}\n\nfunc (s *Store) Close() error {\n" + body(97) + "}\n"
 	small := "package store\n\nfunc helper() {}\n"
 	// 1 Alpha, 4 Beta, a fenced # on 6, filler, 131 Gamma.
@@ -135,7 +135,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 			"`" + hint.Explain.With("file:internal/store/store.go") + "` maps this file",
 			"130 lines, 3 declarations",
 			hint.Refs.With("<name>", "--definition", "--source"),
-			"What the file holds (3 declarations):\n  3-5: Store\n  6-31: Open\n  32-130: Close",
+			"What the file holds (3 declarations):\n  3-4: Store\n  6-30: Open\n  32-130: Store.Close",
 		}},
 		{`cat -n internal/store/store.go`, nil},
 		{`head -n 500 internal/store/store.go`, nil},
@@ -202,6 +202,11 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 		{`sed -n 1,5p internal/store/store.go`, deps},
 		{`sed -n 6,40p internal/store/store.go`, deps},
 		{`head -n 20 internal/store/store.go`, deps},
+		// Between two declarations, which belongs to neither.
+		{`sed -n 31p internal/store/store.go`, deps},
+		// Inside a method: refs cannot name one method among same-named ones.
+		{`sed -n '40,$p' internal/store/store.go`, deps},
+		{`tail -n 5 internal/store/store.go`, deps},
 		// A bounded read of a page: no verb prints one section.
 		{`sed -n 4,20p docs/a.md`, deps},
 		{`grep -n Open internal/store/store.go`, deps},
@@ -224,6 +229,44 @@ func TestReadNavigationSkipsGeneratedOutput(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// TestGoFileMapSpans pins each declaration's span to its own doc comment and closing
+// line: a grouped var's members are separate entries, a method is named by its type, and
+// a blank-identifier assertion neither counts nor voids the map.
+func TestGoFileMapSpans(t *testing.T) {
+	t.Parallel()
+	src := "package store\n\nvar (\n\ta = 1\n\t// b is two.\n\tb = 2\n)\n\nvar _ = a\n\n" +
+		"func F() {\n\t_ = b\n}\n\nfunc (s *S[T]) M() {}\ntype S[T any] struct{}\n"
+	root := writeTree(t, map[string]string{"s.go": src})
+	indexed := map[string]bool{"a": true, "b": true, "F": true, "M": true, "S": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }}
+
+	m, ok := goFileMap(deps, root+"/s.go", "s.go")
+
+	require.True(t, ok)
+	assert.Equal(t, 16, m.lines)
+	assert.Equal(t, []mapEntry{
+		{name: "a", symbol: "a", first: 4, last: 4},
+		{name: "b", symbol: "b", first: 5, last: 6},
+		{name: "F", symbol: "F", first: 11, last: 13},
+		{name: "S.M", first: 15, last: 15},
+		{name: "S", symbol: "S", first: 16, last: 16},
+	}, m.entries)
+}
+
+// TestReadVerdictResolvesFromTheCallCwd pins that a relative read resolves from the
+// judged call's directory, not the hook process's.
+func TestReadVerdictResolvesFromTheCallCwd(t *testing.T) {
+	root := readFixture(t)
+	t.Chdir(t.TempDir())
+	deps := readDeps(root)
+	deps.callDir = root + "/internal/store"
+
+	v, ok := readVerdict(deps, `cat store.go`, DialectBash)
+
+	require.True(t, ok)
+	assert.Equal(t, denyRule{Name: denyRuleReadNavigation, Arg: "internal/store/store.go"}, v.Rule)
+}
+
 func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 	t.Parallel()
 	root := readFixture(t)
@@ -234,11 +277,8 @@ func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 		name    string
 		lines   string
 	}{
-		{`sed -n 7,30p internal/store/store.go`, "Open", "lines 7-30 of internal/store/store.go sit inside `Open` (6-31)"},
+		{`sed -n 7,30p internal/store/store.go`, "Open", "lines 7-30 of internal/store/store.go sit inside `Open` (6-30)"},
 		{`sed -n 10,12p internal/store/store.go`, "Open", "lines 10-12"},
-		{`sed -n '40,$p' internal/store/store.go`, "Close", "lines 40-130"},
-		{`tail -n 5 internal/store/store.go`, "Close", "lines 126-130"},
-		{`tail -n +100 internal/store/store.go`, "Close", "lines 100-130"},
 		{`sed -n 3,4p internal/store/store.go`, "Store", "lines 3-4"},
 	} {
 		v, ok := readVerdictAt(deps, root, tt.command, DialectBash)

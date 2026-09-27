@@ -44,10 +44,10 @@ const guardIndexHeader = "magus-guard-index 1"
 // GuardIndexPath is the index file under a workspace cache dir.
 func GuardIndexPath(cacheDir string) string { return filepath.Join(StoreDir(cacheDir), "guard.idx") }
 
-// GuardRefsPath is the reference-site file beside the index: one line per symbol name and
+// guardRefsPath is the reference-site file beside the index: one line per symbol name and
 // file, sorted by name, kept apart because it is several times the index's size and a
 // hook reads it only for a search it has already found a symbol in.
-func GuardRefsPath(cacheDir string) string {
+func guardRefsPath(cacheDir string) string {
 	return filepath.Join(StoreDir(cacheDir), "guard-refs.idx")
 }
 
@@ -142,7 +142,7 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool) error {
 	if err != nil {
 		return err
 	}
-	if err := writeGuardRefs(GuardRefsPath(cacheDir), g, symbols); err != nil {
+	if err := writeGuardRefs(guardRefsPath(cacheDir), g, symbols); err != nil {
 		return err
 	}
 	var b strings.Builder
@@ -311,7 +311,7 @@ func ReadGuardIndex(cacheDir, root string) (*GuardIndex, error) {
 		return nil, err
 	}
 	defer f.Close()
-	x := &GuardIndex{refsPath: GuardRefsPath(cacheDir), ids: map[string][]string{}, fresh: map[string]bool{}}
+	x := &GuardIndex{refsPath: guardRefsPath(cacheDir), ids: map[string][]string{}, fresh: map[string]bool{}}
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	if !s.Scan() || s.Text() != guardIndexHeader {

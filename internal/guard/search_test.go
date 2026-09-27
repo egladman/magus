@@ -105,7 +105,7 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		{`grep -n ParseConfig internal/api/handler.go`, deps, "refs ParseConfig --occurrences`"},
 		// A pipe changes nothing: the search still runs as typed.
 		{`grep -n HandleRequest internal/api/handler.go | head -1`, deps, "refs HandleRequest --occurrences`"},
-		{`grep -n HandleRequest internal/api/handler.go | tee out.txt`, deps, ""},
+		{`grep -n HandleRequest internal/api/handler.go | tee out.txt`, deps, "refs HandleRequest --occurrences`"},
 
 		// A stale index proves nothing.
 		{`grep -n HandleRequest internal/api/handler.go`, stale, ""},
@@ -161,14 +161,13 @@ func TestJudgeResolvesSearchPathsFromTheCallCwd(t *testing.T) {
 }
 
 // TestSymbolSearchAnswersTreeSearches pins the inline answer of a tree search: the sites
-// the index holds under the searched paths, or what the pipe's filters make of them, and
-// the routing deny alone when the index cannot say.
+// the index holds under the searched paths, labeled as refs' answer and never filtered by
+// a pipe, and the routing deny alone when the index cannot say.
 func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"internal/api/handler.go":      "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
 		"internal/api/handler_test.go": "package api\n\nfunc TestHandle(t *testing.T) { HandleRequest() }\n",
 		"internal/api/config.go":       "package api\n\nfunc ParseConfig() {}\n",
-		"docs/handler.md":              "HandleRequest is documented here.\n",
 	})
 	sites := map[string][]types.KnowledgeRefSite{
 		"HandleRequest": {{File: "internal/api/handler.go", Count: 2, Lines: []int{4, 6}}, {File: "internal/api/handler_test.go", Count: 1, Lines: []int{3}}, {File: "cmd/x.go", Count: 1, Lines: []int{9}}},
@@ -177,53 +176,41 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 	indexed := func(name string) (bool, bool) { return sites[name] != nil, true }
 	deps := Dependencies{SymbolDefined: indexed, SymbolSites: func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], true }, scope: workspaceScope{root: root}}
 	blind := Dependencies{SymbolDefined: indexed, scope: workspaceScope{root: root}}
-	capped := deps
-	capped.SymbolSites = func(name string) ([]types.KnowledgeRefSite, bool) {
-		return []types.KnowledgeRefSite{{File: "internal/api/handler.go", Count: 3, Lines: []int{4, 6}}}, true
-	}
+	const handler = "Its answer (2 results):\n  internal/api/handler.go  (2)  lines 4,6\n  internal/api/handler_test.go  (1)  lines 3"
+	const notReproduced = "\nThe pipe after the search is not reproduced: run it over the command's output."
 
 	for _, tt := range []struct {
 		command string
 		deps    Dependencies
 		run     string
-		answer  string
+		answer  string // "" for the routing deny alone
+		piped   bool
 	}{
-		{`grep -rn HandleRequest internal`, deps, "refs HandleRequest --occurrences",
-			"Its answer (2 results):\n  internal/api/handler.go  (2)  lines 4,6\n  internal/api/handler_test.go  (1)  lines 3"},
-		{`grep -rn HandleRequest internal | grep -v _test`, deps, "refs HandleRequest --occurrences",
-			"Its answer, after `| grep -v _test` (2 results):\n  internal/api/handler.go:4:func HandleRequest() {}\n  internal/api/handler.go:6:func serve() { HandleRequest() }"},
-		{`grep -rn HandleRequest internal | cut -d: -f1 | sort -u`, deps, "refs HandleRequest`",
-			"Its answer, after `| cut -d: -f1 | sort -u` (2 results):\n  internal/api/handler.go\n  internal/api/handler_test.go"},
-		{`grep -rn HandleRequest ./internal/ | cut -d: -f1 | sort | uniq -c`, deps, "refs HandleRequest`",
-			"Its answer, after `| cut -d: -f1 | sort | uniq -c` (2 results):\n        2 ./internal/api/handler.go\n        1 ./internal/api/handler_test.go"},
-		{`grep -rn HandleRequest internal | wc -l`, deps, "refs HandleRequest --occurrences", "Its answer, after `| wc -l`: 3"},
-		{`grep -rn --include='*_test.go' HandleRequest internal | wc -l`, deps, "refs HandleRequest --occurrences", "Its answer, after `| wc -l`: 1"},
-		{`rg 'HandleRequest|ParseConfig' internal/api | head -1`, deps, "refs ParseConfig --occurrences",
-			"Its answer, after `| head -1` (1 result):\n  internal/api/config.go:func ParseConfig() {}"},
-		{`grep -rn 'func HandleRequest' internal | head -1`, deps, "refs HandleRequest --definition --source",
-			"Its answer, after `| head -1` (1 result):\n  internal/api/handler.go:4:func HandleRequest() {}"},
-		// A search the row model does not cover keeps the routing deny alone.
-		{`grep -rl HandleRequest internal`, deps, "refs HandleRequest --occurrences", "generated and cross-language ones a pattern misses."},
-		{`grep -rn HandleRequest internal`, blind, "refs HandleRequest --occurrences", "generated and cross-language ones a pattern misses."},
-		// Capped lines answer the count of sites, never the rows.
-		{`grep -rn HandleRequest internal`, capped, "refs HandleRequest --occurrences", "Its answer (1 result):\n  internal/api/handler.go  (3)  lines 4,6"},
-		{`grep -rn HandleRequest internal | wc -l`, capped, "refs HandleRequest --occurrences", "generated and cross-language ones a pattern misses."},
+		{`grep -rn HandleRequest internal`, deps, "refs HandleRequest --occurrences", handler, false},
+		{`grep -rn HandleRequest ./internal/`, deps, "refs HandleRequest --occurrences", handler, false},
+		{`grep -rn HandleRequest internal | grep -v _test`, deps, "refs HandleRequest --occurrences", handler, true},
+		{`grep -rn HandleRequest internal | cut -d: -f1 | sort | uniq -c`, deps, "refs HandleRequest --occurrences", handler, true},
+		{`grep -rn HandleRequest internal | tee sites.txt`, deps, "refs HandleRequest --occurrences", handler, true},
+		{`grep -rn --include='*_test.go' HandleRequest internal`, deps, "refs HandleRequest --occurrences",
+			"Its answer (1 result):\n  internal/api/handler_test.go  (1)  lines 3", false},
+		{`rg 'HandleRequest|ParseConfig' internal/api`, deps, "refs ParseConfig --occurrences",
+			"Its answer (3 results):\n  internal/api/config.go  (1)  lines 3\n  internal/api/handler.go  (2)  lines 4,6", false},
+		// A search no parser models, or an index with no sites, keeps the routing deny alone.
+		{`grep -rl HandleRequest internal`, deps, "refs HandleRequest --occurrences", "", false},
+		{`grep -rn HandleRequest internal | wc -l`, blind, "refs HandleRequest --occurrences", "", true},
 	} {
 		v, ok := searchVerdictAt(tt.deps, root, parseForTest(t, tt.command))
 		require.True(t, ok && v.Deny != "", tt.command)
 		assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
 		assert.Contains(t, v.Deny, tt.run, tt.command)
-		assert.Contains(t, v.Deny, tt.answer, tt.command)
-		if !strings.Contains(tt.answer, "Its answer") {
+		assert.NotContains(t, v.Deny, "after `|", tt.command)
+		if tt.answer == "" {
 			assert.NotContains(t, v.Deny, "Its answer", tt.command)
+			continue
 		}
+		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		assert.Equal(t, tt.piped, strings.HasSuffix(v.Deny, notReproduced), tt.command)
 	}
-	// The capped sites carry no rows, so a pipe over them has no answer.
-	v, _ := searchVerdictAt(capped, root, parseForTest(t, `grep -rn HandleRequest internal | wc -l`))
-	assert.NotContains(t, v.Deny, "Its answer")
-	// A filter no row model reproduces is silent.
-	_, ok := searchVerdictAt(deps, root, parseForTest(t, `grep -rn HandleRequest internal | tee sites.txt`))
-	assert.False(t, ok)
 }
 
 // TestSymbolSearchStaysSilentOutsideTheWorkspace pins the scope half against a real root:

@@ -9,12 +9,9 @@ import (
 	"github.com/egladman/magus/internal/cli"
 )
 
-// pipeRecord is the shape of a verb's structured output in the json keys -o template
-// reads: the list a text row comes from, the field that identifies one element, and the
-// count the record already carries (empty when it carries none).
-//
-// TestPipeRecordsNameRealFields holds every entry to the type the CLI emits, or to the
-// registry example that documents it, so a rewrite never names a field that does not exist.
+// pipeRecord is a verb's structured output in -o template's json keys: the list a text
+// row comes from, the field naming one element, and the count it carries, "" for none.
+// TestPipeRecordsNameRealFields holds each entry to the type the CLI emits.
 type pipeRecord struct {
 	list, id, count string
 }
@@ -40,9 +37,9 @@ var pipeRecords = map[string]pipeRecord{
 }
 
 // pipeRecordFor resolves the record a magus argv renders. ok is false when the guard holds
-// none for the verb, or when a flag or noun on the line changes the shape: `describe target
-// <ref>` renders one target's graph rather than the listing, and refs' --occurrences,
-// --definition and --source each render their own record.
+// none for the verb, or a flag or noun changes the shape: `describe target <ref>` renders
+// one target's graph, refs' --occurrences, --definition and --source their own records, and
+// refs --text prints grep lines that ignore -o template.
 func pipeRecordFor(args []string) (rec pipeRecord, ok bool) {
 	words := magusSubcommandWords(args)
 	if len(words) == 0 {
@@ -55,12 +52,12 @@ func pipeRecordFor(args []string) (rec pipeRecord, ok bool) {
 		if rec, ok = pipeRecords[words[0]+" "+words[1]]; ok {
 			return rec, true
 		}
-		if _, sub := registryCommand(words[:2]); sub {
+		if registryCommand(words[:2]) {
 			return pipeRecord{}, false
 		}
 	}
 	if words[0] == "refs" {
-		for _, mode := range []string{"occurrences", "definition", "source"} {
+		for _, mode := range []string{"occurrences", "definition", "source", "text"} {
 			if magusFlag(args, mode) {
 				return pipeRecord{}, false
 			}
@@ -70,26 +67,22 @@ func pipeRecordFor(args []string) (rec pipeRecord, ok bool) {
 	return rec, ok
 }
 
-// registryCommand walks the CLI registry down words and reports the deepest command matched
-// and whether every word was one.
-func registryCommand(words []string) (cmd cli.Command, whole bool) {
+// registryCommand reports whether words walk the CLI registry down to a command.
+func registryCommand(words []string) bool {
 	level := cli.All
 	for _, w := range words {
 		i := slices.IndexFunc(level, func(c cli.Command) bool { return c.Name == w })
 		if i < 0 {
-			return cmd, false
+			return false
 		}
-		cmd, level = level[i], level[i].Children
+		level = level[i].Children
 	}
-	return cmd, len(words) > 0
+	return len(words) > 0
 }
 
-// pipeRewrite is the native spelling of the pipe, exact for the command in front of the
-// reader, or false when magus has no projection that answers it and the generic menu is
-// the honest reply.
-//
-// No verb's --limit is offered for `| head -N`: the registry binds one on refs, session
-// and events, and refs' bounds --text matches only, which the registry cannot say.
+// pipeRewrite is the native spelling of the pipe, or false when magus has no projection
+// that answers it. No --limit is offered for `| head -N`: refs' bounds --text matches
+// only, which the registry cannot say.
 func pipeRewrite(p pipedMagus) (string, bool) {
 	words := magusSubcommandWords(p.args)
 	rec, known := pipeRecordFor(p.args)
@@ -121,7 +114,7 @@ func pipeRewrite(p pipedMagus) (string, bool) {
 		if trTrims(p.filterArgs) {
 			return "A `$(...)` substitution already drops the trailing newline, and `-o template` prints none.", true
 		}
-	case "grep", "egrep", "fgrep", "rg", "ag", "sort", "uniq", "cut", "awk", "sed", "column", "tail":
+	case "grep", "egrep", "fgrep", "rg", "ag", "sort", "uniq", "cut", "awk", "sed", "column":
 		if known {
 			return "`-o name` prints each " + rec.id + "; `-o template='{{range ." + rec.list + "}}{{." + rec.id + "}}{{\"\\n\"}}{{end}}'` picks fields, and a bare `-o template` lists them.", true
 		}

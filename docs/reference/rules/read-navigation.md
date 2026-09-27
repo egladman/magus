@@ -14,7 +14,7 @@ A whole read of a mapped Go or Markdown file over 120 lines.
 
 ## Why
 
-The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. 120 lines is the p90 of a bounded read; measured 2026-09-26 over 66,548 Bash reads, 3.6% of whole reads were followed by an edit of that file. Silent on a short file, Buzz (no symbol index), a generated output, a path outside the workspace, a stale index, a heading count the graph disagrees with, and a read feeding a pipe or redirect.
+The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. A Go declaration spans its doc comment to its closing brace, each member of a grouped var, const or type is its own entry, and a method is named `Type.Method`. 120 lines is the p90 of a bounded read; measured 2026-09-26 over 66,548 Bash reads, 8,394 dumped a whole Go, Buzz or Markdown file, and 3.6% of whole reads were followed by an edit of that file. Silent on a short file, Buzz (no symbol index), a generated output, a path outside the workspace, a stale index, a heading count the graph disagrees with, and a read feeding a pipe or redirect.
 
 ## Seeing it
 

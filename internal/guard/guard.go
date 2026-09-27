@@ -103,10 +103,8 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
-	// SymbolSites lists every file that defines or references a symbol named ident, one
-	// entry per file with its occurrence count and first lines, from the same index
-	// SymbolDefined answers from and definitive on the same terms. It is what lets a deny
-	// carry the answer to the search it refuses.
+	// SymbolSites lists each file defining or referencing ident, with its count and first
+	// lines, from SymbolDefined's index and definitive on the same terms.
 	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
 	// Revision is the revision rev names in the checkout holding dir, abbreviated, or ""
 	// when there is no VCS to ask or rev names nothing. Empty rev is the checkout's current

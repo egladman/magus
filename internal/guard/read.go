@@ -2,7 +2,11 @@ package guard
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path"
 	"regexp"
@@ -16,19 +20,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// A whole read of a file the graph has already mapped.
-//
-// Measured 2026-09-26 over 66,548 shell reads of workspace files in 4,161 transcripts:
-// 8,394 dumped a whole Go, Buzz or Markdown file, and nine in ten bounded reads took at
-// most 120 lines. A whole read of a longer file is more than a bounded read ever asks
-// for, so the deny carries what a bounded read needs: every declaration or heading with
-// its lines, and the command that prints one. A bounded read that sits inside one
-// indexed symbol is advised with that symbol's command.
-//
-// Silent whenever the map would be a guess: a short file, a kind no index covers (Buzz
-// has no symbol index), a generated output, a path outside the workspace, a stale index,
-// a heading count the graph disagrees with, and a read whose output feeds a pipe, a
-// redirect or a substitution rather than the reader.
+// The read-navigation rule answers a whole read of a mapped file with its map, and is
+// silent wherever the map would be a guess. The catalog's Why carries the measurements
+// and the silent cases.
 
 // wholeReadLines is the p90 length of a bounded read.
 const wholeReadLines = 120
@@ -304,6 +298,9 @@ type fileMap struct {
 type mapEntry struct {
 	name        string
 	first, last int
+	// symbol is what fileMap.one takes, "" for a method: refs resolves bare names only, so
+	// a method's command would print every same-named method.
+	symbol string
 }
 
 // covering is the one entry whose span holds first..last.
@@ -328,50 +325,105 @@ func closeSpans(entries []mapEntry, lines int) []mapEntry {
 	return entries
 }
 
-// goFileMap maps a Go file's top-level declarations, each span opening at its doc
-// comment. Every name must be one the index vouches for, or the map is no map.
+// goFileMap maps a Go file's top-level declarations, each span running from its doc
+// comment to its closing brace or paren, and each member of a grouped var, const or type
+// its own entry. Every name must be one the index vouches for, or the map is no map.
 func goFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
-	f, err := os.Open(abs)
+	src, err := os.ReadFile(abs)
 	if err != nil {
 		return fileMap{}, false
 	}
-	defer f.Close()
-	var entries []mapEntry
-	lines, commentStart := 0, 0
-	s := bufio.NewScanner(f)
-	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for s.Scan() {
-		lines++
-		text := s.Text()
-		if strings.HasPrefix(text, "//") {
-			if commentStart == 0 {
-				commentStart = lines
-			}
-			continue
-		}
-		if m := goDeclRe.FindStringSubmatch(text); m != nil {
-			if defined, definitive := deps.symbolDefined(m[1]); !defined || !definitive {
-				return fileMap{}, false
-			}
-			first := lines
-			if commentStart != 0 {
-				first = commentStart
-			}
-			entries = append(entries, mapEntry{name: m[1], first: first})
-		}
-		commentStart = 0
-	}
-	if s.Err() != nil || len(entries) == 0 {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, abs, src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
 		return fileMap{}, false
+	}
+	var entries []mapEntry
+	vouched := true
+	add := func(name, symbol string, doc *ast.CommentGroup, from, to token.Pos) {
+		bare := name[strings.LastIndexByte(name, '.')+1:]
+		if bare == "_" {
+			return
+		}
+		if defined, definitive := deps.symbolDefined(bare); !defined || !definitive {
+			vouched = false
+		}
+		if doc != nil {
+			from = doc.Pos()
+		}
+		entries = append(entries, mapEntry{name: name, symbol: symbol, first: fset.Position(from).Line, last: fset.Position(to).Line})
+	}
+	for _, decl := range f.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Recv == nil {
+				add(d.Name.Name, d.Name.Name, d.Doc, d.Pos(), d.End())
+			} else {
+				add(receiverType(d.Recv)+"."+d.Name.Name, "", d.Doc, d.Pos(), d.End())
+			}
+		case *ast.GenDecl:
+			if d.Tok == token.IMPORT {
+				continue
+			}
+			for _, spec := range d.Specs {
+				doc, from, to := d.Doc, d.Pos(), d.End()
+				if d.Lparen.IsValid() {
+					doc, from, to = nil, spec.Pos(), spec.End()
+				}
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if d.Lparen.IsValid() {
+						doc = s.Doc
+					}
+					add(s.Name.Name, s.Name.Name, doc, from, to)
+				case *ast.ValueSpec:
+					if d.Lparen.IsValid() {
+						doc = s.Doc
+					}
+					for _, n := range s.Names {
+						add(n.Name, n.Name, doc, from, to)
+					}
+				}
+			}
+		}
+	}
+	if !vouched || len(entries) == 0 {
+		return fileMap{}, false
+	}
+	lines := bytes.Count(src, []byte("\n"))
+	if len(src) > 0 && src[len(src)-1] != '\n' {
+		lines++
 	}
 	return fileMap{
 		rel:     rel,
 		lines:   lines,
-		entries: closeSpans(entries, lines),
+		entries: entries,
 		one:     func(name string) string { return hint.Refs.With(name, "--definition", "--source") },
 		list:    hint.Explain.With(types.KindFile + ":" + rel),
 		noun:    "declaration",
 	}, true
+}
+
+// receiverType is a method receiver's type name, pointer and type arguments dropped.
+func receiverType(recv *ast.FieldList) string {
+	if recv == nil || len(recv.List) == 0 {
+		return ""
+	}
+	t := recv.List[0].Type
+	for {
+		switch x := t.(type) {
+		case *ast.StarExpr:
+			t = x.X
+		case *ast.IndexExpr:
+			t = x.X
+		case *ast.IndexListExpr:
+			t = x.X
+		case *ast.Ident:
+			return x.Name
+		default:
+			return ""
+		}
+	}
 }
 
 var headingRe = regexp.MustCompile(`^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$`)
@@ -454,15 +506,15 @@ func generatedOutput(deps Dependencies, rel string) bool {
 		return false
 	}
 	files, err := ws.ClassifyFiles(ctx, []string{rel})
-	return err == nil && len(files) == 1 && files[0].Role == "output"
+	return err == nil && len(files) == 1 && files[0].Role == types.DiffRoleOutput
 }
 
 // readVerdict denies the first whole read on the line of a mapped file longer than
 // wholeReadLines, advises the first bounded read that sits inside one indexed symbol,
 // and reports false when neither is there.
 func readVerdict(deps Dependencies, command string, d Dialect) (ShellVerdict, bool) {
-	dir, err := os.Getwd()
-	if err != nil {
+	dir, ok := deps.workingDir()
+	if !ok {
 		return ShellVerdict{}, false
 	}
 	return readVerdictAt(deps, dir, command, d)
@@ -495,7 +547,7 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 			continue
 		}
 		first, last := rc.span(m.lines)
-		if e, ok := m.covering(first, last); ok {
+		if e, ok := m.covering(first, last); ok && e.symbol != "" {
 			return ShellVerdict{Context: adviseReadSymbol(m, e, first, last), Rule: denyRule{Name: advisoryReadSymbol, Arg: e.name}}, true
 		}
 	}
@@ -523,5 +575,5 @@ func denyReadNavigation(m fileMap) string {
 
 func adviseReadSymbol(m fileMap, e mapEntry, first, last int) string {
 	return "magus workspace: lines " + strconv.Itoa(first) + "-" + strconv.Itoa(last) + " of " + m.rel + " sit inside `" + e.name + "` (" +
-		strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "). `" + m.one(e.name) + "` prints that body with its line numbers, checked against the index, and finds it again after the file moves."
+		strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "). `" + m.one(e.symbol) + "` prints that body with its line numbers, checked against the index, and finds it again after the file moves."
 }

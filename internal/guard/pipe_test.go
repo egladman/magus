@@ -2,6 +2,7 @@ package guard
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,9 +28,9 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 	}
 	for verb, rec := range pipeRecords {
 		if verb == "ls" {
-			ls, ok := registryCommand([]string{"ls"})
-			require.True(t, ok)
-			example := strings.Join(exampleCommands(ls), "\n")
+			i := slices.IndexFunc(cli.All, func(c cli.Command) bool { return c.Name == "ls" })
+			require.GreaterOrEqual(t, i, 0)
+			example := strings.Join(exampleCommands(cli.All[i]), "\n")
 			assert.Contains(t, example, "{{range ."+rec.list+"}}{{."+rec.id+"}}", verb)
 			assert.Empty(t, rec.count, "ls has no count field the registry documents")
 			continue
@@ -114,7 +115,6 @@ func TestOutputPipeRewrites(t *testing.T) {
 		{"magus ls | sort", `-o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'`},
 		{"magus describe file a.go | grep output", "`-o name` prints each path"},
 		{"magus ls | cut -d' ' -f1", "{{range .projects}}{{.path}}"},
-		{"magus ls | tail -3", "{{range .projects}}{{.path}}"},
 	} {
 		v := Evaluate(testDependencies(), tc.command)
 		got := v.Deny + v.Context
@@ -142,6 +142,8 @@ func TestOutputPipeKeepsTheGenericAnswerWithoutARecord(t *testing.T) {
 		// refs' other modes render their own records, and its --limit bounds --text alone.
 		{"magus refs Open --occurrences | head -20", "`-s` stays quiet"},
 		{"magus refs Open --definition | head", "`-s` stays quiet"},
+		// Nothing projects "the last N", so tail keeps the menu.
+		{"magus ls | tail -3", "`-s` stays quiet"},
 		{"magus session | head -5", "`-s` stays quiet"},
 		// query's subcommands are not the query record; output is exempt, invocation is not.
 		{"magus query invocation abc | head", "`-s` stays quiet"},
@@ -176,6 +178,18 @@ func TestOutputPipeLeavesCompositionAlone(t *testing.T) {
 		v := Evaluate(testDependencies(), command)
 		assert.Empty(t, v.Deny, command)
 		assert.NotEqual(t, advisoryGraphPipe, v.Kind, command)
+	}
+}
+
+// TestPipeRecordForRefsModes pins that only refs' default listing is the refs record:
+// --text prints grep lines that -o template does not shape.
+func TestPipeRecordForRefsModes(t *testing.T) {
+	rec, ok := pipeRecordFor([]string{"refs", "Open"})
+	assert.True(t, ok)
+	assert.Equal(t, pipeRecord{list: "refs", id: "file"}, rec)
+	for _, mode := range []string{"--text", "--occurrences", "--definition", "--source"} {
+		_, ok := pipeRecordFor([]string{"refs", "Open", mode})
+		assert.False(t, ok, mode)
 	}
 }
 

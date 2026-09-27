@@ -12,6 +12,10 @@ An advisory: it explains, and blocks nothing, on a bounded read inside one index
 
 A bounded read inside one indexed declaration, which refs --definition --source prints checked.
 
+## Why
+
+Silent inside a method: refs resolves bare names, so its command would print every method of that name.
+
 ## Seeing it
 
 A verdict names its rule in brackets, which is how you got here:

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -43,10 +42,6 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		if !hint.IsSearchTool(c.Name) {
 			continue
 		}
-		stages, ok := filterStages(cmds[i+1:])
-		if !ok {
-			continue
-		}
 		if v, ok := fileSymbolVerdict(deps, dir, c); ok {
 			return v, true
 		}
@@ -60,9 +55,7 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		}
 		inScope = append(inScope, c)
 		if routes, ok := provableRoutes(deps, c); ok {
-			if v, ok := treeSymbolVerdict(deps, dir, c, routes, stages); ok {
-				return v, true
-			}
+			return treeSymbolVerdict(deps, dir, c, routes, pipedInto(cmds[i+1:])), true
 		}
 	}
 	ident := precedentIdent(inScope)
@@ -105,12 +98,13 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 	if !ok {
 		return ShellVerdict{}, false
 	}
-	ps, ok := sc.speller(root, dir)
-	if !ok || ps.searchesDir() {
-		return ShellVerdict{}, false
-	}
-	for _, op := range ps.ops {
-		if path.Ext(op.rel) != ".go" {
+	for _, p := range sc.paths {
+		abs, rel, ok := workspacePath(root, dir, p)
+		if !ok || path.Ext(rel) != ".go" {
+			return ShellVerdict{}, false
+		}
+		info, err := os.Stat(abs)
+		if err != nil || info.IsDir() {
 			return ShellVerdict{}, false
 		}
 	}
@@ -130,58 +124,34 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 }
 
 // treeSymbolVerdict denies a search of the tree for names the index vouches for, and
-// carries the answer when the index can give it in the hook's budget: every site under the
-// searched paths, or what the pipe's filters make of them. A stale index, a site list the
-// graph capped, or a pipe over rows it does not hold keeps the routing deny alone. A pipe
-// that needs rows over a diagnostic code, which no site list describes, is silent.
-func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, routes []searchRoute, stages []pipeStage) (ShellVerdict, bool) {
-	if !entityStages(stages) && slices.ContainsFunc(routes, isDiagnosticRoute) {
-		return ShellVerdict{}, false
-	}
-	if projectsToFiles(stages) {
-		for i, r := range routes {
-			if !isDiagnosticRoute(r) {
-				routes[i].run = hint.Refs.With(r.name)
-			}
-		}
-	}
+// carries the index's own answer when it has one: every site under the searched paths.
+// A pipe after the search is named as not reproduced; the answer is never filtered.
+func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, routes []searchRoute, piped bool) ShellVerdict {
 	v := ShellVerdict{Deny: denySymbolSearch(routes), Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
-	answer, rows, ok := treeSymbolAnswer(deps, dir, c, routes)
-	if !ok {
-		return v, true
+	if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
+		v.Deny += "\n" + answerBlock("Its answer", answer) + pipeNote(piped)
 	}
-	if piped, ok := runStages(stages, rows, answer); ok {
-		v.Deny += "\n" + piped.block(answer)
-	}
-	return v, true
+	return v
 }
 
 func isDiagnosticRoute(r searchRoute) bool {
 	return strings.HasPrefix(r.name, types.KindDiagnostic+":")
 }
 
-// maxSiteRows bounds the sites read back for a tree search's rows.
-const maxSiteRows = 400
-
 // treeSymbolAnswer is the sites the index holds for every name searched, under the paths
-// searched: one line per file with its count and lines, as `magus refs` prints them, and
-// the rows the search would print when every site's line is known.
-func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes []searchRoute) (answer, rows []string, ok bool) {
+// searched: one line per file with its count and lines, as `magus refs` prints them.
+func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes []searchRoute) ([]string, bool) {
 	sc, ok := parseSearchCall(c)
 	if !ok || deps.scope.root == "" {
-		return nil, nil, false
+		return nil, false
 	}
 	root, ok := resolvedRoot(deps.scope.root)
 	if !ok {
-		return nil, nil, false
+		return nil, false
 	}
-	ps, ok := sc.speller(root, dir)
+	searched, ok := sc.searchedRels(root, dir)
 	if !ok {
-		return nil, nil, false
-	}
-	line, ok := sc.lineRegexp()
-	if !ok {
-		return nil, nil, false
+		return nil, false
 	}
 	type site struct {
 		rel   string
@@ -191,14 +161,14 @@ func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes [
 	var sites []site
 	for _, r := range routes {
 		if isDiagnosticRoute(r) {
-			return nil, nil, false
+			return nil, false
 		}
 		found, definitive := deps.symbolSites(r.name)
 		if !definitive {
-			return nil, nil, false
+			return nil, false
 		}
 		for _, f := range found {
-			if _, under := ps.spell(f.File); !under || !sc.includes(f.File) {
+			if !underAny(searched, f.File) || !sc.includes(f.File) {
 				continue
 			}
 			sites = append(sites, site{rel: f.File, count: f.Count, lines: f.Lines})
@@ -214,36 +184,37 @@ func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes [
 		}
 		merged = append(merged, s)
 	}
-	complete := !sc.exclude
-	total := 0
-	var hits []hit
+	answer := make([]string, 0, len(merged))
 	for _, s := range merged {
-		spelled, _ := ps.spell(s.rel)
 		slices.Sort(s.lines)
-		total += s.count
-		answer = append(answer, spelled+"  ("+strconv.Itoa(s.count)+")  lines "+joinInts(s.lines))
-		if len(s.lines) != s.count || total > maxSiteRows {
-			complete = false
-			continue
-		}
-		if !complete {
-			continue
-		}
-		text, ok := fileLines(filepath.Join(root, filepath.FromSlash(s.rel)))
+		answer = append(answer, s.rel+"  ("+strconv.Itoa(s.count)+")  lines "+joinInts(s.lines))
+	}
+	return answer, true
+}
+
+// searchedRels are the workspace-relative paths sc searches, the call's directory when it
+// names none, reporting false for a path outside the workspace, a glob, or a missing one.
+func (sc searchCall) searchedRels(root, dir string) ([]string, bool) {
+	paths := sc.paths
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	rels := make([]string, 0, len(paths))
+	for _, p := range paths {
+		_, rel, ok := workspacePath(root, dir, p)
 		if !ok {
-			complete = false
-			continue
+			return nil, false
 		}
-		for _, n := range slices.Compact(s.lines) {
-			if n >= 1 && n <= len(text) && line.MatchString(text[n-1]) {
-				hits = append(hits, hit{rel: s.rel, line: n, text: text[n-1]})
-			}
-		}
+		rels = append(rels, rel)
 	}
-	if complete {
-		rows, _ = sc.rows(ps, hits)
-	}
-	return answer, rows, true
+	return rels, true
+}
+
+// underAny reports whether rel is one of dirs or lies inside one of them.
+func underAny(dirs []string, rel string) bool {
+	return slices.ContainsFunc(dirs, func(d string) bool {
+		return d == "." || rel == d || strings.HasPrefix(rel, d+"/")
+	})
 }
 
 // includes reports whether a file's name passes the search's --include globs.
@@ -257,14 +228,6 @@ func (sc searchCall) includes(rel string) bool {
 	})
 }
 
-func fileLines(file string) ([]string, bool) {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return nil, false
-	}
-	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n"), true
-}
-
 func joinInts(ns []int) string {
 	parts := make([]string, len(ns))
 	for i, n := range ns {
@@ -274,7 +237,7 @@ func joinInts(ns []int) string {
 }
 
 // selectedLines is each line of file that re selects.
-func selectedLines(rel, file string, re *regexp.Regexp) ([]hit, bool) {
+func selectedLines(file string, re *regexp.Regexp) ([]hit, bool) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, false
@@ -285,7 +248,7 @@ func selectedLines(rel, file string, re *regexp.Regexp) ([]hit, bool) {
 	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for n := 1; s.Scan(); n++ {
 		if re.MatchString(s.Text()) {
-			out = append(out, hit{rel: rel, line: n, text: s.Text()})
+			out = append(out, hit{line: n, text: s.Text()})
 		}
 	}
 	return out, s.Err() == nil
@@ -311,6 +274,29 @@ func answerBlock(title string, items []string) string {
 		b.WriteString("  " + it + "\n")
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// pipeConsumers are the programs that read a search's output on a pipe.
+var pipeConsumers = map[string]bool{
+	"head": true, "tail": true, "wc": true, "sort": true, "uniq": true, "cut": true, "tr": true, "sed": true,
+	"awk": true, "gawk": true, "grep": true, "egrep": true, "fgrep": true, "rg": true, "cat": true,
+	"xargs": true, "tee": true, "less": true, "more": true, "jq": true, "column": true, "nl": true, "tac": true,
+}
+
+// pipedInto reports whether the command after a search reads its output. The command list
+// is flat, so one after `;` reads the same; the deny then over-reports a pipe, never an
+// answer.
+func pipedInto(rest []hint.Invocation) bool {
+	return len(rest) > 0 && pipeConsumers[path.Base(rest[0].Name)]
+}
+
+// pipeNote says a deny's answer is the graph command's alone. Reproducing a filter's
+// output would substitute a model of sort, sed or awk for the tool, and a model diverges.
+func pipeNote(piped bool) string {
+	if !piped {
+		return ""
+	}
+	return "\nThe pipe after the search is not reproduced: run it over the command's output."
 }
 
 // asSearch reads `git grep` as the recursive grep it is, so its patterns and paths are

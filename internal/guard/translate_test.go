@@ -278,9 +278,8 @@ func TestSearchTranslationDeclarations(t *testing.T) {
 	}
 }
 
-// TestSearchPipelines pins a search's pipe: each filter runs over the rows the proof read,
-// so the deny answers the pipeline's question, and a filter that asks something the rows
-// cannot answer keeps the rule silent.
+// TestSearchPipelines pins a search's pipe: the deny carries the query's unfiltered answer
+// and says the pipe is not reproduced, whatever the filter; it never models one.
 func TestSearchPipelines(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"internal/store/store.go": "package store\n\ntype Store struct{}\n\nfunc (s *Store) Open() error { return nil }\n\n" +
@@ -288,69 +287,34 @@ func TestSearchPipelines(t *testing.T) {
 	})
 	indexed := map[string]bool{"Store": true, "Open": true, "Close": true, "helper": true, "use": true}
 	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, scope: workspaceScope{root: root}}
-	const explain = "explain file:internal/store/store.go"
+	const answer = "Its answer (4 results):\n  5: Open\n  7: Close\n  9: helper\n  11: use\n" +
+		"The pipe after the search is not reproduced: run it over the command's output.\n"
 
-	for _, tt := range []struct {
-		command string
-		answer  string // "" for no deny
-	}{
-		{`grep -n '^func ' internal/store/store.go | head -2`, "Its answer, after `| head -2` (2 results):\n  5:func (s *Store) Open() error { return nil }\n  7:func (s *Store) Close() error { return nil }"},
-		{`grep -n '^func ' internal/store/store.go | head -n 1`, "Its answer, after `| head -n 1` (1 result):\n  5:func"},
-		{`grep -n '^func ' internal/store/store.go | tail -1`, "Its answer, after `| tail -1` (1 result):\n  11:func use() { helper() }"},
-		{`grep -n '^func ' internal/store/store.go | wc -l`, "Its answer, after `| wc -l`: 4"},
-		{`grep -n '^func ' internal/store/store.go | grep -v Store | wc -l`, "Its answer, after `| grep -v Store | wc -l`: 2"},
-		{`grep -n '^func ' internal/store/store.go | grep -c helper`, "Its answer, after `| grep -c helper`: 2"},
-		{`grep -n '^func ' internal/store/store.go | grep -v Store | head -1`, "Its answer, after `| grep -v Store | head -1` (1 result):\n  9:func helper() {}"},
-		{`grep -n '^func ' internal/store/store.go | grep -iE 'OPEN|close'`, "(2 results):\n  5:func (s *Store) Open() error { return nil }\n  7:func (s *Store) Close() error { return nil }"},
-		{`grep -n '^func ' internal/store/store.go | cut -d: -f1 | tr '\n' ' '`, "Its answer, after `| cut -d: -f1 | tr '\\n' ' '` (1 result):\n  5 7 9 11 "},
-		{`grep -n '^func ' internal/store/store.go | wc -l | tr -d ' '`, "Its answer, after `| wc -l | tr -d ' '` (1 result):\n  4"},
-		{`grep -n '^func ' internal/store/store.go | cut -c1-6`, "(4 results):\n  5:func\n  7:func\n  9:func\n  11:fun"},
-		{`grep -n '^func ' internal/store/store.go | awk -F: '{print $1}' | sort -rn`, "(4 results):\n  11\n  9\n  7\n  5"},
-		{`grep -n '^func ' internal/store/store.go | sed -n '2,3p'`, "(2 results):\n  7:func (s *Store) Close() error { return nil }\n  9:func helper() {}"},
-		{`grep -n '^func ' internal/store/store.go | sed -E 's/^([0-9]+):.*/\1/' | sort -u | wc -l`, "Its answer, after `| sed -E 's/^([0-9]+):.*/\\1/' | sort -u | wc -l`: 4"},
-		{`grep -n '^func ' internal/store/store.go | sed 's|func |fn |'`, "(4 results):\n  5:fn (s *Store) Open() error { return nil }"},
-		{`grep -n '^func ' internal/store/store.go | sed '/Store/d'`, "(2 results):\n  9:func helper() {}\n  11:func use() { helper() }"},
-		{`grep '^func ' internal/store/store.go | awk '{print $2}' | sort | uniq -c | sort -rn | head -1`, "(1 result):\n        2 (s"},
-		{`grep -n '^func ' internal/store/store.go | cat`, "Its answer, after `| cat` (4 results):"},
-		// A consumer that names its own input is a second command, not a filter.
-		{`grep -n '^func ' internal/store/store.go; head -2 internal/store/store.go`, "Its answer (4 results):\n  5: Open"},
-
-		// Filters that change the question in a way the rows cannot answer.
-		{`grep -n '^func ' internal/store/store.go | tee out.txt`, ""},
-		{`grep -n '^func ' internal/store/store.go | less`, ""},
-		{`grep -n '^func ' internal/store/store.go | column -t`, ""},
-		{`grep -n '^func ' internal/store/store.go | while read l; do echo "$l"; done`, ""},
-		{`grep -n '^func ' internal/store/store.go | awk -F: '$1 > 5'`, ""},
-		{`grep -n '^func ' internal/store/store.go | sort -k2`, ""},
-		{`grep -n '^func ' internal/store/store.go | head -c 100`, ""},
-		{`grep -n '^func ' internal/store/store.go | wc`, ""},
-		{`grep -n '^func ' internal/store/store.go | grep -n helper`, ""},
-		{`grep -n '^func ' internal/store/store.go | grep -o 'func [a-z]*'`, ""},
-		{`grep -n '^func ' internal/store/store.go | sed 's/a/b/2'`, ""},
-		{`grep -n '^func ' internal/store/store.go | tr -s ' '`, ""},
-		{`grep -n '^func ' internal/store/store.go | cut -d: -f2 --complement`, ""},
-		{`grep -n '^func ' internal/store/store.go | uniq -d`, ""},
-		{`grep -n '^func ' internal/store/store.go | jq -R .`, ""},
+	for _, command := range []string{
+		`grep -n '^func ' internal/store/store.go | head -2`,
+		`grep -n '^func ' internal/store/store.go | grep -v Store | wc -l`,
+		`grep -n '^func ' internal/store/store.go | sort | uniq -c`,
+		`grep -n '^func ' internal/store/store.go | sed -e s/a/b/ -e s/c/d/`,
+		`grep -n '^func ' internal/store/store.go | tee out.txt`,
 	} {
-		v, ok := translateSearches(deps, root, parseForTest(t, tt.command))
-		if tt.answer == "" {
-			assert.False(t, ok && v.Deny != "", "%q must not deny: %s", tt.command, v.Deny)
-			continue
-		}
-		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: explain}, v.Rule, tt.command)
-		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		v, ok := translateSearches(deps, root, parseForTest(t, command))
+		require.True(t, ok, command)
+		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"}, v.Rule, command)
+		assert.Contains(t, v.Deny, answer, command)
+		assert.NotContains(t, v.Deny, "after `|", command)
 	}
 
-	// Without rows, a proof answers a truncation or an ordering over its entities and
-	// nothing else.
+	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^func ' internal/store/store.go`))
+	assert.NotContains(t, v.Deny, "not reproduced")
+
 	t.Chdir("../..")
-	v := Evaluate(Dependencies{}, `grep -rn 'MGS30[23]' . | head -3`)
-	assert.Equal(t, denyRuleSearchTranslation, v.Rule.Name)
-	assert.Contains(t, v.Deny, "Its answer, after `| head -3` (3 results):\n  diagnostic:MGS3020\n")
-	assert.Empty(t, Evaluate(Dependencies{}, `grep -rn 'MGS30[23]' . | wc -l`).Deny)
-	assert.Empty(t, Evaluate(Dependencies{}, `grep -rn 'MGS30[23]' . | cut -d: -f1 | sort -u`).Deny)
-	assert.Equal(t, denyRuleSymbolSearch, Evaluate(Dependencies{}, `grep -rn MGS1046 . | head`).Rule.Name)
-	assert.Empty(t, Evaluate(Dependencies{}, `grep -rn MGS1046 . | wc -l`).Deny)
+	for _, command := range []string{`grep -rn 'MGS30[23]' . | head -3`, `grep -rn 'MGS30[23]' . | wc -l`} {
+		v := Evaluate(Dependencies{}, command)
+		assert.Equal(t, denyRuleSearchTranslation, v.Rule.Name, command)
+		assert.Contains(t, v.Deny, "Its answer (", command)
+		assert.Contains(t, v.Deny, "not reproduced", command)
+	}
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(Dependencies{}, `grep -rn MGS1046 . | wc -l`).Rule.Name)
 }
 
 // TestFindTranslation pins the find arm: a name search whose files are, one for one, the
@@ -377,10 +341,12 @@ func TestFindTranslation(t *testing.T) {
 	}{
 		{`find internal -name '*.go'`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?[^/]*\.go$' -o name`,
 			"Its answer (3 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go\n  file:internal/store/sub/deep.go"},
-		{`find internal/store -name '*_test.go' -type f | wc -l`, deps, `query kind=file 'id=~^file:internal/store/(?:.*/)?[^/]*_test\.go$' -o name`, "Its answer, after `| wc -l`: 1"},
-		{`find . -name '*.go' | head -1`, deps, `query kind=file 'id=~^file:(?:.*/)?[^/]*\.go$' -o name`, "Its answer, after `| head -1` (1 result):\n  ./internal/store/store.go"},
+		{`find internal/store -name '*_test.go' -type f | wc -l`, deps, `query kind=file 'id=~^file:internal/store/(?:.*/)?[^/]*_test\.go$' -o name`,
+			"Its answer (1 result):\n  file:internal/store/store_test.go\nThe pipe after the search is not reproduced"},
+		{`find . -name '*.go' | head -1`, deps, `query kind=file 'id=~^file:(?:.*/)?[^/]*\.go$' -o name`, "Its answer (3 results):"},
 		{`find internal/store/ -maxdepth 1 -name '*.go' | sort`, deps, `query kind=file 'id=~^file:internal/store/(?:[^/]+/){0,0}[^/]*\.go$' -o name`,
-			"(2 results):\n  internal/store/store.go\n  internal/store/store_test.go"},
+			"(2 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go"},
+		{`find internal -name '*.go' | xargs grep -l package`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?[^/]*\.go$' -o name`, "not reproduced"},
 		{`find internal -name 'deep.go' -print`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?deep\.go$' -o name`, "file:internal/store/sub/deep.go"},
 
 		// Markdown has no file node, so the sets differ.
@@ -392,8 +358,8 @@ func TestFindTranslation(t *testing.T) {
 		{`find internal -name '*.go' -not -path '*/sub/*'`, deps, "", ""},
 		{`find internal -name '*.go' -exec cat {} \;`, deps, "", ""},
 		{`find internal -type f`, deps, "", ""},
-		// A pipe the rows cannot answer.
-		{`find internal -name '*.go' | xargs grep -l package`, deps, "", ""},
+		// find negates a class with `[!x]`, which the proof would read as a literal.
+		{`find internal -name '[!s]*.go'`, deps, "", ""},
 		// The graph lacks a file, or cannot be trusted.
 		{`find internal -name '*.go'`, partial, "", ""},
 		{`find internal -name '*.go'`, stale, "", ""},
