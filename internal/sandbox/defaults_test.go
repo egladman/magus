@@ -452,6 +452,23 @@ func TestCheckDeclarationRefuses(t *testing.T) {
 		"variable in path":  {Allow: []spells.SandboxAllow{{Path: "$HOME/.cache"}}},
 		"relative literal":  {Allow: []spells.SandboxAllow{{Path: "build"}}},
 		"bad passthrough":   {Env: spells.SandboxEnv{Passthrough: []string{"GO*"}}},
+		"cache of no grant": {Caches: []spells.SandboxCache{{Env: "GOCACHE"}}},
+		"read-only cache": {
+			Allow:  []spells.SandboxAllow{{Env: "GOCACHE", Mode: spells.SandboxAccessRX}},
+			Caches: []spells.SandboxCache{{Env: "GOCACHE"}},
+		},
+		"cache declared twice": {
+			Allow:  []spells.SandboxAllow{{Env: "GOCACHE", Mode: spells.SandboxAccessRW}},
+			Caches: []spells.SandboxCache{{Env: "GOCACHE"}, {Env: "GOCACHE"}},
+		},
+		"escaping skip": {
+			Allow:  []spells.SandboxAllow{{Env: "GOCACHE", Mode: spells.SandboxAccessRW}},
+			Caches: []spells.SandboxCache{{Env: "GOCACHE", Skip: []string{"../x"}}},
+		},
+		"malformed skip": {
+			Allow:  []spells.SandboxAllow{{Env: "GOCACHE", Mode: spells.SandboxAccessRW}},
+			Caches: []spells.SandboxCache{{Env: "GOCACHE", Skip: []string{"[a"}}},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Error(t, CheckDeclaration(sb))
@@ -465,6 +482,31 @@ func TestCheckDeclarationRefuses(t *testing.T) {
 			{Path: "/opt/tool", Mode: spells.SandboxAccessRX},
 			{Path: "~/.local/share/tool"},
 		},
-		Env: spells.SandboxEnv{Passthrough: []string{"GOFLAGS", "MISE_*"}},
+		Env:    spells.SandboxEnv{Passthrough: []string{"GOFLAGS", "MISE_*"}},
+		Caches: []spells.SandboxCache{{Env: "GOMODCACHE", Skip: []string{"cache/vcs/**", "**/*.lock"}}},
 	}))
+}
+
+// A cache lives where the sandbox would grant it: its variable when set, else the first
+// writable grant naming it that resolves on this host.
+func TestCacheDirsLocateEachCacheAsItsGrantDoes(t *testing.T) {
+	home := t.TempDir()
+	sb := spells.Sandbox{
+		Allow: []spells.SandboxAllow{
+			{Env: "GOCACHE", Mode: spells.SandboxAccessRX, Path: "/never/writable"},
+			{Env: "GOCACHE", Base: "xdgCache", Path: "go-build", Mode: spells.SandboxAccessRWX},
+			{Env: "GOMODCACHE", Base: "$GOPATH", Path: "pkg/mod", Mode: spells.SandboxAccessRW},
+			{Env: "GOMODCACHE", Base: "home", Path: "go/pkg/mod", Mode: spells.SandboxAccessRW},
+			{Env: "LINT_CACHE", Base: "xdgCache", Path: "lint", Mode: spells.SandboxAccessRW},
+		},
+		Caches: []spells.SandboxCache{{Env: "GOCACHE"}, {Env: "GOMODCACHE"}, {Env: "OFF_CACHE"}},
+	}
+	assert.Equal(t, map[string]string{
+		"GOCACHE":    filepath.Join(home, ".cache", "go-build"),
+		"GOMODCACHE": filepath.Join(home, "go", "pkg", "mod"),
+	}, CacheDirs(sb, nil, home), "unset, each falls to a base; a grant that is not a cache is not located")
+	assert.Equal(t, map[string]string{"GOCACHE": "/c/build", "GOMODCACHE": "/p/pkg/mod"},
+		CacheDirs(sb, []string{"GOCACHE=/c/build", "GOPATH=/p:/q"}, home), "a set variable and a $VAR base win")
+	assert.Equal(t, map[string]string{"GOMODCACHE": filepath.Join(home, "go", "pkg", "mod")},
+		CacheDirs(sb, []string{"GOCACHE=off"}, home), "GOCACHE=off locates nothing")
 }

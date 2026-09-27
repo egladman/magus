@@ -8,4 +8,5 @@
 export object Sandbox {
     allow: [SandboxAllow] = [],
     env: SandboxEnv = SandboxEnv{},
+    caches: [SandboxCache] = [],
 }

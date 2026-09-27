@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -74,8 +73,7 @@ func TestCommandRuleSeesABareCommand(t *testing.T) {
 func TestCommandRuleSeesTheWorkersLease(t *testing.T) {
 	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
-	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}, row.ID)
 
 	probe := &commandRuleProbe{}
 	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})

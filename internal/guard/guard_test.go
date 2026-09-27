@@ -143,7 +143,7 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 }
 
 // TestGuardGradesTwoSessionsInOneCheckoutSeparately is the enforcement half of the
-// per-session binding: each session's own marker decides which write paths its writes are graded
+// per-session binding: each session's own record decides which write paths its writes are graded
 // against, so two workers sharing a checkout are each denied outside their own paths
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
@@ -156,10 +156,9 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, one, two)
-	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.Bind(one.ID))
-	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.Bind(two.ID))
+	bindCaller(t, ctx, hookAttribution{Host: "test-host", Session: "session-one"}, one.ID)
+	bindCaller(t, ctx, hookAttribution{Host: "test-host", Session: "session-two"}, two.ID)
 
 	first := Judge(ctx, Dependencies{}, Request{
 		Input: "internal/guard/spawn.go", IsPath: true, Session: "session-one", Host: "test-host",
@@ -523,6 +522,21 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Equal(t, "advise", v.Decision, v.Reason)
 		assert.Equal(t, workspaceCommandRule, v.Rule)
 		assert.Contains(t, v.Reason+v.Context, "./magus run go-build .")
+	})
+
+	// The test binary carries no go-build stamp, so the stale-binary rule judges it stale,
+	// and a state-writing verb it would run is denied where a read-only one is advised.
+	covered["stale-write"] = true
+	t.Run("stale-write", func(t *testing.T) {
+		exe, err := os.Executable()
+		require.NoError(t, err)
+		ws := checkout(t, false)
+		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
+		v := judgeIn(t, ws, "./magus init --vcs git")
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Contains(t, v.Reason, "no go-build stamp")
+		assert.Equal(t, "advise", judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
 	})
 
 	source, err := os.ReadFile(filepath.Join(root, "tools", "policy", "guard.buzz"))

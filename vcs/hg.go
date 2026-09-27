@@ -406,7 +406,7 @@ func (v hgVCS) InstallMergeDriver(ctx context.Context, root string, globs types.
 
 func (v hgVCS) writeMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
 	return lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyMergeDriverSection(hgrcPath(root), globs)
+		return writeHgFamilyMergeDriverSection(hgrcPath(root), globs, WriteJudge(ctx, root))
 	})
 }
 
@@ -442,7 +442,7 @@ func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.M
 // section in .hg/hgrc is an error.
 func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyRefreshSection(hgrcPath(root), command)
+		return writeHgFamilyRefreshSection(hgrcPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -459,7 +459,7 @@ func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]
 // serialized per repository, and a torn managed section in .hg/hgrc is an error.
 func (v hgVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgFamilyDriftSection(hgrcPath(root), command)
+		return writeHgFamilyDriftSection(hgrcPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err

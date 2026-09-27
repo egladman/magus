@@ -21,8 +21,9 @@ project-local file → MAGUS_\* environment variables → CLI flags.
 
 The view sub-command prints the effective merged configuration. The set
 sub-command writes a key-value pair to the local (or global) config file.
-The init sub-command materializes the built-in defaults to a magus.yaml so
-they can be edited by hand.
+"magus init" writes a magus.yaml holding no keys, so every key keeps its
+built-in default until set. A config file a newer magus wrote is never
+replaced: set stops and names the build to update to.
 
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.
@@ -71,24 +72,15 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 ### config cache export options
 
 **--remote**
-: Store the toolchain bundle in the remote tier instead of writing it (--toolchain only)
+: Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive
 
 **--to** *string*
 : Write the archive to this file (default: stdout)
 
-**--toolchain** *string*
-: Export this toolchain's own caches instead, as a signed bundle (go: GOCACHE and GOMODCACHE)
-
-**--used-within** *duration* (default: 12h0m0s)
-: Keep only build-cache entries used this recently; 0 keeps every entry (--toolchain only)
-
 ### config cache import options
 
 **--remote**
-: Restore the newest verified toolchain bundle from the remote tier (--toolchain only)
-
-**--toolchain** *string*
-: Import a signed bundle of this toolchain's own caches instead, verified against cache.remote.trusted_keys
+: Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive
 
 ### config mcp connector create options
 

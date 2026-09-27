@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 39306
-skill_short_bytes: 29477
+skill_full_bytes: 39176
+skill_short_bytes: 29370
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `88` |
+| `agent-skill-version` | `89` |
 | `knowledge-schema-version` | `15` |
-| `skill-content` | `1a4e78885bd7` |
+| `skill-content` | `6ca7f5066173` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -341,14 +341,12 @@ orchestrator's alone.
 The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
-partitioned. A worker's first
-required act is `magus job exec <its id>`, which takes the lease in that checkout
-and records the base it landed on. Where the host names its session, the worker
-passes `--session <that id>` and the lease is the SESSION's rather than the
-checkout's, so workers sharing a tree each hold one and each has its own write
-paths graded.
-Pass the same id the host reports to its guard hook, or the two halves bind and
-grade under different names. The
+partitioned. A worker whose
+spawn title names its job (`<parent>/<role> <job>`) is bound already and records
+its base on its first call; any other worker runs `magus job exec <its id>` once,
+which records the base it landed on. The guard binds the caller that ran it, keyed
+on the session and subagent ids the host names, so workers sharing a tree each
+hold their own lease and none of them binds you. The
 answer is a status recorded on the row - match, revision-match (same revision,
 different uncommitted patch), diverged, or unknown - plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status
@@ -362,7 +360,7 @@ generic "expect drift" line.
 
 Write paths are the WRITE boundary. The guard reads them as a READ boundary too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
-once `magus job exec <its id>` takes the lease in its checkout. When a worker must READ something it
+once it holds its lease. When a worker must READ something it
 must not WRITE, put that path in the row's `read_paths` instead of widening
 `write_paths`: one list cannot say both, and widening the write paths to open a
 read is how two workers end up owning one file. `read_paths` is the only widening
@@ -974,16 +972,15 @@ The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
 partitioned - and every diff-since-checkpoint in Integrate and verify
-silently lies when the recorded base is not the real one. A worker's first
-required act is `magus job exec <its id>`, which takes the lease in that checkout
-and records the base it landed on. Where the host names its session, the worker
-passes `--session <that id>` and the lease is the SESSION's rather than the
-checkout's, so workers sharing a tree each hold one and each has its own write
-paths graded; without it the binding is the whole checkout's, the second
-worker's is refused as a rebind, and every worker after the first runs
-unattributed, which looks exactly like a guarded session and denies nothing.
-Pass the same id the host reports to its guard hook, or the two halves bind and
-grade under different names. The
+silently lies when the recorded base is not the real one. A worker whose
+spawn title names its job (`<parent>/<role> <job>`) is bound already and records
+its base on its first call; any other worker runs `magus job exec <its id>` once,
+which records the base it landed on. The guard binds the caller that ran it, keyed
+on the session and subagent ids the host names, so workers sharing a tree each
+hold their own lease and none of them binds you. Nothing to pass: the
+CLI cannot tell a subagent from its parent, which is why the binding is the
+guard's, and a host that names neither id binds the checkout for every caller like
+it. The
 answer is a status recorded on the row - match, revision-match (same revision,
 different uncommitted patch), diverged, or unknown - plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status
@@ -1003,7 +1000,7 @@ an investigation or a helpful revert of something correct.
 
 Write paths are the WRITE boundary. The guard reads them as a READ boundary too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
-once `magus job exec <its id>` takes the lease in its checkout. The
+once it holds its lease. The
 read boundary is its projects plus what they declare `depends_on`, so a shared library
 it legitimately builds on stays open. When a worker must READ something it
 must not WRITE, put that path in the row's `read_paths` instead of widening

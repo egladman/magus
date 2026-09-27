@@ -158,6 +158,7 @@ var (
 	AgentHarnessRemove  = cmd("agent", "harness", "remove")
 	AgentHarnessVerify  = cmd("agent", "harness", "verify")
 	ConfigView          = cmd("config", "view")
+	ConfigSet           = cmd("config", "set")
 	ConfigToken         = cmd("config", "token")
 	ConfigTokenPrint    = cmd("config", "token", "print")
 	MCPTokenGenerate    = cmd("config", "token", "generate")
@@ -207,7 +208,7 @@ var AllCommands = []Command{
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
 	AgentHarnessApply, AgentHarnessInstall, AgentHarnessRemove, AgentHarnessVerify,
-	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
+	ConfigView, ConfigSet, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,
 	SelfUpdate, SelfRefresh,

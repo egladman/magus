@@ -122,26 +122,22 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 }
 
 // OverlapFootprints fills each overlap's Footprint: whether the two jobs' diffs, each
-// taken in the checkout bound to that job against its own checkpoint, touch a common
-// declaration. It returns a copy and never fails; every question it cannot answer is a
-// FootprintUnknown verdict naming why.
-//
-// A job's checkout is the one whose binding marker names it, found by listing root and
-// every other checkout driver knows. cacheDirOf maps a checkout root to the cache dir its
-// markers live in. A nil driver is version control that did not resolve.
+// taken in the checkout that job was taken in (its CheckoutRoot) against its own
+// checkpoint, touch a common declaration. It returns a copy and never fails; every
+// question it cannot answer is a FootprintUnknown verdict naming why. A nil driver is
+// version control that did not resolve.
 //
 // Both sides of each diff are compared, per [types.Collisions]: two jobs deleting lines
 // from one declaration both touch it.
-func OverlapFootprints(ctx context.Context, driver types.VCSDriver, root string, cacheDirOf func(string) (string, error), rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+func OverlapFootprints(ctx context.Context, driver types.VCSDriver, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
 	if len(overlaps) == 0 {
 		return overlaps
 	}
-	bound, listed := boundCheckouts(driver, root, cacheDirOf)
 	footprints := map[string]footprint{}
 	footprintOf := func(id string) footprint {
 		fp, ok := footprints[id]
 		if !ok {
-			fp = readFootprint(ctx, driver, rows, bound, listed, id)
+			fp = readFootprint(ctx, driver, rows, id)
 			footprints[id] = fp
 		}
 		return fp
@@ -161,36 +157,7 @@ type footprint struct {
 	reason  string
 }
 
-// boundCheckouts maps each lease bound anywhere in the repository to its checkout root.
-// A lease two checkouts both claim maps to "", which readFootprint reports rather than
-// guessing: checkouts sharing one cache dir do exactly that, and picking the first would
-// diff the wrong tree. listed is "" when the checkouts were listed, else why not.
-func boundCheckouts(driver types.VCSDriver, root string, cacheDirOf func(string) (string, error)) (map[string]string, string) {
-	if driver == nil {
-		return nil, "no version control answered here"
-	}
-	others, err := driver.OtherCheckouts(root)
-	if err != nil {
-		return nil, fmt.Sprintf("the checkouts of this repository could not be listed: %v", err)
-	}
-	bound := map[string]string{}
-	for _, dir := range append([]string{root}, others...) {
-		cacheDir, err := cacheDirOf(dir)
-		if err != nil {
-			continue // its markers cannot be found, so it binds nobody this can see
-		}
-		for _, id := range BoundLeases(cacheDir) {
-			if prior, ok := bound[id]; ok && prior != dir {
-				bound[id] = ""
-				continue
-			}
-			bound[id] = dir
-		}
-	}
-	return bound, ""
-}
-
-func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job, bound map[string]string, listed, id string) footprint {
+func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job, id string) footprint {
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
 	if i < 0 {
 		return footprint{reason: fmt.Sprintf("no job %s is declared", id)}
@@ -199,15 +166,12 @@ func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job
 	if revision == "" {
 		return footprint{reason: fmt.Sprintf("%s was declared without a checkpoint", id)}
 	}
-	if listed != "" {
-		return footprint{reason: listed}
+	if driver == nil {
+		return footprint{reason: "no version control answered here"}
 	}
-	dir, ok := bound[id]
-	switch {
-	case !ok:
-		return footprint{reason: fmt.Sprintf("no checkout of this repository is bound to %s", id)}
-	case dir == "":
-		return footprint{reason: fmt.Sprintf("more than one checkout is bound to %s", id)}
+	dir := rows[i].CheckoutRoot
+	if dir == "" {
+		return footprint{reason: fmt.Sprintf("no checkout of this repository has taken %s", id)}
 	}
 	seen := changedSince(ctx, driver, "", dir, revision)
 	return footprint{regions: seen.Regions, known: seen.RegionsKnown, reason: seen.RegionsReason}

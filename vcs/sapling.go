@@ -649,7 +649,7 @@ func (v saplingVCS) InstallMergeDriver(ctx context.Context, root string, globs t
 
 func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) (bool, error) {
 	return lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyMergeDriverSection(slConfigPath(root), globs)
+		return writeHgFamilyMergeDriverSection(slConfigPath(root), globs, WriteJudge(ctx, root))
 	})
 }
 
@@ -685,7 +685,7 @@ func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, globs ty
 // section in .sl/config is an error.
 func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyRefreshSection(slConfigPath(root), command)
+		return writeHgFamilyRefreshSection(slConfigPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -703,7 +703,7 @@ func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string
 // error.
 func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgFamilyDriftSection(slConfigPath(root), command)
+		return writeHgFamilyDriftSection(slConfigPath(root), command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err

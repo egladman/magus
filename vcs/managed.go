@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/stamp"
 	"github.com/gofrs/flock"
 )
 
@@ -34,9 +35,69 @@ var (
 	regenMarkers = managedMarkers{begin: "# BEGIN magus-regenerate", end: "# END magus-regenerate"}
 )
 
-// section wraps body, which ends in a newline, in m's banner and end lines.
+// section wraps body, which ends in a newline, in m's unstamped banner and end lines.
 func (m managedMarkers) section(body string) string {
-	return m.begin + " - do not edit this section manually\n" + body + m.end + "\n"
+	return m.banner(stamp.Writer{}) + body + m.end + "\n"
+}
+
+// banner is m's opening line, naming w as the writer when w is known. The stamp sits on
+// the begin line because an older magus matches that line by prefix, so it still finds
+// and replaces a stamped section rather than stacking a second one below it.
+func (m managedMarkers) banner(w stamp.Writer) string {
+	line := m.begin + " - do not edit this section manually"
+	if w.Known() {
+		line += "; written by " + w.String()
+	}
+	return line + "\n"
+}
+
+// WriteJudge is the stamp.Judge for a write into root's repository: this binary is the
+// writer, ordered against a recorded one by git ancestry when root is in a git
+// repository holding both commits, and by version and date otherwise.
+func WriteJudge(ctx context.Context, root string) stamp.Judge {
+	return stamp.Judge{
+		Self: stamp.Self(ctx),
+		Ancestry: func(ancestor, descendant string) (bool, error) {
+			return gitVCS{}.IsAncestor(ctx, root, ancestor, descendant)
+		},
+	}
+}
+
+// sectionBanner picks the banner a write of body into text's m section carries.
+//
+// A section whose content already equals body keeps its banner, and so its writer: a
+// rewrite that changes only the stamp would churn a tracked .gitattributes on every
+// rebuild. Any other write is refused when a section's recorded writer is newer than
+// j.Self, and otherwise stamps j.Self. An unstamped section predates stamps and is
+// replaced.
+func sectionBanner(path, text string, m managedMarkers, body string, j stamp.Judge) (string, error) {
+	spans, err := managedSpans(text, m)
+	if err != nil {
+		return "", fmt.Errorf("vcs: %s: %w", path, err)
+	}
+	if len(spans) == 1 {
+		head, rest, _ := strings.Cut(text[spans[0].start:spans[0].end], "\n")
+		if rest == body+m.end+"\n" || rest == body+m.end {
+			return head + "\n", nil
+		}
+	}
+	if err := checkSectionWriters(path, text, spans, j); err != nil {
+		return "", err
+	}
+	return m.banner(j.Self), nil
+}
+
+// checkSectionWriters refuses when any of spans was written by a magus newer than j.Self.
+func checkSectionWriters(path, text string, spans []span, j stamp.Judge) error {
+	for _, s := range spans {
+		head, _, _ := strings.Cut(text[s.start:s.end], "\n")
+		if rec, ok := stamp.Parse(head); ok {
+			if err := j.Check(path, rec); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // managedFileKind selects the file-specific steps writeManagedSection adds around the
@@ -155,8 +216,8 @@ func nextLineStart(text string, pos int) int {
 
 // removeManagedSection deletes every m section from path, keeping the rest, and reports
 // whether path changed. A missing file, or one holding no section, is left alone. The
-// caller holds withRepoLock.
-func removeManagedSection(path string, m managedMarkers) (bool, error) {
+// caller holds withRepoLock. A section a magus newer than j.Self wrote is refused.
+func removeManagedSection(path string, m managedMarkers, j stamp.Judge) (bool, error) {
 	target := path
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		target = resolved
@@ -175,6 +236,9 @@ func removeManagedSection(path string, m managedMarkers) (bool, error) {
 	}
 	if len(spans) == 0 {
 		return false, nil
+	}
+	if err := checkSectionWriters(path, text, spans, j); err != nil {
+		return false, err
 	}
 	var kept strings.Builder
 	prev := 0
@@ -278,8 +342,9 @@ func lockedWrite(ctx context.Context, metaDir string, write func() (bool, error)
 // .gitattributes, .hg/hgrc, .sl/config and shell hooks. The caller holds withRepoLock.
 //
 // A file that already holds the wanted bytes is not rewritten. Any other write replaces
-// path atomically and keeps its mode; a hookFile always ends executable.
-func writeManagedSection(path string, m managedMarkers, body string, kind managedFileKind) (bool, error) {
+// path atomically and keeps its mode; a hookFile always ends executable. A section a
+// magus newer than j.Self wrote is refused with a *stamp.DowngradeError.
+func writeManagedSection(path string, m managedMarkers, body string, kind managedFileKind, j stamp.Judge) (bool, error) {
 	// A hook managed by another tool is often a symlink, and renaming over the link would
 	// replace it with a copy.
 	target := path
@@ -307,7 +372,7 @@ func writeManagedSection(path string, m managedMarkers, body string, kind manage
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return false, fmt.Errorf("vcs: read %s: %w", path, err)
 	}
-	next, err := renderManagedFile(path, string(existing), m, body, kind)
+	next, err := renderManagedFile(path, string(existing), m, body, kind, j)
 	if err != nil {
 		return false, err
 	}
@@ -334,7 +399,10 @@ func writeManagedSection(path string, m managedMarkers, body string, kind manage
 // Git for Windows default) checkout smudges it to CRLF on disk; writing it back as LF
 // marks the file modified and turns `git describe --dirty` into `<tag>-dirty`. An LF file
 // comes back byte for byte.
-func renderManagedFile(path, current string, m managedMarkers, body string, kind managedFileKind) (string, error) {
+//
+// j decides whether the section may be replaced and who the new one names as its writer
+// (see sectionBanner).
+func renderManagedFile(path, current string, m managedMarkers, body string, kind managedFileKind, j stamp.Judge) (string, error) {
 	crlf := strings.Contains(current, "\r\n")
 	text := current
 	if crlf {
@@ -346,7 +414,11 @@ func renderManagedFile(path, current string, m managedMarkers, body string, kind
 			return "", err
 		}
 	}
-	next, err := replaceManagedSection(text, m.section(body), m)
+	banner, err := sectionBanner(path, text, m, body, j)
+	if err != nil {
+		return "", err
+	}
+	next, err := replaceManagedSection(text, banner+body+m.end+"\n", m)
 	if err != nil {
 		return "", fmt.Errorf("vcs: %s: %w", path, err)
 	}

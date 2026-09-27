@@ -38,11 +38,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
 	{Name: "VersionBounds", Type: reflect.TypeFor[spells.VersionBounds]()},
 	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
-	// Leaves first: Sandbox.allow is [SandboxAllow] and Sandbox.env a SandboxEnv.
-	// RuntimeObject because a workspace-local spell's handle carries its Sandbox back
-	// into Buzz.
+	// Leaves first: Sandbox.allow is [SandboxAllow], Sandbox.env a SandboxEnv and
+	// Sandbox.caches [SandboxCache]. RuntimeObject because a workspace-local spell's
+	// handle carries its Sandbox back into Buzz.
 	{Name: "SandboxAllow", Type: reflect.TypeFor[spells.SandboxAllow](), RuntimeObject: true},
 	{Name: "SandboxEnv", Type: reflect.TypeFor[spells.SandboxEnv](), RuntimeObject: true},
+	{Name: "SandboxCache", Type: reflect.TypeFor[spells.SandboxCache](), RuntimeObject: true},
 	{Name: "Sandbox", Type: reflect.TypeFor[spells.Sandbox](), RuntimeObject: true},
 	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], and
 	// Language carries a CommentSyntax.

@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/stamp"
 )
 
 // TestOwedRegenerationRecordMergesAndDrops pins the record's lifecycle: one entry per
@@ -87,7 +89,7 @@ func TestInstallRegenHookCoexists(t *testing.T) {
 	hooks := filepath.Join(dir, ".git", "hooks")
 	old := managedMarkers{begin: "# BEGIN magus-regenerate-owed", end: "# END magus-regenerate-owed"}
 	for _, name := range []string{"post-merge", "post-rewrite"} {
-		_, err := writeManagedSection(filepath.Join(hooks, name), old, "magus job run regenerate-owed >/dev/null 2>&1 || true\n", hookFile)
+		_, err := writeManagedSection(filepath.Join(hooks, name), old, "magus job run regenerate-owed >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 		require.NoError(t, err)
 	}
 

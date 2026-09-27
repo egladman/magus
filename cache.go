@@ -2,21 +2,24 @@ package magus
 
 import (
 	"context"
-	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -67,13 +70,13 @@ func (m *Magus) ImportCache(ctx context.Context, r io.Reader) error {
 	return m.cache.Import(ctx, r)
 }
 
-// ToolchainCache is what saving or restoring a toolchain's own caches did.
-type ToolchainCache struct {
-	Tool string
+// SpellCache is what saving or restoring one spell's declared caches did.
+type SpellCache struct {
+	Spell string
 	// Key is the remote key stored, found stored, or restored; "" when a restore found
 	// no verified bundle.
 	Key string
-	// Exact reports a restore whose module set matched the workspace's go.sum files.
+	// Exact reports a restore whose lockfiles matched the workspace's.
 	Exact bool
 	// Present reports a save that found the day's bundle already stored.
 	Present bool
@@ -81,151 +84,135 @@ type ToolchainCache struct {
 	Inactive bool
 	Files    int
 	Bytes    int64
-	// Skipped is the unused entries a save trimmed, or the files a restore found present.
+	// Skipped is the unused entries a save left out, or the files a restore found present.
 	Skipped     int
 	Transferred int64
 	// Refused names each bundle that failed verification, with the reason.
 	Refused []string
-	// Dirs are the directories bundled or restored into, as NAME=path.
+	// Dirs are the directories bundled or restored into, as ENV=path.
 	Dirs []string
 }
 
-// SaveToolchainCache signs tool's caches and stores them in the remote tier, keeping only
-// build-cache entries used within usedWithin (0 keeps all). It errors when no remote is
-// wired or this run may not write it.
-func (m *Magus) SaveToolchainCache(ctx context.Context, tool string, usedWithin time.Duration) (ToolchainCache, error) {
+// SaveSpellCaches signs the caches every spell the workspace resolves declares, one
+// bundle per spell, and stores them in the remote tier. Of a cache whose tool dates
+// what it uses, only entries dated since the last restore are kept. It errors when no
+// remote is wired or this run may not write it; a workspace whose spells declare no
+// cache saves nothing.
+func (m *Magus) SaveSpellCaches(ctx context.Context) ([]SpellCache, error) {
+	return m.eachSpellCache(ctx, m.cache.SaveSpellCache)
+}
+
+// RestoreSpellCaches restores, for every spell the workspace resolves that declares
+// caches, the newest verified bundle from the remote tier. Finding none is not an
+// error; a bundle that fails verification is never restored and is named in Refused.
+func (m *Magus) RestoreSpellCaches(ctx context.Context) ([]SpellCache, error) {
+	return m.eachSpellCache(ctx, m.cache.RestoreSpellCache)
+}
+
+func (m *Magus) eachSpellCache(ctx context.Context, do func(context.Context, cache.SpellCacheKey, []cache.SpellCacheRoot) (cache.SpellCacheResult, error)) ([]SpellCache, error) {
 	if m.cache == nil {
-		return ToolchainCache{}, types.ErrNoCache
+		return nil, types.ErrNoCache
 	}
-	key, roots, dirs, err := m.toolchain(ctx, tool)
+	declared, err := m.spellCaches(ctx)
 	if err != nil {
-		return ToolchainCache{}, err
+		return nil, err
 	}
-	res, err := m.cache.SaveToolchain(m.ContextWithSecrets(ctx), key, roots, usedWithin)
-	return toolchainReport(tool, dirs, res), err
-}
-
-// RestoreToolchainCache restores the newest verified bundle of tool's caches from the
-// remote tier. Finding none is not an error; a bundle that fails verification is never
-// restored and is named in Refused.
-func (m *Magus) RestoreToolchainCache(ctx context.Context, tool string) (ToolchainCache, error) {
-	if m.cache == nil {
-		return ToolchainCache{}, types.ErrNoCache
-	}
-	key, roots, dirs, err := m.toolchain(ctx, tool)
-	if err != nil {
-		return ToolchainCache{}, err
-	}
-	res, err := m.cache.RestoreToolchain(m.ContextWithSecrets(ctx), key, roots)
-	return toolchainReport(tool, dirs, res), err
-}
-
-// ExportToolchainCache writes tool's caches to w as a bundle signed with
-// MAGUS_CACHE_SIGNING_KEY, which must be set.
-func (m *Magus) ExportToolchainCache(ctx context.Context, tool string, w io.Writer, usedWithin time.Duration) (ToolchainCache, error) {
-	seedB64 := os.Getenv(signingKeyEnv)
-	if seedB64 == "" {
-		return ToolchainCache{}, fmt.Errorf("magus: exporting a toolchain bundle needs %s; an unsigned bundle is refused on import", signingKeyEnv)
-	}
-	seed, err := base64.StdEncoding.DecodeString(seedB64)
-	if err != nil {
-		return ToolchainCache{}, fmt.Errorf("magus: %s is not valid base64: %w", signingKeyEnv, err)
-	}
-	key, roots, dirs, err := m.toolchain(ctx, tool)
-	if err != nil {
-		return ToolchainCache{}, err
-	}
-	stats, err := cache.WriteToolchainBundle(ctx, w, seed, key, roots, usedWithin)
-	return toolchainReport(tool, dirs, cache.ToolchainResult{ToolchainStats: stats}), err
-}
-
-// ImportToolchainCache verifies a bundle read from r against cache.remote.trusted_keys
-// and restores it. An unverified bundle is an error and restores nothing.
-func (m *Magus) ImportToolchainCache(ctx context.Context, tool string, r io.Reader) (ToolchainCache, error) {
-	trusted := make([][]byte, 0, len(m.cfg.Cache.Remote.TrustedKeys))
-	for i, k := range m.cfg.Cache.Remote.TrustedKeys {
-		raw, err := base64.StdEncoding.DecodeString(k)
+	ctx = m.ContextWithSecrets(ctx)
+	out := make([]SpellCache, 0, len(declared))
+	for _, d := range declared {
+		res, err := do(ctx, d.key, d.roots)
+		out = append(out, SpellCache{
+			Spell: d.key.Spell, Key: res.Key, Exact: res.Exact, Present: res.Present, Inactive: res.Inactive,
+			Files: res.Files, Bytes: res.Bytes, Skipped: res.Skipped, Transferred: res.Transferred,
+			Refused: res.Refused, Dirs: d.dirs,
+		})
 		if err != nil {
-			return ToolchainCache{}, fmt.Errorf("magus: trusted key %d is not valid base64: %w", i, err)
+			return out, fmt.Errorf("magus: %s's caches: %w", d.key.Spell, err)
 		}
-		trusted = append(trusted, raw)
 	}
-	key, roots, dirs, err := m.toolchain(ctx, tool)
-	if err != nil {
-		return ToolchainCache{}, err
-	}
-	stats, err := cache.ReadToolchainBundle(ctx, r, trusted, key, roots)
-	return toolchainReport(tool, dirs, cache.ToolchainResult{ToolchainStats: stats}), err
+	return out, nil
 }
 
-func toolchainReport(tool string, dirs []string, res cache.ToolchainResult) ToolchainCache {
-	return ToolchainCache{
-		Tool: tool, Key: res.Key, Exact: res.Exact, Present: res.Present, Inactive: res.Inactive,
-		Files: res.Files, Bytes: res.Bytes, Skipped: res.Skipped, Transferred: res.Transferred,
-		Refused: res.Refused, Dirs: dirs,
-	}
+type declaredCaches struct {
+	key   cache.SpellCacheKey
+	roots []cache.SpellCacheRoot
+	dirs  []string
 }
 
-// toolchain resolves a toolchain's bundle key and cache directories as the workspace's
-// targets see them: `go env` run at the root, under this process's environment.
-func (m *Magus) toolchain(ctx context.Context, tool string) (cache.ToolchainKey, []cache.ToolchainRoot, []string, error) {
-	if tool != "go" {
-		return cache.ToolchainKey{}, nil, nil, fmt.Errorf("magus: no toolchain bundle for %q; the one magus knows is \"go\"", tool)
-	}
-	vars := append(cache.GoKeyVars(), "GOCACHE", "GOMODCACHE")
-	cmd := exec.CommandContext(ctx, "go", append([]string{"env", "-json"}, vars...)...)
-	cmd.Dir = m.ws.Root
-	out, err := cmd.Output()
-	if err != nil {
-		return cache.ToolchainKey{}, nil, nil, fmt.Errorf("magus: go env: %w", err)
-	}
-	var env map[string]string
-	if err := json.Unmarshal(out, &env); err != nil {
-		return cache.ToolchainKey{}, nil, nil, fmt.Errorf("magus: go env: %w", err)
-	}
-	if env["GOCACHE"] == "" || env["GOCACHE"] == "off" || env["GOMODCACHE"] == "" {
-		return cache.ToolchainKey{}, nil, nil, fmt.Errorf("magus: go env reports no usable GOCACHE (%q) or GOMODCACHE (%q)", env["GOCACHE"], env["GOMODCACHE"])
-	}
-	sums, err := goSums(m.ws.Root)
-	if err != nil {
-		return cache.ToolchainKey{}, nil, nil, err
-	}
-	dirs := []string{"GOCACHE=" + env["GOCACHE"], "GOMODCACHE=" + env["GOMODCACHE"]}
-	return cache.GoToolchainKey(env, sums), cache.GoToolchainRoots(env["GOCACHE"], env["GOMODCACHE"]), dirs, nil
-}
-
-// goSums reads every go.sum under root. Hidden directories are skipped: a checkout's
-// .claude/worktrees holds copies that would make one workspace key differently per machine.
-func goSums(root string) (map[string][]byte, error) {
-	sums := map[string][]byte{}
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if p != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules") {
-				return filepath.SkipDir
+// spellCaches resolves, for each spell a project resolved that declares caches, the
+// bundle key and where each cache lives as the sandbox locates it under this process's
+// environment. The key is the host platform and the spell's tool versions, as they key
+// its targets, and the lockfiles its manifests name in those projects.
+func (m *Magus) spellCaches(ctx context.Context) ([]declaredCaches, error) {
+	bySpell := map[string]*spells.Spell{}
+	projects := map[string][]*types.Project{}
+	for _, p := range m.All() {
+		for _, s := range p.ResolvedSpells {
+			if sb := s.Sandbox(); sb == nil || len(sb.Caches) == 0 {
+				continue
 			}
-			return nil
+			bySpell[s.Name()] = s
+			projects[s.Name()] = append(projects[s.Name()], p)
 		}
-		if d.Name() != "go.sum" {
-			return nil
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		sums[filepath.ToSlash(rel)] = data
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("magus: reading go.sum files: %w", err)
 	}
-	return sums, nil
+	home, _ := os.UserHomeDir()
+	var out []declaredCaches
+	for _, name := range slices.Sorted(maps.Keys(bySpell)) {
+		s, sb := bySpell[name], bySpell[name].Sandbox()
+		tools := []string{"platform:" + runtime.GOOS + "/" + runtime.GOARCH}
+		for _, lines := range m.toolVersionsByProject(ctx, projects[name]) {
+			for _, l := range lines {
+				if strings.HasPrefix(l, name+":") {
+					tools = append(tools, l)
+				}
+			}
+		}
+		locks, err := m.spellLocks(s, projects[name])
+		if err != nil {
+			return nil, err
+		}
+		located := sandbox.CacheDirs(*sb, os.Environ(), home)
+		d := declaredCaches{key: cache.NewSpellCacheKey(name, tools, locks)}
+		for _, c := range sb.Caches {
+			dir := located[c.Env]
+			if dir == "" {
+				return nil, fmt.Errorf("magus: spell %s declares the cache %s, which locates no directory here", name, c.Env)
+			}
+			d.roots = append(d.roots, cache.SpellCacheRoot{Name: c.Env, Dir: dir, StampsUse: c.StampsUse, Skip: c.Skip})
+			d.dirs = append(d.dirs, c.Env+"="+dir)
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// spellLocks reads the lockfiles s's manifests name in each of projects, keyed by
+// workspace-relative path.
+func (m *Magus) spellLocks(s *spells.Spell, projects []*types.Project) (map[string][]byte, error) {
+	locks := map[string][]byte{}
+	for _, p := range projects {
+		for _, man := range s.Manifests() {
+			if _, err := os.Stat(filepath.Join(p.Dir, man.Value)); err != nil {
+				continue
+			}
+			for _, lock := range man.LockCandidates {
+				path := filepath.Join(p.Dir, lock)
+				data, err := os.ReadFile(path)
+				if errors.Is(err, fs.ErrNotExist) {
+					continue
+				}
+				if err != nil {
+					return nil, fmt.Errorf("magus: %w", err)
+				}
+				rel, err := filepath.Rel(m.ws.Root, path)
+				if err != nil {
+					return nil, err
+				}
+				locks[filepath.ToSlash(rel)] = data
+			}
+		}
+	}
+	return locks, nil
 }
 
 // CacheStats is this workspace's live cache counters (hits/misses/errors), a caller-facing

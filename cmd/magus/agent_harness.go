@@ -152,14 +152,15 @@ func harnessActingLease(ctx context.Context, root string) (string, error) {
 }
 
 // checkoutLease resolves the lease a CLI call acts under in root's checkout through
-// job.ActingLease: the checkout-wide binding, else claim. A CLI process knows no host
+// job.ActingLease: the checkout's record, else claim. A CLI process knows no host
 // session or subagent, so those sources never answer here.
 func checkoutLease(root, claim string) (string, types.LeaseSource, error) {
 	dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return "", "", fmt.Errorf("resolve the checkout's lease: %w", err)
 	}
-	return job.ActingLease(dir, claim)
+	lease, from := job.ActingLease(dir, claim)
+	return lease, from, nil
 }
 
 // agentHarnessRemoveCmd is ApplyHarness's inverse on the CLI: it deletes only the

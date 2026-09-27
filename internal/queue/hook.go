@@ -29,6 +29,7 @@ import (
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
@@ -226,9 +227,10 @@ func (c hookCommand) Run(ctx context.Context) (procrun.ExecResult, error) {
 // grant a declaration makes writable resolves in the box, with c.Home read, write and
 // exec: go run executes what it caches in GOCACHE. The toolchains the runner installed
 // are read and run where they are, and the object store every candidate's checkout
-// shares is read and never written. c.Cache, when set, is read and written where it is.
-// The nested magus a hook runs stacks its own sandbox on this one, so a right withheld
-// here is withheld from every child whatever that inner policy grants.
+// shares is read and never written. c.Cache, when set, is read and written where it is,
+// and the spells' caches [HookEnv] keeps under it resolve there in the modes the spells
+// declare. The nested magus a hook runs stacks its own sandbox on this one, so a right
+// withheld here is withheld from every child whatever that inner policy grants.
 //
 // A write the base's config grants outside the box is an error, the machine's: another
 // candidate's hook could plant there what this one's gate replays. A box whose home or
@@ -490,18 +492,49 @@ type HookEnv struct {
 	// [CacheReadProxy]'s stand-ins or what [HookEnv.Pass] passes.
 	Fixed []string
 	// Cache is where a boxed hook's magus keeps its local cache tier, outside the box,
-	// for a caller that carries that tier from one run to the next; empty keeps it in the
-	// box, as the queue does, so no candidate replays what another's hook wrote.
+	// for a caller that carries that tier from one run to the next, and where every cache
+	// a spell in Spells declares is kept beside it (see [cache.SpellCacheDir]). Empty
+	// keeps all of them in the box, as the queue does, so no candidate replays or builds
+	// with what another's hook wrote.
 	Cache string
 }
 
 // of is every assignment a gate or a regeneration in the box at home and tmp takes:
-// e.Fixed, then [boxEnv], which nothing overrides.
+// e.Fixed, then [boxEnv] and the spells' caches under e.Cache, which nothing overrides.
 func (e HookEnv) of(home, tmp string) ([]string, error) {
-	if home == "" || tmp == "" {
+	switch {
+	case home == "" || tmp == "":
 		return nil, errors.New("the candidate has no box to run its hooks in")
+	case e.Cache != "" && !filepath.IsAbs(e.Cache):
+		return nil, fmt.Errorf("the cache directory %s is not absolute", e.Cache)
 	}
-	return slices.Concat(e.Fixed, boxEnv(home, tmp, e.Cache)), nil
+	caches, err := spellCacheEnv(e.Cache, e.Spells)
+	if err != nil {
+		return nil, err
+	}
+	return slices.Concat(e.Fixed, boxEnv(home, tmp, e.Cache), caches), nil
+}
+
+// spellCacheEnv points each cache a spell of grants declares at its directory under
+// dir, through the variable the declaration names. The spell's own grant for that
+// variable then resolves there in the mode it declares, so the box grants those
+// directories and nothing else of the spell's. None when dir is empty.
+func spellCacheEnv(dir string, grants map[string]spells.Sandbox) ([]string, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	var env []string
+	owner := map[string]string{}
+	for _, spell := range slices.Sorted(maps.Keys(grants)) {
+		for _, c := range grants[spell].Caches {
+			if other, ok := owner[c.Env]; ok {
+				return nil, fmt.Errorf("spells %s and %s both declare %s a cache, which a box can point at only one directory", other, spell, c.Env)
+			}
+			owner[c.Env] = spell
+			env = append(env, c.Env+"="+cache.SpellCacheDir(dir, spell, c.Env))
+		}
+	}
+	return env, nil
 }
 
 // Pass returns e with every variable in names that this process's environment sets

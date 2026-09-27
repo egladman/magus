@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -292,53 +293,171 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 //
 // A go.mod in the temp dir makes it a workspace root, so the path renders the
 // way it does in a real workspace instead of as an absolute temp path.
+//
+// Not t.Parallel: each case chdirs into its workspace.
 func TestUnknownKeyMessage(t *testing.T) {
+	// Three list items each carrying two unknown keys, placed on the lines of the report
+	// this layout was written against: env at 16, 21, 26 and base at 17, 22, 27.
+	sample := "required_version: \">= 0.4.4\"\n" + strings.Repeat("#\n", 12) +
+		"spells:\n  allow_shadow:\n" +
+		strings.Repeat("    - env: X\n      base: y\n      name: spells/a\n      reason: r\n    #\n", 3)
+	const devBuild, release = "v0.4.3-122-g1a2b3c4", "v0.4.3"
 	cases := map[string]struct {
-		doc  string
-		want string
+		doc        string
+		sourceTree bool
+		running    string
+		want       string
 	}{
-		"top-level typo": {
-			doc:  "concurrencyy: 4\n",
-			want: `magus.yaml:1: unknown key "concurrencyy"; did you mean "concurrency"?`,
+		"the reported sample": {
+			doc:        sample,
+			sourceTree: true,
+			running:    devBuild,
+			want: "magus.yaml has keys this magus does not know:\n" +
+				"  - spells.allow_shadow.env   (lines 16, 21, 26)\n" +
+				"  - spells.allow_shadow.base  (lines 17, 22, 27; did you mean \"name\"?)\n" +
+				"\n" +
+				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
+				"Fix it:\n" +
+				"  - released binary: magus self update\n" +
+				"  - built from this checkout: ./magus run go-build .\n" +
+				"  - if that cannot load the tree either: go build -o ./magus ./cmd/magus",
 		},
-		"nested typo": {
-			doc:  "sandbox:\n  modee: required\n",
-			want: `magus.yaml:2: unknown key "modee"; did you mean "mode"?`,
+		// A release build cannot be the one a checkout outgrew, so it is never told to
+		// bootstrap; the checkout's own build is still a fix.
+		"a release build in a source tree": {
+			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
+			sourceTree: true,
+			running:    release,
+			want: "magus.yaml has a key this magus does not know:\n" +
+				"  - zzzzzzzz  (line 2)\n" +
+				"\n" +
+				"This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" +
+				"Fix it:\n" +
+				"  - released binary: magus self update\n" +
+				"  - built from this checkout: ./magus run go-build .",
 		},
-		// No near key to suggest, so the note that this build may simply predate the key
-		// is appended. "unknown key" alone reads as "you misspelled it", and the two
-		// have opposite fixes; ward owns the sentence so both surfaces say it the same.
-		"nothing close enough to suggest": {
+		"a dev build in a source tree": {
+			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
+			sourceTree: true,
+			running:    devBuild,
+			want: "magus.yaml has a key this magus does not know:\n" +
+				"  - zzzzzzzz  (line 2)\n" +
+				"\n" +
+				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
+				"Fix it:\n" +
+				"  - released binary: magus self update\n" +
+				"  - built from this checkout: ./magus run go-build .\n" +
+				"  - if that cannot load the tree either: go build -o ./magus ./cmd/magus",
+		},
+		// The loader is never told the version, and neither side is invented.
+		"a single unknown key with nothing known": {
 			doc: "concurrency: 2\nzzzzzzzz: 1\n",
-			want: `magus.yaml:2: unknown key "zzzzzzzz"; this magus does not know that key. ` +
-				ward.StaleBinaryAdvice("", "") + ". If the key is genuinely misspelled, this note does not apply",
+			want: "magus.yaml has a key this magus does not know:\n" +
+				"  - zzzzzzzz  (line 2)\n" +
+				"\n" +
+				"This magus's version is unknown here, and the workspace declares no required_version floor.\n" +
+				"Fix it:\n" +
+				"  - released binary: magus self update",
 		},
-		"two unknown keys": {
+		// A near miss is a typo: no version gap, however old the build is.
+		"a typo only": {
+			doc:        "required_version: \">= 0.4.4\"\nconcurrencyy: 4\n",
+			sourceTree: true,
+			running:    devBuild,
+			want: "magus.yaml has a key this magus does not know:\n" +
+				"  - concurrencyy  (line 2; did you mean \"concurrency\"?)",
+		},
+		"two typos at different levels": {
 			doc: "concurrencyy: 4\nsandbox:\n  modee: required\n",
-			want: "magus.yaml:1: unknown key \"concurrencyy\"; did you mean \"concurrency\"?\n" +
-				"magus.yaml:3: unknown key \"modee\"; did you mean \"mode\"?",
+			want: "magus.yaml has keys this magus does not know:\n" +
+				"  - concurrencyy   (line 1; did you mean \"concurrency\"?)\n" +
+				"  - sandbox.modee  (line 3; did you mean \"mode\"?)",
+		},
+		// One name at two levels is two keys, each named by its path.
+		"one name at two levels": {
+			doc: "zzzzzzzz: 1\nwatch:\n  zzzzzzzz: 2\n",
+			want: "magus.yaml has keys this magus does not know:\n" +
+				"  - zzzzzzzz        (line 1)\n" +
+				"  - watch.zzzzzzzz  (line 3)\n" +
+				"\n" +
+				"This magus's version is unknown here, and the workspace declares no required_version floor.\n" +
+				"Fix it:\n" +
+				"  - released binary: magus self update",
 		},
 		// A retired key is misconfiguration, and the error names the key that took its
 		// settings rather than guessing at a typo or blaming the binary.
 		"retired key": {
-			doc:  "daemon:\n  idle_ttl: 1h\n",
-			want: `magus.yaml:1: unknown key "daemon"; it was renamed to "server"`,
+			doc: "daemon:\n  idle_ttl: 1h\n",
+			want: "magus.yaml has a key this magus does not know:\n" +
+				"  - daemon  (line 1; renamed to \"server\")",
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			dir, err := filepath.EvalSymlinks(t.TempDir())
-			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module tmp\n"), 0o644))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(tc.doc), 0o644))
-			t.Chdir(dir)
+			dir := unknownKeyWorkspace(t, tc.doc, tc.sourceTree)
 
-			_, err = loadDirInto(Defaults(), dir)
-			require.Error(t, err)
+			_, err := loadDirInto(Defaults(), dir)
+			if tc.running != "" {
+				err = WithRunningVersion(err, tc.running)
+			}
 			require.ErrorIs(t, err, types.UnknownConfigKey)
 			assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", tc.want).Error(), err.Error())
 		})
 	}
+}
+
+// unknownKeyWorkspace writes doc as the magus.yaml of a fresh workspace root, with
+// cmd/magus in it when sourceTree. The cwd stays elsewhere: the file's own workspace
+// decides how its path renders and whether it is a source tree.
+func unknownKeyWorkspace(t *testing.T, doc string, sourceTree bool) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module tmp\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(doc), 0o644))
+	if sourceTree {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "cmd", "magus"), 0o755))
+	}
+	return dir
+}
+
+// TestUnknownKeysDropsNothing pins that grouping removes only repeated prose: twenty
+// keys, each on three lines, all reach both the message and the structured error.
+func TestUnknownKeysDropsNothing(t *testing.T) {
+	t.Parallel()
+	var item strings.Builder
+	item.WriteString("    - name: spells/a\n      reason: r\n")
+	for i := range 20 {
+		fmt.Fprintf(&item, "      zq%02dxv: 1\n", i)
+	}
+	doc := "spells:\n  allow_shadow:\n" + strings.Repeat(item.String(), 3)
+	dir := unknownKeyWorkspace(t, doc, false)
+
+	_, err := loadDirInto(Defaults(), dir)
+	require.ErrorIs(t, err, types.UnknownConfigKey)
+
+	// Each item spans 22 lines from line 3: name, reason, then the twenty keys.
+	want := UnknownKeysError{File: "magus.yaml"}
+	lines := []string{"magus.yaml has keys this magus does not know:"}
+	for i := range 20 {
+		key := fmt.Sprintf("spells.allow_shadow.zq%02dxv", i)
+		at := []int{5 + i, 27 + i, 49 + i}
+		want.Keys = append(want.Keys, UnknownKey{Key: key, Lines: at})
+		lines = append(lines, fmt.Sprintf("  - %s  (lines %d, %d, %d)", key, at[0], at[1], at[2]))
+	}
+	lines = append(lines, "", ward.StaleBuild{}.Advice())
+
+	var ue *UnknownKeysError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, want, *ue)
+	assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", strings.Join(lines, "\n")).Error(), err.Error())
+}
+
+func TestWithRunningVersionLeavesOtherErrorsAlone(t *testing.T) {
+	t.Parallel()
+	other := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "too old")
+	assert.Equal(t, error(other), WithRunningVersion(other, "v0.4.3"))
+	assert.NoError(t, WithRunningVersion(nil, "v0.4.3"))
 }
 
 // A type mismatch is not an unknown key, and rewriting half of yaml's report

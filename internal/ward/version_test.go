@@ -3,6 +3,7 @@ package ward
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -129,13 +130,16 @@ func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
 		{"the import it cascades into", `import "spells/github/actions";`, "module not found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ExplainStaleBinary(realBuzzErr(t, tc.src), "0.4.0", ">= 0.4.0")
+			src := realBuzzErr(t, tc.src)
+			got := ExplainStaleBinary(src, "v0.3.9", ">= 0.4.0")
 			require.Error(t, got)
-			assert.Contains(t, got.Error(), tc.want, "the original diagnostic must survive")
-			assert.Contains(t, got.Error(), "OUT-OF-DATE BINARY")
-			assert.Contains(t, got.Error(), "0.4.0", "names the running build")
-			assert.Contains(t, got.Error(), "requires >= 0.4.0", "names the declared floor")
-			assert.ErrorIs(t, got, got, "still an error chain callers can inspect")
+			assert.Contains(t, src.Error(), tc.want, "the fixture must be the shape it names")
+			assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", src.Error()+"\n"+
+				"This build does not provide that name; unless it is misspelled, this magus is out of date.\n\n"+
+				"This magus (v0.3.9) is older than the workspace needs (>= 0.4.0).\n"+
+				"Fix it:\n"+
+				"  - released binary: magus self update").Error(), got.Error())
+			assert.ErrorIs(t, got, src, "the original diagnostic stays in the chain")
 		})
 	}
 }
@@ -165,12 +169,14 @@ func TestExplainStaleBinary_LeavesEverythingElseAlone(t *testing.T) {
 // hint still has to say something useful, because a workspace with no floor is exactly
 // the one whose users get no warning from CheckRequiredVersion.
 func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
-	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), "", "")
+	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), DevVersion, "")
 	require.Error(t, got)
-	assert.Contains(t, got.Error(), "an unstamped build")
-	assert.Contains(t, got.Error(), "declares no required_version floor")
-	assert.Contains(t, got.Error(), "rebuild it from this checkout",
-		"the fix for an unstamped build is a rebuild, not `self update`")
+	assert.Contains(t, got.Error(), "\n\nThis magus is an unstamped build, so its version is unknown, "+
+		"and the workspace declares no required_version floor.\n"+
+		"Fix it:\n"+
+		"  - released binary: magus self update\n"+
+		"  - built from source, in the checkout it came from: go build -o ./magus ./cmd/magus\n",
+		"an unstamped build was built from source, so a rebuild is among the fixes")
 }
 
 // TestExplainStaleBinary_AppliesToDevBuilds pins the deliberate difference from
@@ -178,8 +184,8 @@ func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
 // common way to reach this, so exempting it here would skip the majority case.
 func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
 	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), DevVersion, ">= 0.4.0")
-	require.Error(t, got)
-	assert.Contains(t, got.Error(), "OUT-OF-DATE BINARY")
+	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
+	assert.Contains(t, got.Error(), "this magus is out of date")
 
 	// And the contrast, in one place so the asymmetry is visible: the floor ward does
 	// exempt the same build.
@@ -188,18 +194,85 @@ func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
 }
 
 // TestExplainStaleBinary_NotesOnlyTheBranchItExplains pins the joined load error: one
-// stale-shaped failure among several must not relabel the others as a stale binary.
+// stale-shaped failure among several must not relabel the others as a stale binary, and
+// the version gap is stated once however many branches are stale.
 func TestExplainStaleBinary_NotesOnlyTheBranchItExplains(t *testing.T) {
-	stale := realBuzzErr(t, `final s = Secret{value = "x"};`)
+	first := realBuzzErr(t, `final s = Secret{value = "x"};`)
 	other := buzzErr("MGS1038", "option removed")
-	got := ExplainStaleBinary(errors.Join(stale, other), "0.4.0", ">= 0.4.0")
+	second := realBuzzErr(t, `import "spells/github/actions";`)
+	got := ExplainStaleBinary(errors.Join(first, other, second), "v0.3.9", ">= 0.4.0")
 
 	multi, ok := got.(interface{ Unwrap() []error })
 	require.True(t, ok, "the join must survive")
 	branches := multi.Unwrap()
-	require.Len(t, branches, 2)
-	assert.Contains(t, branches[0].Error(), "OUT-OF-DATE BINARY")
+	require.Len(t, branches, 3)
+	note := "This build does not provide that name; unless it is misspelled, this magus is out of date."
+	assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s\n%s", first, note).Error(),
+		branches[0].Error(), "an earlier stale branch carries the note, not the advice")
 	assert.Equal(t, other, branches[1], "an unrelated branch is returned untouched")
+	assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s\n%s\n\n%s", second, note,
+		StaleBuild{Running: "v0.3.9", Floor: ">= 0.4.0"}.Advice()).Error(), branches[2].Error())
+	assert.Equal(t, 1, strings.Count(got.Error(), "Fix it:"), "the advice is stated once")
+}
+
+// TestStaleBuildAdvice pins every rendering: the gap sentence names whichever fact is
+// unknown, and the fixes grow with what magus knows about the build and the tree.
+func TestStaleBuildAdvice(t *testing.T) {
+	t.Parallel()
+	const selfUpdate = "Fix it:\n  - released binary: magus self update"
+	const goBuild = "\n  - built from this checkout: ./magus run go-build ."
+	const bootstrap = "\n  - if that cannot load the tree either: go build -o ./magus ./cmd/magus"
+	for name, tc := range map[string]struct {
+		build StaleBuild
+		want  string
+	}{
+		"a dev build in a source tree, below the floor": {
+			build: StaleBuild{Running: "v0.4.3-122-g1a2b3c4", Floor: ">= 0.4.4", SourceTree: true},
+			want:  "This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + goBuild + bootstrap,
+		},
+		"a release in a source tree gets no bootstrap": {
+			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4", SourceTree: true},
+			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + goBuild,
+		},
+		"a release outside a source tree": {
+			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4"},
+			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate,
+		},
+		"a dev build outside a source tree": {
+			build: StaleBuild{Running: "v0.4.3-1-gabc", Floor: ">= 0.4.4"},
+			want: "This magus (v0.4.3-1-gabc) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate +
+				"\n  - built from source, in the checkout it came from: go build -o ./magus ./cmd/magus",
+		},
+		"a dev build that meets the floor": {
+			build: StaleBuild{Running: "v0.4.4-3-gabc", Floor: ">= 0.4.4", SourceTree: true},
+			want: "This magus (v0.4.4-3-gabc) meets the workspace floor (>= 0.4.4) but was likely built before the workspace changed.\n" +
+				selfUpdate + goBuild + bootstrap,
+		},
+		"an unknown running version is not a dev build": {
+			build: StaleBuild{Floor: ">= 0.4.4", SourceTree: true},
+			want:  "This magus's version is unknown here; the workspace needs >= 0.4.4.\n" + selfUpdate + goBuild,
+		},
+		"nothing known": {
+			want: "This magus's version is unknown here, and the workspace declares no required_version floor.\n" + selfUpdate,
+		},
+		"no floor": {
+			build: StaleBuild{Running: "v0.4.3"},
+			want:  "This magus is v0.4.3; the workspace declares no required_version floor.\n" + selfUpdate,
+		},
+		"an unstamped build": {
+			build: StaleBuild{Running: DevVersion, Floor: ">= 0.4.4", SourceTree: true},
+			want:  "This magus is an unstamped build, so its version is unknown; the workspace needs >= 0.4.4.\n" + selfUpdate + goBuild + bootstrap,
+		},
+		"a floor that does not parse": {
+			build: StaleBuild{Running: "v0.4.3", Floor: "soon"},
+			want:  "This magus is v0.4.3; the workspace needs soon, and the two cannot be compared.\n" + selfUpdate,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, tc.build.Advice())
+		})
+	}
 }
 
 // TestExplainStaleBinary_KeepsAMultiWrapWhole pins that only a join splits: a
@@ -211,5 +284,5 @@ func TestExplainStaleBinary_KeepsAMultiWrapWhole(t *testing.T) {
 
 	assert.ErrorIs(t, got, wrapped)
 	assert.Contains(t, got.Error(), wrapped.Error(), "the wrapper's own text survives")
-	assert.Contains(t, got.Error(), "OUT-OF-DATE BINARY")
+	assert.Equal(t, 1, strings.Count(got.Error(), "Fix it:"))
 }

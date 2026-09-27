@@ -968,8 +968,9 @@ project-local file → MAGUS_* environment variables → CLI flags.
 
 The view sub-command prints the effective merged configuration. The set
 sub-command writes a key-value pair to the local (or global) config file.
-The init sub-command materializes the built-in defaults to a magus.yaml so
-they can be edited by hand.
+"magus init" writes a magus.yaml holding no keys, so every key keeps its
+built-in default until set. A config file a newer magus wrote is never
+replaced: set stops and names the build to update to.
 
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
@@ -1031,17 +1032,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Short: "Write cache entries to an archive",
 					Flags: []Flag{
 						{Name: "to", Kind: FlagString, Doc: "Write the archive to this file (default: stdout)"},
-						{Name: "toolchain", Kind: FlagString, Doc: "Export this toolchain's own caches instead, as a signed bundle (go: GOCACHE and GOMODCACHE)"},
-						{Name: "remote", Kind: FlagBool, Doc: "Store the toolchain bundle in the remote tier instead of writing it (--toolchain only)"},
-						{Name: "used-within", Kind: FlagDuration, Default: 12 * time.Hour, Doc: "Keep only build-cache entries used this recently; 0 keeps every entry (--toolchain only)"},
+						{Name: "remote", Kind: FlagBool, Doc: "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive"},
 					},
 				},
 				{
 					Name:  "import",
 					Short: "Load cache entries from an archive",
 					Flags: []Flag{
-						{Name: "toolchain", Kind: FlagString, Doc: "Import a signed bundle of this toolchain's own caches instead, verified against cache.remote.trusted_keys"},
-						{Name: "remote", Kind: FlagBool, Doc: "Restore the newest verified toolchain bundle from the remote tier (--toolchain only)"},
+						{Name: "remote", Kind: FlagBool, Doc: "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive"},
 					},
 				},
 				{Name: "key", Short: "Manage the remote cache signing key"},
@@ -1391,6 +1389,13 @@ always wired in the repo.
 With --global only the global config is written; the per-clone workspace
 bootstrap (magusfile stub + merge driver) is skipped.
 
+The config holds no keys: every key keeps its built-in default until
+"magus config set" changes it, so no key a later magus removes is pinned
+there. An existing config is left as it is; --force replaces it with an
+empty one. Nothing a newer magus wrote (the config, the managed sections in
+.gitattributes and the hooks, the merge driver registration) is replaced:
+init stops and names the build to update to.
+
 The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
 
 The "spell" subcommand scaffolds a new spell instead of bootstrapping a
@@ -1401,7 +1406,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 		{Name: "global", Kind: FlagBool, Doc: "Write only the global config; skip the workspace bootstrap"},
 		{Name: "dry-run", Kind: FlagBool, Doc: "Print the config, magusfile, and merge-driver destinations without writing any of them"},
 		{Name: "local", Kind: FlagBool, Doc: "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/"},
-		{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing config file"},
+		{Name: "force", Kind: FlagBool, Doc: "Replace an existing config file with one holding no keys"},
 		{Name: "vcs", Kind: FlagString, Doc: "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY"},
 	},
 	Examples: []Example{
@@ -1866,13 +1871,16 @@ global --sandbox is the mode, raised to best-effort as validate raises it.
 
 --cache keeps the local cache tier of the command's magus in a directory outside
 the box that the caller carries between runs, the one write the box grants outside
-itself. --env passes the named variables of this environment to the command's own
+itself, and under it the caches the workspace's spells declare (go: GOCACHE and
+GOMODCACHE), each in the mode its spell grants it. So a command run in one box, such
+as ` + "`magus config cache import --remote`" + `, warms the caches the next box builds
+with. --env passes the named variables of this environment to the command's own
 magus, over the sandbox's scrub, and no further: its children get the scrubbed
 environment. Neither may move the box: a variable the box sets, or one naming a
 cache it withholds, is refused.`,
 			Usage: "magus queue gate [flags] -- <command> [args...]",
 			Flags: append([]Flag{
-				{Name: "cache", Kind: FlagString, Doc: "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does"},
+				{Name: "cache", Kind: FlagString, Doc: "`directory` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does"},
 				{Name: "env", Kind: FlagString, Doc: "Comma-separated `names` of variables passed from this environment to the command's own magus"},
 			}, queueCheckout...),
 		},
@@ -2246,18 +2254,13 @@ field of a live one. Every path flag is repeatable or comma-separated, and an
 empty segment is refused rather than dropped. There is no --state: this declares a
 new job, and one nobody has taken is declared.
 
-exec takes the lease on a job in this checkout. It writes the marker every
-lease-scoped rule reads, and records the base this tree actually landed on beside
-the checkpoint the job was handed, with the divergence between them as a fact
-rather than a refusal. Two acts under one verb, because splitting them left the
-base unrecorded on every job anybody took by hand.
-
-exec --vacate gives that marker up instead of writing one, so the checkout can
-exec a different job. Refused while the job is still declared or running, since
-walking away mid-flight would leave the checkout's next write ungraded; a job
-already exited, one the store no longer carries, or no binding at all, all
-vacate cleanly, which is what a checkout stuck on a lease nobody will ever wait
-on needs.
+exec takes a job in this checkout. It records the base this tree actually landed
+on beside the checkpoint the job was handed, with the divergence between them as
+a fact rather than a refusal. The guard hook binds the caller when it lets exec
+through, keyed on the session and subagent its agent host names, so a subagent's
+exec never binds its parent; a host that names neither binds the checkout. A
+caller holding a job still declared or running is refused another; once its job
+has exited or ended, the next exec takes the next job.
 
 exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
 reads the same record from any checkout. The run behind the result's output ref is
@@ -2323,11 +2326,9 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
-			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. The binding is the SESSION's when --session names one, so several sessions in one checkout each hold their own. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
+			Description: "Record the base this tree is on and the checkout the job was taken in. The guard hook binds the caller to the job when it lets this through, keyed on the session and subagent its host names; a host that names neither binds this checkout.",
 			Flags: []Flag{
 				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
-				{Name: "session", Kind: FlagString, Doc: "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's"},
-				{Name: "vacate", Kind: FlagBool, Doc: "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running"},
 			},
 		},
 		{
@@ -2386,7 +2387,6 @@ shows what it is doing.`,
 		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
 		{"Declare it from a record", "magus job fork --stdin < job.json"},
 		{"Take it in this checkout", "magus job exec session-load/core"},
-		{"Give up this checkout's binding", "magus job exec --vacate"},
 		{"Return it with its result", "magus job exit session-load/core --stdin < result.json"},
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},

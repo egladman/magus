@@ -78,10 +78,7 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 	const name = "bound-lease"
 
 	claimed := trail.LeaseFromEnv()
-	id, from, err := job.ActingLease(cacheDir, claimed)
-	if err != nil {
-		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
-	}
+	id, from := job.ActingLease(cacheDir, claimed)
 	if id == "" {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no lease bound; the guard advises only"}
 	}
@@ -91,7 +88,7 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 			Status:  types.CheckFail,
 			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", id, claimed),
 			Details: []string{
-				"the marker is what `" + hint.JobExec.String() + "` wrote here, so magus grades every write under " +
+				"the guard wrote the marker when a caller whose host names no session ran `" + hint.JobExec.String() + "` here, so magus grades every write under " +
 					id + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
 				"unset " + trail.EnvBaggage + ", or take the lease you mean here with `" + hint.JobExec.With(claimed) + "`",
 			},

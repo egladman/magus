@@ -1318,6 +1318,18 @@ func ObjectSandboxEnv(v spells.SandboxEnv) vm.Value {
 	return out
 }
 
+func ObjectSandboxCache(v spells.SandboxCache) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("env", vm.StrValue(v.Env))
+	out.MapSet("stampsUse", vm.BoolValue(v.StampsUse))
+	itemsSkip := make([]vm.Value, len(v.Skip))
+	for indexSkip := range v.Skip {
+		itemsSkip[indexSkip] = vm.StrValue(v.Skip[indexSkip])
+	}
+	out.MapSet("skip", vm.ListValue(itemsSkip))
+	return out
+}
+
 func ObjectSandbox(v spells.Sandbox) vm.Value {
 	out := vm.NewMap()
 	itemsAllow := make([]vm.Value, len(v.Allow))
@@ -1326,6 +1338,11 @@ func ObjectSandbox(v spells.Sandbox) vm.Value {
 	}
 	out.MapSet("allow", vm.ListValue(itemsAllow))
 	out.MapSet("env", ObjectSandboxEnv(v.Env))
+	itemsCaches := make([]vm.Value, len(v.Caches))
+	for indexCaches := range v.Caches {
+		itemsCaches[indexCaches] = ObjectSandboxCache(v.Caches[indexCaches])
+	}
+	out.MapSet("caches", vm.ListValue(itemsCaches))
 	return out
 }
 

@@ -262,7 +262,11 @@ func DecodeSandboxValue(v vm.Value) (spells.Sandbox, error) {
 	if !ok {
 		return spells.Sandbox{}, fmt.Errorf("sandbox must be a map, got a %s", v.Kind())
 	}
-	return decodeSandboxRecord(buzzSpellObj{v: mv})
+	sb, err := decodeSandboxRecord(buzzSpellObj{v: mv})
+	if err == nil && len(sb.Caches) > 0 {
+		err = errors.New("sandbox: caches are a spell's declaration, keyed by its tools; a target declares none")
+	}
+	return sb, err
 }
 
 // buzzSpellObj adapts a Buzz data map (a resolved definition or a bound handle)

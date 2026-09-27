@@ -109,6 +109,93 @@ const (
 	buzzUnresolvedImport = "BZZ2001"
 )
 
+// StaleBuild is what magus knows about a binary that may be older than its workspace:
+// the facts every out-of-date-binary report states, and the only ones it decides from.
+//
+// Two surfaces reach that conclusion from different evidence and at different moments: a
+// magusfile naming something this build never heard of ([ExplainStaleBinary]) and
+// magus.yaml carrying a key it cannot decode, which fails before there is a Config to
+// read. Both render [StaleBuild.Advice], so they cannot disagree about the remedy.
+type StaleBuild struct {
+	// Running is the binary's version, [DevVersion] for an unstamped build, and "" when
+	// the caller does not know it. "" is reported as unknown, never guessed at.
+	Running string `json:"running,omitempty"`
+	// Floor is the workspace's required_version, "" when it declares none.
+	Floor string `json:"required_version,omitempty"`
+	// SourceTree is whether cmd/magus exists at the workspace root: the workspace is a
+	// magus checkout, so a binary can be built from it.
+	SourceTree bool `json:"source_tree"`
+}
+
+// Advice states the version gap once and lists the fixes as runnable commands, one per
+// line, without a trailing newline.
+//
+// The go-build line appears only for a [StaleBuild.SourceTree] workspace, and the bare
+// `go build` bootstrap only when the running build is also a dev build: that is the
+// binary that may be unable to load the tree it would rebuild itself from. An unknown
+// running version is not a dev build, so it never earns the bootstrap line.
+func (b StaleBuild) Advice() string {
+	lines := []string{b.gap(), "Fix it:", "  - released binary: magus self update"}
+	dev := b.Running != "" && types.IsDevMagusVersion(b.Running)
+	switch {
+	case b.SourceTree:
+		lines = append(lines, "  - built from this checkout: ./magus run go-build .")
+		if dev {
+			lines = append(lines, "  - if that cannot load the tree either: go build -o ./magus ./cmd/magus")
+		}
+	case dev:
+		lines = append(lines, "  - built from source, in the checkout it came from: go build -o ./magus ./cmd/magus")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// gap is the one sentence comparing the build with the floor, naming whichever of the
+// two is unknown.
+func (b StaleBuild) gap() string {
+	running, floor := strings.TrimSpace(b.Running), strings.TrimSpace(b.Floor)
+	switch {
+	case running == "" && floor == "":
+		return "This magus's version is unknown here, and the workspace declares no required_version floor."
+	case running == "":
+		return fmt.Sprintf("This magus's version is unknown here; the workspace needs %s.", floor)
+	case running == DevVersion && floor == "":
+		return "This magus is an unstamped build, so its version is unknown, and the workspace declares no required_version floor."
+	case running == DevVersion:
+		return fmt.Sprintf("This magus is an unstamped build, so its version is unknown; the workspace needs %s.", floor)
+	case floor == "":
+		return fmt.Sprintf("This magus is %s; the workspace declares no required_version floor.", running)
+	}
+	below, ok := belowFloor(running, floor)
+	switch {
+	case !ok:
+		return fmt.Sprintf("This magus is %s; the workspace needs %s, and the two cannot be compared.", running, floor)
+	case below:
+		return fmt.Sprintf("This magus (%s) is older than the workspace needs (%s).", running, floor)
+	default:
+		return fmt.Sprintf("This magus (%s) meets the workspace floor (%s) but was likely built before the workspace changed.", running, floor)
+	}
+}
+
+// belowFloor reports whether running fails constraint, comparing the release alone as
+// [CheckRequiredVersion] does; ok is false when either side does not parse.
+//
+// Unlike that ward it compares dev builds too: git-describe's v0.4.3-122-gabc is 122
+// commits past v0.4.3, so it is below a ">= 0.4.4" floor and meets ">= 0.4.3".
+func belowFloor(running, constraint string) (below, ok bool) {
+	c, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return false, false
+	}
+	v, err := semver.NewVersion(strings.TrimPrefix(running, "v"))
+	if err != nil {
+		return false, false
+	}
+	if base, err := v.SetPrerelease(""); err == nil {
+		v = &base
+	}
+	return !c.Check(v), true
+}
+
 // ExplainStaleBinary annotates a workspace-load failure that looks like an
 // out-of-date binary, and returns err untouched otherwise.
 //
@@ -130,67 +217,60 @@ const (
 // so it cannot lack a feature that workspace uses. That holds only until the checkout
 // moves: a binary built before a pull is a dev build that is genuinely too old, and it
 // is the single most likely way to reach this in day-to-day work.
-
-// StaleBinaryAdvice is the sentence every out-of-date-binary report shares.
 //
-// Two surfaces reach this conclusion from different evidence and at different moments: a
-// magusfile naming something this build never heard of (ExplainStaleBinary, below) and
-// magus.yaml carrying a key it cannot decode, which fails earlier, before there is a
-// Config to read a version out of. They were separate paragraphs saying one thing, which
-// is how two explanations of one condition start disagreeing about the remedy.
-//
-// running may be empty: the config loader fails before the running version is threaded
-// through, and the floor alone still tells a reader which side is behind.
-func StaleBinaryAdvice(running, constraint string) string {
-	build, floor := strings.TrimSpace(running), strings.TrimSpace(constraint)
-	// Spelled out per case rather than joined from clauses: a clause written to follow
-	// "and" opens a sentence in lower case the moment the other half is absent, which is
-	// exactly what the floor-only path does.
-	facts := ""
-	switch {
-	case build != "" && floor != "":
-		facts = fmt.Sprintf("This build is %s and this workspace requires %s. ", build, floor)
-	case build != "":
-		facts = fmt.Sprintf("This build is %s and this workspace declares no required_version floor. ", build)
-	case floor != "":
-		facts = fmt.Sprintf("This workspace requires %s. ", floor)
-	}
-	return "This is what an OUT-OF-DATE BINARY looks like. " + facts +
-		"Update magus (`magus self update`), or rebuild it from this checkout if you build your own. " +
-		"A binary built before your last pull is the usual cause"
-}
-
+// A joined load error keeps its branches: each stale-shaped one becomes MGS1021 with a
+// one-line note, the others are returned untouched, and [StaleBuild.Advice] is stated
+// once, on the last stale branch, however many files failed.
 func ExplainStaleBinary(err error, running, constraint string) error {
 	if err == nil {
 		return nil
 	}
-	// A load joins every failing file, and the note belongs only to the ones it
-	// explains.
-	if errs, ok := joined(err); ok {
-		out := make([]error, len(errs))
-		for i, e := range errs {
-			out[i] = ExplainStaleBinary(e, running, constraint)
-		}
-		return errors.Join(out...)
+	branches, isJoin := joined(err)
+	if !isJoin {
+		branches = []error{err}
 	}
+	last := -1
+	for i, e := range branches {
+		if staleShaped(e) {
+			last = i
+		}
+	}
+	if last < 0 {
+		return err
+	}
+	out := make([]error, len(branches))
+	for i, e := range branches {
+		switch {
+		case i == last:
+			// MGS1021, the same code CheckRequiredVersion raises: this is the same
+			// condition caught later and by a different signal, so it should be the same
+			// thing to look up. WrapDiagnostic keeps the original diagnostic in the
+			// chain, so a caller that branches on the BZZ code still can.
+			out[i] = types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, e, "%s\n%s\n\n%s",
+				e, staleNameNote, StaleBuild{Running: running, Floor: constraint}.Advice())
+		case staleShaped(e):
+			out[i] = types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, e, "%s\n%s", e, staleNameNote)
+		default:
+			out[i] = e
+		}
+	}
+	if !isJoin {
+		return out[0]
+	}
+	return errors.Join(out...)
+}
+
+// staleNameNote follows each failure that names something this build may not provide.
+const staleNameNote = "This build does not provide that name; unless it is misspelled, this magus is out of date."
+
+// staleShaped reports whether err carries one of the codes an out-of-date binary produces.
+func staleShaped(err error) bool {
 	var d *diagnostics.Error
 	if !errors.As(err, &d) {
-		return err
+		return false
 	}
-	if code := string(d.Code); code != buzzUndefinedType && code != buzzUnresolvedImport {
-		return err
-	}
-	build := running
-	if build == "" {
-		build = "an unstamped build"
-	}
-	// MGS1021, the same code CheckRequiredVersion raises: this is the same condition
-	// caught later and by a different signal, so it should be the same thing to look
-	// up. WrapDiagnostic keeps the original diagnostic in the chain, so a caller that
-	// branches on the BZZ code still can.
-	return types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, err,
-		"%s\n\nThe workspace reached for a name this build does not provide. %s. If the name is "+
-			"genuinely misspelled, this note does not apply", err, StaleBinaryAdvice(build, constraint))
+	code := string(d.Code)
+	return code == buzzUndefinedType || code == buzzUnresolvedImport
 }
 
 // joined returns err's branches when rejoining them reproduces its message, as it

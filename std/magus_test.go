@@ -477,24 +477,20 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
-	actor, err := store.Actor()
-	require.NoError(t, err)
-	assert.Equal(t, "fleet/captured", actor.Lease)
+	assert.Equal(t, "fleet/captured", store.Actor().Lease)
 }
 
-// The captured lease is the process's claim, so a checkout bound by `magus job exec`
-// outranks it here exactly as it does for `magus job` and the guard.
+// The captured lease is the process's claim, so a checkout's binding outranks it here
+// exactly as it does for `magus job` and the guard.
 func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	require.NoError(t, job.BindLease(workspace.cacheDir, "fleet/bound"))
+	require.NoError(t, job.NewStore(job.Location{CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
-	actor, err := store.Actor()
-	require.NoError(t, err)
-	assert.Equal(t, "fleet/bound", actor.Lease)
+	assert.Equal(t, "fleet/bound", store.Actor().Lease)
 }
 
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_job MCP

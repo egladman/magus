@@ -303,6 +303,14 @@ func (s leaseStanding) terminal() bool {
 	return s.declared && !s.state.Live()
 }
 
+// inFlight reports a row whose work is still to come: declared or running. A holder may
+// take another job only once its own is not, since walking away mid-flight would leave
+// its next write graded under a job nobody handed it. Exited is not in flight although it
+// is live: nobody is required to ever wait on it, and a caller held to it would be stuck.
+func (s leaseStanding) inFlight() bool {
+	return s.declared && (s.state == types.StateDeclared || s.state == types.StateRunning)
+}
+
 // actingLeaseStanding looks the acting lease up across EVERY row, terminal ones included.
 //
 // Terminal ones included, because "does this id mean anything here" is what separates a
@@ -489,7 +497,7 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 		}
 		return fmt.Sprintf(
 			"magus workspace: leave your own job alone. "+leaseActorClause("change a job")+"\n"+
-				"`%s` would %s, and this checkout is bound to lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.",
+				"`%s` would %s, and this call acts under lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.",
 			command, what, actingLease)
 	}
 	return ""
@@ -559,24 +567,15 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 		return ""
 	}
 	switch {
-	// The read form prints the job this checkout holds and takes no operand; only the form
-	// carrying one takes a different job. Refusing the read would leave a holder unable to
-	// find out what it holds, which is the opposite of what this rule is for. A binding
-	// that names NO job is not a boundary either, so taking another one out of that state
-	// is the remedy rather than an escape.
-	case words[0] == hint.JobExec.Head() && words[1] == hint.JobExec.Leaf() && len(words) > 2:
-		if !me().declared {
+	// Taking the job the caller already holds is the bootstrap run twice, and records the
+	// base it landed on. Taking another is the escape this rule closes, but only while the
+	// held job is in flight: once it has exited or ended, or names no row at all, the next
+	// exec is how the caller moves on (see bindOnExec).
+	case hint.JobExec.MatchedBy(words) && len(words) > 2:
+		if held := me(); !held.inFlight() || execOperand(c.Args) == held.row.ID {
 			return ""
 		}
-		// Re-asserting the SAME job is the bootstrap run twice, which the bind verb itself
-		// permits for that reason. Refusing it left a holder unable to finish the
-		// bootstrap from inside its own worktree: the marker binds the checkout, and then
-		// the verb recording the base it landed on was refused to the only party that
-		// could run it.
-		if words[2] == me().row.ID {
-			return ""
-		}
-		return "take the lease on another job here"
+		return "take the lease on another job"
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
 		return "verify a job"
 	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
@@ -592,7 +591,8 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 //
 //   - `op=exec` on the caller's OWN job records the base it landed on. That is the
 //     holder's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
-//     and denying it here would leave a holder unable to write anywhere at all.
+//     and denying it here would leave a holder unable to write anywhere at all. On
+//     another job it is refused only while the held one is in flight, as the CLI form is.
 //   - `op=put` on the caller's own job that only SHRINKS its write paths gives ground
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
 //     guard's job is the direction, and giving up a path cannot widen a role.
@@ -617,11 +617,11 @@ func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 		// rules are not running.
 		return ""
 	}
+	if op == "exec" && (id == standing.row.ID || !standing.inFlight()) {
+		return ""
+	}
 	if id == "" || id != standing.row.ID {
 		return "write another job"
-	}
-	if op == "exec" {
-		return ""
 	}
 	row := standing.row
 	if shrinksWritePaths(params, row) {

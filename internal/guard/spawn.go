@@ -9,7 +9,6 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
 )
 
 // The multi-agent skill is the one piece of guidance a spawn cannot be written well
@@ -53,23 +52,14 @@ func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool, workspace
 // Fires once per session: the orchestrator handing out a wave is told at the first spawn,
 // not at each of six.
 func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at location) string {
-	if at.cacheDir == "" {
-		return ""
-	}
-	bound := job.BoundLeases(at.cacheDir)
-	if len(bound) == 0 {
+	if at.cacheDir == "" || at.workspace == "" {
 		return ""
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return "" // an unreadable plan is the guard's standing fail-open
 	}
-	var held []types.Job
-	for _, row := range rows {
-		if slices.Contains(bound, row.ID) && row.State.Live() && len(row.WritePaths) > 0 {
-			held = append(held, row)
-		}
-	}
+	held := job.HeldIn(rows, at.workspace)
 	if len(held) == 0 {
 		return ""
 	}

@@ -10,8 +10,10 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestWriteMagusfileStub(t *testing.T) {
@@ -157,6 +159,30 @@ func TestInitCmdRootWithoutLocalOrGlobalRefused(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(cwd, "magusfile.buzz"), "refused init must not scaffold cwd either")
 	xdgTarget := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "magus", "magus.yaml")
 	assert.NoFileExists(t, xdgTarget, "refused init must not write the global config")
+}
+
+// `init --global` on an empty config dir writes a config naming no key: every key keeps
+// its built-in default, and a key a later magus removes is never pinned there. A second
+// init leaves it alone rather than failing.
+func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Chdir(t.TempDir())
+	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0", Commit: "abc1234", Date: "2026-09-26T00:00:00Z"})
+
+	require.NoError(t, initCmd(ctx, "", []string{"--global"}))
+	path := filepath.Join(xdg, "magus", "magus.yaml")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var keys map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &keys))
+	assert.Empty(t, keys, "init writes no key:\n%s", data)
+	assert.Contains(t, string(data), "# written by magus v0.5.0 (commit abc1234, 2026-09-26T00:00:00Z)")
+
+	require.NoError(t, initCmd(ctx, "", []string{"--global"}))
+	again, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, string(data), string(again))
 }
 
 // The other half, that --local alongside --root lands both writes in root, is pinned by

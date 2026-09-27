@@ -599,7 +599,12 @@ a checkout of the commit `HEAD` names, the base's sandbox over it, the global
 will, so a change green there is not red in the queue for where it ran; this
 repository's `ci.yaml` shards do. Two flags serve such a job and never move the box.
 `--cache <dir>` keeps the command's local cache tier in a directory the job carries
-between runs, the one write the box grants outside itself. `--env <names>` passes the
+between runs, the one write the box grants outside itself, and under it the caches the
+workspace's spells declare (Go's `GOCACHE` and `GOMODCACHE`), each in the mode its spell
+grants it. So `magus queue gate --cache <dir> -- magus config cache import --remote`
+warms what the next gate in a box of the same `--cache` builds with, and `export
+--remote` signs what it built. `validate` keeps both in the candidate's box, so no
+candidate replays or builds with another's. `--env <names>` passes the
 named variables to the command's own magus (a CI provider, a remote cache's
 credentials), which its children never see; a variable the box sets is refused.
 

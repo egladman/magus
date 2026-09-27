@@ -89,10 +89,10 @@ A spawn whose title (`description`) reads `<parent>/<role> <job>`, where `<job>`
 that job. From then on every hook call carrying that agent's id is graded under the
 job's lease, in whichever checkout of the repository it runs: the attribution is kept
 in the repository's state directory beside the job store, not in the spawner's cache
-dir. An explicit `--lease` still wins. The agent's job outranks the session's
-`magus job exec` binding, because a subagent shares its parent's session id and only
-its agent id tells the two apart, and it outranks a `BAGGAGE` claim, as every record
-does.
+dir. An explicit `--lease` still wins. The record is keyed on the agent's id as well
+as its session, because a subagent shares its parent's session id and only its agent
+id tells the two apart: neither ever reads the other's binding. It outranks a
+`BAGGAGE` claim, as every record does.
 
 When the job has not reported a base, the agent's first hook call records the
 revision and dirty-patch digest of the checkout it runs in, the values

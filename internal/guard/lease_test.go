@@ -277,67 +277,41 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 	})
 }
 
-// TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
-// hook through: a marker keyed by the checkout's cache dir (job.MarkerPath, under the user
-// state dir), read by the same job.ActingLease the
-// sandbox resolves through. A marker that holds anything but a lease id is an error, and
-// the guard refuses the call: grading it as nobody's while the checkout says it is
-// somebody's is how every lease rule falls silent at once.
-func TestActingLeaseFromMarker(t *testing.T) {
+// TestIdentityLessCallersShareTheCheckoutRecord pins the one binding keyed on the checkout:
+// a host that names no session (OpenCode's plugin hands the guard a bare command) has
+// nothing else to key on, so every such caller in the checkout reads it, and no caller its
+// host names ever does.
+func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
 	t.Setenv("BAGGAGE", "")
 	ctx, _ := fleetFixture(t, narrowLease())
+	bindCaller(t, ctx, hookAttribution{Host: "opencode"}, narrowLease().ID)
+
+	type graded struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	got := map[string]graded{}
+	for name, req := range map[string]Request{
+		"an identity-less hook":      {Input: "ls", Host: "opencode"},
+		"another identity-less hook": {Input: "ls"},
+		"a session in the checkout":  {Input: "ls", Host: "claude-code", Session: "s1"},
+		"a subagent in the checkout": {Input: "ls", Host: "claude-code", Session: "s1", Agent: "a1b2c3"},
+	} {
+		v := Judge(ctx, Dependencies{}, req)
+		got[name] = graded{v.Lease, v.LeaseFrom}
+	}
+	assert.Equal(t, map[string]graded{
+		"an identity-less hook":      {narrowLease().ID, types.LeaseSourceMarker},
+		"another identity-less hook": {narrowLease().ID, types.LeaseSourceMarker},
+		"a session in the checkout":  {},
+		"a subagent in the checkout": {},
+	}, got)
+
 	base := hookLocation(ctx, Dependencies{}).cacheDir
-
-	lease, _, err := job.ActingLease(base, "")
-	require.NoError(t, err)
-	assert.Empty(t, lease, "no marker, no lease")
-
-	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(base)), 0o755))
-	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte(" harness/lease-scoped-deny \n"), 0o644))
-	lease, _, err = job.ActingLease(base, "")
-	require.NoError(t, err)
-	assert.Equal(t, "harness/lease-scoped-deny", lease)
-
 	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
-	_, _, err = job.ActingLease(base, "")
-	require.Error(t, err, "a malformed marker is an error, never an unbound checkout")
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Contains(t, v.Reason, "does not read")
-	assert.Contains(t, v.Reason, job.MarkerPath(base), "the deny names the file")
-}
-
-// A deny that also refused its own repair would be a lockout: no agent in the checkout
-// could clear the marker. `magus job exec --vacate` and a help read pass with the error as
-// advice; anything else, including the repair chained with another command, is denied.
-func TestAnUnreadableMarkerLetsItsRepairThrough(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
-	ctx, _ := fleetFixture(t, narrowLease())
-	base := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(base)), 0o755))
-	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
-
-	for _, command := range []string{
-		"magus job exec --vacate",
-		"./magus --root . job exec --vacate",
-		"magus job exec --help",
-		"magus -h",
-		"magus help job",
-	} {
-		v := Judge(ctx, Dependencies{}, Request{Input: command})
-		assert.Equal(t, "advise", v.Decision, "%q", command)
-		assert.Contains(t, v.Context, "not a lease id", "%q", command)
-	}
-	for _, command := range []string{
-		"magus job exec other-job",
-		"magus job exec --vacate && rm -rf .",
-		"rm .magus/lease",
-		"magus run test .",
-	} {
-		assert.Equal(t, "deny", Judge(ctx, Dependencies{}, Request{Input: command}).Decision, "%q", command)
-	}
-	assert.Equal(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "magus job exec --vacate", IsPath: true}).Decision,
-		"a write is never the repair, whatever its path says")
+	assert.Equal(t, graded{}, graded{v.Lease, v.LeaseFrom}, "a record that does not read binds nobody")
+	assert.Equal(t, "pass", v.Decision)
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
@@ -485,10 +459,11 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 	me := narrowLease().ID
 
 	for command, what := range map[string]string{
-		"magus job exec harness/other":                                   "take the lease on another job here",
-		"./magus job exec harness/other":                                 "take the lease on another job here",
-		"magus -s job exec harness/other":                                "take the lease on another job here",
-		"magus --root /tmp/x job exec harness/other":                     "take the lease on another job here",
+		"magus job exec harness/other":                                   "take the lease on another job",
+		"./magus job exec harness/other":                                 "take the lease on another job",
+		"magus -s job exec harness/other":                                "take the lease on another job",
+		"magus --root /tmp/x job exec harness/other":                     "take the lease on another job",
+		"magus job exec --base rev1 harness/other":                       "take the lease on another job",
 		"magus job wait harness/other":                                   "verify a job",
 		"magus job fork":                                                 "declare a job",
 		"magus_job op=clear":                                             "drop every job",
@@ -513,7 +488,7 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 	me := narrowLease().ID
 
 	for name, command := range map[string]string{
-		"reading the binding":       "magus job exec",
+		"an exec naming no job":     "magus job exec",
 		"reading the plan":          "magus ls jobs",
 		"reading one row":           "magus describe job harness/lease-scoped-deny",
 		"recording its own base":    "magus_job op=exec id=harness/lease-scoped-deny reported_base=abc123",

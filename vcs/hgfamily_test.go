@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,10 +20,14 @@ func TestWriteHgFamilySections(t *testing.T) {
 
 	for _, write := range []func() (bool, error){
 		func() (bool, error) {
-			return writeHgFamilyMergeDriverSection(path, types.MergeDriverGlobs{Outputs: []string{"gen/**", "dist/**"}})
+			return writeHgFamilyMergeDriverSection(path, types.MergeDriverGlobs{Outputs: []string{"gen/**", "dist/**"}}, stamp.Judge{})
 		},
-		func() (bool, error) { return writeHgFamilyRefreshSection(path, "magus job run sync-graph") },
-		func() (bool, error) { return writeHgFamilyDriftSection(path, "magus job run check-drift") },
+		func() (bool, error) {
+			return writeHgFamilyRefreshSection(path, "magus job run sync-graph", stamp.Judge{})
+		},
+		func() (bool, error) {
+			return writeHgFamilyDriftSection(path, "magus job run check-drift", stamp.Judge{})
+		},
 	} {
 		changed, err := write()
 		require.NoError(t, err)
@@ -45,10 +50,10 @@ func TestWriteHgFamilySections(t *testing.T) {
 			"outgoing.magus-drift-notice = magus job run check-drift >/dev/null 2>&1 || true\n")
 	assertFile(t, path, want, 0o644)
 
-	changed, err := writeHgFamilyRefreshSection(path, "magus job run sync-graph")
+	changed, err := writeHgFamilyRefreshSection(path, "magus job run sync-graph", stamp.Judge{})
 	require.NoError(t, err)
 	assert.False(t, changed)
-	changed, err = writeHgFamilyMergeDriverSection(path, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
+	changed, err = writeHgFamilyMergeDriverSection(path, types.MergeDriverGlobs{Outputs: []string{"gen/**"}}, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed, "a dropped glob rewrites the section in place")
 	present, err := managedSectionPresent(path, generatedMarkers)
@@ -61,7 +66,7 @@ func TestWriteHgFamilySections(t *testing.T) {
 func TestWriteHgFamilyMergeDriverSectionRoutesAutoResolveGlobs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hgrc")
 	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**"}, AutoResolve: []string{"CHANGELOG.md", "gen/**", "docs/**/*.md"}}
-	changed, err := writeHgFamilyMergeDriverSection(path, globs)
+	changed, err := writeHgFamilyMergeDriverSection(path, globs, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assertFile(t, path, generatedMarkers.section("[merge-patterns]\n"+
@@ -74,7 +79,7 @@ func TestWriteHgFamilyMergeDriverSectionRoutesAutoResolveGlobs(t *testing.T) {
 		"magus.premerge = False\n"+
 		"magus.gui = False\n"), 0o644)
 
-	changed, err = writeHgFamilyMergeDriverSection(path, globs)
+	changed, err = writeHgFamilyMergeDriverSection(path, globs, stamp.Judge{})
 	require.NoError(t, err)
 	assert.False(t, changed, "installing twice is idempotent")
 }

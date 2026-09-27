@@ -171,6 +171,24 @@ type Install struct {
 type Sandbox struct {
 	Allow []SandboxAllow `json:"allow,omitempty" yaml:"allow,omitempty"`
 	Env   SandboxEnv     `json:"env,omitzero" yaml:"env,omitempty"`
+	// Caches says which of Allow's writable locations are caches. Only a spell declares
+	// them: a bundle of one is keyed by the spell's tools and lockfiles.
+	Caches []SandboxCache `json:"caches,omitempty" yaml:"caches,omitempty"`
+}
+
+// SandboxCache marks a writable location of a spell's sandbox declaration as a cache:
+// what its tools keep there only saves them work. magus carries it between machines as
+// a signed bundle, and a box relocates it through Env.
+type SandboxCache struct {
+	// Env is the variable of a writable Allow entry in the same declaration, the one
+	// that locates the cache and so the one a box points elsewhere.
+	Env string `json:"env" yaml:"env"`
+	// StampsUse says the tool re-dates an entry it uses, so a save leaves out an entry
+	// no run has dated since the bundle it came from was restored.
+	StampsUse bool `json:"stamps_use,omitempty" yaml:"stamps_use,omitempty" buzz:"stampsUse"`
+	// Skip are slash globs, relative to the cache, of files a warm run never reads.
+	// They stay out of a bundle.
+	Skip []string `json:"skip,omitempty" yaml:"skip,omitempty"`
 }
 
 // SandboxEnv is the environment half of a Sandbox declaration.
