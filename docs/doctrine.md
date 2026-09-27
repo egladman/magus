@@ -416,6 +416,26 @@ a hook invoked without that name is refused rather than defaulted to one host.
 reads a CI, hosting or agent-host variable outside a short list of inputs read
 after the caller chose them, and the failure says to take a flag instead.
 
+### Provider I/O is Buzz
+
+A CI or VCS provider (GitHub, GitLab, ...) is reached only by a Buzz op magus
+invokes - a provider spell, the queue's own provider script, a `tools/*.buzz`
+driver, or a workflow action step - which names the act and reports host and
+elapsed on the line. Go opens no provider socket of its own; it calls the Buzz
+op through bindings and reads the record back, the shape `review_spell.go` and
+the queue's own Buzz host module already take. The console reaches nothing but
+its own server, which its CSP enforces at runtime.
+
+The failure this prevents is environment sniffing's shape from the other
+side: a "quick fetch" landing in Go, or in a Buzz file nobody meant to carry
+one, stays invisible until the day the credential it silently depended on is
+missing or wrong, by which point it is load-bearing.
+
+`providerio` in `libs/conventions` fails a `net/http` client or a provider SDK
+import outside a reasoned allowlist; `provider-io-is-buzz` in `tools/lint.buzz`
+fails a real `gh`, `curl` or `http` call at a provider host from a Buzz file
+outside the ones named above.
+
 ### Automation you can interrogate
 
 Each automated verdict has a lens that shows its inputs. `affected --explain`
