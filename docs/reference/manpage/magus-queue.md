@@ -142,7 +142,7 @@ apply report what would merge and call nothing on the provider.
 ### queue gate options
 
 **--cache** *directory*
-: \`directory\` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does
+: \`directory\` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does
 
 **--env** *names*
 : Comma-separated \`names\` of variables passed from this environment to the command's own magus

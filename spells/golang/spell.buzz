@@ -121,6 +121,15 @@ export fun mgs_getSandbox() > Sandbox {
             "CGO_ENABLED", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS",
             "GOLANGCI_LINT_CACHE",
         ]},
+        caches = [
+            // go re-dates a build cache entry it uses once the entry is an hour old.
+            // README, trim.txt and fuzz corpora are not build entries.
+            SandboxCache{env = "GOCACHE", stampsUse = true, skip = ["README", "trim.txt", "fuzz/**"]},
+            // A build reads the extracted tree and its .ziphash, never the zip, so zips
+            // would double the bundle for nothing. VCS clones serve only direct fetches,
+            // and the rest is go's own in-flight work.
+            SandboxCache{env = "GOMODCACHE", skip = ["cache/vcs/**", "cache/download/**/*.zip", "**/*.lock", "**/*.partial", "**/*.tmp"]},
+        ],
     };
 }
 

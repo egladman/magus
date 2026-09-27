@@ -113,14 +113,8 @@ const (
 	FlagConfigCacheExportRemote = "remote"
 	// config cache export: --to
 	FlagConfigCacheExportTo = "to"
-	// config cache export: --toolchain
-	FlagConfigCacheExportToolchain = "toolchain"
-	// config cache export: --used-within
-	FlagConfigCacheExportUsedWithin = "used-within"
 	// config cache import: --remote
 	FlagConfigCacheImportRemote = "remote"
-	// config cache import: --toolchain
-	FlagConfigCacheImportToolchain = "toolchain"
 	// config cache prune: --dry-run
 	FlagConfigCachePruneDryRun = "dry-run"
 	// config cache prune: --keep-last
@@ -1413,7 +1407,7 @@ type QueueGateFlags struct {
 // BindQueueGate registers `magus queue gate`'s flags on fs and returns the destination.
 func BindQueueGate(fs *flag.FlagSet) *QueueGateFlags {
 	var f QueueGateFlags
-	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier in, outside the box; empty keeps it in the box, as validate does")
+	fs.StringVar(&f.Cache, FlagQueueGateCache, "", "`directory` the command's magus keeps its local cache tier and its spells' caches in, outside the box; empty keeps them in the box, as validate does")
 	fs.StringVar(&f.Env, FlagQueueGateEnv, "", "Comma-separated `names` of variables passed from this environment to the command's own magus")
 	fs.StringVar(&f.Remote, FlagQueueGateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueGateVCS, "git", "Version control `backend` of the checkout at --root")
@@ -1553,33 +1547,27 @@ func BindConfigCachePrune(fs *flag.FlagSet) *ConfigCachePruneFlags {
 
 // ConfigCacheExportFlags are the flags declared for `magus config cache export`.
 type ConfigCacheExportFlags struct {
-	To         string        // --to
-	Toolchain  string        // --toolchain
-	Remote     bool          // --remote
-	UsedWithin time.Duration // --used-within
+	To     string // --to
+	Remote bool   // --remote
 }
 
 // BindConfigCacheExport registers `magus config cache export`'s flags on fs and returns the destination.
 func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
 	var f ConfigCacheExportFlags
 	fs.StringVar(&f.To, FlagConfigCacheExportTo, "", "Write the archive to this file (default: stdout)")
-	fs.StringVar(&f.Toolchain, FlagConfigCacheExportToolchain, "", "Export this toolchain's own caches instead, as a signed bundle (go: GOCACHE and GOMODCACHE)")
-	fs.BoolVar(&f.Remote, FlagConfigCacheExportRemote, false, "Store the toolchain bundle in the remote tier instead of writing it (--toolchain only)")
-	fs.DurationVar(&f.UsedWithin, FlagConfigCacheExportUsedWithin, time.Duration(43200000000000), "Keep only build-cache entries used this recently; 0 keeps every entry (--toolchain only)")
+	fs.BoolVar(&f.Remote, FlagConfigCacheExportRemote, false, "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive")
 	return &f
 }
 
 // ConfigCacheImportFlags are the flags declared for `magus config cache import`.
 type ConfigCacheImportFlags struct {
-	Toolchain string // --toolchain
-	Remote    bool   // --remote
+	Remote bool // --remote
 }
 
 // BindConfigCacheImport registers `magus config cache import`'s flags on fs and returns the destination.
 func BindConfigCacheImport(fs *flag.FlagSet) *ConfigCacheImportFlags {
 	var f ConfigCacheImportFlags
-	fs.StringVar(&f.Toolchain, FlagConfigCacheImportToolchain, "", "Import a signed bundle of this toolchain's own caches instead, verified against cache.remote.trusted_keys")
-	fs.BoolVar(&f.Remote, FlagConfigCacheImportRemote, false, "Restore the newest verified toolchain bundle from the remote tier (--toolchain only)")
+	fs.BoolVar(&f.Remote, FlagConfigCacheImportRemote, false, "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive")
 	return &f
 }
 

@@ -701,7 +701,7 @@ func decodeSandbox(src obj) (*spells.Sandbox, error) {
 func decodeSandboxRecord(rec obj) (spells.Sandbox, error) {
 	var sb spells.Sandbox
 	var errs []error
-	errs = append(errs, unknownKeys("sandbox", rec, "allow", "env"))
+	errs = append(errs, unknownKeys("sandbox", rec, "allow", "env", "caches"))
 	for i, o := range rec.Objs("allow") {
 		errs = append(errs, unknownKeys(fmt.Sprintf("allow[%d]", i), o, "name", "env", "base", "bin", "path", "requires", "mode"))
 		var a spells.SandboxAllow
@@ -722,6 +722,18 @@ func decodeSandboxRecord(rec obj) (spells.Sandbox, error) {
 			errs = append(errs, fmt.Errorf("env.passthrough: %w", err))
 		}
 		sb.Env.Passthrough = pass
+	}
+	for i, o := range rec.Objs("caches") {
+		where := fmt.Sprintf("caches[%d]", i)
+		errs = append(errs, unknownKeys(where, o, "env", "stampsUse", "skip"))
+		c := spells.SandboxCache{StampsUse: o.Bool("stampsUse")}
+		c.Env, _ = o.Str("env")
+		skip, err := o.Strs("skip")
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s.skip: %w", where, err))
+		}
+		c.Skip = skip
+		sb.Caches = append(sb.Caches, c)
 	}
 	errs = append(errs, sandbox.CheckDeclaration(sb))
 	return sb, errors.Join(errs...)

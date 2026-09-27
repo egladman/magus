@@ -101,6 +101,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any) vm.Value { return ObjectStatusRun(v.(types.StatusRun)) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any) vm.Value { return ObjectSandbox(v.(spells.Sandbox)) }},
 	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any) vm.Value { return ObjectSandboxAllow(v.(spells.SandboxAllow)) }},
+	{Name: "SandboxCache", Zero: spells.SandboxCache{}, Encode: func(v any) vm.Value { return ObjectSandboxCache(v.(spells.SandboxCache)) }},
 	{Name: "SandboxEnv", Zero: spells.SandboxEnv{}, Encode: func(v any) vm.Value { return ObjectSandboxEnv(v.(spells.SandboxEnv)) }},
 	{Name: "SemverNext", Zero: types.SemverNext{}, Encode: func(v any) vm.Value { return ObjectSemverNext(v.(types.SemverNext)) }},
 	{Name: "SemverVersion", Zero: types.SemverVersion{}, Encode: func(v any) vm.Value { return ObjectSemverVersion(v.(types.SemverVersion)) }},

@@ -960,6 +960,114 @@ func TestGateCommitKeepsTheCallersCacheAndReportsTheExitStatus(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// goCachingDecl is goDecl with the caches the go spell declares, and a writable grant
+// that is not one.
+func goCachingDecl(goroot string) map[string]spells.Sandbox {
+	decl := goDecl(goroot)
+	sb := decl["go"]
+	sb.Allow = append(sb.Allow, spells.SandboxAllow{Env: "GOLANGCI_LINT_CACHE", Base: "userCache", Path: "golangci-lint", Mode: spells.SandboxAccessRW})
+	sb.Caches = []spells.SandboxCache{{Env: "GOCACHE", StampsUse: true}, {Env: "GOMODCACHE"}}
+	decl["go"] = sb
+	return decl
+}
+
+// A caller keeping the local tier outside the box gets the spells' caches kept beside
+// it: the gate's go builds into the directories the next box's restore and save reach.
+func TestGateCommitBuildsWithTheSpellsCachesUnderTheCallersCache(t *testing.T) {
+	root, commit := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	drv := gitDriver(t, root)
+	dir := t.TempDir()
+	env := HookEnv{Cache: dir, Spells: map[string]spells.Sandbox{"go": {
+		Allow:  []spells.SandboxAllow{{Env: "GOCACHE", Mode: spells.SandboxAccessRWX}, {Env: "GOMODCACHE", Mode: spells.SandboxAccessRW}},
+		Env:    spells.SandboxEnv{Passthrough: []string{"GOCACHE", "GOMODCACHE"}},
+		Caches: []spells.SandboxCache{{Env: "GOCACHE"}, {Env: "GOMODCACHE"}},
+	}}}
+	require.NoError(t, GateCommit(t.Context(), drv, root, t.TempDir(), commit,
+		Command{"sh", "-c", `test "$GOCACHE" = "$1/spell-caches/go/GOCACHE" && test "$GOMODCACHE" = "$1/spell-caches/go/GOMODCACHE" && mkdir -p "$GOCACHE/ab" "$GOMODCACHE" && echo built > "$GOCACHE/ab/entry" && echo fetched > "$GOMODCACHE/entry"`, "hook", dir}, env, nil, nil))
+	for path, want := range map[string]string{
+		filepath.Join(dir, "spell-caches", "go", "GOCACHE", "ab", "entry"): "built\n",
+		filepath.Join(dir, "spell-caches", "go", "GOMODCACHE", "entry"):    "fetched\n",
+	} {
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got))
+	}
+
+	env.Cache = "relative"
+	err := GateCommit(t.Context(), drv, root, t.TempDir(), commit, script(`true`), env, nil, nil)
+	require.ErrorContains(t, err, "the cache directory relative is not absolute")
+	_, _, failed := HookFailed(err)
+	assert.False(t, failed, "the caller's, not the change's")
+}
+
+// The cache directory moves the spells' declared caches, and only them, out of the box
+// beside the local tier, each in the mode its spell grants it: the build cache is run
+// from, the module cache is not, and nothing else of the directory is run from. A grant
+// the spell does not call a cache stays in the box. Without the directory, as validate
+// and apply run hooks, the box is as the queue gives every candidate.
+func TestTheCacheDirCarriesOnlyTheSpellsCachesOutOfTheBox(t *testing.T) {
+	runner := filesystem.ResolveRulePath(t.TempDir())
+	goroot := filepath.Join(runner, "go")
+	t.Setenv("GOCACHE", filepath.Join(runner, "gocache"))
+	t.Setenv("GOMODCACHE", filepath.Join(runner, "gomod"))
+	t.Setenv("MAGUS_TEST_GOROOT", goroot)
+	dir := filesystem.ResolveRulePath(t.TempDir())
+	gocache, gomodcache := filepath.Join(dir, "spell-caches", "go", "GOCACHE"), filepath.Join(dir, "spell-caches", "go", "GOMODCACHE")
+	home, tmp := newBox(t)
+	decl := goCachingDecl(goroot)
+
+	queued, err := HookEnv{Spells: decl}.of(home, tmp)
+	require.NoError(t, err)
+	assert.Equal(t, boxEnv(home, tmp, ""), queued, "the queue's box keeps every cache in it")
+	carried, err := HookEnv{Spells: decl, Cache: dir}.of(home, tmp)
+	require.NoError(t, err)
+	assert.Equal(t, append(boxEnv(home, tmp, dir), "GOCACHE="+gocache, "GOMODCACHE="+gomodcache), carried)
+
+	without := hookCommand{Dir: t.TempDir(), Spells: decl, Home: home, TempDir: tmp, Env: queued}
+	with := without
+	with.Cache, with.Env = dir, carried
+	before, err := without.policy()
+	require.NoError(t, err)
+	after, err := with.policy()
+	require.NoError(t, err)
+
+	added := slices.DeleteFunc(slices.Clone(after.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(before.FS.Rules, r) })
+	dropped := slices.DeleteFunc(slices.Clone(before.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(after.FS.Rules, r) })
+	assert.ElementsMatch(t, []filesystem.Rule{
+		{Path: dir, Read: true, Write: true, Create: true},
+		{Path: gocache, Read: true, Write: true, Exec: true, Create: true},
+		{Path: gomodcache, Read: true, Write: true, Create: true},
+	}, added)
+	// The user cache dir is per-OS (~/Library/Caches on darwin), so the paths are checked by base.
+	require.Len(t, dropped, 2, "the spell's cache grants follow GOCACHE and GOMODCACHE out of the box")
+	for _, r := range dropped {
+		assert.True(t, filesystem.Under(r.Path, filesystem.ResolveRulePath(home)), "%s is the box's", r.Path)
+		assert.Equal(t, filepath.Base(r.Path) == "go-build", r.Exec, r.Path)
+	}
+	assert.Empty(t, after.WritesOutside(with.Dir, home, tmp, dir))
+
+	ctx := t.Context()
+	assert.NoError(t, after.CheckExec(ctx, filepath.Join(gocache, "29", "29d7-d", "magus-utils")))
+	assert.NoError(t, after.CheckWrite(ctx, filepath.Join(gomodcache, "cache", "x")))
+	for _, path := range []string{filepath.Join(gomodcache, "cache", "x"), filepath.Join(dir, "cas", "x"), filepath.Join(dir, "spell-caches", "x")} {
+		assert.ErrorIs(t, after.CheckExec(ctx, path), filesystem.ErrDenied, path)
+	}
+	for _, path := range []string{filepath.Join(runner, "gocache", "ab", "x-d"), filepath.Join(runner, "gomod", "cache", "x")} {
+		assert.ErrorIs(t, after.CheckWrite(ctx, path), filesystem.ErrDenied, path)
+		assert.ErrorIs(t, after.CheckRead(ctx, path), filesystem.ErrDenied, path)
+	}
+}
+
+// A box points a variable at one directory, so two spells may not both call it theirs.
+func TestSpellCacheEnvRefusesACacheTwoSpellsDeclare(t *testing.T) {
+	grant := spells.Sandbox{Allow: []spells.SandboxAllow{{Env: "SHARED_CACHE", Mode: spells.SandboxAccessRW}}, Caches: []spells.SandboxCache{{Env: "SHARED_CACHE"}}}
+	_, err := spellCacheEnv("/c", map[string]spells.Sandbox{"a": grant, "b": grant})
+	require.ErrorContains(t, err, "spells a and b both declare SHARED_CACHE a cache")
+	env, err := spellCacheEnv("", map[string]spells.Sandbox{"a": grant, "b": grant})
+	require.NoError(t, err)
+	assert.Empty(t, env, "no directory keeps every cache in the box")
+}
+
 // Pass carries what a caller names to the gate's own magus, and nothing that would move
 // the box: a variable the box sets, one locating a cache it withholds, or the mode.
 func TestPassCarriesNamedVariablesAndRefusesWhatWouldMoveTheBox(t *testing.T) {

@@ -175,6 +175,12 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 	// validate runs the changes' code, so it takes no provider at all.
 	_, err := f.run(t, "", "validate", "--provider", "github", "--stdin", "--gate", "true", "--verdicts", "v")
 	require.ErrorContains(t, err, "flag provided but not defined: -provider")
+	// A candidate's caches, the local tier and the spells' alike, stay in its box:
+	// validate and apply carry none out of it.
+	for _, verb := range [][]string{{"validate", "--stdin", "--gate", "true", "--verdicts", "v"}, {"apply", "--provider", "github", "s"}} {
+		_, err = f.run(t, "", slices.Concat(verb[:1], []string{"--cache", "c"}, verb[1:])...)
+		require.ErrorContains(t, err, "flag provided but not defined: -cache", verb[0])
+	}
 	// A reproduce line is only shown, but never one validate would refuse to run.
 	_, err = f.run(t, "", "apply", "--provider", "github", "--base", "main", "--reproduce-gate", "curl x | sh", "s")
 	require.ErrorContains(t, err, "--reproduce-gate")
@@ -683,6 +689,7 @@ type workflowStep struct {
 	Name string            `yaml:"name"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
+	If   string            `yaml:"if"`
 	Env  map[string]string `yaml:"env"`
 	With map[string]string `yaml:"with"`
 }
@@ -702,16 +709,32 @@ func workflowJob(t *testing.T, path, job string) []workflowStep {
 	return wf.Jobs[job].Steps
 }
 
-// ciShardGate is the argv ci.yaml's shards hand magus, expressions dropped, and the step
-// running it.
-func ciShardGate(t *testing.T) ([]string, workflowStep) {
+// ciShardBoxes are the argvs, expressions dropped, and steps of every command ci.yaml's
+// shards run in a `queue gate` box, in step order.
+func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
 	t.Helper()
+	var argvs [][]string
+	var steps []workflowStep
 	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
-			return strings.Fields(regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")), s
+			argvs = append(argvs, strings.Fields(regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")))
+			steps = append(steps, s)
 		}
 	}
-	require.FailNow(t, "ci.yaml's shards run no `queue gate`")
+	return argvs, steps
+}
+
+// ciShardGate is the argv ci.yaml's shards gate with, expressions dropped, and the step
+// running it: the box that runs `magus run`.
+func ciShardGate(t *testing.T) ([]string, workflowStep) {
+	t.Helper()
+	argvs, steps := ciShardBoxes(t)
+	for i, argv := range argvs {
+		if sep := slices.Index(argv, "--"); sep > 0 && slices.Equal(argv[sep+1:min(sep+3, len(argv))], []string{"magus", "run"}) {
+			return argv, steps[i]
+		}
+	}
+	require.FailNow(t, "ci.yaml's shards gate with no `queue gate -- magus run`")
 	return nil, workflowStep{}
 }
 
@@ -776,10 +799,65 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	assert.NoError(t, err, "nothing ci.yaml passes moves the box")
 }
 
+// The gate builds with the spells' caches CI carries: restored before it and saved after
+// it in boxes of the gate's own --cache, which keeps them in one place for all three,
+// with commands and flags that exist for everything else. The save runs on main alone,
+// once the run is green, from the shard that runs the root module, so nothing a pull
+// request's code writes is ever signed.
+func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
+	flag := func(argv []string, name string) string {
+		i := slices.Index(argv, name)
+		require.Positive(t, i, "%v has no %s", argv, name)
+		return argv[i+1]
+	}
+	argvs, steps := ciShardBoxes(t)
+	at := map[string]int{}
+	for i, argv := range argvs {
+		sep := slices.Index(argv, "--")
+		require.Positive(t, sep, "%v", argv)
+		switch strings.Join(argv[sep+1:], " ") {
+		case "magus config cache import --remote":
+			at["restore"] = i
+		case "magus config cache export --remote":
+			at["save"] = i
+		}
+		if slices.Equal(argv[sep+1:sep+3], []string{"magus", "run"}) {
+			at["gate"] = i
+		}
+	}
+	require.Len(t, at, 3, "ci.yaml's shards restore and save the spells' caches around the gate, each in a box")
+	assert.Less(t, at["restore"], at["gate"])
+	assert.Less(t, at["gate"], at["save"])
+
+	gate, gateStep := argvs[at["gate"]], steps[at["gate"]]
+	cfg, err := config.LoadFile(filepath.Join("..", "..", "magus.yaml"), false)
+	require.NoError(t, err)
+	for _, name := range []string{"restore", "save"} {
+		argv, step := argvs[at[name]], steps[at[name]]
+		assert.Equal(t, flag(gate, "--cache"), flag(argv, "--cache"), "%s keeps the caches where the gate builds with them", name)
+		assert.Equal(t, slices.Contains(gate, "--sandbox=required"), slices.Contains(argv, "--sandbox=required"), name)
+		for _, v := range []string{"TMPDIR", "MISE_TRUSTED_CONFIG_PATHS"} {
+			assert.Equal(t, gateStep.Env[v], step.Env[v], "%s: %s differs from the gate's", name, v)
+		}
+		_, err := queue.HookEnv{Sandbox: cfg.Sandbox}.Pass(strings.Split(flag(argv, "--env"), ","))
+		assert.NoError(t, err, "nothing %s passes moves the box", name)
+	}
+
+	restore, save := steps[at["restore"]], steps[at["save"]]
+	assert.Empty(t, restore.If, "every shard restores: a bundle is verified before a byte of it is placed")
+	assert.NotContains(t, flag(argvs[at["restore"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "a restore signs nothing")
+	assert.True(t, strings.HasPrefix(save.If, "success() && "), save.If)
+	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.projects), ' . ')"} {
+		assert.Contains(t, save.If, cond)
+	}
+	assert.Contains(t, flag(argvs[at["save"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "the save signs what it stores")
+}
+
 // Moving a shard's gate into the queue's box must not move a cache key: main's shards
 // store the remote tier inside the box and a pull request or the queue replays it from
 // another box, a laptop from none. The box's home, temporary directory, XDG directories,
-// toolchain pin and sandbox mode, and the checkout's own location, key no step.
+// the spells' caches under --cache, toolchain pin and sandbox mode, and the checkout's
+// own location, key no step.
 func TestTheBoxKeysNoStep(t *testing.T) {
 	argv, _ := ciShardGate(t)
 	gate := argv[slices.Index(argv, "--")+1:]
@@ -823,6 +901,9 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		"XDG_DATA_HOME":   filepath.Join(home, ".local", "share"),
 		"TMPDIR":          filepath.Join(box, "tmp"),
 		"GOTOOLCHAIN":     "local",
+		// Where --cache keeps the go spell's caches, outside the box itself.
+		"GOCACHE":    filepath.Join(box, "cache", "spell-caches", "go", "GOCACHE"),
+		"GOMODCACHE": filepath.Join(box, "cache", "spell-caches", "go", "GOMODCACHE"),
 		// required where the kernel has landlock; best-effort keys the same wherever it runs.
 		"MAGUS_SANDBOX": string(magustypes.SandboxModeBestEffort),
 	} {

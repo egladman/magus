@@ -6,8 +6,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -386,7 +389,61 @@ func CheckDeclaration(sb spells.Sandbox) error {
 	if _, err := env.Parse(sb.Env.Passthrough); err != nil {
 		errs = append(errs, fmt.Errorf("env.passthrough: %w", err))
 	}
+	seen := map[string]bool{}
+	for i, c := range sb.Caches {
+		if err := checkCache(sb, c); err != nil {
+			errs = append(errs, fmt.Errorf("caches[%d]: %w", i, err))
+		}
+		if seen[c.Env] {
+			errs = append(errs, fmt.Errorf("caches[%d]: %s is declared twice", i, c.Env))
+		}
+		seen[c.Env] = true
+	}
 	return errors.Join(errs...)
+}
+
+// checkCache refuses a cache that names no writable grant of sb, since a cache magus
+// carries or a box relocates is one the tool writes, and a skip glob that could reach
+// outside it.
+func checkCache(sb spells.Sandbox, c spells.SandboxCache) error {
+	if !envName(c.Env) {
+		return fmt.Errorf("env %q is not a variable name", c.Env)
+	}
+	if !slices.ContainsFunc(sb.Allow, func(a spells.SandboxAllow) bool { return a.Env == c.Env && writable(a.Mode) }) {
+		return fmt.Errorf("no writable allow entry has env %s", c.Env)
+	}
+	for _, g := range c.Skip {
+		if !doublestar.ValidatePattern(g) || strings.HasPrefix(g, "/") || slices.Contains(strings.Split(g, "/"), "..") {
+			return fmt.Errorf("skip %q is not a slash glob relative to the cache", g)
+		}
+	}
+	return nil
+}
+
+func writable(mode spells.SandboxAccess) bool {
+	return mode == spells.SandboxAccessRW || mode == spells.SandboxAccessRWX
+}
+
+// CacheDirs returns where each cache sb declares lives on a host with environ and home,
+// keyed by its Env: the first writable grant with that Env that resolves, filtered as a
+// policy filters it. A cache that resolves nowhere is left out.
+func CacheDirs(sb spells.Sandbox, environ []string, home string) map[string]string {
+	h := hostDirs{vars: envMap(environ), home: home, goos: runtime.GOOS}
+	dirs := make(map[string]string, len(sb.Caches))
+	for _, c := range sb.Caches {
+		for _, a := range sb.Allow {
+			if a.Env != c.Env || !writable(a.Mode) {
+				continue
+			}
+			path, literal := h.locate(a)
+			if path == "" || (!literal && (!filepath.IsAbs(path) || h.holdsHome(path))) {
+				continue
+			}
+			dirs[c.Env] = path
+			break
+		}
+	}
+	return dirs
 }
 
 // checkAllow refuses an entry no host could resolve the way it reads.
