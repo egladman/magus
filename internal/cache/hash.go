@@ -523,14 +523,21 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// undo the pruning's whole purpose: a project declaring **/*.js would start hashing
 	// every file in node_modules. An exact path cannot expand that way: it is one file,
 	// named deliberately.
-	var exact []string
+	//
+	// A pattern whose literal prefix NAMES a pruned dir is the same deliberate choice
+	// (internal/spell/gen/types/*.buzz), so it walks that dir alone and matches only
+	// itself; **/*.js still never reaches node_modules.
+	var exact, named []string
 	patterns := normalized[:0:0]
 	for _, g := range normalized {
-		if strings.ContainsAny(g, "*?[{") {
+		switch {
+		case !strings.ContainsAny(g, "*?[{"):
+			exact = append(exact, g)
+		case namesPrunedDir(g, spellDirs):
+			named = append(named, g)
+		default:
 			patterns = append(patterns, g)
-			continue
 		}
-		exact = append(exact, g)
 	}
 	pats := compileGlobs(patterns)
 
@@ -582,13 +589,15 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 		}
 	}
 
-	walk := func(path string, d fs.DirEntry, werr error) error {
+	// walkEntry matches one entry of a walk from start against pats. start itself is
+	// never pruned: walkableBase has already admitted it.
+	walkEntry := func(start, path string, d fs.DirEntry, werr error, pats []compiledGlob) error {
 		if werr != nil {
 			return werr
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if path != root && isIgnoreDir(name, spellDirs) {
+			if path != start && isIgnoreDir(name, spellDirs) {
 				return fs.SkipDir
 			}
 			if len(prunePrefixes) > 0 && path != root {
@@ -622,19 +631,37 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 		}
 		return nil
 	}
+	walk := func(start string, pats []compiledGlob) error {
+		err := filepath.WalkDir(start, func(path string, d fs.DirEntry, werr error) error {
+			return walkEntry(start, path, d, werr, pats)
+		})
+		if err != nil {
+			return fmt.Errorf("expandSources walk: %w", err)
+		}
+		return nil
+	}
 	// Only a pattern can match during the walk, and each pattern can match only under
 	// its static prefix: console/**/*.ts has no reason to list the rest of the
 	// workspace, and doing so was most of a warm replay's CPU.
 	for _, base := range walkBases(patterns) {
 		start := root
 		if base != "" {
-			if !walkableBase(root, base, spellDirs, prunePrefixes) {
+			if !walkableBase(root, base, spellDirs, prunePrefixes, false) {
 				continue
 			}
 			start = filepath.Join(root, filepath.FromSlash(base))
 		}
-		if err := filepath.WalkDir(start, walk); err != nil {
-			return nil, fmt.Errorf("expandSources walk: %w", err)
+		if err := walk(start, pats); err != nil {
+			return nil, err
+		}
+	}
+	for _, g := range named {
+		base := staticDirPrefix(g)
+		if !walkableBase(root, base, spellDirs, prunePrefixes, true) {
+			continue
+		}
+		if err := walk(filepath.Join(root, filepath.FromSlash(base)), compileGlobs([]string{g})); err != nil {
+			return nil, err
 		}
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
@@ -689,11 +716,27 @@ func walkBases(patterns []string) []string {
 	return kept
 }
 
+// namesPrunedDir reports whether glob's literal directory prefix passes through a
+// directory the source walk prunes by name, which only a deliberate declaration does.
+func namesPrunedDir(glob string, spellDirs []string) bool {
+	base := staticDirPrefix(glob)
+	if base == "" {
+		return false
+	}
+	for name := range strings.SplitSeq(base, "/") {
+		if isIgnoreDir(name, spellDirs) {
+			return true
+		}
+	}
+	return false
+}
+
 // walkableBase reports whether the full walk from root would descend into base, so a
 // walk starting there sees exactly what the full walk would: every component a real
 // directory (the full walk follows no symlink), none an ignore dir, and base not under
-// an output prefix.
-func walkableBase(root, base string, spellDirs, prunePrefixes []string) bool {
+// an output prefix. named admits ignore dirs among the components, for a pattern that
+// names one in its literal prefix.
+func walkableBase(root, base string, spellDirs, prunePrefixes []string, named bool) bool {
 	for _, pre := range prunePrefixes {
 		if base == pre || strings.HasPrefix(base, pre+"/") {
 			return false
@@ -701,7 +744,7 @@ func walkableBase(root, base string, spellDirs, prunePrefixes []string) bool {
 	}
 	dir := root
 	for name := range strings.SplitSeq(base, "/") {
-		if isIgnoreDir(name, spellDirs) {
+		if !named && isIgnoreDir(name, spellDirs) {
 			return false
 		}
 		dir = filepath.Join(dir, name)

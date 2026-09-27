@@ -768,8 +768,9 @@ func FuzzHashStep(f *testing.F) {
 // content-generate hit this on proto/gen/descriptor.binpb.
 //
 // A wildcard-free declaration names one file, so it is resolved by stat instead. The
-// second half is the half that must not regress: a PATTERN still gets no such licence,
-// or a project declaring **/*.js would start hashing all of node_modules.
+// second half is the half that must not regress: a pattern that does not name the
+// pruned dir gets no such licence, or a project declaring **/*.js would start hashing
+// all of node_modules.
 func TestExpandSourcesResolvesExactPathInsidePrunedDir(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
@@ -785,10 +786,45 @@ func TestExpandSourcesResolvesExactPathInsidePrunedDir(t *testing.T) {
 	assert.Equal(t, []string{"gen/descriptor.binpb"}, rels,
 		"an exact path names one file deliberately; a pruned dir must not swallow it")
 
-	// A glob reaching into the same dir stays pruned.
-	out, err = expandSources([]string{"gen/*.binpb"}, root, nil, nil)
+	// A glob that reaches the same dir without naming it stays pruned.
+	out, err = expandSources([]string{"**/*.binpb"}, root, nil, nil)
 	require.NoError(t, err)
-	assert.Empty(t, out, "a pattern must not reach into a pruned dir")
+	assert.Empty(t, out, "a pattern must not reach into a pruned dir it does not name")
+}
+
+// TestExpandSourcesWalksAPrunedDirAPatternNames pins the pattern half of the exact-path
+// rule: internal/spell/gen/types/*.buzz names gen/ as deliberately as an exact path does,
+// and pruning it hashed nothing for a declared read, so neither the key nor MGS4008 saw
+// the generator that rewrites those files. The named walk matches only its own pattern
+// and still prunes an ignore dir nested below the prefix.
+func TestExpandSourcesWalksAPrunedDirAPatternNames(t *testing.T) {
+	root := t.TempDir()
+	for _, f := range []string{
+		"internal/spell/gen/types/a.buzz",
+		"internal/spell/gen/types/b.buzz",
+		"internal/spell/gen/types/node_modules/c.buzz",
+		"internal/spell/gen/x.go",
+		"internal/spell/y.go",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, f)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, f), []byte("x"), 0o644))
+	}
+
+	out, err := expandSources([]string{"**/*.go", "internal/spell/gen/types/**/*.buzz"}, root, nil, nil)
+	require.NoError(t, err)
+	var rels []string
+	for _, ra := range out {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{
+		"internal/spell/gen/types/a.buzz",
+		"internal/spell/gen/types/b.buzz",
+		"internal/spell/y.go",
+	}, rels, "**/*.go stays out of gen/; the named pattern reaches in and prunes below itself")
+
+	out, err = expandSources([]string{"internal/spell/gen/types/*.buzz"}, root, []string{"internal/spell/gen/types/*.buzz"}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, out, "a target's own outputs are never its inputs")
 }
 
 // TestExpandSourcesDeduplicatesExactAndPattern covers the overlap the exact-path path
@@ -822,20 +858,21 @@ func TestWalkBases(t *testing.T) {
 
 // TestExpandSourcesPrefixWalkMatchesTheFullWalk pins that walking only the patterns'
 // static prefixes finds exactly what a walk of the whole root would: a prefix that is
-// missing, a symlink, an ignore dir or an output is skipped, never an error and never a
-// way past the full walk's pruning.
+// missing, a symlink or an output is skipped, never an error and never a way past the
+// full walk's pruning. A prefix that names an ignore dir is the named-dir rule, pinned
+// by TestExpandSourcesWalksAPrunedDirAPatternNames.
 func TestExpandSourcesPrefixWalkMatchesTheFullWalk(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation is restricted on Windows")
 	}
 	root := t.TempDir()
-	for _, f := range []string{"web/src/a.ts", "web/b.ts", "web/dist/c.ts", "other/d.ts", "real/e.ts", "vendor/x/f.ts"} {
+	for _, f := range []string{"web/src/a.ts", "web/b.ts", "web/dist/c.ts", "web/vendor/g.ts", "other/d.ts", "real/e.ts"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(f)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, f), []byte(f), 0o644))
 	}
 	require.NoError(t, os.Symlink("real", filepath.Join(root, "link")))
 
-	out, err := expandSources([]string{"web/**/*.ts", "web/src/*.ts", "link/*.ts", "missing/*.ts", "vendor/x/*.ts"},
+	out, err := expandSources([]string{"web/**/*.ts", "web/src/*.ts", "link/*.ts", "missing/*.ts"},
 		root, []string{"web/dist/**"}, nil)
 	require.NoError(t, err)
 	var rels []string
