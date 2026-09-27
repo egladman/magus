@@ -57,10 +57,19 @@ stdout 'deny \[[a-z-]+\]: Restoring a path from MERGE_HEAD overwrites it with ON
 stdout 'magus vcs resolve'
 stdout 'git checkout --ours'
 
+# A stage-everything form the workspace can restate is served as the command to run
+# instead, with the paths it named carried over.
 stdin add-all.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: Stage through the workspace'
-stdout 'magus vcs add'
+stdout 'deny \[stage-all\]: `git add` of everything sweeps outputs'
+stdout '^next:$'
+stdout '^  magus vcs add$'
+
+# `git add .` stages the working directory's subtree, which no vcs add spelling equals, so
+# it gets the prose and both deliberate forms instead.
+stdin add-dot.txt
+! exec magus shell
+stdout 'deny \[stage-all\]: Stage through the workspace'
 stdout 'magus vcs add --dry-run'
 stdout 'git add -- <paths>'
 
@@ -95,7 +104,7 @@ stdout 'jj workspace forget drops that workspace'
 # refusal is lost to whichever reminder the first command earned.
 stdin restore-then-add-all.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: Stage through the workspace'
+stdout 'deny \[stage-all\]'
 
 # A line that does not parse falls back to the regexes, where an over-eager deny is the
 # safe direction: these rules guard work that cannot be recovered.
@@ -206,6 +215,8 @@ git clean -fd
 git checkout MERGE_HEAD -- magusfile.buzz
 -- add-all.txt --
 git add -A
+-- add-dot.txt --
+git add .
 -- worktree-remove.txt --
 git worktree remove ../wt
 -- hg-purge.txt --
