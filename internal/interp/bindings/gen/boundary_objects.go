@@ -1907,6 +1907,18 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 	return out
 }
 
+func ObjectVCSInvocation(v types.VCSInvocation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("tool", vm.StrValue(v.Tool))
+	out.MapSet("subcommand", vm.StrValue(v.Subcommand))
+	itemsArgs := make([]vm.Value, len(v.Args))
+	for indexArgs := range v.Args {
+		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
+	}
+	out.MapSet("args", vm.ListValue(itemsArgs))
+	return out
+}
+
 func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("program", vm.StrValue(v.Program))
@@ -1917,6 +1929,11 @@ func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
 	}
 	out.MapSet("args", vm.ListValue(itemsArgs))
 	out.MapSet("repeats", vm.BoolValue(v.Repeats))
+	optVCS := vm.Null
+	if v.VCS != nil {
+		optVCS = ObjectVCSInvocation((*v.VCS))
+	}
+	out.MapSet("vcs", optVCS)
 	return out
 }
 
@@ -1928,6 +1945,7 @@ func ObjectCheckoutState(v types.CheckoutState) vm.Value {
 		itemsRemoteBranches[indexRemoteBranches] = vm.StrValue(v.RemoteBranches[indexRemoteBranches])
 	}
 	out.MapSet("remoteBranches", vm.ListValue(itemsRemoteBranches))
+	out.MapSet("base", vm.StrValue(v.Base))
 	return out
 }
 

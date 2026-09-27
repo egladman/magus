@@ -1,0 +1,106 @@
+// The code-comments rule, a write rule: the first write of a session that adds code comments
+// is advised to audit what it wrote against the comment rule. The guard answers before the
+// write lands, so the advice arrives with the write rather than after it.
+namespace agentpolicy\comments;
+
+import "std";
+import "magus";
+import "./tools/policy/helpers" as helpers;
+
+final commentAdvice = "This write adds code comments. Audit each one: keep only the comments that say "
+    + "what the code cannot, which is why it is written this way, a constraint or invariant it relies "
+    + "on, a workaround and what it works around, or a public symbol's contract. Delete the ones that "
+    + "narrate the code, restate a name or the next line, or record the change's history, which "
+    + "belongs in the commit message. This is said once per session.";
+
+// A line that opens a comment in the common languages. `#!` is a shebang, not a comment.
+final commentLine = $"(?m)^[ \t]*(#([^!]|$)|//|/\*|\* |<!--|-- |;;)";
+// A comment after code on the same line.
+final trailingComment = $"\S[ \t]+(//|#)[ \t]+\S";
+
+// The formats whose `#`, `--` or `//` lines are content rather than comments.
+final proseExtensions = [".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".json", ".csv", ".tsv",
+    ".log", ".lock", ".svg", ".diff", ".patch"];
+
+fun extensionOf(path: str) > str {
+    final slash = path.split("/");
+    final name = slash[slash.len() - 1];
+    final parts = name.split(".");
+    if (parts.len() < 2) {
+        return "";
+    }
+    return "." + parts[parts.len() - 1].lower();
+}
+
+// addedLines is the text a write adds: the lines of after that before does not hold.
+export fun addedLines(before: str, after: str) > str {
+    final had = mut {<str: bool>};
+    foreach (line in before.split("\n")) {
+        had[line] = true;
+    }
+    final added = mut [<str>];
+    foreach (line in after.split("\n")) {
+        if (!(had[line] ?? false)) {
+            added.append(line);
+        }
+    }
+    return added.join("\n");
+}
+
+// hasComment reports whether text holds a comment line or a trailing comment.
+export fun hasComment(text: str) > bool {
+    return commentLine.match(text) != null or trailingComment.match(text) != null;
+}
+
+// decideComments advises once per session when a write to a code file adds comment lines.
+export fun decideComments(path: str, added: str, once: fun (key: str) > bool) > GuardVerdict {
+    if (added == "" or proseExtensions.indexOf(extensionOf(path)) != null or !hasComment(added)) {
+        return magus\guard.allow();
+    }
+    if (once("code-comments")) {
+        return magus\guard.advise(commentAdvice);
+    }
+    return magus\guard.allow();
+}
+
+test "a write that adds a comment to code is advised once per session" {
+    final once = helpers\counter();
+    final v = decideComments("/w/internal/cache/key.go", added: "// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once);
+    std\assert(v.decision == "advise", message: "the first");
+    std\assert(v.reason.indexOf("keep only the comments that say what the code cannot") != null, message: "states the rule");
+    std\assert(v.reason.indexOf("Skill(") == null, message: "sends the reader to no skill");
+    std\assert(decideComments("/w/a.go", added: "// again", once: once).decision == "allow", message: "only once");
+}
+
+test "every comment form counts" {
+    foreach (path, added in {
+        "a.go": "\t// a note",
+        "a.py": "# a note",
+        "a.sh": "#\necho",
+        "a.c": "/* a note */",
+        "b.c": " * a note",
+        "a.html": "<!-- a note -->",
+        "a.sql": "-- a note",
+        "a.el": ";; a note",
+        "b.go": "x := 1 // a note",
+        "b.py": "x = 1  # a note",
+    }) {
+        std\assert(decideComments(path, added: added, once: helpers\counter()).decision == "advise", message: path);
+    }
+}
+
+test "prose, a shebang, code alone and an unchanged comment stay silent" {
+    foreach (path, added in {
+        "README.md": "# A heading\n// not code",
+        "notes.TXT": "# a line",
+        "data.json": "\{\"a\": \"// b\"}",
+        "run.sh": "#!/bin/sh\necho hi",
+        "a.go": "x := a/b",
+        "b.go": "",
+    }) {
+        std\assert(decideComments(path, added: added, once: helpers\counter()).decision == "allow", message: path);
+    }
+    final before = "// keyOf hashes the inputs.\nfunc keyOf() \{}\n";
+    final after = "// keyOf hashes the inputs.\nfunc keyOf() int \{ return 1 }\n";
+    std\assert(decideComments("a.go", added: addedLines(before, after: after), once: helpers\counter()).decision == "allow", message: "the comment was already there");
+}

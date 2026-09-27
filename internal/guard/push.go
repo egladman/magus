@@ -310,33 +310,69 @@ type pushSite struct {
 // without running anything: a variable, a substitution, a cd whose success decides what
 // runs next, or a relocation inside a wrapper's script.
 func locatePush(command string, d Dialect, cwd string) (pushSite, bool) {
-	calls, ok := locateCalls(command, d, cwd, isPush, true)
+	site, _, located := locateFirst(command, d, cwd, isPush)
+	return site, located
+}
+
+// locateCheckout is where the checkout a command rule is handed stands: the first push's,
+// or on a line that pushes nothing, the first commit's. A push that is found but cannot be
+// located stays unknown rather than falling back, since the push rules read that checkout.
+func locateCheckout(command string, d Dialect, cwd string) (pushSite, bool) {
+	site, found, located := locateFirst(command, d, cwd, isPush)
+	if found {
+		return site, located
+	}
+	site, _, located = locateFirst(command, d, cwd, recordsCommit)
+	return pushSite{dir: site.dir, relocated: site.relocated}, located
+}
+
+// locateFirst locates the first invocation on command that match accepts. found reports
+// one was seen, located that its directory is known without running anything.
+func locateFirst(command string, d Dialect, cwd string, match func(hint.Invocation) bool) (site pushSite, found, located bool) {
+	calls, ok := locateCalls(command, d, cwd, match, true)
 	if !ok || len(calls) == 0 {
-		return pushSite{}, false
+		return pushSite{}, false, false
 	}
 	c := calls[0]
-	var site pushSite
 	switch {
 	case c.unfollowed:
-		return pushSite{}, false
+		return pushSite{}, true, false
 	case c.args == nil:
 		if !c.at.known || vcsRelocates(c.inv.Name, c.inv.Args) {
-			return pushSite{}, false
+			return pushSite{}, true, false
 		}
 		site = pushSite{dir: c.at.dir, relocated: c.at.moved}
 	default:
 		if site, ok = pushFrom(c.inv.Name, c.args, c.at); !ok {
-			return pushSite{}, false
+			return pushSite{}, true, false
 		}
 	}
 	if site.relocated && !filepath.IsAbs(site.dir) {
 		abs, err := filepath.Abs(site.dir)
 		if err != nil {
-			return pushSite{}, false
+			return pushSite{}, true, false
 		}
 		site.dir = abs
 	}
-	return site, true
+	return site, true, true
+}
+
+// recordsCommit reports a command that records a commit message: git, hg and sl commit
+// (hg and sl also spell it ci), and jj commit and describe (describe also spelled desc).
+func recordsCommit(c hint.Invocation) bool {
+	switch c.Name {
+	case "git", "hg", "sl", "jj":
+	default:
+		return false
+	}
+	sub, _ := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		return sub == "commit"
+	case "jj":
+		return sub == "commit" || sub == "describe" || sub == "desc"
+	}
+	return sub == "commit" || sub == "ci"
 }
 
 // shellDir is the working directory a shell line has reached at one point in it.

@@ -63,8 +63,8 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	if deps.CheckoutState != nil {
-		if push, ok := locatePush(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
-			req.Checkout = deps.CheckoutState(ctx, push.dir)
+		if site, ok := locateCheckout(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
+			req.Checkout = deps.CheckoutState(ctx, site.dir)
 		}
 	}
 	bind := func(rule workspace.CommandRule) ruleCall {
@@ -166,6 +166,7 @@ func commandInvocations(command string, d Dialect, dir string) []types.CommandIn
 						Args:    inv.Args,
 						Repeats: repeats,
 						Path:    programPath(n.Args, words, inv, dir, moved),
+						VCS:     vcsInvocation(inv),
 					})
 					if inv.Name == "cd" || inv.Name == "pushd" || inv.Name == "popd" {
 						moved = true
@@ -177,6 +178,16 @@ func commandInvocations(command string, d Dialect, dir string) []types.CommandIn
 	}
 	visit(f, false)
 	return out
+}
+
+// vcsInvocation is inv split at its subcommand by the parser every built-in VCS rule reads,
+// nil when inv is not git, hg, sl or jj.
+func vcsInvocation(inv hint.Invocation) *types.VCSInvocation {
+	if _, other := vcsGlobals[inv.Name]; !other && inv.Name != "git" {
+		return nil
+	}
+	sub, rest := vcsSubcommand(inv)
+	return &types.VCSInvocation{Tool: inv.Name, Subcommand: sub, Args: slices.Clone(rest)}
 }
 
 // programPath is the file inv runs when the line names it by a path, resolved against dir,

@@ -13,6 +13,16 @@ export object Program {
     repeats: bool,
     // path is the file the line names the program by, "" when found on PATH or unknown.
     path: str = "",
+    // vcs is the host's parse of a git, hg, sl or jj command, null for any other program.
+    vcs: VcsCall? = null,
+}
+
+// VcsCall is a version-control command as the guard splits it: the tool, its subcommand,
+// and the arguments after it with the tool's global options taken out.
+export object VcsCall {
+    tool: str,
+    subcommand: str,
+    args: [str],
 }
 
 // The magus flags that take the next word as their value.
@@ -63,6 +73,70 @@ export fun flagValue(args: [str], long: str, short: str) > str? {
         }
     }
     return null;
+}
+
+final heredocOpener = $"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?";
+
+// substitutedHeredocs are the bodies of the heredocs line feeds to a command substitution
+// (`"$(cat <<'EOF'`), in order. The parser renders such an argument empty, so these are the
+// only way to read a message written that way.
+export fun substitutedHeredocs(line: str) > [str] {
+    final bodies = mut [<str>];
+    final lines = line.split("\n");
+    var i = 0;
+    while (i < lines.len()) {
+        final open = heredocOpener.match(lines[i]);
+        final at = lines[i].indexOf("<<");
+        if (open == null or at == null or lines[i].sub(0, len: at!).indexOf("$(") == null) {
+            i = i + 1;
+            continue;
+        }
+        final body = mut [<str>];
+        var j = i + 1;
+        while (j < lines.len() and lines[j].trim() != open![1]) {
+            body.append(lines[j]);
+            j = j + 1;
+        }
+        bodies.append(body.join("\n"));
+        i = j + 1;
+    }
+    return bodies;
+}
+
+// fillSlots puts texts, in order, into the arguments slots names: slots[i] lists the
+// indices of programs[i]'s arguments whose value the parser could not render. For a
+// version-control command they index vcs.args, the arguments its rules read; for any
+// other program, args.
+export fun fillSlots(programs: [Program], slots: [[int]], texts: [str]) > [Program] {
+    final filled = mut [<Program>];
+    var next = 0;
+    foreach (i, p in programs) {
+        if (slots[i].len() == 0 or next >= texts.len()) {
+            filled.append(p);
+            continue;
+        }
+        var source = p.args;
+        if (p.vcs != null) {
+            source = p.vcs!.args;
+        }
+        final args = mut [<str>];
+        foreach (arg in source) {
+            args.append(arg);
+        }
+        foreach (slot in slots[i]) {
+            if (next < texts.len()) {
+                args[slot] = texts[next];
+                next = next + 1;
+            }
+        }
+        if (p.vcs != null) {
+            filled.append(Program{ name = p.name, args = p.args, repeats = p.repeats, path = p.path,
+                vcs = VcsCall{ tool = p.vcs!.tool, subcommand = p.vcs!.subcommand, args = args } });
+        } else {
+            filled.append(Program{ name = p.name, args = args, repeats = p.repeats, path = p.path });
+        }
+    }
+    return filled;
 }
 
 // GoCall is a go command's -C directory, "" for none, and its argv from the subcommand on
@@ -123,6 +197,18 @@ export fun request(argvs: [[str]]) > [Program] {
             name = fs\basename(name);
         }
         programs.append(Program{ name = name, args = words.sub(1), repeats = repeats, path = file });
+    }
+    return programs;
+}
+
+// vcsRequest is the version-control commands a line runs, each spelled as its tool, its
+// subcommand and the arguments the guard leaves after it.
+export fun vcsRequest(calls: [[str]]) > [Program] {
+    final programs = mut [<Program>];
+    foreach (call in calls) {
+        final rest = call.sub(2);
+        programs.append(Program{ name = call[0], args = call.sub(1), repeats = false,
+            vcs = VcsCall{ tool = call[0], subcommand = call[1], args = rest } });
     }
     return programs;
 }

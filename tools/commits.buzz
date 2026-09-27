@@ -100,6 +100,30 @@ export fun problem(subject: str) > str {
     return "";
 }
 
+// branchOf is the branch a base ref names: vcs\base is remote-qualified (`origin/main`),
+// a checkout's branch is bare (`main`).
+export fun branchOf(base: str) > str {
+    final slash = base.indexOf("/");
+    if (slash != null) { return base.sub(slash + 1); }
+    return base;
+}
+
+// onBase reports whether branch is the one base names, where a commit lands as written.
+export fun onBase(branch: str, base: str) > bool {
+    return branch != "" and branch == branchOf(base);
+}
+
+// baseProblem is problem for a commit made on the base branch, "" for a subject git
+// writes itself or an autosquash rebase rewrites away, and for an empty one, which git
+// refuses on its own.
+export fun baseProblem(subject: str) > str {
+    if (subject == "") { return ""; }
+    foreach (prefix in ["Merge ", "fixup! ", "squash! ", "amend! "]) {
+        if (subject.startsWith(prefix)) { return ""; }
+    }
+    return problem(subject);
+}
+
 test "a conventional subject in the repository's style passes" {
     std\assert(problem("feat: add a commit-msg git hook") == "", message: "bare type");
     std\assert(problem("fix(cache): keep the key stable across runs") == "", message: "scoped");
@@ -128,4 +152,19 @@ test "a subject outside the form names what is wrong" {
     std\assert(problem("feat: add a hook.") == "description ends with a period", message: "trailing period");
     std\assert(problem("feat:  add").startsWith("empty description"), message: "double space");
     std\assert(problem("feat: " + "x".repeat(100)).endsWith("over the 100 a subject may run"), message: "too long");
+}
+
+test "the base branch is read off a remote-qualified base ref" {
+    std\assert(branchOf("origin/main") == "main", message: "remote-qualified");
+    std\assert(branchOf("main") == "main", message: "bare");
+    std\assert(onBase("main", base: "origin/main"), message: "on it");
+    std\assert(!onBase("trim-key", base: "origin/main"), message: "another branch");
+    std\assert(!onBase("", base: ""), message: "a detached checkout with no base is on neither");
+}
+
+test "a subject git writes itself is exempt on the base branch" {
+    foreach (subject in ["Merge branch 'x'", "fixup! feat: add a hook", "squash! x", "amend! x", ""]) {
+        std\assert(baseProblem(subject) == "", message: subject);
+    }
+    std\assert(baseProblem("add a hook") == problem("add a hook"), message: "anything else answers to problem");
 }
