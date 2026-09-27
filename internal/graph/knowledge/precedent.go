@@ -61,14 +61,13 @@ type precedentMiner struct {
 // precedentPackages places each workspace package: its directory and the top-level directory
 // (its layer) that holds it.
 type precedentPackages struct {
+	// deps leaves out what generated files import: a generated package is imported like any
+	// other, but what it imports is its generator's decision, even beside hand-written files.
 	deps  packageGraph
 	dir   map[string]string
 	layer map[string]string
 	// ns is each directory's first namespace, the node a dep case names.
 	ns map[string]string
-	// authored holds the packages with a hand-written source. A wholly generated package is
-	// imported like any other, but what it imports is its generator's decision.
-	authored map[string]bool
 }
 
 // packages takes each package's layer from the first segment of its directory, and "." for
@@ -76,8 +75,8 @@ type precedentPackages struct {
 // projects may have no node of its own. No directory name is special.
 func (m precedentMiner) packages() precedentPackages {
 	pk := precedentPackages{
-		deps: m.g.packageDeps(), dir: map[string]string{}, layer: map[string]string{},
-		ns: map[string]string{}, authored: map[string]bool{},
+		deps: m.g.packageDepsExcept(m.x.generated), dir: map[string]string{}, layer: map[string]string{},
+		ns: map[string]string{},
 	}
 	for id, nss := range m.fileNS {
 		n := m.g.nodes[id]
@@ -88,9 +87,6 @@ func (m precedentMiner) packages() precedentPackages {
 		for _, ns := range nss {
 			if cur, ok := pk.dir[ns]; !ok || dir < cur {
 				pk.dir[ns] = dir
-			}
-			if !m.x.generated(n.Source) {
-				pk.authored[ns] = true
 			}
 		}
 	}
@@ -117,7 +113,7 @@ func (m precedentMiner) depDirection(pk precedentPackages) []types.Precedent {
 	edges := map[[2]string]map[dirEdge]bool{}
 	for from, tos := range pk.deps {
 		lf := pk.layer[from]
-		if lf == "" || !pk.authored[from] {
+		if lf == "" {
 			continue
 		}
 		for to := range tos {
@@ -174,7 +170,7 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 	// namespaces per directory, and counting each would add one import per importing file.
 	imports := map[string]map[string]map[string]bool{}
 	for from, tos := range pk.deps {
-		if pk.layer[from] == "" || !pk.authored[from] {
+		if pk.layer[from] == "" {
 			continue
 		}
 		for to := range tos {

@@ -3,6 +3,7 @@ package knowledge
 import (
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/types"
 )
@@ -21,8 +22,16 @@ type packageGraph map[string]map[string]bool
 // Test files are left out. A test may import what its package cannot (Go's external test
 // packages exist for exactly that), so its imports do not constrain where non-test code
 // can move.
-func (g *Graph) packageDeps() packageGraph {
+func (g *Graph) packageDeps() packageGraph { return g.packageDepsExcept(nil) }
+
+// packageDepsExcept is packageDeps without the imports and calls made from the files skip
+// reports, given a workspace-relative path. A nil skip leaves none out.
+func (g *Graph) packageDepsExcept(skip func(file string) bool) packageGraph {
 	g.ensureAdj()
+	skipped := func(source string) bool {
+		file, _, _ := strings.Cut(source, ":")
+		return isTestSource(file) || skip != nil && skip(file)
+	}
 	deps := packageGraph{}
 	add := func(from, to string) {
 		if from == "" || to == "" || from == to {
@@ -37,7 +46,7 @@ func (g *Graph) packageDeps() packageGraph {
 	for id, n := range g.nodes {
 		switch n.Kind {
 		case types.KindFile:
-			if isTestSource(n.Source) {
+			if skipped(n.Source) {
 				continue
 			}
 			for _, e := range g.out[id] {
@@ -49,7 +58,7 @@ func (g *Graph) packageDeps() packageGraph {
 				}
 			}
 		case types.KindSymbol:
-			if isTestSource(n.Source) {
+			if skipped(n.Source) {
 				continue
 			}
 			for _, e := range g.out[id] {

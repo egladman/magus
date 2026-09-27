@@ -234,6 +234,31 @@ func TestPrecedentsTakeALayerWhoseTopDirectoryHoldsOnlyNestedProjects(t *testing
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepDirection, layers))
 }
 
+func TestPrecedentsNeverCountAGeneratedFileInAMixedPackage(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/a", 1)
+	f.pkg("cmd/app", 1)
+	f.file("internal/a/zz_generated.go", precedentNamespace("internal/a", "go"), "a", "go")
+	f.imports("cmd/app", "internal/a")
+	f.edge("file:internal/a/zz_generated.go", precedentNamespace("cmd/app", "go"), types.RelationReferences)
+
+	cmdInternal := types.PrecedentScope{Layers: []string{"cmd", "internal"}}
+	internal := types.PrecedentScope{Layers: []string{"internal"}}
+	assert.Equal(t, []types.Precedent{
+		{
+			Family: types.PrecedentDepDirection, Scope: cmdInternal, Key: types.PrecedentKey{From: "cmd", To: "internal"},
+			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
+		},
+		{
+			Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
+		},
+	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}}),
+		"internal/a's generated file importing cmd/app is its generator's decision, not a departure")
+}
+
 func TestPrecedentsSkipGeneratedAndTestCode(t *testing.T) {
 	t.Parallel()
 
