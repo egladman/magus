@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"cmp"
-	"fmt"
 	"maps"
 	"path"
 	"slices"
@@ -11,54 +10,60 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The norm miner counts, over the whole index, the shapes a later rule would measure a change
-// against. It reads the same facts the conformance lens does (namespaces, defines and
+// The precedent miner counts, over the whole index, the shapes a later rule would measure a
+// change against. It reads the same facts the conformance lens does (namespaces, defines and
 // references edges, calls, the declaration shape a language's reader reports) and applies the
-// same gates, so a row the table calls a norm is one the lens would too.
+// same gates, so a row it calls established is one the lens would too.
 
-// normExamples caps the agreeing members a row names.
-const normExamples = 3
+// precedentCited caps the following cases a row names.
+const precedentCited = 3
 
-// NormOptions scopes [Graph.Norms].
-type NormOptions struct {
+// PrecedentOptions scopes [Graph.Precedents].
+type PrecedentOptions struct {
 	// Generated holds the workspace-relative paths that are generated output. Generated and
 	// test code is never counted.
 	Generated map[string]bool
 }
 
-// Norms mines the norm table from g, which must carry its symbols. Rows come back ordered by
-// family, scope and key, so two runs over one graph agree byte for byte. A graph with no
-// symbols yields no rows, never an error.
-func (g *Graph) Norms(o NormOptions) []types.Norm {
+// Precedents mines the precedents g's cases establish; g must carry its symbols. Rows come
+// back ordered by family and scope, so two runs over one graph agree byte for byte. A graph
+// with no symbols yields no rows, never an error.
+func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated})
-	m := normMiner{g: g, x: x, fileNS: g.fileNamespaces()}
+	m := precedentMiner{g: g, x: x, fileNS: g.fileNamespaces()}
 	pk := m.packages()
 	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName())
 	for i := range rows {
 		r := &rows[i]
 		if r.Cohort > 0 {
-			r.Share = float64(r.Agree) / float64(r.Cohort)
+			r.Share = float64(r.Follow) / float64(r.Cohort)
 		}
-		r.Silent = r.Cohort < conformanceMinCohort || r.Share < conformanceMinShare
+		r.Established = r.Cohort >= conformanceMinCohort && r.Share >= conformanceMinShare
 	}
-	slices.SortFunc(rows, func(a, b types.Norm) int {
-		return cmp.Or(cmp.Compare(a.Family, b.Family), cmp.Compare(a.Scope, b.Scope), cmp.Compare(a.Key, b.Key))
+	slices.SortFunc(rows, func(a, b types.Precedent) int {
+		return cmp.Or(
+			cmp.Compare(a.Family, b.Family),
+			cmp.Compare(a.Scope.Language, b.Scope.Language),
+			slices.Compare(a.Scope.Layers, b.Scope.Layers),
+		)
 	})
 	return rows
 }
 
-type normMiner struct {
+type precedentMiner struct {
 	g      *Graph
 	x      *namingIndex
 	fileNS map[string][]string
 }
 
-// normPackages places each workspace package: its directory and the top-level directory
+// precedentPackages places each workspace package: its directory and the top-level directory
 // (its layer) that holds it.
-type normPackages struct {
+type precedentPackages struct {
 	deps  packageGraph
 	dir   map[string]string
 	layer map[string]string
+	// ns is each directory's first namespace, the node a dep case names.
+	ns map[string]string
 	// authored holds the packages with a hand-written source. A wholly generated package is
 	// imported like any other, but what it imports is its generator's decision.
 	authored map[string]bool
@@ -66,15 +71,16 @@ type normPackages struct {
 
 // packages reads layers off the directory tree the graph already holds: a top-level dir or
 // project node is a layer, and the workspace root is ".". No directory name is special.
-func (m normMiner) packages() normPackages {
+func (m precedentMiner) packages() precedentPackages {
 	tops := map[string]bool{}
 	for _, n := range m.g.nodes {
 		if (n.Kind == types.KindDir || n.Kind == types.KindProject) && n.Source != "." && !strings.Contains(n.Source, "/") {
 			tops[n.Source] = true
 		}
 	}
-	pk := normPackages{
-		deps: m.g.packageDeps(), dir: map[string]string{}, layer: map[string]string{}, authored: map[string]bool{},
+	pk := precedentPackages{
+		deps: m.g.packageDeps(), dir: map[string]string{}, layer: map[string]string{},
+		ns: map[string]string{}, authored: map[string]bool{},
 	}
 	for id, nss := range m.fileNS {
 		n := m.g.nodes[id]
@@ -92,6 +98,9 @@ func (m normMiner) packages() normPackages {
 		}
 	}
 	for ns, dir := range pk.dir {
+		if cur, ok := pk.ns[dir]; !ok || ns < cur {
+			pk.ns[dir] = ns
+		}
 		top, _, _ := strings.Cut(dir, "/")
 		switch {
 		case dir == ".":
@@ -103,15 +112,18 @@ func (m normMiner) packages() normPackages {
 	return pk
 }
 
-type normEdge struct{ from, to string }
+// depCase names the package in dir as a case importing imports.
+func (pk precedentPackages) depCase(dir string, imports ...string) types.Case {
+	return types.Case{Node: pk.ns[dir], Source: dir, Imports: imports}
+}
 
-func (e normEdge) String() string { return e.from + " -> " + e.to }
+type dirEdge struct{ from, to string }
 
 // depDirection counts, for each pair of layers, the package imports running each way. The
-// majority direction is the key and the minority edges are the deviations. Imports within
+// majority direction is the key and the minority edges are the departures. Imports within
 // one layer say nothing about direction and are not counted.
-func (m normMiner) depDirection(pk normPackages) []types.Norm {
-	edges := map[[2]string]map[normEdge]bool{}
+func (m precedentMiner) depDirection(pk precedentPackages) []types.Precedent {
+	edges := map[[2]string]map[dirEdge]bool{}
 	for from, tos := range pk.deps {
 		lf := pk.layer[from]
 		if lf == "" || !pk.authored[from] {
@@ -124,52 +136,52 @@ func (m normMiner) depDirection(pk normPackages) []types.Norm {
 			}
 			k := [2]string{lf, lt}
 			if edges[k] == nil {
-				edges[k] = map[normEdge]bool{}
+				edges[k] = map[dirEdge]bool{}
 			}
-			edges[k][normEdge{pk.dir[from], pk.dir[to]}] = true
+			edges[k][dirEdge{pk.dir[from], pk.dir[to]}] = true
 		}
 	}
 	pairs := map[[2]string]bool{}
 	for k := range edges {
 		pairs[[2]string{min(k[0], k[1]), max(k[0], k[1])}] = true
 	}
-	var out []types.Norm
+	var out []types.Precedent
 	for p := range pairs {
 		fwd, back := p, [2]string{p[1], p[0]}
 		if len(edges[back]) > len(edges[fwd]) {
 			fwd, back = back, fwd
 		}
-		agree := slices.SortedFunc(maps.Keys(edges[fwd]), compareEdges)
-		dev := slices.SortedFunc(maps.Keys(edges[back]), compareEdges)
-		row := types.Norm{
-			Family: types.NormDepDirection,
-			Scope:  p[0] + ", " + p[1],
-			Key:    fwd[0] + " -> " + fwd[1],
-			Agree:  len(agree),
-			Cohort: len(agree) + len(dev),
+		follow := slices.SortedFunc(maps.Keys(edges[fwd]), compareDirEdges)
+		depart := slices.SortedFunc(maps.Keys(edges[back]), compareDirEdges)
+		row := types.Precedent{
+			Family: types.PrecedentDepDirection,
+			Scope:  types.PrecedentScope{Layers: []string{p[0], p[1]}},
+			Key:    types.PrecedentKey{From: fwd[0], To: fwd[1]},
+			Follow: len(follow),
+			Cohort: len(follow) + len(depart),
 		}
-		for _, e := range agree[:min(len(agree), normExamples)] {
-			row.Examples = append(row.Examples, e.String())
+		for _, e := range follow[:min(len(follow), precedentCited)] {
+			row.Cited = append(row.Cited, pk.depCase(e.from, e.to))
 		}
-		for _, e := range dev {
-			row.Deviations = append(row.Deviations, types.NormSite{Subject: e.String(), Source: e.from})
+		for _, e := range depart {
+			row.Departures = append(row.Departures, pk.depCase(e.from, e.to))
 		}
 		out = append(out, row)
 	}
 	return out
 }
 
-func compareEdges(a, b normEdge) int {
+func compareDirEdges(a, b dirEdge) int {
 	return cmp.Or(cmp.Compare(a.from, b.from), cmp.Compare(a.to, b.to))
 }
 
 // depFanout is, per layer, the distribution of how many distinct packages in it each
 // importing package imports. The cohort is the packages that import the layer at all: a
 // package that never does says nothing about how many is usual.
-func (m normMiner) depFanout(pk normPackages) []types.Norm {
+func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 	// Keyed by directory, not namespace: a language that makes each file a module has many
 	// namespaces per directory, and counting each would add one import per importing file.
-	imports := map[string]map[normEdge]bool{}
+	imports := map[string]map[string]map[string]bool{}
 	for from, tos := range pk.deps {
 		if pk.layer[from] == "" || !pk.authored[from] {
 			continue
@@ -180,42 +192,40 @@ func (m normMiner) depFanout(pk normPackages) []types.Norm {
 				continue
 			}
 			if imports[lt] == nil {
-				imports[lt] = map[normEdge]bool{}
+				imports[lt] = map[string]map[string]bool{}
 			}
-			imports[lt][normEdge{pk.dir[from], pk.dir[to]}] = true
+			if imports[lt][pk.dir[from]] == nil {
+				imports[lt][pk.dir[from]] = map[string]bool{}
+			}
+			imports[lt][pk.dir[from]][pk.dir[to]] = true
 		}
 	}
-	var out []types.Norm
-	for layer, edges := range imports {
-		byPkg := map[string]int{}
-		for e := range edges {
-			byPkg[e.from]++
-		}
-		pkgs := slices.SortedFunc(maps.Keys(byPkg), func(a, b string) int {
-			return cmp.Or(cmp.Compare(byPkg[b], byPkg[a]), cmp.Compare(a, b))
+	var out []types.Precedent
+	for layer, byDir := range imports {
+		dirs := slices.SortedFunc(maps.Keys(byDir), func(a, b string) int {
+			return cmp.Or(cmp.Compare(len(byDir[b]), len(byDir[a])), cmp.Compare(a, b))
 		})
-		vals := make([]int, len(pkgs))
-		for i, p := range pkgs {
-			vals[i] = byPkg[p]
+		counts := make([]int, len(dirs))
+		for i, d := range dirs {
+			counts[i] = len(byDir[d])
 		}
-		slices.Sort(vals)
-		q := func(p float64) int { return vals[min(len(vals)-1, int(p*float64(len(vals))))] }
-		qs := &types.NormQuantiles{P95: q(0.95), Max: vals[len(vals)-1]}
-		row := types.Norm{
-			Family:    types.NormDepFanout,
-			Scope:     layer,
-			Key:       fmt.Sprintf("at most %d", qs.P95),
-			Cohort:    len(pkgs),
-			Quantiles: qs,
+		slices.Sort(counts)
+		bound := counts[min(len(counts)-1, int(0.95*float64(len(counts))))]
+		row := types.Precedent{
+			Family: types.PrecedentDepFanout,
+			Scope:  types.PrecedentScope{Layers: []string{layer}},
+			Key:    types.PrecedentKey{MaxImports: bound},
+			Cohort: len(dirs),
 		}
-		for _, p := range pkgs {
-			if byPkg[p] > qs.P95 {
-				row.Deviations = append(row.Deviations, types.NormSite{Subject: fmt.Sprintf("%s imports %d", p, byPkg[p]), Source: p})
+		for _, d := range dirs {
+			c := pk.depCase(d, slices.Sorted(maps.Keys(byDir[d]))...)
+			if len(c.Imports) > bound {
+				row.Departures = append(row.Departures, c)
 				continue
 			}
-			row.Agree++
-			if len(row.Examples) < normExamples {
-				row.Examples = append(row.Examples, fmt.Sprintf("%s imports %d", p, byPkg[p]))
+			row.Follow++
+			if len(row.Cited) < precedentCited {
+				row.Cited = append(row.Cited, c)
 			}
 		}
 		out = append(out, row)
@@ -225,8 +235,8 @@ func (m normMiner) depFanout(pk normPackages) []types.Norm {
 
 // errSentinelName counts the values a language's reader types as error, by whether the
 // name's first word starts with err.
-func (m normMiner) errSentinelName() []types.Norm {
-	byLang := map[string]*types.Norm{}
+func (m precedentMiner) errSentinelName() []types.Precedent {
+	byLang := map[string]*types.Precedent{}
 	for _, id := range slices.Sorted(maps.Keys(m.x.byID)) {
 		d := m.x.byID[id]
 		if d.shape.Kind != declValue || d.shape.Meaning != "error" {
@@ -234,28 +244,32 @@ func (m normMiner) errSentinelName() []types.Norm {
 		}
 		row := byLang[d.language]
 		if row == nil {
-			row = &types.Norm{Family: types.NormErrSentinelName, Scope: d.language, Key: "err<X>"}
+			row = &types.Precedent{
+				Family: types.PrecedentErrSentinelName,
+				Scope:  types.PrecedentScope{Language: d.language},
+				Key:    types.PrecedentKey{Prefix: "err"},
+			}
 			byLang[d.language] = row
 		}
 		row.Cohort++
-		name := path.Dir(d.file()) + "." + d.label
-		if !strings.HasPrefix(d.folded[0], "err") {
-			row.Deviations = append(row.Deviations, types.NormSite{Subject: name, Source: d.source})
+		c := types.Case{Node: id, Source: d.source}
+		if !strings.HasPrefix(d.folded[0], row.Key.Prefix) {
+			row.Departures = append(row.Departures, c)
 			continue
 		}
-		row.Agree++
-		if len(row.Examples) < normExamples {
-			row.Examples = append(row.Examples, name)
+		row.Follow++
+		if len(row.Cited) < precedentCited {
+			row.Cited = append(row.Cited, c)
 		}
 	}
-	return derefRows(byLang)
+	return derefPrecedents(byLang)
 }
 
 // testPackageName counts test files by whether they declare the package their directory's
 // other sources declare. Only a language that packages by directory is judged: one whose
 // directories of several sources almost always share one namespace. A language that gives
 // every file its own module has no package for a test to agree with.
-func (m normMiner) testPackageName() []types.Norm {
+func (m precedentMiner) testPackageName() []types.Precedent {
 	type dirLang struct{ dir, lang string }
 	sources := map[dirLang]map[string]bool{}
 	files := map[dirLang]int{}
@@ -291,7 +305,7 @@ func (m normMiner) testPackageName() []types.Norm {
 		}
 	}
 
-	byLang := map[string]*types.Norm{}
+	byLang := map[string]*types.Precedent{}
 	slices.Sort(tests)
 	for _, id := range tests {
 		n := m.g.nodes[id]
@@ -306,26 +320,25 @@ func (m normMiner) testPackageName() []types.Norm {
 		}
 		row := byLang[lang]
 		if row == nil {
-			row = &types.Norm{Family: types.NormTestPackageName, Scope: lang, Key: "its directory's package"}
+			row = &types.Precedent{Family: types.PrecedentTestPackageName, Scope: types.PrecedentScope{Language: lang}}
 			byLang[lang] = row
 		}
 		row.Cohort++
+		c := types.Case{Node: id, Source: n.Source}
 		if !slices.ContainsFunc(nss, func(ns string) bool { return siblings[ns] }) {
-			row.Deviations = append(row.Deviations, types.NormSite{
-				Subject: n.Source + " (package " + m.g.nodes[nss[0]].Label + ")", Source: n.Source,
-			})
+			row.Departures = append(row.Departures, c)
 			continue
 		}
-		row.Agree++
-		if len(row.Examples) < normExamples {
-			row.Examples = append(row.Examples, n.Source)
+		row.Follow++
+		if len(row.Cited) < precedentCited {
+			row.Cited = append(row.Cited, c)
 		}
 	}
-	return derefRows(byLang)
+	return derefPrecedents(byLang)
 }
 
-func derefRows(m map[string]*types.Norm) []types.Norm {
-	out := make([]types.Norm, 0, len(m))
+func derefPrecedents(m map[string]*types.Precedent) []types.Precedent {
+	out := make([]types.Precedent, 0, len(m))
 	for _, r := range m {
 		out = append(out, *r)
 	}

@@ -1267,52 +1267,74 @@ type KnowledgeGraphOutput struct {
 	Links []KnowledgeEdge `json:"links"         yaml:"links"`
 }
 
-// The norm families the miner reports. Each slug names a rule, its reference page and its
-// opt-out alike.
+// PrecedentFamily names the shape a [Precedent] counts. Each slug names a rule, its reference
+// page and its opt-out alike.
+type PrecedentFamily string
+
 const (
-	// NormDepDirection is which way package imports run between two top-level directories.
-	NormDepDirection = "dep-direction"
-	// NormDepFanout is how many distinct packages under one top-level directory a package
-	// imports.
-	NormDepFanout = "dep-fanout"
-	// NormErrSentinelName is whether a package-level error value's name leads with err.
-	NormErrSentinelName = "err-sentinel-name"
-	// NormTestPackageName is whether a test file declares the package its directory's
+	// PrecedentDepDirection is which way package imports run between two top-level
+	// directories.
+	PrecedentDepDirection PrecedentFamily = "dep-direction"
+	// PrecedentDepFanout is how many distinct packages under one top-level directory a
+	// package imports.
+	PrecedentDepFanout PrecedentFamily = "dep-fanout"
+	// PrecedentErrSentinelName is whether a package-level error value's name leads with err.
+	PrecedentErrSentinelName PrecedentFamily = "err-sentinel-name"
+	// PrecedentTestPackageName is whether a test file declares the package its directory's
 	// sources declare.
-	NormTestPackageName = "test-package-name"
+	PrecedentTestPackageName PrecedentFamily = "test-package-name"
 )
 
-// Norm is one row of the norm table: how many members of a cohort agree on one shape. A row
-// is a norm only when Cohort and Share clear the table's minimums; below either it is Silent,
-// a count and never a rule. Deviations are the members that disagree, so a reader can check
-// each one against the count.
-type Norm struct {
-	Family string `json:"family"`
-	// Scope is where the cohort was drawn: a directory pair, a directory, or a language.
-	Scope string `json:"scope"`
-	// Key is the shape the agreeing members share.
-	Key    string  `json:"key"`
-	Agree  int     `json:"agree"`
-	Cohort int     `json:"cohort"`
-	Share  float64 `json:"share"`
-	Silent bool    `json:"silent"`
-	// Quantiles is set on a distribution row (dep-fanout), whose Key names the p95 bound and
-	// whose deviations are the members above it. The bound is a fact; where to draw a ceiling
-	// is a decision the row does not make.
-	Quantiles  *NormQuantiles `json:"quantiles,omitempty"`
-	Examples   []string       `json:"examples,omitempty"`
-	Deviations []NormSite     `json:"deviations,omitempty"`
+// Precedent is what a body of cases in the graph establishes: Follow of Cohort cases share one
+// shape. It is established only when Cohort and Share clear the conformance gate; the zero
+// value, and any row below the gate, is no precedent, a count and never a rule. Departures are
+// the cases that do not follow it, so a reader can check each one against the count.
+type Precedent struct {
+	Family PrecedentFamily `json:"family"`
+	Scope  PrecedentScope  `json:"scope"`
+	Key    PrecedentKey    `json:"key"`
+	Follow int             `json:"follow"`
+	Cohort int             `json:"cohort"`
+	// Share is Follow over Cohort, in [0, 1].
+	Share       float64 `json:"share"`
+	Established bool    `json:"established"`
+	// Cited is up to three cases that follow the precedent.
+	Cited      []Case `json:"cited,omitempty"`
+	Departures []Case `json:"departures,omitempty"`
 }
 
-// NormQuantiles summarizes a per-member count across a cohort.
-type NormQuantiles struct {
-	P95 int `json:"p95"`
-	Max int `json:"max"`
+// PrecedentScope is where a precedent's cases were drawn from. Which fields are set depends on
+// the family: Layers for the dep families, Language for the rest.
+type PrecedentScope struct {
+	// Layers are top-level directories, "." for the workspace root: the sorted pair a
+	// dep-direction row compares, or the one layer a dep-fanout row counts imports into.
+	Layers   []string `json:"layers,omitempty"`
+	Language string   `json:"language,omitempty"`
 }
 
-// NormSite is one member a norm row names: what it is, and where it is (a workspace-relative
-// path, with a line when the index recorded one).
-type NormSite struct {
-	Subject string `json:"subject"`
-	Source  string `json:"source"`
+// PrecedentKey is the shape a precedent's following cases share. Which fields are set depends
+// on the family; a test-package-name key sets none, since the family names its one shape.
+type PrecedentKey struct {
+	// From and To are the layers a dep-direction precedent says imports run from and to.
+	From string `json:"from,omitempty"`
+	To   string `json:"to,omitempty"`
+	// MaxImports is the most packages under the layer a dep-fanout precedent says one package
+	// imports: the cohort's 95th percentile. Where to draw a ceiling is a decision the row
+	// does not make.
+	MaxImports int `json:"max_imports,omitempty"`
+	// Prefix is the word an err-sentinel-name precedent says a name starts with, folded to
+	// lower case.
+	Prefix string `json:"prefix,omitempty"`
+}
+
+// Case is one instance in the graph a precedent counts.
+type Case struct {
+	// Node is the graph node the case was read from: a symbol, a file, or for a dep family the
+	// importing package's namespace.
+	Node string `json:"node"`
+	// Source is a workspace-relative path, with a line when the index recorded one. For a dep
+	// family it is the importing package's directory.
+	Source string `json:"source"`
+	// Imports are the directories a dep family case imports that the row counted, sorted.
+	Imports []string `json:"imports,omitempty"`
 }
