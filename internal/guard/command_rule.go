@@ -81,6 +81,9 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 		}
 	}
 	asked := askWorkspaceRules(ctx, seamCommand, deps.LoadFailure, resolve, bind(deps.CommandRule))
+	// Parsed again only when nothing loaded, so the pass path pays nothing. The unloaded
+	// deny names the failures itself.
+	denied := asked.unloaded && denyUnloaded(&asked, seamCommand, gatedVerb(in.command, in.dialect), at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}
@@ -92,8 +95,65 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if asked.by == "" {
 		decided = ""
 	}
+	if denied {
+		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+	}
 	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered)
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+}
+
+// gatedVerb names, in backticks, the first call on the line that must wait while no side
+// of the policy loads: a push, a pull request merge, or a magus verb writing state other
+// checkouts or magus versions read. "" for anything else, the rebuild included, and for a
+// line that does not parse, which the built-ins already judge.
+func gatedVerb(command string, d Dialect) string {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		switch {
+		case isPush(c):
+			return "`" + vcsMutation(c) + "`"
+		case filepath.Base(c.Name) == "gh" && len(c.Args) > 1 && c.Args[0] == "pr" && c.Args[1] == "merge":
+			return "`gh pr merge`"
+		case isMagusInvocation(c):
+			if verb := magusStateWrite(c.Args); verb != "" {
+				return "`magus " + verb + "`"
+			}
+		}
+	}
+	return ""
+}
+
+// magusStateWrite is the state-writing verb a magus argv runs, "" for any other. The set
+// is tools/policy/stale.buzz's stateWrite: a dry run, a streamed install and `init spell`
+// write nothing shared.
+func magusStateWrite(args []string) string {
+	if magusFlag(args, "dry-run") {
+		return ""
+	}
+	ops := magusSubcommandWords(args)
+	if len(ops) == 0 {
+		return ""
+	}
+	sub := ""
+	if len(ops) > 1 {
+		sub = ops[1]
+	}
+	switch {
+	case ops[0] == "init" && sub != "spell":
+		return "init"
+	case ops[0] == "server" && sub == "start":
+		return "server start"
+	case ops[0] == "config" && sub == "set":
+		return "config set"
+	case ops[0] == "agent" && sub == "install" && !magusFlag(args, "tar"):
+		return "agent install"
+	case ops[0] == "agent" && sub == "harness" && len(ops) > 2 && slices.Contains([]string{"apply", "install", "remove"}, ops[2]):
+		return "agent harness " + ops[2]
+	}
+	return ""
 }
 
 // commandRequest normalizes one shell command for the workspace rule. Every field is read

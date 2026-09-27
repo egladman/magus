@@ -111,8 +111,18 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		}
 		asked := askWorkspaceRules(ctx, seamSpawn, deps.LoadFailure, resolve, bind(deps.SpawnRule))
 		failures = asked.failures
+		// A continuation hands a running child more work; only a spawn creates one the rule
+		// exists to bind.
+		verb := ""
+		if env.IsSpawn {
+			verb = "a subagent spawn"
+		}
+		// The unloaded deny names the failures itself.
+		denied := asked.unloaded && denyUnloaded(&asked, seamSpawn, verb, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
-		verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
+		if !denied {
+			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
+		}
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
 		policyDigest: digest,

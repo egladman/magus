@@ -151,6 +151,26 @@ func classifyPolicy(prev policyMarker, seen bool, now PolicyState, pending bool)
 	return PolicyTightened
 }
 
+// recordedRule reports whether the last rule set this cache recorded registered seam's
+// rule. The marker is written only from a policy that loaded, so it outlives a load
+// failure; false when there is no marker.
+func recordedRule(cacheDir string, seam functionSeam) bool {
+	if cacheDir == "" {
+		return false
+	}
+	m, ok := readPolicyMarker(filepath.Join(cacheDir, policyMarkerFile))
+	if !ok {
+		return false
+	}
+	switch seam {
+	case seamCommand:
+		return m.CommandRule
+	case seamWrite:
+		return m.WriteRule
+	}
+	return m.SpawnRule
+}
+
 func readPolicyMarker(path string) (policyMarker, bool) {
 	body, err := os.ReadFile(path)
 	if err != nil {
