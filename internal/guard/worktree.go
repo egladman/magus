@@ -187,7 +187,7 @@ func unpublished(ctx context.Context, drv types.VCSDriver, dir, head, base strin
 func removalSite(c locatedCall) (target, gitDir, why string) {
 	switch {
 	case c.unfollowed:
-		return "", "", "it runs inside a conditional, loop or function, which the guard does not follow"
+		return "", "", "it runs inside a conditional, a function, or a loop whose words are not all literal, which the guard does not follow"
 	case c.args == nil:
 		return "", "", "it is reached through a wrapper, whose arguments cannot be read as literal words"
 	}

@@ -339,6 +339,56 @@ func TestLocatePushFollowsTheLine(t *testing.T) {
 	}
 }
 
+// TestLocateCallsUnrollsALiteralLoop pins that each word of a literal for loop yields its
+// own located push, with the loop variable read as that word and a cd carried into the
+// next iteration.
+func TestLocateCallsUnrollsALiteralLoop(t *testing.T) {
+	t.Parallel()
+
+	sites := func(command string) []pushSite {
+		t.Helper()
+		calls, ok := locateCalls(command, DialectBash, "/w", isPush, false)
+		require.True(t, ok, command)
+		var out []pushSite
+		for _, c := range calls {
+			require.False(t, c.unfollowed, command)
+			site, ok := pushFrom(c.inv.Name, c.args, c.at)
+			require.True(t, ok, command)
+			out = append(out, site)
+		}
+		return out
+	}
+	assert.Equal(t, []pushSite{
+		{dir: "/b", relocated: true, rev: "topic-b"},
+		{dir: "/c", relocated: true, rev: "topic-c"},
+	}, sites(`for d in b 'c'; do git -C /$d push origin "topic-${d}"; done`))
+	assert.Equal(t, []pushSite{
+		{dir: "/w/b", relocated: true, rev: "b"},
+		{dir: "/w/b/c", relocated: true, rev: "c"},
+	}, sites("for d in b c; do cd $d && git push origin $d; done"))
+	assert.Equal(t, []pushSite{
+		{dir: "/w", rev: "x"}, {dir: "/w", rev: "y"}, {dir: "/w", rev: "z"},
+	}, sites("for a in x y; do git push origin $a; done; for a in z; do git push origin $a; done"))
+
+	first, ok := locatePush("for d in /b /c; do git -C $d push; done", DialectBash, "/w")
+	assert.True(t, ok)
+	assert.Equal(t, pushSite{dir: "/b", relocated: true}, first)
+
+	for _, command := range []string{
+		"for d in $(ls); do git -C /$d push; done",
+		"for d in /b*; do git -C $d push; done",
+		"for d in /b /c; do git -C $d push; continue; done",
+		"for d in /b; do read d; git -C $d push; done",
+		"for ((i=0; i<2; i++)); do git push; done",
+		"select d in /b; do git -C $d push; done",
+		"g() { :; }; for d in /b; do git -C $d push; done",
+		"for d in /b; do if true; then git -C $d push; fi; done",
+	} {
+		_, ok := locatePush(command, DialectBash, "/w")
+		assert.False(t, ok, command)
+	}
+}
+
 // judgeRelocatedPush judges command, built from checkout B's path, in checkout A. A's HEAD
 // is abc1234 and B's is def5678; each holds a run log, with a green gate at its HEAD when
 // gated says so.
