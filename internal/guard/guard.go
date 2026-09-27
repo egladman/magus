@@ -291,6 +291,9 @@ type Verdict struct {
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease; see types.LeaseSource.
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	// Next is a deny's remedy, served only when it passes the guard for the acting
+	// lease, and pre-authorized for the calls after it. Reason renders it too.
+	Next []hint.Next `json:"next,omitempty"`
 }
 
 // hostUnnamed refuses a call from installed hook glue that did not say which agent host
@@ -450,6 +453,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// advisory fires on it, and the role-scoped rules stand down. The workspace-wide
 	// denies do not, and they are the ones whose reasons say why (see internal/guard/preauth.go).
 	var ruleRecord workspaceRuleRecord
+	// remedy is the shell deny that carried a computed next, graded for the acting lease
+	// once every rule has spoken.
+	var remedy ShellVerdict
 	preauth := ""
 	if hasInput && !req.Observe && !isPath {
 		preauth = servedNextPreauthorizes(markers, input)
@@ -624,16 +630,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			callDir = location.dir
 		}
 		deps.callDir = callDir
-		v := rankOwnBuild(Evaluate(deps, input), ownBuildVerdict(deps, callDir, input, shellD))
-		v = rankScriptContent(v, denyScriptContent(deps, callDir, input, shellD))
-		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
-		v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, location, callDir, input, shellD))
-		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
-		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
-		v = rankTokenState(v, denyTokenStateCommand(location, input, shellD))
-		// Outside Evaluate for the same reason the two rules above are: it reads session
-		// state (which skills have loaded) rather than the line alone, and Evaluate's
-		// verdict is a pure function of what was handed in.
+		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
+		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
+		// than the line alone, and a remedy graded by that function never writes Buzz.
 		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
@@ -643,6 +642,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 			verdict.Rule = v.RuleName()
+			if v.Rule.Name == denyRuleSiblingCheckout {
+				lead, next := siblingCheckoutRemedy(input, shellD)
+				v = v.withRemedy(lead, next...)
+			}
+			remedy = v
 		case v.Context != "" && preauth == "":
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
@@ -656,7 +660,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease} {
+		for _, rule := range roleScopedCommandRules() {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
@@ -784,7 +788,16 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if req.DryRun {
 			shapeGate = hint.Gate{} // spends and stores nothing, so the deny is worded in full
 		}
-		verdict.Reason, verdictRef = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, note)
+		// Only while the deny that computed the remedy is still the one standing: a later
+		// rule's refusal is about something else.
+		var next []hint.Next
+		if len(remedy.Next) > 0 && verdict.Reason == remedy.Deny {
+			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, remedy.Next)
+			if len(next) > 0 {
+				verdict.Reason = remedy.Lead
+			}
+		}
+		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, note, next)
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
@@ -799,6 +812,55 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
 	}
 	return verdict
+}
+
+// judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
+// holds: Evaluate's, then the ones that read the filesystem.
+func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
+	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(deps, callDir, line, d))
+	// A remedy computed from a script's line would run outside the directory and the
+	// lines around it that the script sets up.
+	script := denyScriptContent(deps, callDir, line, d)
+	script.Next, script.Lead = nil, ""
+	v = rankScriptContent(v, script)
+	v = rankSiblingCheckout(v, denySiblingCheckout(line, d))
+	v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, at, callDir, line, d))
+	v = rankInterpreterRewrite(v, denyInterpreterRewrite(at, line, d))
+	v = rankCacheDirWrite(v, denyCacheDirCommand(at, line, d))
+	return rankTokenState(v, denyTokenStateCommand(at, line, d))
+}
+
+// roleScopedCommandRules are the command rules a served next stands down, so each is
+// asked of a remedy before it is served.
+func roleScopedCommandRules() []func(context.Context, Dependencies, string, string) string {
+	return []func(context.Context, Dependencies, string, string) string{
+		denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease,
+	}
+}
+
+// servableRemedy keeps the remedies the acting lease may run. A served next is
+// pre-authorized and the role-scoped rules stand down for it, so one they would refuse
+// is dropped here: serving it would clear a command the role may not run.
+//
+// Graded by the rules the next call meets, rather than filtered by a list of its own,
+// so a rule added later grades remedies without anyone remembering to.
+func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []hint.Next) []hint.Next {
+	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
+	d := effectiveDialect(deps.ShellDialect)
+	var kept []hint.Next
+	for _, n := range hint.ServableTo(role, writePaths, next) {
+		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run) != "" {
+			continue
+		}
+		refused := slices.ContainsFunc(roleScopedCommandRules(), func(rule func(context.Context, Dependencies, string, string) string) bool {
+			return rule(ctx, deps, actingLease, n.Run) != ""
+		})
+		if refused || gradeFocusRead(ctx, deps, actingLease, n.Run).Decision == "deny" {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return kept
 }
 
 // hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to

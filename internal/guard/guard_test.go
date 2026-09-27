@@ -705,3 +705,49 @@ func TestDryRunRefusesASpawn(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
+
+// TestJudgeServesADenyRemedyItThenPreauthorizes is the plan's proof run end to end: the
+// redirect is refused with its --tee line as next, and running that line passes,
+// cleared by the remedy's own id.
+func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	cacheDir := ctx.Value(locationKey{}).(location).cacheDir
+	deps := testDependencies()
+
+	v := Judge(ctx, deps, Request{Input: "./magus ls jobs -o json > f"})
+	require.Equal(t, "deny", v.Decision)
+	require.Equal(t, string(denyRuleOutputRedirect), v.Rule)
+	want := hint.Next{
+		ID: "deny-output-redirect", Run: "magus ls jobs -o json --tee f",
+		Argv: []string{"magus", "ls", "jobs", "-o", "json", "--tee", "f"},
+		Why:  "--tee writes the structured record to the file and still prints it.",
+	}
+	assert.Equal(t, []hint.Next{want}, v.Next)
+	assert.Equal(t, "`ls jobs >f`: console text is not a format anything should parse."+
+		"\nnext:\n  magus ls jobs -o json --tee f\n      "+want.Why+
+		"\nsee: "+ruleDocsBase+"output-redirect/", v.Reason, "one line plus the next")
+
+	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
+	assert.NotEqual(t, "deny", Judge(ctx, deps, Request{Input: want.Run}).Decision, "the served line passes")
+}
+
+// TestJudgeDropsARemedyTheRoleMayNotRun pins the other half: a worker refused a piped gate
+// is not handed the gate unpiped, because a served next stands the lease rules down.
+func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
+	worker := narrowLease()
+	ctx, _ := fleetFixture(t, worker)
+	deps := testDependencies()
+	const piped = "magus affected ci | tail -5"
+
+	// The worker first: its firing is the one worded in full.
+	leased := Judge(ctx, deps, Request{Input: piped, Lease: worker.ID})
+	require.Equal(t, "deny", leased.Decision)
+	assert.Equal(t, string(denyRuleOutputPipe), leased.Rule)
+	assert.Nil(t, leased.Next, "the worker may not run the gate, so it is not served one")
+	assert.Contains(t, leased.Reason, "`-s` stays quiet until something fails", "the prose names the lever instead")
+	assert.NotContains(t, leased.Reason, "next:")
+
+	unbound := Judge(ctx, deps, Request{Input: piped})
+	require.Len(t, unbound.Next, 1)
+	assert.Equal(t, "magus affected ci -s", unbound.Next[0].Run)
+}

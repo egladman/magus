@@ -54,12 +54,28 @@ import (
 // conflating them is how enrolling three VCS advisories to give them names quietly turned
 // them from every-time into once-per-session. An advisory that sets Kind is named by it
 // and needs no Rule; one that sets Rule alone speaks every time and still reports itself.
+//
+// Next is a deny's remedy, the complete command the rule computed from the refused line,
+// and Lead the one line that replaces Deny when Judge serves it. Deny stays whole on its
+// own: a remedy the acting role may not run is dropped, and the reader then needs the
+// prose that names the lever.
 type ShellVerdict struct {
 	Deny    string
 	Context string
 	Kind    hint.MarkerKind
 	Brief   string
 	Rule    denyRule
+	Next    []hint.Next
+	Lead    string
+}
+
+// withRemedy attaches next to a deny, or leaves v alone when the rule computed none.
+func (v ShellVerdict) withRemedy(lead string, next ...hint.Next) ShellVerdict {
+	if len(next) == 0 || lead == "" {
+		return v
+	}
+	v.Next, v.Lead = next, lead
+	return v
 }
 
 // RuleName is the name this verdict reports, preferring the marker kind when it has one:
@@ -186,6 +202,10 @@ type toolMatch struct {
 	// name the charm that makes the write legal instead of routing to a target that
 	// would refuse to do it.
 	rewrites bool
+	// exact reports that the op runs what was typed: the bare subcommand, or the op's
+	// own arguments. Arguments forwarded after `--` are appended to the op's, so any
+	// other spelling has no exact magus form.
+	exact bool
 }
 
 // textFilters are the shell commands whose purpose is to trim, slice, or
@@ -242,7 +262,7 @@ func magusPipedToFilter(command string, d Dialect) (denied, read pipedMagus) {
 		}
 		match := pipedMagus{verb: magusVerb(left), filter: filter.Name, filterArgs: filter.Args, ok: true}
 		if i := slices.IndexFunc(left, isMagusInvocation); i >= 0 {
-			match.args = left[i].Args
+			match.bin, match.args = left[i].Name, left[i].Args
 		}
 		if !graphReadOnly(left) {
 			denied = match
@@ -262,6 +282,7 @@ func magusPipedToFilter(command string, d Dialect) (denied, read pipedMagus) {
 // the noun, the flags and the count the reader typed.
 type pipedMagus struct {
 	verb, filter     string
+	bin              string
 	args, filterArgs []string
 	ok               bool
 }
@@ -385,12 +406,30 @@ func magusVerb(cmds []hint.Invocation) string {
 // `> /dev/null` wants silence, a named file wants the output kept, and magus has a
 // different lever for each.
 func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
+	r := magusRedirect(command, d)
+	return r.verb, r.dest, r.ok
+}
+
+// redirectedMagus is one magus invocation whose output a redirect loses: the verb and
+// destination for the message, the argv and which stream for the remedy.
+type redirectedMagus struct {
+	verb, dest string
+	// file is the redirect's literal target, "" when the shell computes it.
+	file string
+	bin  string
+	args []string
+	// stdout is set when the lost stream is stdout, the only one --tee can keep.
+	stdout bool
+	ok     bool
+}
+
+func magusRedirect(command string, d Dialect) (found redirectedMagus) {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return "", "", false
+		return redirectedMagus{}
 	}
 	syntax.Walk(f, func(n syntax.Node) bool {
-		if ok {
+		if found.ok {
 			return false
 		}
 		stmt, isStmt := n.(*syntax.Stmt)
@@ -399,12 +438,15 @@ func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
 		}
 		cmds := stmtCommands(stmt, d)
 		if r := discardingRedirect(stmt.Redirs, magusDoesRunWork(cmds)); r != nil {
-			verb, dest, ok = magusVerb(cmds), redirectTarget(r), true
+			found = redirectedMagus{verb: magusVerb(cmds), dest: redirectTarget(r), file: redirectWord(r), stdout: redirectFd(r) == "1", ok: true}
+			if i := slices.IndexFunc(cmds, isMagusInvocation); i >= 0 {
+				found.bin, found.args = cmds[i].Name, cmds[i].Args
+			}
 			return false
 		}
 		return true
 	})
-	return verb, dest, ok
+	return found
 }
 
 // streamEnd is where one output stream lands once every redirect has applied.
@@ -926,7 +968,8 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 				if len(prefix) > 0 && (len(have) < len(prefix) || !slices.Equal(have[:len(prefix)], prefix)) {
 					continue
 				}
-				return toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0}, true
+				exact := len(have) == len(c.Args) && (len(have) == len(prefix) || slices.Equal(have, args))
+				return toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0, exact: exact}, true
 			}
 		}
 	}
@@ -1488,6 +1531,11 @@ var (
 		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"Waiting on something outside this machine is what your host's monitor surface is for."
 
+	// Says only what the guard can prove about a probe of someone else's process: nothing
+	// here announces that process's end to the caller, so the other text would be false.
+	denyBusyWaitForeign = "This loop waits on a process you did not start and holds your tool slot for its whole wait; past the tool timeout it is backgrounded rather than killed, and polls on.\n" +
+		"Waiting on another process is what your host's monitor surface is for."
+
 	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age).\n" +
 		"`pgrep`, `pidof` and `ps` invent an unbounded poll that answers what the lock message already said."
 
@@ -1594,6 +1642,220 @@ func redirectDeny(verb, dest string) string {
 		answer = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
 	}
 	return lead + answer + mintedLogNote(verb)
+}
+
+// A deny's remedy is the reader's own command with the refused construct replaced, and
+// only where that command is exact: a remedy is served as `next` and pre-authorized, so
+// one that answers a different question is worse than the prose it stands in for.
+
+// magusWithFlags is a magus argv with flags added ahead of any `--`, which belongs to a spell.
+//
+// The binary is spelled as every other breadcrumb spells it: the parser reduces the
+// reader's to its base name, and a bare `magus` may resolve to another checkout's build.
+func magusWithFlags(args []string, flags ...string) []string {
+	argv := append([]string{hint.BinaryName()}, args...)
+	if i := slices.Index(argv, "--"); i >= 0 {
+		return slices.Concat(argv[:i], flags, argv[i:])
+	}
+	return append(argv, flags...)
+}
+
+// magusSilent reports -s or --silent among a magus argv's own flags.
+func magusSilent(args []string) bool {
+	return magusFlag(args, "silent") || magusFlag(args, "s")
+}
+
+// magusOutputFormat is the value of -o/--output, "" when none was given.
+func magusOutputFormat(args []string) string {
+	for i, a := range args {
+		if a == "--" {
+			return ""
+		}
+		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") || (name != "o" && name != "output") {
+			continue
+		}
+		if joined {
+			return value
+		}
+		if i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+// pipeRemedy is the piped magus command answering on its own: -s for a run trimmed to its
+// tail, else the projection pipeRewrite names, read out of its first quoted span so the
+// prose and the served command cannot drift apart.
+func pipeRemedy(p pipedMagus) (string, []hint.Next) {
+	if p.bin == "" || magusOutputFormat(p.args) != "" {
+		return "", nil
+	}
+	lead := "`" + p.verb + " | " + p.filter + "`: magus answers this without the pipe, which also reads a failing magus as exit 0."
+	var flags []string
+	var why string
+	words := magusSubcommandWords(p.args)
+	switch {
+	case len(words) > 0 && isRunVerb(words[0]) && slices.Contains([]string{"head", "tail", "less", "more"}, p.filter):
+		if magusSilent(p.args) {
+			return "", nil
+		}
+		flags, why = []string{"-s"}, "-s stays quiet until something fails, then prints the diagnostics and the log path."
+	// A search, sort or cut keeps a subset the projection does not choose, so only the
+	// count, the first N and the join are exact.
+	case slices.Contains([]string{"head", "wc", "tr"}, p.filter):
+		rewrite, ok := pipeRewrite(p)
+		if !ok {
+			return "", nil
+		}
+		flags, why = quotedFlags(rewrite), "-o projects the record itself, so nothing parses console text."
+	}
+	if len(flags) == 0 {
+		return "", nil
+	}
+	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputPipe), magusWithFlags(p.args, flags...), why)}
+}
+
+// quotedFlags reads the flags out of prose's first backtick span, nil unless every word
+// there is a literal and the span leads with a flag.
+func quotedFlags(prose string) []string {
+	_, rest, ok := strings.Cut(prose, "`")
+	if !ok {
+		return nil
+	}
+	span, _, ok := strings.Cut(rest, "`")
+	if !ok {
+		return nil
+	}
+	argv := servedArgv("magus " + span)
+	if len(argv) < 2 || !strings.HasPrefix(argv[1], "-") {
+		return nil
+	}
+	return argv[1:]
+}
+
+// redirectRemedy drops the redirect for the lever that does what it was for: --silent
+// for a discard, --tee for stdout kept in a file.
+func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
+	if r.bin == "" {
+		return "", nil
+	}
+	format := magusOutputFormat(r.args)
+	var flags []string
+	var lead, why string
+	switch {
+	case r.file == "/dev/null":
+		lead = "`" + r.verb + " " + r.dest + "`: this discards the diagnostics a failure prints."
+		why = "--silent says nothing until something fails, then prints what the redirect would have discarded."
+		if !magusSilent(r.args) {
+			flags = []string{"--silent"}
+		}
+	case r.stdout && r.file != "" && !magusFlag(r.args, "tee"):
+		lead = "`" + r.verb + " " + r.dest + "`: console text is not a format anything should parse."
+		why = "--tee writes the structured record to the file and still prints it."
+		switch {
+		case format == "":
+			structured := "json"
+			if words := magusSubcommandWords(r.args); len(words) > 0 && isRunVerb(words[0]) {
+				structured = "jsonl"
+			}
+			flags = []string{"-o", structured, "--tee", r.file}
+		case format == "json" || format == "jsonl":
+			flags = []string{"--tee", r.file}
+		default:
+			return "", nil
+		}
+	default:
+		return "", nil
+	}
+	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputRedirect), magusWithFlags(r.args, flags...), why)}
+}
+
+// rawToolRemedy is the spell op run bare, when the typed command is the op's own. A
+// rewriting form is left to the prose: its charm belongs on the workspace's target.
+func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (string, []hint.Next) {
+	if !match.exact || match.rewrites || helpRequest(deps, c) {
+		return "", nil
+	}
+	lead := "magus guard denied `" + elideCommand(resolvedCommand(c)) + "`: the " + match.spell + " spell runs it cached, sandboxed and tracked by affected."
+	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleRawTool),
+		hint.Run.Argv(match.spell+"::"+match.operation),
+		"the op runs the same command in the project you are in.")}
+}
+
+// stageAllRemedy stages the same paths through the workspace. `git add .` is left to the
+// prose: it stages the working directory's subtree, which no vcs add spelling equals.
+func stageAllRemedy(command string, d Dialect) (string, []hint.Next) {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return "", nil
+	}
+	for _, c := range cmds {
+		if c.Name != "git" || len(c.Args) == 0 || c.Args[0] != "add" || !slices.ContainsFunc(c.Args[1:], isStageAllOperand) {
+			continue
+		}
+		var paths []string
+		for _, a := range c.Args[1:] {
+			switch {
+			case a == ".":
+				return "", nil
+			case a == "--" || isStageAllOperand(a):
+			case strings.HasPrefix(a, "-"):
+				return "", nil
+			default:
+				paths = append(paths, a)
+			}
+		}
+		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.",
+			[]hint.Next{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
+				"vcs add stages a source change with the outputs it produced and reports anything undeclared.")}
+	}
+	return "", nil
+}
+
+// foreignWaitFires reports a sleep-only while or until loop whose condition probes a
+// process by pid or through magus's pool and job rows, which a caller's own backgrounded
+// command never needs: the host announces that one's end.
+func foreignWaitFires(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		loop, ok := n.(*syntax.WhileClause)
+		if found || !ok || !bodyOnlySleeps(loop.Do, d) {
+			return !found
+		}
+		for _, cond := range loop.Cond {
+			syntax.Walk(cond, func(m syntax.Node) bool {
+				if call, ok := m.(*syntax.CallExpr); ok {
+					found = found || slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), probesForeignProcess)
+				}
+				return !found
+			})
+		}
+		return !found
+	})
+	return found
+}
+
+// probesForeignProcess reports `kill -0`, a process-table read, or a magus read of the
+// pool or a job.
+func probesForeignProcess(c hint.Invocation) bool {
+	switch filepath.Base(c.Name) {
+	case "kill":
+		return slices.Contains(c.Args, "-0")
+	case "pgrep", "pidof", "ps":
+		return true
+	}
+	if !isMagusInvocation(c) {
+		return false
+	}
+	words := magusSubcommandWords(c.Args)
+	return hint.Status.MatchedBy(words) || hint.LsJobs.MatchedBy(words) || hint.DescribeJob.MatchedBy(words) ||
+		(len(words) > 0 && words[0] == "job")
 }
 
 // filterWithoutInputDeny names the tool, since on a pipeline the reader cannot otherwise
@@ -1826,6 +2088,11 @@ func precedentIdent(cmds []hint.Invocation) string {
 func Evaluate(deps Dependencies, command string) ShellVerdict {
 	d := effectiveDialect(deps.ShellDialect)
 	builtin := evaluateRules(deps, command, d)
+	// Here rather than in gitGuard, which answers for every backend and names no paths.
+	if builtin.Rule.Name == denyRuleStageAll {
+		lead, next := stageAllRemedy(command, d)
+		builtin = builtin.withRemedy(lead, next...)
+	}
 	// A built-in advisory is about this workspace, so a line that only touches paths
 	// outside it has nothing to be advised about. Denies are exempt: each one decides for
 	// itself whether a path outside the tree changes its answer. So is capture-filter: a
@@ -1834,6 +2101,11 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 		builtin = ShellVerdict{}
 	}
 	v := strengthenWithWorkspace(builtin, matchWorkspaceShell(deps.ShellRules, command, d))
+	// A remedy runs where the caller stands, and after a cd that is not where the refused
+	// command would have run.
+	if len(v.Next) > 0 && changesDirectory(command, d) {
+		v.Next, v.Lead = nil, ""
+	}
 	// A deny refuses the WHOLE line, and the reason only ever discusses the one construct
 	// that earned it. On a line holding several commands that reads as a partial refusal:
 	// the writer fixes the named command and assumes the others ran. They did not.
@@ -1847,6 +2119,14 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 		v.Deny += nothingRanNote(command, d)
 	}
 	return v
+}
+
+// changesDirectory reports a cd or pushd anywhere on the line, or a line that does not parse.
+func changesDirectory(command string, d Dialect) bool {
+	cmds, ok := ParseCommandsDialect(command, d)
+	return !ok || slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		return isCdInvocation(c) || filepath.Base(c.Name) == "pushd"
+	})
 }
 
 // nothingRanNote is the line a deny carries when it refused several commands at once, or ""
@@ -1888,12 +2168,21 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if busyWaitFires(command, d) {
-		return ShellVerdict{Deny: denyBusyWait, Rule: denyRule{Name: denyRuleBusyWait}}
+		reason := denyBusyWait
+		if foreignWaitFires(command, d) {
+			reason = denyBusyWaitForeign
+		}
+		return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleBusyWait}}
 	}
 	// Beside busy-wait: both invent a waiter for work magus already tracks. This one is
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(work) {
-		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}
+		// The one-shot read, not --watch: a watch never exits, and a served command that
+		// holds the caller's tool slot until it times out is the poll again.
+		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
+			"`pgrep`, `pidof` and `ps` answer what the project lock already records.",
+			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
+				"status reads the live pool once and exits, where the process table only guesses at it."))
 	}
 	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
 	// waiting in the background. The backtick is judged first because a stray one is how a
@@ -1959,7 +2248,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(deps, command)
 	piped, pipedRead := magusPipedToFilter(command, d)
-	redirVerb, redirDest, redirected := magusRedirected(command, d)
+	redir := magusRedirect(command, d)
 	switch {
 	case magusInThrowawayCopy(command, d):
 		return ShellVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
@@ -1977,14 +2266,23 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(work, isDependencyMutation) {
 			reason += "\n" + updateAdvice
 		}
-		return ShellVerdict{
+		v := ShellVerdict{
 			Deny: explainDeny(command, rawToolCmd, reason),
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
+		// Not for a dependency rewrite: its covering target carries the update charm,
+		// which a spell op cannot.
+		if !isDependencyMutation(rawToolCmd) {
+			lead, next := rawToolRemedy(deps, rawToolCmd, match)
+			v = v.withRemedy(lead, next...)
+		}
+		return v
 	case piped.ok:
-		return ShellVerdict{Deny: pipeAnswer(piped), Rule: denyRule{Name: denyRuleOutputPipe}}
-	case redirected:
-		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
+		lead, next := pipeRemedy(piped)
+		return ShellVerdict{Deny: pipeAnswer(piped), Rule: denyRule{Name: denyRuleOutputPipe}}.withRemedy(lead, next...)
+	case redir.ok:
+		lead, next := redirectRemedy(redir)
+		return ShellVerdict{Deny: redirectDeny(redir.verb, redir.dest), Rule: denyRule{Name: denyRuleOutputRedirect}}.withRemedy(lead, next...)
 	}
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
 		return ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}
