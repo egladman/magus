@@ -168,6 +168,26 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 	assert.Contains(t, out, "1 attention request(s) open; `magus session attention` lists them")
 }
 
+// `session ls -o json` exposes the pair on the invocation Summary a loaded session
+// summarizes to, which is how a reader scripts "what ran under an old model"
+// without opening every session by hand.
+func TestSessionsJSONExposesTheModelAndHostVersionPair(t *testing.T) {
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+
+	_, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","model":"claude-opus-5-5","host_version":"2.1.280"}`)
+	require.NoError(t, err)
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"-o", "json"}))
+	})
+
+	assert.Contains(t, out, `"model": "claude-opus-5-5"`)
+	assert.Contains(t, out, `"host_version": "2.1.280"`)
+}
+
 func TestSessionsRejectsPositionalArguments(t *testing.T) {
 	err := sessionCmd(context.Background(), t.TempDir(), []string{"yesterday"})
 	require.Error(t, err)
@@ -428,6 +448,41 @@ func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
 	assert.Contains(t, out, "magus-run")
 	assert.Contains(t, out, "internal/foo.go")
 	assert.Contains(t, out, "hook outputs: 1")
+}
+
+// The pair `show` prints is the NEWEST one a loaded event named, not the first: a
+// session that ran under one model and switched mid-session is checked against
+// what it ended on.
+func TestSessionShowPrintsTheModelAndHostVersionPair(t *testing.T) {
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+
+	_, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","model":"claude-opus-5","host_version":"2.1.260"}`,
+		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"pwd","model":"claude-opus-5-5","host_version":"2.1.280"}`)
+	require.NoError(t, err)
+
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+
+	assert.Contains(t, out, "model claude-opus-5-5  host version 2.1.280")
+}
+
+// An adapter that cannot know the model or the host version omits the field
+// (or sends it null); `show` reports the pair as absent rather than printing an
+// empty line nobody asked for.
+func TestSessionShowOmitsThePairLineWhenNoEventNamesOne(t *testing.T) {
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+
+	_, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
+	require.NoError(t, err)
+
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+
+	assert.NotContains(t, out, "host version")
 }
 
 func TestSessionShowNamesTheLoadWhenNothingIsThere(t *testing.T) {
