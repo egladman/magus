@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -186,6 +187,30 @@ func TestPrecedentsAreNotEstablishedBelowEitherGate(t *testing.T) {
 		Departures: []types.Case{{Node: bad, Source: "internal/a/f0.go:6"}, {Node: missing, Source: "internal/a/f0.go:7"}},
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope),
 		"5 of 7 is under 80%")
+}
+
+// TestPrecedentsMarshalByteStable: a test file defining namespaces of two languages is judged
+// under whichever comes first, so that has to be the same one every run.
+func TestPrecedentsMarshalByteStable(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/a", 2)
+	f.file("internal/a/a_test.go", precedentNamespace("internal/a", "go"), "a", "go")
+	f.file("internal/a/a_test.go", precedentNamespace("internal/a/a_test.go", "typescript"), "a_test", "typescript")
+
+	rows := f.g.Precedents(PrecedentOptions{})
+	assert.Equal(t, []types.Precedent{{
+		Family: types.PrecedentTestPackageName, Scope: goScope,
+		Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{fileCase("internal/a/a_test.go")},
+	}}, rows)
+	first, err := json.Marshal(rows)
+	require.NoError(t, err)
+	for range 20 {
+		again, err := json.Marshal(f.g.Precedents(PrecedentOptions{}))
+		require.NoError(t, err)
+		require.Equal(t, string(first), string(again))
+	}
 }
 
 // TestPrecedentsTakeALayerWhoseTopDirectoryHoldsOnlyNestedProjects: libs has no dir or

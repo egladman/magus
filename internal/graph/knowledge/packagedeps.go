@@ -62,7 +62,8 @@ func (g *Graph) packageDeps() packageGraph {
 	return deps
 }
 
-// fileNamespaces maps each file node ID to the namespaces it defines: its package.
+// fileNamespaces maps each file node ID to the namespaces it defines: its package. Each list
+// is sorted, so a caller that reads the first one reads the same one every run.
 func (g *Graph) fileNamespaces() map[string][]string {
 	g.ensureAdj()
 	out := map[string][]string{}
@@ -75,6 +76,9 @@ func (g *Graph) fileNamespaces() map[string][]string {
 				out[e.Source] = append(out[e.Source], n.ID)
 			}
 		}
+	}
+	for _, nss := range out {
+		slices.Sort(nss)
 	}
 	return out
 }
