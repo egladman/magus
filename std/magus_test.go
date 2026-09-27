@@ -434,7 +434,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "the declared goal", "write_paths": "internal/job"})
+	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."})
 	require.NoError(t, err)
 
 	got, err := MagusPutJob(ctx, "u1", map[string]any{"state": "pass"})
@@ -442,6 +442,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	assert.Equal(t, types.StatePass, got.State)
 	assert.Equal(t, "the declared goal", got.Criteria, "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.WritePaths)
+	require.NotNil(t, got.Check, "the state advance must not erase the check")
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
