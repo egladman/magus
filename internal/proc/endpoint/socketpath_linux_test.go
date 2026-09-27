@@ -16,7 +16,7 @@ import (
 // A socket path far past sun_path is bound and dialed through its directory, and the
 // socket is where the path says: the listener reports it, a byte crosses it, and
 // closing the listener removes it.
-func TestAPathLongerThanSunPathBindsAndDialsOnLinux(t *testing.T) {
+func TestAPathLongerThanSocketPathBindsAndDialsOnLinux(t *testing.T) {
 	dir := t.TempDir()
 	for len(dir) < 200 {
 		dir = filepath.Join(dir, strings.Repeat("d", 50))
@@ -57,7 +57,7 @@ func TestAPathLongerThanSunPathBindsAndDialsOnLinux(t *testing.T) {
 }
 
 // A name reached through its directory still has to fit after /proc/self/fd/<fd>/.
-func TestASocketNameTooLongForSunPathIsRefusedOnLinux(t *testing.T) {
+func TestASocketNameTooLongForSocketPathIsRefusedOnLinux(t *testing.T) {
 	path := filepath.Join(t.TempDir(), strings.Repeat("s", 100)+".sock")
 	_, err := Endpoint{Scheme: "unix", Addr: path}.Listen()
 	assert.ErrorContains(t, err, "is 105 bytes, and linux holds at most 107")

@@ -14,8 +14,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// sunPathLen is the size of sockaddr_un's sun_path on linux, its NUL included.
-const sunPathLen = 108
+// maxSocketPath is the size of sockaddr_un's sun_path on linux, its NUL included.
+const maxSocketPath = 108
 
 // unixName is the name to bind or dial path by, and done releases what that name
 // holds. A path that fits sun_path is its own name. A longer one is reached through
@@ -23,7 +23,7 @@ const sunPathLen = 108
 // the socket is made at path itself, and removing or finding it by path works as
 // usual. done must run once the bind or connect has returned.
 func unixName(path string) (string, func(), error) {
-	if len(path) < sunPathLen {
+	if len(path) < maxSocketPath {
 		return path, func() {}, nil
 	}
 	dir, base := filepath.Split(path)
@@ -35,9 +35,9 @@ func unixName(path string) (string, func(), error) {
 		return "", nil, fmt.Errorf("endpoint: open %s to reach the %d-byte socket path %s: %w", dir, len(path), path, err)
 	}
 	name := "/proc/self/fd/" + strconv.Itoa(fd) + "/" + base
-	if len(name) >= sunPathLen {
+	if len(name) >= maxSocketPath {
 		_ = unix.Close(fd)
-		return "", nil, fmt.Errorf("endpoint: unix socket name %q is %d bytes, and linux holds at most %d", base, len(base), sunPathLen-1)
+		return "", nil, fmt.Errorf("endpoint: unix socket name %q is %d bytes, and linux holds at most %d", base, len(base), maxSocketPath-1)
 	}
 	return name, func() { _ = unix.Close(fd) }, nil
 }
