@@ -37,12 +37,12 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`, `"tier":"principal"`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
-		SchemaVersion: types.JobSchemaVersion,
-		ID:            "adj/ledger",
-		WritePaths:    []string{"internal/ledger"},
-		DenyPaths:     []string{"MAGUS.md"},
-		ReadPaths:     []string{"internal/hint"},
-		Model:         "principal",
+		Schema:     types.Schema{Version: types.JobSchemaVersion},
+		ID:         "adj/ledger",
+		WritePaths: []string{"internal/ledger"},
+		DenyPaths:  []string{"MAGUS.md"},
+		ReadPaths:  []string{"internal/hint"},
+		Model:      "principal",
 	}, row)
 }
 
@@ -81,10 +81,38 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 
 			_, err := DecodeResult(strings.NewReader(raw))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "version 2")
+			assert.Contains(t, err.Error(), "accepts versions 1 through 2")
 			assert.NotContains(t, err.Error(), "next_field", "the version is the reason, not the field")
 		})
 	}
+}
+
+// An older sender's record is a subset of the current shape, so it is read, not refused.
+func TestDecodeAcceptsAnOlderVersion(t *testing.T) {
+	t.Parallel()
+
+	rep, err := DecodeResult(strings.NewReader(
+		`{"schema_version":1,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
+	require.NoError(t, err)
+	assert.Equal(t, 1, rep.Version)
+
+	row, err := DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store"}`))
+	require.NoError(t, err)
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: 1}, ID: "adj/store"}, row)
+}
+
+// A record demanding a feature this magus lacks is refused by name; one naming a feature
+// it has is read.
+func TestDecodeRefusesAnUnmetRequirement(t *testing.T) {
+	t.Parallel()
+
+	_, err := DecodeDeclaration(declaration(`"requires":["never-implemented"]`, `"id":"adj/store"`))
+	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (schema %d) lacks; update magus`,
+		types.JobSchemaVersion), err.Error())
+
+	row, err := DecodeDeclaration(declaration(`"requires":["claim-declarations"]`, `"id":"adj/store"`))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"claim-declarations"}, row.Requires)
 }
 
 func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
@@ -189,9 +217,14 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
 	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
+	// The envelope and the key, which ParseMerge takes as arguments, and decode.go's own
+	// legacy compat.
+	skipped := func(field string) bool {
+		return field == "schema_version" || field == "requires" || field == "id" || legacy[field]
+	}
 	for _, field := range jsonFields(types.Declaration{}) {
-		if field == "schema_version" || field == "id" || legacy[field] {
-			continue // the envelope and the key (ParseMerge takes them as arguments), and decode.go's own legacy compat
+		if skipped(field) {
+			continue
 		}
 		var value any = "declared"
 		switch field {
@@ -215,8 +248,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		assert.NoError(t, err, "magus_job fork rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
-	for _, field := range jsonFields(types.Declaration{})[2:] {
-		if !legacy[field] {
+	for _, field := range jsonFields(types.Declaration{}) {
+		if !skipped(field) {
 			current = append(current, field)
 		}
 	}

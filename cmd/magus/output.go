@@ -452,9 +452,9 @@ func writeFieldBlock(w io.Writer, t reflect.Type) []reflect.Type {
 	var fields []field
 	var refs []reflect.Type
 	width := 0
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() || f.Anonymous {
+	// VisibleFields reaches an embedded struct's fields, which json promotes to the top level.
+	for _, f := range reflect.VisibleFields(t) {
+		if !f.IsExported() || f.Anonymous || strings.HasSuffix(f.Tag.Get("json"), ",unknown") {
 			continue
 		}
 		key := jsonFieldKey(f)

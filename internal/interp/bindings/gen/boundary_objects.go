@@ -1567,7 +1567,12 @@ func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
 
 func ObjectJobResult(v types.JobResult) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
+	itemsRequires := make([]vm.Value, len(v.Schema.Requires))
+	for indexRequires := range v.Schema.Requires {
+		itemsRequires[indexRequires] = vm.StrValue(v.Schema.Requires[indexRequires])
+	}
+	out.MapSet("requires", vm.ListValue(itemsRequires))
 	out.MapSet("job", vm.StrValue(v.Job))
 	itemsChangedPaths := make([]vm.Value, len(v.ChangedPaths))
 	for indexChangedPaths := range v.ChangedPaths {
@@ -1626,7 +1631,12 @@ func ObjectJobRun(v types.JobRun) vm.Value {
 
 func ObjectJob(v types.Job) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
+	itemsRequires := make([]vm.Value, len(v.Schema.Requires))
+	for indexRequires := range v.Schema.Requires {
+		itemsRequires[indexRequires] = vm.StrValue(v.Schema.Requires[indexRequires])
+	}
+	out.MapSet("requires", vm.ListValue(itemsRequires))
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("parent", vm.StrValue(v.Parent))
 	out.MapSet("criteria", vm.StrValue(v.Criteria))
@@ -1774,6 +1784,17 @@ func ObjectJobBlock(v types.JobBlock) vm.Value {
 	return out
 }
 
+func ObjectJobReadOnly(v types.JobReadOnly) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("job", vm.StrValue(v.Job))
+	itemsLacks := make([]vm.Value, len(v.Lacks))
+	for indexLacks := range v.Lacks {
+		itemsLacks[indexLacks] = vm.StrValue(v.Lacks[indexLacks])
+	}
+	out.MapSet("lacks", vm.ListValue(itemsLacks))
+	return out
+}
+
 func ObjectJobList(v types.JobList) vm.Value {
 	out := vm.NewMap()
 	itemsJobs := make([]vm.Value, len(v.Jobs))
@@ -1806,6 +1827,11 @@ func ObjectJobList(v types.JobList) vm.Value {
 		itemsBlocked[indexBlocked] = ObjectJobBlock(v.Blocked[indexBlocked])
 	}
 	out.MapSet("blocked", vm.ListValue(itemsBlocked))
+	itemsReadOnly := make([]vm.Value, len(v.ReadOnly))
+	for indexReadOnly := range v.ReadOnly {
+		itemsReadOnly[indexReadOnly] = ObjectJobReadOnly(v.ReadOnly[indexReadOnly])
+	}
+	out.MapSet("readOnly", vm.ListValue(itemsReadOnly))
 	return out
 }
 

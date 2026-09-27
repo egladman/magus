@@ -236,7 +236,7 @@ func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 		"check": "go::go-test .",
 	})
 	result := map[string]any{
-		"schema_version":   job.ResultSchemaVersion,
+		"schema_version":   types.JobResultSchemaVersion,
 		"job":              "evidence",
 		"changed_paths":    []any{"internal/job/verify.go"},
 		"validation":       map[string]any{"command": "magus run go::go-test .", "output_ref": "out-evidence"},
@@ -288,7 +288,7 @@ func TestJobToolCompletionGatesRoundTripThroughMCP(t *testing.T) {
 	assert.Equal(t, "docs", forked.CompletionGates[1].ID)
 
 	result := map[string]any{
-		"schema_version": job.ResultSchemaVersion,
+		"schema_version": types.JobResultSchemaVersion,
 		"job":            "gated",
 		"changed_paths":  []any{"internal/job/verify.go"},
 		"gate_evidence": []any{

@@ -536,11 +536,7 @@ func sortedMethods(mod std.Module) []std.Method {
 // stated rather than relied upon.
 func referencedObjects(rt reflect.Type) []string {
 	var out []string
-	for i := 0; i < rt.NumField(); i++ {
-		f := rt.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
+	for _, f := range boundaryFields(rt) {
 		t := f.Type
 		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
 			t = t.Elem()

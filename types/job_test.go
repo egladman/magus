@@ -1,7 +1,6 @@
 package types
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -9,43 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// jobFieldNames is the golden list of every json field types.Job carries, pinned beside
-// JobSchemaVersion. A field added, removed or renamed here without also bumping the
-// version is exactly how two live rows lost write_paths, read_paths, deny_paths, model
-// and check on 2026-09-11: an older binary's non-strict decoder dropped what it did not
-// know, then rewrote the whole row without them.
-//
-// A Go literal here rather than a testdata fixture: the list is read by this one test and
-// nothing else, so keeping it as code puts the diff a JobSchemaVersion bump requires in
-// the same review as the field change, rather than in a second file a reviewer has to
-// remember to open.
-var jobFieldNames = []string{
-	"schema_version", "id", "parent", "criteria", "checkpoint", "write_paths", "deny_paths",
-	"read_paths", "depends_on", "model", "check", "validation", "completion_gates", "state", "holder",
-	"read_only", "releases", "unattributed", "write_proof", "reported_base", "base_verdict",
-	"registered_by", "registered", "checkout_root", "end_reason", "created", "updated", "deadline", "result", "attempt", "gate_attempts", "last_run",
-}
-
-// TestJobSchemaVersionCoversEveryField pins Job's field set against jobFieldNames, read
-// off the struct with reflect so a field added straight to the struct cannot slip past
-// either list unnoticed.
-func TestJobSchemaVersionCoversEveryField(t *testing.T) {
-	t.Parallel()
-
-	typ := reflect.TypeOf(Job{})
-	got := make([]string, 0, typ.NumField())
-	for i := range typ.NumField() {
-		tag := typ.Field(i).Tag.Get("json")
-		if tag == "" || tag == "-" {
-			continue
-		}
-		name, _, _ := strings.Cut(tag, ",")
-		got = append(got, name)
-	}
-	assert.Equal(t, jobFieldNames, got,
-		"types.Job's field set changed: bump JobSchemaVersion and update jobFieldNames in types/job_test.go in the same change")
-}
 
 // TestValidJobID pins the rule every lease channel shares. The marker scanner is not the
 // only producer: whatever stamps a Job has to agree with this, or internal/trail's

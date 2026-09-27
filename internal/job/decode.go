@@ -18,28 +18,33 @@ import (
 //go:embed gen/job.schema.json
 var DeclarationSchema string
 
-// foldStoredNames reads the four renamed fields out of a ledger file a previous magus wrote
-// and puts them on the rows raw was decoded into, which carry only the current spelling.
+// foldStoredNames moves the four renamed fields a previous magus wrote out of each row's
+// unknown members onto their current spelling, then drops every name [types.JobSchema]
+// reserves, so a reserved name is never carried back out as data.
 //
 // compat: see the legacy fields on [Declaration]. Without it a plan written before the rename
 // comes back with every boundary empty, and the next put stores that as the truth.
-func foldStoredNames(raw []byte, rows []types.Job) error {
-	var stored struct {
-		Jobs []struct {
+func foldStoredNames(rows []types.Job) error {
+	for i := range rows {
+		if len(rows[i].Unknown) == 0 {
+			continue
+		}
+		var old struct {
 			WritePaths []string `json:"owned_paths"`
 			DenyPaths  []string `json:"forbidden_paths"`
 			ReadPaths  []string `json:"focus"`
 			Model      string   `json:"tier"`
-		} `json:"jobs"`
-	}
-	if err := json.Unmarshal(raw, &stored); err != nil {
-		return err
-	}
-	if len(stored.Jobs) != len(rows) {
-		return nil
-	}
-	for i := range rows {
-		old := stored.Jobs[i]
+		}
+		bag, err := json.Marshal(rows[i].Unknown)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(bag, &old); err != nil {
+			return fmt.Errorf("row %s: %w", rows[i].ID, err)
+		}
+		for _, name := range types.JobSchema.Reserved {
+			delete(rows[i].Unknown, name)
+		}
 		fold := func(name string, into *[]string, from []string) error {
 			if len(from) == 0 {
 				return nil
@@ -77,7 +82,8 @@ const maxInputBytes = 1 << 20
 // STRICT AND VERSIONED, in that order of reporting: a sender a release ahead is told which
 // versions this magus knows instead of learning that one of its fields is unknown, and
 // then an unknown member is an error, because a field the verifier never reads looks to its
-// author exactly like one that was taken into account.
+// author exactly like one that was taken into account. Any version up to this magus's own
+// is accepted: an older sender's record is a subset of the current shape.
 //
 // Every failure here is one class to a caller: the input could not be understood, as
 // opposed to understood and rejected. `magus job wait` exits 2 for this and 1 for a
@@ -87,12 +93,12 @@ func DecodeResult(r io.Reader) (types.JobResult, error) {
 	if err != nil {
 		return types.JobResult{}, err
 	}
-	if err := checkVersion(raw, "result", ResultSchemaVersion); err != nil {
+	if err := checkVersion(raw, "result", types.JobResultSchema); err != nil {
 		return types.JobResult{}, err
 	}
 	var rep types.JobResult
 	if err := json.UnmarshalStrict(raw, &rep); err != nil {
-		return types.JobResult{}, fmt.Errorf("job: the input is not a version %d result: %w", ResultSchemaVersion, err)
+		return types.JobResult{}, fmt.Errorf("job: the input is not a version %d result: %w", types.JobResultSchemaVersion, err)
 	}
 	return rep, nil
 }
@@ -104,7 +110,7 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 	if err != nil {
 		return types.Declaration{}, err
 	}
-	if err := checkVersion(raw, "job", types.JobSchemaVersion); err != nil {
+	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
 		return types.Declaration{}, err
 	}
 	var row types.Declaration
@@ -131,23 +137,26 @@ func readInput(r io.Reader, what string) ([]byte, error) {
 	return raw, nil
 }
 
-// checkVersion reads the one member that decides whether the rest can be read at all.
+// checkVersion reads the envelope that decides whether the rest can be read at all.
 // Non-strict on purpose: this pass must survive the very fields a newer sender added,
 // or a version skew would be reported as an unknown member, which is the misdirect the
 // version exists to prevent.
-func checkVersion(raw []byte, what string, supported int) error {
-	var envelope struct {
-		SchemaVersion int `json:"schema_version"`
-	}
+func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
+	var envelope types.Schema
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return fmt.Errorf("job: the %s is not JSON: %w", what, err)
 	}
-	switch v := envelope.SchemaVersion; {
-	case v == 0:
-		return fmt.Errorf("job: the %s carries no schema_version; this magus accepts version %d", what, supported)
-	case v != supported:
-		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts version %d only."+
+	supported := ledger.Version
+	switch v := envelope.Version; {
+	case v <= 0:
+		return fmt.Errorf("job: the %s carries no schema_version; this magus accepts versions 1 through %d", what, supported)
+	case v > supported:
+		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts versions 1 through %d."+
 			" A newer record is not readable by an older magus; update magus, or send version %d", what, v, supported, supported)
+	}
+	if lacks := envelope.Unmet(ledger.Features()); lacks != nil {
+		return fmt.Errorf("job: the %s requires %s, which this magus (schema %d) lacks; update magus",
+			what, quoteAll(lacks), supported)
 	}
 	return nil
 }

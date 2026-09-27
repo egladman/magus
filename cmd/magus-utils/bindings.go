@@ -573,12 +573,9 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	var body bytes.Buffer
 	fmt.Fprintf(&body, "func %s(v %s) vm.Value {\n", e.funcName(t), e.qualify(t))
 	fmt.Fprintln(&body, "\tout := vm.NewMap()")
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
-		value, err := e.value(&body, "v."+f.Name, f.Name, f.Type, "\t")
+	for _, bf := range boundaryFields(t) {
+		f := bf.StructField
+		value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
 		if err != nil {
 			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 		}
@@ -712,6 +709,34 @@ func (e *buzzValueEmitter) funcName(t reflect.Type) string {
 // within the function.
 func (e *buzzValueEmitter) name(prefix, path string) string {
 	return prefix + path
+}
+
+// boundaryField is one field a boundary type carries across, with the selector that
+// reaches it from the value ("Schema.Version" for a field of an embedded struct).
+type boundaryField struct {
+	reflect.StructField
+	selector string
+}
+
+// boundaryFields lists t's exported fields the way buzzgen's mirror declares them: an
+// untagged embedded struct contributes its own fields inline rather than one nested field.
+func boundaryFields(t reflect.Type) []boundaryField {
+	var out []boundaryField
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
+			continue
+		}
+		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
+			for _, inner := range boundaryFields(f.Type) {
+				inner.selector = f.Name + "." + inner.selector
+				out = append(out, inner)
+			}
+			continue
+		}
+		out = append(out, boundaryField{StructField: f, selector: f.Name})
+	}
+	return out
 }
 
 // buzzVMFieldName must agree with the mirror's field name exactly: this emits the RUNTIME

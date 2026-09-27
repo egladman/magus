@@ -232,7 +232,7 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 	for {
 		var round []ending
 		for _, row := range rows {
-			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer {
+			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil {
 				continue
 			}
 			reason, err := w.reason(rows, row)
@@ -313,7 +313,7 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 		return f, err
 	}
 	err = s.withFileLock(context.Background(), func() error {
-		cur, rawByID, err := s.read()
+		cur, err := s.read()
 		if err != nil {
 			return err
 		}
@@ -327,7 +327,7 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 			cur.Jobs[i].Updated = w.now
 		}
 		if len(dead) > 0 {
-			if err := s.write(cur, rawByID); err != nil {
+			if err := s.write(cur); err != nil {
 				return err
 			}
 		}

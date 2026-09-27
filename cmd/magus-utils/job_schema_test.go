@@ -23,8 +23,7 @@ const FixtureSchemaVersion = 3
 //
 // The second paragraph is rationale, and the schema does not carry it.
 type Fixture struct {
-	// SchemaVersion is the shape this record is written in.
-	SchemaVersion int @json:"schema_version"@
+	Envelope
 	// ID is the lease's identity within the plan.
 	ID string @json:"id" schema:"leaseid"@
 	// State is where the lease stands.
@@ -35,6 +34,13 @@ type Fixture struct {
 	Paths []string @json:"paths,omitempty"@
 	Undocumented bool @json:"undocumented,omitempty"@
 	Hidden string @json:"-"@
+}
+
+// Envelope is inlined into every record that embeds it, and its bag publishes nothing.
+type Envelope struct {
+	// SchemaVersion is the shape this record is written in.
+	SchemaVersion int @json:"schema_version"@
+	Unknown map[string]string @json:",unknown"@
 }
 
 // Check is the check a lease runs.
@@ -57,7 +63,8 @@ const wantFixtureSchema = `{
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 3,
+      "minimum": 1,
+      "maximum": 3,
       "description": "SchemaVersion is the shape this record is written in."
     },
     "id": {

@@ -121,11 +121,7 @@ func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
 func enumsUsedBy(rt reflect.Type) []boundaryEnum {
 	seen := map[string]bool{}
 	var out []boundaryEnum
-	for i := 0; i < rt.NumField(); i++ {
-		f := rt.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
+	for _, f := range boundaryFields(rt) {
 		e, ok := buzzEnum(f.Type)
 		if !ok || seen[e.Name] {
 			continue
