@@ -132,7 +132,7 @@ An aside whose second clause sits on the next line ends its first line in `" -"`
 No line-oriented search can see it, because the trailing hyphen has no space
 after it. This tree holds **281** of them, disjoint from every number above.
 
-They are off by default and enabled with `wrapped: true`. The split is about the
+They are off by default and enabled with `report-wrapped: true`. The split is about the
 fix, not the rule: an inline aside is a one-line edit, while a wrapped one
 rewraps a paragraph. Sweep them separately.
 
@@ -156,7 +156,7 @@ linters:
           allow:
             - "*_gen.go"
           # Also report a comment line ENDING in a spaced hyphen. See above.
-          wrapped: false
+          report-wrapped: false
           # Checks that do not run. An unknown name fails at config load.
           disable:
             - history
@@ -189,7 +189,7 @@ singlechecker.Main(coldread.Analyzer)
 ```
 
 `Analyzer` is the default configuration and exposes no flags. To set `allow`,
-`wrapped`, or `disable` outside golangci-lint, build your own with
+`report-wrapped`, or `disable` outside golangci-lint, build your own with
 `coldread.New(coldread.Options{...})`, which errors on a malformed glob or an
 unknown check name. restate reads each file's source through `Pass.ReadFile`; a
 driver that leaves it nil silences restate and commentedcode rather than failing.

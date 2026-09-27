@@ -65,16 +65,23 @@ never reported by a check other than aside.`
 // and is what [Options.Disable] lists.
 type Check string
 
+// The checks, in the order the package comment describes them.
 const (
-	CheckAside         Check = "aside"
-	CheckRestate       Check = "restate"
-	CheckSteps         Check = "steps"
-	CheckHistory       Check = "history"
-	CheckDocstub       Check = "docstub"
+	// CheckAside reports a spaced hyphen spelling an em-dash.
+	CheckAside Check = "aside"
+	// CheckRestate reports a one-line comment whose every word names the next line.
+	CheckRestate Check = "restate"
+	// CheckSteps reports "step 1" narration, or numbered comments sequencing a body.
+	CheckSteps Check = "steps"
+	// CheckHistory reports a phrase narrating the change rather than the code.
+	CheckHistory Check = "history"
+	// CheckDocStub reports a declaration doc comment that only repeats the name.
+	CheckDocStub Check = "docstub"
+	// CheckCommentedCode reports a comment that parses as Go statements.
 	CheckCommentedCode Check = "commentedcode"
 )
 
-var checks = []Check{CheckAside, CheckRestate, CheckSteps, CheckHistory, CheckDocstub, CheckCommentedCode}
+var checks = []Check{CheckAside, CheckRestate, CheckSteps, CheckHistory, CheckDocStub, CheckCommentedCode}
 
 // asideMessage names the fix rather than the sin, for the reason testlayout's
 // external-package message does: the wrong thing compiles, passes, and reads
@@ -94,11 +101,11 @@ type Options struct {
 	// name of a Go file whose comments are exempt.
 	Allow []string `json:"allow"`
 
-	// Wrapped extends the rule to a comment line ENDING in a spaced hyphen, which
-	// is the same aside with its second half on the next line. Off by default
-	// because the fix rewraps a paragraph rather than editing one line, so it is
-	// worth sweeping separately. See readme.md for what it adds.
-	Wrapped bool `json:"wrapped"`
+	// ReportWrapped extends the aside check to a comment line ENDING in a spaced
+	// hyphen, which is the same aside with its second half on the next line. Off
+	// by default because the fix rewraps a paragraph rather than editing one
+	// line, so it is worth sweeping separately. See readme.md for what it adds.
+	ReportWrapped bool `json:"report-wrapped"`
 
 	// Disable names checks that do not run. Every check runs by default.
 	Disable []Check `json:"disable"`
@@ -133,7 +140,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 var Analyzer = newAnalyzer(Options{})
 
 func newAnalyzer(opts Options) *analysis.Analyzer {
-	l := linter{allow: opts.Allow, wrapped: opts.Wrapped, enabled: map[Check]bool{}}
+	l := linter{allow: opts.Allow, wrapped: opts.ReportWrapped, enabled: map[Check]bool{}}
 	for _, c := range checks {
 		l.enabled[c] = !slices.Contains(opts.Disable, c)
 	}

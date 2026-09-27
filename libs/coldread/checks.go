@@ -57,8 +57,8 @@ func (l linter) checkIntent(pass *analysis.Pass, f *ast.File, tf *token.File) {
 
 		sym, isDoc := docs[group]
 
-		if isDoc && l.enabled[CheckDocstub] && docStub(group, sym) {
-			report(group.Pos(), CheckDocstub, fmt.Sprintf(docstubMessage, sym.name))
+		if isDoc && l.enabled[CheckDocStub] && docStub(group, sym) {
+			report(group.Pos(), CheckDocStub, fmt.Sprintf(docstubMessage, sym.name))
 		}
 
 		own, next := placement(group, tf, src)
