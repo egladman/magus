@@ -12,6 +12,8 @@ import "./tools/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
 import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
+// The advisory verdict `security` reaches; console/ and docs/ share it.
+import "./tools/advisories" as advisories;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
 // This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
@@ -1061,7 +1063,13 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // against sources. govulncheck sat in `lint` for a while, which spread that uncacheable
     // answer across every op lint runs. GOEXPERIMENT is threaded through so the sandboxed
     // child builds with the same fingerprint as the rest of the workspace.
-    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
+    //
+    // advisories\govulncheck, not the go spell's op: the verdict needs the scanner's JSON,
+    // which the op does not capture. On a change it fails only on what the change
+    // introduced (tools/advisories.buzz).
+    os\withEnv({"GOEXPERIMENT": "jsonv2"}, callback: fun () > void !> any {
+        advisories\govulncheck(ctx, go: go);
+    });
     proc\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"

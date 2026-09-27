@@ -21,13 +21,27 @@
 //              every run, never fatal, and it becomes BLOCKING by itself the day the patch
 //              matures. Nothing to remember, nothing to snooze, no allowlist to rot.
 //
+// A second axis says who brought each actionable finding in, read against the vcs base:
+//   introduced: the base manifest lacks that package at that version; this change chose it.
+//   inherited:  the base already carries it. On a change (base differs from head) it is
+//               printed [inherited] and left to main; where the base IS the head (main,
+//               the queue, a schedule) it fails like any other.
+//   unknown:    no base to read. Fatal like introduced, and said so once.
+// A fresh CVE against a year-old module then reddens main and the schedule, not every open
+// pull request whose author cannot fix it there. docs/guides/security-scanning.md is the
+// recipe for copying this.
+//
 // This is the part a task orchestrator with a real language can do and a YAML `run:` step
 // cannot. The scanner gives you JSON and an exit code; deciding what that MEANS for this
 // build belongs to the build, written in something that can express it.
 
 import "std";
 import "proc";
+import "fs";
+import "vcs";
+import "magus";
 import "encoding/json";
+import "encoding/yaml";
 import "semver";
 import "time";
 // Used by the test blocks, which run under buzz_test now that it globs tools/.
@@ -152,13 +166,229 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
     return false;
 }
 
-// audit scans the current project and fails ONLY on findings that are actionable today.
-// Everything else is printed and carried. Throws to fail the calling target.
+// Finding is one advisory reduced to what the verdict reads.
+object Finding {
+    id: str,
+    // name@version of every installed copy the advisory matched: the keys classify looks
+    // up in the base inventory.
+    installed: [str],
+    summary: str,
+    fix: str,
+    actionable: bool,
+    deferral: str = "",
+}
+
+// Base is the change's starting point. inventory is the set of name@version keys the base
+// manifest carries, null when there is no base to read (missing says why). changed is
+// false when the base IS the head, which is how main, the queue and a schedule differ from
+// a pull request without reading any CI variable.
+object Base {
+    inventory: {str: bool}?,
+    changed: bool = false,
+    missing: str = "",
+}
+
+// classify says whether the change brought a finding in. A version change counts as
+// introduced: the change chose that version, as dependency review gates "added or updated".
+fun classify(installed: [str], base: {str: bool}?) > str {
+    if (base == null) {
+        return "unknown";
+    }
+    final inventory = base!;
+    foreach (key in installed) {
+        if (!(inventory[key] ?? false)) {
+            return "introduced";
+        }
+    }
+    return "inherited";
+}
+
+// isFatal is the policy: an actionable finding fails the run unless the base already
+// carried it and this run is a change against that base.
+fun isFatal(provenance: str, changed: bool) > bool {
+    return !changed or provenance != "inherited";
+}
+
+test "classify reads provenance off the base inventory" {
+    final base = {"golang.org/x/net@v0.30.0": true, "nanoid@3.3.16": true};
+    assert\equal(classify(["golang.org/x/net@v0.30.0"], base: base), want: "inherited",
+        message: "the base carries the same module at the same version");
+    assert\equal(classify(["golang.org/x/net@v0.31.0"], base: base), want: "introduced",
+        message: "a version bump is the change's choice");
+    assert\equal(classify(["left-pad@1.0.0"], base: base), want: "introduced",
+        message: "a module the base lacks");
+    assert\equal(classify(["nanoid@3.3.16", "nanoid@3.3.17"], base: base), want: "introduced",
+        message: "one new copy is enough");
+    assert\equal(classify(["nanoid@3.3.16"], base: null), want: "unknown",
+        message: "no base, no provenance");
+}
+
+test "inherited is fatal only where the base IS the head" {
+    assert\isFalse(isFatal("inherited", changed: true), message: "a change does not own the base's findings");
+    assert\isTrue(isFatal("inherited", changed: false), message: "main owns everything it carries");
+    assert\isTrue(isFatal("introduced", changed: true), message: "a change owns what it added");
+    assert\isTrue(isFatal("unknown", changed: true), message: "no base keeps the strict behavior");
+}
+
+// showArgs is each backend's spelling of "print path as of rev", path relative to the
+// working directory.
+fun showArgs(rev: str, path: str) > [str] {
+    final backend = vcs\name();
+    if (backend == "git") {
+        return ["show", rev + ":./" + path];
+    }
+    if (backend == "jj") {
+        return ["file", "show", "-r", rev, path];
+    }
+    return ["cat", "-r", rev, path];
+}
+
+// BaseFile is path as the base ref has it; text is null when it cannot be read, missing
+// says why.
+object BaseFile {
+    text: str?,
+    changed: bool = false,
+    missing: str = "",
+}
+
+fun readBase(path: str) > BaseFile {
+    if (vcs\name() == "") {
+        return BaseFile{ text = null, missing = "no VCS" };
+    }
+    final rev = vcs\base();
+    if (rev == "") {
+        return BaseFile{ text = null, missing = "vcs.base_ref is empty" };
+    }
+    var changed = false;
+    try {
+        changed = vcs\commit(rev).id != vcs\commit().id;
+    } catch (e) {
+        // A shallow CI clone often lacks the base.
+        return BaseFile{ text = null, missing = "base ref {rev} does not resolve here; fetch it" };
+    }
+    // A failed read is no base, never an empty one: a blobless clone fetches the blob on
+    // demand, and a sandbox without network must not turn every finding introduced.
+    final res = vcs\cmd(showArgs(rev, path: path), opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (res == null or !res!.ok) {
+        return BaseFile{ text = null, missing = "{path} is unreadable at {rev}" };
+    }
+    return BaseFile{ text = res!.stdout, changed = changed };
+}
+
+// anyActionable gates the base read: provenance only decides actionable findings, so a
+// run with none skips the VCS and manifest reads.
+fun anyActionable(findings: [Finding]) > bool {
+    foreach (f in findings) {
+        if (f.actionable) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// verdict prints every finding with its classes, then the summary line, and throws
+// failure when one is fatal.
+fun verdict(tool: str, findings: [Finding], base: Base, deferNote: str, failure: str) > void !> any {
+    if (base.inventory == null) {
+        std\print("{tool}: no base ref; provenance not computed ({base.missing})");
+    }
+    var introduced = 0;
+    var inherited = 0;
+    var unknown = 0;
+    var deferred = 0;
+    var fatal = mut [<str>];
+    foreach (f in findings) {
+        final what = f.id + " " + f.installed.join(", ") + ": " + f.summary;
+        if (!f.actionable) {
+            deferred = deferred + 1;
+            std\print("{tool} [deferred] " + what + " - " + f.deferral);
+            continue;
+        }
+        final provenance = classify(f.installed, base: base.inventory);
+        if (provenance == "introduced") {
+            introduced = introduced + 1;
+        } else if (provenance == "inherited") {
+            inherited = inherited + 1;
+        } else {
+            unknown = unknown + 1;
+        }
+        if (isFatal(provenance, changed: base.changed)) {
+            fatal.append("{tool} [BLOCKING] [{provenance}] " + what + " - " + f.fix);
+        } else {
+            std\print("{tool} [inherited] " + what + " - " + f.fix
+                + "; the base carries it too, so it fails main, not this change");
+        }
+    }
+    if (deferred > 0 and deferNote != "") {
+        std\print(deferNote);
+    }
+    var summary = "security: {introduced} introduced, {inherited} inherited, {deferred} deferred";
+    if (unknown > 0) {
+        summary = summary + ", {unknown} unknown";
+    }
+    std\print(summary);
+    if (fatal.len() > 0) {
+        foreach (line in fatal) {
+            std\print(line);
+        }
+        throw failure;
+    }
+}
+
+// pnpmKey reduces a lockfile packages key to name@version: v6 prefixes "/", and a peer or
+// patch suffix in parentheses names the same installed version.
+fun pnpmKey(key: str) > str {
+    var k = key;
+    if (k.startsWith("/")) {
+        k = k.sub(1);
+    }
+    final open = k.indexOf("(");
+    if (open != null) {
+        k = k.sub(0, len: open);
+    }
+    return k;
+}
+
+fun pnpmInventory(lockfile: str) > {str: bool} !> any {
+    var inventory = mut {<str: bool>};
+    if (lockfile == "") {
+        return inventory;
+    }
+    final doc = yaml\parse(lockfile);
+    if (doc["packages"] == null) {
+        return inventory;
+    }
+    foreach (key, _ in doc["packages"]) {
+        inventory[pnpmKey(key)] = true;
+    }
+    return inventory;
+}
+
+test "a pnpm lockfile inventory keys on name@version" {
+    final inventory = pnpmInventory(`lockfileVersion: '9.0'
+packages:
+  '@babel/core@7.24.0':
+    resolution: {integrity: sha512-x}
+  nanoid@3.3.16:
+    resolution: {integrity: sha512-y}
+  /react-dom@18.2.0(react@18.2.0):
+    resolution: {integrity: sha512-z}
+`);
+    assert\isTrue(inventory["@babel/core@7.24.0"] ?? false, message: "scoped name");
+    assert\isTrue(inventory["nanoid@3.3.16"] ?? false, message: "plain name");
+    assert\isTrue(inventory["react-dom@18.2.0"] ?? false, message: "v6 slash and peer suffix dropped");
+    assert\equal(pnpmInventory("").len(), want: 0, message: "absent at the base");
+}
+
+// audit scans the current project and fails ONLY on findings that are actionable today
+// and, on a change, that the change introduced. Everything else is printed and carried.
+// Throws to fail the calling target.
 export fun audit() > void !> any {
     final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
         opts: {"allow_failure": true});
     if (res.code == 0) {
         std\print("audit: no advisories match this tree");
+        std\print("security: 0 introduced, 0 inherited, 0 deferred");
         return;
     }
 
@@ -168,45 +398,278 @@ export fun audit() > void !> any {
         return;
     }
 
-    var blocking = mut [<str>];
-    var deferred = mut [<str>];
-
+    var findings = mut [<Finding>];
     foreach (id, adv in report["advisories"]) {
         final severity = adv["severity"] ?? "unknown";
         final pkg = adv["module_name"] ?? "unknown";
         final patched = adv["patched_versions"] ?? "";
-        final where = pkg + " (" + severity + "): " + (adv["title"] ?? "");
 
         // The version the tree is actually on, which bounds what a fix could be.
         // Absent (an advisory with no findings) leaves it empty and the major
         // check off, which is the old behavior.
         var installed = "";
+        var copies = mut [<str>];
         if (adv["findings"] != null and adv["findings"].len() > 0) {
             installed = adv["findings"][0]["version"] ?? "";
+            foreach (found in adv["findings"]) {
+                copies.append(pkg + "@" + (found["version"] ?? ""));
+            }
         }
 
+        var actionable = false;
+        var deferral = "";
         if (!isBlockingSeverity(severity)) {
-            deferred.append(where + " - below the failing threshold");
+            deferral = "below the failing threshold";
         } else if (hasInstallablePatch(pkg, patched, installed)) {
-            blocking.append(where + " - fix available: upgrade to " + patched);
+            actionable = true;
         } else {
-            deferred.append(where + " - patched " + patched + " is inside the cooling"
-                + " period, unpublished, or only on a major this tree cannot reach");
+            deferral = "patched " + patched + " is inside the cooling period, unpublished,"
+                + " or only on a major this tree cannot reach";
         }
+        findings.append(Finding{
+            id = pkg + " (" + severity + ")",
+            installed = copies,
+            summary = adv["title"] ?? "",
+            fix = "fix available: upgrade to " + patched,
+            actionable = actionable,
+            deferral = deferral,
+        });
     }
 
-    foreach (d in deferred) {
-        std\print("audit [deferred] " + d);
-    }
-    if (deferred.len() > 0) {
-        std\print("audit: deferred findings are NOT actionable today. Each one starts"
-            + " failing this gate on its own once a patch clears the cooling period.");
-    }
-
-    if (blocking.len() > 0) {
-        foreach (b in blocking) {
-            std\print("audit [BLOCKING] " + b);
+    var base = Base{ inventory = {<str: bool>} };
+    if (anyActionable(findings)) {
+        final lock = readBase("pnpm-lock.yaml");
+        var inventory: {str: bool}? = null;
+        if (lock.text != null) {
+            inventory = pnpmInventory(lock.text!);
         }
-        throw "audit: an advisory has a fix this policy would install today; upgrade it";
+        base = Base{ inventory = inventory, changed = lock.changed, missing = lock.missing };
     }
+    verdict("audit", findings: findings, base: base,
+        deferNote: "audit: deferred findings are NOT actionable today. Each one starts"
+            + " failing this gate on its own once a patch clears the cooling period.",
+        failure: "audit: an advisory has a fix this policy would install today; upgrade it");
+}
+
+// goLine is a Go version's language line: "go1.26.1", "v1.26.1" and "1.26" all give
+// "1.26". go.mod does not pin the stdlib's patch version (the installed toolchain does),
+// so stdlib provenance is judged at the line a change can move.
+fun goLine(version: str) > str {
+    var v = version;
+    if (v.startsWith("go")) {
+        v = v.sub(2);
+    }
+    if (v.startsWith("v")) {
+        v = v.sub(1);
+    }
+    final parts = v.split(".");
+    if (parts.len() < 2) {
+        return v;
+    }
+    return parts[0] + "." + parts[1];
+}
+
+fun goKey(module: str, version: str) > str {
+    if (module == "stdlib" or module == "toolchain") {
+        return module + "@" + goLine(version);
+    }
+    return module + "@" + version;
+}
+
+// goInventory reads `go mod edit -json` output. A replacement's version is what the build
+// uses, so it is keyed under the replaced path too.
+fun goInventory(modJSON: str) > {str: bool} !> any {
+    var inventory = mut {<str: bool>};
+    if (modJSON == "") {
+        return inventory;
+    }
+    final mod = json\parse(modJSON);
+    if (mod["Require"] != null) {
+        foreach (req in mod["Require"]) {
+            inventory[goKey(req["Path"], version: req["Version"] ?? "")] = true;
+        }
+    }
+    if (mod["Replace"] != null) {
+        foreach (rep in mod["Replace"]) {
+            final version = rep["New"]["Version"] ?? "";
+            if (version != "") {
+                inventory[goKey(rep["Old"]["Path"], version: version)] = true;
+            }
+        }
+    }
+    final line = mod["Toolchain"] ?? mod["Go"] ?? "";
+    if (line != "") {
+        inventory[goKey("stdlib", version: line)] = true;
+        inventory[goKey("toolchain", version: line)] = true;
+    }
+    return inventory;
+}
+
+// goFindings reads govulncheck's `-format json` stream into one Finding per OSV id. The
+// stream is concatenated objects encoded with a two-space indent, so a "}" at column zero
+// ends each one and joining there makes the stream an array.
+//
+// govulncheck reports a vulnerability at module, package and symbol level. Only a
+// symbol-level finding (a frame with a function) means this code calls it, which is what
+// a plain `govulncheck ./...` exit code fails on; the rest are deferred.
+fun goFindings(stream: str) > [Finding] !> any {
+    final body = stream.trim();
+    var findings = mut [<Finding>];
+    if (body == "") {
+        return findings;
+    }
+    final messages = json\parse("[" + body.replace("\n}\n\{", "\n},\n\{") + "]");
+    var summaries = mut {<str: str>};
+    var order = mut [<str>];
+    var copies = mut {<str: str>};
+    var called = mut {<str: bool>};
+    var fixes = mut {<str: str>};
+    foreach (message in messages) {
+        if (message["osv"] != null) {
+            summaries[message["osv"]["id"]] = message["osv"]["summary"] ?? "";
+        }
+        if (message["finding"] == null) {
+            continue;
+        }
+        final found = message["finding"];
+        final id: str = found["osv"];
+        final frame = found["trace"][0];
+        final calls = (frame["function"] ?? "") != "";
+        if (copies[id] == null) {
+            order.append(id);
+        }
+        if (copies[id] == null or (calls and !(called[id] ?? false))) {
+            copies[id] = goKey(frame["module"], version: frame["version"] ?? "");
+        }
+        if (calls) {
+            called[id] = true;
+        }
+        fixes[id] = found["fixed_version"] ?? "";
+    }
+    foreach (id in order) {
+        var fix = "no fixed version published";
+        if ((fixes[id] ?? "") != "") {
+            fix = "fixed in " + fixes[id]!;
+        }
+        findings.append(Finding{
+            id = id,
+            installed = [copies[id]!],
+            summary = summaries[id] ?? "",
+            fix = fix,
+            actionable = called[id] ?? false,
+            deferral = "imported or required, but this code does not call it",
+        });
+    }
+    return findings;
+}
+
+test "govulncheck's stream becomes one finding per vulnerability" {
+    final findings = goFindings(`{
+  "config": {
+    "protocol_version": "v1.0.0"
+  }
+}
+{
+  "osv": {
+    "id": "GO-2025-0001",
+    "summary": "Quadratic parsing in x/net/html"
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2025-0001",
+    "fixed_version": "v0.33.0",
+    "trace": [
+      {
+        "module": "golang.org/x/net",
+        "version": "v0.30.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2025-0001",
+    "fixed_version": "v0.33.0",
+    "trace": [
+      {
+        "module": "golang.org/x/net",
+        "version": "v0.30.0",
+        "package": "golang.org/x/net/html",
+        "function": "Parse"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2025-0002",
+    "trace": [
+      {
+        "module": "stdlib",
+        "version": "v1.26.1",
+        "package": "net/http"
+      }
+    ]
+  }
+}
+`);
+    assert\equal(findings.len(), want: 2, message: "one per OSV id");
+    assert\equal(findings[0].id, want: "GO-2025-0001", message: "stream order kept");
+    assert\equal(findings[0].installed[0], want: "golang.org/x/net@v0.30.0", message: "trace[0] names the module");
+    assert\isTrue(findings[0].actionable, message: "a called symbol is actionable");
+    assert\equal(findings[0].fix, want: "fixed in v0.33.0", message: "fixed_version");
+    assert\equal(findings[0].summary, want: "Quadratic parsing in x/net/html", message: "osv summary");
+    assert\isFalse(findings[1].actionable, message: "a package-level finding is not called");
+    assert\equal(findings[1].installed[0], want: "stdlib@1.26", message: "stdlib keyed at its line");
+    assert\equal(goFindings("\n").len(), want: 0, message: "an empty stream");
+}
+
+test "a go.mod inventory carries requires, replacements and the go line" {
+    final inventory = goInventory(`{
+  "Go": "1.26",
+  "Require": [
+    {"Path": "golang.org/x/net", "Version": "v0.30.0", "Indirect": true}
+  ],
+  "Replace": [
+    {"Old": {"Path": "example.com/a"}, "New": {"Path": "example.com/fork", "Version": "v1.2.0"}},
+    {"Old": {"Path": "example.com/b"}, "New": {"Path": "../b"}}
+  ]
+}`);
+    assert\isTrue(inventory["golang.org/x/net@v0.30.0"] ?? false, message: "indirect requires count");
+    assert\isTrue(inventory["example.com/a@v1.2.0"] ?? false, message: "keyed under the replaced path");
+    assert\isTrue(inventory["stdlib@1.26"] ?? false, message: "the go line");
+    assert\equal(inventory.len(), want: 4, message: "a directory replacement adds nothing");
+}
+
+// govulncheck scans the current Go module and fails on a vulnerability this code calls,
+// unless the run is a change and the base already carried it. go is the workspace's go
+// spell handle: its go-mod-json op parses the base go.mod, so no modfile parser lives here.
+//
+// The scanner runs through proc\exec because the go spell's govulncheck op neither
+// captures its output nor lets a caller put -format ahead of its ./... argument.
+export fun govulncheck(ctx: magus\Context, go: any) > void !> any {
+    final res = proc\exec("govulncheck", args: ["-format", "json", "./..."], dir: ".",
+        opts: {"quiet": true});
+    final findings = goFindings(res.stdout);
+
+    var base = Base{ inventory = {<str: bool>} };
+    if (anyActionable(findings)) {
+        final mod = readBase("go.mod");
+        var inventory: {str: bool}? = null;
+        if (mod.text != null) {
+            var parsed = "";
+            if (mod.text! != "") {
+                final path = fs\tempFile("base-go.mod");
+                fs\writeFile(path, content: mod.text!);
+                parsed = go["go-mod-json"](ctx, {"args": [path]}).stdout;
+                fs\remove(path);
+            }
+            inventory = goInventory(parsed);
+        }
+        base = Base{ inventory = inventory, changed = mod.changed, missing = mod.missing };
+    }
+    verdict("govulncheck", findings: findings, base: base,
+        deferNote: "",
+        failure: "govulncheck: this code calls a vulnerable symbol; upgrade the module that carries it");
 }
