@@ -809,10 +809,8 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 			return nil, sErr
 		}
 		cfgOpts = append(cfgOpts, trusted...)
-		if rb, rErr := cache.OpenRemoteBackend(ctx, name); rErr != nil {
-			slog.WarnContext(ctx, "magus: remote cache backend init failed; continuing local-only", slog.String("error", rErr.Error()))
-		} else if rb != nil {
-			cfgOpts = append(cfgOpts, cache.WithRemoteBackend(observability.InstrumentRemoteBackend(rb, tel)))
+		if opt := remoteBackendOption(ctx, name, tel); opt != nil {
+			cfgOpts = append(cfgOpts, opt)
 		}
 	}
 	// Host capacity. Wired here rather than inside cache.Open because the arbiter is a
@@ -844,6 +842,21 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		},
 	)
 	return m, nil
+}
+
+// remoteBackendOption opens the remote backend the magusfile wired. A backend that
+// fails to start is handed to the cache rather than logged, so a required remote write
+// fails Open and an optional one names the reason in the run header.
+func remoteBackendOption(ctx context.Context, name string, tel observability.Provider) cache.Option {
+	rb, err := cache.OpenRemoteBackend(ctx, name)
+	switch {
+	case err != nil:
+		return cache.WithRemoteUnavailable(name, err)
+	case rb == nil:
+		return nil
+	default:
+		return cache.WithRemoteBackend(observability.InstrumentRemoteBackend(rb, tel))
+	}
 }
 
 func (m *Magus) Root() string                   { return m.ws.Root }

@@ -14,16 +14,21 @@ import (
 // implementation (arbitrary Buzz, with the whole host surface), and calling it here put
 // that on the path before the first line of output, where a slow probe stalls the run
 // with nothing on screen to explain the pause. Presence and name are known without
-// asking; whether the backend engages is the run's business, not the header's.
+// asking; whether the backend engages is the run's business, not the header's. A wired
+// backend that did not start is the exception: Open already knows why, so tier says it.
 //
 // Both strings derive from the write gates Open decided, so the header cannot disagree
 // with what the run does. They stay strings rather than a per-tier struct: they are the
 // run.cache record's schema, and a structured form would break its readers for no
 // behavior the header lacks.
 func (c *Cache) Description() (tier, mode string) {
-	tier = "local"
-	if c.remote != nil {
+	switch {
+	case c.remote != nil:
 		tier = c.remote.name() + " + local"
+	case c.remoteDown != nil:
+		tier = "local (" + c.remoteDown.Error() + ")"
+	default:
+		tier = "local"
 	}
 	switch {
 	case !c.local.writes():
