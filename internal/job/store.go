@@ -466,6 +466,32 @@ func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
 	return err
 }
 
+// boundaryFields are the declared fields a widen or narrow changes, in changedFields'
+// spelling.
+var boundaryFields = []string{"write_paths", "deny_paths", "read_paths"}
+
+// widensInPlace reports a declaration that changes a live row's boundaries and nothing
+// else it declares, while resetting a state its holder already moved past declared: a
+// re-fork that only moves paths. Such a write keeps the stored state, since resetting it
+// would hand the holder's job out again. A deadline may move with it, because a fork
+// re-stamps jobs.default_timeout. A re-fork that changes no boundary still resets the
+// state, which is how a rejected job is handed out again.
+func widensInPlace(prev, next types.Job) bool {
+	if !prev.State.Live() || prev.State == types.StateDeclared || next.State != types.StateDeclared {
+		return false
+	}
+	moved := false
+	for _, field := range changedFields(prev, next) {
+		switch {
+		case slices.Contains(boundaryFields, field):
+			moved = true
+		case field != "state" && field != "deadline":
+			return false
+		}
+	}
+	return moved
+}
+
 // mutate is the locked read-modify-write [Store.Update] and [Store.Exec] share, and
 // the only place jobs.json is rewritten row-wise. kind says what the write is; see
 // [grading].
@@ -504,6 +530,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		}
 		row = row.Clone()
 		row.ID = id
+		if kind == asDeclaration && i >= 0 && widensInPlace(prev, row) {
+			row.State = prev.State
+		}
 		entering := kind == asDeclaration && requestsEntry(prev, row)
 		switch {
 		case entering:
