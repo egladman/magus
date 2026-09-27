@@ -53,7 +53,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		{`grep -rn 'func Judge' internal/`, "stale"},
 		// Another tree is not this workspace's graph.
 		{`grep -rn 'func Judge' /tmp/other-repo`, ""},
-		// Reading one file is not a search of the tree.
+		// With no workspace root a named file cannot be placed, so it is left alone.
 		{`grep -n 'func Judge' internal/guard/guard.go`, ""},
 	} {
 		d := deps
@@ -70,6 +70,63 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		for _, name := range strings.Split(want, ",") {
 			assert.Contains(t, v.Deny, name, "%q: one command per name", tt.command)
 		}
+	}
+}
+
+// TestSymbolSearchOnNamedFiles pins the file half: a search of named Go files for an
+// indexed name is denied with the lines it would have printed, and anything the index
+// does not cover, or a flag that changes the question, is left alone.
+func TestSymbolSearchOnNamedFiles(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
+		"internal/api/config.go":  "package api\n\nfunc ParseConfig() {}\n",
+		"docs/handler.md":         "HandleRequest is documented here.\n",
+	})
+	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, scope: workspaceScope{root: root}}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, scope: workspaceScope{root: root}}
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		arg     string // "" for no deny
+		answer  string
+	}{
+		{`grep -n HandleRequest internal/api/handler.go`, deps, "HandleRequest",
+			"What this search selects (3 results):\n  internal/api/handler.go:3:// HandleRequest serves one request.\n  internal/api/handler.go:4:func HandleRequest() {}\n  internal/api/handler.go:6:func serve() { HandleRequest() }"},
+		{`grep -n 'HandleRequest\|ParseConfig' internal/api/handler.go internal/api/config.go`, deps, "HandleRequest,ParseConfig",
+			"  internal/api/config.go:3:func ParseConfig() {}"},
+		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "HandleRequest", "  internal/api/handler.go:6:func serve() { HandleRequest() }"},
+		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "HandleRequest", "refs HandleRequest --definition --source"},
+		{`grep -n ParseConfig internal/api/handler.go`, deps, "ParseConfig", "What this search selects: nothing."},
+
+		// A stale index proves nothing.
+		{`grep -n HandleRequest internal/api/handler.go`, stale, "", ""},
+		// Text, and a name the index does not hold.
+		{`grep -n serve internal/api/handler.go`, deps, "", ""},
+		{`grep -n 'HandleRequest\|serve' internal/api/handler.go`, deps, "", ""},
+		// Prose is not what the symbol index covers.
+		{`grep -n HandleRequest docs/handler.md`, deps, "", ""},
+		{`grep -n HandleRequest internal/api/handler.go docs/handler.md`, deps, "", ""},
+		// Context, count, list, invert and case flags ask a different question.
+		{`grep -n -B2 HandleRequest internal/api/handler.go`, deps, "", ""},
+		{`grep -c HandleRequest internal/api/handler.go`, deps, "", ""},
+		{`grep -l HandleRequest internal/api/handler.go`, deps, "", ""},
+		{`grep -v HandleRequest internal/api/handler.go`, deps, "", ""},
+		{`grep -in handlerequest internal/api/handler.go`, deps, "", ""},
+		// A glob or a missing file cannot be read.
+		{`grep -n HandleRequest internal/api/*.go`, deps, "", ""},
+		{`grep -n HandleRequest internal/api/missing.go`, deps, "", ""},
+		// A pipe is not a file.
+		{`cat internal/api/handler.go | grep -n HandleRequest`, deps, "", ""},
+	} {
+		v, ok := searchVerdictAt(tt.deps, root, parseForTest(t, tt.command))
+		if tt.arg == "" {
+			assert.False(t, ok && v.Deny != "", "%q must not deny: %s", tt.command, v.Deny)
+			continue
+		}
+		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, tt.command)
+		assert.Contains(t, v.Deny, tt.answer, tt.command)
 	}
 }
 
