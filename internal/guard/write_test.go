@@ -801,14 +801,15 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 // negotiation, and a worker that has to describe its own row in prose makes the
 // orchestrator reconstruct what the ledger already knows.
 //
-// The call carries the paths the row already had, because op=put REPLACES the row: a call
-// naming only the blocked path hands back a narrower boundary than the worker started with.
+// The call carries the paths the row already had, because a put's write_paths REPLACES the
+// row's: a call naming only the blocked path hands back a narrower boundary than the worker
+// started with. It names the op the tool accepts, which is `fork`.
 func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
 	require.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, "magus_job op=put id=lease-b")
+	assert.Contains(t, got.Reason, "magus_job op=fork id=lease-b write_paths=")
 	assert.Contains(t, got.Reason, "cmd/magus/**", "the call must keep the paths the row already declared")
 	assert.Contains(t, got.Reason, "docs/guard.md", "every one of them, not just the first")
 	assert.Contains(t, got.Reason, "internal/thing/new.go", "and it must add the path that was refused")
@@ -818,13 +819,13 @@ func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	t.Run("a path another live lease owns wants re-partitioning", func(t *testing.T) {
 		owned := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "deny", owned.Decision)
-		assert.NotContains(t, owned.Reason, "op=put")
+		assert.NotContains(t, owned.Reason, "write_paths=")
 	})
 
 	t.Run("a path the row's own deny list names was refused on purpose", func(t *testing.T) {
 		refused := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "deny", refused.Decision)
-		assert.NotContains(t, refused.Reason, "op=put")
+		assert.NotContains(t, refused.Reason, "write_paths=")
 	})
 }
 

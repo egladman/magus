@@ -462,16 +462,16 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 // blocked worker reports a paste rather than a paragraph and whoever owns the plan acts
 // without reconstructing the row from a denial.
 //
-// It carries every path the row already declared alongside the new one, because op=put
-// REPLACES the row: a call naming only the blocked path would hand back a narrower set of
-// paths than the worker started with.
+// It carries every path the row already declared alongside the new one, because a put's
+// write_paths REPLACES the row's: a call naming only the blocked path would hand back a
+// narrower set of paths than the worker started with. The tool's put op is `fork`.
 //
 // Only this denial offers it. A path another live row owns wants the plan re-partitioned
 // rather than a second owner, and a path the row's own deny list names was refused on
 // purpose; printing the undo for either would teach the reader that a boundary is a
 // formality.
 func widenCall(me types.Job, rel string) string {
-	return fmt.Sprintf("%s op=put id=%s write_paths=%q",
+	return fmt.Sprintf("%s op=fork id=%s write_paths=%q",
 		hint.ToolJob.String(), me.ID, strings.Join(append(slices.Clone(me.WritePaths), rel), " "))
 }
 
