@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,11 +36,9 @@ func (f *precedentFixture) edge(from, to string, rel types.RelationID) {
 	f.g.AddEdge(types.KnowledgeEdge{Source: from, Target: to, Relation: rel, Confidence: types.ConfidenceExtracted, Score: 1})
 }
 
-// file adds a file defining the namespace ns, labelled label, and the top-level dir holding it.
+// file adds a file defining the namespace ns, labelled label. No dir node is added: a layer is
+// read off the path.
 func (f *precedentFixture) file(file, ns, label, lang string) {
-	if top, _, ok := strings.Cut(file, "/"); ok {
-		f.g.AddNode(types.KnowledgeNode{ID: dirID(top), Kind: types.KindDir, Label: top, Source: top})
-	}
 	f.g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: label, Source: file + ":1",
 		Attrs: map[string]string{attrNamespace: ns, attrLanguage: lang, attrSymbolKind: "Package"}})
 	f.g.AddNode(types.KnowledgeNode{ID: "file:" + file, Kind: types.KindFile, Label: file, Source: file})
@@ -189,6 +186,27 @@ func TestPrecedentsAreNotEstablishedBelowEitherGate(t *testing.T) {
 		Departures: []types.Case{{Node: bad, Source: "internal/a/f0.go:6"}, {Node: missing, Source: "internal/a/f0.go:7"}},
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope),
 		"5 of 7 is under 80%")
+}
+
+// TestPrecedentsTakeALayerWhoseTopDirectoryHoldsOnlyNestedProjects: libs has no dir or
+// project node of its own, only the projects under it.
+func TestPrecedentsTakeALayerWhoseTopDirectoryHoldsOnlyNestedProjects(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/x", 1)
+	for _, dir := range []string{"libs/a", "libs/b"} {
+		f.g.AddNode(types.KnowledgeNode{ID: "project:" + dir, Kind: types.KindProject, Label: dir, Source: dir})
+		f.pkg(dir, 1)
+		f.imports(dir, "internal/x")
+	}
+
+	layers := types.PrecedentScope{Layers: []string{"internal", "libs"}}
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentDepDirection, Scope: layers, Key: types.PrecedentKey{From: "libs", To: "internal"},
+		Follow: 2, Cohort: 2, Share: 1,
+		Cited: []types.Case{depCase("libs/a", "internal/x"), depCase("libs/b", "internal/x")},
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepDirection, layers))
 }
 
 func TestPrecedentsSkipGeneratedAndTestCode(t *testing.T) {

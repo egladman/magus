@@ -71,15 +71,10 @@ type precedentPackages struct {
 	authored map[string]bool
 }
 
-// packages reads layers off the directory tree the graph already holds: a top-level dir or
-// project node is a layer, and the workspace root is ".". No directory name is special.
+// packages takes each package's layer from the first segment of its directory, and "." for
+// the workspace root. The path alone decides it: a top-level directory holding only nested
+// projects may have no node of its own. No directory name is special.
 func (m precedentMiner) packages() precedentPackages {
-	tops := map[string]bool{}
-	for _, n := range m.g.nodes {
-		if (n.Kind == types.KindDir || n.Kind == types.KindProject) && n.Source != "." && !strings.Contains(n.Source, "/") {
-			tops[n.Source] = true
-		}
-	}
 	pk := precedentPackages{
 		deps: m.g.packageDeps(), dir: map[string]string{}, layer: map[string]string{},
 		ns: map[string]string{}, authored: map[string]bool{},
@@ -103,13 +98,7 @@ func (m precedentMiner) packages() precedentPackages {
 		if cur, ok := pk.ns[dir]; !ok || ns < cur {
 			pk.ns[dir] = ns
 		}
-		top, _, _ := strings.Cut(dir, "/")
-		switch {
-		case dir == ".":
-			pk.layer[ns] = "."
-		case tops[top]:
-			pk.layer[ns] = top
-		}
+		pk.layer[ns], _, _ = strings.Cut(dir, "/")
 	}
 	return pk
 }
