@@ -447,6 +447,153 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	return f, nil
 }
 
+// Ending is one live row [Store.Prune] ends, and the end_reason it records.
+type Ending struct {
+	ID     string `json:"id"     yaml:"id"`
+	Reason string `json:"reason" yaml:"reason"`
+}
+
+// PruneOptions widens or previews [Store.Prune].
+type PruneOptions struct {
+	// All also ends a row a holder took and nobody touched within jobs.stale_after.
+	All bool
+	// DryRun decides what would end and writes nothing.
+	DryRun bool
+}
+
+// Prune ends, as no_return, every live row the store can show nobody is working, and
+// returns them in the order they ended. A row ends for the first of:
+//
+//   - a reason the read sweep ends rows for (see [sweeper.dead]);
+//   - its holder exited and nobody collected the result with `magus job wait`;
+//   - it is overdue ([types.Job.Overdue]);
+//   - it is stale ([types.Job.StaleAt] against jobs.stale_after) and nobody took it, or
+//     opts.All is set.
+//
+// A declared or running row a holder took and touched within jobs.stale_after is never
+// ended, and neither is one it took that is not overdue unless opts.All is set. Nor is
+// any ancestor of such a row, since its tree would end with it. Server rows and rows this
+// magus cannot write are left alone, as the sweep leaves them.
+//
+// A bound actor is refused: pruning ends other leases' rows.
+func (s *Store) Prune(ctx context.Context, opts PruneOptions) ([]Ending, error) {
+	if actor := s.Actor(); actor.Bound() {
+		return nil, refuse(actor, actor.Lease, "pruning ends other leases' rows, so it belongs to whoever declared the plan")
+	}
+	window, err := s.resolveStaleAfter()
+	if err != nil {
+		return nil, err
+	}
+	clock := s.clock
+	if clock == nil {
+		clock = time.Now
+	}
+	w := &sweeper{now: clock().Unix(), window: func() (time.Duration, error) { return window, nil }, gone: map[string]bool{}}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f, err := s.read()
+	if err != nil {
+		return nil, err
+	}
+	// Probed outside the file lock, as the sweep does: the probe runs the VCS.
+	w.landed = s.landings(f.Jobs, w.now)
+
+	var out []Ending
+	err = s.withFileLock(ctx, func() error {
+		cur, err := s.read()
+		if err != nil {
+			return err
+		}
+		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil || opts.DryRun || len(out) == 0 {
+			return err
+		}
+		for _, e := range out {
+			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })
+			cur.Jobs[i].State = types.StateNoReturn
+			cur.Jobs[i].EndReason = e.Reason
+			cur.Jobs[i].Updated = w.now
+		}
+		return s.write(cur)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// prunable is what [Store.Prune] ends, repeated to a fixed point like [sweeper.dead]
+// because ending a row orphans its children.
+func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]Ending, error) {
+	rows = slices.Clone(rows)
+	var out []Ending
+	for {
+		flagged := types.JobList{Jobs: rows}.Flag(w.now, window)
+		kept := w.worked(rows, window, all)
+		var round []Ending
+		for _, row := range rows {
+			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil || kept[row.ID] {
+				continue
+			}
+			reason, err := w.reason(rows, row)
+			if err != nil {
+				return nil, err
+			}
+			if reason == "" {
+				reason = w.pruneReason(row, flagged, window)
+			}
+			if reason != "" {
+				round = append(round, Ending{ID: row.ID, Reason: reason})
+			}
+		}
+		if len(round) == 0 {
+			return out, nil
+		}
+		for _, e := range round {
+			i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.ID })
+			rows[i].State = types.StateNoReturn
+		}
+		out = append(out, round...)
+	}
+}
+
+// worked is the ids Prune keeps: every row a holder took and may still be working, and
+// every ancestor of one.
+func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[string]bool {
+	kept := map[string]bool{}
+	for _, row := range rows {
+		if !Editing(row) || row.Registered == 0 {
+			continue
+		}
+		touched := !row.StaleAt(w.now, window)
+		if !touched && (all || row.Overdue(w.now)) {
+			continue
+		}
+		kept[row.ID] = true
+		for _, a := range types.JobAncestors(rows, row.ID) {
+			kept[a.ID] = true
+		}
+	}
+	return kept
+}
+
+// pruneReason is why Prune ends a row the sweep would keep, or "" when it keeps it too.
+func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.Duration) string {
+	idle := time.Duration(w.now-row.Updated) * time.Second
+	switch {
+	case row.State == types.StateExited:
+		return fmt.Sprintf("exited %s ago and nobody collected its result with `magus job wait`", idle)
+	case slices.Contains(flagged.Overdue, row.ID):
+		return fmt.Sprintf("overdue: its deadline passed %s ago", time.Duration(w.now-row.Deadline)*time.Second)
+	case !slices.Contains(flagged.Stale, row.ID):
+		return ""
+	case row.Registered == 0:
+		return fmt.Sprintf("declared and never taken, untouched for %s (jobs.stale_after is %s)", idle, window)
+	default:
+		return fmt.Sprintf("taken, then untouched for %s (jobs.stale_after is %s)", idle, window)
+	}
+}
+
 // resolveStaleAfter is jobs.stale_after from the workspace's own magus.yaml. Workspace
 // only, like every rule that acts rather than reports: a value in one person's global
 // config must not end rows in a repository that never chose it.
