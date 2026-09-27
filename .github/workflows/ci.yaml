@@ -261,6 +261,25 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    # Scopes MAGUS_CACHE_SIGNING_KEY to the cache-signing environment, whose deployment
+    # branch policy admits only main: a pull_request run holds a ref the policy refuses,
+    # so the secret stays out of reach at the platform level rather than by the
+    # workflow's own `if` alone. name can be an expression (github context is allowed
+    # here; see "jobs.<job_id>.environment" in
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
+    # and an empty name means the job references no environment at all - the same idiom
+    # dbt-labs/dbt-project-evaluator's ci.yml uses to gate an approval-required
+    # environment onto fork PRs alone.
+    #
+    # Creating the environment and setting its branch policy are repository-admin
+    # actions this workflow cannot take; until the owner does, a run that references
+    # cache-signing here auto-creates one with no protection rules of its own
+    # (docs.github.com: "the newly created environment will not have any protection
+    # rules or secrets configured").
+    #
+    # Trade-off: this job is a matrix, so every shard that runs on main references the
+    # environment and records its own deployment - one per shard, not one per run.
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && 'cache-signing' || '' }}
     env:
       # Caps the local tier, and so every saved store below, at 256 MiB: the saves share
       # the repository's Actions cache quota with the remote tier's entries, and an

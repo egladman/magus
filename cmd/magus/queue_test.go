@@ -709,6 +709,22 @@ func workflowJob(t *testing.T, path, job string) []workflowStep {
 	return wf.Jobs[job].Steps
 }
 
+// workflowJobEnvironment reads job's top-level `environment` field, unresolved, from the
+// workflow file at path under the repository root.
+func workflowJobEnvironment(t *testing.T, path, job string) string {
+	t.Helper()
+	var wf struct {
+		Jobs map[string]struct {
+			Environment string `yaml:"environment"`
+		} `yaml:"jobs"`
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", path))
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(raw, &wf))
+	require.Contains(t, wf.Jobs, job, path)
+	return wf.Jobs[job].Environment
+}
+
 // ciShardBoxes are the argvs, expressions dropped, and steps of every command ci.yaml's
 // shards run in a `queue gate` box, in step order.
 func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
@@ -858,6 +874,30 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
 		_, carries := s.Env["MAGUS_CACHE_SIGNING_KEY"]
 		assert.Equal(t, s.Name == gateStep.Name || s.Name == save.Name, carries, s.Name)
+	}
+}
+
+// MAGUS_CACHE_SIGNING_KEY now resolves from the cache-signing environment (a repository
+// secret until this change), whose deployment branch policy is what a pull_request run or
+// a push to any branch but main is refused by. The job's `environment` and each step's own
+// condition on the key must move together, or an edit could widen one without the other
+// and leave a run that holds no environment still expecting the key, or a run that holds
+// the environment unable to reach it.
+func TestCIShardsReferenceTheSigningEnvironmentOnMainAlone(t *testing.T) {
+	const cond = "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'"
+
+	env := workflowJobEnvironment(t, ".github/workflows/ci.yaml", "ci")
+	require.NotEmpty(t, env, "ci.yaml's ci job references no environment")
+	assert.Contains(t, env, cond)
+	assert.Contains(t, env, "'cache-signing'")
+	assert.Contains(t, env, "|| ''", "a pull_request run or a non-main ref references no environment")
+
+	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+		key, carries := s.Env["MAGUS_CACHE_SIGNING_KEY"]
+		if !carries {
+			continue
+		}
+		assert.Contains(t, key, cond, "%s: the key's condition differs from the job's environment condition", s.Name)
 	}
 }
 

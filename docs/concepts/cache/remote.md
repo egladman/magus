@@ -154,11 +154,12 @@ asymmetric:
 - The **public** verification keys live in `magus.yaml` (`cache.remote.trusted_keys`).
   They are not secret. Any machine (CI, a laptop, a fork PR) can verify and so
   still get cache hits.
-- The **secret** signing seed lives only in trusted CI, as the
-  `MAGUS_CACHE_SIGNING_KEY` environment secret. Only a holder of the seed can
-  produce a signature. A machine without it (every machine but trusted CI)
-  cannot publish an artifact others will replay; magus won't even attempt
-  the upload.
+- The **secret** signing seed lives only in trusted CI, as
+  `MAGUS_CACHE_SIGNING_KEY` scoped to a GitHub Environment (this repository's is
+  named `cache-signing`) whose deployment branch policy admits `main` alone.
+  Only a holder of the seed can produce a signature. A machine without it
+  (every machine but trusted CI) cannot publish an artifact others will
+  replay; magus won't even attempt the upload.
 
 Because verification happens on the consumer, this holds even against an attacker
 who bypasses magus entirely and writes poisoned bytes straight into the bucket:
@@ -215,18 +216,32 @@ overlap.
 
 ### Set the signing secret in CI
 
+Store the seed in a GitHub Environment whose deployment branch policy admits only
+your trusted branch (`main`), not as a bare repository secret: a repository secret
+is readable by any workflow run a writer can trigger, fork PRs included once they
+land on a branch, where an environment-scoped secret is refused to a run holding
+any other ref before a single step executes.
+
 ```yaml
-# in your trusted-push workflow only (e.g. push to main) - never exposed to fork PRs
+# the job holding the signing steps, referencing an environment whose deployment
+# branch policy is main-only; empty on every other ref, so the job never even asks
+environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && 'cache-signing' || '' }}
 env:
   MAGUS_CACHE_SIGNING_KEY: ${{ secrets.MAGUS_CACHE_SIGNING_KEY }}
 ```
 
 ### Runbook: turning it on for a GitHub repository
 
-Four steps, in this order. The cache stays off until the last one, so a half-finished
+Five steps, in this order. The cache stays off until the last one, so a half-finished
 setup degrades to local-only rather than breaking a build.
 
-**1 and 2. Mint the key and store it.** Pick one of two custody models. Both keep the
+**1. Create the environment.** `MAGUS_CACHE_SIGNING_KEY` lives in a GitHub Environment,
+not as a bare repository secret, so its deployment branch policy - not the workflow's
+own conditionals alone - is what refuses the key to a run holding any ref but `main`.
+Creating an environment and setting its branch policy are repository-admin actions the
+CLI does not wrap; use `gh api` or _Settings -> Environments -> New environment_.
+
+**2 and 3. Mint the key and store it.** Pick one of two custody models. Both keep the
 seed off disk; they differ in whether you ever see it.
 
 _Hand it straight to the secret store, unseen._ `-o template='{{.seed}}'` puts the seed
@@ -235,13 +250,13 @@ alone on stdout - no banner, and no trailing newline, which matters because
 
 ```sh
 set -o pipefail
-magus config cache key generate -o template='{{.seed}}' | gh secret set MAGUS_CACHE_SIGNING_KEY
+magus config cache key generate -o template='{{.seed}}' | gh secret set MAGUS_CACHE_SIGNING_KEY --env cache-signing
 ```
 
 `set -o pipefail` is not optional here. A pipeline reports only its LAST command's
 status, so without it a failed keygen still looks successful and `gh` stores whatever
 it read - possibly nothing. The keyid and public key are printed to stderr, so you
-still see the half you need for step 3.
+still see the half you need for step 4.
 
 _See it once, then file it._ Use this when the seed belongs in your own password
 manager as well. `gh secret set` reads stdin when given no `--body`, so the value stays
@@ -252,28 +267,28 @@ magus config cache key generate
 ```
 
 ```sh
-gh secret set MAGUS_CACHE_SIGNING_KEY
+gh secret set MAGUS_CACHE_SIGNING_KEY --env cache-signing
 ```
 
 Never pass a seed as `--body` or with `echo ... |`; both put it in history. `--tee` is
 refused on `key generate` for the same reason - it writes structured output to a file,
 and a signing key must not come to rest on disk.
 
-The web UI is equally fine for either model: _Settings -> Secrets and variables ->
-Actions -> Secrets -> New repository secret_. A paste into a password field is not in
+The web UI is equally fine for either model: _Settings -> Environments -> cache-signing
+-> Environment secrets -> Add secret_. A paste into a password field is not in
 your shell history either.
 
-**3. Publish the public key.** It is not secret, so an argument is fine here. It goes
+**4. Publish the public key.** It is not secret, so an argument is fine here. It goes
 in two places - `magus.yaml` is what every consumer verifies against, and the
 repository variable is what the workflow hands to `MAGUS_CACHE_REMOTE_TRUSTED_KEYS`:
 
 ```sh
-gh variable set MAGUS_CACHE_PUBLIC_KEY --body "<the public key from step 1>"
+gh variable set MAGUS_CACHE_PUBLIC_KEY --body "<the public key from step 2>"
 ```
 
 Then add the same value under `cache.remote.trusted_keys` in `magus.yaml` and commit it.
 
-**4. Confirm what CI signs with.** This derives the public identity from the seed and
+**5. Confirm what CI signs with.** This derives the public identity from the seed and
 never echoes the seed itself:
 
 ```sh
@@ -337,8 +352,10 @@ each one:
 <!--diagram:cache-trust-->
 
 - **Pull requests do not write the remote tier.** `ci.yaml` sets
-  `MAGUS_CACHE_REMOTE_WRITE_ENABLED=false` on `pull_request` events and hands
-  `MAGUS_CACHE_SIGNING_KEY` only to runs on the default branch.
+  `MAGUS_CACHE_REMOTE_WRITE_ENABLED=false` on `pull_request` events and references
+  the `cache-signing` environment, holding `MAGUS_CACHE_SIGNING_KEY`, only for a run
+  on the default branch; the environment's own deployment branch policy refuses the
+  key to any other ref, the workflow's conditional aside.
 - **A pull request's local tier stays with it.** The workflow saves `.magus/` on
   `pull_request` events only, and GitHub scopes that save to the pull request's ref,
   out of the default branch's reach. No workflow uses `pull_request_target`, and the
