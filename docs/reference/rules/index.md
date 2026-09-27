@@ -19,7 +19,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [agent-sign-off](agent-sign-off.md)               | an agent stamping a read receipt or closing an attention request, which only a person may do      |
 | [backtick-substitution](backtick-substitution.md) | a backtick command substitution, which inside double quotes runs a command                        |
 | [brief-command](brief-command.md)                 | a spawn or continuation brief that teaches a command the guard denies                             |
-| [busy-wait](busy-wait.md)                         | a loop polling for work you started, which announces its own completion                           |
+| [busy-wait](busy-wait.md)                         | a loop that only sleeps between polls, holding a tool slot for its whole wait                     |
 | [buzz-unbriefed](buzz-unbriefed.md)               | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                              |
 | [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)           |
