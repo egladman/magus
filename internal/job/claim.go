@@ -102,7 +102,8 @@ func driverPattern(p string) string {
 // depends_on partner.
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
-// RefuseSharedCheckout and the overlap report already watch; a holder blocked on
+// RefuseSharedCheckout and the overlap report already watch; a holder that exited, whose
+// editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move.
 func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, id string, candidate types.Job) error {
@@ -120,7 +121,7 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 			continue
 		}
 		for _, holder := range rows {
-			if holder.ID == id || !holder.State.Live() || len(holder.WritePaths) == 0 {
+			if holder.ID == id || !Editing(holder) || len(holder.WritePaths) == 0 {
 				continue
 			}
 			// A row nobody has taken yet is not in a different checkout from anyone.

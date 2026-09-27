@@ -2,8 +2,10 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -325,6 +327,14 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
+			name:       "a checkout_root with no registration is not a holder",
+			staleAfter: 2 * time.Hour,
+			rows: []types.Job{
+				{ID: "forked", State: types.StateDeclared, CheckoutRoot: here, Updated: old},
+			},
+			ended: map[string]string{"forked": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
+		},
+		{
 			name: "a zero stale_after ends nothing for age",
 			rows: []types.Job{{ID: "untaken", State: types.StateDeclared, Updated: 1}},
 		},
@@ -472,4 +482,146 @@ func TestSweepRefusesAnUnreadableWorkspaceConfig(t *testing.T) {
 
 	_, err := s.List()
 	assert.ErrorContains(t, err, "jobs.stale_after")
+}
+
+// An exited row the landing probe proves is on the base ends as no_return with the
+// probe's reason; one with a live child, one another write moved since the probe, and one
+// the probe does not prove all stay.
+func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
+	s, notices := sweepStore(t, 100_000, 0)
+	result := &types.JobResult{ChangedPaths: []string{"a.go"}}
+	exited := func(id string) types.Job {
+		return types.Job{ID: id, State: types.StateExited, Result: result, Checkpoint: "c0", CheckoutRoot: "/w/" + id, Updated: 90_000}
+	}
+	busy := exited("busy")
+	plant(t, s,
+		exited("landed"),
+		busy,
+		types.Job{ID: "busy/child", Parent: "busy", State: types.StateRunning, Updated: 90_000},
+		exited("pending"),
+		types.Job{ID: "reader", State: types.StateExited, ReadOnly: true, Updated: 90_000},
+	)
+	var probed []string
+	s.landed = func(_ context.Context, row types.Job) string {
+		probed = append(probed, row.ID)
+		if row.ID == "pending" {
+			return ""
+		}
+		return "its work landed on origin/main at base1"
+	}
+
+	got := states(t, s)
+	assert.Equal(t, []string{"landed", "busy", "pending"}, probed, "only exited rows with changed paths in a checkout are probed")
+	assert.Equal(t, types.StateNoReturn, got["landed"].State)
+	assert.Equal(t, "its work landed on origin/main at base1", got["landed"].EndReason)
+	for _, id := range []string{"busy", "pending", "reader"} {
+		assert.Equal(t, types.StateExited, got[id].State, id)
+	}
+	assert.Equal(t, "ended landed: its work landed on origin/main at base1\n", notices.String())
+}
+
+// git runs one git command in dir with the box's own config shut out, and returns its
+// trimmed output.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+	return strings.TrimSpace(string(out))
+}
+
+// Two jobs whose branches were squashed into ONE base commit both end, judged by content
+// alone: no ancestry joins either branch to the squash. A job whose commit is not on the
+// base, and one whose change was never committed, both stay exited.
+func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
+	root := gitRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n", "c.go": "package c\n", "d.go": "package d\n"})
+	seedRev := commitRepo(t, root)
+	worktree := func(name, file, body string, commit bool) string {
+		dir := filepath.Join(t.TempDir(), name)
+		git(t, root, "worktree", "add", "-q", "-b", name, dir, seedRev)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644))
+		if commit {
+			git(t, dir, "commit", "-q", "-am", name)
+		}
+		return dir
+	}
+	wa := worktree("job-a", "a.go", "package a // landed\n", true)
+	wb := worktree("job-b", "b.go", "package b // landed\n", true)
+	wc := worktree("job-c", "c.go", "package c // not merged\n", true)
+	wd := worktree("job-d", "d.go", "package d // uncommitted\n", false)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a // landed\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "b.go"), []byte("package b // landed\n"), 0o644))
+	git(t, root, "commit", "-q", "-am", "squash of job-a and job-b")
+	squash := git(t, root, "rev-parse", "HEAD")
+	git(t, root, "update-ref", "refs/remotes/origin/main", squash)
+
+	s := tmpStore(t, root)
+	var notices strings.Builder
+	s.notices = &notices
+	exited := func(id, dir, file string) types.Job {
+		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: dir,
+			WritePaths: []string{file}, Result: &types.JobResult{ChangedPaths: []string{file}}, Updated: 1}
+	}
+	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"), exited("job-c", wc, "c.go"), exited("job-d", wd, "d.go"))
+
+	got := states(t, s)
+	for id, dir := range map[string]string{"job-a": wa, "job-b": wb} {
+		head := git(t, dir, "rev-parse", "HEAD")
+		assert.Equal(t, types.StateNoReturn, got[id].State, id)
+		var base, short string
+		_, err := fmt.Sscanf(got[id].EndReason, "its work landed on origin/main at %s the 1 changed path(s) at %s", &base, &short)
+		require.NoError(t, err, got[id].EndReason)
+		assert.True(t, strings.HasPrefix(squash, strings.TrimSuffix(base, ":")), "names the squash commit: %s", got[id].EndReason)
+		assert.True(t, strings.HasPrefix(head, short), "names the job's own HEAD: %s", got[id].EndReason)
+		assert.True(t, strings.HasSuffix(got[id].EndReason, " in "+dir+" read the same there"), got[id].EndReason)
+	}
+	assert.Equal(t, types.StateExited, got["job-c"].State, "a commit the base never took")
+	assert.Equal(t, types.StateExited, got["job-d"].State, "HEAD reads as the checkpoint, so it says nothing of the change")
+
+	jobs, err := s.Path()
+	require.NoError(t, err)
+	probes, err := os.ReadFile(filepath.Join(filepath.Dir(jobs), landingProbesFile))
+	require.NoError(t, err)
+	assert.Contains(t, string(probes), `"job-c"`, "an unproven row waits out the interval before its next probe")
+}
+
+// Exit resolves a ref the caller's checkout never recorded in the checkout the job was
+// taken in, so an orchestrator can file its worker's result; with no Outputs it refuses.
+func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
+	t.Parallel()
+
+	worker := t.TempDir()
+	row := acceptRow()
+	row.CheckoutRoot, row.Registered = worker, 1
+	result := passingResult()
+	here := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
+
+	loc := declared(t)
+	plant(t, NewStore(loc), row)
+	_, err := Exit(t.Context(), NewStore(loc), row.ID, &result, here)
+	require.EqualError(t, err, `job: the result's output ref "a1b2c3d4" names no run this checkout recorded`)
+
+	var asked []string
+	loc.Outputs = func(root string) AttemptResolver {
+		return func(_ context.Context, ref string) (types.JobAttempt, error) {
+			asked = append(asked, root)
+			if root != worker {
+				return types.JobAttempt{}, nil
+			}
+			found := passingRun
+			found.Ref = ref
+			return found, nil
+		}
+	}
+	stored, err := Exit(t.Context(), NewStore(loc), row.ID, &result, here)
+	require.NoError(t, err)
+	assert.Equal(t, []string{worker}, asked)
+	assert.Equal(t, types.StateExited, stored.State)
+	require.NotNil(t, stored.Attempt)
+	assert.Equal(t, "a1b2c3d4", stored.Attempt.Ref)
 }
