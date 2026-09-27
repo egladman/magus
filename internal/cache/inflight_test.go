@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -110,6 +111,34 @@ func TestInflightConcurrentEdges(t *testing.T) {
 	for _, e := range entries {
 		assert.NotContains(t, e.Name(), ".tmp", "temp files must not accumulate")
 	}
+}
+
+// A Ctrl+C handler cannot reach a Cache, so InFlight must see every tracker in the
+// process, and a cleared record must leave it. Other tests may run targets beside this
+// one, so it asserts on its own names only.
+func TestInflightForInterruptSpansEveryTracker(t *testing.T) {
+	a, b := newInflight(t.TempDir()), newInflight(t.TempDir())
+	doneA := a.start("interrupt-a", "build")
+	doneB := b.start("interrupt-b", "test")
+
+	names := func() []string {
+		var out []string
+		for _, r := range InFlight() {
+			if strings.HasPrefix(r.Project, "interrupt-") {
+				out = append(out, r.Project+" "+r.Target)
+			}
+		}
+		return out
+	}
+	assert.Equal(t, []string{"interrupt-a build", "interrupt-b test"}, names())
+	for _, r := range InFlight() {
+		assert.False(t, r.Started.IsZero(), "the start time is what the warning ages")
+	}
+
+	doneA()
+	assert.Equal(t, []string{"interrupt-b test"}, names(), "clearing one leaves the other")
+	doneB()
+	assert.Empty(t, names())
 }
 
 // A cache with nowhere to write must not make every call site nil-check.
