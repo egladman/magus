@@ -5,17 +5,18 @@ in the root `conventions_test.go` that walked the tree as text; as an analyzer i
 runs in `magus run lint` beside the stock linters, reports at the offending line,
 and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 
-| Linter          | Reports                                                                          |
-| --------------- | -------------------------------------------------------------------------------- |
-| `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path         |
-| `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code        |
-| `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                   |
-| `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file             |
-| `importceiling` | a package importing more packages under a prefix than its ratchet allows         |
-| `stutter`       | an exported package-level name opening with its package's name                   |
-| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names |
-| `nameoutput`    | a `case outputName:` arm that does not render through an emitter                 |
-| `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain` |
+| Linter          | Reports                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                    |
+| `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                   |
+| `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                              |
+| `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                        |
+| `importceiling` | a package importing more packages under a prefix than its ratchet allows                                    |
+| `stutter`       | an exported package-level name opening with its package's name                                              |
+| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
+| `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |
+| `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
+| `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
 
 Every path, word list, ceiling and exemption lives in the root `.golangci.yml`,
 so the analyzers carry the mechanism and the config carries the policy.

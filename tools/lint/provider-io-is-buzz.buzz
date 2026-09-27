@@ -1,0 +1,234 @@
+// provider-io-is-buzz holds every CI/VCS provider call - a real `gh` run, a `curl` at a
+// provider host, or the http module reaching one - to the Buzz files the boundary names: a
+// provider spell, the queue's own provider script, a top-level tools/*.buzz driver, or a
+// workflow action step. Elsewhere Go opens no provider socket either (the Go half of this
+// rule is providerio in libs/conventions); see docs/doctrine.md, "provider I/O is Buzz",
+// and plans/inflight-view-2026-09-27.md sec 3.
+namespace providerio;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "tools/lint/support" as support;
+
+// ALLOWED_DIRS are the module directories that may reach a provider, every *.buzz file
+// inside them at any depth.
+export final ALLOWED_DIRS = ["spells/github/", "spells/gitlab/", ".github/actions/"];
+
+// ALLOWED_FILES are individual files outside ALLOWED_DIRS and outside tools/*.buzz that
+// reach a provider, each named with why.
+export final ALLOWED_FILES = {
+    "internal/queue/provider/github.buzz": "the queue's own provider script",
+    // Not the intended pattern - the boundary's table names only spells, the queue
+    // provider, tools/*.buzz and workflow actions - kept here with the plan named
+    // rather than moved silently: release-index is the root magusfile, not one of
+    // those four.
+    "magusfile.buzz": "release-index opens and checks its own pull request with gh; not yet split out of the root magusfile",
+    // This rule's own test fixtures write gh/curl/http call shapes as literal text, to
+    // prove the check fires and passes; they are not real calls, but this rule reads
+    // its own source text like any other file and cannot tell the difference.
+    "tools/lint/provider-io-is-buzz.buzz": "its test fixtures ARE gh/curl/http call shapes, written to be scanned, not run",
+};
+
+// OUT_OF_SCOPE are trees this rule does not report on even if a future reads() widens
+// to see them: teaching material nothing in magus executes. std/examples/http/get.buzz
+// calls a provider host on purpose, to show the http module's shape to a reader, and
+// docs/tour walks the same ground. reads() does not name either today - both sit
+// outside this project or outside the globs below - so this is a second guard, not the
+// one doing the work.
+export final OUT_OF_SCOPE = ["docs/", "std/examples/"];
+
+// A real `gh` or `curl` run: proc\exec("gh", ... or proc\exec("curl", ..., the shape a
+// call takes in this tree (args always follow on the same line the call opens on). A
+// string literal naming "gh" or "curl" without this shape - a guard rule's own fixture,
+// grading a hypothetical command - is not a call and is not matched.
+final ghExec = std\pattern("proc\\\\exec\\(\\s*\"gh\"");
+final curlExec = std\pattern("proc\\\\exec\\(\\s*\"curl\"");
+
+// A call into the http module's package-level verbs.
+final httpCall = std\pattern("http\\\\(get|post|request|head)\\(");
+
+// A literal naming a CI/VCS provider host. A dynamic URL (an env var, a joined string)
+// matches nothing here, which is deliberate: this rule catches a literal provider
+// address, not a call whose target it cannot read.
+final providerHost = std\pattern("(github\\.com|gitlab\\.com|bitbucket\\.org|dev\\.azure\\.com)");
+
+// reads is every Buzz file the boundary's table (sec 3) or this rule's own allowlist
+// names, plus the root magusfile - not "**/*.buzz", which would reach into every
+// nested project's own magusfile and its generated output.
+export fun reads() > [str] {
+    return ["spells/**/*.buzz", "internal/queue/provider/*.buzz", "tools/**/*.buzz",
+            ".github/**/*.buzz", "magusfile.buzz"];
+}
+
+// allowed reports whether path may hold a provider call.
+fun allowed(path: str) > bool {
+    if (ALLOWED_FILES[path] != null) {
+        return true;
+    }
+    foreach (dir in ALLOWED_DIRS) {
+        if (path.startsWith(dir)) {
+            return true;
+        }
+    }
+    // tools/*.buzz: a file directly under tools/, not one of its subdirectories
+    // (tools/lint/*, tools/policy/*), which carry no provider call of their own.
+    return path.startsWith("tools/") and path.endsWith(".buzz") and path.indexOf("/", from: 6) == null;
+}
+
+fun outOfScope(path: str) > bool {
+    foreach (dir in OUT_OF_SCOPE) {
+        if (path.startsWith(dir)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final seenAllowFile = mut {<str: bool>};
+    foreach (f in files) {
+        if (ALLOWED_FILES[f.value] != null) {
+            seenAllowFile[f.value] = true;
+        }
+        if (outOfScope(f.value) or allowed(f.value)) {
+            continue;
+        }
+        final src = support\read(f);
+        var n = 0;
+        foreach (line in src.split("\n")) {
+            n = n + 1;
+            if (ghExec.match(line) != null) {
+                found.append(Finding{ path = f.value, line = n,
+                    message = "runs gh outside the Buzz files that may reach a provider",
+                    fix = "move the call into a provider spell, internal/queue/provider/*.buzz, a top-level tools/*.buzz, "
+                        + "or a workflow action; or add the path to ALLOWED_FILES in tools/lint/provider-io-is-buzz.buzz, naming why" });
+            } else if (curlExec.match(line) != null and providerHost.match(line) != null) {
+                found.append(Finding{ path = f.value, line = n,
+                    message = "curls a CI/VCS provider host outside the Buzz files that may reach one",
+                    fix = "move the call into an allowed file, or add the path to ALLOWED_FILES, naming why" });
+            } else if (httpCall.match(line) != null and providerHost.match(line) != null) {
+                found.append(Finding{ path = f.value, line = n,
+                    message = "calls the http module against a CI/VCS provider host outside the Buzz files that may reach one",
+                    fix = "move the call into an allowed file, or add the path to ALLOWED_FILES, naming why" });
+            }
+        }
+    }
+    foreach (p in support\sorted(ALLOWED_FILES.keys())) {
+        if (seenAllowFile[p] == null) {
+            found.append(Finding{ path = p, message = "ALLOWED_FILES names " + p + ", which is not in the tree",
+                fix = "delete the entry from tools/lint/provider-io-is-buzz.buzz" });
+        }
+    }
+    return found;
+}
+
+// namedStubs stands in, in a test's fixture, for the two files ALLOWED_FILES names: a
+// test that is not about them would otherwise trip the stale-entry check by omission.
+final namedStubs = {
+    "internal/queue/provider/github.buzz": "namespace github;\n",
+    "magusfile.buzz": "namespace root;\n",
+    "tools/lint/provider-io-is-buzz.buzz": "namespace providerio;\n",
+};
+
+// withNamedStubs merges extra over namedStubs, so a test naming its own magusfile.buzz
+// keeps that content.
+fun withNamedStubs(extra: {str: str}) > {str: str} {
+    final m = mut {<str: str>};
+    foreach (k, v in namedStubs) {
+        m[k] = v;
+    }
+    foreach (k, v in extra) {
+        m[k] = v;
+    }
+    return m;
+}
+
+test "a real gh call outside the allowlist is reported" {
+    final got = check(support\fixture(withNamedStubs({
+        "internal/queue/candidate.buzz": `namespace queue;
+
+fun poll() > void !> any \{
+    final r = proc\exec("gh", args: ["pr", "list"]);
+\}
+`,
+    })));
+    assert\equal(support\messages(got), want: ["runs gh outside the Buzz files that may reach a provider"], message: "gh outside the allowlist");
+    assert\equal(got[0].line, want: 4, message: "the call, line");
+}
+
+test "gh named in a guard fixture, never called, passes" {
+    final got = check(support\fixture(withNamedStubs({
+        "tools/policy/gh.buzz": `namespace agentpolicy\gh;
+
+fun cases() > [[str]] \{
+    return [["gh", "pr", "checks", "183"]];
+\}
+`,
+    })));
+    assert\equal(got.len(), want: 0, message: "a string literal naming gh is not a call");
+}
+
+test "curl at a provider host outside the allowlist is reported, curl elsewhere passes" {
+    final got = check(support\fixture(withNamedStubs({
+        "tools/registry/mirror.buzz": `namespace mirror;
+
+fun sync() > void !> any \{
+    proc\exec("curl", args: ["-sS", "https://api.github.com/repos/x"]);
+\}
+`,
+        "docs/tour/24-secret-grants.buzz": `namespace tour;
+
+fun run() > void !> any \{
+    proc\exec("curl", args: [os\env("OPENAI_BASE_URL") + "/get"]);
+\}
+`,
+    })));
+    assert\equal(support\messages(got), want: ["curls a CI/VCS provider host outside the Buzz files that may reach one"],
+        message: "only the literal provider host is reported; docs/ is out of scope and the other call names no provider host");
+}
+
+test "an http module call at a provider host outside the allowlist is reported" {
+    final got = check(support\fixture(withNamedStubs({
+        "internal/job/notify.buzz": `namespace notify;
+
+fun ping() > void !> any \{
+    http\get("https://api.github.com/repos/x");
+\}
+`,
+    })));
+    assert\equal(support\messages(got), want: ["calls the http module against a CI/VCS provider host outside the Buzz files that may reach one"],
+        message: "http\\get at a provider host");
+}
+
+test "the allowed dirs, top-level tools files and named files pass; a nested tools file does not" {
+    final got = check(support\fixture(withNamedStubs({
+        "spells/github/actions/spell.buzz": `namespace x;
+
+fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+`,
+        "tools/registry.buzz": `namespace x;
+
+fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+`,
+        "magusfile.buzz": `namespace x;
+
+fun a() > void !> any \{ proc\exec("gh", args: ["pr", "create"]); \}
+`,
+        "tools/lint/other-rule.buzz": `namespace x;
+
+fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+`,
+    })));
+    assert\equal(support\messages(got), want: ["runs gh outside the Buzz files that may reach a provider"],
+        message: "only the nested tools/lint file, which tools/*.buzz does not cover, is reported");
+}
+
+test "a stale ALLOWED_FILES entry is reported" {
+    assert\equal(support\messages(check([<Path>])),
+        want: ["ALLOWED_FILES names internal/queue/provider/github.buzz, which is not in the tree",
+               "ALLOWED_FILES names magusfile.buzz, which is not in the tree",
+               "ALLOWED_FILES names tools/lint/provider-io-is-buzz.buzz, which is not in the tree"],
+        message: "all three entries are stale when the tree carries none of the files");
+}

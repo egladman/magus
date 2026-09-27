@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                               |
-| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `lint-files`                                                                |
+| target     |     100+ | `magus query kind=target`     | `content-generate`, `lint-files`, `site-generate`                                                                |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `typescript`                                                                                   |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                  |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                  |
@@ -58,7 +58,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | dir        |     200+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/codes/magusfile`                                   |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `internal/queue/provider/github.buzz`, `tools/pull-requests.buzz`                              |
 | function   |    1000+ | `magus query kind=function`   | `apiBase`, `describe`, `records`                                                                                 |
-| import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                             |
+| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                             |
 | rationale  |        8 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
