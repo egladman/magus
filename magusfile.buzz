@@ -3266,7 +3266,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
             // and no analyzer can either. Drop this skip once it is tidied.
             if (mod.value == "libs/gopherbuzz/benchmarks/comparison/go.mod") { continue; }
             proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "hostagnostic,stutter"],
+                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter"],
                       fs\dirname(mod.value));
         }
     });
