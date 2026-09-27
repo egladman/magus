@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,4 +200,57 @@ func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{weird}, got, "a newline in a name split one path into two")
 	})
+}
+
+// hgFamilyHistoryRepo builds assertHistoryScenario's history with prog, hg or sl, whose
+// commands for it are the same.
+func hgFamilyHistoryRepo(t *testing.T, prog string) string {
+	t.Helper()
+	if _, err := exec.LookPath(prog); err != nil {
+		t.Skipf("%s not available", prog)
+	}
+	dir := t.TempDir()
+	run := func(args ...string) { vcsTestRun(t, dir, prog, args...) }
+	if prog == "sl" {
+		slInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+	} else {
+		hgInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+	}
+	commit := func(msg string) { run("commit", "-m", msg, "-u", "test") }
+	writeRepoFile(t, dir, "docs/b.md", "b\n")
+	run("add", "docs/b.md")
+	commit("side adds docs")
+	run("update", "-r", "desc('init')")
+	writeRepoFile(t, dir, "docs/a.md", "a2\n")
+	commit("main edits docs")
+	run("merge", "-r", "desc('side adds docs')")
+	commit("merge side")
+	writeRepoFile(t, dir, "x.txt", "x2\n")
+	commit("main edits x")
+	return dir
+}
+
+func TestHgHistoryFollowsPathsAndFirstParent(t *testing.T) {
+	assertHistoryScenario(t, hgVCS{}, hgFamilyHistoryRepo(t, "hg"))
+}
+
+// A count that disagrees with the fields after it is an error, never a guess at where the
+// next commit starts.
+func TestParseHgHistoryRefusesABadCount(t *testing.T) {
+	rec := strings.Join([]string{"id", "s", "n", "e", "2026-01-02T03:04:05Z", "", "msg"}, commitDelim)
+	got, err := parseHgHistory(rec + commitDelim + "2" + commitDelim + "a" + commitDelim)
+	assert.Nil(t, got)
+	require.Error(t, err)
+
+	got, err = parseHgHistory(rec + commitDelim + "1" + commitDelim + "a" + commitDelim)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, []string{"a"}, got[0].Files)
+}
+
+func TestKeepUnder(t *testing.T) {
+	files := []string{"docs/a.md", "docsx/b.md", "README.md", "blog/p.md"}
+	assert.Equal(t, files, keepUnder(files, nil))
+	assert.Equal(t, []string{"docs/a.md", "README.md"}, keepUnder(files, []string{"docs/", "README.md"}))
+	assert.Nil(t, keepUnder(files, []string{"nope"}))
 }

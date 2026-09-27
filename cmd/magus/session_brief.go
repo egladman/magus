@@ -298,7 +298,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 	if err != nil || base.ID == "" {
 		return nil
 	}
-	history, err := res.VCS.History(ctx, root, briefCommitWalk)
+	history, err := res.VCS.History(ctx, root, types.HistoryQuery{Limit: briefCommitWalk})
 	if err != nil {
 		return nil
 	}

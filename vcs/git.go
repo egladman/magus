@@ -962,15 +962,87 @@ func (v gitVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, 
 	return c, nil
 }
 
-func (v gitVCS) History(ctx context.Context, dir string, limit int) ([]types.Commit, error) {
-	if limit <= 0 {
-		limit = 1
+// gitHistoryFormat opens each record with an empty field, which no path can be, so the
+// parser can tell where one commit's paths stop and the next commit starts.
+const gitHistoryFormat = "%x00" + gitCommitFormat
+
+// History is one `git log` rather than an id list resolved through FindCommit, which
+// would spawn once per commit and the docs site reads hundreds. --diff-merges=first-parent
+// names a merge's files against the line it landed on, and --no-renames lists a rename as
+// both paths, as RangeFiles does.
+//
+// With paths, git's default history simplification drops a merge that matches either
+// parent, where hg and jj judge a merge by its first parent. --full-history --sparse shows
+// every commit with its files narrowed to the paths, and historyTouching keeps the ones
+// left with any.
+func (v gitVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+	at, err := gitTopWhen(ctx, dir, q.Paths)
+	if err != nil {
+		return nil, err
 	}
-	out, err := gitOutput(ctx, dir, gitOpts{}, "log", fmt.Sprintf("-%d", limit), "--format=%H")
+	args := []string{"log", "-z", "--no-renames", "--name-only", "--diff-merges=first-parent", "--format=" + gitHistoryFormat}
+	switch {
+	case len(q.Paths) > 0:
+		args = append(args, "--full-history", "--sparse")
+	case q.Limit > 0:
+		args = append(args, fmt.Sprintf("-%d", q.Limit))
+	}
+	if q.FirstParent {
+		args = append(args, "--first-parent")
+	}
+	args = append(append(args, "--"), q.Paths...)
+	out, err := gitOutput(ctx, at, gitOpts{Literal: true, KeepLeadingSpace: true}, args...)
 	if err != nil {
 		return nil, fmt.Errorf("git log: %w", err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	return historyTouching(parseGitHistory(out), q, func(c types.Commit) ([]string, error) { return c.Files, nil })
+}
+
+// historyTouching sets each commit's Files from filesOf, newest first, and keeps the ones
+// that touch q.Paths (every one, with none) until q.Limit are kept. Every backend walks the
+// whole line when it has paths, so a merge is judged by its first-parent diff, and the
+// limit can only apply here.
+func historyTouching(commits []types.Commit, q types.HistoryQuery, filesOf func(types.Commit) ([]string, error)) ([]types.Commit, error) {
+	kept := commits[:0]
+	for _, c := range commits {
+		if q.Limit > 0 && len(kept) == q.Limit {
+			break
+		}
+		files, err := filesOf(c)
+		if err != nil {
+			return nil, err
+		}
+		if c.Files = files; len(q.Paths) == 0 || len(files) > 0 {
+			kept = append(kept, c)
+		}
+	}
+	return kept, nil
+}
+
+// parseGitHistory splits History's output: per commit an empty field, the
+// gitCommitFormat fields, then its paths. git puts a newline between a message and its
+// first path that belongs to neither.
+func parseGitHistory(out string) []types.Commit {
+	fields := strings.Split(out, commitDelim)
+	var commits []types.Commit
+	for i := 0; i+numCommitFields < len(fields); {
+		if fields[i] != "" {
+			i++
+			continue
+		}
+		c := parseCommit(strings.Join(fields[i+1:i+1+numCommitFields], commitDelim))
+		i += 1 + numCommitFields
+		if i < len(fields) && strings.HasPrefix(fields[i], "\n") {
+			if fields[i] = fields[i][1:]; fields[i] == "" {
+				i++
+			}
+		}
+		for ; i < len(fields) && fields[i] != ""; i++ {
+			c.Files = append(c.Files, fields[i])
+		}
+		commits = append(commits, c)
+	}
+	return commits
 }
 
 // gitChurnFormat opens each commit's --name-only block with a NUL sentinel followed

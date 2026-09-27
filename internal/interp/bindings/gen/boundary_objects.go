@@ -1206,6 +1206,11 @@ func ObjectCommit(v types.Commit) vm.Value {
 		itemsParents[indexParents] = vm.StrValue(v.Parents[indexParents])
 	}
 	out.MapSet("parents", vm.ListValue(itemsParents))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
 	return out
 }
 
@@ -1375,6 +1380,11 @@ func ObjectCommitRecord(v types.CommitRecord) vm.Value {
 		itemsParents[indexParents] = vm.StrValue(v.Parents[indexParents])
 	}
 	out.MapSet("parents", vm.ListValue(itemsParents))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
 	return out
 }
 
