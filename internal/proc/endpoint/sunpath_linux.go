@@ -75,7 +75,7 @@ func diagBoundAt(ln *net.UnixListener, path string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("endpoint: ask sock_diag which file the socket offered for %s is bound to: %w", path, err)
 	}
-	return bound && dev == uint64(want.Dev) && ino == uint32(want.Ino), nil //nolint:unconvert // Dev is uint32 on linux/mips
+	return bound && dev == uint64(want.Dev) && uint64(ino) == want.Ino, nil //nolint:unconvert // Dev is uint32 on linux/mips
 }
 
 // diagVFS is the device and inode of the file the unix socket with sockfs inode sock
