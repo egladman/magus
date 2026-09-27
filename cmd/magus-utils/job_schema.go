@@ -43,13 +43,14 @@ type jobRecord struct {
 
 var jobRecords = []jobRecord{
 	{Struct: "Declaration", Title: "magus job", File: "job.schema.json", Version: "JobSchemaVersion"},
-	{Struct: "JobResult", Title: "magus job result", File: "result.schema.json", Version: "ResultSchemaVersion"},
+	{Struct: "JobResult", Title: "magus job result", File: "result.schema.json", Version: "JobResultSchemaVersion"},
 }
 
 // jobSources are the files the records and every type they reach are declared in.
 var jobSources = []string{
 	"internal/job/verify.go",
 	"types/job.go",
+	"types/schema.go",
 }
 
 const (
@@ -103,7 +104,10 @@ func runJobSchema(args []string) error {
 //   - one property per json tag, in declaration order and named by the tag;
 //   - required is every field whose tag carries no omitempty, because that is the only
 //     requiredness the decoder expresses;
-//   - schema_version carries the const its package declares;
+//   - an untagged embedded struct contributes its properties inline, as the decoder reads
+//     it, and a `,unknown` bag contributes none;
+//   - schema_version accepts 1 through the version its package declares, since a
+//     decoder takes any version up to its own;
 //   - a field typed by a closed set carries that set as an enum, plus "" when the field
 //     is omitempty and an absent value is therefore legal;
 //   - a field marked `schema:"leaseid"` carries the pattern and maxLength the id
@@ -154,19 +158,34 @@ func properties(structName string, st *ast.StructType, d *goDecls, version int) 
 	var props node
 	required := []string{}
 	for _, f := range st.Fields.List {
-		if len(f.Names) != 1 {
-			return nil, nil, fmt.Errorf("%s: an embedded or multi-name field has no single json name", structName)
-		}
-		field := f.Names[0].Name
 		tag := ""
 		if f.Tag != nil {
 			tag = f.Tag.Value
 		}
 		name, opts, _ := strings.Cut(godecl.TagRaw(tag, "json"), ",")
-		switch name {
-		case "-":
+		if len(f.Names) == 0 {
+			// An embedded struct with no json name is inlined by the decoder, so its
+			// properties are the parent's.
+			embedded, ok := f.Type.(*ast.Ident)
+			if !ok || name != "" || d.structs[embedded.Name] == nil {
+				return nil, nil, fmt.Errorf("%s: only an untagged embedded struct these sources declare can be published", structName)
+			}
+			inner, innerRequired, err := properties(embedded.Name, d.structs[embedded.Name], d, version)
+			if err != nil {
+				return nil, nil, err
+			}
+			props = append(props, inner...)
+			required = append(required, innerRequired...)
 			continue
-		case "":
+		}
+		if len(f.Names) != 1 {
+			return nil, nil, fmt.Errorf("%s: a multi-name field has no single json name", structName)
+		}
+		field := f.Names[0].Name
+		switch {
+		case name == "-", name == "" && opts == "unknown":
+			continue
+		case name == "":
 			return nil, nil, fmt.Errorf("%s.%s carries no json tag, so no schema can name it", structName, field)
 		}
 		omitempty := slices.Contains(strings.Split(opts, ","), "omitempty")
@@ -189,7 +208,7 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 		return nil, fmt.Errorf("%s.%s: %w", structName, field, err)
 	}
 	if name == versionProperty {
-		prop = append(prop, member{"const", version})
+		prop = append(prop, member{"minimum", 1}, member{"maximum", version})
 	}
 	tag := ""
 	if f.Tag != nil {

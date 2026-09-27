@@ -10,8 +10,16 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 11,
-      "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
+      "minimum": 1,
+      "maximum": 11,
+      "description": "Version is the newest schema any writer of this record used. A rewrite stamps the larger of the stored version and its own, so an older magus never relabels content a newer one wrote."
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Requires names the features a reader must implement to act on this record at all. A reader lacking one treats the record as read-only; the records around it stay usable. Set only for content an older reader would act on wrongly, never for an added field it can ignore."
     },
     "id": {
       "type": "string",

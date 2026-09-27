@@ -290,6 +290,12 @@ func printJobTree(out io.Writer, report types.JobList) {
 			fmt.Fprintf(out, "  %s: %s\n", b.Job, b.String())
 		}
 	}
+	if len(report.ReadOnly) > 0 {
+		fmt.Fprintln(out, "\nread-only: require what this magus lacks, so it will not write them; update magus")
+		for _, r := range report.ReadOnly {
+			fmt.Fprintf(out, "  %s: requires %s\n", r.Job, strings.Join(r.Lacks, ", "))
+		}
+	}
 
 	if len(report.Overlaps) == 0 {
 		return
@@ -514,7 +520,7 @@ type forkFlags struct {
 
 func (f forkFlags) row(id string) types.Declaration {
 	return types.Declaration{
-		SchemaVersion:   types.JobSchemaVersion,
+		Schema:          types.Schema{Version: types.JobSchemaVersion},
 		ID:              id,
 		Parent:          f.parent,
 		Criteria:        f.criteria,

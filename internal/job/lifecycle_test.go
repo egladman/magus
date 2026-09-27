@@ -134,7 +134,7 @@ func plant(t *testing.T, s *Store, rows ...types.Job) {
 	path, err := s.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, s.write(jobsFile{Jobs: rows}, nil))
+	require.NoError(t, s.write(jobsFile{Jobs: rows}))
 }
 
 // sweepStore is a temp store whose sweep runs at now with a fixed jobs.stale_after, its

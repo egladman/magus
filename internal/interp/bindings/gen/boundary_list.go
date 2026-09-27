@@ -75,6 +75,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any) vm.Value { return ObjectJobList(v.(types.JobList)) }},
 	{Name: "JobOverlap", Zero: types.JobOverlap{}, Encode: func(v any) vm.Value { return ObjectJobOverlap(v.(types.JobOverlap)) }},
 	{Name: "JobOverlapFootprint", Zero: types.JobOverlapFootprint{}, Encode: func(v any) vm.Value { return ObjectJobOverlapFootprint(v.(types.JobOverlapFootprint)) }},
+	{Name: "JobReadOnly", Zero: types.JobReadOnly{}, Encode: func(v any) vm.Value { return ObjectJobReadOnly(v.(types.JobReadOnly)) }},
 	{Name: "JobRelease", Zero: types.JobRelease{}, Encode: func(v any) vm.Value { return ObjectJobRelease(v.(types.JobRelease)) }},
 	{Name: "JobResult", Zero: types.JobResult{}, Encode: func(v any) vm.Value { return ObjectJobResult(v.(types.JobResult)) }},
 	{Name: "JobResultValidation", Zero: types.JobResultValidation{}, Encode: func(v any) vm.Value { return ObjectJobResultValidation(v.(types.JobResultValidation)) }},

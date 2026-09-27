@@ -596,6 +596,7 @@ export object GateEvidence {
 
 export object JobResult {
     schemaVersion: int = 0,
+    requires: [str] = [],
     job: str = "",
     changedPaths: [str] = [],
     validation: JobResultValidation = JobResultValidation{},
@@ -631,6 +632,7 @@ export object JobRun {
 
 export object Job {
     schemaVersion: int = 0,
+    requires: [str] = [],
     id: str = "",
     parent: str = "",
     criteria: str = "",
@@ -757,6 +759,11 @@ export object JobBlock {
     state: str = "",
 }
 
+export object JobReadOnly {
+    job: str = "",
+    lacks: [str] = [],
+}
+
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
@@ -764,6 +771,7 @@ export object JobList {
     orphans: [str] = [],
     stale: [str] = [],
     blocked: [JobBlock] = [],
+    readOnly: [JobReadOnly] = [],
 }
 
 export object GateStatus {

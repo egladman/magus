@@ -402,27 +402,26 @@ func ValidJobID(id string) bool {
 	return true
 }
 
-// JobSchemaVersion is the version of the row shape this magus writes and accepts. It
-// is stamped on every stored row and required on every row a client sends, so a decoder
-// meeting a shape it does not know says which versions it supports instead of rejecting
-// one field at a time.
+// JobSchemaVersion is the version of the row shape this magus writes: stamped on every row
+// it writes, and the newest a client may send. [JobSchema] is its ledger.
 //
-// BUMP IT ON EVERY CHANGE TO THE FIELD SET, an added optional field included. This used to
-// say an added optional field does not need one; measured 2026-09-11, that is exactly how
-// two live rows silently lost write_paths, read_paths, deny_paths, model and check to an
-// older binary's non-strict decoder, because those fields were added without moving this
-// constant, so the rows still read schema_version 1 and the loss was invisible. A reader
-// that quietly ignores a field it does not know is correct only until something else reads
-// its rewrite; the version is what tells such a reader to stop instead of proceeding.
-// TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
-// golden list, so a field added without a bump fails a test instead of failing a store.
+// AN ADDED FIELD DOES NOT MOVE IT. A reader ignores a member it does not know and a writer
+// carries that member back out ([Schema].Unknown), so a row a newer magus wrote survives an
+// older one's rewrite whole. The 2026-09-11 loss of write_paths and four other fields was a
+// writer dropping what it did not declare, which the bag closes; a bump would only have
+// refused the rows. A removed or renamed name goes into JobSchema.Reserved and is never
+// declared again, and a change of meaning is a new name.
 //
-// A change to what a field MEANS bumps it too. 11 is the `<path>#<declaration>` claim
-// grammar in write_paths (see SplitClaim): no field changed, but an older binary matches
-// `run.go#RunCI` against no file, so it would stop grading the claim rather than refuse the
-// row. 10 is the field set that ends dead jobs, so a binary stopping at 10 refuses these
-// rows rather than misreading their claims.
+// It moves only for a change an older reader would act on WRONGLY, and that version names
+// the feature in JobSchema.Requires. 11 is the `<path>#<declaration>` claim grammar in
+// write_paths (see SplitClaim): an older binary matches `run.go#RunCI` against no file and
+// would stop grading the claim. 10 is the field set that ends dead jobs.
+// TestSchemaLedgersEvolveAdditively fails a bump whose diff is only additive.
 const JobSchemaVersion = 11
+
+// JobResultSchemaVersion is the version of the result shape a holder files, the newest the
+// decoder accepts. [JobResultSchema] is its ledger, under JobSchemaVersion's rules.
+const JobResultSchemaVersion = 2
 
 // JobWriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT at the moment it was declared.
@@ -479,7 +478,7 @@ const (
 
 // JobResult is the result a holder files for a job.
 type JobResult struct {
-	SchemaVersion   int                 `json:"schema_version" yaml:"schema_version"`
+	Schema          `yaml:",inline"`
 	Job             string              `json:"job,omitempty" yaml:"job,omitempty"`
 	ChangedPaths    []string            `json:"changed_paths" yaml:"changed_paths"`
 	Validation      JobResultValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
@@ -585,9 +584,10 @@ func (a JobAttempt) String() string {
 // and magus\ledger.list return one. VCSCheckpoint stays unregistered: Checkpoint is a
 // plain string here, the form an orchestrator has at spawn time.
 type Job struct {
-	// SchemaVersion is the shape this row was written in, stamped by the store on every
-	// write and never taken from a client. See JobSchemaVersion.
-	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
+	// Schema is the shape this row was written in, stamped by the store on every write and
+	// never taken from a client, with every member this build does not declare. See
+	// JobSchemaVersion.
+	Schema `yaml:",inline"`
 	// ID is the lease's identity within the plan, and the key Update upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an
 	// orchestrator should use the same id it puts in the worker's prompt.
@@ -767,9 +767,9 @@ type Job struct {
 // construct one, but nothing hands one back out to Buzz; job.DecodeDeclaration is the only
 // decoder, and it reads JSON, not a Buzz value.
 type Declaration struct {
-	// SchemaVersion is the row shape this record is written in, and it is required: a
-	// version this magus does not know is rejected by name. See JobSchemaVersion.
-	SchemaVersion int `json:"schema_version"`
+	// Schema is the row shape this record is written in. The version is required, and one
+	// newer than this magus is rejected by name. See JobSchemaVersion.
+	Schema
 	// ID is the lease's identity within the plan, the key a second register replaces on,
 	// and the only required field besides the version.
 	ID string `json:"id" schema:"leaseid"`
@@ -1250,6 +1250,15 @@ type JobList struct {
 	// Blocked are the live jobs that claim no paths yet because a dependency has not
 	// passed, each naming the first such dependency. Derived with Overlaps, from the rows.
 	Blocked []JobBlock `json:"blocked,omitempty" yaml:"blocked,omitempty"`
+	// ReadOnly are the rows requiring a feature this magus lacks. It lists and honors them
+	// and refuses every write to them.
+	ReadOnly []JobReadOnly `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+}
+
+// JobReadOnly names a row this magus will not write and the features it lacks for it.
+type JobReadOnly struct {
+	Job   string   `json:"job"   yaml:"job"`
+	Lacks []string `json:"lacks" yaml:"lacks"`
 }
 
 // JobBlock is why a live job owns none of its write paths: On, a job it depends on, is in
@@ -1371,12 +1380,17 @@ func NewJobList(jobs []Job) JobList {
 		jobs = []Job{}
 	}
 	var blocked []JobBlock
+	var readOnly []JobReadOnly
+	known := JobSchema.Features()
 	for _, row := range jobs {
 		if b, ok := JobBlockedOn(jobs, row); ok && row.State.Live() {
 			blocked = append(blocked, b)
 		}
+		if lacks := row.Unmet(known); lacks != nil {
+			readOnly = append(readOnly, JobReadOnly{Job: row.ID, Lacks: lacks})
+		}
 	}
-	return JobList{Jobs: jobs, Overlaps: jobOverlaps(jobs), Blocked: blocked}
+	return JobList{Jobs: jobs, Overlaps: jobOverlaps(jobs), Blocked: blocked, ReadOnly: readOnly}
 }
 
 // jobOverlaps reports every pair of jobs whose declared write paths
@@ -1520,6 +1534,7 @@ func LiteralPrefix(p string) string {
 // preserves nil, so a row that stored null does not come back as [].
 func (u Job) Clone() Job {
 	c := u
+	c.Schema = u.clone()
 	c.WritePaths = slices.Clone(u.WritePaths)
 	c.DenyPaths = slices.Clone(u.DenyPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
@@ -1529,6 +1544,7 @@ func (u Job) Clone() Job {
 	c.Unattributed = slices.Clone(u.Unattributed)
 	if u.Result != nil {
 		result := *u.Result
+		result.Schema = u.Result.clone()
 		result.ChangedPaths = slices.Clone(u.Result.ChangedPaths)
 		result.Descendants = slices.Clone(u.Result.Descendants)
 		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)

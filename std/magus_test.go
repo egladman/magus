@@ -518,7 +518,7 @@ func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
 	t.Parallel()
 
 	result, err := jobResultFromMap(map[string]any{
-		"schema_version": job.ResultSchemaVersion,
+		"schema_version": types.JobResultSchemaVersion,
 		"changed_paths":  []any{"internal/job/lifecycle.go"},
 		"validation": map[string]any{
 			"command":    "magus run test .",
@@ -527,11 +527,11 @@ func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
 		"unresolved_risks": []any{},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, job.ResultSchemaVersion, result.SchemaVersion)
+	assert.Equal(t, types.JobResultSchemaVersion, result.Version)
 	assert.Equal(t, "out123", result.Validation.OutputRef)
 
 	_, err = jobResultFromMap(map[string]any{
-		"schema_version":   job.ResultSchemaVersion,
+		"schema_version":   types.JobResultSchemaVersion,
 		"changed_paths":    []any{},
 		"validation":       map[string]any{},
 		"unresolved_risks": []any{},

@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -120,9 +122,9 @@ func TestStoreRoundTrip(t *testing.T) {
 			for i, w := range tt.want {
 				// Timestamps and the schema stamp are the store's, not the fixture's;
 				// assert them separately and compare the declared facts here.
-				assert.Equal(t, types.JobSchemaVersion, got[i].SchemaVersion, "the store stamps the row shape")
+				assert.Equal(t, types.JobSchemaVersion, got[i].Version, "the store stamps the row shape")
 				assert.Equal(t, trail.LocalOrigin(t.Context()), got[i].RegisteredBy, "the store records the OS account that created the row")
-				w.Created, w.Updated, w.SchemaVersion, w.RegisteredBy = got[i].Created, got[i].Updated, got[i].SchemaVersion, got[i].RegisteredBy
+				w.Created, w.Updated, w.Version, w.RegisteredBy = got[i].Created, got[i].Updated, got[i].Version, got[i].RegisteredBy
 				require.Len(t, got[i].Releases, len(w.Releases))
 				for j := range w.Releases {
 					w.Releases[j].ReleasedAt = got[i].Releases[j].ReleasedAt
@@ -412,28 +414,128 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	assert.Equal(t, "internal/a/store.go", stored.Unattributed[0].Path)
 }
 
-// A ledger a newer magus wrote is refused rather than read lossily. read drops what this
-// binary does not know and mutate rewrites EVERY row, so one unrelated put would destroy
-// the rest of the plan.
-func TestStoreRefusesARowFromANewerMagus(t *testing.T) {
-	t.Parallel()
-
-	s := tmpStore(t, t.TempDir())
+// plantRaw writes body as the store's file, byte for byte.
+func plantRaw(t *testing.T, s *Store, body string) string {
+	t.Helper()
 	path, err := s.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	newer := types.JobSchemaVersion + 1
-	require.NoError(t, os.WriteFile(path,
-		[]byte(fmt.Sprintf(`{"jobs":[{"id":"adj/store","schema_version":%d}]}`, newer)+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
+	return path
+}
 
-	_, err = s.List()
+// storedRow reads row id back from the file as JSON, not through the struct, so a member
+// the struct does not declare is visible.
+func storedRow(t *testing.T, path, id string) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var f struct {
+		Jobs []map[string]any `json:"jobs"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &f))
+	for _, row := range f.Jobs {
+		if row["id"] == id {
+			return row
+		}
+	}
+	require.Failf(t, "no row", "%s holds no row %s", path, id)
+	return nil
+}
+
+// A row a newer magus wrote is an ordinary row to this one: updating it or any other row
+// keeps the members this binary does not declare, and never lowers the newer stamp.
+func TestStoreKeepsANewerRowWhole(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path := plantRaw(t, s, fmt.Sprintf(`{"jobs":[`+
+		`{"id":"future","schema_version":99,"requires":[],"state":"running","created":1,"updated":1,"future_field":{"x":1}},`+
+		`{"id":"other","schema_version":%d,"state":"running","created":1,"updated":1}]}`, types.JobSchemaVersion))
+	want := map[string]any{"x": float64(1)}
+
+	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Criteria = "moved" })
+	require.NoError(t, err)
+	future := storedRow(t, path, "future")
+	assert.Equal(t, want, future["future_field"], "an update of another row keeps this row's unknown member")
+	assert.Equal(t, float64(99), future["schema_version"], "and its stamp")
+
+	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
+	require.NoError(t, err)
+	future = storedRow(t, path, "future")
+	assert.Equal(t, want, future["future_field"], "an update of this row keeps its unknown member")
+	assert.Equal(t, float64(99), future["schema_version"], "a rewrite never lowers the stamp")
+	assert.Equal(t, "pass", future["state"], "the field the update named was applied")
+	assert.Equal(t, float64(types.JobSchemaVersion), storedRow(t, path, "other")["schema_version"])
+
+	// A whole-row replace is still the store's to stamp: it cannot drop the envelope.
+	_, err = s.Update(t.Context(), "future", func(u *types.Job) { *u = types.Job{State: types.StateRunning} })
+	require.NoError(t, err)
+	future = storedRow(t, path, "future")
+	assert.Equal(t, want, future["future_field"])
+	assert.Equal(t, float64(99), future["schema_version"])
+}
+
+// A row requiring a feature this magus lacks is listed and named, and only a write to it is
+// refused: every other row stays writable, and the sweep leaves it alone.
+func TestStoreDegradesARowItCannotActOn(t *testing.T) {
+	t.Parallel()
+
+	s, notices := sweepStore(t, 10_000, time.Hour)
+	path := plantRaw(t, s, fmt.Sprintf(`{"jobs":[`+
+		`{"id":"future","schema_version":99,"requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7},`+
+		`{"id":"other","schema_version":%d,"state":"running","created":9999,"updated":9999}]}`, types.JobSchemaVersion))
+	before := storedRow(t, path, "future")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "the row is read, not hidden")
+	assert.Empty(t, notices.String(), "the sweep does not end a row it may not write, stale as it is")
+	assert.Equal(t, []types.JobReadOnly{{Job: "future", Lacks: []string{"never-implemented"}}},
+		types.NewJobList(rows).ReadOnly, "every listing names it")
+
+	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
 	require.Error(t, err)
-	assert.Contains(t, err.Error(),
-		fmt.Sprintf("schema_version %d and this magus accepts version %d only", newer, types.JobSchemaVersion))
+	assert.Equal(t, fmt.Sprintf(`job: future requires "never-implemented", which this magus (schema %d) lacks,`+
+		` so it will not write that row. Update magus, or run the command with the magus that wrote it`, types.JobSchemaVersion), err.Error())
+	_, err = s.Delete(t.Context(), "future", true)
+	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 
-	row := lease("adj/other")
-	_, err = s.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
-	assert.Error(t, err, "no write goes near a ledger this binary cannot read whole")
+	_, err = s.Update(t.Context(), "other", func(u *types.Job) { u.State = types.StatePass })
+	require.NoError(t, err, "every other row stays writable")
+	after := storedRow(t, path, "future")
+	for k, v := range before {
+		assert.Equal(t, v, after[k], "the read-only row keeps %s as it was", k)
+	}
+}
+
+// A requirement on the FILE is the one refusal wider than a row.
+func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path := plantRaw(t, s, `{"schema_version":99,"requires":["jobs-v2"],"jobs":[]}`)
+
+	_, err := s.List()
+	assert.Equal(t, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks; update magus`,
+		path, types.JobSchemaVersion), err.Error())
+}
+
+// The file's own envelope survives a rewrite and a clear, like a row's.
+func TestStoreKeepsTheFileEnvelope(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path := plantRaw(t, s, `{"schema_version":99,"plan":"p1","jobs":[]}`)
+	seed(t, s, lease("a"))
+	_, err := s.Clear(t.Context())
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var f map[string]any
+	require.NoError(t, json.Unmarshal(raw, &f))
+	assert.Equal(t, map[string]any{"schema_version": float64(99), "plan": "p1", "jobs": nil}, f)
 }
 
 // compat: see the legacy fields on Row. A plan written before the rename keeps its
@@ -651,7 +753,7 @@ func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 }
 
 // A pre-rename spelling folded onto its current field by foldStoredNames must not
-// ride back out under the old name too: mergeRowRaw's raw baggage would otherwise carry it
+// ride back out under the old name too: the row's unknown members would otherwise carry it
 // forward forever, and the NEXT read would find the field declared under both spellings,
 // which foldStoredNames refuses outright.
 func TestStoreUpdateDropsAFoldedLegacySpelling(t *testing.T) {

@@ -12,11 +12,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ResultSchemaVersion is the version of the result shape this magus accepts. A holder
-// sends it, the decoder rejects what it does not know by name, and the schema requires
-// it. See types.JobSchemaVersion for the job's half of the same rule.
-const ResultSchemaVersion = 2
-
 // ResultSchema is the JSON Schema for [types.JobResult], embedded so a harness can give a
 // holder a response format without magus having to render one. Generated from the struct
 // itself; see [DeclarationSchema].

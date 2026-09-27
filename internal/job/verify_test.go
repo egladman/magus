@@ -24,9 +24,9 @@ func acceptRow() types.Job {
 
 func passingResult() types.JobResult {
 	return types.JobResult{
-		SchemaVersion: ResultSchemaVersion,
-		Job:           "harness/ledger-accept",
-		ChangedPaths:  []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
+		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
+		Job:          "harness/ledger-accept",
+		ChangedPaths: []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
 		Validation: types.JobResultValidation{
 			Command:   "magus run go::go-test . -- -run Ledger",
 			OutputRef: "a1b2c3d4",
@@ -64,9 +64,9 @@ func completionGateRow() types.Job {
 
 func completionGateResult() types.JobResult {
 	return types.JobResult{
-		SchemaVersion: ResultSchemaVersion,
-		Job:           "harness/gated",
-		ChangedPaths:  []string{"internal/job/verify.go"},
+		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
+		Job:          "harness/gated",
+		ChangedPaths: []string{"internal/job/verify.go"},
 		GateEvidence: []types.GateEvidence{
 			{GateID: "unit", OutputRef: "unit-ref"},
 			{GateID: "docs", OutputRef: "docs-ref"},
@@ -463,10 +463,12 @@ func TestResultSchemaMatchesTheStruct(t *testing.T) {
 // jsonFields is the wire name of every field a struct serializes, which is the set the
 // schema has to describe.
 func jsonFields(v any) []string {
-	t := reflect.TypeOf(v)
-	out := make([]string, 0, t.NumField())
-	for i := range t.NumField() {
-		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+	var out []string
+	for _, f := range reflect.VisibleFields(reflect.TypeOf(v)) {
+		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if f.Anonymous || opts == "unknown" {
+			continue
+		}
 		out = append(out, name)
 	}
 	return out

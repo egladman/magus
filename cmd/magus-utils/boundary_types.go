@@ -194,6 +194,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobOverlapFootprint", Type: reflect.TypeFor[types.JobOverlapFootprint](), RuntimeObject: true},
 	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
 	{Name: "JobBlock", Type: reflect.TypeFor[types.JobBlock](), RuntimeObject: true},
+	{Name: "JobReadOnly", Type: reflect.TypeFor[types.JobReadOnly](), RuntimeObject: true},
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
 	{Name: "JobStatus", Type: reflect.TypeFor[types.JobStatus](), RuntimeObject: true},
 	{Name: "GateStatus", Type: reflect.TypeFor[types.GateStatus](), RuntimeObject: true},
