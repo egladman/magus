@@ -1,8 +1,3 @@
-// Package edit writes exact-range replacements across files. Every site is checked against
-// the file on disk, and every file graded, before the first byte moves; then every file is
-// written or none is. No VCS command runs on the apply path: atomicity comes from staging
-// each file as a temp sibling, renaming the stages over the originals, and renaming the
-// held originals back if any rename fails.
 package edit
 
 import (
@@ -137,7 +132,7 @@ func (p *Plan) readFile(root, rel string, sites []Site) *fileEdit {
 	for _, s := range sites {
 		start, end, reason := byteRange(before, s)
 		if reason != "" {
-			p.refuse(types.EditRefusal{Path: rel, Line: s.Start.Line, Col: s.Start.Col, Reason: reason})
+			p.refuse(types.EditRefusal{Path: rel, Line: s.Start.Line, Column: s.Start.Column, Reason: reason})
 			ok = false
 			continue
 		}
@@ -153,8 +148,8 @@ func (p *Plan) readFile(root, rel string, sites []Site) *fileEdit {
 		// Two spans starting together overlap even when one is empty: which lands first is
 		// not something the sites say.
 		if prev, cur := spans[k-1], spans[k]; cur.start < prev.end || cur.start == prev.start {
-			p.refuse(types.EditRefusal{Path: rel, Line: cur.at.Line, Col: cur.at.Col,
-				Reason: fmt.Sprintf("overlaps the site at %d:%d", prev.at.Line, prev.at.Col)})
+			p.refuse(types.EditRefusal{Path: rel, Line: cur.at.Line, Column: cur.at.Column,
+				Reason: fmt.Sprintf("overlaps the site at %d:%d", prev.at.Line, prev.at.Column)})
 			ok = false
 		}
 	}
@@ -162,9 +157,9 @@ func (p *Plan) readFile(root, rel string, sites []Site) *fileEdit {
 		return nil
 	}
 
-	f := &fileEdit{path: rel, abs: abs, mode: info.Mode().Perm(), before: before, digestBefore: Digest(before)}
+	f := &fileEdit{path: rel, abs: abs, mode: info.Mode().Perm(), before: before, digestBefore: digest(before)}
 	f.after = compose(before, spans)
-	f.digestAfter = Digest(f.after)
+	f.digestAfter = digest(f.after)
 	for _, s := range spans {
 		f.spans = append(f.spans, types.EditSpan{Path: rel, Start: positionAt(before, s.start), End: positionAt(before, s.end)})
 	}
@@ -195,11 +190,11 @@ func insideRoot(root, abs string) bool {
 func byteRange(content []byte, s Site) (int, int, string) {
 	start, ok := offsetAt(content, s.Start)
 	if !ok {
-		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file", s.Start.Line, s.Start.Col)
+		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file", s.Start.Line, s.Start.Column)
 	}
 	end, ok := offsetAt(content, s.End)
 	if !ok || end < start {
-		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file after the start", s.End.Line, s.End.Col)
+		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file after the start", s.End.Line, s.End.Column)
 	}
 	if got := string(content[start:end]); got != s.Old {
 		return 0, 0, fmt.Sprintf("holds %q, not %q: the file changed since it was read", got, s.Old)
@@ -210,7 +205,7 @@ func byteRange(content []byte, s Site) (int, int, string) {
 // offsetAt is the byte offset of a 1-based line and column. A column may sit one past the
 // line's last byte, where an exclusive end lands, but never past its terminator.
 func offsetAt(content []byte, at types.EditPosition) (int, bool) {
-	if at.Line < 1 || at.Col < 1 {
+	if at.Line < 1 || at.Column < 1 {
 		return 0, false
 	}
 	lineStart := 0
@@ -225,14 +220,14 @@ func offsetAt(content []byte, at types.EditPosition) (int, bool) {
 	if nl := bytes.IndexByte(content[lineStart:], '\n'); nl >= 0 {
 		lineEnd = lineStart + nl
 	}
-	off := lineStart + at.Col - 1
+	off := lineStart + at.Column - 1
 	return off, off <= lineEnd
 }
 
 // positionAt is the 1-based line and byte column of offset.
 func positionAt(content []byte, offset int) types.EditPosition {
 	lineStart := bytes.LastIndexByte(content[:offset], '\n') + 1
-	return types.EditPosition{Line: bytes.Count(content[:offset], []byte{'\n'}) + 1, Col: offset - lineStart + 1}
+	return types.EditPosition{Line: bytes.Count(content[:offset], []byte{'\n'}) + 1, Column: offset - lineStart + 1}
 }
 
 // compose writes spans, sorted and disjoint, into before.
@@ -248,8 +243,8 @@ func compose(before []byte, spans []span) []byte {
 	return after.Bytes()
 }
 
-// Digest is the `sha256:<hex>` of content.
-func Digest(content []byte) string {
+// digest is the `sha256:<hex>` of content.
+func digest(content []byte) string {
 	sum := sha256.Sum256(content)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
@@ -281,9 +276,10 @@ func (p *Plan) Spans() []types.EditSpan {
 	return out
 }
 
-// Apply writes every file of the plan or none of them. It stages every file as a temp
-// sibling first; a failed rename renames the held originals back over every file already
-// replaced, and the error says whether that restore held.
+// Apply writes every file of the plan or none of them, and runs no VCS command. It stages
+// every file as a temp sibling and renames each over its original; when a rename fails, it
+// re-stages the original bytes of every file already replaced and renames them back. The
+// error says whether that restore held.
 func (p *Plan) Apply() error {
 	if len(p.refused) > 0 {
 		return ErrRefused
@@ -305,7 +301,7 @@ func (p *Plan) Apply() error {
 		staged[i] = s
 	}
 	for i, f := range p.files {
-		err := unchanged(f)
+		err := checkUnchanged(f)
 		if err == nil {
 			err = p.opts.rename(staged[i], f.abs)
 		}
@@ -322,14 +318,14 @@ func (p *Plan) Apply() error {
 	return nil
 }
 
-// unchanged refuses a file another writer changed between Resolve and its rename, which
-// the rename would otherwise silently discard.
-func unchanged(f *fileEdit) error {
+// checkUnchanged refuses a file another writer changed between Resolve and its rename,
+// which the rename would otherwise silently discard.
+func checkUnchanged(f *fileEdit) error {
 	now, err := os.ReadFile(f.abs)
 	if err != nil {
 		return err
 	}
-	if d := Digest(now); d != f.digestBefore {
+	if d := digest(now); d != f.digestBefore {
 		return fmt.Errorf("changed on disk since it was read (%s, was %s)", d, f.digestBefore)
 	}
 	return nil
@@ -382,7 +378,7 @@ func FormatRefusal(r types.EditRefusal) string {
 	var b strings.Builder
 	switch {
 	case r.Path != "" && r.Line > 0:
-		fmt.Fprintf(&b, "%s:%d:%d: ", r.Path, r.Line, r.Col)
+		fmt.Fprintf(&b, "%s:%d:%d: ", r.Path, r.Line, r.Column)
 	case r.Path != "":
 		b.WriteString(r.Path + ": ")
 	}

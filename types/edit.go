@@ -41,16 +41,16 @@ type EditSpan struct {
 
 // EditPosition is a 1-based line and a 1-based byte column.
 type EditPosition struct {
-	Line int `json:"line" yaml:"line"`
-	Col  int `json:"col"  yaml:"col"`
+	Line   int `json:"line"   yaml:"line"`
+	Column int `json:"column" yaml:"column"`
 }
 
 // EditRefusal is one reason an edit was not applied. Line is 0 for a reason that belongs
 // to the whole file; Rule names the guard rule behind a lease refusal.
 type EditRefusal struct {
-	Path   string `json:"path,omitempty" yaml:"path,omitempty"`
-	Line   int    `json:"line,omitempty" yaml:"line,omitempty"`
-	Col    int    `json:"col,omitempty"  yaml:"col,omitempty"`
-	Rule   string `json:"rule,omitempty" yaml:"rule,omitempty"`
-	Reason string `json:"reason"         yaml:"reason"`
+	Path   string `json:"path,omitempty"   yaml:"path,omitempty"`
+	Line   int    `json:"line,omitempty"   yaml:"line,omitempty"`
+	Column int    `json:"column,omitempty" yaml:"column,omitempty"`
+	Rule   string `json:"rule,omitempty"   yaml:"rule,omitempty"`
+	Reason string `json:"reason"           yaml:"reason"`
 }
