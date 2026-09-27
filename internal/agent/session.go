@@ -27,11 +27,12 @@ import (
 // download it.
 //
 // 2 is the one deliberate exception: it adds the model and host-version
-// dimensions (AgentEvent.Model, AgentEvent.HostVersion) that the model-upgrade
-// loop reads to tell an old session from a new one, and an adapter silently
-// missing them would misreport that loop's own evidence as "no model ever
-// ran here" rather than "this copy predates the fact". The number in the
-// coverage line is what lets a reader tell the two apart at a glance.
+// dimensions (AgentEvent.Agent.Model, AgentEvent.Agent.HostVersion) that the
+// model-upgrade loop reads to tell an old session from a new one, and an
+// adapter silently missing them would misreport that loop's own evidence as
+// "no model ever ran here" rather than "this copy predates the fact". The
+// number in the coverage line is what lets a reader tell the two apart at a
+// glance.
 const SessionSchemaVersion = 2
 
 // SessionCoverageMarker introduces an adapter's machine-readable statement of what

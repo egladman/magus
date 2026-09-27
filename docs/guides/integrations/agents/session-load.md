@@ -106,8 +106,10 @@ An adapter emits one JSON object per line on stdout and pipes it into
   "ref": "<the host's own id for this event>",
   "text": "<command | path | skill name | hook text>",
   "transcript": "/abs/path",
-  "model": "<the model that produced this event, or null>",
-  "host_version": "<the host's own version, or null>",
+  "agent": {
+    "model": "<the model that produced this event, or null>",
+    "host_version": "<the host's own version, or null>"
+  },
   "outcome": { "exit": null, "denied": false, "interrupted": false }
 }
 ```
@@ -130,11 +132,13 @@ Four things are worth knowing before writing your own:
 - `text` for a spawn is the subagent TYPE, not the prompt. A prompt is unbounded,
   it is the delegating agent's own words about work in progress, and no report
   here asks what an agent was told.
-- `model` and `host_version` are opaque strings, compared for change only. magus
-  ships no model names, so nothing here lockstep-couples a magus release to a
-  model. `session show` and `session ls -o json` report the pair off the NEWEST
-  event that named one, which is what a session ended on, and null (or an
-  omitted key) where a host's record does not carry it.
+- `agent.model` and `agent.host_version` are opaque strings, compared for change
+  only. magus ships no model names, so nothing here lockstep-couples a magus
+  release to a model. They travel as one value because they describe one thing,
+  the agent that produced the event. `session show` and `session ls -o json`
+  report the pair off the NEWEST event that named one, which is what a session
+  ended on, and an omitted `agent` (or a null field inside it) where a host's
+  record does not carry it.
 
 ## Session load across hosts
 
@@ -246,7 +250,8 @@ the delegated half of every fanned-out session goes with them.
 #   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
 #    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
 #    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
-#    "transcript":"<abs>","model":"<message.model, or null>","host_version":"<version, or null>",
+#    "transcript":"<abs>",
+#    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
 #    "outcome":{"exit":null,"denied":false,"interrupted":false}}
 #
 # Run it with no arguments to pipe the stream into `magus session load`; run it
@@ -369,7 +374,7 @@ extract() {
     def event($r; $kind; $ref; $text):
       {host: $host, session: ($r.sessionId // ""), ts: ($r.timestamp // "" | ms),
        cwd: ($r.cwd // ""), kind: $kind, ref: $ref, text: $text, transcript: $transcript,
-       model: ($r.message.model // null), host_version: ($r.version // null),
+       agent: {model: ($r.message.model // null), host_version: ($r.version // null)},
        outcome: {exit: null, denied: false, interrupted: false}};
     foreach (inputs, null) as $r ({p: {}, e: []};
       .e = []

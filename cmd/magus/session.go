@@ -472,13 +472,11 @@ type loadEvent struct {
 	Ref        string `json:"ref"`
 	Text       string `json:"text"`
 	Transcript string `json:"transcript"`
-	// Model and HostVersion are opaque, adapter-supplied facts: which model produced
-	// this event and which release of the host ran it. Absent (or null, which decodes
-	// the same as absent) when an adapter's host does not carry one; see
-	// sessions.AgentEvent.
-	Model       string `json:"model,omitempty"`
-	HostVersion string `json:"host_version,omitempty"`
-	Outcome     struct {
+	// Agent is the adapter-supplied model/host-version pair, absent (or null,
+	// which decodes the same as absent) when an adapter's host does not carry
+	// either; see sessions.Agent.
+	Agent   sessions.Agent `json:"agent,omitzero"`
+	Outcome struct {
 		Exit        int  `json:"exit"`
 		Denied      bool `json:"denied"`
 		Interrupted bool `json:"interrupted"`
@@ -702,8 +700,7 @@ func validateLoadEvent(ev loadEvent) string {
 func storedEvent(ev loadEvent) sessions.AgentEvent {
 	out := sessions.AgentEvent{
 		Host:        ev.Host,
-		Model:       ev.Model,
-		HostVersion: ev.HostVersion,
+		Agent:       ev.Agent,
 		Kind:        ev.Kind,
 		Ref:         ev.Ref,
 		AtMs:        ev.Ts,
@@ -830,11 +827,10 @@ type commandGroup struct {
 type sessionShowOutput struct {
 	Session string `json:"session"`
 	Host    string `json:"host,omitempty"`
-	// Model and HostVersion are the pair off the newest event that named one: what
-	// this session ended on, which is what today's guard rules would be checked
-	// against. Empty when no loaded event named either.
-	Model        string         `json:"model,omitempty"`
-	HostVersion  string         `json:"host_version,omitempty"`
+	// Agent is the pair off the newest event that named one: what this session
+	// ended on, which is what today's guard rules would be checked against. Zero
+	// when no loaded event named either.
+	Agent        sessions.Agent `json:"agent,omitzero"`
 	Events       int            `json:"events"`
 	FirstMs      int64          `json:"first_ms,omitempty"`
 	LastMs       int64          `json:"last_ms,omitempty"`
@@ -946,8 +942,8 @@ func summarizeSession(session string, events []sessions.AgentEvent) sessionShowO
 				out.LastMs = ev.AtMs
 			}
 		}
-		if (ev.Model != "" || ev.HostVersion != "") && ev.AtMs >= pairAtMs {
-			out.Model, out.HostVersion, pairAtMs = ev.Model, ev.HostVersion, ev.AtMs
+		if ev.Agent != (sessions.Agent{}) && ev.AtMs >= pairAtMs {
+			out.Agent, pairAtMs = ev.Agent, ev.AtMs
 		}
 		switch ev.Kind {
 		case sessions.EventShellCommand:
@@ -1018,8 +1014,8 @@ const showListCap = 10
 
 func renderSessionShow(w io.Writer, s sessionShowOutput) {
 	fmt.Fprintf(w, "%s  host %s  %d event(s)\n", s.Session, orDash(s.Host), s.Events)
-	if s.Model != "" || s.HostVersion != "" {
-		fmt.Fprintf(w, "model %s  host version %s\n", orDash(s.Model), orDash(s.HostVersion))
+	if s.Agent != (sessions.Agent{}) {
+		fmt.Fprintf(w, "model %s  host version %s\n", orDash(s.Agent.Model), orDash(s.Agent.HostVersion))
 	}
 	if s.FirstMs > 0 {
 		fmt.Fprintf(w, "%s to %s\n",

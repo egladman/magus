@@ -11,7 +11,8 @@
 #   {"host":"claude-code","session":"<id>","ts":<unix ms>,"cwd":"<abs>",
 #    "kind":"shell.command|file.read|file.write|skill.load|hook.output|spawn|magus.call",
 #    "ref":"<the host's own id for this event>","text":"<command | path | skill | hook text>",
-#    "transcript":"<abs>","model":"<message.model, or null>","host_version":"<version, or null>",
+#    "transcript":"<abs>",
+#    "agent":{"model":"<message.model, or null>","host_version":"<version, or null>"},
 #    "outcome":{"exit":null,"denied":false,"interrupted":false}}
 #
 # Run it with no arguments to pipe the stream into `magus session load`; run it
@@ -134,7 +135,7 @@ extract() {
     def event($r; $kind; $ref; $text):
       {host: $host, session: ($r.sessionId // ""), ts: ($r.timestamp // "" | ms),
        cwd: ($r.cwd // ""), kind: $kind, ref: $ref, text: $text, transcript: $transcript,
-       model: ($r.message.model // null), host_version: ($r.version // null),
+       agent: {model: ($r.message.model // null), host_version: ($r.version // null)},
        outcome: {exit: null, denied: false, interrupted: false}};
     foreach (inputs, null) as $r ({p: {}, e: []};
       .e = []

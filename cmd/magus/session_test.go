@@ -177,13 +177,14 @@ func TestSessionsJSONExposesTheModelAndHostVersionPair(t *testing.T) {
 	root := t.TempDir()
 
 	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","model":"claude-opus-5-5","host_version":"2.1.280"}`)
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","agent":{"model":"claude-opus-5-5","host_version":"2.1.280"}}`)
 	require.NoError(t, err)
 
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"-o", "json"}))
 	})
 
+	assert.Contains(t, out, `"agent": {`)
 	assert.Contains(t, out, `"model": "claude-opus-5-5"`)
 	assert.Contains(t, out, `"host_version": "2.1.280"`)
 }
@@ -459,8 +460,8 @@ func TestSessionShowPrintsTheModelAndHostVersionPair(t *testing.T) {
 	root := t.TempDir()
 
 	_, err := loadStream(t, root,
-		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","model":"claude-opus-5","host_version":"2.1.260"}`,
-		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"pwd","model":"claude-opus-5-5","host_version":"2.1.280"}`)
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls","agent":{"model":"claude-opus-5","host_version":"2.1.260"}}`,
+		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"pwd","agent":{"model":"claude-opus-5-5","host_version":"2.1.280"}}`)
 	require.NoError(t, err)
 
 	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })

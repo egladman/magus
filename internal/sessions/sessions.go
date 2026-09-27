@@ -512,13 +512,12 @@ type Summary struct {
 	Facts        int               `json:"facts"`
 	Events       int               `json:"events,omitempty"` // of Facts, the ones a `magus session load` put here
 	Targets      []TargetResult    `json:"targets,omitempty"`
-	// Model and HostVersion are the pair off the NEWEST loaded [AgentEvent] that named
-	// one, so a session spanning a model or host switch reports what it ended on
-	// rather than what it began with. Empty when no loaded event named either.
-	Model       string `json:"model,omitempty"`
-	HostVersion string `json:"host_version,omitempty"`
-	// pairAtMs is the AtMs of the event Model/HostVersion came from, kept only to
-	// decide whether a later event's pair should replace it; never serialized.
+	// Agent is the pair off the NEWEST loaded [AgentEvent] that named one, so a
+	// session spanning a model or host switch reports what it ended on rather than
+	// what it began with. Zero when no loaded event named either.
+	Agent Agent `json:"agent,omitzero"`
+	// pairAtMs is the AtMs of the event Agent came from, kept only to decide
+	// whether a later event's pair should replace it; never serialized.
 	pairAtMs int64
 }
 
@@ -558,8 +557,8 @@ func Summarize(fold Fold) []Summary {
 		case KindAgentEvent:
 			s.Events++
 			var ev AgentEvent
-			if json.Unmarshal(rec.Payload, &ev) == nil && (ev.Model != "" || ev.HostVersion != "") && ev.AtMs >= s.pairAtMs {
-				s.Model, s.HostVersion, s.pairAtMs = ev.Model, ev.HostVersion, ev.AtMs
+			if json.Unmarshal(rec.Payload, &ev) == nil && ev.Agent != (Agent{}) && ev.AtMs >= s.pairAtMs {
+				s.Agent, s.pairAtMs = ev.Agent, ev.AtMs
 			}
 		}
 	}
@@ -616,6 +615,25 @@ const (
 	VerdictDeny   = "deny"
 )
 
+// Agent is which model produced an event and which release of its host ran it:
+// one fact ("what produced this"), not two, so it is one value rather than a
+// pair of loose fields that happen to travel together. Both are opaque strings,
+// compared for change only; magus never interprets either, so nothing here
+// lockstep-couples a magus release to a model name.
+type Agent struct {
+	// Model is the model that produced this event, as the host's own record names it
+	// (Claude Code: message.model on the assistant record). Empty when the host's
+	// record does not carry one; an adapter's coverage line says so under the
+	// "model" dimension rather than leaving a reader to read the empty string as
+	// a fact.
+	Model string `json:"model,omitempty"`
+	// HostVersion is the agent host's own release at the moment of this event
+	// (Claude Code: the transcript record's top-level "version"). Distinct from
+	// AgentEvent.Host, which names the PROGRAM ("claude-code"); this is the
+	// version OF it.
+	HostVersion string `json:"host_version,omitempty"`
+}
+
 // AgentEvent is the payload of a [KindAgentEvent] record: one thing a host
 // observed its session do.
 //
@@ -630,18 +648,9 @@ const (
 // output, all of which magus either printed itself or already records elsewhere.
 type AgentEvent struct {
 	Host string `json:"host"`
-	// Model is the model that produced this event, as the host's own record names it
-	// (Claude Code: message.model on the assistant record). Opaque: magus never
-	// interprets it, only compares it for change, so nothing here lockstep-couples a
-	// magus release to a model name. Empty when the host's record does not carry one;
-	// an adapter's coverage line says so under the "model" dimension rather than
-	// leaving a reader to read the empty string as a fact.
-	Model string `json:"model,omitempty"`
-	// HostVersion is the agent host's own release at the moment of this event (Claude
-	// Code: the transcript record's top-level "version"), the same opaque-string
-	// treatment as Model. Distinct from Host, which names the PROGRAM
-	// ("claude-code"); this is the version OF it.
-	HostVersion string `json:"host_version,omitempty"`
+	// Agent is the model and host-version pair, zero when the host's record
+	// carries neither.
+	Agent Agent `json:"agent,omitzero"`
 	// Kind is one of [EventKinds]. The wire name stays "event" so the payloads already
 	// in a store keep decoding.
 	Kind string `json:"event"`
