@@ -8,8 +8,8 @@
 //
 // Narrowing is the reported case, not a missing sibling. 34% of the standard
 // library's test files are named after a cross-cutting concern no source file
-// owns, which makes reporting those a house rule. See Options.Unpaired, and
-// [CrossCuttingMarker] for the comment that excuses one file from it.
+// owns, which makes reporting those a house rule. See [Options.ReportUnpaired],
+// and [CrossCuttingMarker] for the comment that can excuse one file from it.
 //
 // The analyzer depends on no linter runner. The golangci-lint plugin lives in
 // the plugin subpackage.
@@ -48,7 +48,7 @@ func isMainTestPackage(name string) bool {
 	return name == "main" || name == "main_test"
 }
 
-// mainTestMessage names the fix for [Options.NoMainTests]: the wrong thing here
+// mainTestMessage names the fix for [Options.ReportMainTests]: the wrong thing here
 // also compiles and passes, so the message says where the logic belongs rather
 // than what is wrong with leaving it in main.
 const mainTestMessage = "move the logic this test drives into the package that owns it, then test it there"
@@ -64,15 +64,17 @@ belongs in the package it tests; the external package is reserved for the case w
 an in-package test would close an import cycle, and that case is worth a //nolint
 naming the cycle rather than a silent convention.
 
-With the unpaired option it reports every X_test.go with no X.go, unless a source
-family (X_linux.go) stands in or the file opens with "// cross-cutting: <why>".
-ignore-marker takes that second exit away, pair-benchmarks holds X_bench_test.go to
-the same rule instead of exempting it, and no-unix-suffix reports any Go file named
-with a _unix segment.
+With report-unpaired it reports every X_test.go with no X.go, unless a source
+family (X_linux.go) stands in. honor-marker adds a second exit, a file opening with
+"// cross-cutting: <why>". pair-benchmarks holds X_bench_test.go to the same rule
+instead of exempting it, and report-unix-suffix reports any Go file named with a
+_unix segment.
 
-With no-main-tests it also reports any _test.go declaring package main or
+With report-main-tests it also reports any _test.go declaring package main or
 main_test, regardless of the other options: that test can only run inside the
-binary it drives, which usually means the code it drives never left main either.`
+binary it drives, which usually means the code it drives never left main either.
+
+Every option is off by default.`
 
 // conventional lists test filenames that have no source counterpart by design,
 // with the number of uses each has in the Go standard library. Every entry is
@@ -116,45 +118,44 @@ var buildSuffixes = []string{
 // Options configures the analyzer returned by [New]. The json tags are golangci-lint's
 // settings block: the plugin decodes straight into this struct rather than keeping a
 // parallel copy, so adding an option here cannot be silently dropped on the way in.
+//
+// Every option is off in the zero value, and setting a flag true turns on what its
+// name says, so a settings block lists only what it enables.
 type Options struct {
 	// Allow lists globs in [path/filepath.Match] syntax, matched against the base
 	// name of a test file, that are exempt from the rule.
 	Allow []string `json:"allow"`
 
-	// Unpaired extends the rule to every test file with no source file of the same
-	// name, not only one that narrows an existing name. See the package comment for
-	// what that costs.
+	// ReportUnpaired extends the rule to every test file with no source file of
+	// the same name, not only one that narrows an existing name. See the package
+	// comment for what that costs.
 	//
 	// A test file still pairs when its name matches a platform-split family:
 	// tree_test.go covers tree_linux.go and tree_darwin.go when no tree.go exists.
-	// A file carrying [CrossCuttingMarker] above its package clause is exempt.
-	Unpaired bool `json:"unpaired"`
+	ReportUnpaired bool `json:"report-unpaired"`
 
-	// IgnoreMarker stops [CrossCuttingMarker] from exempting a file under Unpaired,
-	// for a tree that names its few unpaired test files in Allow, where every
-	// exception is visible in one place, instead of in each file's header.
-	IgnoreMarker bool `json:"ignore-marker"`
+	// HonorMarker lets [CrossCuttingMarker] exempt a file from ReportUnpaired.
+	// Without it an unpaired test file goes in Allow, where every exception is
+	// visible in one place instead of in each file's header.
+	HonorMarker bool `json:"honor-marker"`
 
 	// PairBenchmarks drops the benchmark file names (bench_test.go,
 	// X_bench_test.go and the benchmark_ forms) from the conventional exemptions,
 	// so benchmarks live in the _test.go of the file they measure.
 	PairBenchmarks bool `json:"pair-benchmarks"`
 
-	// NoUnixSuffix reports every Go file, test or source, whose name ends in a
-	// _unix segment. The toolchain reads no constraint from that segment, so the
-	// file's //go:build line decides what it serves and the name only suggests
-	// it; name the platforms instead (X_linux.go, X_darwin.go, X_other.go).
-	NoUnixSuffix bool `json:"no-unix-suffix"`
+	// ReportUnixSuffix reports every Go file, test or source, whose name ends in
+	// a _unix segment. The toolchain reads no constraint from that segment, so
+	// the file's //go:build line decides what it serves and the name only
+	// suggests it; name the platforms instead (X_linux.go, X_darwin.go,
+	// X_other.go).
+	ReportUnixSuffix bool `json:"report-unix-suffix"`
 
-	// NoMainTests reports every _test.go file declaring package main or
+	// ReportMainTests reports every _test.go file declaring package main or
 	// main_test, so a test that only compiles inside the binary it drives gets
-	// flagged for the logic to move to a package of its own.
-	//
-	// Off by default: this repo migrates cmd/ logic into domain packages over
-	// time rather than in one lift, so turning this on today would report on
-	// every test that lift hasn't reached yet. See readme.md for the plan it
-	// is gated on.
-	NoMainTests bool `json:"no-main-tests"`
+	// flagged for the logic to move to a package of its own. A tree moving that
+	// logic out over time would see every test the move has not reached yet.
+	ReportMainTests bool `json:"report-main-tests"`
 }
 
 // CrossCuttingMarker opens a line comment above the package clause of a test file
@@ -162,9 +163,10 @@ type Options struct {
 //
 //	// cross-cutting: every backend runs the same cases, so no one backend owns them
 //
-// It exempts the file from [Options.Unpaired] only. A marked file that narrows a
-// source name is still reported, because that file has a home. An empty reason
-// does not count: the marker exists to make the exception readable.
+// Under [Options.HonorMarker] it exempts the file from [Options.ReportUnpaired]
+// only. A marked file that narrows a source name is still reported, because that
+// file has a home. An empty reason does not count: the marker exists to make the
+// exception readable.
 const CrossCuttingMarker = "cross-cutting:"
 
 // New returns an analyzer configured by opts, erroring on a malformed Allow glob.
@@ -189,11 +191,11 @@ var Analyzer = newAnalyzer(Options{})
 
 func newAnalyzer(opts Options) *analysis.Analyzer {
 	l := linter{
-		unpaired:       opts.Unpaired,
-		ignoreMarker:   opts.IgnoreMarker,
+		unpaired:       opts.ReportUnpaired,
+		honorMarker:    opts.HonorMarker,
 		pairBenchmarks: opts.PairBenchmarks,
-		noUnixSuffix:   opts.NoUnixSuffix,
-		noMainTests:    opts.NoMainTests,
+		unixSuffix:     opts.ReportUnixSuffix,
+		mainTests:      opts.ReportMainTests,
 		// Combined once. Per test file, this list is walked but never rebuilt.
 		exempt: slices.Concat(conventional, opts.Allow),
 	}
@@ -207,10 +209,10 @@ func newAnalyzer(opts Options) *analysis.Analyzer {
 type linter struct {
 	exempt         []string
 	unpaired       bool
-	ignoreMarker   bool
+	honorMarker    bool
 	pairBenchmarks bool
-	noUnixSuffix   bool
-	noMainTests    bool
+	unixSuffix     bool
+	mainTests      bool
 }
 
 func (l linter) run(pass *analysis.Pass) (any, error) {
@@ -231,7 +233,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 		path := tf.Name()
 
 		name := filepath.Base(path)
-		if l.noUnixSuffix && unixSuffixed(name) {
+		if l.unixSuffix && unixSuffixed(name) {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: unixSuffixMessage(name)})
 		}
 
@@ -247,7 +249,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: externalPackageMessage(f.Name.Name)})
 		}
 
-		if l.noMainTests && isMainTestPackage(f.Name.Name) {
+		if l.mainTests && isMainTestPackage(f.Name.Name) {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: mainTestMessage})
 		}
 
@@ -267,7 +269,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			listings[dir] = sources
 		}
 
-		marked := !l.ignoreMarker && crossCutting(f)
+		marked := l.honorMarker && crossCutting(f)
 		if message := l.check(name, sources, marked); message != "" {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: message})
 		}
@@ -301,7 +303,8 @@ func (l linter) check(name string, sources map[string]bool, marked bool) string 
 	}
 
 	// Reached only under PairBenchmarks, since otherwise the name was exempted. It is
-	// reported with or without Unpaired: a benchmark file always has a file it measures.
+	// reported with or without ReportUnpaired: a benchmark file always has a file it
+	// measures.
 	if matchesAny(benchmarkNames, name) {
 		return fmt.Sprintf("%s keeps benchmarks apart from the tests of the file they measure; "+
 			"move them into that file's _test.go", name)
@@ -311,7 +314,7 @@ func (l linter) check(name string, sources map[string]bool, marked bool) string 
 		return ""
 	}
 
-	if l.ignoreMarker {
+	if !l.honorMarker {
 		return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
 			"of the file they exercise, or, when no single file owns them, add it to the allow list", name)
 	}

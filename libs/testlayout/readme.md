@@ -26,60 +26,67 @@ implements. Measured against the Go 1.26 standard library, excluding `src/cmd`:
 
 A third of the standard library names test files after a cross-cutting concern no
 single source file owns: `concurrency_test.go`, `sizeof_test.go`. Reporting those
-is a house rule, available as `unpaired` and off by default.
+is a house rule, available as `report-unpaired` and off by default.
 
 Narrowing is the case worth gating. The tests had a home and someone made a new
 file instead.
 
-### Opting into `unpaired`
+Every option is off by default, and setting one true turns on what its name
+says.
 
-With `unpaired` on, two things still pair a test file that has no `X.go`:
+### Opting into `report-unpaired`
 
-- A platform family. `tree_test.go` covers `tree_linux.go` and `tree_darwin.go`
-  when there is no `tree.go`, because the toolchain reads those suffixes as
-  constraints, not as part of the name.
-- A marker. A test file with no single honest home, such as an end-to-end suite,
-  a scale check across the package, or a test sited in a consuming package to
-  dodge an import cycle, opens with a line comment above its package clause:
+With `report-unpaired` on, a platform family still pairs a test file that has no
+`X.go`: `tree_test.go` covers `tree_linux.go` and `tree_darwin.go` when there is
+no `tree.go`, because the toolchain reads those suffixes as constraints, not as
+part of the name.
 
-  ```go
-  // cross-cutting: every backend runs the same cases, so no one backend owns them
+Anything else with no single honest home, such as an end-to-end suite, a scale
+check across the package, or a test sited in a consuming package to dodge an
+import cycle, goes in `allow`, so every exception sits in the config.
 
-  package vcs
-  ```
+### `honor-marker`
 
-  The reason is required. `// cross-cutting:` alone does not count, and neither
-  does the marker below the package clause. It excuses a missing pair only: a
-  marked file that narrows a source name is still reported.
+A tree that would rather record each exception in the file itself sets
+`honor-marker`. A test file then opens with a line comment above its package
+clause:
+
+```go
+// cross-cutting: every backend runs the same cases, so no one backend owns them
+
+package vcs
+```
+
+The reason is required. `// cross-cutting:` alone does not count, and neither
+does the marker below the package clause. It excuses a missing pair only: a
+marked file that narrows a source name is still reported.
 
 ### Stricter layouts
 
-Three more options tighten `unpaired` for a tree that wants every test file
-paired, each off by default:
+Two more options tighten `report-unpaired` for a tree that wants every test file
+paired:
 
-- `ignore-marker`: the marker stops excusing a file. The few files with no single
-  home go in `allow` instead, so every exception sits in the config.
 - `pair-benchmarks`: the benchmark names in the table below lose their exemption.
   `resolver_bench_test.go` narrows `resolver.go` like any other test file, and a
   benchmark file that narrows nothing is still reported, since it measures some
   file whose `_test.go` should hold it.
-- `no-unix-suffix`: any Go file named `X_unix.go` or `X_unix_test.go` is
+- `report-unix-suffix`: any Go file named `X_unix.go` or `X_unix_test.go` is
   reported. The toolchain reads `unix` from a `//go:build` line but never from a
   file name, so the name only suggests what the tag decides. Name the platforms
   instead: `X_linux.go`, `X_darwin.go`, `X_other.go`, and `X.go` for the shared
   part.
 
-## no-main-tests: tests trapped in package main
+## report-main-tests: tests trapped in package main
 
-With `no-main-tests` on, any `_test.go` declaring `package main` or its external
-`package main_test` variant is reported: move the logic the test drives into
-the package that owns it, then test it there. A test that only compiles inside
-the binary it drives usually means the code it drives never left `package
-main` either. This check runs regardless of the other options - it reads the
+With `report-main-tests` on, any `_test.go` declaring `package main` or its
+external `package main_test` variant is reported: move the logic the test drives
+into the package that owns it, then test it there. A test that only compiles
+inside the binary it drives usually means the code it drives never left `package
+main` either. This check runs regardless of the other options: it reads the
 package clause, not the file name, so it still fires on a `main_test.go` that
-`unpaired` would otherwise treat as the conventional `TestMain` file.
+`report-unpaired` would otherwise treat as the conventional `TestMain` file.
 
-Ships **off by default**. magus's own `cmd/magus`, `cmd/magus-utils`, the docs
+magus leaves it off. Its own `cmd/magus`, `cmd/magus-utils`, the docs
 generators, gopherbuzz's CLI, and termcast/termshots/swegrade all test from
 inside `package main` today, and this repo moves that logic into domain
 packages over time rather than in one lift (see
@@ -110,7 +117,7 @@ from counting it rather than from taste. Counts are occurrences in `$GOROOT/src`
 | `internal_test.go`, `*_internal_test.go`, `*_pkg_test.go` | 6    | white-box companion to an external test package |
 
 Trailing GOOS and GOARCH segments are also exempt, plus `unix` (unless
-`no-unix-suffix` reports it), so `rawconn_unix_test.go` still pairs with
+`report-unix-suffix` reports it), so `rawconn_unix_test.go` still pairs with
 `rawconn.go`. Without that the standard
 library reports 51 files instead of 16, and every one of the difference is a
 platform variant.
@@ -141,16 +148,16 @@ linters:
           allow:
             - "*_conformance_test.go"
           # Report every test file with no source file of the same name. See the
-          # table above for what this costs, and "Opting into unpaired" for the
-          # two ways a test file still pairs.
-          unpaired: false
+          # table above for what this costs, and "Opting into report-unpaired" for
+          # what still pairs.
+          report-unpaired: false
+          # Let `// cross-cutting: <why>` excuse an unpaired file. See "honor-marker".
+          honor-marker: false
           # See "Stricter layouts".
-          ignore-marker: false
           pair-benchmarks: false
-          no-unix-suffix: false
-          # See "no-main-tests: tests trapped in package main". Off until this
-          # repo's cmd/ lift into domain packages lands.
-          no-main-tests: false
+          report-unix-suffix: false
+          # See "report-main-tests: tests trapped in package main".
+          report-main-tests: false
 ```
 
 ## Building the binary
@@ -182,7 +189,7 @@ singlechecker.Main(testlayout.Analyzer)
 ```
 
 `Analyzer` is the default configuration and exposes no flags. To set `allow` or
-`unpaired` outside golangci-lint, build your own with
+`report-unpaired` outside golangci-lint, build your own with
 `testlayout.New(testlayout.Options{...})`, which errors on a malformed glob.
 
 ## Not hermetic
