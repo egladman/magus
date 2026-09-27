@@ -77,8 +77,8 @@ type Dependencies struct {
 	WriteRule workspace.WriteRule
 	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
-	// CheckoutState reads the checkout holding dir for a command rule judging a push, nil
-	// when its version control cannot report it.
+	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
+	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
 	// LoadFailure is why the working tree's workspace did not load, nil when it loaded or
 	// there is none. SpawnRule, CommandRule and WriteRule are then nil because nothing could

@@ -1,15 +1,17 @@
 // The code-comments rule, a write rule: the first write of a session that adds code comments
-// is advised to load the comment rules and audit what it wrote. The guard answers before
-// the write lands, so the advice arrives with the write rather than after it.
+// is advised to audit what it wrote against the comment rule. The guard answers before the
+// write lands, so the advice arrives with the write rather than after it.
 namespace agentpolicy\comments;
 
 import "std";
 import "magus";
 import "./tools/policy/helpers" as helpers;
 
-final commentAdvice = "This write adds code comments. Load Skill(idiomatic-code-comments), then audit the "
-    + "comments just written: keep the ones that say what the code cannot (why, a constraint, a "
-    + "workaround) and delete narration, restatement and change history. This asks once per session.";
+final commentAdvice = "This write adds code comments. Audit each one: keep only the comments that say "
+    + "what the code cannot, which is why it is written this way, a constraint or invariant it relies "
+    + "on, a workaround and what it works around, or a public symbol's contract. Delete the ones that "
+    + "narrate the code, restate a name or the next line, or record the change's history, which "
+    + "belongs in the commit message. This is said once per session.";
 
 // A line that opens a comment in the common languages. `#!` is a shebang, not a comment.
 final commentLine = $"(?m)^[ \t]*(#([^!]|$)|//|/\*|\* |<!--|-- |;;)";
@@ -65,7 +67,8 @@ test "a write that adds a comment to code is advised once per session" {
     final once = helpers\counter();
     final v = decideComments("/w/internal/cache/key.go", added: "// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once);
     std\assert(v.decision == "advise", message: "the first");
-    std\assert(v.reason.indexOf("Skill(idiomatic-code-comments)") != null, message: "names the skill");
+    std\assert(v.reason.indexOf("keep only the comments that say what the code cannot") != null, message: "states the rule");
+    std\assert(v.reason.indexOf("Skill(") == null, message: "sends the reader to no skill");
     std\assert(decideComments("/w/a.go", added: "// again", once: once).decision == "allow", message: "only once");
 }
 

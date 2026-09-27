@@ -125,6 +125,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "UnreferencedEntry", Zero: types.UnreferencedEntry{}, Encode: func(v any) vm.Value { return ObjectUnreferencedEntry(v.(types.UnreferencedEntry)) }},
 	{Name: "UpdateRef", Zero: types.UpdateRef{}, Encode: func(v any) vm.Value { return ObjectUpdateRef(v.(types.UpdateRef)) }},
 	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }},
+	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
 	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
 	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest)) }},

@@ -13,6 +13,16 @@ export object Program {
     repeats: bool,
     // path is the file the line names the program by, "" when found on PATH or unknown.
     path: str = "",
+    // vcs is the host's parse of a git, hg, sl or jj command, null for any other program.
+    vcs: VcsCall? = null,
+}
+
+// VcsCall is a version-control command as the guard splits it: the tool, its subcommand,
+// and the arguments after it with the tool's global options taken out.
+export object VcsCall {
+    tool: str,
+    subcommand: str,
+    args: [str],
 }
 
 // The magus flags that take the next word as their value.
@@ -94,7 +104,9 @@ export fun substitutedHeredocs(line: str) > [str] {
 }
 
 // fillSlots puts texts, in order, into the arguments slots names: slots[i] lists the
-// argument indices of programs[i] whose value the parser could not render.
+// indices of programs[i]'s arguments whose value the parser could not render. For a
+// version-control command they index vcs.args, the arguments its rules read; for any
+// other program, args.
 export fun fillSlots(programs: [Program], slots: [[int]], texts: [str]) > [Program] {
     final filled = mut [<Program>];
     var next = 0;
@@ -103,8 +115,12 @@ export fun fillSlots(programs: [Program], slots: [[int]], texts: [str]) > [Progr
             filled.append(p);
             continue;
         }
+        var source = p.args;
+        if (p.vcs != null) {
+            source = p.vcs!.args;
+        }
         final args = mut [<str>];
-        foreach (arg in p.args) {
+        foreach (arg in source) {
             args.append(arg);
         }
         foreach (slot in slots[i]) {
@@ -113,7 +129,12 @@ export fun fillSlots(programs: [Program], slots: [[int]], texts: [str]) > [Progr
                 next = next + 1;
             }
         }
-        filled.append(Program{ name = p.name, args = args, repeats = p.repeats, path = p.path });
+        if (p.vcs != null) {
+            filled.append(Program{ name = p.name, args = p.args, repeats = p.repeats, path = p.path,
+                vcs = VcsCall{ tool = p.vcs!.tool, subcommand = p.vcs!.subcommand, args = args } });
+        } else {
+            filled.append(Program{ name = p.name, args = args, repeats = p.repeats, path = p.path });
+        }
     }
     return filled;
 }
@@ -176,6 +197,18 @@ export fun request(argvs: [[str]]) > [Program] {
             name = fs\basename(name);
         }
         programs.append(Program{ name = name, args = words.sub(1), repeats = repeats, path = file });
+    }
+    return programs;
+}
+
+// vcsRequest is the version-control commands a line runs, each spelled as its tool, its
+// subcommand and the arguments the guard leaves after it.
+export fun vcsRequest(calls: [[str]]) > [Program] {
+    final programs = mut [<Program>];
+    foreach (call in calls) {
+        final rest = call.sub(2);
+        programs.append(Program{ name = call[0], args = call.sub(1), repeats = false,
+            vcs = VcsCall{ tool = call[0], subcommand = call[1], args = rest } });
     }
     return programs;
 }

@@ -166,9 +166,10 @@ type CommandRequest struct {
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
-	// Checkout is the state of the checkout a push leaves from, read only for a line that
-	// pushes, since reading it costs processes. Nil otherwise, and when the checkout's
-	// version control cannot report it: a rule reads nil as unknown.
+	// Checkout is the state of the checkout a push leaves from or, on a line that pushes
+	// nothing, the one its first commit records into (jj describe counts). It is read only
+	// for such a line, since reading it costs processes. Nil otherwise, and when the
+	// checkout's version control cannot report it: a rule reads nil as unknown.
 	Checkout *CheckoutState
 	// Dir is the directory the line runs in, as the host reported it; empty when it
 	// reported none.
@@ -230,4 +231,22 @@ type CommandInvocation struct {
 	// runs it again until a condition changes. A for loop walks a fixed list and does not
 	// count.
 	Repeats bool
+	// VCS is the program read as a command of a version-control tool magus drives (git,
+	// hg, sl, jj), nil for any other program.
+	VCS *VCSInvocation
+}
+
+// VCSInvocation is a version-control command split where its tool splits it, so a rule
+// reads the subcommand and its arguments without knowing any tool's global options.
+type VCSInvocation struct {
+	// Tool is the version-control tool: git, hg, sl or jj.
+	Tool string
+	// Subcommand is the first word the tool reads as its command, "" when the line names
+	// none. git's `--help` and `--version` read as the help and version commands, as git
+	// rewrites them.
+	Subcommand string
+	// Args are the words after Subcommand with the tool's global options and their values
+	// taken out. git reads those only before its subcommand; hg, sl and jj read them
+	// anywhere on the line.
+	Args []string
 }

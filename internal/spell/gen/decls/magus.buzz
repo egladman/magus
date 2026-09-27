@@ -689,16 +689,24 @@ export object SpawnRequest {
     target: SpawnTarget? = null,
 }
 
+export object VCSInvocation {
+    tool: str = "",
+    subcommand: str = "",
+    args: [str] = [],
+}
+
 export object CommandInvocation {
     program: str = "",
     path: str = "",
     args: [str] = [],
     repeats: bool = false,
+    vcs: VCSInvocation? = null,
 }
 
 export object CheckoutState {
     branch: str = "",
     remoteBranches: [str] = [],
+    base: str = "",
 }
 
 export object CommandRequest {

@@ -367,12 +367,16 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotEqual(t, "deny", edit("- old\n", "- old, fixed\n").Decision, "a released section's fix passes")
 	})
 
-	// The text rules spend a first-use gate per session, so each runs its calls in order
-	// against one fixture.
-	shellIn := func(t *testing.T) func(command string) Verdict {
+	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main.
+	shellIn := func(t *testing.T, branch string) func(command string) Verdict {
 		t.Helper()
 		ctx, _ := spawnFixture(t)
-		deps := Dependencies{CommandRule: m.CommandRule()}
+		deps := Dependencies{
+			CommandRule: m.CommandRule(),
+			CheckoutState: func(context.Context, string) *types.CheckoutState {
+				return &types.CheckoutState{Branch: branch, Base: "origin/main"}
+			},
+		}
 		return func(command string) Verdict {
 			return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Bash",
@@ -383,32 +387,66 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {
-		run := shellIn(t)
-		first := run(`git commit -m "trim a fragment"`)
-		assert.Equal(t, "deny", first.Decision, first.Reason)
-		assert.Equal(t, workspaceCommandRule, first.Rule)
-		assert.Contains(t, first.Reason, "Skill(idiomatic-commit-messages)")
+		run := shellIn(t, "trim-key")
+		for _, line := range []string{
+			`git -c user.name=x commit -q -m "URL-parse the port; keep the key"`,
+			`hg -R . --config ui.username=x commit -m "trim a fragment" -y`,
+			`sl --cwd . ci -m "trim a fragment"`,
+			`jj --no-pager commit -m "trim a fragment"`,
+			`jj describe -r @- --message="trim a fragment"`,
+			`rg "git commit -m" docs`,
+		} {
+			v := run(line)
+			assert.NotEqual(t, "deny", v.Decision, line+": "+v.Reason)
+		}
+		for _, line := range []string{
+			`git -C . commit -m "Fix the port."`,
+			`hg -q commit -m "Fix the port."`,
+			`sl commit -m "Fix the port."`,
+			`jj --color=never commit -m "Fix the port."`,
+			`jj -R . describe -m "Fix the port."`,
+		} {
+			v := run(line)
+			assert.Equal(t, "deny", v.Decision, line)
+			assert.Equal(t, workspaceCommandRule, v.Rule)
+			assert.Contains(t, v.Reason, "a capitalized first word", line)
+			assert.Contains(t, v.Reason, "Write one subject line, lowercase and imperative", line)
+			assert.NotContains(t, v.Reason, "Skill(", line)
+		}
 
 		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nFix the port.\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
 		assert.Equal(t, "deny", v.Decision, v.Reason)
 		for _, want := range []string{"a trailing period", "a capitalized first word", "an attribution", "a line break"} {
 			assert.Contains(t, v.Reason, want)
 		}
-		assert.NotEqual(t, "deny", run(`git -c user.name=x commit -q -m "URL-parse the port; keep the key"`).Decision)
-		assert.NotEqual(t, "deny", run(`rg "git commit -m" docs`).Decision)
+		assert.Contains(t, run(`git commit -m "fix(cache): keep the key"`).Reason, "a colon", "off the base branch a prefix is denied")
+	})
+
+	t.Run("commit-subject on the base branch", func(t *testing.T) {
+		run := shellIn(t, "main")
+		for _, line := range []string{
+			`git commit -m "fix(cache): keep the key stable across runs"`,
+			`jj describe -m "feat: add a commit-msg hook"`,
+		} {
+			v := run(line)
+			assert.NotEqual(t, "deny", v.Decision, line+": "+v.Reason)
+		}
+		v := run(`git commit -m "trim a fragment"`)
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Reason, "A commit made on main lands as written")
+		assert.Contains(t, v.Reason, `"trim a fragment": no `+"`<type>: `"+` prefix`)
 	})
 
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
-		run := shellIn(t)
-		first := run(`gh pr create --title "fix(cache): pin the key" --body "Pins it."`)
-		assert.Equal(t, "deny", first.Decision, first.Reason)
-		assert.Contains(t, first.Reason, "Skill(idiomatic-commit-messages)")
+		run := shellIn(t, "trim-key")
+		assert.NotEqual(t, "deny", run(`gh pr create --title "fix(cache): pin the key" --body "Pins it."`).Decision, "no first-use gate")
 
 		v := run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
 		assert.Equal(t, "deny", v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, `pr-title: "Pin the key": no `+"`<type>: `"+` prefix`)
 		assert.Contains(t, v.Reason, "credits a tool")
+		assert.NotContains(t, v.Reason, "Skill(")
 		assert.NotEqual(t, "deny", run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Reads .claude/skills/x/SKILL.md."`).Decision)
 	})
 
@@ -421,11 +459,13 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				"tool_input": map[string]any{"file_path": filepath.Join(ws, name), "content": content},
 			})})
 		}
-		assert.NotContains(t, write("notes.md", "# A heading\n").Context, "idiomatic-code-comments", "prose is not code")
+		const rule = "keep only the comments that say what the code cannot"
+		assert.NotContains(t, write("notes.md", "# A heading\n").Context, rule, "prose is not code")
 		v := write("a.go", "package a\n\n// keyOf is stable across runs.\nfunc keyOf() {}\n")
 		assert.Equal(t, "advise", v.Decision, v.Reason)
-		assert.Contains(t, v.Reason+v.Context, "Skill(idiomatic-code-comments)")
-		assert.NotContains(t, write("b.go", "package a\n\n// again\n").Context, "idiomatic-code-comments", "once per session")
+		assert.Contains(t, v.Reason+v.Context, rule)
+		assert.NotContains(t, v.Reason+v.Context, "Skill(")
+		assert.NotContains(t, write("b.go", "package a\n\n// again\n").Context, rule, "once per session")
 	})
 
 	// The binary rules read the trees a line names, so each case builds its own.
