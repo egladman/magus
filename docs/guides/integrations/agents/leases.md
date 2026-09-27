@@ -114,8 +114,9 @@ magus job fork --schema             # what that record must satisfy
 ```
 
 Write paths name files. An existing directory is refused
-([MGS3018](../../../reference/codes/sandbox/MGS3018.md)) unless it is the root
-of a project the job owns whole, or does not exist yet because the job creates it.
+([MGS3018](../../../reference/codes/sandbox/MGS3018.md)), a project root and `.`
+included: a directory claims every file under it and overlaps every other job
+there. A path that does not exist yet passes, because the job creates it.
 
 A write path can also claim one declaration of a file, so two jobs can start on
 one file: `run.go#executeStages`, `docs/scope.md#The knobs`. The part after the

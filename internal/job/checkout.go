@@ -283,14 +283,14 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 	return nil
 }
 
-// RefuseDirectoryWritePaths refuses a fork whose write paths name an existing directory that
-// is not a project root (MGS3018). A directory claims every file beneath it, so the job
-// overlaps every job that edits anything there, and the overlap report fills with pairs
-// that share no file. Every fork door runs it, and there is no override.
+// RefuseDirectoryWritePaths refuses a fork whose write paths name an existing directory
+// (MGS3018), project roots and the workspace root included. A write path names files: a
+// directory claims every file beneath it, so the job overlaps every job that edits anything
+// there, and the overlap report fills with pairs that share no file. Every fork door runs
+// it, and there is no override.
 //
-// Declarable: a file; a path that does not exist yet, which the job creates; and a project
-// root, which the job owns whole ("." when the workspace root is a project). A glob whose
-// last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything
+// Declarable: a file, and a path that does not exist yet, which the job creates. A glob
+// whose last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything
 // under its directory, so it is judged as that directory, each match when the directory
 // part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
 //
@@ -302,23 +302,28 @@ func RefuseDirectoryWritePaths(store *Store, id string, candidate types.Job) err
 	var refused []string
 	for _, decl := range candidate.WritePaths {
 		for _, dir := range claimedDirs(store.root, decl) {
-			if describe.IsProjectRoot(store.root, dir) {
-				continue
-			}
 			named := fmt.Sprintf("%q", decl)
 			if dir != path.Clean(strings.TrimSpace(decl)) {
 				named = fmt.Sprintf("%q (matching the directory %q)", decl, dir)
 			}
-			refused = append(refused, fmt.Sprintf("%s, inside project %q", named, enclosingProject(store.root, dir)))
+			switch {
+			case dir == ".":
+				named += ", the workspace root"
+			case describe.IsProjectRoot(store.root, dir):
+				named += fmt.Sprintf(", the root of project %q", dir)
+			default:
+				named += fmt.Sprintf(", inside project %q", enclosingProject(store.root, dir))
+			}
+			refused = append(refused, named)
 		}
 	}
 	if len(refused) == 0 {
 		return nil
 	}
 	return types.DiagnosticErrorf(types.WritePathIsDirectory,
-		"job: %s declares a directory as a write path: %s. A directory claims every file under it, so the job"+
-			" would overlap every job editing anything there. List the files the job will edit, or declare the"+
-			" root of the project it owns whole",
+		"job: %s declares a directory as a write path: %s. A write path names files: a directory, a project"+
+			" root included, claims every file under it, so the job would overlap every job editing anything there."+
+			" List the files the job will edit, and name each file it creates by its path",
 		id, strings.Join(refused, "; "))
 }
 
