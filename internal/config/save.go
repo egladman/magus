@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/stamp"
 )
 
 // nameSegment is the literal placeholder used in dotted keys for a
@@ -127,7 +128,11 @@ func KnownKeys() []string {
 // For slice-of-struct fields, key uses name-addressed syntax
 // (e.g. "<parent>.<entry-name>.<leaf>"). The entry is found by matching
 // its name field; if no matching entry exists, a new one is appended.
-func Save(path, key, value string) error {
+//
+// The file is stamped with j.Self, and a file a magus newer than j.Self wrote is refused
+// with a *stamp.DowngradeError: an older magus validates against an older schema and
+// would drop or reject what the newer one wrote.
+func Save(j stamp.Judge, path, key, value string) error {
 	fs, entryName, ok := matchSchema(key)
 	if !ok {
 		if err := retiredKeyError(key); err != nil {
@@ -145,6 +150,9 @@ func Save(path, key, value string) error {
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("read %s: %w", path, err)
+	}
+	if err := checkWriter(j, path, data); err != nil {
+		return err
 	}
 	if len(data) > 0 {
 		if err := yaml.Unmarshal(data, &m); err != nil {
@@ -178,14 +186,40 @@ func Save(path, key, value string) error {
 		return err
 	}
 
-	if err := file.WriteFileAtomic(path, buf.Bytes(), 0o644); err != nil {
+	if err := file.WriteFileAtomic(path, append([]byte(stampLine(j.Self)), buf.Bytes()...), 0o644); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
 }
 
+// stampPrefix opens the comment line naming the magus that last wrote a config file. A
+// comment, not a key: a key this binary adds is one an older binary's strict loader
+// rejects.
+const stampPrefix = "# written by "
+
+// stampLine is the stamp comment for w, "" when w is unknown.
+func stampLine(w stamp.Writer) string {
+	if !w.Known() {
+		return ""
+	}
+	return stampPrefix + w.String() + "\n"
+}
+
+// checkWriter refuses to replace data, the config at path, when its stamp names a magus
+// newer than j.Self. An unstamped file predates stamps and may be replaced.
+func checkWriter(j stamp.Judge, path string, data []byte) error {
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if rest, ok := strings.CutPrefix(line, stampPrefix); ok {
+			if rec, ok := stamp.Parse(rest); ok {
+				return j.Check(path, rec)
+			}
+		}
+	}
+	return nil
+}
+
 // validateAfterMerge unmarshals data on top of Defaults() and runs
-// the schema validator against the result. Used by Save (and Init)
+// the schema validator against the result. Used by Save
 // to guarantee that whatever lands on disk loads cleanly.
 func validateAfterMerge(data []byte) error {
 	cfg := Defaults()
@@ -307,33 +341,34 @@ func setSliceEntry(m map[string]interface{}, slicePath, entryName, templatePath 
 	return nil
 }
 
-// Init writes a magus.yaml containing every built-in default to path.
-// It refuses to overwrite an existing file unless force is true. The
-// parent directory is created if missing.
-func Init(path string, force bool) error {
-	if !force {
-		if _, err := os.Stat(path); err == nil {
-			return fmt.Errorf("%s already exists (use --force to overwrite)", path)
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("stat %s: %w", path, err)
+// initHeader opens the file Init writes.
+const initHeader = "# magus configuration. Every key has a built-in default, so this file holds only\n" +
+	"# the keys you change: `magus config set key=<key>,value=<value>`.\n" +
+	"# `magus config view` prints the effective configuration.\n"
+
+// Init writes a magus.yaml holding no keys to path: a header naming how to set one, and
+// j.Self's stamp. Every key has a built-in default, and a file listing them all pins
+// today's defaults and names keys a later magus may remove, which that magus's strict
+// loader then refuses.
+//
+// An existing file is left alone and Init reports false. force replaces it, refusing a
+// file a magus newer than j.Self wrote.
+func Init(j stamp.Judge, path string, force bool) (bool, error) {
+	data, err := os.ReadFile(path)
+	switch {
+	case err == nil && !force:
+		return false, nil
+	case err == nil:
+		if err := checkWriter(j, path, data); err != nil {
+			return false, err
 		}
+	case !os.IsNotExist(err):
+		return false, fmt.Errorf("read %s: %w", path, err)
 	}
-
-	cfg := Defaults()
-	if err := Validate(cfg); err != nil {
-		return fmt.Errorf("init: built-in defaults failed validation: %w", err)
+	if err := file.WriteFileAtomic(path, []byte(initHeader+stampLine(j.Self)), 0o644); err != nil {
+		return false, fmt.Errorf("write config: %w", err)
 	}
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(cfg); err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-	if err := enc.Close(); err != nil {
-		return fmt.Errorf("marshal close: %w", err)
-	}
-
-	return file.WriteFileAtomic(path, buf.Bytes(), 0o644)
+	return true, nil
 }
 
 // parseBool parses a permissive boolean (true/1/yes, false/0/no).

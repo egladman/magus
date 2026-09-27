@@ -25,6 +25,13 @@ always wired in the repo.
 With --global only the global config is written; the per-clone workspace
 bootstrap (magusfile stub + merge driver) is skipped.
 
+The config holds no keys: every key keeps its built-in default until
+"magus config set" changes it, so no key a later magus removes is pinned
+there. An existing config is left as it is; --force replaces it with an
+empty one. Nothing a newer magus wrote (the config, the managed sections in
+.gitattributes and the hooks, the merge driver registration) is replaced:
+init stops and names the build to update to.
+
 The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
 
 The "spell" subcommand scaffolds a new spell instead of bootstrapping a
@@ -37,7 +44,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.
 : Print the config, magusfile, and merge-driver destinations without writing any of them
 
 **--force**
-: Overwrite an existing config file
+: Replace an existing config file with one holding no keys
 
 **--global**
 : Write only the global config; skip the workspace bootstrap

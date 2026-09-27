@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/egladman/magus/internal/stamp"
 )
 
 // Note: ApplyEnv tests moved to internal/config/gen/env_test.go.
@@ -64,7 +66,7 @@ func TestSave_Concurrent(t *testing.T) {
 		i := i
 		go func() {
 			defer wg.Done()
-			errs[i] = Save(path, "concurrency", fmt.Sprintf("%d", i+1))
+			errs[i] = Save(stamp.Judge{}, path, "concurrency", fmt.Sprintf("%d", i+1))
 		}()
 	}
 	wg.Wait()

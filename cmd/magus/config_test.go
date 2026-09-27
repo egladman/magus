@@ -47,7 +47,7 @@ func TestRunConfigSet_Local(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	require.NoError(t, runConfigSet([]string{"key=cache.dir,value=/tmp/mycache"}))
+	require.NoError(t, runConfigSet(t.Context(), []string{"key=cache.dir,value=/tmp/mycache"}))
 
 	path := filepath.Join(dir, config.Filename)
 	_, err := os.Stat(path)
@@ -62,7 +62,7 @@ func TestRunConfigSet_Global(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	require.NoError(t, runConfigSet([]string{"--global", "key=log.format,value=json"}))
+	require.NoError(t, runConfigSet(t.Context(), []string{"--global", "key=log.format,value=json"}))
 
 	path := filepath.Join(dir, "magus", config.Filename)
 	_, err := os.Stat(path)
@@ -77,7 +77,7 @@ func TestRunConfigSet_UnknownKey(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	err := runConfigSet([]string{"key=not.a.real.key,value=v"})
+	err := runConfigSet(t.Context(), []string{"key=not.a.real.key,value=v"})
 	assert.Error(t, err, "expected error for unknown key")
 }
 
@@ -85,7 +85,7 @@ func TestRunConfigSet_BadInt(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	err := runConfigSet([]string{"key=parallel,value=notanumber"})
+	err := runConfigSet(t.Context(), []string{"key=parallel,value=notanumber"})
 	assert.Error(t, err, "expected error for bad int")
 }
 

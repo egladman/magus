@@ -32,3 +32,28 @@ func MagusVersionFromContext(ctx context.Context) string {
 func IsDevMagusVersion(version string) bool {
 	return version == "" || version == "unknown" || strings.Contains(version, "-g")
 }
+
+type magusBuildKey struct{}
+
+// MagusBuild is the running binary's build identity as the linker stamped it. A field
+// the build did not stamp is "" or "unknown".
+type MagusBuild struct {
+	// Version is main.version: a release tag, or git describe output for a dev build.
+	Version string
+	// Commit is the revision the binary was built from.
+	Commit string
+	// Date is that commit's date, RFC 3339.
+	Date string
+}
+
+// WithMagusBuild carries the running binary's build identity on ctx, for the writers of
+// state that other magus binaries read, which record who wrote it.
+func WithMagusBuild(ctx context.Context, b MagusBuild) context.Context {
+	return context.WithValue(ctx, magusBuildKey{}, b)
+}
+
+// MagusBuildFromContext returns what WithMagusBuild stored, or the zero MagusBuild.
+func MagusBuildFromContext(ctx context.Context) MagusBuild {
+	b, _ := ctx.Value(magusBuildKey{}).(MagusBuild)
+	return b
+}

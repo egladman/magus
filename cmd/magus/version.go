@@ -5,11 +5,36 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/types"
 )
+
+// selfBuild is this binary's build identity. A bare `go build` passes no -X flags, so its
+// commit and date come from the VCS stamp the toolchain embeds instead. go-build's -X
+// values win when present: its sandboxed link embeds a VCS stamp from another revision.
+func selfBuild() types.MagusBuild {
+	b := types.MagusBuild{Version: version, Commit: commit, Date: buildDate}
+	if b.Commit != unknownVersion {
+		return b
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return b
+	}
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			b.Commit = s.Value
+		case "vcs.time":
+			b.Date = s.Value
+		}
+	}
+	return b
+}
 
 // unknownVersion is the unstamped-build default, and the dev-build sentinel the proc
 // adoption gate keys on to fingerprint one (proc.devVersionSentinel); keep the two in

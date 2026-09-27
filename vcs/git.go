@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/types"
 )
 
@@ -1105,10 +1106,11 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, globs types
 		return fmt.Errorf("vcs: install merge driver: %s is not in a git repository", root)
 	}
 	return withRepoLock(ctx, paths.commonDir, func() error {
-		if _, err := writeManagedSection(filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(globs), configFile); err != nil {
+		j := WriteJudge(ctx, root)
+		if _, err := writeManagedSection(filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(globs), configFile, j); err != nil {
 			return err
 		}
-		return v.writeGitConfig(ctx, root)
+		return v.writeGitConfig(ctx, root, j)
 	})
 }
 
@@ -1124,7 +1126,7 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.
 	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
 		return false, nil
 	}
-	attrsCurrent, attrsWanted, err := v.gitAttrsState(root, globs)
+	attrsCurrent, attrsWanted, err := v.gitAttrsState(ctx, root, globs)
 	if err != nil {
 		return false, err
 	}
@@ -1186,8 +1188,18 @@ func gitManagedConfig(ctx context.Context, root string) (map[string]string, erro
 	for _, f := range gitFuncnames {
 		keys = append(keys, f.key())
 	}
+	return gitConfigValues(ctx, root, "", keys)
+}
+
+// gitConfigValues returns keys' values in one git config scope ("--local", "--worktree"),
+// or across every scope when scope is "", keyed as git spells them. An unset key is absent.
+func gitConfigValues(ctx context.Context, root, scope string, keys []string) (map[string]string, error) {
 	pattern := "^(" + strings.ReplaceAll(strings.Join(keys, "|"), ".", `\.`) + ")$"
-	out, err := gitOutput(ctx, root, gitOpts{}, "config", "-z", "--get-regexp", pattern)
+	args := []string{"config"}
+	if scope != "" {
+		args = append(args, scope)
+	}
+	out, err := gitOutput(ctx, root, gitOpts{}, append(args, "-z", "--get-regexp", pattern)...)
 	if exitCode(err) == 1 {
 		return map[string]string{}, nil
 	}
@@ -1383,13 +1395,13 @@ func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
 // gitAttrsState returns .gitattributes as it is now and as the declared globs say it
 // should be, so callers can compare the two without writing. It renders exactly what
 // writeManagedSection would write, CRLF preservation included.
-func (v gitVCS) gitAttrsState(root string, globs types.MergeDriverGlobs) (current, wanted string, err error) {
+func (v gitVCS) gitAttrsState(ctx context.Context, root string, globs types.MergeDriverGlobs) (current, wanted string, err error) {
 	path := filepath.Join(root, ".gitattributes")
 	existing, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", "", fmt.Errorf("vcs: read %s: %w", path, err)
 	}
-	wanted, err = renderManagedFile(path, string(existing), generatedMarkers, gitAttrsBody(globs), configFile)
+	wanted, err = renderManagedFile(path, string(existing), generatedMarkers, gitAttrsBody(globs), configFile, WriteJudge(ctx, root))
 	if err != nil {
 		return "", "", err
 	}
@@ -1577,27 +1589,54 @@ func driverExeExists(registered string) bool {
 // this build, and a merge there silently resolves with the wrong tool. Reading stays
 // unscoped; `git config <key>` already prefers worktree config. The xfuncname patterns
 // take the same scope so every registration magus owns lives in one place.
-func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	scope := []string{"config"}
+//
+// gitWriterKey records who wrote them. A scope already holding every wanted value is left
+// alone, stamp included; any other write is refused when the recorded writer is newer
+// than j.Self.
+func (v gitVCS) writeGitConfig(ctx context.Context, root string, j stamp.Judge) error {
+	scope, configName := "--local", "config"
 	if v.worktreeConfigEnabled(ctx, root) {
-		scope = append(scope, "--worktree")
+		scope, configName = "--worktree", "config.worktree"
 	}
-	set := func(key, value string) error {
-		if _, err := gitOutput(ctx, root, gitOpts{}, slices.Concat(scope, []string{key, value})...); err != nil {
-			return fmt.Errorf("git config %s: %w", key, err)
-		}
-		return nil
+	want := [][2]string{{gitMergeDriverKey, gitMergeDriverCommand(ctx, root)}}
+	for _, f := range gitFuncnames {
+		want = append(want, [2]string{f.key(), f.pattern})
 	}
-	if err := set(gitMergeDriverKey, gitMergeDriverCommand(ctx, root)); err != nil {
+	keys := make([]string, 0, 1+len(want))
+	keys = append(keys, gitWriterKey)
+	for _, kv := range want {
+		keys = append(keys, kv[0])
+	}
+	current, err := gitConfigValues(ctx, root, scope, keys)
+	if err != nil {
 		return err
 	}
-	for _, f := range gitFuncnames {
-		if err := set(f.key(), f.pattern); err != nil {
+	if !slices.ContainsFunc(want, func(kv [2]string) bool { return current[kv[0]] != kv[1] }) {
+		return nil
+	}
+	if rec, ok := stamp.Parse(current[gitWriterKey]); ok {
+		file, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", configName)
+		if err != nil {
+			file = configName
+		}
+		if err := j.Check(file+" ("+gitMergeDriverKey+")", rec); err != nil {
 			return err
+		}
+	}
+	if j.Self.Known() {
+		want = append(want, [2]string{gitWriterKey, j.Self.String()})
+	}
+	for _, kv := range want {
+		if _, err := gitOutput(ctx, root, gitOpts{}, "config", scope, kv[0], kv[1]); err != nil {
+			return fmt.Errorf("git config %s: %w", kv[0], err)
 		}
 	}
 	return nil
 }
+
+// gitWriterKey holds the stamp of the magus that last wrote the registrations. git reads
+// nothing under the magus section.
+const gitWriterKey = "magus.writer"
 
 // worktreeConfigEnabled reports whether per-worktree config is available: without the
 // extension, `git config --worktree` is an error.
@@ -1732,9 +1771,10 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 		return nil, fmt.Errorf("vcs: mkdir %s: %w", paths.hooksDir, err)
 	}
 	var installed []string
+	j := WriteJudge(ctx, root)
 	err = withRepoLock(ctx, paths.commonDir, func() error {
 		for _, name := range names {
-			changed, err := writeManagedSection(filepath.Join(paths.hooksDir, name), m, body(name), hookFile)
+			changed, err := writeManagedSection(filepath.Join(paths.hooksDir, name), m, body(name), hookFile, j)
 			if err != nil {
 				return err
 			}
@@ -1843,9 +1883,10 @@ func removeGitHookSections(ctx context.Context, root string, names []string, m m
 		return nil, err
 	}
 	var removed []string
+	j := WriteJudge(ctx, root)
 	err = withRepoLock(ctx, paths.commonDir, func() error {
 		for _, name := range names {
-			changed, err := removeManagedSection(filepath.Join(paths.hooksDir, name), m)
+			changed, err := removeManagedSection(filepath.Join(paths.hooksDir, name), m, j)
 			if err != nil {
 				return err
 			}
