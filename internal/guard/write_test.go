@@ -957,9 +957,10 @@ func holderCalled(t *testing.T, ctx context.Context, lease string, ago time.Dura
 	})
 }
 
-// TestLandlordEntry pins the entry: denied without one, held while the holder works, one
-// write through once it is idle, and the next write denied again.
-func TestLandlordEntry(t *testing.T) {
+// TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath pins the entry: denied without one,
+// held while the holder works, one write through once it is idle, and the next write
+// denied again.
+func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 	ctx, root := fleetFixture(t)
 	store := storeAt(ctx)
 	for _, row := range entryFleet(root) {
