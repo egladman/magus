@@ -123,6 +123,23 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 			})
 		}
 	}
+	// An entry changes no declared field, so it travels alone and the store grades it as
+	// an entry; see Store.Enter.
+	if v, ok, e := mergeString(params, "enter"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		rel, perr := entryPath(v)
+		for key := range params {
+			if key != "op" && key != "id" && key != "enter" {
+				perr = errors.Join(perr, fmt.Errorf("job: a put carrying enter enters a job and declares nothing, so %s does not belong beside it", key))
+			}
+		}
+		if perr != nil {
+			err = errors.Join(err, perr)
+		} else {
+			set = append(set, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
+		}
+	}
 	if v, present := params["read_only"]; present {
 		b, ok := v.(bool)
 		if !ok {
@@ -146,6 +163,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only", "timeout",
+	"enter",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
