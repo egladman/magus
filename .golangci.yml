@@ -290,10 +290,11 @@ linters:
             # cmd/magus's references to the root package rose 71 -> 189; the
             # concurrency clamp exists in both cmd/magus/main.go and magus.go. 67
             # since the merge queue's packages moved from libs/mergequeue to
-            # internal/queue. Raising it is a sentence in the commit message.
+            # internal/queue, 68 since refs --rename imports internal/edit. Raising it
+            # is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 67
+              max: 68
 
       stutter:
         type: module

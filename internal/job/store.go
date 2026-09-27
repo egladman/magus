@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -345,6 +346,126 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 // this is how the apply func declines that without inventing a lease nobody declared.
 var errNoSuchJob = errors.New("job: no such lease")
 
+// MaxJobEntries is how many entries one job takes. Past it, the job wants its holder
+// resumed or its lease ended, not a third visitor.
+const MaxJobEntries = 2
+
+// Enter records that the caller will write rel, inside the write paths of live job id,
+// once. The guard then lets one write by somebody other than the holder through and
+// stamps it consumed; see [Store.ConsumeEntry]. A put carrying `enter` is the same write.
+//
+// Refused, and nothing is written, when the job is not live, when the caller is its
+// holder, when rel is outside its write paths (that wants widening, not entering), when
+// an entry for rel is still open, and when the job already took [MaxJobEntries].
+func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
+	rel, err := entryPath(rel)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
+}
+
+// entryPath cleans the path an entry names, refusing one that is not workspace-relative.
+func entryPath(rel string) (string, error) {
+	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(rel)))
+	if clean == "." || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", fmt.Errorf("job: enter %q: name one workspace-relative path inside the job's write paths", rel)
+	}
+	return clean, nil
+}
+
+// requestsEntry reports a write whose only change is one unstamped entry appended to
+// prev's, which is how Enter and a put carrying `enter` reach mutate.
+func requestsEntry(prev, next types.Job) bool {
+	n := len(prev.Entries)
+	if len(next.Entries) != n+1 || next.Entries[n].At != 0 {
+		return false
+	}
+	for k := range n {
+		if !reflect.DeepEqual(next.Entries[k], prev.Entries[k]) {
+			return false
+		}
+	}
+	return true
+}
+
+// authorizeEntry grades an entry: prev is the row before it and next carries the one
+// entry appended to it.
+func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
+	entry := next.Entries[len(next.Entries)-1]
+	switch {
+	case !exists:
+		return fmt.Errorf("%w %q: there is nothing to enter", ErrUnknownJob, id)
+	case len(changedFields(prev, next)) > 0:
+		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(changedFields(prev, next), ", "))
+	case actor.Lease == id:
+		return refuse(actor, id, "a holder writes its own paths and never enters them")
+	case actor.Bound() && !slices.ContainsFunc(types.JobAncestors(rows, id), func(r types.Job) bool { return r.ID == actor.Lease }):
+		return refuse(actor, id, "a worker enters only a job forked beneath its own")
+	case !prev.State.Live():
+		return fmt.Errorf("job: %s is %s, so its paths are free to write and there is nothing to enter", id, prev.State)
+	}
+	if _, ok := matching(prev.WritePaths, entry.Path); !ok {
+		return fmt.Errorf("job: %s is outside the write paths of %s (%s); a path the job does not own is widened into it, never entered",
+			entry.Path, id, strings.Join(prev.WritePaths, ", "))
+	}
+	if open, ok := OpenEntry(prev, entry.Path); ok {
+		return fmt.Errorf("job: %s already has an entry for %s, recorded at %s and not yet written; write it before entering again",
+			id, open.Path, time.Unix(open.At, 0).UTC().Format(time.RFC3339))
+	}
+	if len(prev.Entries) >= MaxJobEntries {
+		return fmt.Errorf("job: %s has taken its %d entries; resume its holder to make the change, or end its lease with `magus job exit %s`",
+			id, MaxJobEntries, id)
+	}
+	return nil
+}
+
+// EntryAdvice is what an entry is answered with: what the entrant may now do, and once.
+func EntryAdvice(row types.Job, rel string) string {
+	return fmt.Sprintf("entered %s on %s (%d of %d entries): your next write to it passes once its holder has been idle for a minute, and is recorded on the job",
+		rel, row.ID, len(row.Entries), MaxJobEntries)
+}
+
+// EntriesOf is the entries recorded on job id in rows, nil when rows holds no such job.
+func EntriesOf(rows []types.Job, id string) []types.JobEntry {
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+		return rows[i].Entries
+	}
+	return nil
+}
+
+// OpenEntry is the first entry on row that covers rel and has not been consumed.
+func OpenEntry(row types.Job, rel string) (types.JobEntry, bool) {
+	for _, e := range row.Entries {
+		if e.Consumed == 0 && covers(e.Path, rel) {
+			return e, true
+		}
+	}
+	return types.JobEntry{}, false
+}
+
+// ConsumeEntry stamps the open entry on job id covering rel as used. An observation, like
+// RecordUnattributedWrite: the guard records the write it just let through. A job with no
+// open entry for rel is left alone.
+func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
+	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
+		if !exists {
+			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
+		}
+		for i, e := range cur.Entries {
+			if e.Consumed == 0 && covers(e.Path, rel) {
+				cur.Entries[i].Consumed = now
+				return nil
+			}
+		}
+		return nil
+	})
+	if errors.Is(err, errNoSuchJob) {
+		return nil
+	}
+	return err
+}
+
 // mutate is the locked read-modify-write [Store.Update] and [Store.Exec] share, and
 // the only place jobs.json is rewritten row-wise. kind says what the write is; see
 // [grading].
@@ -383,7 +504,15 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		}
 		row = row.Clone()
 		row.ID = id
-		if kind.graded() {
+		entering := kind == asDeclaration && requestsEntry(prev, row)
+		switch {
+		case entering:
+			if aerr := authorizeEntry(actor, id, prev, row, i >= 0, f.Jobs); aerr != nil {
+				return aerr
+			}
+			e := &row.Entries[len(row.Entries)-1]
+			e.By, e.At, e.Consumed = trail.StampOrigin(ctx, types.Origin{}), now, 0
+		case kind.graded():
 			if aerr := authorizeRow(actor, id, prev, row, i >= 0, f.Jobs); aerr != nil {
 				return aerr
 			}
@@ -401,9 +530,15 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			if kind != asObservation {
 				row.Unattributed = prev.Unattributed
 			}
+			if kind != asObservation && !entering {
+				row.Entries = prev.Entries
+			}
 		case actor.Bound():
 			row.ReportedBase, row.BaseVerdict, row.Registered, row.Unattributed = "", "", 0, nil
 			row.CheckoutRoot = ""
+		}
+		if i < 0 {
+			row.Entries = nil
 		}
 		// Only the sweep writes a reason, and a row brought back to life has none.
 		row.EndReason = prev.EndReason
@@ -411,7 +546,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.EndReason = ""
 		}
 		row.Updated = now
-		if kind == asObservation && i >= 0 {
+		if (kind == asObservation || entering) && i >= 0 {
 			row.Updated = prev.Updated
 		}
 		row.Created = now

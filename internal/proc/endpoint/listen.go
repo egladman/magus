@@ -8,8 +8,8 @@ import (
 
 // ListenUnix binds a *net.UnixListener at path, reaching one longer than the
 // platform's sun_path the way Endpoint.Listen does. Use it in place of
-// net.Listen("unix", path) when the caller needs the concrete *net.UnixListener - to
-// duplicate its descriptor, or to drive SetUnlinkOnClose itself - since Endpoint.Listen
+// net.Listen("unix", path) when the caller needs the concrete *net.UnixListener
+// (to duplicate its descriptor, or to drive SetUnlinkOnClose itself): Endpoint.Listen
 // hides that behind net.Listener once it wraps a long path.
 func ListenUnix(path string) (*net.UnixListener, error) {
 	name, done, err := unixName(path)

@@ -28,8 +28,8 @@ func longPath(t *testing.T, name string) string {
 	return filepath.Join(dir, name)
 }
 
-// A caller that needs the concrete *net.UnixListener - to duplicate its descriptor, or
-// drive SetUnlinkOnClose - still reaches a path past sun_path, and DialUnix reaches the
+// A caller that needs the concrete *net.UnixListener (to duplicate its descriptor, or
+// drive SetUnlinkOnClose) still reaches a path past sun_path, and DialUnix reaches the
 // same listener back.
 func TestListenUnixBindsAndDialsALongPath(t *testing.T) {
 	path := longPath(t, "magus-99999-0123abcd.sock")
