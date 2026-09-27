@@ -294,16 +294,9 @@ func (v saplingVCS) FindCommit(ctx context.Context, dir, rev string) (types.Comm
 	return c, nil
 }
 
-func (v saplingVCS) History(ctx context.Context, dir string, limit int) ([]types.Commit, error) {
-	if limit <= 0 {
-		limit = 1
-	}
-	// sl log is newest-first by default, so -l N is the N most recent.
-	out, err := vcsOutput(ctx, dir, "sl", "log", "-l", fmt.Sprintf("%d", limit), "--template", "{node}\n")
-	if err != nil {
-		return nil, fmt.Errorf("sl log: %w", err)
-	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+// History implements types.VCSDriver; see hgFamilyHistory.
+func (v saplingVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
+	return hgFamilyHistory(ctx, v, "sl", dir, q)
 }
 
 // TrackedFiles implements types.TrackedFileReporter. `sl files -- <paths>` prints the
