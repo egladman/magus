@@ -3154,26 +3154,76 @@ func (v gitVCS) Checkouts(ctx context.Context, root string) ([]string, error) {
 }
 
 // gitCheckouts maps each worktree CreateCheckout made, by its resolved path, to the path
-// git registered it under. `worktree list --porcelain -z` is records of NUL-terminated
-// attribute lines, each record ending in an empty one.
+// git registered it under.
 func gitCheckouts(ctx context.Context, root string) (map[string]string, error) {
-	out, err := gitOutput(ctx, root, gitOpts{KeepLeadingSpace: true}, "worktree", "list", "--porcelain", "-z")
+	all, err := gitWorktrees(ctx, root)
 	if err != nil {
-		return nil, fmt.Errorf("git worktree list: %w", err)
+		return nil, err
 	}
 	owned := map[string]string{}
-	path := ""
-	for _, line := range strings.Split(out, "\x00") {
-		switch {
-		case strings.HasPrefix(line, "worktree "):
-			path = strings.TrimPrefix(line, "worktree ")
-		case line == "locked "+checkoutLockReason && path != "":
-			owned[realPath(path)] = path
-		case line == "":
-			path = ""
+	for _, co := range all {
+		if co.Locked && co.LockReason == checkoutLockReason {
+			owned[realPath(co.Root)] = co.Root
 		}
 	}
 	return owned, nil
+}
+
+// RegisteredCheckouts implements types.CheckoutReporter from `git worktree list`, which
+// lists the main worktree first.
+func (gitVCS) RegisteredCheckouts(ctx context.Context, dir string) ([]types.RegisteredCheckout, error) {
+	return gitWorktrees(ctx, dir)
+}
+
+// gitWorktrees reads `worktree list --porcelain -z`: records of NUL-terminated attribute
+// lines, each record ending in an empty one.
+func gitWorktrees(ctx context.Context, dir string) ([]types.RegisteredCheckout, error) {
+	out, err := gitOutput(ctx, dir, gitOpts{KeepLeadingSpace: true}, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return nil, fmt.Errorf("git worktree list: %w", err)
+	}
+	return parseWorktreeList(out), nil
+}
+
+func parseWorktreeList(out string) []types.RegisteredCheckout {
+	var all []types.RegisteredCheckout
+	var cur *types.RegisteredCheckout
+	for _, line := range strings.Split(out, "\x00") {
+		if root, ok := strings.CutPrefix(line, "worktree "); ok {
+			all = append(all, types.RegisteredCheckout{Root: root, Primary: len(all) == 0})
+			cur = &all[len(all)-1]
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		switch attr, value, _ := strings.Cut(line, " "); attr {
+		case "HEAD":
+			// An unborn branch lists the all-zero id.
+			if strings.Trim(value, "0") != "" {
+				cur.Head = value
+			}
+		case "locked":
+			cur.Locked, cur.LockReason = true, value
+		case "":
+			cur = nil
+		}
+	}
+	return all
+}
+
+// UnpublishedRevisions implements types.CheckoutReporter with one `rev-list`, which
+// excludes everything reachable from refs/remotes and from each base.
+func (gitVCS) UnpublishedRevisions(ctx context.Context, dir, rev string, bases ...string) ([]string, error) {
+	if err := checkRequiredRev(append([]string{rev}, bases...)...); err != nil {
+		return nil, err
+	}
+	args := append([]string{"rev-list", rev, "--not", "--remotes"}, bases...)
+	out, err := gitOutput(ctx, dir, gitOpts{}, append(args, "--")...)
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list %s: %w", rev, err)
+	}
+	return splitLines([]byte(out)), nil
 }
 
 // checkConfiguredRemote refuses a remote name the repository has not configured. git
