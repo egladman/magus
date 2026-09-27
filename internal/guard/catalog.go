@@ -198,7 +198,7 @@ var denyRuleDocs = []RuleDoc{
 			"Measured: one such call put 69 files, a whole regenerated docs site plus five untouched source files, into a commit about four collection methods. " +
 			"`magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it."},
 	{Name: string(denyRuleSymbolSearch), Decision: "deny",
-		Catches: "a text search of the tree or of named Go files for names the graph answers exactly: symbols or diagnostic codes",
+		Catches: "a text search for symbols or diagnostic codes the graph answers exactly",
 		Why: "It fires only when the graph can VOUCH for every name the pattern looks for: each symbol is defined here and no project's index is older than its sources, and each diagnostic code is one the graph carries a node for. " +
 			"On those terms `magus refs <symbol> --occurrences` knows every definition and reference, including the generated and cross-language ones a pattern misses, and `magus explain diagnostic:<code>` knows the code's page and what documents and emits it. " +
 			"An alternation (`A\\|B`, `-e A -e B`, `A|B` under -E) is answered with one command per name, and a definition lookup (`func X`, `func (r *T) X`, `type X`) with `magus refs X --definition --source`, which prints the body in place of the grep-then-sed pair. " +
@@ -211,7 +211,7 @@ var denyRuleDocs = []RuleDoc{
 			"Four shapes qualify. A pattern that can only match MGS codes (`MGS30[23]`, `MGS30..`, `MGS302[0-9]\\|MGS303[0-9]`), over any path in the workspace, becomes `magus query kind=diagnostic 'id=~^diagnostic:...$'`, and a single literal code keeps symbol-search's `magus explain diagnostic:<code>`. " +
 			"A pattern selecting every Markdown heading of the files searched (`^#`, `^#\\+`), when those lines match the section nodes the graph holds file for file and none sits in a code fence, becomes `magus query kind=docsection 'id=~^docsection:<file>#'`. " +
 			"A search of a magusfile whose every hit declares a target the graph holds becomes `magus explain target:<project>:<name>`. " +
-			"A search of one Go file whose every hit declares a symbol the index holds (`^func `, `^func Test`, `func (s \\*Store)`) becomes `magus explain file:<path>`, with the names and their lines inline. " +
+			"A search of one Go file whose every hit declares a symbol the index holds (`^func`, `^func Test`, `func (s \\*Store)`) becomes `magus explain file:<path>`, with the names and their lines inline. " +
 			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. " +
 			"Measured 2026-09-26 over 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389 listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target declarations."},
 	{Name: string(denyRuleThrowawayCopy), Decision: "deny",
