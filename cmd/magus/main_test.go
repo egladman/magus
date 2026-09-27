@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -1153,11 +1152,12 @@ func TestIsDeclaredRunRejectsEverythingButThreeBareTokens(t *testing.T) {
 // most cases, which is more than a unit test should require to check that two name
 // lists agree.
 func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
+	// go test's cwd is this package dir, regardless of -trimpath.
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
 	}
-	mainPath := filepath.Join(filepath.Dir(thisFile), "main.go")
+	mainPath := filepath.Join(dir, "main.go")
 
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, mainPath, nil, 0)

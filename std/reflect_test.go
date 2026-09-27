@@ -2,7 +2,6 @@ package std
 
 import (
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -61,9 +60,9 @@ func genericFunc[T any]() {}
 // TestMethodSource resolves an Impl back to the file and line it is defined at,
 // which is what links a generated doc page to the code.
 func TestMethodSource(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller")
-	repoRoot := filepath.Dir(filepath.Dir(thisFile))
+	// go test's cwd is this package dir, regardless of -trimpath.
+	repoRoot, err := filepath.Abs("..")
+	require.NoError(t, err)
 
 	file, line := MethodSource(Method{Impl: FsGlob}, repoRoot)
 	if file == "" {

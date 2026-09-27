@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -243,11 +242,11 @@ func TestSession_Diagnostics_ReplSuppressesUnusedImportWarning(t *testing.T) {
 // BZZ code must be enumerated, and the counts must match, so a new code cannot silently escape the
 // doc-coverage check below.
 func TestAllBZZCodesEnumerated(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
+	// go test's cwd is this package dir, regardless of -trimpath.
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
 	}
-	dir := filepath.Dir(thisFile)
 	src, err := os.ReadFile(filepath.Join(dir, "diagnostics.go"))
 	if err != nil {
 		t.Fatal(err)
@@ -276,11 +275,11 @@ func TestAllBZZCodesEnumerated(t *testing.T) {
 // TestEveryBZZCodeHasDocPage keeps a new code from shipping without its lookup page, at exactly the path
 // its docs URL resolves to (docs/codes/<code>.md inside gopherbuzz's own tree).
 func TestEveryBZZCodeHasDocPage(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
+	// go test's cwd is this package dir, regardless of -trimpath.
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
 	}
-	dir := filepath.Dir(thisFile)
 	for _, c := range allBZZCodes {
 		path := filepath.Join(dir, "docs", "codes", string(c)+".md")
 		if _, err := os.Stat(path); err != nil {
