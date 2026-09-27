@@ -557,8 +557,8 @@ func Compare(a, b string) int {
 // v0.5.0-rc.1 and v1.2.3-rc.1+build-9 do, v1.2.3+build-1 does not, since build
 // metadata is not a prerelease. The leading v is optional; a string that is not
 // semver is not a prerelease. It is the one definition the release index, the
-// release cut and self update share, and it answers as
-// .github/actions/magus/prerelease.buzz does for the GitHub Release flag.
+// release cut and self update share, and it answers as the Buzz semver\isPrerelease
+// does for the GitHub Release flag and the docs site's latest stable release.
 func IsPrerelease(version string) bool {
 	if !strings.HasPrefix(version, "v") {
 		version = "v" + version

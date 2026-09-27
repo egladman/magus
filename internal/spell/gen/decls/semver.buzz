@@ -23,6 +23,7 @@ export object SemverVersion {
 
 export extern fun canonical(v: str) > str !> any;
 export extern fun compare(a: str, b: str) > int !> any;
+export extern fun isPrerelease(v: str) > bool;
 export extern fun isValid(v: str) > bool;
 export extern fun major(v: str) > str !> any;
 export extern fun majorMinor(v: str) > str !> any;

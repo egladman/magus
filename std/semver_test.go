@@ -50,6 +50,26 @@ func TestSemverIsValid(t *testing.T) {
 	}
 }
 
+// The cases are selfupdate.TestIsPrereleaseAgreesWithTheReleaseFlag's, so the Buzz
+// predicate and the release index classify every tag shape alike.
+func TestSemverIsPrerelease(t *testing.T) {
+	cases := map[string]bool{
+		"v0.4.0":              false,
+		"v0.5.0-rc.1":         true,
+		"v1.0.0-beta":         true,
+		"v1.2.3+build-1":      false,
+		"v1.2.3-rc.1+build-9": true,
+		"0.5.0-rc.1":          true,
+		"not-a-version":       false,
+		"":                    false,
+	}
+	for v, want := range cases {
+		got, err := SemverIsPrerelease(context.Background(), v)
+		require.NoError(t, err, "isPrerelease must never error, only report")
+		assert.Equal(t, want, got, v)
+	}
+}
+
 // Input stays lenient (matching parse) while output is always canonical, so two
 // results are directly comparable.
 func TestSemverCanonicalLenientInStrictOut(t *testing.T) {

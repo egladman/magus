@@ -6,21 +6,25 @@
 // wrong marks an ordinary release as a prerelease, which hides it from everyone following
 // the repo's latest.
 //
-// This is the same parser the magusfile's channel() uses to pick an image's floating tag, so
-// the release flag and the image tag read one tag the same way rather than disagreeing.
+// semver\isPrerelease is the predicate the release index and the docs site's latest stable
+// release use too, so the release flag, `magus self update` and the install docs cannot
+// disagree about one tag.
 //
 // Reads TAG. Prints "true" or "false" for $GITHUB_OUTPUT.
 import "os";
 import "semver";
 import "std";
 
-// isPrerelease reports whether tag carries a semver prerelease component. Pure, so every
-// tag shape below is testable - which the one-line shell it replaced was not.
-export fun isPrerelease(tag: str) > bool !> any {
-    return semver\parse(tag).prerelease.len() > 0;
-}
-
 fun env(name: str) > str { return os\env(name) ?? ""; }
+
+// releaseFlag is the value the step writes for tag. A tag that is not semver throws: the
+// predicate alone would call it no prerelease, publishing it as the repo's latest.
+export fun releaseFlag(tag: str) > bool !> any {
+    if (!semver\isValid(tag)) {
+        throw "prerelease: TAG \"{tag}\" is not a semantic version";
+    }
+    return semver\isPrerelease(tag);
+}
 
 fun main() > void !> any {
     final tag = env("TAG");
@@ -38,24 +42,34 @@ fun main() > void !> any {
         std\print("prerelease: no TAG; nothing to classify");
         return;
     }
-    std\print("{isPrerelease(tag)}");
+    std\print("{releaseFlag(tag)}");
 }
 
 
 test "a plain version is not a prerelease" {
-    std\assert(isPrerelease("v0.4.0") == false, message: "v0.4.0 is a release");
+    std\assert(releaseFlag("v0.4.0") == false, message: "v0.4.0 is a release");
 }
 
 test "an rc tag is a prerelease" {
-    std\assert(isPrerelease("v0.5.0-rc.1"), message: "v0.5.0-rc.1 is a prerelease");
-    std\assert(isPrerelease("v1.0.0-beta"), message: "v1.0.0-beta is a prerelease");
+    std\assert(releaseFlag("v0.5.0-rc.1"), message: "v0.5.0-rc.1 is a prerelease");
+    std\assert(releaseFlag("v1.0.0-beta"), message: "v1.0.0-beta is a prerelease");
 }
 
 // The case a hyphen check gets wrong, and the reason this parses instead.
 test "build metadata containing a hyphen is not a prerelease" {
-    std\assert(isPrerelease("v1.2.3+build-1") == false, message: "+build-1 is metadata, not a prerelease");
+    std\assert(releaseFlag("v1.2.3+build-1") == false, message: "+build-1 is metadata, not a prerelease");
 }
 
 test "a prerelease alongside build metadata is still a prerelease" {
-    std\assert(isPrerelease("v1.2.3-rc.1+build-9"), message: "the rc.1 component still counts");
+    std\assert(releaseFlag("v1.2.3-rc.1+build-9"), message: "the rc.1 component still counts");
+}
+
+test "a tag that is not a version is refused rather than called a release" {
+    var refused = false;
+    try {
+        _ = releaseFlag("vendor-bump");
+    } catch (e) {
+        refused = true;
+    }
+    std\assert(refused, message: "vendor-bump must throw");
 }

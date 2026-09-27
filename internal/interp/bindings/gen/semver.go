@@ -33,6 +33,14 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return BoolVal(ret0), nil
 	}))
+	m.MapSet("isPrerelease", vm.DirectValue("semver.isPrerelease", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		v := Str(bzArgs, 0)
+		ret0, err := std.SemverIsPrerelease(ctx, v)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return BoolVal(ret0), nil
+	}))
 	m.MapSet("canonical", vm.DirectValue("semver.canonical", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		v := Str(bzArgs, 0)
 		ret0, err := std.SemverCanonical(ctx, v)

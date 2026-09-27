@@ -37,6 +37,13 @@ var Semver = Module{
 			Impl:    SemverIsValid,
 		},
 		{
+			Name:    "isPrerelease",
+			Doc:     `Whether v carries a prerelease component: "v0.5.0-rc.1" does, "v1.2.3+build-1" does not, since build metadata is not a prerelease. False, never an error, when v is not a semantic version.`,
+			Args:    []Arg{{Name: "v", Type: TypeString}},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    SemverIsPrerelease,
+		},
+		{
 			Name:    "canonical",
 			Doc:     `Canonical "vX.Y.Z" form of v, filling in missing components and discarding build metadata; errors on invalid input.`,
 			Args:    []Arg{{Name: "v", Type: TypeString}},
@@ -157,6 +164,16 @@ func SemverNext(_ context.Context, v string) (types.SemverNext, error) {
 func SemverIsValid(_ context.Context, v string) (bool, error) {
 	_, err := semver.NewVersion(v)
 	return err == nil, nil
+}
+
+// SemverIsPrerelease reports whether v has a prerelease component. It answers as
+// selfupdate.IsPrerelease does for the release index, so a script deciding the
+// GitHub Release flag or the docs site's latest stable release agrees with which
+// releases self update may pick on its own. It parses with this module's parser
+// rather than importing selfupdate, which builds only without -tags noselfupdate.
+func SemverIsPrerelease(_ context.Context, v string) (bool, error) {
+	sv, err := semver.NewVersion(v)
+	return err == nil && sv.Prerelease() != "", nil
 }
 
 // SemverCanonical returns v in canonical "vX.Y.Z" form.

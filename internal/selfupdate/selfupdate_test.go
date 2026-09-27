@@ -294,8 +294,8 @@ func TestSelectRelease_AllMalformedVersions(t *testing.T) {
 	assert.Contains(t, err.Error(), "semver")
 }
 
-// The cases mirror .github/actions/magus/prerelease.buzz's tests, so the GitHub
-// Release flag and the index agree on every tag shape.
+// The cases are std.TestSemverIsPrerelease's, so the Buzz predicate behind the
+// GitHub Release flag and the index agree on every tag shape.
 func TestIsPrereleaseAgreesWithTheReleaseFlag(t *testing.T) {
 	t.Parallel()
 	cases := map[string]bool{
