@@ -6,8 +6,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -90,4 +93,160 @@ func driverPattern(p string) string {
 		return "`*" + ext + "`"
 	}
 	return "`" + path.Base(p) + "`"
+}
+
+// RefuseUnorderedFileShare refuses a fork whose write paths would hand a single claimable
+// file to two live, unordered jobs at once (MGS3032): one of candidate's entries and an
+// entry of another live row, held in a DIFFERENT checkout, name the same single literal
+// file (no glob, not a directory, not a project root), that file has a diff driver, the two
+// entries still intersect (see types.PathsIntersect, so two different declaration claims
+// pass each other), and neither row is the other's ancestor, descendant, or a depends_on
+// partner.
+//
+// A FILE HAS ONE OWNER, unless the two rows say otherwise. Two whole-file leases on it both
+// read "mine wins" and neither refuses the other, which is what makes the whole-file
+// spelling look free; this is the fork-time cost that makes it not, once a file is
+// genuinely shared. Runs after RefuseSharedCheckout, so the same-checkout workspace-load
+// case keeps its own worktree message.
+//
+// SAME-CHECKOUT SHARING IS LEFT ALONE, on purpose: two rows one caller declared side by
+// side, or a worker fork of its own child, are the checkout RefuseSharedCheckout already
+// watches and WriteProof already records as overlapping, and
+// TestForkRecordsWhetherTheWritePathsWereProvenDisjoint pins that an overlap there is the
+// orchestrator's call, not a refusal. What nothing previously caught, and what this closes,
+// is the pair sitting in two DIFFERENT checkouts: WriteProof is scoped to "this checkout"
+// (heldHere) and reads a cross-checkout pair as WriteProofAlone, so the only trace of it
+// was an `ls jobs` overlap line nobody acted on.
+//
+// Narrow by construction otherwise. It says nothing about a glob, a directory, or a project
+// root (RefuseDirectoryWritePaths and the overlap report already cover those), nothing
+// about a file with no diff driver (recorded only, never refused: the only move for those
+// is depends_on), and nothing about a pair already ordered by parent or depends_on.
+//
+// A nil store, or one with no workspace root, has no tree to stat and refuses nothing.
+func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, id string, candidate types.Job) error {
+	if store == nil || store.root == "" || len(candidate.WritePaths) == 0 {
+		return nil
+	}
+	here, _ := filepath.Abs(store.root)
+	combined := append(slices.Clone(rows), candidate)
+	for _, mine := range candidate.WritePaths {
+		file, ok := literalClaimableFile(store.root, mine)
+		if !ok {
+			continue
+		}
+		if _, driven := types.DiffDriverFor(file); !driven {
+			continue
+		}
+		for _, holder := range rows {
+			if holder.ID == id || !holder.State.Live() || len(holder.WritePaths) == 0 {
+				continue
+			}
+			if here != "" && holder.CheckoutRoot == here {
+				continue
+			}
+			if _, blocked := types.JobBlockedOn(rows, holder); blocked {
+				continue
+			}
+			if orderedPair(combined, id, holder.ID) {
+				continue
+			}
+			for _, theirs := range holder.WritePaths {
+				if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
+					continue
+				}
+				if !types.PathsIntersect(mine, theirs) {
+					continue
+				}
+				touched := touchedInFile(ctx, store, rows, holder.ID, file)
+				return types.DiagnosticErrorf(types.WritePathFileShared,
+					"job: %s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
+						" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
+						" say otherwise. %s has touched %s in it so far. Claim `%s#<declaration>` on both rows, add"+
+						" `--depends-on %s` to %s, or fold %s into %s",
+					id, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
+					file,
+					holder.ID, touched,
+					file, holder.ID, id,
+					id, holder.ID)
+			}
+		}
+	}
+	return nil
+}
+
+// literalClaimableFile is the file entry names, whole or by declaration, cleaned and
+// workspace-relative, or "" when entry is a glob, the whole tree, a project root, or an
+// existing directory: none of those can be shared by a claim, so RefuseUnorderedFileShare
+// has nothing to compare them against.
+func literalClaimableFile(root, entry string) (string, bool) {
+	p, _ := types.SplitClaim(entry)
+	p = path.Clean(strings.TrimSpace(p))
+	if p == "" || p == "." || strings.ContainsAny(p, globMeta) {
+		return "", false
+	}
+	if describe.IsProjectRoot(root, p) {
+		return "", false
+	}
+	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err == nil && info.IsDir() {
+		return "", false
+	}
+	return p, true
+}
+
+// orderedPair reports whether id and other are already sequenced: one an ancestor or
+// descendant of the other by parent chain, walked over combined (which must carry id even
+// when it is not declared yet), or one names the other directly in depends_on.
+func orderedPair(combined []types.Job, id, other string) bool {
+	if slices.ContainsFunc(types.JobAncestors(combined, id), func(r types.Job) bool { return r.ID == other }) {
+		return true
+	}
+	if slices.ContainsFunc(types.JobAncestors(combined, other), func(r types.Job) bool { return r.ID == id }) {
+		return true
+	}
+	dependsOn := func(from, on string) bool {
+		i := slices.IndexFunc(combined, func(r types.Job) bool { return r.ID == from })
+		return i >= 0 && slices.Contains(combined[i].DependsOn, on)
+	}
+	return dependsOn(id, other) || dependsOn(other, id)
+}
+
+// touchedInFile is what holder has changed inside file so far, restricted to file, for the
+// refusal to name: the declarations already touched, "none yet" before any diff exists, or
+// why that cannot be read. Reads the tree once per refusal; a fork this rule passes never
+// pays for it.
+func touchedInFile(ctx context.Context, store *Store, rows []types.Job, holder, file string) string {
+	driver, _ := resolveDriver(ctx, store.root)
+	fp := readFootprint(ctx, driver, rows, holder)
+	if !fp.known {
+		reason := fp.reason
+		if reason == "" {
+			reason = "its footprint could not be read"
+		}
+		return fmt.Sprintf("unknown (%s)", reason)
+	}
+	var decls []string
+	for _, r := range fp.regions {
+		loc := r.Location()
+		if loc.Path != file {
+			continue
+		}
+		d := loc.Declaration
+		if d == "" {
+			d = "the top of the file"
+		}
+		if !slices.Contains(decls, d) {
+			decls = append(decls, d)
+		}
+	}
+	if len(decls) == 0 {
+		return "none yet"
+	}
+	slices.Sort(decls)
+	return strings.Join(decls, ", ")
+}
+
+// updatedAgo is how long ago row last wrote itself, as a refusal names it.
+func updatedAgo(row types.Job) string {
+	return time.Since(time.Unix(row.Updated, 0)).Round(time.Second).String()
 }

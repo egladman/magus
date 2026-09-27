@@ -294,22 +294,43 @@ func completionGatesEqual(a, b []types.CompletionGate) bool {
 }
 
 // subset reports whether every declaration in inner is one outer also holds, compared as
-// the strings they were declared as.
+// the strings they were declared as, with one narrowing allowed: a claim on one declaration
+// of a file (`F#d`) is inside outer's whole-file entry for that same file (`F`).
 //
-// String equality rather than path containment, because this grades a DECLARATION against
-// a declaration: a worker that may rewrite its declarations into any covered form can also
-// rewrite a glob into a wider one that still looks contained. The exact-string rule costs a
-// worker one round trip and cannot be argued with.
+// String equality otherwise, because this grades a DECLARATION against a declaration: a
+// worker that may rewrite its declarations into any covered form can also rewrite a glob
+// into a wider one that still looks contained. The exact-string rule costs a worker one
+// round trip and cannot be argued with. The declaration case is admitted on purpose: it is
+// how a worker holding `F` shrinks to `F#d` (see [authorizeRow]) and how a child is handed
+// `F#d` of a parent's `F` (see [authorizeChild]), and it runs only one way, so widening
+// `F#d` back out to `F` is still refused.
 //
 // Both sides are trimmed here because [Store.Update] writes a types.Job the caller
 // built, which no door has trimmed.
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
-		if !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) }) {
+		p := strings.TrimSpace(p)
+		if slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == p }) {
+			continue
+		}
+		if !narrowsWholeFile(p, outer) {
 			return false
 		}
 	}
 	return true
+}
+
+// narrowsWholeFile reports whether p claims one declaration of a file that some entry in
+// outer holds whole, the one case [subset] admits beyond exact string equality.
+func narrowsWholeFile(p string, outer []string) bool {
+	file, decl := types.SplitClaim(p)
+	if decl == "" {
+		return false
+	}
+	return slices.ContainsFunc(outer, func(o string) bool {
+		of, od := types.SplitClaim(strings.TrimSpace(o))
+		return od == "" && of == file
+	})
 }
 
 // authorizeDelete refuses a bound holder deleting a row.

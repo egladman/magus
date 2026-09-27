@@ -317,3 +317,50 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 	require.Len(t, rows[0].Unattributed, 1)
 	assert.Equal(t, "held.go", rows[0].Unattributed[0].Path)
 }
+
+// Shrinking a whole-file lease to a declaration of that same file is a narrower boundary,
+// not a wider one, so subset has to admit it even though the two spellings differ as
+// strings; widening back out to the whole file is not admitted the same way.
+func TestBoundWorkerNarrowsAWriteToADeclaration(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "adj/magusfile", WritePaths: []string{"magusfile.buzz"}, State: types.StateRunning}
+	loc := declared(t, row)
+
+	stored, err := boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *types.Job) {
+		u.WritePaths = []string{"magusfile.buzz#lint"}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"magusfile.buzz#lint"}, stored.WritePaths)
+
+	_, err = boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *types.Job) {
+		u.WritePaths = []string{"magusfile.buzz"}
+	})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused, "widening a claimed declaration back to the whole file is not a shrink")
+	assert.Contains(t, err.Error(), "SHRINK write_paths")
+}
+
+// A child may be handed one declaration of a file its parent owns whole: that is a
+// narrower boundary than the parent's, the same admission [subset] makes for a worker
+// shrinking its own row. A child claiming anything beyond what the parent owns is still
+// refused.
+func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
+	t.Parallel()
+
+	parent := types.Job{ID: "adj/store", WritePaths: []string{"magusfile.buzz"}, State: types.StateRunning}
+	loc := declared(t, parent)
+
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/lint", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"magusfile.buzz#lint"}}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"magusfile.buzz#lint"}, stored.WritePaths)
+
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/extra", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"magusfile.buzz#lint", "other.go"}}
+	})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused, "a child claims more than its parent owns when it also names other.go")
+	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
+}
