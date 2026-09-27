@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -35,7 +36,7 @@ func serveSocket(t *testing.T, h http.Handler) *http.Client {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	path := filepath.Join(dir, "s.sock")
-	ln, err := net.Listen("unix", path)
+	ln, err := endpoint.ListenUnix(path)
 	require.NoError(t, err)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ConnContext: PeerConnContext}
 	done := make(chan error, 1)
@@ -46,7 +47,7 @@ func serveSocket(t *testing.T, h http.Handler) *http.Client {
 	})
 	return &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", path)
+			return endpoint.DialUnix(ctx, path)
 		},
 	}}
 }
@@ -132,7 +133,8 @@ func unixPair() (*net.UnixConn, *net.UnixConn, error) {
 		return nil, nil, err
 	}
 	defer os.RemoveAll(dir)
-	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(dir, "p.sock"), Net: "unix"})
+	path := filepath.Join(dir, "p.sock")
+	ln, err := endpoint.ListenUnix(path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,7 +144,7 @@ func unixPair() (*net.UnixConn, *net.UnixConn, error) {
 		c, _ := ln.AcceptUnix()
 		accepted <- c
 	}()
-	dialed, err := net.DialUnix("unix", nil, ln.Addr().(*net.UnixAddr))
+	dialed, err := endpoint.DialUnix(context.Background(), path)
 	if err != nil {
 		return nil, nil, err
 	}
