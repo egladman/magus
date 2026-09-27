@@ -276,3 +276,29 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 		Departures: []types.Case{depCase("cmd/big", all...)},
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal))
 }
+
+func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/a", 1)
+	var cited []types.Case
+	for i := range 4 {
+		dir := fmt.Sprintf("cmd/c%d", i)
+		f.pkg(dir, 1)
+		f.imports(dir, "internal/a")
+		cited = append(cited, depCase(dir, "internal/a"))
+	}
+	internal := types.PrecedentScope{Layers: []string{"internal"}}
+	want := types.Precedent{
+		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+		Follow: 4, Cohort: 4, Share: 1, Cited: cited[:3],
+	}
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal),
+		"four importers are under the minimum cohort of five")
+
+	f.pkg("cmd/c4", 1)
+	f.imports("cmd/c4", "internal/a")
+	want.Follow, want.Cohort, want.Established = 5, 5, true
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal))
+}

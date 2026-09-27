@@ -38,7 +38,9 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 		if r.Cohort > 0 {
 			r.Share = float64(r.Follow) / float64(r.Cohort)
 		}
-		r.Established = r.Cohort >= conformanceMinCohort && r.Share >= conformanceMinShare
+		// A fan-out row's share is at least 0.95 by construction, since its key is the p95, so
+		// only its cohort says anything.
+		r.Established = r.Cohort >= conformanceMinCohort && (r.Family == types.PrecedentDepFanout || r.Share >= conformanceMinShare)
 	}
 	slices.SortFunc(rows, func(a, b types.Precedent) int {
 		return cmp.Or(

@@ -1286,9 +1286,10 @@ const (
 )
 
 // Precedent is what a body of cases in the graph establishes: Follow of Cohort cases share one
-// shape. It is established only when Cohort and Share clear the conformance gate; the zero
-// value, and any row below the gate, is no precedent, a count and never a rule. Departures are
-// the cases that do not follow it, so a reader can check each one against the count.
+// shape. It is established only when Cohort and Share clear the conformance gate (a dep-fanout
+// row, whose share is at least 0.95 by construction, is gated on Cohort alone); the zero value,
+// and any row below the gate, is no precedent, a count and never a rule. Departures are the
+// cases that do not follow it, so a reader can check each one against the count.
 type Precedent struct {
 	Family PrecedentFamily `json:"family"`
 	Scope  PrecedentScope  `json:"scope"`
