@@ -118,14 +118,112 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	assert.Equal(t, types.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
 }
 
-func TestWaitRefusesTheBoundHolder(t *testing.T) {
+// lineageRow is acceptRow renamed into a tree under parent.
+func lineageRow(id, parent string) types.Job {
+	row := acceptRow()
+	row.ID, row.Parent = id, parent
+	return row
+}
+
+// lineage is a worker's tree: its root, the worker, a sibling, a row outside the tree,
+// and below the worker whatever the case adds.
+func lineage(below ...types.Job) []types.Job {
+	return append([]types.Job{
+		lineageRow("root", ""),
+		lineageRow("root/worker", "root"),
+		lineageRow("root/sibling", "root"),
+		lineageRow("other", ""),
+	}, below...)
+}
+
+// waitAs waits on target as the worker leased to holder, with a result that verifies.
+func waitAs(t *testing.T, loc Location, holder, target string) (types.JobStatus, error) {
+	t.Helper()
+	result := passingResult()
+	result.Job = target
+	attempt := passingRun
+	attempt.Ref = result.Validation.OutputRef
+	attempt.TimestampMs = 9_999_999_999_999
+	return Wait(t.Context(), boundStore(loc, holder), target, &result, func(context.Context, string) (types.JobAttempt, error) {
+		return attempt, nil
+	}, observeClaim(result))
+}
+
+// jobStates maps each row in loc's store to its state.
+func jobStates(t *testing.T, loc Location) map[string]types.JobState {
+	t.Helper()
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	out := map[string]types.JobState{}
+	for _, row := range rows {
+		out[row.ID] = row.State
+	}
+	return out
+}
+
+func TestWaitLetsAHolderVerifyItsDescendants(t *testing.T) {
 	t.Parallel()
 
-	row := acceptRow()
-	loc := declared(t, row)
-	_, err := Wait(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not verify its own work")
+	tests := map[string]struct {
+		rows   []types.Job
+		target string
+	}{
+		"child": {
+			rows:   lineage(lineageRow("root/worker/child", "root/worker")),
+			target: "root/worker/child",
+		},
+		"grandchild": {
+			rows: lineage(
+				lineageRow("root/worker/child", "root/worker"),
+				lineageRow("root/worker/child/leaf", "root/worker/child"),
+			),
+			target: "root/worker/child/leaf",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			loc := declared(t, tt.rows...)
+			status, err := waitAs(t, loc, "root/worker", tt.target)
+			require.NoError(t, err)
+			assert.True(t, status.Verified, status.Violations)
+
+			want := map[string]types.JobState{}
+			for _, row := range tt.rows {
+				want[row.ID] = types.StateRunning
+			}
+			want[tt.target] = types.StatePass
+			assert.Equal(t, want, jobStates(t, loc))
+		})
+	}
+}
+
+func TestWaitRefusesAHolderOutsideItsDescendants(t *testing.T) {
+	t.Parallel()
+
+	for name, target := range map[string]string{
+		"its own row": "root/worker",
+		"a sibling":   "root/sibling",
+		"an ancestor": "root",
+		"unrelated":   "other",
+		"undeclared":  "root/worker/ghost",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			rows := lineage(lineageRow("root/worker/child", "root/worker"))
+			loc := declared(t, rows...)
+			_, err := waitAs(t, loc, "root/worker", target)
+			require.EqualError(t, err, "job: this checkout holds the lease on root/worker and a holder does not verify its own work")
+
+			want := map[string]types.JobState{}
+			for _, row := range rows {
+				want[row.ID] = types.StateRunning
+			}
+			assert.Equal(t, want, jobStates(t, loc), "a refused wait writes nothing")
+		})
+	}
 }
 
 // plant writes rows exactly as given, timestamps included, which no write door allows.

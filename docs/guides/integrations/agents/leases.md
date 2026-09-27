@@ -184,6 +184,18 @@ the CLI, the `magus_job` MCP tool and `magus\job` all reach the same file and
 only one of them is a command a pattern can read. A session holding no lease,
 the orchestrator or a person at a terminal, writes anything.
 
+**A child is forked with `--parent <your job>`.** The guard lets a leased
+session fork a NEW row that names its own job as `parent`, as flags, as a
+`--stdin` record in a quoted heredoc, or as `magus_job` `op=fork` with
+`parent`, and leaves its boundary to the store: a child claiming more than its
+parent is refused there, once. The store grades a child only when it writes as
+that lease, which it reads from the checkout's binding; a worker the guard
+identified in a checkout bound to nobody may fork only a `--read-only` child
+that declares no paths, check or gates. A child neither read-only nor handed
+write paths is refused either way, since an empty write set scopes nothing.
+The guard also lets `magus job wait` through for the session's own
+descendants, and refuses it for any other job.
+
 **Taking a lease is one-way while the job is in flight.** `magus job exec` from a
 caller whose job is still `declared` or `running` is refused when it names a
 different job: retaking is how a holder would be graded against another job's
