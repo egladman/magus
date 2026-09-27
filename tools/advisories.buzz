@@ -25,7 +25,9 @@
 //   introduced: the base manifest lacks that package at that version; this change chose it.
 //   inherited:  the base already carries it. On a change (base differs from head) it is
 //               printed [inherited] and left to main; where the base IS the head (main,
-//               the queue, a schedule) it fails like any other.
+//               a schedule) it fails like any other. A merge queue candidate differs
+//               from its base yet is about to become it, so its gate passes
+//               `--inherited=fatal` (inheritedFatal) to fail the same way.
 //   unknown:    no base to read. Fatal like introduced, and said so once.
 // A fresh CVE against a year-old module then reddens main and the schedule, not every open
 // pull request whose author cannot fix it there. docs/guides/security-scanning.md is the
@@ -39,11 +41,11 @@ import "std";
 import "proc";
 import "fs";
 import "vcs";
-import "magus";
 import "encoding/json";
 import "encoding/yaml";
 import "semver";
 import "time";
+import "flags";
 // Used by the test blocks, which run under buzz_test now that it globs tools/.
 import "assert";
 
@@ -180,8 +182,8 @@ object Finding {
 
 // Base is the change's starting point. inventory is the set of name@version keys the base
 // manifest carries, null when there is no base to read (missing says why). changed is
-// false when the base IS the head, which is how main, the queue and a schedule differ from
-// a pull request without reading any CI variable.
+// false when the base IS the head, which is how main and a schedule differ from a pull
+// request without reading any CI variable, or when the caller passed --inherited=fatal.
 object Base {
     inventory: {str: bool}?,
     changed: bool = false,
@@ -221,6 +223,36 @@ test "classify reads provenance off the base inventory" {
         message: "one new copy is enough");
     assert\equal(classify(["nanoid@3.3.16"], base: null), want: "unknown",
         message: "no base, no provenance");
+}
+
+// inheritedFatal reads a target's `--inherited=fatal` argument. It is an explicit argument
+// because nothing in the tree tells a merge queue candidate from a pull request: both
+// differ from the base.
+export fun inheritedFatal(args: [str]) > bool !> any {
+    final parsed = flags\parse(args, switches: [<str>], valued: ["--inherited"]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "security: unexpected arguments {args.join(" ")}; the only one is --inherited=fatal";
+    }
+    final value = parsed.values["--inherited"] ?? "";
+    if (value != "" and value != "fatal") {
+        throw "security: --inherited takes fatal, not \"{value}\"";
+    }
+    return value == "fatal";
+}
+
+test "--inherited=fatal is the only argument security takes" {
+    assert\isFalse(inheritedFatal([<str>]), message: "no argument judges by the base");
+    assert\isTrue(inheritedFatal(["--inherited", "fatal"]), message: "spaced value");
+    assert\isTrue(inheritedFatal(["--inherited=fatal"]), message: "joined value");
+    var raised = 0;
+    foreach (bad in [["--inherited=advisory"], ["--strict"], ["./..."]]) {
+        try {
+            _ = inheritedFatal(bad);
+        } catch (e) {
+            raised = raised + 1;
+        }
+    }
+    assert\equal(raised, want: 3, message: "an unknown value, flag or positional raises");
 }
 
 test "inherited is fatal only where the base IS the head" {
@@ -381,9 +413,9 @@ packages:
 }
 
 // audit scans the current project and fails ONLY on findings that are actionable today
-// and, on a change, that the change introduced. Everything else is printed and carried.
-// Throws to fail the calling target.
-export fun audit() > void !> any {
+// and, on a change without inheritedFatal, that the change introduced. Everything else is
+// printed and carried. Throws to fail the calling target.
+export fun audit(inheritedFatal: bool = false) > void !> any {
     final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
         opts: {"allow_failure": true});
     if (res.code == 0) {
@@ -443,7 +475,7 @@ export fun audit() > void !> any {
         if (lock.text != null) {
             inventory = pnpmInventory(lock.text!);
         }
-        base = Base{ inventory = inventory, changed = lock.changed, missing = lock.missing };
+        base = Base{ inventory = inventory, changed = lock.changed and !inheritedFatal, missing = lock.missing };
     }
     verdict("audit", findings: findings, base: base,
         deferNote: "audit: deferred findings are NOT actionable today. Each one starts"
@@ -643,14 +675,14 @@ test "a go.mod inventory carries requires, replacements and the go line" {
 }
 
 // govulncheck scans the current Go module and fails on a vulnerability this code calls,
-// unless the run is a change and the base already carried it. go is the workspace's go
-// spell handle: its go-mod-json op parses the base go.mod, so no modfile parser lives here.
+// unless the run is a change, the base already carried it, and inheritedFatal is false.
+// go is the workspace's go spell handle: its govulncheck op runs the scan and its
+// go-mod-json op parses the base go.mod, so no modfile parser lives here. run is the
+// target's ctx, or a ctx.withEnv of it, that both ops run under.
 //
-// The scanner runs through proc\exec because the go spell's govulncheck op neither
-// captures its output nor lets a caller put -format ahead of its ./... argument.
-export fun govulncheck(ctx: magus\Context, go: any) > void !> any {
-    final res = proc\exec("govulncheck", args: ["-format", "json", "./..."], dir: ".",
-        opts: {"quiet": true});
+// `-format json` exits 0 whatever it finds, so the verdict below is the only one.
+export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
+    final res = go["govulncheck"](run, {"args": ["-format", "json", "./..."]});
     final findings = goFindings(res.stdout);
 
     var base = Base{ inventory = {<str: bool>} };
@@ -662,12 +694,12 @@ export fun govulncheck(ctx: magus\Context, go: any) > void !> any {
             if (mod.text! != "") {
                 final path = fs\tempFile("base-go.mod");
                 fs\writeFile(path, content: mod.text!);
-                parsed = go["go-mod-json"](ctx, {"args": [path]}).stdout;
+                parsed = go["go-mod-json"](run, {"args": [path]}).stdout;
                 fs\remove(path);
             }
             inventory = goInventory(parsed);
         }
-        base = Base{ inventory = inventory, changed = mod.changed, missing = mod.missing };
+        base = Base{ inventory = inventory, changed = mod.changed and !inheritedFatal, missing = mod.missing };
     }
     verdict("govulncheck", findings: findings, base: base,
         deferNote: "",

@@ -420,7 +420,11 @@ jobs:
           # touching an explicitly named one. --concurrency-profile aggressive is the
           # explicit ask for the whole runner: magus reads no environment variable to
           # guess it is in CI, so every invocation that wants the machine says so itself.
-          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }}
+          # A main run passes --inherited=fatal for the same reason: security fails on
+          # every actionable finding main carries, not only on what a change introduced.
+          # A target argument, not a charm, since a charm keys every step and main's
+          # cache is the one pull requests read.
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 

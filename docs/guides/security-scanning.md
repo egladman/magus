@@ -69,9 +69,9 @@ magus\project({
 ```
 
 The go spell's `govulncheck` op declares `External.reads`, which `magus doctor` reads
-to flag a cacheable target composing it (MGS1033). The recipe below runs the scanner
-through `proc\exec` to capture its JSON, so that declaration is not on the call path:
-`skip_cache` on the target states the same fact.
+to flag a cacheable target composing it (MGS1033). The op captures its output and
+defaults its package pattern to `./...`, so the recipe calls it with
+`{"args": ["-format", "json", "./..."]}` and reads the JSON from the result's `stdout`.
 
 ## 4. Classes
 
@@ -119,16 +119,31 @@ Both feed one `classify(installed, base)` function.
 
 ## 6. Where each class fails
 
-| run                                         | base vs head | fatal                          |
-| ------------------------------------------- | ------------ | ------------------------------ |
-| pull request branch                         | differ       | actionable and not `inherited` |
-| main after a merge, queue on main, schedule | equal        | every actionable finding       |
-| no VCS, or the base does not resolve        | none         | every actionable finding       |
+| run                                  | base vs head | fatal                          |
+| ------------------------------------ | ------------ | ------------------------------ |
+| pull request branch                  | differ       | actionable and not `inherited` |
+| merge queue candidate, with the flag | differ       | every actionable finding       |
+| main after a merge, schedule         | equal        | every actionable finding       |
+| no VCS, or the base does not resolve | none         | every actionable finding       |
 
 The target compares `vcs\commit(vcs\base()).id` with `vcs\commit().id`. It reads no CI
 variable, so the same command gives the same verdict on a laptop and in a runner. An
 inherited finding on a pull request prints as `[inherited]`; the base carries it, so
 main's next run and the schedule fail on it.
+
+A merge queue candidate differs from its base like a pull request does, yet it becomes
+main when it passes. Nothing in the tree tells the two apart, so the queue says so with a
+target argument:
+
+```sh
+magus run security . -- --inherited=fatal
+magus run ci:gha . -- --inherited=fatal
+```
+
+`ctx.needs` hands a dependency no arguments, so a `ci` that composes `security` reads
+the flag itself and calls `security(ctx, args: args)` in its body when it is set. Use an
+argument rather than a charm here: a charm keys every step the run reaches, so a queue
+run under one would miss the cache main's runs wrote.
 
 Every run ends with one summary line, so a week of runs shows the split:
 
@@ -157,12 +172,13 @@ private repository and pnpm the same way.
 ## 9. Copy this
 
 Copy `tools/advisories.buzz` from the magus repository into your workspace. It exports
-two functions:
+three functions:
 
-| function                              | scans                                      | needs               |
-| ------------------------------------- | ------------------------------------------ | ------------------- |
-| `advisories\govulncheck(ctx, go: go)` | the Go module in the target's directory    | the go spell handle |
-| `advisories\audit()`                  | the pnpm project in the target's directory | nothing             |
+| function                                                    | does                                                | needs               |
+| ----------------------------------------------------------- | --------------------------------------------------- | ------------------- |
+| `advisories\govulncheck(ctx, go: go, inheritedFatal: bool)` | scans the Go module in the target's directory       | the go spell handle |
+| `advisories\audit(inheritedFatal: bool = false)`            | scans the pnpm project in the target's directory    | nothing             |
+| `advisories\inheritedFatal(args)`                           | reads `--inherited=fatal`, raising on anything else | the target's `args` |
 
 A Go project:
 
@@ -172,9 +188,12 @@ import "magus/spell/go";
 import "./tools/advisories" as advisories;
 
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
-    advisories\govulncheck(ctx, go: go);
+    advisories\govulncheck(ctx, go: go, inheritedFatal: advisories\inheritedFatal(args));
 }
 ```
+
+The first argument can be `ctx.withEnv({...})` when the scan needs the build's
+environment, such as a `GOEXPERIMENT` the rest of the workspace sets.
 
 A pnpm project:
 
@@ -193,6 +212,7 @@ tools/advisories.buzz`. They pin the parts you are most likely to edit:
 
 - `classify` provenance, including a version bump counting as introduced.
 - `isFatal`: inherited is fatal only where the base is the head.
+- `inheritedFatal`: the one argument `security` takes, and what it refuses.
 - The govulncheck stream parse and the `go.mod` and lockfile inventories.
 - The npm range handling behind the cooling window.
 
