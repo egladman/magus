@@ -89,6 +89,10 @@ type Store struct {
 	clock      func() time.Time
 	staleAfter *time.Duration
 	notices    io.Writer
+	// outputs is Location.Outputs.
+	outputs func(root string) AttemptResolver
+	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
+	landed func(context.Context, types.Job) string
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -116,6 +120,12 @@ type Location struct {
 	// environment and CacheDir through [ActingActor]", which is what every door outside a
 	// test wants.
 	Actor *Actor
+	// Outputs resolves an output ref against the output store of the checkout at root.
+	// Exit and Wait fall back to it when the caller's resolver finds no run, trying the
+	// checkouts the job and its descendants were taken in, so an orchestrator can file a
+	// result its worker recorded in another checkout of the repository. Nil tries the
+	// caller's resolver alone.
+	Outputs func(root string) AttemptResolver
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -130,7 +140,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir}
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
