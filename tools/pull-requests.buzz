@@ -3,11 +3,18 @@
 // this repository's glue, not part of magus:
 //
 //	magus buzz tools/pull-requests.buzz -- status [--author <login>] [--pr <n>]...
-//	    one JSON line per pull request: its state, the action it needs, and the model
-//	    that does it (none when this script or nobody acts)
+//	    one JSON line per pull request: its state (running, green, red-inherited or red),
+//	    its stage, the action it needs and the model that does it (none when this script
+//	    or nobody acts), and for a green or red-inherited one the merge command a person
+//	    runs
 //	magus buzz tools/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
 //	    take the actions that change no code: queue what is green on a current base, and
 //	    rerun a red run once per head when the failure is outside the change's files
+//
+// red-inherited means every failing check, and every Go test its log reports failing, also
+// fails on main's latest completed CI run, and nothing else does: the change broke nothing
+// main had not. Proving it reads main's run once per status, and only when a finished red
+// needs it.
 //
 // With no selector the selection is the authenticated user's open pull requests. Every
 // decision is a pure function tested at the bottom; the gh and git calls are not. Apply
@@ -63,6 +70,28 @@ object Check {
     conclusion: str,
     run: str = "",
     job: str = "",
+    // runUrl is the workflow run's page, "" for a status.
+    runUrl: str = "",
+}
+
+// Baseline is main's latest completed CI run: what failed there, by check name and by Go
+// test name, so a pull request's failures can be told apart from main's.
+object Baseline {
+    url: str,
+    failingChecks: [str] = [<str>],
+    failingTests: [str] = [<str>],
+}
+
+// Verdict is what the checks on a pull request's head say: running, green, red-inherited
+// (every failure is also main's) or red, with the runs and failures that prove it.
+object Verdict {
+    state: str,
+    mainRun: str = "",
+    headRuns: [str] = [<str>],
+    failingTests: [str] = [<str>],
+    // The failing checks and tests main's run does not have.
+    newChecks: [str] = [<str>],
+    newTests: [str] = [<str>],
 }
 
 object Kick {
@@ -118,6 +147,10 @@ object Facts {
     failedSteps: {str: [str]} = {<str: [str]>},
     // Kick-back paths that are declared outputs.
     generated: [str] = [<str>],
+    // main's latest completed CI run, null when it was not read.
+    baseline: Baseline? = null,
+    // The Go tests the head's failing jobs report failing.
+    failingTests: [str] = [<str>],
 }
 
 object Evidence {
@@ -138,11 +171,17 @@ object Record {
     pr: int,
     head: str,
     base: str,
+    // What the checks say; see Verdict.
     state: str,
+    // Where the pull request stands on its way to main; see stageOf.
+    stage: str = "",
     reason: str,
     action: str,
     model: str,
     evidence: Evidence,
+    verdict: Verdict? = null,
+    // The command a person runs to merge it, "" unless its checks allow one.
+    merge: str = "",
 }
 
 object Selector {
@@ -206,8 +245,13 @@ export fun checksOf(rollup: [serialize\Boxed]) > [Check] {
                 conclusion = "PENDING";
             }
             key = c.q("workflowName").stringValue() + "/" + c.q("name").stringValue();
+            var runUrl = url;
+            final jobAt = url.indexOf("/job/");
+            if (jobAt != null) {
+                runUrl = url.sub(0, len: jobAt!);
+            }
             check = Check{ name = c.q("name").stringValue(), conclusion = conclusion,
-                run = idAfter(url, marker: "/runs/"), job = idAfter(url, marker: "/job/") };
+                run = idAfter(url, marker: "/runs/"), job = idAfter(url, marker: "/job/"), runUrl = runUrl };
         }
         final seen = latest[key];
         if (seen == null) {
@@ -379,8 +423,146 @@ fun names(checks: [Check], conclusion: str?) > [str] {
     return acc;
 }
 
-// stateOf reads the first thing standing between p and a merge, from p's own record.
-export fun stateOf(p: Pull, open: [Pull]) > str {
+// unshared lists the items the other list lacks, each once.
+fun unshared(items: [str], other: [str]) > [str] {
+    final acc = mut [<str>];
+    foreach (item in items) {
+        if (other.indexOf(item) == null and acc.indexOf(item) == null) {
+            acc.append(item);
+        }
+    }
+    return acc;
+}
+
+// completedRed reports whether every check on p's head has finished and one failed: the
+// only case where main's run is worth reading.
+export fun completedRed(p: Pull) > bool {
+    return p.checks.len() > 0 and names(p.checks, conclusion: "PENDING").len() == 0 and failing(p.checks).len() > 0;
+}
+
+final SHARD_PREFIX = "magus shard ";
+
+// checkKey is the name a check is matched with main's by. A shard's number depends on how
+// many shards the run's affected set split into, so `magus shard 0: docs` on a pull request
+// is `magus shard 2: docs` on main; the project after the colon is what names it.
+export fun checkKey(name: str) > str {
+    final colon = name.indexOf(": ");
+    if (!name.startsWith(SHARD_PREFIX) or colon == null) {
+        return name;
+    }
+    return SHARD_PREFIX + name.sub(colon!);
+}
+
+// newFailures names the failing checks on p's head that main's run does not fail. Only a
+// FAILURE can be main's: a cancelled or timed-out run never judged the change.
+fun newFailures(p: Pull, baseline: Baseline) > [str] {
+    final mains = mut [<str>];
+    foreach (name in baseline.failingChecks) {
+        mains.append(checkKey(name));
+    }
+    final acc = mut [<str>];
+    foreach (c in failing(p.checks)) {
+        if ((c.conclusion != "FAILURE" or mains.indexOf(checkKey(c.name)) == null) and acc.indexOf(c.name) == null) {
+            acc.append(c.name);
+        }
+    }
+    return acc;
+}
+
+// inheritedChecks reports whether every failing check on p's head also failed on main's
+// run, before any test is compared.
+export fun inheritedChecks(p: Pull, baseline: Baseline) > bool {
+    return newFailures(p, baseline: baseline).len() == 0;
+}
+
+// verdictOf is what p's checks say. A head no check has reported on yet reads running: CI
+// runs on every push here, so no checks is a run not yet started, never a pass. A failure
+// counts as main's only when main's latest completed run fails the same check and, below
+// it, the same Go tests; without that run read, a failure is the change's.
+export fun verdictOf(p: Pull, facts: Facts) > Verdict {
+    if (p.checks.len() == 0 or names(p.checks, conclusion: "PENDING").len() > 0) {
+        return Verdict{ state = "running" };
+    }
+    final bad = failing(p.checks);
+    if (bad.len() == 0) {
+        return Verdict{ state = "green" };
+    }
+    final runs = mut [<str>];
+    foreach (c in bad) {
+        var run = c.runUrl;
+        if (run == "") {
+            run = c.run;
+        }
+        if (run != "" and runs.indexOf(run) == null) {
+            runs.append(run);
+        }
+    }
+    if (facts.baseline == null) {
+        return Verdict{ state = "red", headRuns = runs, failingTests = facts.failingTests,
+            newChecks = names(bad, conclusion: null), newTests = facts.failingTests };
+    }
+    final baseline = facts.baseline!;
+    final newChecks = newFailures(p, baseline: baseline);
+    final newTests = unshared(facts.failingTests, other: baseline.failingTests);
+    var state = "red";
+    if (newChecks.len() == 0 and newTests.len() == 0) {
+        state = "red-inherited";
+    }
+    return Verdict{ state = state, mainRun = baseline.url, headRuns = runs, failingTests = facts.failingTests,
+        newChecks = newChecks, newTests = newTests };
+}
+
+final failMarker = "--- FAIL: ";
+
+// failingTestsOf reads the Go tests a job log reports failing, subtests included, each once.
+export fun failingTestsOf(log: str) > [str] {
+    final acc = mut [<str>];
+    foreach (line in log.split("\n")) {
+        final at = line.indexOf(failMarker);
+        if (at == null) {
+            continue;
+        }
+        final rest = line.sub(at! + failMarker.len());
+        var name = rest;
+        final space = rest.indexOf(" ");
+        if (space != null) {
+            name = rest.sub(0, len: space!);
+        }
+        if (name != "" and acc.indexOf(name) == null) {
+            acc.append(name);
+        }
+    }
+    return acc;
+}
+
+// baselineRunOf picks main's latest run that judged anything from `gh run list --json
+// databaseId,conclusion,url`, newest first: a cancelled or skipped run failed nothing on
+// its merits, so it is passed over. Null when none did.
+export fun baselineRunOf(body: str) > serialize\Boxed? !> any {
+    foreach (run in serialize\jsonDecode(body).listValue()) {
+        final conclusion = run.q("conclusion").stringValue();
+        if (conclusion == "success" or conclusion == "failure") {
+            return run;
+        }
+    }
+    return null;
+}
+
+// failingJobsOf names the jobs of `gh run view --json jobs` that failed. A cancelled job
+// on main is not proof the check fails there.
+export fun failingJobsOf(body: str) > [str] !> any {
+    final acc = mut [<str>];
+    foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
+        if (job.q("conclusion").stringValue() == "failure") {
+            acc.append(job.q("name").stringValue());
+        }
+    }
+    return acc;
+}
+
+// stageOf reads the first thing other than its checks standing between p and a merge,
+// from p's own record. What the checks say is verdictOf's.
+export fun stageOf(p: Pull, open: [Pull]) > str {
     if (p.state == "MERGED") {
         return "merged";
     }
@@ -400,9 +582,6 @@ export fun stateOf(p: Pull, open: [Pull]) > str {
     final kicked = p.labels.indexOf(KICKED) != null or p.labels.indexOf(NEEDS_REGENERATION) != null;
     if (kicked and !intent(p, open: open)) {
         return "kicked-back";
-    }
-    if (failing(p.checks).len() > 0) {
-        return "red";
     }
     if (p.mergeState == "BEHIND") {
         return "behind";
@@ -656,8 +835,9 @@ fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str],
     };
 }
 
-fun recordOf(p: Pull, state: str, action: str, model: str, reason: str, evidence: Evidence) > Record {
-    return Record{ pr = p.number, head = p.head, base = p.base, state = state, reason = reason,
+// recordOf is the action for p; classify adds its state, stage and merge command.
+fun recordOf(p: Pull, action: str, model: str, reason: str, evidence: Evidence) > Record {
+    return Record{ pr = p.number, head = p.head, base = p.base, state = "", reason = reason,
         action = action, model = model, evidence = evidence };
 }
 
@@ -708,28 +888,28 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
     // An unexplained failure beside an explained one is taken to follow it, the way the
     // `ci gate` aggregate fails when a shard does. Alone, nothing says where it is.
     if (!explained) {
-        return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
+        return recordOf(p, action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
     }
     if (rerunnable and runs.len() > 0) {
         // GitHub refuses to rerun a run that is still going, so wait for it to finish.
         foreach (c in p.checks) {
             if (c.conclusion == "PENDING" and runs.indexOf(c.run) != null) {
-                return recordOf(p, state: "red", action: "none", model: "none",
+                return recordOf(p, action: "none", model: "none",
                     reason: "red ({failed}) outside the files the change touched; its run is still going", evidence: plain);
             }
         }
         foreach (run in runs) {
             if ((facts.attempts[run] ?? 1) > 1) {
-                return recordOf(p, state: "red", action: "fix", model: "opus",
+                return recordOf(p, action: "fix", model: "opus",
                     reason: "red again ({failed}) after this head was rerun once", evidence: plain);
             }
         }
-        return recordOf(p, state: "red", action: "rerun", model: "none",
+        return recordOf(p, action: "rerun", model: "none",
             reason: "red ({failed}) outside the files the change touched",
             evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: runs, sensitive: sensitive, drifted: [<str>]));
     }
     if (source or rerunnable) {
-        return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}) in the change's own source", evidence: plain);
+        return recordOf(p, action: "fix", model: "opus", reason: "red ({failed}) in the change's own source", evidence: plain);
     }
     // Every failing check is the drift gate's own throw, or an unexplained one that
     // follows it the same way `ci gate` follows a shard above: an aggregate carries no
@@ -748,18 +928,18 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         }
     }
     if (hasDrift and !driftOnly) {
-        return recordOf(p, state: "red", action: "fix", model: "opus",
+        return recordOf(p, action: "fix", model: "opus",
             reason: "red ({failed}): a drift throw beside a failing check that is not drift", evidence: plain);
     }
     if (driftOnly) {
-        return recordOf(p, state: "red", action: "fix", model: "sonnet",
+        return recordOf(p, action: "fix", model: "sonnet",
             reason: "generated files drifted: {drifted.join(", ")}; regenerate and commit them",
             evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: drifted));
     }
     // What is left is hygiene and formatting, maybe beside a transient run.
     final mechanical = classes.indexOf("mechanical") != null;
     if (mechanical and sensitive.len() > 0) {
-        return recordOf(p, state: "red", action: "fix", model: "opus", reason: "red ({failed}) in a change to {sensitive[0]}", evidence: plain);
+        return recordOf(p, action: "fix", model: "opus", reason: "red ({failed}) in a change to {sensitive[0]}", evidence: plain);
     }
     var reason = "red ({failed}): formatting or generated output drifted";
     if (hygiene) {
@@ -770,7 +950,7 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
             reason = "{HYGIENE} failed on a conventional title: the changelog fragment";
         }
     }
-    return recordOf(p, state: "red", action: "fix", model: "sonnet", reason: reason, evidence: plain);
+    return recordOf(p, action: "fix", model: "sonnet", reason: reason, evidence: plain);
 }
 
 fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
@@ -779,16 +959,16 @@ fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
     // in and they are regenerated, the merge leaves them as the branch has them and the
     // queue takes it again. The regeneration runs the change's own generator code.
     if (p.labels.indexOf(NEEDS_REGENERATION) != null or (p.kick != null and p.kick!.code == "KICK_REGENERATION")) {
-        return recordOf(p, state: "kicked-back", action: "merge-base", model: "opus",
+        return recordOf(p, action: "merge-base", model: "opus",
             reason: "KICK_REGENERATION: merging it needs generated files its own code regenerates; merge main in, regenerate them, and queue it again", evidence: plain);
     }
     if (p.kick == null) {
-        return recordOf(p, state: "kicked-back", action: "fix", model: "opus",
+        return recordOf(p, action: "fix", model: "opus",
             reason: "labeled {KICKED}, and no kick-back comment carries its facts", evidence: plain);
     }
     final kick = p.kick!;
     if (kick.code == "KICK_CONFLICT") {
-        return recordOf(p, state: "kicked-back", action: "merge-base", model: "opus",
+        return recordOf(p, action: "merge-base", model: "opus",
             reason: "the queue found a conflict outside generated files", evidence: plain);
     }
     if (kick.code == "KICK_RED" or kick.code == "KICK_REFUSED") {
@@ -799,38 +979,56 @@ fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
             }
         }
         if (generated and sensitive.len() == 0 and sensitivePaths(kick.paths).len() == 0) {
-            return recordOf(p, state: "kicked-back", action: "fix", model: "sonnet",
+            return recordOf(p, action: "fix", model: "sonnet",
                 reason: "{kick.code}: only generated outputs are at issue; regenerate them", evidence: plain);
         }
-        return recordOf(p, state: "kicked-back", action: "fix", model: "opus", reason: "{kick.code} on the queue's candidate", evidence: plain);
+        return recordOf(p, action: "fix", model: "opus", reason: "{kick.code} on the queue's candidate", evidence: plain);
     }
-    return recordOf(p, state: "kicked-back", action: "fix", model: "opus",
+    return recordOf(p, action: "fix", model: "opus",
         reason: "kicked back with code \"{kick.code}\", which this script does not know", evidence: plain);
 }
 
-// classify decides one pull request: its state, what to do and who does it. Anything it
-// cannot place goes to opus; model none is only for what this script or nobody does.
+// The stages from which a person may merge a pull request whose checks allow it: open,
+// not a draft, not stacked on an unmerged one, and neither conflicting nor kicked back.
+final LANDABLE = ["behind", "queued", "needs-queue"];
+
+// classify decides one pull request: its state and stage, what to do and who does it, and
+// the merge command a person runs when its checks are green or fail only as main does.
+// Anything it cannot place goes to opus; model none is only for what this script or
+// nobody does.
 export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
-    final state = stateOf(p, open: open);
+    final stage = stageOf(p, open: open);
+    final verdict = verdictOf(p, facts: facts);
+    final r = actionOf(p, open: open, facts: facts, stage: stage, verdict: verdict);
+    var merge = "";
+    final mergeable = verdict.state == "green" or verdict.state == "red-inherited";
+    if (mergeable and LANDABLE.indexOf(stage) != null and p.mergeable == "MERGEABLE") {
+        merge = "gh pr merge {p.number} --squash --admin";
+    }
+    return Record{ pr = r.pr, head = r.head, base = r.base, state = verdict.state, stage = stage, reason = r.reason,
+        action = r.action, model = r.model, evidence = r.evidence, verdict = verdict, merge = merge };
+}
+
+fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) > Record {
     final sensitive = sensitivePaths(p.files);
     final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
-    if (state == "merged") {
-        return recordOf(p, state: state, action: "none", model: "none", reason: "merged", evidence: Evidence{});
+    if (stage == "merged") {
+        return recordOf(p, action: "none", model: "none", reason: "merged", evidence: Evidence{});
     }
-    if (state == "closed") {
-        return recordOf(p, state: state, action: "none", model: "none",
+    if (stage == "closed") {
+        return recordOf(p, action: "none", model: "none",
             reason: "closed without merging; reopen it or leave it out of the selection", evidence: Evidence{});
     }
-    if (state == "draft") {
-        return recordOf(p, state: state, action: "none", model: "none", reason: "a draft; mark it ready to land it", evidence: plain);
+    if (stage == "draft") {
+        return recordOf(p, action: "none", model: "none", reason: "a draft; take it out of draft to land it", evidence: plain);
     }
-    if (state == "waiting-below") {
+    if (stage == "waiting-below") {
         final parent = parentOf(p, open: open)!;
-        return recordOf(p, state: state, action: "none", model: "none",
+        return recordOf(p, action: "none", model: "none",
             reason: "stacked on #{parent.number}, which has not merged",
             evidence: evidenceOf(p, conflicts: [<str>], parent: parent.number, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
     }
-    if (state == "conflicting") {
+    if (stage == "conflicting") {
         final paths = mut [<str>];
         foreach (c in facts.conflicts) {
             paths.append(c.path);
@@ -844,52 +1042,59 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
         } else if (sensitive.len() > 0) {
             reason = "conflicts with {p.base} in a change to {sensitive[0]}";
         }
-        return recordOf(p, state: state, action: "merge-base", model: model, reason: reason,
+        return recordOf(p, action: "merge-base", model: model, reason: reason,
             evidence: evidenceOf(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
     }
-    if (state == "kicked-back") {
+    if (stage == "kicked-back") {
         return kickRecord(p, facts: facts, sensitive: sensitive);
     }
-    if (state == "red") {
+    if (verdict.state == "red") {
         return redRecord(p, facts: facts, sensitive: sensitive);
+    }
+    if (verdict.state == "red-inherited") {
+        return recordOf(p, action: "none", model: "none",
+            reason: "every failing check and test also fails on main's run {verdict.mainRun}; nothing here to fix", evidence: plain);
     }
     var mechanical = "sonnet";
     if (sensitive.len() > 0) {
         mechanical = "opus";
     }
-    if (state == "behind") {
-        return recordOf(p, state: state, action: "merge-base", model: mechanical,
+    if (stage == "behind") {
+        return recordOf(p, action: "merge-base", model: mechanical,
             reason: "behind {p.base} with no conflict", evidence: plain);
     }
-    if (state == "queued") {
+    if (stage == "queued") {
         var reason = "queued";
         if (p.queueStatus != "") {
             reason = "queued; its {QUEUE_STATUS} status is {p.queueStatus}";
         }
-        return recordOf(p, state: state, action: "none", model: "none", reason: reason, evidence: plain);
+        return recordOf(p, action: "none", model: "none", reason: reason, evidence: plain);
     }
     if (p.fork) {
-        return recordOf(p, state: state, action: "fix", model: "opus",
+        return recordOf(p, action: "fix", model: "opus",
             reason: "from a fork, which the queue refuses; a person decides how it lands", evidence: plain);
     }
-    if (plain.pending.len() > 0) {
-        return recordOf(p, state: state, action: "none", model: "none",
-            reason: "checks still running: {plain.pending.join(", ")}", evidence: plain);
+    if (verdict.state == "running") {
+        var reason = "no check has reported on the head yet";
+        if (plain.pending.len() > 0) {
+            reason = "checks still running: {plain.pending.join(", ")}";
+        }
+        return recordOf(p, action: "none", model: "none", reason: reason, evidence: plain);
     }
     if (p.mergeable != "MERGEABLE") {
-        return recordOf(p, state: state, action: "none", model: "none",
+        return recordOf(p, action: "none", model: "none",
             reason: "GitHub has not said whether it merges cleanly ({p.mergeable})", evidence: plain);
     }
     final tops = stackTops(p, open: open, depth: 0);
     if (tops.len() > 1) {
-        return recordOf(p, state: state, action: "fix", model: "opus",
+        return recordOf(p, action: "fix", model: "opus",
             reason: "the stack on it branches; a person picks which top carries the queue label", evidence: plain);
     }
     var top: int? = null;
     if (tops.len() == 1) {
         top = tops[0];
     }
-    return recordOf(p, state: state, action: "queue", model: "none", reason: "green on a current base",
+    return recordOf(p, action: "queue", model: "none", reason: "green on a current base",
         evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: top, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
 }
 
@@ -917,8 +1122,39 @@ export fun render(r: Record) > str {
         }
         e["sensitive_paths"] = shown;
     }
-    return encode({"pr": r.pr, "head": r.head, "base": r.base, "state": r.state, "reason": r.reason,
-        "action": r.action, "model": r.model, "evidence": e});
+    // A red-inherited record names both runs; a red one names what main does not fail.
+    if (r.verdict != null) {
+        final v = r.verdict!;
+        if (v.mainRun != "") { e["main_run"] = v.mainRun; }
+        if (v.headRuns.len() > 0) { e["head_runs"] = v.headRuns; }
+        // A broken package fails dozens of tests at once; a few name it, the count sizes it.
+        if (v.failingTests.len() > 0) {
+            var shown = v.failingTests;
+            if (shown.len() > 10) {
+                shown = shown.sub(0, len: 10);
+            }
+            e["failing_tests"] = shown;
+            e["failing_test_count"] = v.failingTests.len();
+        }
+        if (v.state == "red") {
+            if (v.newChecks.len() > 0) { e["checks_main_passes"] = v.newChecks; }
+            if (v.newTests.len() > 0) { e["tests_main_passes"] = v.newTests; }
+        }
+    }
+    final doc = mut {<str: any>};
+    doc["pr"] = r.pr;
+    doc["head"] = r.head;
+    doc["base"] = r.base;
+    doc["state"] = r.state;
+    doc["stage"] = r.stage;
+    doc["reason"] = r.reason;
+    doc["action"] = r.action;
+    doc["model"] = r.model;
+    if (r.merge != "") {
+        doc["merge"] = r.merge;
+    }
+    doc["evidence"] = e;
+    return encode(doc);
 }
 
 // applyCommands is what apply runs for r: queueing and reruns only, never a merge past
@@ -1153,27 +1389,79 @@ fun records(sel: Selector) > [Record] !> any {
 
     final conflicting = mut [<Pull>];
     foreach (p in chosen) {
-        if (stateOf(p, open: open) == "conflicting") {
+        if (stageOf(p, open: open) == "conflicting") {
             conflicting.append(p);
         }
     }
     final conflicts = conflictsOf(conflicting);
+    // main's run is read once, and only when a finished red needs comparing with it.
+    var baseline: Baseline? = null;
     final acc = mut[<Record>];
     foreach (p in chosen) {
-        final state = stateOf(p, open: open);
-        var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>] };
-        if (state == "red") {
-            facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p) };
-        } else if (state == "kicked-back" and p.kick != null) {
-            facts = Facts{ generated = generatedOf(p.kick!.paths) };
+        final stage = stageOf(p, open: open);
+        var tests = [<str>];
+        if (completedRed(p) and stage != "merged" and stage != "closed") {
+            if (baseline == null) {
+                baseline = mainBaseline();
+            }
+            if (inheritedChecks(p, baseline: baseline!)) {
+                tests = failingTestsFor(p);
+            }
+        }
+        var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests };
+        final verdict = verdictOf(p, facts: facts);
+        if (verdict.state == "red" and LANDABLE.indexOf(stage) != null) {
+            facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p), baseline = baseline, failingTests = tests };
+        } else if (stage == "kicked-back" and p.kick != null) {
+            facts = Facts{ generated = generatedOf(p.kick!.paths), baseline = baseline, failingTests = tests };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
         if (r.action == "rerun") {
             r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, failedSteps = facts.failedSteps,
-                attempts = attemptsOf(r.evidence.rerun) });
+                attempts = attemptsOf(r.evidence.rerun), baseline = baseline, failingTests = tests });
         }
         acc.append(r);
+    }
+    return acc;
+}
+
+// The workflow whose push runs on main are the baseline a pull request's failures are
+// compared with.
+final CI_WORKFLOW = "ci.yaml";
+
+// mainBaseline reads main's latest push run of CI that judged anything: its failing jobs,
+// and the Go tests their logs report failing.
+fun mainBaseline() > Baseline !> any {
+    final runs = capture("gh", args: ["run", "list", "--branch", "main", "--event", "push", "--workflow", CI_WORKFLOW,
+        "--status", "completed", "--limit", "20", "--json", "databaseId,conclusion,url"]);
+    final run = baselineRunOf(runs);
+    if (run == null) {
+        throw "pull-requests: no completed {CI_WORKFLOW} run on main passed or failed among the last 20";
+    }
+    final id = "{run!.q("databaseId").integerValue()}";
+    final failing = failingJobsOf(capture("gh", args: ["run", "view", id, "--json", "jobs"]));
+    var tests = [<str>];
+    if (failing.len() > 0) {
+        tests = failingTestsOf(capture("gh", args: ["run", "view", id, "--log-failed"]));
+    }
+    return Baseline{ url = run!.q("url").stringValue(), failingChecks = failing, failingTests = tests };
+}
+
+// failingTestsFor reads the Go tests p's failing runs report failing, one log per run.
+fun failingTestsFor(p: Pull) > [str] !> any {
+    final acc = mut [<str>];
+    final read = mut [<str>];
+    foreach (c in failing(p.checks)) {
+        if (c.run == "" or c.conclusion != "FAILURE" or read.indexOf(c.run) != null) {
+            continue;
+        }
+        read.append(c.run);
+        foreach (name in failingTestsOf(capture("gh", args: ["run", "view", c.run, "--log-failed"]))) {
+            if (acc.indexOf(name) == null) {
+                acc.append(name);
+            }
+        }
     }
     return acc;
 }
@@ -1262,12 +1550,12 @@ test "an unreadable kick marker is a kick with no code" {
     assert\equal(kickOf(serialize\jsonDecode(`[{"body": "no marker"}]`).listValue()), want: null, message: "no kick-back");
 }
 
-test "state is the first thing between a pull request and its merge" {
+test "stage is the first thing other than checks between a pull request and its merge" {
     final bottom = Pull{ number = 1, head = "a" };
     final top = Pull{ number = 2, head = "b", base = "a", labels = ["merge-queue: squash"] };
     final open = [bottom, top];
     final expect = fun(p: Pull, want: str) > void {
-        assert\equal(stateOf(p, open: open), want: want, message: "#{p.number} {want}");
+        assert\equal(stageOf(p, open: open), want: want, message: "#{p.number} {want}");
     };
     final failed = [red("t", conclusion: "FAILURE", job: "1")];
     expect(Pull{ number = 3, state = "MERGED" }, want: "merged");
@@ -1279,7 +1567,7 @@ test "state is the first thing between a pull request and its merge" {
     expect(Pull{ number = 3, labels = [KICKED], checks = failed }, want: "kicked-back");
     expect(Pull{ number = 3, labels = [NEEDS_REGENERATION] }, want: "kicked-back");
     expect(Pull{ number = 3, labels = [KICKED], autoMerge = true }, want: "queued");
-    expect(Pull{ number = 3, autoMerge = true, checks = failed }, want: "red");
+    expect(Pull{ number = 3, autoMerge = true, checks = failed }, want: "queued");
     expect(Pull{ number = 3, mergeState = "BEHIND" }, want: "behind");
     expect(Pull{ number = 3, autoMerge = true }, want: "queued");
     expect(Pull{ number = 3, labels = ["merge-queue: rebase"] }, want: "queued");
@@ -1316,7 +1604,7 @@ test "a base merge goes to sonnet only when regeneration or keeping both sides s
 test "a conflicting record carries its paths and model" {
     final p = Pull{ number = 5, head = "h", mergeable = "CONFLICTING", files = ["internal/cache/key.go"] };
     final r = classify(p, open: [p], facts: Facts{ conflicts = [Conflict{ path = "MAGUS.md", generated = true }] });
-    assert\equal([r.state, r.action, r.model], want: ["conflicting", "merge-base", "sonnet"], message: "generated only");
+    assert\equal([r.stage, r.action, r.model], want: ["conflicting", "merge-base", "sonnet"], message: "generated only");
     assert\equal(r.evidence.conflicts, want: ["MAGUS.md"], message: "paths");
 }
 
@@ -1430,8 +1718,9 @@ test "a red record says whether to rerun, and who fixes it" {
     expect([shard], facts: Facts{ failedSteps = {"7": ["Run jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654"]} }, action: "rerun", model: "none");
     expect([shard], facts: Facts{ failedSteps = {"7": ["Run jdx/mise-action@7e36c90", "Run CI for shard"]} }, action: "fix", model: "opus");
     expect([shard], facts: Facts{ failedSteps = {"7": ["Set up job"]}, attempts = {"11": 2} }, action: "fix", model: "opus");
-    expect([shard, red("magus shard 1: docs", conclusion: "PENDING", job: "12")],
-        facts: Facts{ failedSteps = {"7": ["Set up job"]} }, action: "none", model: "none");
+    final going = Pull{ number = 4, files = files, checks = [shard, red("magus shard 1: docs", conclusion: "PENDING", job: "12")] };
+    final waiting = classify(going, open: [going], facts: Facts{ failedSteps = {"7": ["Set up job"]} });
+    assert\equal([waiting.state, waiting.action, waiting.model], want: ["running", "none", "none"], message: "a red beside a running check waits for it");
     expect([red(HYGIENE, conclusion: "FAILURE", job: "9"), red("t", conclusion: "CANCELLED", job: "7")], facts: Facts{}, action: "fix", model: "sonnet");
     final rerun = classify(Pull{ number = 4, checks = [red("t", conclusion: "CANCELLED", job: "7")] }, open: [<Pull>], facts: Facts{});
     assert\equal(rerun.evidence.rerun, want: ["11"], message: "the run to rerun");
@@ -1451,7 +1740,7 @@ test "a kick-back is fixed by the model its code and paths call for" {
     final kicked = fun (code: str, paths: [str]) > Pull => Pull{ number = 6, labels = [KICKED], kick = Kick{ code = code, paths = paths, url = "u" } };
     final expect = fun(p: Pull, facts: Facts, action: str, model: str) > void {
         final r = classify(p, open: [p], facts: facts);
-        assert\equal([r.state, r.action, r.model], want: ["kicked-back", action, model], message: r.reason);
+        assert\equal([r.stage, r.action, r.model], want: ["kicked-back", action, model], message: r.reason);
     };
     expect(kicked("KICK_CONFLICT", paths: ["a.go"]), facts: Facts{}, action: "merge-base", model: "opus");
     expect(kicked("KICK_RED", paths: ["a.go"]), facts: Facts{}, action: "fix", model: "opus");
@@ -1468,7 +1757,7 @@ test "a kick-back is fixed by the model its code and paths call for" {
 test "a green pull request is queued, a stack by the label on its top" {
     final lone = Pull{ number = 1, head = "a", checks = [green("t")] };
     final r = classify(lone, open: [lone], facts: Facts{});
-    assert\equal([r.state, r.action, r.model], want: ["needs-queue", "queue", "none"], message: "lone");
+    assert\equal([r.state, r.stage, r.action, r.model], want: ["green", "needs-queue", "queue", "none"], message: "lone");
     assert\equal(applyCommands(r, method: "squash"), want: [["gh", "pr", "merge", "1", "--auto", "--squash"]], message: "auto-merge");
 
     final mid = Pull{ number = 2, head = "b", base = "a" };
@@ -1520,7 +1809,7 @@ test "model none goes only with no action or one apply takes" {
 test "a status line carries the record and only the evidence it has" {
     final p = Pull{ number = 9, head = "h", mergeable = "CONFLICTING" };
     final r = classify(p, open: [p], facts: Facts{ conflicts = [Conflict{ path = "a.go" }] });
-    final want = `{"pr":9,"head":"h","base":"main","state":"conflicting","reason":"conflicts with main in source","action":"merge-base","model":"opus","evidence":{"conflicts":["a.go"]}}`;
+    final want = `{"pr":9,"head":"h","base":"main","state":"running","stage":"conflicting","reason":"conflicts with main in source","action":"merge-base","model":"opus","evidence":{"conflicts":["a.go"]}}`;
     assert\equal(render(r), want: want, message: "one line");
 }
 
@@ -1559,4 +1848,114 @@ test "selection is the requested numbers or the author's pull requests" {
     assert\equal(numbers(selected(open, prs: [2, 3], author: "")), want: [2, 3], message: "by number");
     assert\equal(sensitivePaths(["internal/queue/plan.go", "internal/cache/key.go", ".github/workflows/ci.yaml"]),
         want: ["internal/queue/plan.go", ".github/workflows/ci.yaml"], message: "sensitive paths");
+}
+
+// Lines of `gh run view --log-failed`, trimmed from main's run 36279682496: job, step,
+// timestamp, then the job's own output.
+final FAILED_LOG = "magus shard 0: .\tRun CI for shard\t2026-09-26T23:42:55.9402489Z --- FAIL: TestAcquireDefersToAPredecessorThatHolds (0.05s)\n"
+    + "magus shard 0: .\tRun CI for shard\t2026-09-26T23:42:55.9409496Z     --- FAIL: TestPipe/red_upstream (0.00s)\n"
+    + "magus shard 0: .\tRun CI for shard\t2026-09-26T23:42:55.9415197Z --- FAIL: TestAcquireDefersToAPredecessorThatHolds (0.05s)\n"
+    + "magus shard 2: docs\tRun CI for shard\t2026-09-26T23:37:10.6360667Z Getting action download info\n"
+    + "magus shard 0: .\tRun CI for shard\t2026-09-26T23:42:56.0000000Z FAIL\tgithub.com/egladman/magus/internal/pipe\t4.1s\n";
+
+final MAIN = Baseline{ url = "https://github.com/egladman/magus/actions/runs/36279682496",
+    failingChecks = ["magus shard 0: .", "ci gate"], failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] };
+
+fun failed(name: str) > Check {
+    return Check{ name = name, conclusion = "FAILURE", run = "11", job = "7", runUrl = "https://github.com/egladman/magus/actions/runs/11" };
+}
+
+test "a job log's failing Go tests are read once each, subtests included" {
+    assert\equal(failingTestsOf(FAILED_LOG), want: ["TestAcquireDefersToAPredecessorThatHolds", "TestPipe/red_upstream"], message: "tests");
+    assert\equal(failingTestsOf("ok  \tgithub.com/egladman/magus\t1.2s\n").len(), want: 0, message: "a passing log");
+}
+
+test "main's baseline is its latest run that passed or failed, and its failed jobs" {
+    final runs = `[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}, {"databaseId": 2, "conclusion": "failure", "url": "u2"}, {"databaseId": 1, "conclusion": "success", "url": "u1"}]`;
+    assert\equal(baselineRunOf(runs)!.q("url").stringValue(), want: "u2", message: "a cancelled run judged nothing");
+    assert\equal(baselineRunOf(`[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}]`), want: null, message: "none judged");
+    final jobs = `{"jobs": [{"name": "magus plan", "conclusion": "success"}, {"name": "magus shard 0: .", "conclusion": "failure"}, {"name": "magus advisor", "conclusion": "skipped"}, {"name": "magus shard 1: docs", "conclusion": "cancelled"}, {"name": "ci gate", "conclusion": "failure"}]}`;
+    assert\equal(failingJobsOf(jobs), want: ["magus shard 0: .", "ci gate"], message: "failed jobs only");
+}
+
+test "a check's run page is kept for the evidence" {
+    final p = pullOf(serialize\jsonDecode(SAMPLE));
+    assert\equal(p.checks[1].runUrl, want: "https://github.com/egladman/magus/actions/runs/36074168245", message: "the run, not the job");
+}
+
+test "the checks on the head decide running, green, red-inherited and red" {
+    final expect = fun (checks: [Check], facts: Facts, want: str) > Verdict {
+        final v = verdictOf(Pull{ number = 1, checks = checks }, facts: facts);
+        assert\equal(v.state, want: want, message: want);
+        return v;
+    };
+    expect([<Check>], facts: Facts{}, want: "running");
+    expect([green("t"), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
+    expect([failed("magus shard 0: ."), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
+    expect([green("t"), Check{ name = "u", conclusion = "SKIPPED" }], facts: Facts{}, want: "green");
+
+    final inherited = expect([green("t"), failed("magus shard 0: ."), failed("ci gate")],
+        facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] }, want: "red-inherited");
+    assert\equal(inherited.mainRun, want: MAIN.url, message: "names main's run");
+    assert\equal(inherited.headRuns, want: ["https://github.com/egladman/magus/actions/runs/11"], message: "names the head's run");
+
+    final newTest = expect([failed("magus shard 0: ."), failed("ci gate")],
+        facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds", "TestKeyIsStable"] }, want: "red");
+    assert\equal([newTest.newChecks.len(), newTest.newTests.len()], want: [0, 1], message: "only the test main passes");
+    assert\equal(newTest.newTests, want: ["TestKeyIsStable"], message: "names it");
+
+    final newCheck = expect([failed("magus shard 0: ."), failed(HYGIENE)], facts: Facts{ baseline = MAIN }, want: "red");
+    assert\equal(newCheck.newChecks, want: [HYGIENE], message: "the check main passes");
+
+    expect([failed("magus shard 1: ."), failed("ci gate")],
+        facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] }, want: "red-inherited");
+    assert\equal([checkKey("magus shard 0: docs"), checkKey("magus shard 2: docs"), checkKey("ci gate")],
+        want: ["magus shard : docs", "magus shard : docs", "ci gate"], message: "a shard is matched by its project");
+    final cancelled = expect([Check{ name = "magus shard 0: .", conclusion = "CANCELLED", run = "11" }], facts: Facts{ baseline = MAIN }, want: "red");
+    assert\equal(cancelled.newChecks, want: ["magus shard 0: ."], message: "a run that never judged the change is not main's failure");
+    expect([failed("magus shard 0: .")], facts: Facts{}, want: "red");
+}
+
+test "only a green or red-inherited pull request on a landable stage carries a merge command" {
+    final inheritedFacts = Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] };
+    final expect = fun (p: Pull, facts: Facts, state: str, merge: bool) > Record {
+        final r = classify(p, open: [p], facts: facts);
+        assert\equal(r.state, want: state, message: "#{p.number} {r.reason}");
+        assert\equal(r.merge == "gh pr merge {p.number} --squash --admin", want: merge, message: "#{p.number} merge");
+        if (!merge) {
+            assert\equal(r.merge, want: "", message: "#{p.number} no command");
+        }
+        return r;
+    };
+    final lone = expect(Pull{ number = 1, checks = [green("t")] }, facts: Facts{}, state: "green", merge: true);
+    assert\equal(lone.action, want: "queue", message: "apply still queues green");
+    expect(Pull{ number = 2, checks = [green("t")], mergeState = "BEHIND" }, facts: Facts{}, state: "green", merge: true);
+    expect(Pull{ number = 3, checks = [green("t")], autoMerge = true }, facts: Facts{}, state: "green", merge: true);
+
+    final inherited = expect(Pull{ number = 4, checks = [failed("magus shard 0: .")] }, facts: inheritedFacts, state: "red-inherited", merge: true);
+    assert\equal([inherited.action, inherited.model], want: ["none", "none"], message: "nothing for an agent to fix");
+    assert\equal(applyCommands(inherited, method: "squash").len(), want: 0, message: "apply neither queues nor reruns it");
+
+    expect(Pull{ number = 5, checks = [failed("magus shard 0: .")] }, facts: Facts{}, state: "red", merge: false);
+    expect(Pull{ number = 6, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, facts: Facts{}, state: "running", merge: false);
+    expect(Pull{ number = 7, checks = [green("t")], draft = true }, facts: Facts{}, state: "green", merge: false);
+    expect(Pull{ number = 8, checks = [green("t")], mergeable = "CONFLICTING" }, facts: Facts{}, state: "green", merge: false);
+    expect(Pull{ number = 9, checks = [green("t")], labels = [KICKED] }, facts: Facts{}, state: "green", merge: false);
+    expect(Pull{ number = 10, checks = [green("t")], state = "MERGED" }, facts: Facts{}, state: "green", merge: false);
+    expect(Pull{ number = 11, checks = [green("t")], mergeable = "UNKNOWN" }, facts: Facts{}, state: "green", merge: false);
+}
+
+test "a red-inherited line names both runs, a red one the failures main does not have" {
+    final inherited = classify(Pull{ number = 4, head = "h", checks = [failed("magus shard 0: .")] }, open: [<Pull>],
+        facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] });
+    final line = render(inherited);
+    foreach (want in [`"state":"red-inherited"`, `"merge":"gh pr merge 4 --squash --admin"`, `"main_run":"{MAIN.url}"`,
+        `"head_runs":["https://github.com/egladman/magus/actions/runs/11"]`, `"failing_tests":["TestAcquireDefersToAPredecessorThatHolds"]`]) {
+        assert\equal(line.indexOf(want) != null, want: true, message: "{want} in {line}");
+    }
+    final red = render(classify(Pull{ number = 5, checks = [failed("magus shard 0: .")] }, open: [<Pull>],
+        facts: Facts{ baseline = MAIN, failingTests = ["TestKeyIsStable"] }));
+    assert\equal(red.indexOf(`"tests_main_passes":["TestKeyIsStable"]`) != null, want: true, message: red);
+    assert\equal(red.indexOf(`"merge"`) == null, want: true, message: "no merge command on red");
+    assert\equal(red.indexOf("ready") == null and line.indexOf("ready") == null, want: true, message: "no word the board does not define");
 }
