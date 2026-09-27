@@ -2364,7 +2364,22 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
             + "`magus-utils cut` would refuse and this release would publish binaries with no notes. "
             + "Write the entries before tagging"));
     } else {
-        checks.append(passed("changelog", changelog\FRAGMENT_DIR + " holds {fragments.len()} fragment(s) for cut to fold"));
+        // Counting is not parsing: pr-changelog only lints the fragments a pull request
+        // ADDS, so one merged from another branch, or hand-edited after landing, could
+        // carry more than one entry and still count here - and fail `cut` after the
+        // binaries are already built, in the publish job, with the version already tagged.
+        // allow_failure surfaces every malformed fragment as one check instead of failing
+        // this whole preflight function before the checks after it get to run.
+        var paths = mut [<str>];
+        foreach (f in fragments) { paths.append(f.value); }
+        final lint = proc\exec("go", ["run", "./cmd/magus-utils", "lint-fragments"] + paths,
+            opts: {"allow_failure": true, "quiet": true});
+        if (!lint.ok) {
+            checks.append(failed("changelog", "`magus-utils cut` would refuse " + changelog\FRAGMENT_DIR
+                + ": " + lint.stderr.trim()));
+        } else {
+            checks.append(passed("changelog", changelog\FRAGMENT_DIR + " holds {fragments.len()} fragment(s) for cut to fold"));
+        }
     }
 
     // (d) The trigger, from both sides. A nested tag that matched would run the whole
@@ -3302,6 +3317,18 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
     proc\exec("actionlint", []);
+
+    // Every unreleased fragment, not only the ones a pull request ADDS: pr-changelog
+    // lints those and nothing else, so a fragment merged from another branch, or edited
+    // after landing, went unchecked until `magus-utils cut` refused it in the publish job,
+    // after the release binaries were already built. Same lint-fragments entry point
+    // pr-changelog calls, over the whole directory.
+    final fragments = fs\glob(changelog\FRAGMENT_DIR + "*.md");
+    if (fragments.len() > 0) {
+        var paths = mut [<str>];
+        foreach (f in fragments) { paths.append(f.value); }
+        proc\exec("go", ["run", "./cmd/magus-utils", "lint-fragments"] + paths);
+    }
 }
 // Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than
 // prettier because it needs no Node in the format path, and rather than biome because
