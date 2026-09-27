@@ -12,6 +12,9 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/queue"
+	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -425,4 +428,132 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	} {
 		assert.Error(t, jobExec(t.Context(), root, args), name)
 	}
+}
+
+// inflightFixture is the in-flight plan's fixture: two job trees, one checkout on
+// landlord-rebase, eight open changes on main listed out of plan order, one plan of one
+// partition and one verdict.
+func inflightFixture() (types.JobList, job.InflightInput) {
+	rows := []types.Job{
+		{ID: "fleet", State: types.StateRunning},
+		{ID: "child-job-wait", Parent: "fleet", State: types.StatePass, CheckoutRoot: "/w/child-job-wait"},
+		{ID: "status-wait", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/status-wait"},
+		{ID: "landlord-rebase", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/landlord-rebase"},
+		{ID: "inflight-view", Parent: "fleet", State: types.StateRunning, ReadOnly: true, CheckoutRoot: "/w/main"},
+		{ID: "their-fleet", State: types.StateRunning},
+		{ID: "their-work", Parent: "their-fleet", State: types.StateRunning, CheckoutRoot: "/w/theirs"},
+	}
+	change := func(id, branch, title, author string) qtypes.Change {
+		return qtypes.Change{ID: id, Head: strings.Repeat(id, 14)[:40], Branch: branch, Base: "main", Title: title, Author: author, Method: qtypes.MethodSquash}
+	}
+	c438 := change("438", "guard-reads-and-searches", "guard reads and searches", "egladman")
+	c443 := change("443", "landlord-rebase", "rebase the landlord onto the job store before a worker forks its own child", "egladman")
+	c445 := change("445", "trimpath-tests-more", "trimpath the remaining tests", "egladman")
+	c450 := change("450", "merge-queue-dashboard", "merge queue dashboard", "egladman")
+	c456 := change("456", "fix-444-review", "fix the 444 review", "egladman")
+	c457 := change("457", "theirs", "their change", "priya")
+	c459 := change("459", "status-wait", "status wait pipe", "egladman")
+	in := job.InflightInput{
+		Fetch: &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 1790514000, ElapsedMS: 812},
+		Changes: qtypes.Changes{
+			Base:    "main",
+			Changes: []qtypes.Change{c443, c438, c450, c445, c456, c457, c459},
+			Unqueued: []qtypes.UnqueuedChange{
+				{ID: "458", Head: strings.Repeat("8", 40), Branch: "child-job-wait", Base: "main", Title: "child job wait", Author: "egladman", Mark: qtypes.MarkKickedBack},
+			},
+		},
+		Plan: &qtypes.Plan{
+			Base: "main", BaseCommit: "f223bb1" + strings.Repeat("0", 33), Depth: 1,
+			Partitions: [][]qtypes.Change{{c438, c443, c445, c450, c456, c457}},
+			Verdicts:   []qtypes.Verdict{{Change: c459, Decision: qtypes.DecisionKick, Code: qtypes.CodeKickRed, Reason: "pr hygiene: changelog fragment missing"}},
+		},
+		Branches: map[string]string{
+			"/w/child-job-wait": "child-job-wait", "/w/status-wait": "status-wait", "/w/landlord-rebase": "landlord-rebase",
+			"/w/main": "main", "/w/theirs": "theirs",
+		},
+		Me: job.Identity{Lease: "landlord-rebase", Login: "egladman"},
+	}
+	return types.JobList{Jobs: rows}, in
+}
+
+// The plan's proof: the reader's two kicked-back changes first, the five queued in plan
+// order whatever order the provider listed them in, and everyone else as one count line.
+func TestLsJobsPrintsTheChangesInFlight(t *testing.T) {
+	t.Parallel()
+	list, in := inflightFixture()
+	render := func(all bool) string {
+		var out strings.Builder
+		printInflight(&out, job.Inflight(list, in), all)
+		return out.String()
+	}
+	head := "in flight on main at f223bb100000, as of 2026-09-27 13:00 UTC (github, github.com, 812ms)\n"
+	kicked := "" +
+		"  #459  status wait pipe  KICK_RED: pr hygiene: changelog fragment missing  job status-wait\n" +
+		"  #458  child job wait    kicked back                                       job child-job-wait\n"
+	queued := "" +
+		"  #438  guard reads and searches                            pos 1\n" +
+		"  #443  rebase the landlord onto the job store before a...  pos 2  job landlord-rebase\n" +
+		"  #445  trimpath the remaining tests                        pos 3\n" +
+		"  #450  merge queue dashboard                               pos 4\n" +
+		"  #456  fix the 444 review                                  pos 5\n"
+	tail := "jobs without a change (1)\n  inflight-view\n"
+	refetch := "refetch: magus queue ls --provider github --base main\n"
+
+	assert.Equal(t, head+"needs me (2)\n"+kicked+"queued, in plan order (5)\n"+queued+tail+"others: 1 queued\n"+refetch, render(false))
+	assert.Equal(t, head+"needs the author (2)\n"+kicked+"queued, in plan order (6)\n"+queued+
+		"  #457  their change                                        pos 6  job their-work\n"+tail+refetch, render(true))
+	assert.Equal(t, render(false), render(false), "one store and one snapshot render the same bytes")
+}
+
+func TestLsJobsRendersTheRecordTheSameTwice(t *testing.T) {
+	t.Parallel()
+	list, in := inflightFixture()
+	first, err := json.Marshal(job.Inflight(list, in))
+	require.NoError(t, err)
+	second, err := json.Marshal(job.Inflight(list, in))
+	require.NoError(t, err)
+	assert.Equal(t, string(first), string(second))
+}
+
+func TestLsChangesSaysWhenTheQueueWasNeverFetched(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	root, _ := execFixture(t, leaseRow("fleet", ""))
+	withOutput(t, "")
+	out := captureStdout(t, func() {
+		require.NoError(t, lsJobs(root, []string{"--changes"}))
+	})
+	assert.Equal(t, "in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes\n", out)
+}
+
+// Read end to end from a snapshot: a caller no job or login names sees everyone's.
+func TestLsChangesReadsTheSnapshot(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	root, _ := execFixture(t, leaseRow("fleet", ""))
+	_, in := inflightFixture()
+	require.NoError(t, queue.WriteSnapshot(root, queue.Snapshot{Fetched: *in.Fetch, Changes: in.Changes}))
+
+	withOutput(t, "name")
+	out := captureStdout(t, func() {
+		require.NoError(t, lsJobs(root, []string{"--changes"}))
+	})
+	assert.Equal(t, "443\n438\n450\n445\n456\n457\n459\n458\n", out)
+}
+
+func TestDescribeJobPrintsItsChange(t *testing.T) {
+	t.Parallel()
+	list, in := inflightFixture()
+	joined := job.Inflight(list, in)
+	var out strings.Builder
+	printJobChange(&out, joined.Changes, "landlord-rebase")
+	printJobChange(&out, joined.Changes, "child-job-wait")
+	printJobChange(&out, joined.Changes, "inflight-view")
+	assert.Equal(t, "\nchange: #443 rebase the landlord onto the job store before a..., the queue's turn, pos 2\n"+
+		"\nchange: #458 child job wait, its author's turn, kicked back\n", out.String())
+}
+
+func TestLsJobsClipsATitleAtAWord(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "short", clipTitle("short", 48))
+	assert.Equal(t, "one two...", clipTitle("one two three", 9))
+	assert.Equal(t, "abcdefgh...", clipTitle("abcdefghijk", 8), "no space to cut at")
 }
