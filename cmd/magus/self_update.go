@@ -4,12 +4,13 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -34,6 +35,45 @@ func activeOpts() selfupdate.Options {
 		opts.Keys = selfupdate.ReleaseKeys
 	}
 	return opts
+}
+
+// discoveryHost returns the hostname a release index fetch will use, mirroring
+// selfupdate.Options.discoveryURL's precedence (explicit opts.DiscoveryURL, then
+// MAGUS_UPDATE_URL, then the default site) so the confirmation prompt names the
+// actual source instead of assuming GitHub, which only ever hosts the artifacts.
+func discoveryHost(opts selfupdate.Options) string {
+	raw := opts.DiscoveryURL
+	if raw == "" {
+		raw = os.Getenv("MAGUS_UPDATE_URL")
+	}
+	if raw == "" {
+		raw = selfupdate.DefaultDiscoveryURL
+	}
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return raw
+}
+
+// confirmInstall asks the caller to approve an install unless yes is set, and
+// returns a non-nil error when they declined or when stdin is not a terminal
+// and --yes was not given: a script piping this command must see a nonzero
+// exit whenever nothing was installed, not the exit code of a prompt that
+// silently returned nil after "aborted".
+func confirmInstall(out io.Writer, in io.Reader, isTerminal, yes bool, version, host, targetPath string) error {
+	if yes {
+		return nil
+	}
+	if !isTerminal {
+		return fmt.Errorf("non-interactive terminal: use --%s (-%s) to confirm the update", gen.FlagSelfUpdateYes, gen.FlagSelfUpdateY)
+	}
+	fmt.Fprintf(out, "Install magus %s from %s -> %s? [y/N] ", version, host, targetPath)
+	var answer string
+	_, scanErr := fmt.Fscanln(in, &answer)
+	if scanErr != nil || strings.ToLower(strings.TrimSpace(answer)) != "y" {
+		return fmt.Errorf("declined: magus %s was not installed", version)
+	}
+	return nil
 }
 
 // selfUpdateCompiled is true when the binary includes self-update support
@@ -107,7 +147,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
 	}
-	// -y and --uf.Yes are one switch, which the registry expresses with AliasOf.
+	// -y and --yes are one switch, which the registry expresses with AliasOf.
 	uf := gen.BindSelfUpdate(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -141,7 +181,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	}
 
 	// Downgrade/freeze protection.
-	// --version is an explicit request; allow downgrade only with --version or --uf.Force.
+	// --version is an explicit request; allow downgrade only with --version or --force.
 	// Without --version (auto-latest), never silently downgrade.
 	if version == "unknown" {
 		// Dev build: there is no running version to compare against, so
@@ -149,28 +189,29 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		// release mislabeled by a compromised or stale index. Require an
 		// explicit choice instead of guessing.
 		if !uf.Force && uf.Version == "" {
-			return errors.New(
-				"running build is unversioned (dev build): refusing to auto-select a release\n" +
-					"  use --version to install a specific release, or --uf.Force to proceed anyway",
+			return fmt.Errorf(
+				"running build is unversioned (dev build): refusing to auto-select a release\n"+
+					"  use --%s to install a specific release, or --%s to proceed anyway",
+				gen.FlagSelfUpdateVersion, gen.FlagSelfUpdateForce,
 			)
 		}
 	} else if !uf.Force {
 		switch selfupdate.Compare(rel.Version, version) {
 		case 0:
-			return fmt.Errorf("magus self update: already running %s (use --uf.Force to reinstall)", version)
+			return fmt.Errorf("magus self update: already running %s (use --%s to reinstall)", version, gen.FlagSelfUpdateForce)
 		case -1:
 			if uf.Version == "" {
 				// Auto-latest is below running: refuse unconditionally unless forced.
 				return fmt.Errorf(
 					"index advertises %s but you are running %s - refusing downgrade\n"+
-						"  use --version %s to install a specific older release, or --uf.Force to override",
-					rel.Version, version, rel.Version,
+						"  use --%s %s to install a specific older release, or --%s to override",
+					rel.Version, version, gen.FlagSelfUpdateVersion, rel.Version, gen.FlagSelfUpdateForce,
 				)
 			}
-			// Explicit --version downgrade: still require --uf.Force.
+			// Explicit --version downgrade: still require --force.
 			return fmt.Errorf(
-				"target %s is older than current %s (use --uf.Force to allow downgrade)",
-				rel.Version, version,
+				"target %s is older than current %s (use --%s to allow downgrade)",
+				rel.Version, version, gen.FlagSelfUpdateForce,
 			)
 		}
 	}
@@ -210,16 +251,8 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	if !uf.Yes {
-		if !tty.StdinIsTerminal() {
-			return errors.New("non-interactive terminal: use --uf.Yes / -y to confirm the update")
-		}
-		fmt.Printf("Install magus %s -> %s? [y/N] ", manifest.Version, targetPath)
-		var answer string
-		if _, err := fmt.Scanln(&answer); err != nil || strings.ToLower(strings.TrimSpace(answer)) != "y" {
-			fmt.Fprintln(os.Stderr, "aborted")
-			return nil //nolint:nilerr // Scanln failure (e.g. empty line) is treated as a declined prompt, not a fatal error
-		}
+	if err := confirmInstall(os.Stdout, os.Stdin, tty.StdinIsTerminal(), uf.Yes, manifest.Version, discoveryHost(opts), targetPath); err != nil {
+		return err
 	}
 
 	if err := selfupdate.CheckWritable(targetPath); err != nil {
