@@ -431,14 +431,14 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 }
 
 // inflightFixture is the in-flight plan's fixture: two job trees, one checkout on
-// landlord-rebase, eight open changes on main listed out of plan order, one plan of one
+// fork-row-rebase, eight open changes on main listed out of plan order, one plan of one
 // partition and one verdict.
 func inflightFixture() (types.JobList, job.InflightInput) {
 	rows := []types.Job{
 		{ID: "fleet", State: types.StateRunning},
 		{ID: "child-job-wait", Parent: "fleet", State: types.StatePass, CheckoutRoot: "/w/child-job-wait"},
 		{ID: "status-wait", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/status-wait"},
-		{ID: "landlord-rebase", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/landlord-rebase"},
+		{ID: "fork-row-rebase", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/fork-row-rebase"},
 		{ID: "inflight-view", Parent: "fleet", State: types.StateRunning, ReadOnly: true, CheckoutRoot: "/w/main"},
 		{ID: "their-fleet", State: types.StateRunning},
 		{ID: "their-work", Parent: "their-fleet", State: types.StateRunning, CheckoutRoot: "/w/theirs"},
@@ -447,7 +447,7 @@ func inflightFixture() (types.JobList, job.InflightInput) {
 		return qtypes.Change{ID: id, Head: strings.Repeat(id, 14)[:40], Branch: branch, Base: "main", Title: title, Author: author, Method: qtypes.MethodSquash}
 	}
 	c438 := change("438", "guard-reads-and-searches", "guard reads and searches", "egladman")
-	c443 := change("443", "landlord-rebase", "rebase the landlord onto the job store before a worker forks its own child", "egladman")
+	c443 := change("443", "fork-row-rebase", "rebase the fork row onto the job store before a worker forks its own child", "egladman")
 	c445 := change("445", "trimpath-tests-more", "trimpath the remaining tests", "egladman")
 	c450 := change("450", "merge-queue-dashboard", "merge queue dashboard", "egladman")
 	c456 := change("456", "fix-444-review", "fix the 444 review", "egladman")
@@ -468,10 +468,10 @@ func inflightFixture() (types.JobList, job.InflightInput) {
 			Verdicts:   []qtypes.Verdict{{Change: c459, Decision: qtypes.DecisionKick, Code: qtypes.CodeKickRed, Reason: "pr hygiene: changelog fragment missing"}},
 		},
 		Branches: map[string]string{
-			"/w/child-job-wait": "child-job-wait", "/w/status-wait": "status-wait", "/w/landlord-rebase": "landlord-rebase",
+			"/w/child-job-wait": "child-job-wait", "/w/status-wait": "status-wait", "/w/fork-row-rebase": "fork-row-rebase",
 			"/w/main": "main", "/w/theirs": "theirs",
 		},
-		Me: job.Identity{Lease: "landlord-rebase", Login: "egladman"},
+		Me: job.Identity{Lease: "fork-row-rebase", Login: "egladman"},
 	}
 	return types.JobList{Jobs: rows}, in
 }
@@ -492,7 +492,7 @@ func TestLsJobsPrintsTheChangesInFlight(t *testing.T) {
 		"  #458  child job wait    kicked back                                       job child-job-wait\n"
 	queued := "" +
 		"  #438  guard reads and searches                            pos 1\n" +
-		"  #443  rebase the landlord onto the job store before a...  pos 2  job landlord-rebase\n" +
+		"  #443  rebase the fork row onto the job store before a...  pos 2  job fork-row-rebase\n" +
 		"  #445  trimpath the remaining tests                        pos 3\n" +
 		"  #450  merge queue dashboard                               pos 4\n" +
 		"  #456  fix the 444 review                                  pos 5\n"
@@ -515,28 +515,34 @@ func TestLsJobsRendersTheRecordTheSameTwice(t *testing.T) {
 	assert.Equal(t, string(first), string(second))
 }
 
-func TestLsChangesSaysWhenTheQueueWasNeverFetched(t *testing.T) {
+func TestLsJobsSaysWhenTheQueueWasNeverFetched(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	root, _ := execFixture(t, leaseRow("fleet", ""))
 	withOutput(t, "")
 	out := captureStdout(t, func() {
-		require.NoError(t, lsJobs(root, []string{"--changes"}))
+		require.NoError(t, lsJobs(root, nil))
 	})
-	assert.Equal(t, "in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes\n", out)
+	assert.Contains(t, out, "in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes\n")
 }
 
 // Read end to end from a snapshot: a caller no job or login names sees everyone's.
-func TestLsChangesReadsTheSnapshot(t *testing.T) {
+func TestLsJobsReadsTheSnapshot(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	root, _ := execFixture(t, leaseRow("fleet", ""))
 	_, in := inflightFixture()
 	require.NoError(t, queue.WriteSnapshot(root, queue.Snapshot{Fetched: *in.Fetch, Changes: in.Changes}))
 
-	withOutput(t, "name")
+	withOutput(t, "json")
 	out := captureStdout(t, func() {
-		require.NoError(t, lsJobs(root, []string{"--changes"}))
+		require.NoError(t, lsJobs(root, nil))
 	})
-	assert.Equal(t, "443\n438\n450\n445\n456\n457\n459\n458\n", out)
+	var got types.JobList
+	require.NoError(t, json.Unmarshal([]byte(out), &got))
+	var ids []string
+	for _, c := range got.Changes {
+		ids = append(ids, c.ID)
+	}
+	assert.Equal(t, []string{"443", "438", "450", "445", "456", "457", "459", "458"}, ids)
 }
 
 func TestDescribeJobPrintsItsChange(t *testing.T) {
@@ -544,10 +550,10 @@ func TestDescribeJobPrintsItsChange(t *testing.T) {
 	list, in := inflightFixture()
 	joined := job.Inflight(list, in)
 	var out strings.Builder
-	printJobChange(&out, joined.Changes, "landlord-rebase")
+	printJobChange(&out, joined.Changes, "fork-row-rebase")
 	printJobChange(&out, joined.Changes, "child-job-wait")
 	printJobChange(&out, joined.Changes, "inflight-view")
-	assert.Equal(t, "\nchange: #443 rebase the landlord onto the job store before a..., the queue's turn, pos 2\n"+
+	assert.Equal(t, "\nchange: #443 rebase the fork row onto the job store before a..., the queue's turn, pos 2\n"+
 		"\nchange: #458 child job wait, its author's turn, kicked back\n", out.String())
 }
 

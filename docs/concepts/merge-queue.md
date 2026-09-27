@@ -70,7 +70,7 @@ about to see that pull request merged.
 | queue a stack                   | label its top pull request `merge-queue: squash`        |
 | take it out                     | `gh pr merge <n> --disable-auto`, or remove the label   |
 | list what is queued             | `magus queue ls --provider github --base main`          |
-| see yours offline, with jobs    | `magus ls jobs --changes`, from what `queue ls` read    |
+| see yours offline, with jobs    | `magus ls jobs`, from what `queue ls` read              |
 | see why one is waiting          | its `merge-queue` status, which reads `waiting: <why>`  |
 | see why one was kicked back     | the queue's newest comment on it                        |
 | land it past the queue          | `gh pr merge <n> --admin`: an admin's bypass, see below |

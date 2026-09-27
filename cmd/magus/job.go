@@ -186,12 +186,11 @@ func openJobs(root string) (*job.Store, error) {
 
 // lsJobs is `magus ls jobs`: every job this repository carries, whoever holds it.
 func lsJobs(root string, args []string) error {
-	var all, changesOnly bool
+	var all bool
 	rest, err := cmdParse("ls jobs", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "List every in-flight change, not only yours")
-		fs.BoolVar(&changesOnly, "changes", false, "List only the in-flight changes, without the jobs")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [--changes] [--all] [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [--all] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
 			fmt.Fprintln(os.Stderr, "its fork could prove about its write paths (PROOF) and its check, followed by every")
@@ -240,18 +239,6 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if changesOnly {
-		scoped := inflightScope(list.Changes, all)
-		switch opts.Format {
-		case outputName:
-			return emitNamesOf(scoped, func(c types.InflightChange) string { return c.ID })
-		case outputText:
-			printInflight(os.Stdout, list, all)
-			return nil
-		default:
-			return emitFormatted(opts, inflightOutput{Fetched: list.Fetched, Changes: scoped, Unproposed: list.Unproposed})
-		}
-	}
 	if opts.Format != outputName {
 		list.Overlaps = overlapFootprints(ctx, root, list.Jobs, list.Overlaps)
 	}
@@ -272,13 +259,6 @@ func lsJobs(root string, args []string) error {
 		list.Changes = inflightScope(list.Changes, all)
 		return emitFormatted(opts, list)
 	}
-}
-
-// inflightOutput is `ls jobs --changes` under -o: the in-flight part of the job list.
-type inflightOutput struct {
-	Fetched    *types.InflightFetch   `json:"fetched,omitempty"    yaml:"fetched,omitempty"`
-	Changes    []types.InflightChange `json:"changes"              yaml:"changes"`
-	Unproposed []string               `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
 }
 
 // joinInflight joins list to the queue snapshot as the caller sees it: the job it acts
