@@ -1,11 +1,11 @@
 ---
-name: land-pull-requests
-description: Land a batch of open pull requests in THIS repository through the magus merge queue, spending agent work only on the pull requests that need code changes. Use when asked to land, merge or ship open pull requests, or to keep a set of them moving until they reach main. tools/pull-requests.buzz decides each pull request's state, action and model; this skill routes to it and says who does what. Hand-authored for this repository and never shipped.
+name: shepherd-pull-requests
+description: Shepherd a batch of open pull requests in THIS repository through the magus merge queue, spending agent work only on the pull requests that need code changes. Use when asked to shepherd, merge or ship open pull requests, or to keep a set of them moving until they reach main. tools/pull-requests.buzz decides each pull request's state, action and model; this skill routes to it and says who does what. Hand-authored for this repository and never shipped.
 metadata:
   source: workspace
 ---
 
-# Landing pull requests
+# Shepherding pull requests
 
 `tools/pull-requests.buzz` decides; the orchestrator acts on what it prints. Do not
 work out a state, an action or a model from `gh` yourself. When a record looks
@@ -67,7 +67,7 @@ wrong, fix the pure function that produced it and its test, then run it again.
    queue's validation time), or with its pull request monitor, and repeat from 1.
    A record with `action: none` needs nothing from an agent: it is queued,
    waiting on the pull request below it, `running`, or `red-inherited` with a
-   `merge` for the person. A `draft` or `closed` stage never lands on its own;
+   `merge` for the person. A `draft` or `closed` stage never merges on its own;
    tell the person and drop it from the selection.
 
 Stop when every selected record's stage reads `merged`. That `status` output is the
@@ -76,7 +76,7 @@ proof; a green check or the queue's comment is not.
 ## Never
 
 - Never admin-merge (`gh pr merge --admin`) yourself. It skips the queue's
-  validation and its ordering, so nothing checked the combination that lands;
+  validation and its ordering, so nothing checked the combination that merges;
   the record's `merge` is for the person to run.
 - Never force-push a pull request branch. Reviews and the queue's candidates name
   commits, and a rewrite orphans both.
