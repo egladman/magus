@@ -2368,7 +2368,7 @@ func TestGitExecPinsTheSettingsItsParsersDependOn(t *testing.T) {
 		assert.NotContains(t, plain, pin)
 	}
 	env := strings.Join(cmd.Env, "\n")
-	for _, set := range []string{"GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_LITERAL_PATHSPECS=1"} {
+	for _, set := range []string{"GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_OPTIONAL_LOCKS=0", "GIT_LITERAL_PATHSPECS=1"} {
 		assert.Contains(t, cmd.Env, set)
 	}
 	for _, gone := range []string{"GIT_REPLACE_REF_BASE=", "GIT_ATTR_SOURCE=", "GIT_GLOB_PATHSPECS=", "GIT_SHALLOW_FILE="} {
