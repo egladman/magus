@@ -56,6 +56,9 @@ func guardDependencies() guard.Dependencies {
 		GraphIDs:         graphIDsForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
+		VCS: types.VCSOptions{
+			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
+		},
 	}
 	if rules != nil {
 		deps.SpawnRule = rules.SpawnRule()

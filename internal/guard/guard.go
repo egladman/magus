@@ -118,6 +118,9 @@ type Dependencies struct {
 	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
 	// base an attributed spawn records for its job, the value `magus job exec` records.
 	CheckoutBase func(ctx context.Context, root string) string
+	// VCS is the workspace's version-control configuration. The worktree rule reads its
+	// base branch, and refuses when it disables version control.
+	VCS types.VCSOptions
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -572,6 +575,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		v := rankOwnBuild(Evaluate(deps, input), ownBuildVerdict(deps, callDir, input, shellD))
 		v = rankScriptContent(v, denyScriptContent(deps, callDir, input, shellD))
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
+		v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, location, callDir, input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
 		v = rankTokenState(v, denyTokenStateCommand(location, input, shellD))

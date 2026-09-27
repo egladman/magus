@@ -232,10 +232,16 @@ var denyRuleDocs = []RuleDoc{
 			"Verify in place instead: no magus run needs a clean tree. " +
 			"git's own help passes, because git documents that it prints usage without running: `git stash --help`, `git reset -h`, `git help stash`. It has to be the whole line, with nothing between the verb and the flag, so `git reset --hard --help`, `git -c ... stash --help`, a `VAR=value` prefix, `sh -c` or a pipe are judged as work."},
 	{Name: string(denyRuleWorktreeRemove), Decision: "deny",
-		Catches: "removing a worktree, which may hold another session's uncommitted work",
-		Why: "A worktree is where another session may be working right now, and its uncommitted changes live nowhere else. " +
-			"Check it is clean first with `git -C <path> status`, and remove it only once you know what it holds. " +
-			"`git worktree remove --help` and `-h`, alone on the line, print usage and pass."},
+		Catches: "removing a worktree magus cannot prove holds nothing that would be lost",
+		Why: "A worktree may be where another session is working right now, and what it holds may exist nowhere else. " +
+			"`git worktree remove` passes only when every condition holds: the path is a linked worktree of this repository (per `git worktree list`), not the main one and not the checkout the session runs in; " +
+			"it has no modified, staged or untracked files (ignored files do not count); " +
+			"every commit its HEAD carries is on a remote-tracking ref or the base branch, or a job that finished (pass or fail) was taken in it and filed its result; " +
+			"no live job was taken in it; and it is not locked. " +
+			"The refusal names each failed condition and the command that inspects it, and `--force` changes nothing. " +
+			"Removal cannot be undone, so a fact that cannot be read refuses too: an unreadable job store, a line that does not parse, a path that is not a literal word, a removal inside a conditional or behind a wrapper. " +
+			"`git worktree prune` passes, since it only clears records of directories already gone, and `git worktree remove --help` and `-h`, alone on the line, print usage and pass. " +
+			"`jj workspace forget` stays refused: the jj driver cannot yet report a workspace's registration or which of its commits are published, so nothing proves a forget loses nothing."},
 }
 
 // advisoryDocs documents every rule that EXPLAINS rather than refuses. Several are

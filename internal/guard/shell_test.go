@@ -65,9 +65,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git stash push -m wip", rule: wholeTree("git stash")},
 		{command: "git stash list"},
 		{command: "git stash show"},
-		// Deleting a worktree takes its uncommitted work with it, and in this repo that
-		// work routinely belongs to another session.
-		{command: "git worktree remove ../wt", rule: denyRule{Name: denyRuleWorktreeRemove}},
+		// Removing a worktree is judged from the worktree and the job store, which this pure
+		// rule set does not read (TestWorktreeRemoveDeniesEachUnsafeCondition).
+		{command: "git worktree remove ../wt"},
 		{command: "git worktree list"},
 		{command: "git reset --hard origin/main", rule: wholeTree("git reset --hard")},
 		{command: "git reset HEAD~1"},
@@ -605,14 +605,12 @@ func TestHelpRequestsPassRoutingRules(t *testing.T) {
 		{command: "git add . -h", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git checkout MERGE_HEAD -- x --help", rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
 		{command: "git stash -- --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
-		{command: "git worktree remove ../x --help", rule: denyRule{Name: denyRuleWorktreeRemove}},
 		{command: "GIT_EXEC_PATH=/tmp git stash --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
 		{command: "env git stash --help", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
 		{command: "bash -c 'git stash --help'", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
 		{command: "git stash --help | cat", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
 		{command: "git stash --help && git stash", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
 		{command: "git stash --help > usage.txt", rule: denyRule{Name: denyRuleWholeTree, Arg: "git stash"}},
-		{command: "git worktree remove --help; true", rule: denyRule{Name: denyRuleWorktreeRemove}},
 	}
 	for _, tt := range tests {
 		v := Evaluate(testDependencies(), tt.command)

@@ -47,7 +47,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store         |
 | [unknown-env](unknown-env.md)                     | a retired or misspelled MAGUS_* variable handed to a command                                      |
 | [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                        |
-| [worktree-remove](worktree-remove.md)             | removing a worktree, which may hold another session's uncommitted work                            |
+| [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                           |
 
 ## Explains
 

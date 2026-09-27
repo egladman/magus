@@ -4099,6 +4099,74 @@ func (_c *MockVCSDriver_RegionsBetween_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
+// RegisteredCheckouts provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) RegisteredCheckouts(ctx context.Context, dir string) ([]types.RegisteredCheckout, error) {
+	ret := _mock.Called(ctx, dir)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RegisteredCheckouts")
+	}
+
+	var r0 []types.RegisteredCheckout
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]types.RegisteredCheckout, error)); ok {
+		return returnFunc(ctx, dir)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []types.RegisteredCheckout); ok {
+		r0 = returnFunc(ctx, dir)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.RegisteredCheckout)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, dir)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_RegisteredCheckouts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RegisteredCheckouts'
+type MockVCSDriver_RegisteredCheckouts_Call struct {
+	*mock.Call
+}
+
+// RegisteredCheckouts is a helper method to define mock.On call
+//   - ctx context.Context
+//   - dir string
+func (_e *MockVCSDriver_Expecter) RegisteredCheckouts(ctx interface{}, dir interface{}) *MockVCSDriver_RegisteredCheckouts_Call {
+	return &MockVCSDriver_RegisteredCheckouts_Call{Call: _e.mock.On("RegisteredCheckouts", ctx, dir)}
+}
+
+func (_c *MockVCSDriver_RegisteredCheckouts_Call) Run(run func(ctx context.Context, dir string)) *MockVCSDriver_RegisteredCheckouts_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_RegisteredCheckouts_Call) Return(registeredCheckouts []types.RegisteredCheckout, err error) *MockVCSDriver_RegisteredCheckouts_Call {
+	_c.Call.Return(registeredCheckouts, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_RegisteredCheckouts_Call) RunAndReturn(run func(ctx context.Context, dir string) ([]types.RegisteredCheckout, error)) *MockVCSDriver_RegisteredCheckouts_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RemoteURL provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) RemoteURL(ctx context.Context, dir string, name string) (string, error) {
 	ret := _mock.Called(ctx, dir, name)
@@ -4896,6 +4964,95 @@ func (_c *MockVCSDriver_Unbundle_Call) Return(err error) *MockVCSDriver_Unbundle
 }
 
 func (_c *MockVCSDriver_Unbundle_Call) RunAndReturn(run func(ctx context.Context, root string, file string) error) *MockVCSDriver_Unbundle_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UnpublishedRevisions provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) UnpublishedRevisions(ctx context.Context, dir string, rev string, bases ...string) ([]string, error) {
+	var tmpRet mock.Arguments
+	if len(bases) > 0 {
+		tmpRet = _mock.Called(ctx, dir, rev, bases)
+	} else {
+		tmpRet = _mock.Called(ctx, dir, rev)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnpublishedRevisions")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, ...string) ([]string, error)); ok {
+		return returnFunc(ctx, dir, rev, bases...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, ...string) []string); ok {
+		r0 = returnFunc(ctx, dir, rev, bases...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, ...string) error); ok {
+		r1 = returnFunc(ctx, dir, rev, bases...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_UnpublishedRevisions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnpublishedRevisions'
+type MockVCSDriver_UnpublishedRevisions_Call struct {
+	*mock.Call
+}
+
+// UnpublishedRevisions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - dir string
+//   - rev string
+//   - bases ...string
+func (_e *MockVCSDriver_Expecter) UnpublishedRevisions(ctx interface{}, dir interface{}, rev interface{}, bases ...interface{}) *MockVCSDriver_UnpublishedRevisions_Call {
+	return &MockVCSDriver_UnpublishedRevisions_Call{Call: _e.mock.On("UnpublishedRevisions",
+		append([]interface{}{ctx, dir, rev}, bases...)...)}
+}
+
+func (_c *MockVCSDriver_UnpublishedRevisions_Call) Run(run func(ctx context.Context, dir string, rev string, bases ...string)) *MockVCSDriver_UnpublishedRevisions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 []string
+		var variadicArgs []string
+		if len(args) > 3 {
+			variadicArgs = args[3].([]string)
+		}
+		arg3 = variadicArgs
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_UnpublishedRevisions_Call) Return(strings []string, err error) *MockVCSDriver_UnpublishedRevisions_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_UnpublishedRevisions_Call) RunAndReturn(run func(ctx context.Context, dir string, rev string, bases ...string) ([]string, error)) *MockVCSDriver_UnpublishedRevisions_Call {
 	_c.Call.Return(run)
 	return _c
 }

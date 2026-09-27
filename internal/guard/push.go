@@ -310,23 +310,33 @@ type pushSite struct {
 // without running anything: a variable, a substitution, a cd whose success decides what
 // runs next, or a relocation inside a wrapper's script.
 func locatePush(command string, d Dialect, cwd string) (pushSite, bool) {
-	f, err := parseFile(command, d)
-	if err != nil {
+	calls, ok := locateCalls(command, d, cwd, isPush, true)
+	if !ok || len(calls) == 0 {
 		return pushSite{}, false
 	}
-	w := pushWalk{d: d}
-	w.stmts(f.Stmts, shellDir{dir: cwd, known: true})
-	if !w.found || !w.located {
+	c := calls[0]
+	var site pushSite
+	switch {
+	case c.unfollowed:
 		return pushSite{}, false
+	case c.args == nil:
+		if !c.at.known || vcsRelocates(c.inv.Name, c.inv.Args) {
+			return pushSite{}, false
+		}
+		site = pushSite{dir: c.at.dir, relocated: c.at.moved}
+	default:
+		if site, ok = pushFrom(c.inv.Name, c.args, c.at); !ok {
+			return pushSite{}, false
+		}
 	}
-	if w.site.relocated && !filepath.IsAbs(w.site.dir) {
-		abs, err := filepath.Abs(w.site.dir)
+	if site.relocated && !filepath.IsAbs(site.dir) {
+		abs, err := filepath.Abs(site.dir)
 		if err != nil {
 			return pushSite{}, false
 		}
-		w.site.dir = abs
+		site.dir = abs
 	}
-	return w.site, true
+	return site, true
 }
 
 // shellDir is the working directory a shell line has reached at one point in it.
@@ -336,18 +346,46 @@ type shellDir struct {
 	known bool
 }
 
-// pushWalk follows a line's statements in the order the shell runs them, carrying the
-// working directory, until it reaches a push.
-type pushWalk struct {
-	d       Dialect
-	found   bool
-	located bool
-	site    pushSite
+// locatedCall is one invocation a callWalk matched, and the directory the shell had
+// reached when it ran.
+type locatedCall struct {
+	inv hint.Invocation
+	at  shellDir
+	// args are the call's words after the program, nil when the invocation was reached
+	// through a wrapper, whose arguments arrive only as rendered text.
+	args []*syntax.Word
+	// unfollowed is set for a call inside a conditional, loop or function, which the walk
+	// finds but does not locate.
+	unfollowed bool
 }
 
-func (w *pushWalk) stmts(list []*syntax.Stmt, at shellDir) shellDir {
+// locateCalls returns the invocations on command that match, in the order the shell
+// runs them, each with the directory it runs in, starting from cwd. first stops at the
+// first match. False when the line does not parse.
+func locateCalls(command string, d Dialect, cwd string, match func(hint.Invocation) bool, first bool) ([]locatedCall, bool) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil, false
+	}
+	w := callWalk{d: d, match: match, first: first}
+	w.stmts(f.Stmts, shellDir{dir: cwd, known: true})
+	return w.calls, true
+}
+
+// callWalk follows a line's statements in the order the shell runs them, carrying the
+// working directory, and records each matching invocation.
+type callWalk struct {
+	d     Dialect
+	match func(hint.Invocation) bool
+	first bool
+	calls []locatedCall
+}
+
+func (w *callWalk) done() bool { return w.first && len(w.calls) > 0 }
+
+func (w *callWalk) stmts(list []*syntax.Stmt, at shellDir) shellDir {
 	for _, s := range list {
-		if w.found {
+		if w.done() {
 			break
 		}
 		at = w.stmt(s, at)
@@ -355,8 +393,8 @@ func (w *pushWalk) stmts(list []*syntax.Stmt, at shellDir) shellDir {
 	return at
 }
 
-func (w *pushWalk) stmt(s *syntax.Stmt, at shellDir) shellDir {
-	if s == nil || s.Cmd == nil || w.found {
+func (w *callWalk) stmt(s *syntax.Stmt, at shellDir) shellDir {
+	if s == nil || s.Cmd == nil || w.done() {
 		return at
 	}
 	if s.Background {
@@ -366,7 +404,7 @@ func (w *pushWalk) stmt(s *syntax.Stmt, at shellDir) shellDir {
 	return w.cmd(s.Cmd, at)
 }
 
-func (w *pushWalk) cmd(c syntax.Command, at shellDir) shellDir {
+func (w *callWalk) cmd(c syntax.Command, at shellDir) shellDir {
 	switch c := c.(type) {
 	case *syntax.CallExpr:
 		return w.call(c, at)
@@ -394,25 +432,25 @@ func (w *pushWalk) cmd(c syntax.Command, at shellDir) shellDir {
 	case *syntax.Block:
 		return w.stmts(c.Stmts, at)
 	}
-	// Conditionals, loops and functions are not followed: a push inside one is found but
+	// Conditionals, loops and functions are not followed: a match inside one is found but
 	// not located, and a cd inside one leaves the directory unknown.
 	syntax.Walk(c, func(n syntax.Node) bool {
-		if call, ok := n.(*syntax.CallExpr); ok && !w.found {
+		if call, ok := n.(*syntax.CallExpr); ok && !w.done() {
 			for _, inv := range peelWrappers(literalWords(call.Args), w.d) {
 				switch {
-				case isPush(inv):
-					w.found = true
+				case w.match(inv):
+					w.calls = append(w.calls, locatedCall{inv: inv, at: at, unfollowed: true})
 				case changesDir(inv):
 					at.known = false
 				}
 			}
 		}
-		return !w.found
+		return !w.done()
 	})
 	return at
 }
 
-func (w *pushWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
+func (w *callWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 	words := literalWords(c.Args)
 	if len(words) == 0 {
 		return at
@@ -424,23 +462,20 @@ func (w *pushWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 			return cdInto(c.Args[1:], at)
 		case changesDir(inv):
 			at.known = false
-		case isPush(inv):
-			w.found = true
-			w.site, w.located = pushFrom(inv.Name, c.Args[1:], at)
+		case w.match(inv):
+			w.calls = append(w.calls, locatedCall{inv: inv, at: at, args: c.Args[1:]})
 		}
 		return at
 	}
-	// A wrapper's arguments reach this only as rendered text, which cannot tell a literal
-	// from a variable, so a relocation inside one is never followed.
 	for _, inv := range invs {
 		switch {
 		case changesDir(inv):
 			at.known = false
-		case isPush(inv):
-			w.found = true
-			w.located = at.known && !vcsRelocates(inv.Name, inv.Args)
-			w.site = pushSite{dir: at.dir, relocated: at.moved}
-			return at
+		case w.match(inv):
+			w.calls = append(w.calls, locatedCall{inv: inv, at: at})
+			if w.done() {
+				return at
+			}
 		}
 	}
 	return at
@@ -509,10 +544,20 @@ func vcsRelocates(program string, args []string) bool {
 }
 
 // gitPushFrom is pushFrom for git: where its -C chain leads from at, and the revision the
-// refspec names. False when a word git reads before its subcommand is not literal, since
-// a variable there may be the subcommand itself, or when --git-dir or --work-tree name
-// the repository by a path no checkout can be read off.
+// refspec names.
 func gitPushFrom(args []*syntax.Word, at shellDir) (pushSite, bool) {
+	at, g, ok := gitCallAt(args, at)
+	if !ok {
+		return pushSite{}, false
+	}
+	return pushSite{dir: at.dir, relocated: at.moved, rev: pushedRev(args[g.at+1:])}, true
+}
+
+// gitCallAt is where a git call spelled with args runs, starting from at, and the literal
+// prefix of its argv as git reads it. False when a word git reads before its subcommand is
+// not literal, since a variable there may be the subcommand itself, or when --git-dir or
+// --work-tree name the repository by a path no checkout can be read off.
+func gitCallAt(args []*syntax.Word, at shellDir) (shellDir, gitCommand, bool) {
 	lits := make([]string, 0, len(args))
 	for _, w := range args {
 		lit, ok := literalArg(w.Parts)
@@ -523,18 +568,15 @@ func gitPushFrom(args []*syntax.Word, at shellDir) (pushSite, bool) {
 	}
 	g := parseGit(lits)
 	if g.at < 0 || g.opaque {
-		return pushSite{}, false
+		return at, g, false
 	}
 	for _, dir := range g.dirs {
 		if strings.HasPrefix(dir, "~") {
-			return pushSite{}, false
+			return at, g, false
 		}
 		at = moveTo(at, dir)
 	}
-	if !at.known {
-		return pushSite{}, false
-	}
-	return pushSite{dir: at.dir, relocated: at.moved, rev: pushedRev(args[g.at+1:])}, true
+	return at, g, at.known
 }
 
 // pushFrom is where a push spelled with args runs, starting from at, and the revision a
