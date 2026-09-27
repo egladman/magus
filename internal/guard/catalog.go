@@ -149,6 +149,13 @@ var denyRuleDocs = []RuleDoc{
 			"A target run persists its whole log either way and prints a ref for it, so capturing the console is redundant. " +
 			"It judges where each stream ENDS. Either stream landing in a file fires, and so does stdout landing in /dev/null. `2>/dev/null` fires on `run`, `affected` and `x`, which write their failure block (cause, output ref, reproduce line) to stderr, and passes on every other verb, whose stderr carries at most an error line the exit status also reports. " +
 			"`2>&1` alone passes: both streams still reach the reader. Measured 2026-09-26: 556 of 841 denies were stderr-only."},
+	{Name: string(denyRuleOwnRepoCodeSearch), Decision: "deny",
+		Catches: "a GitHub code search scoped to this workspace's own repository, which the graph answers locally",
+		Why: "It is scoped to the workspace's OWN repository: `gh search code` with a `repo:` qualifier or `--repo`/`-R` naming it, or `gh api` against the search/code endpoint with such a query, in any spelling (a URL query, `-f q=`, `-X GET`, `--jq`, a pipe, `bash -c`). " +
+			"The repository is read from the checkout's remote (origin, else the first by name), never hard-coded, and matched without regard to case. " +
+			"GitHub's code index holds only the pushed default branch and lags it, so it never sees this checkout's edits, and it matches text where `magus refs <symbol>` resolves every definition and use, generated and cross-language ones included, and `magus query <text>` relates projects, targets, spells and docs. The deny serves both as remedies, built from the words searched for. " +
+			"Remote code search stays legitimate for code outside this workspace: another repository, GitHub's own docs, or a search naming no repository at all runs as typed and draws nothing. So does every other gh search (`gh search issues`, `gh search prs`) and any other API path, `repos/<owner>/<repo>/contents/...` included. " +
+			"A workspace with no remote a file read can find has nothing to match against and is never judged."},
 	{Name: string(denyRuleProcessPoll), Decision: "deny",
 		Catches: "a process table inspected to wait on magus work the lock already reports",
 		Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. " +

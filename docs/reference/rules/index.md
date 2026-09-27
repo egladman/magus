@@ -32,6 +32,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                          |
 | [output-pipe](output-pipe.md)                     | magus output piped into a filter, when magus projects the record itself                           |
 | [output-redirect](output-redirect.md)             | magus output sent to a file or discarded, which the run log already holds                         |
+| [own-repo-code-search](own-repo-code-search.md)   | a GitHub code search scoped to this workspace's own repository, which the graph answers locally   |
 | [process-poll](process-poll.md)                   | a process table inspected to wait on magus work the lock already reports                          |
 | [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused               |
 | [raw-tool](raw-tool.md)                           | a toolchain command a spell already wraps, run outside the cache                                  |

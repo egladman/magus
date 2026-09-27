@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -226,4 +227,97 @@ func TestSymbolSearchStaysSilentOutsideTheWorkspace(t *testing.T) {
 	v := Evaluate(deps, "grep -rn HandleRequest ~/.claude/projects")
 	assert.Empty(t, v.Deny)
 	assert.Empty(t, v.Context, "nor is it advised")
+}
+
+// TestOwnRepoCodeSearchDeniesOnlyThisRepository pins the rule's scope: a GitHub code
+// search naming the repository the checkout's remote names is refused in every spelling,
+// and a search of another repository, of all of GitHub, or of anything but code passes
+// without a word.
+func TestOwnRepoCodeSearchDeniesOnlyThisRepository(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		".git/config": "[remote \"origin\"]\n\turl = git@github.com:egladman/magus.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n",
+	})
+	deps := Dependencies{scope: workspaceScope{root: root}}
+
+	for _, command := range []string{
+		`gh search code HandleRequest --repo egladman/magus`,
+		`gh search code HandleRequest --repo=egladman/magus`,
+		`gh search code HandleRequest -R egladman/magus`,
+		`gh search code HandleRequest -Regladman/magus`,
+		`gh search code "HandleRequest repo:egladman/magus"`,
+		`gh search code HandleRequest repo:EGladman/Magus --language go --limit 5`,
+		`gh search code --json path,url -q '.[].path' HandleRequest -R egladman/magus`,
+		`gh api /search/code?q=HandleRequest+repo:egladman/magus`,
+		`gh api 'search/code?q=HandleRequest%20repo%3Aegladman%2Fmagus'`,
+		`gh api https://api.github.com/search/code?q=repo:egladman/magus+HandleRequest`,
+		`gh api -X GET search/code -f q='HandleRequest repo:egladman/magus'`,
+		`gh api --method GET search/code -F 'q=repo:egladman/magus HandleRequest'`,
+		`gh api --method=GET search/code --raw-field q='repo:egladman/magus HandleRequest'`,
+		`gh api 'search/code?q=HandleRequest+repo:egladman/magus' --jq '.items[].path'`,
+		`gh api 'search/code?q=HandleRequest+repo:egladman/magus' -q '.items[].path'`,
+		`gh api 'search/code?q=HandleRequest+repo:egladman/magus' | jq -r '.items[].path'`,
+		`bash -c "gh api 'search/code?q=HandleRequest+repo:egladman/magus'"`,
+		`cd /tmp && gh search code HandleRequest --repo egladman/magus`,
+		`/opt/homebrew/bin/gh search code HandleRequest --repo egladman/magus.git`,
+	} {
+		v := Evaluate(deps, command)
+		assert.Equal(t, denyRule{Name: denyRuleOwnRepoCodeSearch, Arg: "egladman/magus"}, v.Rule, command)
+		assert.Contains(t, v.Deny, "refs <symbol>", command)
+		assert.Contains(t, v.Deny, "query <text>", command)
+	}
+
+	for _, command := range []string{
+		// Another repository is outside what the graph describes.
+		`gh search code HandleRequest --repo cli/cli`,
+		`gh search code "HandleRequest repo:egladman/magus-extras"`,
+		`gh api 'search/code?q=HandleRequest+repo:golang/go'`,
+		`gh api 'search/code?q=egladman/magus+HandleRequest'`,
+		// Naming no repository searches all of GitHub.
+		`gh search code HandleRequest`,
+		`gh search code HandleRequest --owner egladman`,
+		`gh api 'search/code?q=HandleRequest'`,
+		// Not a code search.
+		`gh search issues HandleRequest --repo egladman/magus`,
+		`gh search prs "repo:egladman/magus HandleRequest"`,
+		`gh api repos/egladman/magus/contents/internal/guard/search.go`,
+		`gh api 'search/issues?q=repo:egladman/magus+HandleRequest'`,
+		`gh api repos/egladman/magus/search/code`,
+		`gh repo view egladman/magus`,
+	} {
+		v := Evaluate(deps, command)
+		assert.NotEqual(t, denyRuleOwnRepoCodeSearch, v.Rule.Name, "%q must pass", command)
+		assert.NotContains(t, v.Context, "GitHub", "%q draws nothing", command)
+	}
+
+	// With no remote to read there is nothing to match against.
+	bare := Dependencies{scope: workspaceScope{root: writeTree(t, map[string]string{"go.mod": "module x\n"})}}
+	assert.Empty(t, Evaluate(bare, `gh search code HandleRequest --repo egladman/magus`).Deny)
+}
+
+// TestOwnRepoCodeSearchServesRemedies pins the remedies: refs for a lone identifier and
+// query for the words searched, qualifiers dropped, and none when only qualifiers remain.
+func TestOwnRepoCodeSearchServesRemedies(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		".git/config": "[remote \"origin\"]\n\turl = https://github.com/egladman/magus\n",
+	})
+	deps := Dependencies{scope: workspaceScope{root: root}}
+
+	runs := func(v ShellVerdict) []string {
+		out := make([]string, len(v.Next))
+		for i, n := range v.Next {
+			out[i] = strings.TrimPrefix(n.Run, hint.BinaryName()+" ")
+		}
+		return out
+	}
+
+	v := Evaluate(deps, `gh search code HandleRequest --repo egladman/magus --language go`)
+	assert.Equal(t, []string{"refs HandleRequest --occurrences", "query HandleRequest"}, runs(v))
+	assert.Equal(t, "GitHub's index of egladman/magus lags this checkout; the graph answers from it.", v.Lead)
+
+	v = Evaluate(deps, `gh api -X GET search/code -f q='cache key path:internal repo:egladman/magus'`)
+	assert.Equal(t, []string{`query "cache key"`}, runs(v))
+
+	v = Evaluate(deps, `gh search code repo:egladman/magus filename:magusfile.buzz`)
+	assert.Equal(t, denyRuleOwnRepoCodeSearch, v.Rule.Name)
+	assert.Empty(t, v.Next, "only qualifiers: nothing to route")
 }

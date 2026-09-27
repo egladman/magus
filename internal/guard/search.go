@@ -3,6 +3,7 @@ package guard
 import (
 	"bufio"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // The symbol-search rule denies a tree search only when refs returns the same sites for
@@ -498,4 +500,197 @@ func routeClause(routes []searchRoute) string {
 func denySymbolSearch(routes []searchRoute) string {
 	return routeClause(routes) + " this exactly, checked against the tree rather than matched against it.\n" +
 		"Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it."
+}
+
+// codeSearch is one GitHub code search on a line: the repositories it names and the words
+// it searches for, qualifiers dropped.
+type codeSearch struct {
+	repos []string
+	terms []string
+}
+
+// ghSearchCodeValued are the `gh search code` flags that take a value, so a value is never
+// read as a query word.
+var ghSearchCodeValued = map[string]bool{
+	"-R": true, "--repo": true, "--owner": true, "--extension": true, "--filename": true, "--language": true,
+	"--match": true, "--size": true, "-L": true, "--limit": true, "--json": true, "-q": true, "--jq": true,
+	"-t": true, "--template": true,
+}
+
+// ghAPIValued are the `gh api` flags that take a value.
+var ghAPIValued = map[string]bool{
+	"-X": true, "--method": true, "-H": true, "--header": true, "-f": true, "--raw-field": true, "-F": true,
+	"--field": true, "-q": true, "--jq": true, "-t": true, "--template": true, "--input": true,
+	"--hostname": true, "--cache": true, "-p": true, "--preview": true,
+}
+
+// ghArgs splits args into each valued flag's values, keyed by the flag as spelled, and the
+// operands. It reads `--flag=v`, `--flag v`, `-Xv` and `-X v`; everything after `--` is an
+// operand.
+func ghArgs(args []string, valued map[string]bool) (map[string][]string, []string) {
+	flags := map[string][]string{}
+	var operands []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return flags, append(operands, args[i+1:]...)
+		case strings.HasPrefix(a, "--"):
+			name, value, attached := strings.Cut(a, "=")
+			if !valued[name] {
+				continue
+			}
+			if !attached && i+1 < len(args) {
+				i++
+				value = args[i]
+			}
+			flags[name] = append(flags[name], value)
+		case len(a) > 1 && a[0] == '-':
+			name := a[:2]
+			if !valued[name] {
+				continue
+			}
+			value := a[2:]
+			if value == "" && i+1 < len(args) {
+				i++
+				value = args[i]
+			}
+			flags[name] = append(flags[name], value)
+		default:
+			operands = append(operands, a)
+		}
+	}
+	return flags, operands
+}
+
+// parseCodeSearch reads c as `gh search code` or a `gh api` call to the search/code
+// endpoint, reporting false for anything else, other gh searches included.
+func parseCodeSearch(c hint.Invocation) (codeSearch, bool) {
+	if path.Base(c.Name) != "gh" || len(c.Args) == 0 {
+		return codeSearch{}, false
+	}
+	switch {
+	case len(c.Args) >= 2 && c.Args[0] == "search" && c.Args[1] == "code":
+		flags, operands := ghArgs(c.Args[2:], ghSearchCodeValued)
+		s := codeSearchOf(strings.Join(operands, " "))
+		s.repos = append(s.repos, flags["-R"]...)
+		s.repos = append(s.repos, flags["--repo"]...)
+		return s, true
+	case c.Args[0] == "api":
+		flags, operands := ghArgs(c.Args[1:], ghAPIValued)
+		if len(operands) == 0 {
+			return codeSearch{}, false
+		}
+		endpoint, rawQuery, _ := strings.Cut(operands[0], "?")
+		if _, rest, ok := strings.Cut(endpoint, "://"); ok {
+			_, endpoint, _ = strings.Cut(rest, "/")
+		}
+		endpoint = strings.TrimPrefix(strings.Trim(strings.ToLower(endpoint), "/"), "api/v3/")
+		if endpoint != "search/code" {
+			return codeSearch{}, false
+		}
+		var queries []string
+		if values, err := url.ParseQuery(rawQuery); err == nil {
+			queries = values["q"]
+		}
+		for _, name := range []string{"-f", "--raw-field", "-F", "--field"} {
+			for _, field := range flags[name] {
+				if value, ok := strings.CutPrefix(field, "q="); ok {
+					queries = append(queries, value)
+				}
+			}
+		}
+		return codeSearchOf(strings.Join(queries, " ")), true
+	}
+	return codeSearch{}, false
+}
+
+// codeSearchOf splits a GitHub search query into its repo: qualifiers and its words.
+func codeSearchOf(query string) codeSearch {
+	var s codeSearch
+	for _, word := range strings.Fields(query) {
+		word = strings.Trim(word, `"'`)
+		key, value, qualified := strings.Cut(word, ":")
+		switch {
+		case word == "":
+		case qualified && strings.EqualFold(key, "repo"):
+			s.repos = append(s.repos, strings.Trim(value, `"'`))
+		case qualified && qualifierKeyRe.MatchString(key):
+		default:
+			s.terms = append(s.terms, word)
+		}
+	}
+	return s
+}
+
+// qualifierKeyRe matches a search qualifier's key, NOT: included, so `path:x` and
+// `-language:go` narrow the search rather than being searched for.
+var qualifierKeyRe = regexp.MustCompile(`^-?[a-zA-Z]+$`)
+
+// remoteSlug is owner/repo from an scp-style or URL-style remote, "" when it names none.
+func remoteSlug(remote string) string {
+	remote = strings.TrimSuffix(strings.TrimSpace(remote), ".git")
+	var p string
+	switch {
+	case strings.Contains(remote, "://"):
+		u, err := url.Parse(remote)
+		if err != nil {
+			return ""
+		}
+		p = u.Path
+	case strings.Contains(remote, ":"):
+		_, p, _ = strings.Cut(remote, ":")
+	default:
+		return ""
+	}
+	parts := strings.Split(strings.Trim(p, "/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return ""
+	}
+	return parts[0] + "/" + parts[1]
+}
+
+// ownRepoCodeSearchVerdict denies a GitHub code search that names this workspace's own
+// repository, read from the checkout's remote. A search of another repository, or of all of
+// GitHub, passes without a word: the graph describes this workspace and nothing else.
+func ownRepoCodeSearchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
+	own := ""
+	for _, c := range cmds {
+		s, ok := parseCodeSearch(c)
+		if !ok || len(s.repos) == 0 || deps.scope.root == "" {
+			continue
+		}
+		if own == "" {
+			if own = remoteSlug(vcs.ConfiguredRemote(deps.scope.root)); own == "" {
+				return ShellVerdict{}, false
+			}
+		}
+		for _, r := range s.repos {
+			if strings.EqualFold(strings.TrimSuffix(r, ".git"), own) {
+				return ownRepoCodeSearchDeny(own, s.terms), true
+			}
+		}
+	}
+	return ShellVerdict{}, false
+}
+
+func ownRepoCodeSearchDeny(repo string, terms []string) ShellVerdict {
+	v := ShellVerdict{
+		Deny: "`" + hint.Refs.With("<symbol>") + "` and `" + hint.Query.With("<text>") + "` answer a search of " + repo + ", the repository this workspace is, from this checkout.\n" +
+			"GitHub's code index holds only the pushed default branch, lags it, and never sees this checkout's edits; the graph holds every definition, reference and document here. " +
+			"A search of another repository, or of all of GitHub, runs as typed.",
+		Rule: denyRule{Name: denyRuleOwnRepoCodeSearch, Arg: repo},
+	}
+	if len(terms) == 0 {
+		return v
+	}
+	text := strings.Join(terms, " ")
+	var next []hint.Next
+	if len(terms) == 1 && hint.IsIdentifier(text) {
+		next = append(next, hint.NextForDenyRemedy(string(denyRuleOwnRepoCodeSearch), hint.Refs.Argv(text, "--occurrences"),
+			"the index holds every definition and use in this checkout, generated and cross-language ones included."))
+	}
+	next = append(next, hint.NextForDenyRemedy(string(denyRuleOwnRepoCodeSearch), hint.Query.Argv(text),
+		"the graph relates projects, targets, spells, symbols and docs in this checkout."))
+	return v.withRemedy("GitHub's index of "+repo+" lags this checkout; the graph answers from it.", next...)
 }

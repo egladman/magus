@@ -121,6 +121,7 @@ const (
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
+	denyRuleOwnRepoCodeSearch denyRuleName = "own-repo-code-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleReadNavigation    denyRuleName = "read-navigation"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
@@ -2186,6 +2187,11 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			"`pgrep`, `pidof` and `ps` answer what the project lock already records.",
 			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
 				"status reads the live pool once and exits, where the process table only guesses at it."))
+	}
+	if parsed {
+		if v, ok := ownRepoCodeSearchVerdict(deps, cmds); ok {
+			return v
+		}
 	}
 	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
 	// waiting in the background. The backtick is judged first because a stray one is how a
