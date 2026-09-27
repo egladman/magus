@@ -3,6 +3,7 @@
 package broker
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+
+	"github.com/egladman/magus/internal/proc/endpoint"
 )
 
 // dupFD hands adoptListener its own descriptor, as a supervisor would, so the test's
@@ -28,10 +31,10 @@ func dupFD(t *testing.T, f *os.File) int {
 
 func TestActivationAdoptsAListeningUnixSocket(t *testing.T) {
 	path := strings.TrimPrefix(testAddr(t), "unix://")
-	ln, err := net.Listen("unix", path)
+	ln, err := endpoint.ListenUnix(path)
 	require.NoError(t, err)
 	defer func() { _ = ln.Close() }()
-	f, err := ln.(*net.UnixListener).File()
+	f, err := ln.File()
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 
@@ -43,7 +46,7 @@ func TestActivationAdoptsAListeningUnixSocket(t *testing.T) {
 		"a socket runs do not dial holds capacity nobody asks for")
 
 	go func() {
-		if c, err := net.Dial("unix", path); err == nil {
+		if c, err := endpoint.DialUnix(context.Background(), path); err == nil {
 			_ = c.Close()
 		}
 	}()
@@ -66,7 +69,7 @@ func TestActivationRefusesWhatIsNotAListeningUnixStream(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = tcpFile.Close() }()
 
-	gram, err := net.ListenUnixgram("unixgram", &net.UnixAddr{Name: strings.TrimPrefix(testAddr(t), "unix://"), Net: "unixgram"})
+	gram, err := endpoint.ListenUnixgram(strings.TrimPrefix(testAddr(t), "unix://"))
 	require.NoError(t, err)
 	defer func() { _ = gram.Close() }()
 	gramFile, err := gram.File()
@@ -74,13 +77,13 @@ func TestActivationRefusesWhatIsNotAListeningUnixStream(t *testing.T) {
 	defer func() { _ = gramFile.Close() }()
 
 	streamPath := strings.TrimPrefix(testAddr(t), "unix://")
-	stream, err := net.Listen("unix", streamPath)
+	stream, err := endpoint.ListenUnix(streamPath)
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
-	client, err := net.Dial("unix", streamPath)
+	client, err := endpoint.DialUnix(context.Background(), streamPath)
 	require.NoError(t, err)
 	defer func() { _ = client.Close() }()
-	clientFile, err := client.(*net.UnixConn).File()
+	clientFile, err := client.File()
 	require.NoError(t, err)
 	defer func() { _ = clientFile.Close() }()
 
@@ -108,10 +111,10 @@ func TestActivationRefusesWhatIsNotAListeningUnixStream(t *testing.T) {
 func TestActivationServesTheSupervisorsSocket(t *testing.T) {
 	addr := testAddr(t)
 	path := strings.TrimPrefix(addr, "unix://")
-	ln, err := net.Listen("unix", path)
+	ln, err := endpoint.ListenUnix(path)
 	require.NoError(t, err)
 	defer func() { _ = ln.Close() }()
-	f, err := ln.(*net.UnixListener).File()
+	f, err := ln.File()
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 

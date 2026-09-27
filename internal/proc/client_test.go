@@ -297,7 +297,7 @@ func rawServer(t *testing.T, serve func(net.Conn)) string {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	addr := filepath.Join(dir, "w.sock")
-	ln, err := net.Listen("unix", addr)
+	ln, err := endpoint.ListenUnix(addr)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })
 
