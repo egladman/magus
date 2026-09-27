@@ -39,6 +39,8 @@ func (jjName) name() string      { return "jj" }
 //   - hg and sl, RegenHookInstaller and BranchChangeReporter: not built yet, though their
 //     hooks and revsets could answer. Until then the merge driver logs the regeneration
 //     to run before committing, and `magus vcs resolve` runs it.
+//   - hg, sl and jj, CheckoutReporter: not built yet, though hg's shares and jj's
+//     workspaces are registered checkouts too.
 //   - hg, sl and jj, the capabilities that combine revisions without a checkout: git's
 //     alone so far, though hg and Sapling have bundles, shares and commit, and jj has
 //     workspaces.
@@ -211,6 +213,14 @@ func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
 
 func (declines[N]) OtherCheckouts(string) ([]string, error) {
 	return nil, decline[N](types.CapCheckoutLister)
+}
+
+func (declines[N]) RegisteredCheckouts(context.Context, string) ([]types.RegisteredCheckout, error) {
+	return nil, decline[N](types.CapCheckoutReporter)
+}
+
+func (declines[N]) UnpublishedRevisions(context.Context, string, string, ...string) ([]string, error) {
+	return nil, decline[N](types.CapCheckoutReporter)
 }
 
 func (declines[N]) FetchRef(context.Context, string, string, string) (string, error) {

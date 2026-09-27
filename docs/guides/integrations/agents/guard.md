@@ -104,10 +104,14 @@ the command being RUN: an environment prefix, `env -u GOROOT ...`, a launcher,
 or `bash -c '...'` all reach the same verdict as the bare command.
 
 - **Destructive whole-tree VCS operations**: `git stash`, `git reset --hard`,
-  `git checkout .`, `git restore .`, `git clean -f`, and `git worktree remove`,
-  which destroys another tree's uncommitted and untracked work rather than this
-  one's - in a repository running several checkouts that is routinely another
-  session's, and it is in no commit to recover from. Reading a stash is exempt
+  `git checkout .`, `git restore .`, and `git clean -f`. `git worktree remove`
+  destroys another tree's work rather than this one's, so it is judged instead:
+  it passes only for a clean, unlocked linked worktree of this repository that
+  is not your own, that no live job was taken in, and whose commits are all
+  published or were filed by a finished job. The refusal names each condition
+  that failed, `--force` changes nothing, and a fact magus cannot read refuses
+  (see [worktree-remove](../../../reference/rules/worktree-remove.md)).
+  Reading a stash is exempt
   (`git stash list`, `git stash show`), as is `git stash create`, which returns a
   commit object without touching the working tree or the stash stack.
   Every backend magus drives is covered, in its own spelling: `hg purge` and

@@ -138,8 +138,8 @@ type VCSDriver interface {
 	// repo-relative with forward slashes. The exceptions: the path filters of Dirty,
 	// DirtyFiles, DirtyDiff, TrackedFiles, IgnoredFiles and RangeDiff are the backend's
 	// pathspecs, relative to dir; CheckoutProvisioner's dir names a checkout outside the
-	// repository; CheckoutLister returns absolute checkout roots; Bundler's file is an
-	// absolute path.
+	// repository; CheckoutLister and CheckoutReporter return absolute checkout roots;
+	// Bundler's file is an absolute path.
 	Bisector
 	MergeDriverInstaller
 	RefreshHookInstaller
@@ -168,6 +168,7 @@ type VCSDriver interface {
 	GeneratedPathReporter
 	CheckoutProvisioner
 	CheckoutLister
+	CheckoutReporter
 	RevisionFetcher
 	Pusher
 	Bundler
@@ -399,6 +400,7 @@ const (
 	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
 	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
 	CapCheckoutLister        VCSCapability = "CheckoutLister"
+	CapCheckoutReporter      VCSCapability = "CheckoutReporter"
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
 	CapPusher                VCSCapability = "Pusher"
 	CapBundler               VCSCapability = "Bundler"
@@ -529,6 +531,33 @@ type CheckoutLister interface {
 	// OtherCheckouts returns the root of every OTHER live checkout of root's repository,
 	// primary first. A checkout whose directory is gone is omitted.
 	OtherCheckouts(root string) ([]string, error)
+}
+
+// RegisteredCheckout is one checkout as its repository registers it.
+type RegisteredCheckout struct {
+	// Root is the checkout's top level as registered, absolute. Its directory may be gone.
+	Root string
+	// Primary marks the repository's main checkout, the one its store lives in.
+	Primary bool
+	// Head is the full id of the revision checked out, "" when there is none yet.
+	Head string
+	// Locked reports a checkout locked against removal; LockReason is why, "" when the
+	// lock gave none.
+	Locked     bool
+	LockReason string
+}
+
+// CheckoutReporter is the capability to report the checkouts a repository registers and
+// which revisions exist nowhere but the local store: what a caller about to remove a
+// checkout needs to know it loses nothing.
+type CheckoutReporter interface {
+	// RegisteredCheckouts returns every checkout the repository containing dir registers,
+	// primary first, including one whose directory is gone.
+	RegisteredCheckouts(ctx context.Context, dir string) ([]RegisteredCheckout, error)
+	// UnpublishedRevisions returns the ids of the revisions reachable from rev that no
+	// remote-tracking ref and none of bases reaches, newest first, nil when every one is.
+	// A base that names nothing is an error, not an empty reach.
+	UnpublishedRevisions(ctx context.Context, dir, rev string, bases ...string) ([]string, error)
 }
 
 // DefaultRefReporter is the capability (sibling of RemoteReporter) to report the

@@ -111,14 +111,8 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 				return denySharedStash(rest[0]), true
 			}
 			return denyWholeTree("git stash"), true
-		case "worktree":
-			if len(rest) > 0 && rest[0] == "remove" {
-				return ShellVerdict{
-					Deny: "Check it is clean first with `git -C <path> status`, then remove the worktree from a session that owns it.\n" +
-						"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from.",
-					Rule: denyRule{Name: denyRuleWorktreeRemove},
-				}, true
-			}
+		// `git worktree remove` is judged in internal/guard/worktree.go, which reads the
+		// worktree and the job store.
 		case "reset":
 			if slices.Contains(rest, "--hard") {
 				return denyWholeTree("git reset --hard"), true
@@ -692,11 +686,14 @@ func jjRule(prog, sub string, rest []string) (ShellVerdict, bool) {
 		if !hasPositional(rest) {
 			return denyWholeTree(prog + " restore"), true
 		}
+	// Denied outright, where git's removal is judged: the jj driver reports no workspace
+	// registrations or publication (types.CheckoutReporter), so nothing can prove a forget
+	// loses nothing.
 	case "workspace":
 		if len(rest) > 0 && rest[0] == "forget" {
 			return ShellVerdict{
-				Deny: "Check it is clean first, then forget the workspace from a session that owns it.\n" +
-					"jj workspace forget drops that workspace's working copy, which in a repo running several is routinely another session's.",
+				Deny: "Forget the workspace from a session that owns it, once `jj workspace list` and `jj log` show its working-copy commit is empty or published.\n" +
+					"jj workspace forget drops that workspace's working-copy commit, which in a repo running several is routinely another session's, and magus cannot yet read a jj workspace's state to prove it holds nothing.",
 				Rule: denyRule{Name: denyRuleWorktreeRemove},
 			}, true
 		}

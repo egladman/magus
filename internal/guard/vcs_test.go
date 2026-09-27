@@ -123,7 +123,6 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		"git --exec-path stash":                               wholeTree("git stash"),
 		"git -C . stash pop":                                  {Name: denyRuleSharedStash, Arg: "pop"},
 		"git -P add -A":                                       {Name: denyRuleStageAll},
-		"git --no-replace-objects worktree remove ../wt":      {Name: denyRuleWorktreeRemove},
 		"git -C . checkout MERGE_HEAD -- a.go":                {Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"},
 		"git -c alias.x='reset --hard' x":                     {Name: denyRuleInlineAlias, Arg: "alias.x"},
 		"git -c alias.st=status st":                           {Name: denyRuleInlineAlias, Arg: "alias.st"},
@@ -205,7 +204,6 @@ func TestGitGuardFollowsDashCIntoAnotherCheckout(t *testing.T) {
 		"git -C " + wt + " checkout -- .":               {Name: denyRuleWholeTree, Arg: "git checkout ."},
 		"git -C .. -C wt-feature stash":                 {Name: denyRuleWholeTree, Arg: "git stash"},
 		"git -C " + wt + " checkout MERGE_HEAD -- a.go": {Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"},
-		"git -C " + main + " worktree remove " + wt:     {Name: denyRuleWorktreeRemove},
 		"git --work-tree=" + wt + " clean -fd":          {Name: denyRuleWholeTree, Arg: "git clean"},
 	} {
 		assert.Equal(t, want, Evaluate(testDependencies(), command).Rule, "%q", command)

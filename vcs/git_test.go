@@ -3006,6 +3006,79 @@ func TestRemoveCheckoutRefusesACheckoutItDidNotCreate(t *testing.T) {
 	assert.DirExists(t, mine)
 }
 
+// RegisteredCheckouts lists every worktree git registers, the main one first, with its
+// revision and lock, including one whose directory is gone.
+func TestGitRegisteredCheckouts(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	head := gitTestOutput(t, dir, "rev-parse", "HEAD")
+	parent := t.TempDir()
+	locked, plain, gone := filepath.Join(parent, "locked"), filepath.Join(parent, "plain"), filepath.Join(parent, "gone")
+	gitRun(t, dir, "worktree", "add", "-q", "--detach", "--lock", "--reason", "in use", locked, "HEAD")
+	gitRun(t, dir, "worktree", "add", "-q", "-b", "topic", plain, "HEAD")
+	gitRun(t, dir, "worktree", "add", "-q", "--detach", gone, "HEAD")
+	require.NoError(t, os.RemoveAll(gone))
+
+	got, err := gitVCS{}.RegisteredCheckouts(t.Context(), plain)
+	require.NoError(t, err)
+	for i := range got {
+		got[i].Root = realPath(got[i].Root)
+	}
+	assert.Equal(t, []types.RegisteredCheckout{
+		{Root: realPath(dir), Primary: true, Head: head},
+		{Root: filepath.Join(realPath(parent), "gone"), Head: head},
+		{Root: realPath(locked), Head: head, Locked: true, LockReason: "in use"},
+		{Root: realPath(plain), Head: head},
+	}, got)
+}
+
+// An unborn branch has no revision, and a lock with no reason is still a lock.
+func TestParseWorktreeList(t *testing.T) {
+	t.Parallel()
+	out := "worktree /r\x00HEAD " + strings.Repeat("0", 40) + "\x00branch refs/heads/main\x00\x00" +
+		"worktree /w\x00HEAD " + strings.Repeat("a", 40) + "\x00detached\x00locked\x00prunable gitdir file points to non-existent location\x00\x00"
+	assert.Equal(t, []types.RegisteredCheckout{
+		{Root: "/r", Primary: true},
+		{Root: "/w", Head: strings.Repeat("a", 40), Locked: true},
+	}, parseWorktreeList(out))
+}
+
+// UnpublishedRevisions names the commits no remote-tracking ref and no base reaches, and
+// nothing once one of them does.
+func TestGitUnpublishedRevisions(t *testing.T) {
+	isolateGitConfig(t)
+	origin := t.TempDir()
+	gitInitRepo(t, origin, map[string]string{"a.txt": "a\n"})
+	gitRun(t, origin, "branch", "-M", "main")
+	clone := filepath.Join(t.TempDir(), "clone")
+	cmd := exec.Command("git", "clone", "-q", "file://"+origin, clone)
+	cmd.Env = gitEnv()
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "clone: %s", out)
+	gitConfigureFixture(t, clone)
+	g := gitVCS{}
+
+	got, err := g.UnpublishedRevisions(t.Context(), clone, "HEAD")
+	require.NoError(t, err)
+	assert.Empty(t, got, "a fresh clone's HEAD is on origin/main")
+
+	gitRun(t, clone, "commit", "-q", "--allow-empty", "-m", "local")
+	local := gitTestOutput(t, clone, "rev-parse", "HEAD")
+	got, err = g.UnpublishedRevisions(t.Context(), clone, "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, []string{local}, got)
+
+	got, err = g.UnpublishedRevisions(t.Context(), clone, local, "main")
+	require.NoError(t, err)
+	assert.Empty(t, got, "the base reaches it")
+
+	_, err = g.UnpublishedRevisions(t.Context(), clone, "HEAD", "no-such-branch")
+	require.Error(t, err, "a base naming nothing is not an empty reach")
+	_, err = g.UnpublishedRevisions(t.Context(), clone, "HEAD", "")
+	require.Error(t, err)
+}
+
 // A checkout reached through a symlink that lands inside the repository is inside it.
 func TestCreateCheckoutResolvesSymlinksBeforeRefusingAPathInside(t *testing.T) {
 	isolateGitConfig(t)
