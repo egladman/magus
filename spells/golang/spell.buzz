@@ -280,7 +280,12 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // pinned by whatever the workspace uses, and the OBSERVE probe records which, alongside the
 // database date, for the targets that compose this op. There is no version probe: see the
 // tools table above for why one would key every target in the project.
-fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."], external = External.reads}; }
+//
+// `./...` is a default so explicit args can put `-format json` ahead of the pattern, and
+// capture returns that stream to a caller that reads the verdict itself.
+fun goVulncheck(target: Target) > Command {
+    return Command{bin = "govulncheck", defaultArgs = ["./..."], capture = true, external = External.reads};
+}
 // magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
 // in the tree; scip-go writes there via --output. The runner resolves the bare
 // $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.

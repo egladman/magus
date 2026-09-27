@@ -243,12 +243,18 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    advisories\audit();
+    advisories\audit(inheritedFatal: advisories\inheritedFatal(args));
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the
-// build-plus-drift-gate, and the advisory audit, all first-class ci steps.
-export fun ci(ctx: magus\Context, args: [str]) > void {
+// build-plus-drift-gate, and the advisory audit, all first-class ci steps. ctx.needs hands a
+// dependency no args, so `--inherited=fatal` calls security in the body.
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    ctx.needs(lint, test, build, security);
+    if (!advisories\inheritedFatal(args)) {
+        ctx.needs(lint, test, build, security);
+        return;
+    }
+    ctx.needs(lint, test, build);
+    security(ctx, args: args);
 }

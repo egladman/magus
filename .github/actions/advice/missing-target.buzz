@@ -189,7 +189,7 @@ fun body(items: [{str: str}]) > str {
         + "testing rather than visibly failing.\n\n"
         + "If this does not apply to your project, because it has nothing to test or that "
         + "work happens somewhere else, then this finding is wrong and worth ignoring. "
-        + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
+        + "Add the `advice: silence " + section + "` label to keep it quiet.\n";
 }
 
 fun main() > void !> any {
@@ -372,6 +372,6 @@ test "body explains the cohort, says the change opened the gap, and names the es
     std\assert(text.indexOf("quietly exempt") != null, message: "says why a gap matters");
     std\assert(text.indexOf("This change is what opened the gap") != null,
         message: "the heading claims this change did it, so the body owes the reader why");
-    std\assert(text.indexOf("`magus:silence:missing-target` label") != null,
+    std\assert(text.indexOf("`advice: silence missing-target` label") != null,
         message: "declining must be easy and permanent, and the label is how");
 }

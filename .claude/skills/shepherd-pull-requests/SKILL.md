@@ -13,15 +13,18 @@ wrong, fix the pure function that produced it and its test, then run it again.
 
 ## The loop
 
-1. Read the board:
+1. Read the pinned "Merge queue" issue first: every open pull request's place in
+   the queue, with its reason and a person's command (`./magus buzz
+   tools/pull-requests.buzz -- dashboard --all` renders it locally). Then read
+   the board:
 
    ```sh
    ./magus buzz tools/pull-requests.buzz -- status [--pr <n>]... [--author <login>]
    ```
 
-   With no selector it reads your own open pull requests. It prints one JSON
-   record per pull request: `state`, `stage`, `reason`, `action`, `model`,
-   `evidence`, and sometimes `merge`.
+   With no selector it reads your own open pull requests; `--all` reads
+   everyone's. It prints one JSON record per pull request: `state`, `stage`,
+   `reason`, `action`, `model`, `evidence`, and sometimes `merge`.
 
    `state` is what the checks on the head say:
 
@@ -61,7 +64,8 @@ wrong, fix the pure function that produced it and its test, then run it again.
 
 4. When an agent reports, check its branch with a narrow test of what it changed.
    Then you, and only you, push it and queue it again: `gh pr merge <n> --auto
-   --squash`, or for a stack the `queue: <method>` label on its top pull request.
+   --squash`, or for a stack the `merge-queue: <method>` label on its top pull
+   request. A `queue: <state>` label is the queue's answer, never intent.
 
 5. Schedule the next pass with the host's wakeup, about every 20 minutes (the
    queue's validation time), or with its pull request monitor, and repeat from 1.

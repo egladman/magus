@@ -549,7 +549,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // pnpm-workspace.yaml cooling period is the stronger half of this.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    advisories\audit();
+    advisories\audit(inheritedFatal: advisories\inheritedFatal(args));
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
