@@ -81,6 +81,9 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	if asked.by == "" {
 		decided = ""
 	}
+	if asked.timedOut {
+		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+	}
 	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamWrite, asked.failures, asked.answered)
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }

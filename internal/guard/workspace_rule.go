@@ -61,6 +61,9 @@ type rulesAnswer struct {
 	answered []string
 	// failures are the sides that judged nothing, and why.
 	failures []trail.RuleFailure
+	// timedOut is true when the answer is the deny for an approved side that did not
+	// resolve in time; that deny already says so, so no failure note is added to it.
+	timedOut bool
 	// unloaded is true when the working tree failed to load and the approved side yielded
 	// no rule either, so no policy was read at all. A side that loaded and then raised is
 	// not unloaded: that stays fail-open.
@@ -121,6 +124,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 			out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "resolving the rule took longer than " + approvedResolveTimeout.String()})
 			out.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: approvedRuleTimedOut(seam)}
 			out.by = decidedByApproved
+			out.timedOut = true
 		case err != nil:
 			out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
 		}

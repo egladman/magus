@@ -95,7 +95,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if asked.by == "" {
 		decided = ""
 	}
-	if denied {
+	if denied || asked.timedOut {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
 	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered)

@@ -878,12 +878,6 @@ func workspaceRelativeFile(path string) (string, bool) {
 	return rel, true
 }
 
-// denyRuleVCSOffSwitch names the deny below. Not yet wired into Judge's dispatch
-// (internal/guard/guard.go), which is held by another lease as this is written: see the
-// job report for the one-line call this needs and the catalog.go row it needs to pass
-// TestEveryRuleIsCatalogued.
-const denyRuleVCSOffSwitch denyRuleName = "vcs-off-switch"
-
 // vcsOffSwitchDoc is the one field a magus.yaml candidate is read for here, unmarshaled on
 // its own rather than into config.Config: unrelated schema drift elsewhere in that struct
 // (a new required key, a stricter tag) must never make this rule's own parse fail, and

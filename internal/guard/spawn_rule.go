@@ -120,7 +120,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		// The unloaded deny names the failures itself.
 		denied := asked.unloaded && denyUnloaded(&asked, seamSpawn, verb, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
-		if !denied {
+		if !denied && !asked.timedOut {
 			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
 		}
 	}
