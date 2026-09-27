@@ -131,6 +131,20 @@ declaration (its package clause and imports) belong to no claim. A doc comment
 directly above a declaration is that declaration's, and in Go a top-level `var`,
 `const` or `type` (a single one or a `(` block) is a declaration of its own.
 
+`fork` also refuses a job whose write path and another live job's, held in a
+DIFFERENT checkout, both name the same single literal file that has a diff
+driver, when neither job is the other's parent, child, or `depends_on` partner
+([MGS3032](../../../reference/codes/sandbox/MGS3032.md)): a whole-file lease
+looks free because two of them on one file both read "mine wins", and this is
+the fork-time cost that makes it not, once the file is genuinely shared across
+checkouts. The refusal names the holder and what it has touched in the file so
+far; the fix is a declaration claim on both rows, `--depends-on`, or folding
+the work into the holder. A file with no diff driver is recorded rather than
+refused, since the only move left for one is `depends_on`, and two rows
+sharing a file in the SAME checkout stay the advisory `write_proof:
+overlapping` already is: that collision is the declaring orchestrator's own
+call.
+
 A path that itself contains `#` is spelled so the `#` cannot start a claim:
 `./notes/a#b.md` (with a leading `./` the whole entry is the path) or
 `notes/a\#b.md` (escaped, which also allows `notes/a\#b.md#Intro`). `fork`

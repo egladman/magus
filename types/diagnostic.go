@@ -480,7 +480,14 @@ const (
 	// declaration, a checkout whose version control does not place changed lines, or a
 	// file with no diff driver to name its declarations. Refused rather than recorded,
 	// because a claim nothing can check reads as a boundary and is none.
-	WritePathClaimUngradable  DiagnosticCode = "MGS3031"
+	WritePathClaimUngradable DiagnosticCode = "MGS3031"
+	// WritePathFileShared is a job fork whose write path and another live row's, in any
+	// checkout, name the same single literal file that has a diff driver, with neither row
+	// ordered against the other by parent, child, or depends_on. Refused rather than
+	// recorded: the file has one owner unless a claim, a dependency, or a fold says
+	// otherwise, and none of the three costs the fork anything a whole-file lease does not
+	// already pay.
+	WritePathFileShared       DiagnosticCode = "MGS3032"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -648,7 +655,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, HookHostUnnamed,
 	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
-	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable,
+	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

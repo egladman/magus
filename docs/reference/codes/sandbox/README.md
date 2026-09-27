@@ -154,6 +154,7 @@ Two layers run together:
 - [MGS3029](MGS3029.md): a `run --stdin` that reads a malformed plan, or names a shard, target or count the plan does not have.
 - [MGS3030](MGS3030.md): a magus stage upstream of this run in a pipe exited non-zero.
 - [MGS3031](MGS3031.md): a job forked with a declaration claim no footprint can grade.
+- [MGS3032](MGS3032.md): a job forked into an unordered share of one claimable file another live job already holds.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

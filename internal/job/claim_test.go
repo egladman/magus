@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
@@ -75,4 +76,71 @@ func TestRefuseUngradableClaims(t *testing.T) {
 		require.ErrorIs(t, err, types.WritePathClaimUngradable)
 		assert.Contains(t, err.Error(), `"run.go": `)
 	})
+}
+
+// commitRepo commits everything gitRepo wrote and returns HEAD, so a footprint has a
+// revision to diff against.
+func commitRepo(t *testing.T, dir string) string {
+	t.Helper()
+	run := func(args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return strings.TrimSpace(string(out))
+	}
+	run("add", "-A")
+	run("commit", "-q", "-m", "seed")
+	return run("rev-parse", "HEAD")
+}
+
+func TestRefuseUnorderedFileShare(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"magusfile.buzz": "target a {}\n", "notes.txt": "hi\n", "docs/x.md": "# X\n"}
+	bRoot := gitRepo(t, files)
+	aRoot := gitRepo(t, files)
+	aRev := commitRepo(t, aRoot)
+
+	for _, tc := range []struct {
+		name        string
+		aWrite      []string
+		bWrite      []string
+		bParent     string
+		bDependsOn  []string
+		wantRefused bool
+	}{
+		{name: "unordered whole-file share", aWrite: []string{"magusfile.buzz"}, bWrite: []string{"magusfile.buzz"}, wantRefused: true},
+		{name: "different declarations of one file pass", aWrite: []string{"magusfile.buzz#lint_files"}, bWrite: []string{"magusfile.buzz#lint"}},
+		{name: "depends_on orders the pair", aWrite: []string{"magusfile.buzz"}, bWrite: []string{"magusfile.buzz"}, bDependsOn: []string{"A"}},
+		{name: "a child of the holder", aWrite: []string{"magusfile.buzz"}, bWrite: []string{"magusfile.buzz"}, bParent: "A"},
+		{name: "a glob is not a literal file", aWrite: []string{"docs/x.md"}, bWrite: []string{"docs/**"}},
+		{name: "a file with no diff driver", aWrite: []string{"notes.txt"}, bWrite: []string{"notes.txt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			loc := tmpLoc(t, bRoot)
+			s := NewStore(loc)
+			a := types.Job{ID: "A", State: types.StateRunning, WritePaths: tc.aWrite, Checkpoint: aRev, CheckoutRoot: aRoot}
+			seed(t, s, a)
+			rows, err := s.List()
+			require.NoError(t, err)
+
+			candidate := types.Job{ID: "B", WritePaths: tc.bWrite, Parent: tc.bParent, DependsOn: tc.bDependsOn}
+			refErr := RefuseUnorderedFileShare(context.Background(), s, rows, "B", candidate)
+			if !tc.wantRefused {
+				require.NoError(t, refErr)
+				return
+			}
+			require.ErrorIs(t, refErr, types.WritePathFileShared)
+			assert.Contains(t, refErr.Error(), `job: B declares "magusfile.buzz", and A`)
+			assert.Contains(t, refErr.Error(), "none yet")
+			assert.Contains(t, refErr.Error(), "Claim `magusfile.buzz#<declaration>`")
+			assert.Contains(t, refErr.Error(), "--depends-on A")
+		})
+	}
 }

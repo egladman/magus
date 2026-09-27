@@ -653,7 +653,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.CompletionGates, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths}
+	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, Parent: row.Parent, DependsOn: row.DependsOn}
 	if err := job.RefuseDirectoryWritePaths(store, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -661,6 +661,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return usagef("magus job fork: %s", err)
 	}
 	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	if err := job.RefuseUnorderedFileShare(ctx, store, plan, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	proof := store.WriteProof(plan, row.ID, candidate)

@@ -67,6 +67,9 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 		if err := RefuseSharedCheckout(store, rows, id, candidate); err != nil {
 			return types.Job{}, err
 		}
+		if err := RefuseUnorderedFileShare(ctx, store, rows, id, candidate); err != nil {
+			return types.Job{}, err
+		}
 		proof = store.WriteProof(rows, id, candidate)
 	}
 	return store.Update(ctx, id, func(u *types.Job) {
