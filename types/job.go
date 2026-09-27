@@ -365,9 +365,17 @@ func (s JobState) Terminal() bool {
 // EXITED IS LIVE, which reads oddly next to Terminal and is the safe direction. A holder
 // that filed its result still holds the lease on its checkout, and a verification that
 // rejects sends it back to the same write paths; dropping the job out of live here would
-// leave every write after `job exit` graded by nothing at all.
+// leave every write after `job exit` graded by nothing at all. What an exited job no
+// longer does is claim its paths against another job: it blocks no other fork and is in
+// no overlap (see [JobState.Editing]).
 func (s JobState) Live() bool {
 	return s == StateDeclared || s == StateRunning || s == StateExited
+}
+
+// Editing reports whether a holder may still be writing the job's paths: declared or
+// running. Only an editing job claims its write paths against another job's.
+func (s JobState) Editing() bool {
+	return s == StateDeclared || s == StateRunning
 }
 
 // MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
@@ -1516,7 +1524,7 @@ func NewJobList(jobs []Job) JobList {
 // jobOverlaps reports every pair of jobs whose declared write paths
 // intersect, in ledger order.
 //
-// A job in a terminal state is not in any pair. A released or finished job is not
+// Only a [JobState.Editing] job is in a pair. A released, exited or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
 // would make the surface noisiest exactly when the plan is winding down. A job blocked on
@@ -1524,7 +1532,7 @@ func NewJobList(jobs []Job) JobList {
 func jobOverlaps(jobs []Job) []JobOverlap {
 	claims := func(j Job) bool {
 		_, blocked := JobBlockedOn(jobs, j)
-		return !j.State.Terminal() && len(j.WritePaths) > 0 && !blocked
+		return j.State.Editing() && len(j.WritePaths) > 0 && !blocked
 	}
 	var out []JobOverlap
 	for i, a := range jobs {
