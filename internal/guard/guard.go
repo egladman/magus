@@ -514,7 +514,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		if verdict.Decision != "deny" {
-			switch g := gradeHookWiringWrite(actingLease, input); g.Decision {
+			if g := denyVCSOffSwitch(actingLease, input, write); g.Decision == "deny" {
+				verdict.Decision, verdict.Reason, verdict.Rule = "deny", g.Reason, g.Rule
+			}
+		}
+		if verdict.Decision != "deny" {
+			switch g := gradeHookWiringWrite(actingLease, who.Agent != "", input); g.Decision {
 			case "deny":
 				verdict.Decision, verdict.Reason = "deny", g.Reason
 			case "advise":

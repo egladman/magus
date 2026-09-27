@@ -1,0 +1,85 @@
+The fragment grammar, read by tools/changelog.buzz's tests and cmd/magus-utils's, so the
+two parsers cannot drift. A valid/ file parses. An invalid/ file fails, and one of its
+problems contains the text of the .want file beside it.
+
+-- valid/removed-breaking.md --
+### Removed
+
+- **Breaking: the `exclusive` option.** Delete
+  the key.
+
+-- valid/headline-only.md --
+### Security
+
+- **Patched.**
+-- valid/sixty-words.md --
+### Changed
+
+- **Sixty words.** one two three four five six seven eight nine ten eleven twelve
+  thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty one two
+  three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen
+  sixteen seventeen eighteen nineteen twenty one two three four five six seven eight
+  nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen end.
+-- invalid/empty.md --
+-- invalid/empty.want --
+opens with no `### <group>` heading
+-- invalid/no-heading.md --
+- **A thing.**
+-- invalid/no-heading.want --
+line 1: an entry sits under a section heading
+-- invalid/unknown-group.md --
+### Fix
+
+- **A thing.**
+-- invalid/unknown-group.want --
+line 1: "Fix" is not a Keep a Changelog section
+-- invalid/heading-alone.md --
+### Added
+-- invalid/heading-alone.want --
+holds 0 entries
+-- invalid/two-entries.md --
+### Added
+
+- **One.**
+- **Two.**
+-- invalid/two-entries.want --
+holds 2 entries
+-- invalid/two-sections.md --
+### Added
+
+- **One.**
+
+### Fixed
+
+- **Two.**
+-- invalid/two-sections.want --
+more than one section heading
+-- invalid/no-headline.md --
+### Added
+
+- plain.
+-- invalid/no-headline.want --
+line 3: an entry opens with a **bold headline**
+-- invalid/no-period.md --
+### Added
+
+- **A thing** with no stop
+-- invalid/no-period.want --
+line 3: an entry ends with a period
+-- invalid/stray-line.md --
+### Added
+
+- **A thing.**
+not indented
+-- invalid/stray-line.want --
+line 4: not a heading, an entry, or an entry's two-space continuation
+-- invalid/sixty-one-words.md --
+### Changed
+
+- **Sixty-one words.** one two three four five six seven eight nine ten eleven twelve
+  thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty one two
+  three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen
+  sixteen seventeen eighteen nineteen twenty one two three four five six seven eight
+  nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen end.
+-- invalid/sixty-one-words.want --
+line 3: entry is 61 words; the cap is 60

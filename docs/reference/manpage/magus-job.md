@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|exec|exit|wait|watch|run\> [flags]
+**magus** job \<fork|exec|exit|wait|watch|run|rm|prune\> [flags]
 
 ## Description
 
@@ -69,6 +69,9 @@ write. Whether the work is GOOD stays the reading of whoever forked it.
 run submits one of the server's own jobs, the housekeeping magus does for itself,
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
+
+rm removes one row that should never have been written. prune ENDS every job
+nobody is working, as exit would abandon it, and keeps each row as the record.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.
@@ -140,6 +143,11 @@ them and magus describe job prints one job's terms.
 **--force**
 : Remove a row that already ended, destroying the record of what happened
 
+### job prune options
+
+**--all**
+: Also end a job a holder took and nobody touched within jobs.stale_after
+
 ## Subcommands
 
 **fork**
@@ -162,6 +170,9 @@ them and magus describe job prints one job's terms.
 
 **rm**
 : Remove one job from the plan
+
+**prune**
+: End every job nobody is working
 
 ## Examples
 
@@ -205,6 +216,12 @@ magus job exit --schema
 
 ```sh
 magus job run sync-graph
+```
+
+*See which jobs a prune would end*
+
+```sh
+magus job prune --dry-run
 ```
 
 ## See Also

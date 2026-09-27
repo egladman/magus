@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -113,6 +115,22 @@ func TestLeasedBoundarySkipsTheRowsAncestors(t *testing.T) {
 		owners = append(owners, b.Path)
 	}
 	assert.Equal(t, []string{"internal/guard"}, owners, "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
+}
+
+// An exited holder returned, so a sibling's terms no longer put its paths out of reach.
+func TestLeasedBoundarySkipsAnExitedRow(t *testing.T) {
+	t.Parallel()
+
+	rows := []types.Job{
+		{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job"}},
+		{ID: "b", State: types.StateExited, WritePaths: []string{"internal/guard"}},
+		{ID: "c", State: types.StateDeclared, WritePaths: []string{"internal/hint"}},
+	}
+	var owners []string
+	for _, b := range leasedBoundary(rows[0], rows) {
+		owners = append(owners, b.Path)
+	}
+	assert.Equal(t, []string{"internal/hint"}, owners)
 }
 
 func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
@@ -375,6 +393,57 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 		require.NoError(t, err)
 	}
 	return root, cacheDir
+}
+
+// The store the CLI opens resolves a ref the worker recorded in its own checkout, so an
+// orchestrator can exit a job on its worker's behalf.
+func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	worker := t.TempDir()
+	recorded, err := cache.NewOutputStore(filepath.Join(worker, ".magus")).
+		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test"})
+	require.NoError(t, err)
+
+	row := leaseRow("w", "")
+	row.CheckoutRoot, row.Registered = worker, 1
+	root, _ := execFixture(t, row)
+	store, err := openJobs(root)
+	require.NoError(t, err)
+	here := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
+	result := types.JobResult{Job: row.ID, Validation: types.JobResultValidation{OutputRef: recorded.Ref}}
+
+	stored, err := job.Exit(t.Context(), store, row.ID, &result, here)
+	require.NoError(t, err)
+	assert.Equal(t, &types.JobAttempt{Found: true, Ref: recorded.Ref, Project: ".", Target: "test"}, stored.Attempt)
+}
+
+// Prune prints each job it ends with the reason, then the count; under --dry-run it says
+// what would end and leaves the row live.
+func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	exited := leaseRow("returned", "")
+	exited.State = types.StateExited
+	busy := leaseRow("busy", "")
+	busy.Registered = time.Now().Unix()
+	root, cacheDir := execFixture(t, exited, busy)
+	prev := globalCfg.DryRun
+	t.Cleanup(func() { globalCfg.DryRun = prev })
+
+	globalCfg.DryRun = true
+	out := captureStdout(t, func() { require.NoError(t, jobPrune(t.Context(), root, nil)) })
+	assert.Regexp(t, "^would end returned: exited .* ago and nobody collected its result with `magus job wait`\n"+
+		"would end 1 job\\(s\\); --dry-run ended nothing\n$", out)
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, rows[0].State)
+
+	globalCfg.DryRun = false
+	out = captureStdout(t, func() { require.NoError(t, jobPrune(t.Context(), root, nil)) })
+	assert.Regexp(t, "^ended returned: exited .* ago and nobody collected its result with `magus job wait`\nended 1 job\\(s\\)\n$", out)
+	rows, err = store.List()
+	require.NoError(t, err)
+	assert.Equal(t, []types.JobState{types.StateNoReturn, types.StateRunning}, []types.JobState{rows[0].State, rows[1].State})
 }
 
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose

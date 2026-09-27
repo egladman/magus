@@ -12,8 +12,10 @@ import (
 // fragment is one unreleased changelog entry, kept in its own file under
 // changes/unreleased/ so concurrent changes never edit a shared file. The file is
 // the entry exactly as it reads under [Unreleased]: one Keep a Changelog section
-// heading and one entry in lintUnreleased's shape. A breaking change says so in
-// its headline, as every released entry does:
+// heading and one entry in lintUnreleased's shape. tools/changelog.buzz parses the
+// same grammar for every reader but cut; changes/testdata/fragments.txtar holds
+// both to it. A breaking change says so in its headline, as every released entry
+// does:
 //
 //	### Removed
 //
@@ -120,34 +122,4 @@ func renderUnreleased(frags []fragment) string {
 		}
 	}
 	return strings.TrimSuffix(b.String(), "\n")
-}
-
-// runLintFragments checks the named fragment files and reports every malformed
-// one; pr-changelog runs it over the fragments a pull request adds.
-//
-// Usage: magus-utils lint-fragments changes/unreleased/<name>.md...
-func runLintFragments(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: magus-utils lint-fragments <fragment.md> [<fragment.md>...]")
-	}
-	var errs []error
-	for _, path := range args {
-		if filepath.Ext(path) != ".md" {
-			errs = append(errs, fmt.Errorf("%s: not a fragment; fragments are <name>.md files", path))
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if _, err := parseFragment(path, data); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if err := errors.Join(errs...); err != nil {
-		return err
-	}
-	fmt.Printf("%d fragment(s) follow the changelog format\n", len(args))
-	return nil
 }

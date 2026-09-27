@@ -225,6 +225,10 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "a run inside a temp or scratchpad copy, which leaves the real tree unverified",
 		Why: "A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits. " +
 			"No magus run needs a clean tree; run from the workspace and name the project. If you genuinely need a pristine tree, use a throwaway `git worktree add`, not a copy."},
+	{Name: string(denyRuleVCSOffSwitch), Decision: "deny",
+		Catches: "an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads",
+		Why: "With vcs off, vcs.Resolve returns no VCS, so the guard has no approved copy to compare a policy edit against and every workspace rule is read from the working tree alone. " +
+			"Decided by parsing the proposed magus.yaml content, never by matching text. A person editing their own checkout, with no lease and no spawn ancestry, is untouched."},
 	{Name: string(denyRuleUnknownEnv), Decision: "deny",
 		Catches: "a retired or misspelled MAGUS_* variable handed to a command",
 		Why: "A retired or misspelled name is ignored without a word, so the setting the caller meant never takes effect and nothing says so. " +

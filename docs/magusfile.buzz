@@ -3,6 +3,7 @@ import "../tools/toolchain-policy" as policy;
 // The shared advisory gate; see tools/advisories.buzz for why an exit code is the wrong question.
 import "../tools/advisories" as advisories;
 import "../tools/drift" as drift;
+import "../tools/changelog" as changelog;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -40,8 +41,8 @@ import "render" as renderer;
 // the dependency graph; informational) and does not run in this project's ci, which uses
 // the custom targets below; it just makes the project's TypeScript browsable as symbols.
 import "magus/spell/typescript";
-// go is imported for its go-run op only (content-generate/changelog-generate drive
-// repo-root Go tools through it), NOT added to the project spells list below: docs is
+// go is imported for its go-run op only (content-generate drives repo-root Go tools
+// through it), NOT added to the project spells list below: docs is
 // not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
 import "magus/spell/go";
 // Imported for its typos op only, NOT added to the project spells list below: binding
@@ -322,34 +323,28 @@ fun isDecimalCopySuffix(suffix: str) > bool {
     return true;
 }
 
-// changelog-page renders the changelog as a docs page: every release from releases/*.yaml,
-// and under [Unreleased] the fragments in changes/unreleased/. It is build output and
-// never committed (.gitignore), because a committed page would move with every fragment
-// and put a shared file back into every pull request the fragments keep apart. The root
-// CHANGELOG.md carries the same releases with an empty [Unreleased].
+// changelog-page renders the changelog, the one place it is assembled: every release from
+// releases/*.yaml, and under [Unreleased] the fragments in changes/unreleased/, through
+// templates/changelog.mustache. It is build output and never committed (.gitignore),
+// because a committed page would move with every fragment and put a shared file back into
+// every pull request the fragments keep apart.
 //
-// A page rather than a link to the root file: the ordinary page pipeline (search index,
-// breadcrumbs, related cards, the orphan gate) picks it up with no renderer change.
-// Links in the changelog are written for GitHub, resolving from the repo ROOT
+// Links in the entries are written for GitHub, resolving from the repo ROOT
 // ("docs/concepts/knowledge.md"). This page sits INSIDE docs/, so the prefix comes off or
 // every one of them 404s, which the asset-integrity gate catches. CONTRIBUTING.md is
 // not a docs page at all: site/development.buzz synthesizes it under development/, so
 // that link becomes the URL. Trailing slash and no anchor, so a "#naming" suffix survives.
 export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(workspace\file("releases/*.yaml"), workspace\file("changes/unreleased/*.md"),
-        workspace\file("cmd/magus-utils/**/*.go"), workspace\file("internal/**/*.go"),
-        workspace\file("go.mod"), workspace\file("go.sum"));
+    ctx.readsFiles("templates/changelog.mustache", workspace\file("releases/*.yaml"),
+        workspace\file("changes/unreleased/*.md"), workspace\file("tools/changelog.buzz"),
+        workspace\file("tools/commits.buzz"));
     ctx.writesFiles("changelog.md");
-    go["go-run"](ctx, {"args": ["../cmd/magus-utils", "generate-changelog", "-releases", "../releases",
-        "-unreleased", "../changes/unreleased", "-changelog", "changelog.md"]});
-    final changelogMd = fs\readFile("changelog.md")
+    final page = changelog\render(fs\readFile("templates/changelog.mustache"),
+        fragments: changelog\read("../" + changelog\FRAGMENT_DIR),
+        shipped: changelog\releases("../releases"));
+    fs\writeFile("changelog.md", page
         .split("](docs/").join("](")
-        .split("](CONTRIBUTING.md").join("](development/contributing/");
-    fs\writeFile("changelog.md",
-        "---\ntitle: Changelog\ngenerated_from: CHANGELOG.md\n"
-        + "description: Every change to magus, newest first, in Keep a Changelog format, starting with the unreleased entries. Generated from changes/unreleased/ and releases/*.yaml.\n"
-        + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
-        + changelogMd);
+        .split("](CONTRIBUTING.md").join("](development/contributing/"));
 }
 
 // site-generate owns publication. It cannot replay while it reads VCS state; the
@@ -399,28 +394,24 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // and the missing declaration never fired.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "reference/config *.md");
-    // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md, the root
-    // CHANGELOG.md, assets/gen (the README's diagram pair), and the derived Markdown in
+    // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md,
+    // assets/gen (the README's diagram pair), and the derived Markdown in
     // CONTENT. gen/ is absent because it is ignored, and an ignored path is never dirty, so
     // listing it would assert a check that silently passes. src/gen is absent because
     // proto:generate declares and gates it - nothing in THIS chain regenerates it, so the
     // hash either side would always match.
     //
     // The engine's drift gate does NOT make this one redundant. It hashes each target's
-    // declared OUTPUTS, and two of these are not outputs: `magus describe file` reports
-    // CHANGELOG.md and assets/gen as role=source, because they are written through `update`
-    // declarations rather than ctx.writesFiles. A check keyed on outputs cannot see them
-    // however correct it is. MAGUS.md and CONTENT are covered twice over; those two are
-    // covered only here.
-    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "assets/gen"] + CONTENT;
+    // declared OUTPUTS, and assets/gen is not one: `magus describe file` reports it as
+    // role=source, because it is written through an `update` declaration rather than
+    // ctx.writesFiles. A check keyed on outputs cannot see it however correct it is.
+    // MAGUS.md and CONTENT are covered twice over; assets/gen only here.
+    final GENERATED = ["MAGUS.md", "assets/gen"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
     // these paths at all - it used to be inert there and fire only in CI.
     final before = drift\hashes(GENERATED);
-    // changelog-generate refreshes the root CHANGELOG.md this gate covers. Its own stage,
-    // ahead of the fan-out below: both it and content-generate compile Go under internal/.
-    ctx.needs(workspace\changelog_generate);
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
     //
@@ -433,8 +424,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // rather than on every docs build.
     ctx.needs(content_generate, index_generate, diagrams_generate);
     if (ctx.hasCharm("rw")) { return; }
-    // Name the files, not the set. "MAGUS.md or CHANGELOG.md or generated docs Markdown
-    // drifted" tells a reader only that one of nine things moved, and this gate fires
+    // Name the files, not the set. "MAGUS.md or generated docs Markdown drifted" tells a
+    // reader only that one of nine things moved, and this gate fires
     // where the tree is not in front of them. changedSince expands the directories in
     // GENERATED, so what comes back is the actual files.
     final moved = drift\changedSince(before, GENERATED);

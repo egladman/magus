@@ -319,6 +319,8 @@ const (
 	FlagJobForkTimeout = "timeout"
 	// job fork: --write-paths
 	FlagJobForkWritePaths = "write-paths"
+	// job prune: --all
+	FlagJobPruneAll = "all"
 	// job rm: --force
 	FlagJobRmForce = "force"
 	// job wait: --schema
@@ -1778,6 +1780,18 @@ type JobRmFlags struct {
 func BindJobRm(fs *flag.FlagSet) *JobRmFlags {
 	var f JobRmFlags
 	fs.BoolVar(&f.Force, FlagJobRmForce, false, "Remove a row that already ended, destroying the record of what happened")
+	return &f
+}
+
+// JobPruneFlags are the flags declared for `magus job prune`.
+type JobPruneFlags struct {
+	All bool // --all
+}
+
+// BindJobPrune registers `magus job prune`'s flags on fs and returns the destination.
+func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
+	var f JobPruneFlags
+	fs.BoolVar(&f.All, FlagJobPruneAll, false, "Also end a job a holder took and nobody touched within jobs.stale_after")
 	return &f
 }
 

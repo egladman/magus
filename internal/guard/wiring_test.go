@@ -50,7 +50,7 @@ func TestHookWiringSubjectIsSilentEverywhereElse(t *testing.T) {
 // TestGradeHookWiringWriteDeniesUnderALease is D4: the write a declared boundary cannot
 // make legitimate, because what it edits is whether the boundary is checked at all.
 func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
-	g := gradeHookWiringWrite("harness/wiring", ".claude/settings.json")
+	g := gradeHookWiringWrite("harness/wiring", false, ".claude/settings.json")
 
 	require.Equal(t, "deny", g.Decision)
 	assert.Contains(t, g.Reason, "harness/wiring", "the denial must name the lease it refused")
@@ -61,17 +61,35 @@ func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
 		"a worker told to reach for the job tool reaches for it; that is the mistake this rewrite answers")
 }
 
-// TestGradeHookWiringWriteAdvisesUnboundSessions covers the other half of the asymmetry:
-// an orchestrator and a person in their own checkout both legitimately rewire a host, and
-// what they are owed is the sentence naming the file.
-func TestGradeHookWiringWriteAdvisesUnboundSessions(t *testing.T) {
-	g := gradeHookWiringWrite("", ".cursor/hooks.json")
+// TestGradeHookWiringWriteDeniesAnAgentAttributedSession is U7: the host attributing a
+// call to an agent is what disarms every rule from the next session on, whether or not
+// that agent ever took a lease. "Nobody told me not to" is not a scope.
+func TestGradeHookWiringWriteDeniesAnAgentAttributedSession(t *testing.T) {
+	g := gradeHookWiringWrite("", true, ".claude/settings.json")
+
+	require.Equal(t, "deny", g.Decision, "an agent-attributed session with no lease must still be denied")
+	assert.Contains(t, g.Reason, ".claude/settings.json", "the denial must name the file")
+	assert.Contains(t, g.Reason, "hook wiring", "the denial must say what the file IS")
+	assert.Contains(t, g.Reason, "agent", "the denial must say attribution, not binding, is why")
+	assert.Contains(t, g.Reason, "person", "the denial must name who can make this edit instead")
+	assert.NotContains(t, g.Reason, "magus_job",
+		"a worker told to reach for the job tool reaches for it; that is the mistake this rewrite answers")
+}
+
+// TestGradeHookWiringWriteAdvisesAPersonsOwnSession covers the other half of the
+// asymmetry: a person's own session, or an orchestrator relaying for one, is not
+// attributed to any agent, and both legitimately rewire a host. What they are owed is the
+// sentence naming the file, not a refusal.
+func TestGradeHookWiringWriteAdvisesAPersonsOwnSession(t *testing.T) {
+	g := gradeHookWiringWrite("", false, ".cursor/hooks.json")
 
 	require.Equal(t, "advise", g.Decision)
 	assert.Equal(t, advisoryHookWiring, g.Kind, "a standing fact is said once per session")
 	assert.Contains(t, g.Context, ".cursor/hooks.json")
 	assert.Contains(t, g.Context, "next session start", "the advisory must say when the edit takes effect")
 
-	assert.Empty(t, gradeHookWiringWrite("harness/wiring", "cmd/magus/guard.go").Decision,
+	assert.Empty(t, gradeHookWiringWrite("harness/wiring", false, "cmd/magus/guard.go").Decision,
 		"every other path is somebody else's rule")
+	assert.Empty(t, gradeHookWiringWrite("", true, "cmd/magus/guard.go").Decision,
+		"every other path is somebody else's rule, agent-attributed or not")
 }
