@@ -92,4 +92,4 @@ Two consequences worth knowing before you pick a build:
 
 Package-maintainer builds compiled with `-tags noselfupdate` disable this subcommand; fall back to a manual install.
 
-Release notes are in the [CHANGELOG](https://github.com/egladman/magus/blob/main/CHANGELOG.md).
+Release notes are in the [changelog](changelog.md).
