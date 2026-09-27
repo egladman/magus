@@ -148,6 +148,9 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 **--kind** *string*
 : Scope every section to one node kind (spell, target, doc, ...)
 
+**--norms**
+: Print the norm table instead: the shapes most of the workspace agrees on, counted from the symbol index
+
 **--refresh**
 : Force a full graph rebuild first
 
