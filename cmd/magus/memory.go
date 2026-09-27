@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
-	store "github.com/egladman/magus/internal/memory"
+	"github.com/egladman/magus/internal/memory"
 )
 
 func memoryCmd(ctx context.Context, root string, args []string) error {
@@ -59,8 +59,8 @@ func memoryUsage() {
 }
 
 type memoryListOutput struct {
-	Records []store.Record `json:"records" jsonl:"primary"`
-	Issues  []store.Issue  `json:"issues"`
+	Records []memory.Record `json:"records" jsonl:"primary"`
+	Issues  []memory.Issue  `json:"issues"`
 }
 
 func memoryList(root string, args []string) error {
@@ -77,7 +77,7 @@ func memoryList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	recs, issues, err := store.Inspect(root)
+	recs, issues, err := memory.Inspect(root)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func memoryGet(root string, args []string) error {
 	if len(pos) != 1 {
 		return fmt.Errorf("magus memory get: requires exactly one entry name")
 	}
-	rec, err := store.Get(root, pos[0])
+	rec, err := memory.Get(root, pos[0])
 	if err != nil {
 		return fmt.Errorf("magus memory get %q: %w", pos[0], err)
 	}
@@ -195,16 +195,16 @@ func memoryPut(root string, args []string) error {
 	if len(pos) != 1 {
 		return fmt.Errorf("magus memory put: requires exactly one entry name")
 	}
-	parsed, err := store.ParseRefs(strings.Join(refs, "\n"))
+	parsed, err := memory.ParseRefs(strings.Join(refs, "\n"))
 	if err != nil {
 		return err
 	}
 	// No mask: the flags the caller typed are the fields to write. --amend is this
 	// surface's spelling of allow_missing=false.
-	rec, err := store.Update(root, store.Record{
-		Name: pos[0], Type: store.RecordType(pf.Type), Status: pf.Status, Body: pf.Body,
+	rec, err := memory.Update(root, memory.Record{
+		Name: pos[0], Type: memory.RecordType(pf.Type), Status: pf.Status, Body: pf.Body,
 		Excerpt: pf.Excerpt, Refs: parsed, References: references,
-	}, store.UpdateOptions{AllowMissing: !pf.Amend})
+	}, memory.UpdateOptions{AllowMissing: !pf.Amend})
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("magus memory put: the journal holds no entry named %q; drop --amend to create it, or see what is there with `%s`", pos[0], hint.MemoryLs)
@@ -240,7 +240,7 @@ func memoryDelete(root string, args []string) error {
 	if len(pos) != 1 {
 		return fmt.Errorf("magus memory delete: requires exactly one entry name")
 	}
-	if err := store.Delete(root, pos[0], false); err != nil {
+	if err := memory.Delete(root, pos[0], false); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()
@@ -281,8 +281,8 @@ func memoryVerify(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	report, err := store.Verify(root, func(ref store.Ref) error {
-		if ref.Kind != store.RefKindOutput {
+	report, err := memory.Verify(root, func(ref memory.Ref) error {
+		if ref.Kind != memory.RefKindOutput {
 			return nil
 		}
 		_, err := m.OutputDescriptorByRef(ref.Target)
@@ -318,7 +318,7 @@ func memoryVerify(ctx context.Context, root string, args []string) error {
 }
 
 // memoryIssueSubjects names what each issue is about, for `-o name`.
-func memoryIssueSubjects(issues []store.Issue) []string {
+func memoryIssueSubjects(issues []memory.Issue) []string {
 	out := make([]string, 0, len(issues))
 	for _, i := range issues {
 		if i.Record != "" {
@@ -330,7 +330,7 @@ func memoryIssueSubjects(issues []store.Issue) []string {
 	return out
 }
 
-func printMemoryRecord(rec store.Record) {
+func printMemoryRecord(rec memory.Record) {
 	fmt.Printf("%s (%s)\n", rec.Name, rec.Type)
 	if rec.Status != "" {
 		fmt.Printf("status: %s\n", rec.Status)
@@ -356,7 +356,7 @@ func printMemoryRecord(rec store.Record) {
 	fmt.Printf("updated: %s\n", time.Unix(rec.Updated, 0).UTC().Format(time.RFC3339))
 }
 
-func printMemoryIssues(issues []store.Issue) error {
+func printMemoryIssues(issues []memory.Issue) error {
 	for _, issue := range issues {
 		glyph := "[warn]"
 		if issue.Severity == "error" {
@@ -367,7 +367,7 @@ func printMemoryIssues(issues []store.Issue) error {
 	return memoryIssuesError(issues)
 }
 
-func memoryIssuesError(issues []store.Issue) error {
+func memoryIssuesError(issues []memory.Issue) error {
 	var failures int
 	for _, issue := range issues {
 		if issue.Severity == "error" {
