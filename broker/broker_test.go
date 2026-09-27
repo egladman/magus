@@ -508,10 +508,10 @@ func TestListenLosesToALiveBroker(t *testing.T) {
 func TestListenReclaimsADeadSocket(t *testing.T) {
 	addr := testAddr(t)
 	path := addr[len("unix://"):]
-	ln, err := net.Listen("unix", path)
+	ln, err := endpoint.ListenUnix(path)
 	require.NoError(t, err)
 	// Leave the file behind the way a killed broker does.
-	ln.(*net.UnixListener).SetUnlinkOnClose(false)
+	ln.SetUnlinkOnClose(false)
 	require.NoError(t, ln.Close())
 	require.FileExists(t, path)
 
